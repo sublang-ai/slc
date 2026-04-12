@@ -3,7 +3,7 @@
 
 # Text-to-GEARS Transformation
 
-This is the first phase in defining a playbook — a state-machine AI agent that coordinates multiple AI agents to carry out a defined procedure.
+This is the first phase in defining a playbook — a state-machine-powered AI agent that coordinates multiple AI agents to carry out a defined procedure.
 This phase transforms user input into normative spec items.
 
 - Source: the user's description of the procedure in free-form natural language.
@@ -33,7 +33,7 @@ distinguish them from ordinary text.
 
 ## Behaviors
 
-Target specifies which prompt to give to which role under which preconditions.
+Target specifies state-machine behaviors including which prompt to give to which role under which conditions.
 All prompts shall be blockquoted.
 A prompt consists of concise, clearly organized points, one per line.
 
@@ -55,6 +55,7 @@ Target should be written in the same language as Source.
 Prompt lines may duplicate across spec items.
 
 If duplicate prompt lines share a common condition and identical roles, they may be abstracted into an independent spec item, and they do not need to be restated or cited by other spec items.
+This improves maintainability.
 
 E.g., the prompt lines in `CODE-10` above may apply when reviewing a commit or unstaged changes, or as part of a longer prompt, so they are abstracted under the shared condition "when Reviewer is about to review any change".
 

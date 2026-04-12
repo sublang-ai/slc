@@ -1,2 +1,1 @@
-# slc
-SubLang Compiler
+# SubLang Compiler
