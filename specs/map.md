@@ -25,6 +25,7 @@ meta.md     The spec of specs
 | ID | File | Summary |
 | --- | --- | --- |
 | DR-000 | [000-spec-structure-format.md](decisions/000-spec-structure-format.md) | Spec structure, format, and naming conventions |
+| DR-001 | [001-slc-io-architecture.md](decisions/001-slc-io-architecture.md) | SLC terminology, pipeline layout, and CLI shape |
 
 ## Iterations
 
