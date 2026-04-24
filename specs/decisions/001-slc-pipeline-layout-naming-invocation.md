@@ -89,7 +89,9 @@ slc <pipeline>[.<phase>] <source> [-o <target>]
 
 ### Output locations
 
-Each artifact's location depends on its role in the pipeline, not on invocation mode.
+Each artifact's location depends on its role in the pipeline, not on invocation
+mode. The pipeline output is the artifact emitted by the terminal phase, and
+all earlier artifacts are intermediates.
 
 Let `<source-dir>` be the directory containing `<source>` (or containing `.<pipeline>/` when `<source>` is inside the intermediate directory). Let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` stripped.
 
