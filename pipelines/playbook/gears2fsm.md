@@ -11,6 +11,13 @@ This phase transforms normative spec items into state machines.
 
 A procedure is essentially a sequence of AI agent calls, modeled as a state machine.
 
+## Formats
+
+| Role | Format | Extension |
+| --- | --- | --- |
+| source | gears | .md |
+| target | fsm | .ts |
+
 ## States
 
 Each state shall have an intuitive name and a clear description.

@@ -11,6 +11,13 @@ This phase transforms user input into normative spec items.
 
 The second phase transforms spec items into state machines, which is outside the scope of this transformation.
 
+## Formats
+
+| Role | Format | Extension |
+| --- | --- | --- |
+| source | text | .md |
+| target | gears | .md |
+
 ## Roles
 
 Both Source and Target use role names to refer to AI agents and the user.
