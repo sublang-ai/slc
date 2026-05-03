@@ -27,10 +27,13 @@ The playbook has two default roles:
 - Boss: the human user who provides input
 - Captain: the coordinating agent that drives the procedure
 
-Source may define additional roles in an opening `## Roles` section. E.g.:
+Source may define additional roles in an opening `## Roles` section.
+A role may be declared as an alias of other roles using `=` and `|`; at runtime, Boss picks one of the listed roles to play it.
+E.g.:
 
 - Coder
 - Reviewer
+- Committer = Coder | Reviewer
 
 The playbook runtime maps these roles to AI agents and invokes them.
 
