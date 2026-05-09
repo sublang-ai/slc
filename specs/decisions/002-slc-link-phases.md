@@ -10,7 +10,8 @@ Accepted
 ## Context
 
 Some pipelines produce object artifacts that need runtime bindings before they
-are executable. For example, `playbook` links a state machine to a runner.
+are executable.
+For example, `playbook` links a state machine to a runner.
 
 ## Decision
 
@@ -44,7 +45,8 @@ The linked format shall use a different format token from every accepted object
 format, even when formats share the same file extension.
 
 Object inputs are ordered and use the declared source format unless the link
-phase declares additional accepted object formats. The link phase validates
+phase declares additional accepted object formats.
+The link phase validates
 object count and compatibility.
 
 Link options are for values that vary per invocation without creating a new
@@ -90,9 +92,9 @@ slc <pipeline> <source> --link <target> [-o <linked-target>]
 
 `<target>` is defined by the pipeline's `link.md`.
 
-In `.link` invocation, the final positional operand is the link target. All
-earlier positional operands are ordered object artifacts. At least one object
-operand is required before the target.
+In `.link` invocation, the final positional operand is the link target.
+All earlier positional operands are ordered object artifacts.
+At least one object operand is required before the target.
 
 ```text
 slc <pipeline>.link main.fsm.ts helper.fsm.ts runner.ts -o app.run.ts
@@ -101,13 +103,15 @@ slc <pipeline>.link main.fsm.ts helper.fsm.ts runner.ts -o app.run.ts
 `slc` shall not infer positional roles by extension, file existence, or `--`.
 
 `--link <target>` is required only for full-pipeline invocation because it
-selects the terminal link phase. Full-pipeline invocation without `--link`
+selects the terminal link phase.
+Full-pipeline invocation without `--link`
 stops at the ordinary compile-chain output from DR-001.
 Default link targets are not supported; full-pipeline linking always requires
 an explicit `--link <target>`.
 
-`--link-option` values are opaque name/value pairs. They may be appended to
-either invocation form. `slc` passes them to the link phase; `link.md` declares
+`--link-option` values are opaque name/value pairs.
+They may be appended to either invocation form.
+`slc` passes them to the link phase; `link.md` declares
 and validates supported names.
 
 ### Output Locations
@@ -126,12 +130,14 @@ When linking runs in a full-pipeline invocation:
 - `-o <linked-target>` controls only the linked artifact
 
 For direct `.link` invocation, one object uses DR-001 source-dir and basename
-rules. Multiple objects require `-o <linked-target>`.
+rules.
+Multiple objects require `-o <linked-target>`.
 
 ### Playbook Example
 
 For `playbook`, a link target is a runner module providing symbols such as
-`Captain`. A `playbook` link phase may use the shape above with `fsm` as
+`Captain`.
+A `playbook` link phase may use the shape above with `fsm` as
 source, `run` as target, `.ts` as both extensions, and target form `<path>.ts`.
 
 `slc playbook flows/onboarding.md --link runner.ts` may write
