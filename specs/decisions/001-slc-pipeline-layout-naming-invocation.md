@@ -9,7 +9,8 @@ Accepted
 
 ## Context
 
-`slc` (the SubLang Compiler) translates content through an ordered sequence of phases; targets may be specs, executable code, or any structured representation. The first pipeline, `playbook`, runs `text2gears` (natural language → GEARS) then `gears2fsm` (GEARS → XState machine).
+`slc` (the SubLang Compiler) translates content through an ordered sequence of phases; targets may be specs, executable code, or any structured representation.
+The first pipeline, `playbook`, runs `text2gears` (natural language → GEARS) then `gears2fsm` (GEARS → XState machine).
 
 Intermediates (e.g., GEARS between those phases) are for human inspection and refinement, not disposable build cache — which shapes where the compiler writes them.
 
@@ -39,7 +40,8 @@ pipelines/
 
 ### Phase filename convention
 
-Each phase file shall be named `<source-format>2<target-format>.md`, where each token is a short kebab-case language identifier. Examples: `text2gears.md`, `gears2fsm.md`.
+Each phase file shall be named `<source-format>2<target-format>.md`, where each token is a short kebab-case language identifier.
+Examples: `text2gears.md`, `gears2fsm.md`.
 
 ### Phase format declarations
 
@@ -54,7 +56,8 @@ Each phase file shall declare its source and target formats with canonical exten
 | target | gears | .md |
 ```
 
-These declarations are authoritative: `slc` uses them to map formats to extensions, validate chain composition, and verify sources. `slc` shall refuse to run a pipeline whose phases declare conflicting extensions for the same format token.
+These declarations are authoritative: `slc` uses them to map formats to extensions, validate chain composition, and verify sources.
+`slc` shall refuse to run a pipeline whose phases declare conflicting extensions for the same format token.
 
 A phase's filename tokens shall match its `## Formats` table; `slc` shall refuse to load any phase that violates this.
 
@@ -89,11 +92,11 @@ slc <pipeline>[.<phase>] <source> [-o <target>]
 
 ### Output locations
 
-Each artifact's location depends on its role in the pipeline, not on invocation
-mode. The pipeline output is the artifact emitted by the terminal phase, and
-all earlier artifacts are intermediates.
+Each artifact's location depends on its role in the pipeline, not on invocation mode.
+The pipeline output is the artifact emitted by the terminal phase, and all earlier artifacts are intermediates.
 
-Let `<source-dir>` be the directory containing `<source>` (or containing `.<pipeline>/` when `<source>` is inside the intermediate directory). Let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` stripped.
+Let `<source-dir>` be the directory containing `<source>` (or containing `.<pipeline>/` when `<source>` is inside the intermediate directory).
+Let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` stripped.
 
 - The pipeline output goes next to the source as `<source-dir>/<basename>.<target-format>.<ext>`, unless `-o <target>` overrides.
 - Intermediates go to `<source-dir>/.<pipeline>/<basename>.<format>.<ext>` regardless of `-o`.
@@ -116,7 +119,8 @@ Examples:
 - A single vocabulary (pipeline, phase, source, target, intermediate) reduces cognitive overhead.
 - Chain inference keeps linear pipelines manifest-free.
 - Single-phase and full-pipeline runs write to the same locations, so users can iterate on any phase without file shuffling.
-- Outputs are source-relative, co-locating sources and derivatives for human review. Per-source-directory isolation prevents basename collisions (e.g., `flows/onboarding.md` and `policies/onboarding.md` cannot clobber each other).
+- Outputs are source-relative, co-locating sources and derivatives for human review.
+  Per-source-directory isolation prevents basename collisions (e.g., `flows/onboarding.md` and `policies/onboarding.md` cannot clobber each other).
 - Per-phase format declarations are authoritative, so new formats do not require amending this DR.
 - Basename normalization lets users edit `flows/.playbook/onboarding.gears.md` and rerun phase 2 to produce `flows/onboarding.fsm.ts` (not `onboarding.gears.fsm.ts`).
 - Entry-phase sources may be plain `<name>.<ext>`, so users needn't learn a convention to start authoring.

@@ -20,7 +20,8 @@ Add SPDX headers (license and copyright info) to applicable files.
    - British spelling: `LICENCE`, `LICENCE.txt`
    - Multiple licenses: `LICENSES/` folder (REUSE convention)
 
-2. **Identify applicable files** according to the license(s): git-tracked or `git add`-able files with comment syntax. Excludes:
+2. **Identify applicable files** according to the license(s): git-tracked or `git add`-able files with comment syntax.
+   Excludes:
    - No comment syntax: e.g., JSON, binaries
    - Config: e.g., `.gitignore`, `.editorconfig`, `**/settings.json`, `AGENTS.md`, `.github/workflows/ci.yml`, lock files
    - Generated/vendor: e.g., `dist/`, `node_modules/`
@@ -28,7 +29,8 @@ Add SPDX headers (license and copyright info) to applicable files.
 
 3. **Add headers** in the first comment block (after shebang if present), using appropriate comment syntax per file type
 
-4. **Document format** in a dev spec according to the license(s). E.g.:
+4. **Document format** in a dev spec according to the license(s).
+   E.g.:
 
    > **Source code** (including specs):
    >
@@ -51,5 +53,5 @@ Add SPDX headers (license and copyright info) to applicable files.
 
 ## Acceptance criteria
 
-- All source files have SPDX-FileCopyrightText header ([LIC-3](../items/test/licensing.md#lic-3))
-- Files have SPDX-License-Identifier if a license file exists ([LIC-4](../items/test/licensing.md#lic-4))
+- All source files have SPDX-FileCopyrightText header ([LIC-3](../test/licensing.md#lic-3))
+- Files have SPDX-License-Identifier if a license file exists ([LIC-4](../test/licensing.md#lic-4))
