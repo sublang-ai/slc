@@ -123,14 +123,13 @@ When linking runs in a full-pipeline invocation:
 
 - ordinary compile-chain outputs are intermediates
 - the compile-chain exit artifact becomes the object artifact
-- the object artifact is written under `<source-dir>/.<pipeline>/`
-- the linked artifact is written next to the source as
-  `<source-dir>/<basename>.<target-format>.<ext>` unless
+- the object artifact is written under `./.<pipeline>/`
+- the linked artifact is written to
+  `./<basename>.<target-format>.<ext>` unless
   `-o <linked-target>` overrides
 - `-o <linked-target>` controls only the linked artifact
 
-For direct `.link` invocation, one object uses DR-001 source-dir and basename
-rules.
+For direct `.link` invocation, one object uses DR-001 pwd and basename rules.
 Multiple objects require `-o <linked-target>`.
 
 ### Playbook Example
@@ -141,8 +140,8 @@ A `playbook` link phase may use the shape above with `fsm` as
 source, `run` as target, `.ts` as both extensions, and target form `<path>.ts`.
 
 `slc playbook flows/onboarding.md --link runner.ts` may write
-`flows/.playbook/onboarding.fsm.ts` as the object artifact and
-`flows/onboarding.run.ts` as the linked artifact.
+`./.playbook/onboarding.fsm.ts` as the object artifact and
+`./onboarding.run.ts` as the linked artifact.
 
 ## Consequences
 

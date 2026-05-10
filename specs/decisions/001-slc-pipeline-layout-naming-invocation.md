@@ -92,18 +92,17 @@ slc <pipeline>[.<phase>] <source> [-o <target>]
 
 ### Output locations
 
+All artifacts go to the current working directory (pwd).
 Each artifact's location depends on its role in the pipeline, not on invocation mode.
 The pipeline output is the artifact emitted by the terminal phase, and all earlier artifacts are intermediates.
 
-Let `<source-dir>` be the directory containing `<source>` (or containing `.<pipeline>/` when `<source>` is inside the intermediate directory).
 Let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` stripped.
 
-- The pipeline output goes next to the source as `<source-dir>/<basename>.<target-format>.<ext>`, unless `-o <target>` overrides.
-- Intermediates go to `<source-dir>/.<pipeline>/<basename>.<format>.<ext>` regardless of `-o`.
+- The pipeline output goes to `./<basename>.<target-format>.<ext>`, unless `-o <target>` overrides.
+- Intermediates go to `./.<pipeline>/<basename>.<format>.<ext>` regardless of `-o`.
 
 ```text
-<source-dir>/
-    <basename>[.<source-format>].<ext>      # source
+./
     <basename>.<target-format>.<ext>        # pipeline output (when -o omitted)
     .<pipeline>/
         <basename>.<format>.<ext>           # intermediates
@@ -111,16 +110,15 @@ Let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` s
 
 Examples:
 
-- `slc playbook flows/onboarding.md` → `flows/.playbook/onboarding.gears.md` (intermediate) + `flows/onboarding.fsm.ts` (output).
-- `slc playbook.text2gears flows/onboarding.md` → `flows/.playbook/onboarding.gears.md` only; same location as the full run.
+- `slc playbook flows/onboarding.md` → `./.playbook/onboarding.gears.md` (intermediate) + `./onboarding.fsm.ts` (output).
+- `slc playbook.text2gears flows/onboarding.md` → `./.playbook/onboarding.gears.md` only; same location as the full run.
 
 ## Consequences
 
 - A single vocabulary (pipeline, phase, source, target, intermediate) reduces cognitive overhead.
 - Chain inference keeps linear pipelines manifest-free.
 - Single-phase and full-pipeline runs write to the same locations, so users can iterate on any phase without file shuffling.
-- Outputs are source-relative, co-locating sources and derivatives for human review.
-  Per-source-directory isolation prevents basename collisions (e.g., `flows/onboarding.md` and `policies/onboarding.md` cannot clobber each other).
+- Outputs go to pwd, so users control placement by `cd` or `-o` rather than by source layout. Avoiding basename collisions across runs is the user's responsibility (use distinct working directories or `-o`).
 - Per-phase format declarations are authoritative, so new formats do not require amending this DR.
-- Basename normalization lets users edit `flows/.playbook/onboarding.gears.md` and rerun phase 2 to produce `flows/onboarding.fsm.ts` (not `onboarding.gears.fsm.ts`).
+- Basename normalization lets users edit `./.playbook/onboarding.gears.md` and rerun phase 2 to produce `./onboarding.fsm.ts` (not `onboarding.gears.fsm.ts`).
 - Entry-phase sources may be plain `<name>.<ext>`, so users needn't learn a convention to start authoring.
