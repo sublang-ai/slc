@@ -30,13 +30,15 @@ We need a consistent vocabulary and CLI shape for these pipelines.
 
 ### Directory layout
 
-Pipeline and phase definitions live under `pipelines/`:
+A project's pipeline definition lives under `pipeline/` at the project root, with phase files directly inside:
 
 ```text
-pipelines/
-    <pipeline>/
-        <phase>.md
+pipeline/
+    <phase>.md
 ```
+
+A project hosts a single pipeline at this location.
+The pipeline name supplied to the [CLI](#cli) and used in [output locations](#output-locations) is independent of the directory name.
 
 ### Phase filename convention
 
@@ -92,33 +94,34 @@ slc <pipeline>[.<phase>] <source> [-o <target>]
 
 ### Output locations
 
-All artifacts go to the current working directory (pwd).
+Artifacts go to a `<basename>.<pipeline>/` directory placed alongside the source file.
 Each artifact's location depends on its role in the pipeline, not on invocation mode.
 The pipeline output is the artifact emitted by the terminal phase, and all earlier artifacts are intermediates.
 
-Let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` stripped.
+Let `<src-dir>` be the directory containing `<source>`, and let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` stripped.
 
-- The pipeline output goes to `./<basename>.<target-format>.<ext>`, unless `-o <target>` overrides.
-- Intermediates go to `./.<pipeline>/<basename>.<format>.<ext>` regardless of `-o`.
+- The pipeline output goes to `<src-dir>/<basename>.<pipeline>/<basename>.<target-format>.<ext>`, unless `-o <target>` overrides.
+- Intermediates go to `<src-dir>/<basename>.<pipeline>/<basename>.<format>.<ext>` regardless of `-o`.
 
 ```text
-./
-    <basename>.<target-format>.<ext>        # pipeline output (when -o omitted)
-    .<pipeline>/
-        <basename>.<format>.<ext>           # intermediates
+<src-dir>/
+    <basename>[.<source-format>].<ext>          # source file
+    <basename>.<pipeline>/
+        <basename>.<format>.<ext>               # intermediates
+        <basename>.<target-format>.<ext>        # pipeline output (when -o omitted)
 ```
 
 Examples:
 
-- `slc playbook flows/onboarding.md` → `./.playbook/onboarding.gears.md` (intermediate) + `./onboarding.fsm.ts` (output).
-- `slc playbook.text2gears flows/onboarding.md` → `./.playbook/onboarding.gears.md` only; same location as the full run.
+- `slc playbook flows/onboarding.md` → `flows/onboarding.playbook/onboarding.gears.md` (intermediate) + `flows/onboarding.playbook/onboarding.fsm.ts` (output).
+- `slc playbook.text2gears flows/onboarding.md` → `flows/onboarding.playbook/onboarding.gears.md` only; same location as the full run.
 
 ## Consequences
 
 - A single vocabulary (pipeline, phase, source, target, intermediate) reduces cognitive overhead.
 - Chain inference keeps linear pipelines manifest-free.
 - Single-phase and full-pipeline runs write to the same locations, so users can iterate on any phase without file shuffling.
-- Outputs go to pwd, so users control placement by `cd` or `-o` rather than by source layout. Avoiding basename collisions across runs is the user's responsibility (use distinct working directories or `-o`).
+- Outputs travel with the source tree under `<basename>.<pipeline>/`, so artifacts move with the source rather than the invocation cwd. Collisions are scoped to the source basename within its directory.
 - Per-phase format declarations are authoritative, so new formats do not require amending this DR.
-- Basename normalization lets users edit `./.playbook/onboarding.gears.md` and rerun phase 2 to produce `./onboarding.fsm.ts` (not `onboarding.gears.fsm.ts`).
+- Basename normalization lets users edit `flows/onboarding.playbook/onboarding.gears.md` and rerun phase 2 to produce `flows/onboarding.playbook/onboarding.fsm.ts` (not `onboarding.gears.fsm.ts`).
 - Entry-phase sources may be plain `<name>.<ext>`, so users needn't learn a convention to start authoring.
