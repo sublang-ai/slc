@@ -30,15 +30,16 @@ We need a consistent vocabulary and CLI shape for these pipelines.
 
 ### Directory layout
 
-A project's pipeline definition lives under `pipeline/` at the project root, with phase files directly inside:
+A pipeline's phase files live together in a single directory, directly inside it:
 
 ```text
-pipeline/
+<pipeline-dir>/
     <phase>.md
 ```
 
-A project hosts a single pipeline at this location.
+A pipeline directory hosts exactly one pipeline.
 The pipeline name supplied to the [CLI](#cli) and used in [output locations](#output-locations) is independent of the directory name.
+DR-001 does not prescribe where `<pipeline-dir>` lives; how `slc` resolves a pipeline reference to a directory is left to the consumer.
 
 ### Phase filename convention
 
