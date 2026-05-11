@@ -26,10 +26,10 @@ For example, `playbook` links a state machine to a runner.
 
 ### Link Phase
 
-A pipeline may define one reserved link phase at:
+A pipeline may define one reserved link phase as `link.md` directly inside its pipeline directory (per [DR-001 Directory layout](001-slc-pipeline-layout-naming-invocation.md#directory-layout)):
 
 ```text
-pipeline/link.md
+<pipeline-dir>/link.md
 ```
 
 `link.md` is excluded from ordinary compile-chain inference and from DR-001's
