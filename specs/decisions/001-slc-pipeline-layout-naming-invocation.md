@@ -99,14 +99,20 @@ Each artifact's location depends on its role in the pipeline, not on invocation 
 The pipeline output is the artifact emitted by the terminal phase, and all earlier artifacts are intermediates.
 
 Let `<src-dir>` be the directory containing `<source>`, and let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` stripped.
+Let `<art-dir>` be the **artifact directory**:
 
-- The pipeline output goes to `<src-dir>/<basename>.<pipeline>/<basename>.<target-format>.<ext>`, unless `-o <target>` overrides.
-- Intermediates go to `<src-dir>/<basename>.<pipeline>/<basename>.<format>.<ext>` regardless of `-o`.
+- `<art-dir>` = `<src-dir>/<basename>.<pipeline>/`, except
+- when `<src-dir>`'s leaf name is exactly `<basename>.<pipeline>`, `<art-dir>` = `<src-dir>` — `slc` shall not nest another artifact directory inside the canonical one.
+
+The second rule keeps re-runs from a file already inside `<basename>.<pipeline>/` (e.g., an edited intermediate) from producing `<basename>.<pipeline>/<basename>.<pipeline>/…`.
+
+- The pipeline output goes to `<art-dir>/<basename>.<target-format>.<ext>`, unless `-o <target>` overrides.
+- Intermediates go to `<art-dir>/<basename>.<format>.<ext>` regardless of `-o`.
 
 ```text
 <src-dir>/
     <basename>[.<source-format>].<ext>          # source file
-    <basename>.<pipeline>/
+    <basename>.<pipeline>/                      # <art-dir>
         <basename>.<format>.<ext>               # intermediates
         <basename>.<target-format>.<ext>        # pipeline output (when -o omitted)
 ```
@@ -115,6 +121,7 @@ Examples:
 
 - `slc playbook flows/onboarding.md` → `flows/onboarding.playbook/onboarding.gears.md` (intermediate) + `flows/onboarding.playbook/onboarding.fsm.ts` (output).
 - `slc playbook.text2gears flows/onboarding.md` → `flows/onboarding.playbook/onboarding.gears.md` only; same location as the full run.
+- `slc playbook.gears2fsm flows/onboarding.playbook/onboarding.gears.md` → `flows/onboarding.playbook/onboarding.fsm.ts`; the canonical artifact directory is reused, not nested.
 
 ## Consequences
 
