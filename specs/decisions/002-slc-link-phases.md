@@ -29,7 +29,7 @@ For example, `playbook` links a state machine to a runner.
 A pipeline may define one reserved link phase at:
 
 ```text
-pipelines/<pipeline>/link.md
+pipeline/link.md
 ```
 
 `link.md` is excluded from ordinary compile-chain inference and from DR-001's
@@ -123,13 +123,14 @@ When linking runs in a full-pipeline invocation:
 
 - ordinary compile-chain outputs are intermediates
 - the compile-chain exit artifact becomes the object artifact
-- the object artifact is written under `./.<pipeline>/`
+- the object artifact is written under `<src-dir>/<basename>.<pipeline>/`
 - the linked artifact is written to
-  `./<basename>.<target-format>.<ext>` unless
+  `<src-dir>/<basename>.<pipeline>/<basename>.<target-format>.<ext>` unless
   `-o <linked-target>` overrides
 - `-o <linked-target>` controls only the linked artifact
 
-For direct `.link` invocation, one object uses DR-001 pwd and basename rules.
+For direct `.link` invocation, one object uses DR-001's source-adjacent
+directory and basename rules.
 Multiple objects require `-o <linked-target>`.
 
 ### Playbook Example
@@ -140,8 +141,8 @@ A `playbook` link phase may use the shape above with `fsm` as
 source, `run` as target, `.ts` as both extensions, and target form `<path>.ts`.
 
 `slc playbook flows/onboarding.md --link runner.ts` may write
-`./.playbook/onboarding.fsm.ts` as the object artifact and
-`./onboarding.run.ts` as the linked artifact.
+`flows/onboarding.playbook/onboarding.fsm.ts` as the object artifact and
+`flows/onboarding.playbook/onboarding.run.ts` as the linked artifact.
 
 ## Consequences
 
