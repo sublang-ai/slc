@@ -35,6 +35,9 @@ The pipeline's `link.md` shall be the semantic source of truth for a link phase.
 A phase shall be executed either by interpreting its definition directly ([DR-004](004-slc-interpreted-phase-execution.md)) or by a compiled runnable artifact ([DR-005](005-slc-self-hosting-meta-pipeline.md)).
 Both strategies shall honor this boundary; the choice of strategy shall not change what `slc` validates or how artifacts are placed.
 
+Every executing phase, interpreted or compiled, shall write only its declared target or linked artifact.
+It shall not modify sources, phase or link definitions, specs, object artifacts, link targets, or unrelated files.
+
 ### `slc` responsibilities
 
 For ordinary compile phases, `slc` shall use [DR-001](001-slc-pipeline-layout-naming-invocation.md) and phase `## Formats` metadata to:
@@ -66,6 +69,7 @@ They include output postconditions:
 They also include defensive integrity checks for inputs and pipeline metadata that an executing phase is not allowed to modify:
 
 - the source remains valid for the consuming phase;
+- the source and any object inputs are unchanged from before the run;
 - the pipeline chain remains valid.
 
 Any semantic or format-aware verification beyond generic checks shall belong to the phase or link definition.
