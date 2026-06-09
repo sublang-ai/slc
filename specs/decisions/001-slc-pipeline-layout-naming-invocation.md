@@ -93,6 +93,8 @@ slc <pipeline>[.<phase>] <source> [-o <target>]
 
 `<source>` shall comply with the [source filename convention](#source-filename-convention).
 
+[DR-005](005-slc-self-hosting-meta-pipeline.md) amends this grammar to make `<pipeline>` optional, defaulting to the reserved `slc` pipeline.
+
 ### Output locations
 
 Artifacts go to a `<basename>.<pipeline>/` directory placed alongside the source file.
