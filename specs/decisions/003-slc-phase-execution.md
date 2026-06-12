@@ -37,6 +37,7 @@ Both strategies shall honor this boundary; the choice of strategy shall not chan
 
 Every executing phase, interpreted or compiled, shall write only its declared target or linked artifact.
 It shall not modify sources, phase or link definitions, specs, object artifacts, link targets, or unrelated files.
+Scratch space that does not persist past the run is not a write under this rule; ensuring it does not persist is the executing phase's responsibility.
 
 ### `slc` responsibilities
 
@@ -68,9 +69,11 @@ They include output postconditions:
 
 They also include defensive integrity checks for inputs and pipeline metadata that an executing phase is not allowed to modify:
 
-- the source remains valid for the consuming phase;
-- the source and any object inputs are unchanged from before the run;
+- the source, any object inputs, and the link target are unchanged from before the run;
 - the pipeline chain remains valid.
+
+These checks defend the inputs whose silent mutation would corrupt later phases; they do not prove the full write scope.
+`slc` or its host may additionally enforce that scope with sandboxes, snapshots, or write allowlists, and a write-scope violation detected by any means shall fail like a failed generic check.
 
 Any semantic or format-aware verification beyond generic checks shall belong to the phase or link definition.
 The executing phase carries out that verification while following the definition; it is not a separate opaque hook executed by `slc`.
