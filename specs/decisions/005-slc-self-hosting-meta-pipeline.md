@@ -28,18 +28,20 @@ When `slc` is invoked without an explicit pipeline argument, the command shall u
 `slc <source>` is equivalent to `slc slc <source>`, and `slc slc.<phase> <source>` runs one named phase per [DR-001](001-slc-pipeline-layout-naming-invocation.md#cli).
 This amends the [DR-001](001-slc-pipeline-layout-naming-invocation.md#cli) grammar to make `<pipeline>` optional with default `slc`.
 Because a pipeline run always takes a source, a single positional is the source under the default pipeline and a leading positional before the source is the explicit pipeline, so the form stays unambiguous.
+A positional that fails source validation may equally be a pipeline name missing its source; the failure diagnostic shall present both readings.
 
 The `slc` pipeline shall chain `text2gears` (`text` `.md` to `gears` `.md`) and `gears2fsm` (`gears` `.md` to `fsm` `.ts`), plus a reserved `link.md` link phase (`fsm` `.ts` to `phase` `.ts`) per [DR-002](002-slc-link-phases.md).
 Each phase's transformation rules live in its own definition, not in this DR.
 This DR constrains only the properties self-hosting depends on:
 
-- `gears2fsm` shall preserve the GEARS-to-phase mapping in machine-readable form, so a generated phase artifact can be audited against its phase definition.
+- `gears2fsm` shall preserve the GEARS-to-FSM mapping in machine-readable form, so a generated phase artifact can be audited against its phase definition.
 - The link phase shall emit the distinct `phase` linked format, whose runnable artifact exposes the interface `slc` needs to run that phase against its declared inputs and output path. Per [DR-002](002-slc-link-phases.md#cli), full-pipeline invocation without `--link` stops at the `fsm` object artifact.
 
 ### Compiled phase execution
 
 A non-`slc` pipeline may execute its phases through compiled phase artifacts produced by the `slc` pipeline.
 Compilation is chosen for phases that need fixed control flow, statefulness, or determinism.
+Compiled execution shall build on Playbook (npm `@sublang/playbook` [[1]]): a compiled phase artifact is a playbook — a state-machine agent orchestrating deterministic tools and coding agents through host-supplied ports.
 Interpreted execution ([DR-004](004-slc-interpreted-phase-execution.md)) remains available for phases without a pinned compiled artifact.
 
 A compiled phase artifact shall be behavior-equivalent to interpreting its definition, per the [DR-004](004-slc-interpreted-phase-execution.md) reference semantics.
@@ -72,15 +74,17 @@ interface PhaseRunner {
 export default function createPhaseRunner(): PhaseRunner;
 ```
 
+`PhaseInput` carries workspace paths, not contents; the artifact performs no direct file I/O and reaches the workspace only through the ports.
 The runner takes no construction options; per-step model selection flows through `callAgent`, not construction.
 Port semantics are minimal and everything else is host-defined.
 `runTool` resolves with the tool's exit `code`, `stdout`, and `stderr`, and a non-zero `code` is a tool outcome the runner inspects rather than a rejection.
-`callAgent` resolves with the agent's text; its `binding` is an opaque key the runner chooses per step, which the host maps to a concrete model, so per-step model selection is the runner's while model identities stay the host's.
+`callAgent` runs a coding agent in the workspace — `slc` supplies this port through Cligent (npm `@sublang/cligent` [[2]]) per [DR-004](004-slc-interpreted-phase-execution.md) — so the agent can read inputs and write the target itself; it resolves with the agent's text.
+Its `binding` is an opaque key the runner chooses per step, which the host maps to a concrete agent and model, so per-step model selection is the runner's while agent and model identities stay the host's.
 Both reject only when the call cannot complete or `signal` aborts.
 How a host interprets a command — shell or direct process, working directory, environment, resource limits — is host-defined; portability holds over the port shape and these failure and abort semantics, not the execution environment.
 
-The runner writes only the `target` or `linked` path from its input, honoring the [DR-003](003-slc-phase-execution.md) write-scope invariant.
-`slc` constructs the runner, supplies the ports, calls `run`, then maps the result onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; `blocked` and `error` both surface the runner's diagnostics.
+The runner causes writes only to the `target` or `linked` path from its input, whether through tools or agents, honoring the [DR-003](003-slc-phase-execution.md) write-scope invariant.
+`slc` constructs the runner, supplies the ports, calls `run`, then maps the result onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol)).
 
 ### Strategy selection
 
@@ -98,7 +102,7 @@ A pin is current when the artifact exists and those inputs are unchanged; `slc` 
 A pin whose artifact is missing or whose inputs changed is stale, and `slc` fails per [Strategy selection](#strategy-selection).
 A phase with no pin is interpreted.
 
-The concrete pin format — storage location, path resolution, hash algorithm, link-target identity, and what belongs in the semantic input closure — is deferred to a dedicated pinning DR.
+The concrete pin format — storage location, path resolution, hash algorithm, link-target identity, what belongs in the semantic input closure, and whether the producing meta-pipeline version is a pin input — is deferred to a dedicated pinning DR.
 Until that DR exists, compiled selection is unavailable and `slc` interprets every phase ([DR-004](004-slc-interpreted-phase-execution.md)).
 
 ### Artifact stability
@@ -118,6 +122,11 @@ For example:
 ## Consequences
 
 - A pipeline can be bootstrapped by compiling its own phase definitions; once the pinning contract exists, `slc` runs it through the resulting artifacts rather than interpreting them.
-- Compiled phases gain auditable control flow (the GEARS-to-phase mapping) and can mix deterministic and agentic steps.
+- Compiled phases gain auditable control flow (the GEARS-to-FSM mapping) and can mix deterministic and agentic steps.
 - Once the pinning contract exists, version-pinned artifacts keep the toolchain stable across runs.
 - Interpreted execution ([DR-004](004-slc-interpreted-phase-execution.md)) remains the reference semantics and the fallback for uncompiled phases.
+
+## References
+
+[1]: https://www.npmjs.com/package/@sublang/playbook "Playbook: Skills Made Reliable through State Machines and Visualization"
+[2]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"
