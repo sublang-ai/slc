@@ -11,7 +11,7 @@ Accepted
 
 Some pipelines produce object artifacts that need runtime bindings before they
 are executable.
-For example, `playbook` links a state machine to a runner.
+For example, `playbook` links a state machine to a Playbook runtime.
 
 ## Decision
 
@@ -70,7 +70,7 @@ A link phase may use this shape:
 | <path>.ts | TypeScript module exporting a compatible runner. |
 
 Required symbols:
-- Captain
+- createRunner
 
 Options:
 
@@ -135,14 +135,21 @@ Multiple objects require `-o <linked-target>`.
 
 ### Playbook Example
 
-For `playbook`, a link target is a runner module providing symbols such as
-`Captain`.
-A `playbook` link phase may use the shape above with `fsm` as
-source, `run` as target, `.ts` as both extensions, and target form `<path>.ts`.
+For `playbook`, the object artifact is an XState FSM and the linked artifact
+is a host-agnostic Playbook runtime.
+The runtime contract is owned by Playbook's authored `slc/link.md` source;
+CODE's generated `reference/sdlc/code.playbook/code.playbook.ts` is a
+reference realization of that contract, not the contract source.
 
-`slc playbook flows/onboarding.md --link runner.ts` may write
+A `playbook` link phase may use `fsm` as source, `playbook` as target, `.ts`
+as both extensions, and a link target that supplies the Playbook linker inputs
+needed to bind players and strategies.
+The link target affects only the linked artifact; it shall not change the
+reviewable FSM object artifact.
+
+`slc playbook flows/onboarding.md --link playbook-link.ts` may write
 `flows/onboarding.playbook/onboarding.fsm.ts` as the object artifact and
-`flows/onboarding.playbook/onboarding.run.ts` as the linked artifact.
+`flows/onboarding.playbook/onboarding.playbook.ts` as the linked artifact.
 
 ## Consequences
 
