@@ -5,11 +5,12 @@
 
 ## Goal
 
-Implement [DR-003](../decisions/003-slc-phase-execution.md) (phase execution boundary) and [DR-004](../decisions/004-slc-interpreted-phase-execution.md) (interpreted phase execution) as a working `slc` command.
+Implement [DR-003](../decisions/003-slc-phase-execution.md) (phase execution boundary) and [DR-004](../decisions/004-slc-interpreted-phase-execution.md) (interpreted phase execution) as the runnable core of the `slc` command (the injectable `runSlc` API).
 
 - Dependencies: the repository has no code yet, and DR-003 delegates generic mechanics to [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) and [DR-002](../decisions/002-slc-link-phases.md); this IR therefore builds the minimal DR-001/DR-002 mechanics those DRs require to run.
 - Strategy: interpreted execution via Cligent is the only executor in this IR; the boundary orchestrator exposes an executor interface that a future compiled executor can implement.
 - Out of scope: compiled phase execution, pinning, and the file capability ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)), which DR-005 itself defers; until those land, `slc` interprets every phase.
+- Out of scope: binding the published `slc` bin to a concrete pipeline-reference resolver and agent/model selection, which [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) and [DR-004](../decisions/004-slc-interpreted-phase-execution.md) leave to the consumer/host; `runSlc` takes both as injected dependencies and the bin wiring is a follow-up IR.
 
 ## Deliverables
 
@@ -57,6 +58,8 @@ Implement [DR-003](../decisions/003-slc-phase-execution.md) (phase execution bou
     Implement the Task 10 test items against a sample pipeline (with a faked agent transport), covering interpreted full-pipeline, single-phase, and `.link` runs, plus blocked and generic-check-failure paths.
 
 ## Acceptance criteria
+
+Verified through the `runSlc` core over the documented CLI grammar; each `slc …` form below denotes that invocation grammar, and binding the published bin is deferred per the Goal.
 
 - `slc <pipeline> <source>` runs a full interpreted pipeline, writing intermediates and the output to canonical paths ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations)).
 - `slc <pipeline>.<phase> <source>` and `slc <pipeline>.link <object>... <target>` run a single phase or link to the same locations ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli)).

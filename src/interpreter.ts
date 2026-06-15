@@ -75,7 +75,7 @@ export function buildPhasePrompt(opts: {
     'The phase definition below is authoritative; follow it exactly and add no rules of your own.',
     '',
     '--- DEFINITION ---',
-    definition.trim(),
+    definition,
     '--- END DEFINITION ---',
     '',
     'Inputs:',
