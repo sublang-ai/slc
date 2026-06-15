@@ -9,6 +9,7 @@
  */
 
 export * from './phase.js';
+export * from './pipeline.js';
 
 export const name = 'slc';
 
