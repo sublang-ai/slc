@@ -46,11 +46,13 @@ const linkDoc = `## Formats
 /** An agent that writes the prompt's declared target, with optional faults. */
 const makeAgent = (
   opts: { block?: boolean; skip?: boolean; mutate?: string; add?: string } = {},
-): { agent: AgentClient; calls: string[] } => {
+): { agent: AgentClient; calls: string[]; models: (string | undefined)[] } => {
   const calls: string[] = [];
+  const models: (string | undefined)[] = [];
   const agent: AgentClient = {
-    run: async ({ prompt }) => {
+    run: async ({ prompt, model }) => {
       calls.push(prompt);
+      models.push(model);
       if (opts.block)
         return { status: 'success', text: 'BLOCKED: the source is malformed' };
       const match = /artifact to write: (.+)/.exec(prompt);
@@ -61,7 +63,7 @@ const makeAgent = (
       return { status: 'success', text: 'wrote the artifact' };
     },
   };
-  return { agent, calls };
+  return { agent, calls, models };
 };
 
 let root: string;
@@ -138,12 +140,34 @@ describe('full pipeline run (PIPE-20, PHEXEC-16)', () => {
     expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(false);
   });
 
-  it('passes the configured model through to the agent (PHEXEC-21)', async () => {
-    const { agent, calls } = makeAgent();
+  it('passes the configured model to every interpreted phase (PHEXEC-21)', async () => {
+    const { agent, models } = makeAgent();
     await runSlc(['playbook', source], deps(agent, 'a-model'));
-    expect(calls.length).toBeGreaterThan(0);
+    expect(models).toEqual(['a-model', 'a-model']);
     // The source is unchanged: the agent wrote only targets.
     expect(await readFile(source, 'utf8')).toBe('prose');
+  });
+
+  it('builds an agent prompt with the definition verbatim and the full contract (PHEXEC-20)', async () => {
+    const { agent, calls } = makeAgent();
+    await runSlc(['playbook', source], deps(agent));
+    const prompt = calls[0];
+    // The definition is embedded verbatim, not just a fragment.
+    expect(prompt).toContain(formats('text', '.md', 'gears', '.md'));
+    // Every PHEXEC-14 contract clause (plus PHEXEC-15) appears.
+    expect(prompt).toContain('authoritative');
+    expect(prompt).toContain('write only');
+    expect(prompt).toContain('not edit the sources');
+    expect(prompt).toContain('not commit');
+    expect(prompt).toContain('complete artifact');
+    expect(prompt).toContain('add no domain semantics');
+    expect(prompt).toContain('drop nothing');
+    expect(prompt).toContain('preserve verbatim');
+    expect(prompt).toContain('run only the deterministic tools');
+    expect(prompt).toContain('read only the content it cites');
+    expect(prompt).toContain('verify the produced artifact');
+    expect(prompt).toContain('summary');
+    expect(prompt).toContain('BLOCKED:');
   });
 });
 
@@ -156,6 +180,51 @@ describe('single-phase run (PIPE-24)', () => {
     expect(calls).toHaveLength(1);
     expect(result.outputs).toEqual([join(artDir, 'onboarding.gears.md')]);
     expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(false);
+  });
+
+  it('ignores -o for a non-terminal phase, keeping the canonical intermediate (DR-001)', async () => {
+    const { agent } = makeAgent();
+    const out = join(srcDir, 'custom.gears.md');
+    const result = await runSlc(
+      ['playbook.text2gears', source, '-o', out],
+      deps(agent),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([join(artDir, 'onboarding.gears.md')]);
+    expect(await exists(out)).toBe(false);
+  });
+
+  it('reuses the artifact directory without nesting on a rerun (PIPE-24)', async () => {
+    await mkdir(artDir, { recursive: true });
+    const intermediate = join(artDir, 'onboarding.gears.md');
+    await writeFile(intermediate, 'gears');
+    const { agent } = makeAgent();
+
+    const result = await runSlc(
+      ['playbook.gears2fsm', intermediate],
+      deps(agent),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([join(artDir, 'onboarding.fsm.ts')]);
+  });
+
+  it('honors -o for the terminal phase', async () => {
+    await mkdir(artDir, { recursive: true });
+    const intermediate = join(artDir, 'onboarding.gears.md');
+    await writeFile(intermediate, 'gears');
+    const out = join(srcDir, 'custom.fsm.ts');
+    const { agent } = makeAgent();
+
+    const result = await runSlc(
+      ['playbook.gears2fsm', intermediate, '-o', out],
+      deps(agent),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([out]);
+    expect(await exists(out)).toBe(true);
   });
 });
 
@@ -198,6 +267,45 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(true); // object artifact
     expect(await exists(join(artDir, 'onboarding.run.ts'))).toBe(true); // linked artifact
   });
+
+  it('lets -o override the linked artifact for a .link run (PIPE-28)', async () => {
+    await mkdir(artDir, { recursive: true });
+    const object = join(artDir, 'onboarding.fsm.ts');
+    await writeFile(object, 'fsm');
+    await writeFile(join(srcDir, 'runner.ts'), 'runner');
+    const out = join(srcDir, 'app.run.ts');
+    const { agent } = makeAgent();
+
+    const result = await runSlc(
+      ['playbook.link', object, join(srcDir, 'runner.ts'), '-o', out],
+      deps(agent),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([out]);
+    expect(await exists(out)).toBe(true);
+  });
+
+  it('conveys --link-option to the link phase (PIPE-29)', async () => {
+    await mkdir(artDir, { recursive: true });
+    const object = join(artDir, 'onboarding.fsm.ts');
+    await writeFile(object, 'fsm');
+    await writeFile(join(srcDir, 'runner.ts'), 'runner');
+    const { agent, calls } = makeAgent();
+
+    await runSlc(
+      [
+        'playbook.link',
+        object,
+        join(srcDir, 'runner.ts'),
+        '--link-option',
+        'seed=42',
+      ],
+      deps(agent),
+    );
+
+    expect(calls[0]).toContain('options: seed=42');
+  });
 });
 
 describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', () => {
@@ -206,6 +314,14 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     const result = await runSlc(['playbook', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('was not written');
+  });
+
+  it('fails when -o gives the output a wrong extension (PHEXEC-17)', async () => {
+    const { agent } = makeAgent();
+    const out = join(srcDir, 'onboarding.fsm.txt'); // terminal phase declares .ts
+    const result = await runSlc(['playbook', source, '-o', out], deps(agent));
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('extension');
   });
 
   it('fails and reports when the agent blocks (PHEXEC-19)', async () => {
@@ -220,6 +336,45 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     const result = await runSlc(['playbook', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('changed during the run');
+  });
+
+  it('fails when the agent mutates a phase definition (PHEXEC-18)', async () => {
+    const { agent } = makeAgent({ mutate: join(pipelineDir, 'text2gears.md') });
+    const result = await runSlc(['playbook', source], deps(agent));
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('text2gears.md');
+  });
+
+  it('fails when the agent mutates a link object (PHEXEC-18)', async () => {
+    await mkdir(artDir, { recursive: true });
+    const object = join(artDir, 'onboarding.fsm.ts');
+    await writeFile(object, 'fsm');
+    await writeFile(join(srcDir, 'runner.ts'), 'runner');
+    const { agent } = makeAgent({ mutate: object });
+    const result = await runSlc(
+      ['playbook.link', object, join(srcDir, 'runner.ts')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('changed during the run');
+  });
+
+  it('fails when a phase filename disagrees with its ## Formats (PIPE-23)', async () => {
+    const badDir = join(root, 'badname');
+    await mkdir(badDir);
+    // Named text2gears.md but declares target fsm, so the expected name is text2fsm.md.
+    await writeFile(
+      join(badDir, 'text2gears.md'),
+      formats('text', '.md', 'fsm', '.ts'),
+    );
+    const { agent } = makeAgent();
+    const result = await runSlc(['x', source], {
+      ...deps(agent),
+      resolver: () => [badDir],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('text2gears.md');
+    expect(result.outputs).toEqual([]);
   });
 
   it('fails when the agent breaks the chain mid-run (PHEXEC-22)', async () => {
@@ -237,12 +392,38 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     const { agent } = makeAgent();
     const result = await runSlc(['broken', source], deps(agent));
     expect(result.ok).toBe(false);
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+    expect(result.outputs).toEqual([]);
   });
 
   it('fails on an unresolved pipeline reference (PIPE-27)', async () => {
     const { agent } = makeAgent();
     const result = await runSlc(['missing', source], deps(agent));
     expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('missing'); // names the reference
+    expect(result.outputs).toEqual([]);
+  });
+
+  it('fails on an ambiguous pipeline reference (PIPE-27)', async () => {
+    const { agent } = makeAgent();
+    const ambiguous: SlcDeps = {
+      ...deps(agent),
+      resolver: () => [pipelineDir, join(root, 'pipe-2')],
+    };
+    const result = await runSlc(['playbook', source], ambiguous);
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('playbook'); // names the reference
+    expect(result.outputs).toEqual([]);
+  });
+
+  it('fails on a source whose name matches no form (PIPE-22)', async () => {
+    const badSource = join(srcDir, 'onboarding.txt');
+    await writeFile(badSource, 'prose');
+    const { agent } = makeAgent();
+    const result = await runSlc(['playbook', badSource], deps(agent));
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+    expect(result.outputs).toEqual([]);
   });
 
   it('fails on a malformed invocation', async () => {
