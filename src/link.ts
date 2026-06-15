@@ -187,18 +187,28 @@ function parseLinkTargets(lines: readonly string[]): {
 
   const validation = segments.validation.join('\n').trim();
   return {
-    targetForms: firstColumn(segments.targets, 'target form'),
+    targetForms: columnAfterHeader(segments.targets, 'target form'),
     requiredSymbols: listItems(segments.required),
-    options: firstColumn(segments.options, 'name'),
+    options: columnAfterHeader(segments.options, 'name'),
     validation: validation.length > 0 ? validation : null,
   };
 }
 
-/** Returns the first table column from `lines`, dropping the named header cell. */
-function firstColumn(lines: readonly string[], header: string): string[] {
-  return parseTable(lines)
+/**
+ * Returns the data-row first column of the table in `lines`, requiring its
+ * header row's first cell to equal `header` (lowercase). Returns an empty array
+ * when no such table is present, so a missing or mis-headed required table is
+ * caught by the caller's emptiness check rather than leaking the header as data.
+ */
+function columnAfterHeader(lines: readonly string[], header: string): string[] {
+  const rows = parseTable(lines);
+  if (rows.length === 0 || rows[0][0].toLowerCase() !== header) {
+    return [];
+  }
+  return rows
+    .slice(1)
     .map((cells) => cells[0])
-    .filter((cell) => cell.length > 0 && cell.toLowerCase() !== header);
+    .filter((cell) => cell.length > 0);
 }
 
 /** Returns the bullet-list item texts in `lines`. */

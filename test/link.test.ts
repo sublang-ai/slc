@@ -106,6 +106,25 @@ Required symbols:
     );
   });
 
+  it('refuses a ## Link Targets table whose header is not "Target form"', () => {
+    const wrongHeader = `## Formats
+
+| Role | Format | Extension |
+| --- | --- | --- |
+| source | fsm | .ts |
+| target | run | .ts |
+
+## Link Targets
+
+| Form | Meaning |
+| --- | --- |
+| <path>.ts | A runner module. |
+`;
+    expect(() => parseLinkPhase(wrongHeader)).toThrow(
+      expect.objectContaining({ code: 'missing-link-targets' }),
+    );
+  });
+
   it('refuses a missing ## Formats section', () => {
     expect(() =>
       parseLinkPhase('## Link Targets\n\n| Target form |\n| --- |\n| x.ts |\n'),
