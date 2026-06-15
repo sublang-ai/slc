@@ -39,6 +39,12 @@ meta.md     The spec of specs
 
 ## Packages
 
+### COMPILE
+
+| Group | File | Summary |
+| --- | --- | --- |
+| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, and run outcomes |
+
 ### GIT
 
 | Group | File | Summary |
