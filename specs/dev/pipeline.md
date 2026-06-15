@@ -16,6 +16,16 @@ is specified in the `phase-execution` package.
 
 Essential project-specific reference: `slc`, this project's compiler CLI.
 
+## Discovery
+
+### PIPE-16
+
+When a `<pipeline>` reference cannot be resolved to exactly one pipeline directory through the consumer-provided resolution ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#directory-layout)), the slc command shall stop with a diagnostic naming the reference.
+
+### PIPE-17
+
+Where a pipeline directory is resolved, the slc command shall treat each `.md` file directly inside it as a phase file, reserve `link.md` as the link phase ([PIPE-10](#pipe-10)), and shall not descend into subdirectories ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#directory-layout)).
+
 ## Phases and formats
 
 ### PIPE-1
@@ -68,7 +78,11 @@ Where a pipeline directory contains `link.md`, the slc command shall load it as 
 
 ### PIPE-11
 
-When loading `link.md`, the slc command shall read its `## Formats` (object source format and a distinct linked target format) and `## Link Targets` (target form, required symbols, supported option names, and validation rules), and shall refuse a linked format token equal to any accepted object format token ([DR-002](../decisions/002-slc-link-phases.md#link-phase)).
+When loading `link.md`, the slc command shall read its `## Formats` (the object source format and the linked target format) and its `## Link Targets` section, whose target-form table is required and whose required symbols, supported `--link-option` names, and validation rules are optional ([DR-002](../decisions/002-slc-link-phases.md#link-phase)).
+
+### PIPE-19
+
+While loading `link.md`, the slc command shall refuse a linked format token equal to the object source format token declared in `## Formats`, even when they share a file extension; accepting any additional object formats and validating object count and compatibility are the link phase's responsibility ([DR-002](../decisions/002-slc-link-phases.md#link-phase), [PHEXEC-7](phase-execution.md#phexec-7)).
 
 ### PIPE-12
 
@@ -84,4 +98,8 @@ When given `--link-option <name>=<value>` pairs on either invocation form, the s
 
 ### PIPE-15
 
-When a link phase runs, the slc command shall write the linked artifact to `<art-dir>/<basename>.<target-format>.<ext>` unless `-o <linked-target>` overrides it, and shall treat the compile-chain exit artifact as the object-artifact intermediate ([DR-002](../decisions/002-slc-link-phases.md#output-locations)).
+When a link phase runs in a full-pipeline invocation, the slc command shall treat the compile-chain exit artifact as the object artifact, write the linked artifact to `<art-dir>/<basename>.<target-format>.<ext>` unless `-o <linked-target>` overrides it, and let `-o <linked-target>` control only the linked artifact ([DR-002](../decisions/002-slc-link-phases.md#output-locations)).
+
+### PIPE-18
+
+When invoked as `slc <pipeline>.link` with exactly one object, the slc command shall place the linked artifact by DR-001's source-adjacent directory and basename rules unless `-o <linked-target>` overrides the linked-artifact path; with more than one object, the slc command shall require `-o <linked-target>`, refuse the invocation when it is absent, and write the linked artifact to that path ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [DR-002](../decisions/002-slc-link-phases.md#output-locations)).
