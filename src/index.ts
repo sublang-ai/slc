@@ -10,6 +10,7 @@
 
 export * from './artifacts.js';
 export * from './invocation.js';
+export * from './link.js';
 export * from './phase.js';
 export * from './pipeline.js';
 

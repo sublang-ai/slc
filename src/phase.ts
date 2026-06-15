@@ -7,11 +7,14 @@
  * Implements PIPE-1 (read the authoritative `## Formats` table), PIPE-2 (refuse
  * a phase whose `<source-format>2<target-format>.md` filename does not match its
  * table), and PIPE-3 (refuse phases declaring conflicting extensions for the
- * same format token). See specs/dev/pipeline.md.
+ * same format token). The `## Formats` reader is shared with the link loader.
+ * See specs/dev/pipeline.md.
  */
 
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
+
+import { findSection, parseTable } from './markdown.js';
 
 /** A format token bound to its canonical file extension. */
 export interface FormatDecl {
@@ -31,11 +34,15 @@ export interface Phase {
   target: FormatDecl;
 }
 
-/** Machine-readable reason a phase was refused. */
-export type PhaseErrorCode =
+/** Machine-readable reason a `## Formats` table was refused. */
+export type FormatsErrorCode =
   | 'missing-formats'
   | 'malformed-formats'
-  | 'missing-role'
+  | 'missing-role';
+
+/** Machine-readable reason a phase was refused. */
+export type PhaseErrorCode =
+  | FormatsErrorCode
   | 'filename-mismatch'
   | 'extension-conflict';
 
@@ -52,8 +59,58 @@ export class PhaseError extends Error {
 
 const FORMAT_TOKEN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const EXTENSION = /^\.[A-Za-z0-9]+$/;
-const HEADING = /^#{1,6}\s/;
-const SEPARATOR_CELL = /^:?-+:?$/;
+
+/**
+ * Reads the authoritative `## Formats` table into its source and target
+ * declarations (PIPE-1), shared by the phase and link loaders.
+ *
+ * Refusals are reported through `fail` so each loader can raise its own error
+ * type; `fail` must not return.
+ */
+export function readFormats(
+  content: string,
+  fail: (code: FormatsErrorCode, message: string) => never,
+): { source: FormatDecl; target: FormatDecl } {
+  const section = findSection(content, 'Formats');
+  if (section === null) {
+    fail('missing-formats', 'missing a ## Formats section');
+  }
+
+  const decls = new Map<'source' | 'target', FormatDecl>();
+  for (const cells of parseTable(section)) {
+    if (cells.length < 3) continue;
+    const role = cells[0].toLowerCase();
+    if (role !== 'source' && role !== 'target') continue;
+
+    const [, format, ext] = cells;
+    if (!FORMAT_TOKEN.test(format)) {
+      fail(
+        'malformed-formats',
+        `${role} format token "${format}" is not a kebab-case identifier`,
+      );
+    }
+    if (!EXTENSION.test(ext)) {
+      fail(
+        'malformed-formats',
+        `${role} extension "${ext}" is not a canonical extension (e.g. ".md")`,
+      );
+    }
+    if (decls.has(role)) {
+      fail('malformed-formats', `## Formats declares ${role} more than once`);
+    }
+    decls.set(role, { format, ext });
+  }
+
+  const source = decls.get('source');
+  const target = decls.get('target');
+  if (source === undefined || target === undefined) {
+    fail(
+      'missing-role',
+      `## Formats is missing a ${source === undefined ? 'source' : 'target'} row`,
+    );
+  }
+  return { source, target };
+}
 
 /**
  * Parses and validates a phase definition from its filename and content.
@@ -62,7 +119,9 @@ const SEPARATOR_CELL = /^:?-+:?$/;
  *   when the filename does not match the declared tokens (PIPE-1, PIPE-2).
  */
 export function parsePhase(file: { name: string; content: string }): Phase {
-  const { source, target } = parseFormats(file.content);
+  const { source, target } = readFormats(file.content, (code, message) => {
+    throw new PhaseError(code, message);
+  });
 
   const expected = `${source.format}2${target.format}.md`;
   if (file.name !== expected) {
@@ -103,70 +162,4 @@ export function checkExtensionConsistency(phases: readonly Phase[]): void {
       }
     }
   }
-}
-
-/** Parses the `## Formats` table into its source and target declarations. */
-function parseFormats(content: string): {
-  source: FormatDecl;
-  target: FormatDecl;
-} {
-  const lines = content.split(/\r?\n/);
-  const start = lines.findIndex((line) =>
-    /^##\s+Formats\s*$/.test(line.trim()),
-  );
-  if (start === -1) {
-    throw new PhaseError(
-      'missing-formats',
-      'phase is missing a ## Formats section',
-    );
-  }
-
-  const decls = new Map<'source' | 'target', FormatDecl>();
-  for (let i = start + 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (HEADING.test(line)) break;
-    if (!line.startsWith('|')) continue;
-
-    const cells = line
-      .split('|')
-      .slice(1, -1)
-      .map((cell) => cell.trim());
-    if (cells.length < 3) continue;
-    if (cells.every((cell) => SEPARATOR_CELL.test(cell))) continue;
-
-    const role = cells[0].toLowerCase();
-    if (role !== 'source' && role !== 'target') continue;
-
-    const [, format, ext] = cells;
-    if (!FORMAT_TOKEN.test(format)) {
-      throw new PhaseError(
-        'malformed-formats',
-        `${role} format token "${format}" is not a kebab-case identifier`,
-      );
-    }
-    if (!EXTENSION.test(ext)) {
-      throw new PhaseError(
-        'malformed-formats',
-        `${role} extension "${ext}" is not a canonical extension (e.g. ".md")`,
-      );
-    }
-    if (decls.has(role)) {
-      throw new PhaseError(
-        'malformed-formats',
-        `## Formats declares ${role} more than once`,
-      );
-    }
-    decls.set(role, { format, ext });
-  }
-
-  const source = decls.get('source');
-  const target = decls.get('target');
-  if (source === undefined || target === undefined) {
-    const missing = source === undefined ? 'source' : 'target';
-    throw new PhaseError(
-      'missing-role',
-      `## Formats is missing a ${missing} row`,
-    );
-  }
-  return { source, target };
 }
