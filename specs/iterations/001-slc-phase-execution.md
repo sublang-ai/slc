@@ -15,7 +15,7 @@ Implement [DR-003](../decisions/003-slc-phase-execution.md) (phase execution bou
 
 - [x] `slc` TypeScript/Node project scaffold with build, test, and lint
 - [x] Generic pipeline mechanics: pipeline resolution, chain inference, source naming, artifact paths, CLI, link phases ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md))
-- [ ] Execution boundary: generic checks, write-scope enforcement, blocked protocol, failure reporting ([DR-003](../decisions/003-slc-phase-execution.md))
+- [x] Execution boundary: generic checks, write-scope enforcement, blocked protocol, failure reporting ([DR-003](../decisions/003-slc-phase-execution.md))
 - [ ] Interpreted executor via Cligent honoring the agent contract, one invocation per phase ([DR-004](../decisions/004-slc-interpreted-phase-execution.md))
 - [ ] Dev and test spec packages `pipeline` and `phase-execution`, registered in `map.md`
 - [ ] Integration tests for interpreted full-pipeline, single-phase, and link runs
