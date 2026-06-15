@@ -9,6 +9,7 @@
  */
 
 export * from './artifacts.js';
+export * from './execution.js';
 export * from './invocation.js';
 export * from './link.js';
 export * from './phase.js';
