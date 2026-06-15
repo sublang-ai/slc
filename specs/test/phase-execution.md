@@ -31,7 +31,7 @@ Verifies: [PHEXEC-3](../dev/phase-execution.md#phexec-3), [PHEXEC-5](../dev/phas
 While interpreting a phase, when the agent modifies the source, an object input, the link target, or a phase or link definition, the slc command shall fail the run with a report naming the changed path.
 
 ### PHEXEC-19
-Verifies: [PHEXEC-7](../dev/phase-execution.md#phexec-7), [PHEXEC-9](../dev/phase-execution.md#phexec-9)
+Verifies: [PHEXEC-7](../dev/phase-execution.md#phexec-7), [PHEXEC-9](../dev/phase-execution.md#phexec-9), [COMPILE-4](../user/compiler.md#compile-4)
 
 While interpreting a phase, when the agent reports `BLOCKED` for malformed inputs or an incompatible definition, the slc command shall stop the pipeline and emit a failure report carrying the blocked diagnostics.
 
@@ -46,6 +46,6 @@ Verifies: [PHEXEC-13](../dev/phase-execution.md#phexec-13)
 Where slc configuration selects an agent and model, when the slc command interprets a phase, the slc command shall pass that selection to the agent transport without it changing the phase definition or the produced artifact.
 
 ### PHEXEC-22
-Verifies: [PHEXEC-5](../dev/phase-execution.md#phexec-5)
+Verifies: [PHEXEC-5](../dev/phase-execution.md#phexec-5), [COMPILE-4](../user/compiler.md#compile-4)
 
 While interpreting a phase, when the agent adds, removes, or renames a phase file so the pipeline chain no longer infers, the slc command shall fail the run with a diagnostic rather than report success.

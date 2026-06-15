@@ -28,7 +28,7 @@ When the user supplies an output-path override, the slc command shall write the 
 
 ### COMPILE-4
 
-When a run cannot complete, the slc command shall stop and report which phase failed, the artifact it targeted, and the reasons, and shall leave the source, the previously produced artifacts, and the pipeline definitions unchanged ([DR-003](../decisions/003-slc-phase-execution.md)).
+When a run cannot complete — because the invocation or pipeline is rejected, or a phase fails — the slc command shall stop and report the reason, naming the failing phase and its target artifact when a phase is at fault, and shall leave the inputs it read and the pipeline definitions unchanged ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-003](../decisions/003-slc-phase-execution.md)).
 
 ### COMPILE-5
 
