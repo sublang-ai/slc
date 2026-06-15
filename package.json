@@ -31,5 +31,8 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.0",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@sublang/cligent": "^0.12.0"
   }
 }
