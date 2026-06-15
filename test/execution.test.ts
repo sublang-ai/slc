@@ -126,6 +126,97 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     await run(writingExecutor());
     expect(await readFile(request.source, 'utf8')).toBe('source');
   });
+
+  it('fails when a sibling chain definition is mutated (PHEXEC-5)', async () => {
+    const sibling = join(dir, 'gears2fsm.md');
+    await writeFile(sibling, 'sibling def');
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      definitions: [request.definitionPath, sibling],
+      executor: executor(async (req) => {
+        await writeFile(req.target, 'out');
+        await writeFile(sibling, 'tampered sibling');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.report.reasons.some((r) => r.includes('gears2fsm.md')),
+      ).toBe(true);
+    }
+  });
+
+  it('always protects the active definition even when definitions omits it', async () => {
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      definitions: [],
+      executor: executor(async (req) => {
+        await writeFile(req.target, 'out');
+        await writeFile(req.definitionPath, 'tampered def');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.report.reasons.some((r) => r.includes('text2gears.md')),
+      ).toBe(true);
+    }
+  });
+
+  it('fails when the revalidate hook reports an invalid chain (PHEXEC-5)', async () => {
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      revalidate: () => {
+        throw new Error('multiple entry phases');
+      },
+      executor: writingExecutor(),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.report.reasons.some((r) => r.includes('no longer valid')),
+      ).toBe(true);
+    }
+  });
+
+  it('passes when the revalidate hook accepts the chain', async () => {
+    let called = false;
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      revalidate: () => {
+        called = true;
+      },
+      executor: writingExecutor(),
+    });
+    expect(called).toBe(true);
+    expect(result.ok).toBe(true);
+  });
+
+  it('detects an input mutation even when the executor blocks (PHEXEC-6)', async () => {
+    const result = await run(
+      executor(async (req) => {
+        if (req.kind === 'compile') await writeFile(req.source, 'tampered');
+        return { status: 'blocked', diagnostics: ['source is malformed'] };
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain('source is malformed');
+      expect(
+        result.report.reasons.some((r) => r.includes('changed during the run')),
+      ).toBe(true);
+    }
+  });
 });
 
 describe('runPhase blocked protocol (PHEXEC-7, PHEXEC-9)', () => {
@@ -209,7 +300,7 @@ describe('runPhase link execution', () => {
       definitionPath: join(dir, 'link.md'),
       objects: [join(dir, 'onboarding.fsm.ts')],
       linkTarget: join(dir, 'runner.ts'),
-      options: {},
+      options: [{ name: 'seed', value: '1' }],
       linked: join(dir, 'onboarding.playbook.ts'),
     };
 

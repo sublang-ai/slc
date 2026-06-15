@@ -7,11 +7,13 @@
  * `runPhase` performs only generic mechanics (PHEXEC-1): it snapshots the
  * protected inputs, runs an injected {@link PhaseExecutor} (interpreted in
  * IR-001 Task 9, compiled later), then applies the generic checks — the target
- * exists and its extension matches the declared one (PHEXEC-4), and the source,
- * objects, link target, and phase/link definition are unchanged (PHEXEC-5),
- * which also catches the input-mutating write-scope violations (PHEXEC-3,
- * PHEXEC-6). A `blocked` or `error` result, or any failed check, becomes a
- * failure report naming the phase, target, and reasons (PHEXEC-7, PHEXEC-9).
+ * exists and its extension matches the declared one (PHEXEC-4); the source,
+ * objects, link target, and the chain's definition files are unchanged; and an
+ * optional `revalidate` hook confirms the pipeline chain still infers, catching
+ * added/removed phase files (PHEXEC-5). Input-mutating write-scope violations
+ * are caught after any executor outcome (PHEXEC-3, PHEXEC-6). A `blocked` or
+ * `error` result, a thrown executor, or any failed check becomes a failure
+ * report naming the phase, target, and reasons (PHEXEC-7, PHEXEC-9).
  *
  * The executor honors PHEXEC-2 by treating the passed definition as the
  * semantic source of truth. Broader write-scope enforcement (sandbox or
@@ -22,6 +24,12 @@
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname } from 'node:path';
+
+/** An opaque link option pair (PIPE-14), structurally compatible with the CLI's LinkOption. */
+export interface LinkOptionPair {
+  name: string;
+  value: string;
+}
 
 /** What a phase execution is asked to produce: a compile target or a linked artifact. */
 export type ExecuteRequest =
@@ -38,7 +46,7 @@ export type ExecuteRequest =
       definitionPath: string;
       objects: string[];
       linkTarget: string;
-      options: Record<string, string>;
+      options: LinkOptionPair[];
       linked: string;
     };
 
@@ -77,49 +85,68 @@ export async function runPhase(opts: {
   phase: string;
   targetExt: string;
   executor: PhaseExecutor;
+  /** Other chain definition files to protect; the executing phase's is always protected. */
+  definitions?: readonly string[];
+  /** Re-checks that the pipeline chain still infers; throws when it no longer does (PHEXEC-5). */
+  revalidate?: () => void | Promise<void>;
   signal?: AbortSignal;
 }): Promise<PhaseResult> {
   const { request, phase, targetExt, executor } = opts;
   const signal = opts.signal ?? new AbortController().signal;
   const target = request.kind === 'compile' ? request.target : request.linked;
-  const protectedPaths =
+  const inputs =
     request.kind === 'compile'
-      ? [request.source, request.definitionPath]
-      : [...request.objects, request.linkTarget, request.definitionPath];
+      ? [request.source]
+      : [...request.objects, request.linkTarget];
+  const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
+  const protectedPaths = [...new Set([...inputs, ...definitions])];
 
   const before = await snapshot(protectedPaths);
 
-  let result: ExecutorResult;
+  const reasons: string[] = [];
+  let result: ExecutorResult | null = null;
   try {
     result = await executor.run(request, signal);
   } catch (error) {
-    return failure(phase, target, [`executor threw: ${messageOf(error)}`]);
+    reasons.push(`executor threw: ${messageOf(error)}`);
   }
 
-  if (result.status !== 'ok') {
-    return failure(phase, target, reasonsFor(result));
+  if (result !== null && result.status !== 'ok') {
+    reasons.push(...reasonsFor(result));
   }
 
-  const reasons: string[] = [];
-  if (!(await exists(target))) {
-    reasons.push(`expected target "${target}" was not written`);
-  } else if (extname(target) !== targetExt) {
-    reasons.push(
-      `target "${target}" extension does not match the declared "${targetExt}"`,
-    );
+  if (result?.status === 'ok') {
+    if (!(await exists(target))) {
+      reasons.push(`expected target "${target}" was not written`);
+    } else if (extname(target) !== targetExt) {
+      reasons.push(
+        `target "${target}" extension does not match the declared "${targetExt}"`,
+      );
+    }
   }
 
+  // Protected inputs and chain definitions are re-checked after any outcome, so
+  // a mutation is caught even when the executor blocks, errors, or throws
+  // (PHEXEC-5, PHEXEC-6).
   const after = await snapshot(protectedPaths);
   for (const path of protectedPaths) {
     if (before.get(path) !== after.get(path)) {
-      reasons.push(`protected input "${path}" changed during the run`);
+      reasons.push(`protected path "${path}" changed during the run`);
+    }
+  }
+
+  if (opts.revalidate) {
+    try {
+      await opts.revalidate();
+    } catch (error) {
+      reasons.push(`pipeline chain is no longer valid: ${messageOf(error)}`);
     }
   }
 
   if (reasons.length > 0) {
     return failure(phase, target, reasons);
   }
-  return { ok: true, target, diagnostics: result.diagnostics };
+  return { ok: true, target, diagnostics: result?.diagnostics ?? [] };
 }
 
 /** Renders a failure report as a multi-line diagnostic string (PHEXEC-9). */
