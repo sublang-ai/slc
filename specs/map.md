@@ -57,9 +57,11 @@ meta.md     The spec of specs
 | Group | File | Summary |
 | --- | --- | --- |
 | dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution |
+| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, and blocked-protocol acceptance |
 
 ### PIPE
 
 | Group | File | Summary |
 | --- | --- | --- |
 | dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link |
+| test | [pipeline.md](test/pipeline.md) | End-to-end pipeline run, chain, naming, path, and link acceptance |
