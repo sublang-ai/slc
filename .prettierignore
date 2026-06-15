@@ -1,0 +1,7 @@
+dist
+node_modules
+coverage
+package-lock.json
+
+# Markdown is hand-authored (specs follow their own conventions, e.g. META-25).
+*.md
