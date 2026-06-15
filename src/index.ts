@@ -9,7 +9,9 @@
  */
 
 export * from './artifacts.js';
+export * from './cligent-agent.js';
 export * from './execution.js';
+export * from './interpreter.js';
 export * from './invocation.js';
 export * from './link.js';
 export * from './phase.js';
