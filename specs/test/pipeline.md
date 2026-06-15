@@ -15,7 +15,7 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 ## Pipeline runs
 
 ### PIPE-20
-Verifies: [PIPE-4](../dev/pipeline.md#pipe-4), [PIPE-8](../dev/pipeline.md#pipe-8), [PIPE-17](../dev/pipeline.md#pipe-17)
+Verifies: [PIPE-4](../dev/pipeline.md#pipe-4), [PIPE-8](../dev/pipeline.md#pipe-8), [PIPE-17](../dev/pipeline.md#pipe-17), [COMPILE-1](../user/compiler.md#compile-1)
 
 Where a pipeline directory holds a valid linear chain, when the slc command runs the full pipeline on a conforming source, the slc command shall write each intermediate and the output to their canonical `<art-dir>` paths and exit zero.
 
@@ -35,7 +35,7 @@ Verifies: [PIPE-2](../dev/pipeline.md#pipe-2)
 Where a phase file's `<source-format>2<target-format>.md` filename disagrees with its `## Formats` table, when the slc command loads the pipeline, the slc command shall refuse the run with a diagnostic naming the phase.
 
 ### PIPE-24
-Verifies: [PIPE-7](../dev/pipeline.md#pipe-7), [PIPE-9](../dev/pipeline.md#pipe-9)
+Verifies: [PIPE-7](../dev/pipeline.md#pipe-7), [PIPE-9](../dev/pipeline.md#pipe-9), [COMPILE-2](../user/compiler.md#compile-2)
 
 When the slc command runs `slc <pipeline>.<phase>` on an intermediate already inside a `<basename>.<pipeline>/` directory, the slc command shall write only that phase's target into the same artifact directory without nesting another inside it.
 
@@ -55,7 +55,7 @@ Verifies: [PIPE-16](../dev/pipeline.md#pipe-16)
 When a `<pipeline>` reference resolves to no directory or to more than one, the slc command shall exit non-zero with a diagnostic naming the reference and write no artifacts.
 
 ### PIPE-28
-Verifies: [PIPE-8](../dev/pipeline.md#pipe-8), [PIPE-15](../dev/pipeline.md#pipe-15), [PIPE-18](../dev/pipeline.md#pipe-18)
+Verifies: [PIPE-8](../dev/pipeline.md#pipe-8), [PIPE-15](../dev/pipeline.md#pipe-15), [PIPE-18](../dev/pipeline.md#pipe-18), [COMPILE-3](../user/compiler.md#compile-3)
 
 When the slc command is run with `-o <target>`, the slc command shall write the pipeline output, or the linked artifact, to that path while leaving intermediates at their canonical locations.
 
