@@ -141,12 +141,16 @@ async function runSinglePhase(
   const artDir = artifactDir(srcDir, basename, invocation.pipeline);
   await mkdir(artDir, { recursive: true });
 
-  const [artifact] = planArtifacts({
-    phases: [phase],
+  // Plan over the whole chain so the named phase keeps its pipeline role: a
+  // non-terminal phase writes its canonical intermediate and ignores `-o`
+  // (DR-001 -- artifact location depends on role, not invocation mode).
+  const plan = planArtifacts({
+    phases: pipeline.phases,
     basename,
     artDir,
     output: invocation.output ?? undefined,
   });
+  const artifact = plan[pipeline.phases.indexOf(phase)];
   const step: PhaseStep = {
     request: {
       kind: 'compile',
