@@ -4,9 +4,11 @@
 /**
  * Public entry point for the SubLang Compiler (slc).
  *
- * This is a scaffold stub (IR-001 Task 1). Pipeline resolution, phase
- * execution, and linking arrive in later IR-001 tasks.
+ * Pipeline resolution, phase execution, and linking arrive in later IR-001
+ * tasks; the phase model below (DR-001) is the first mechanic in place.
  */
+
+export * from './phase.js';
 
 export const name = 'slc';
 
