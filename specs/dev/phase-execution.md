@@ -90,6 +90,10 @@ When interpreting a phase, the slc command shall establish in the agent prompt a
 - the agent verifies the produced artifact against the definition before finishing;
 - the agent reports a concise summary and diagnostics, and follows the blocked protocol ([PHEXEC-7](#phexec-7)).
 
+### PHEXEC-15
+
+When interpreting a phase, the slc command shall permit the agent to invoke the deterministic tools or commands the definition calls for and to read the content the definition cites or references, as part of following the definition, and shall treat that readable closure as the phase's semantic input closure ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter)).
+
 ## References
 
 [1]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"
