@@ -8,6 +8,7 @@
  * tasks; the phase model below (DR-001) is the first mechanic in place.
  */
 
+export * from './artifacts.js';
 export * from './phase.js';
 export * from './pipeline.js';
 
