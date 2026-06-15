@@ -51,3 +51,15 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | dev | [licensing.md](dev/licensing.md) | SPDX header requirements and file-scope rules |
 | test | [licensing.md](test/licensing.md) | Copyright and license header presence checks |
+
+### PHEXEC
+
+| Group | File | Summary |
+| --- | --- | --- |
+| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution |
+
+### PIPE
+
+| Group | File | Summary |
+| --- | --- | --- |
+| dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link |
