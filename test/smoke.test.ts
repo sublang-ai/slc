@@ -35,10 +35,30 @@ describe('slc bin entry', () => {
     expect(out.join('')).toContain('SLC_AGENT');
   });
 
-  it('exits non-zero on a malformed invocation (CLI-4)', async () => {
+  it('exits non-zero naming SLC_AGENT when the agent is unset (CLI-12)', async () => {
     const err: string[] = [];
     const code = await run([], { env: {}, stderr: (text) => err.push(text) });
-    expect(code).not.toBe(0);
-    expect(err.join('')).not.toBe('');
+    expect(code).toBe(1);
+    expect(err.join('')).toContain('SLC_AGENT');
+  });
+
+  it('maps a runSlc failure to a stderr report and non-zero exit (CLI-4, CLI-11)', async () => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await run(['missing', 'onboarding.md'], {
+      env: {},
+      stdout: (text) => out.push(text),
+      stderr: (text) => err.push(text),
+      // Resolve to no pipeline directory so runSlc rejects the reference,
+      // exercising the result-to-stderr failure mapping (not the config path).
+      buildDeps: ({ signal }) => ({
+        resolver: () => [],
+        executor: { run: async () => ({ status: 'ok', diagnostics: [] }) },
+        signal,
+      }),
+    });
+    expect(code).toBe(1);
+    expect(out.join('')).toBe('');
+    expect(err.join('')).toContain('missing');
   });
 });
