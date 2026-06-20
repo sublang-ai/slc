@@ -14,15 +14,16 @@
  */
 
 import { stat } from 'node:fs/promises';
-import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 
 import type { PipelineResolver } from './pipeline.js';
 
 /**
  * Computes the ordered pipeline search roots from an `SLC_PIPELINE_PATH` value
- * (CLI-6): an OS path-list whose entries are made absolute against `cwd`,
- * defaulting to `[cwd]` when the value is unset, empty, or all blank. Duplicate
- * roots are collapsed while order is preserved.
+ * (CLI-6): an OS path-list whose entries are resolved to absolute, normalized
+ * roots against `cwd`, defaulting to `[cwd]` when the value is unset, empty, or
+ * all blank. Normalization (via `resolve`) strips trailing slashes and
+ * redundant segments so duplicate roots collapse while order is preserved.
  */
 export function pipelineSearchRoots(
   pipelinePath: string | undefined,
@@ -33,10 +34,8 @@ export function pipelineSearchRoots(
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
   const roots = entries.length > 0 ? entries : [cwd];
-  const absolute = roots.map((root) =>
-    isAbsolute(root) ? root : resolve(cwd, root),
-  );
-  return [...new Set(absolute)];
+  const normalized = roots.map((root) => resolve(cwd, root));
+  return [...new Set(normalized)];
 }
 
 /**
@@ -45,13 +44,20 @@ export function pipelineSearchRoots(
  * A `<reference>` matches `join(root, reference)` only when that path exists, is
  * a directory, and sits directly under the root — so nested paths and `..`
  * traversal yield no match. Matches are returned in root order, deduplicated.
+ *
+ * Roots are canonicalized once at construction (trailing slashes and redundant
+ * segments dropped) so the direct-child check holds even when a caller supplies
+ * a root like `/pipes/`.
  */
 export function createPipelineResolver(
   searchRoots: readonly string[],
 ): PipelineResolver {
+  // `join(root, '.')` drops a trailing slash and redundant segments without
+  // forcing the root absolute, matching the form `dirname(join(root, ref))` yields.
+  const roots = searchRoots.map((root) => join(root, '.'));
   return async (reference) => {
     const matches: string[] = [];
-    for (const root of searchRoots) {
+    for (const root of roots) {
       const candidate = join(root, reference);
       if (dirname(candidate) !== root) continue;
       if (await isDirectory(candidate)) matches.push(candidate);
