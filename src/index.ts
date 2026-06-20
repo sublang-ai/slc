@@ -10,6 +10,7 @@
 
 export * from './artifacts.js';
 export * from './cligent-agent.js';
+export * from './config.js';
 export * from './execution.js';
 export * from './interpreter.js';
 export * from './invocation.js';
