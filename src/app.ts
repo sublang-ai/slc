@@ -136,6 +136,29 @@ export async function run(
   return 1;
 }
 
+/**
+ * Wires `SIGINT`/`SIGTERM` on `emitter` to abort a fresh controller, returning
+ * its cancellation signal and a disposer that removes the listeners (CLI-10).
+ * The `cli.ts` shim passes `process`; tests pass a fake emitter so the
+ * interrupt-to-abort wiring is exercised without real signals.
+ */
+export function interruptSignal(emitter: {
+  once(event: string, listener: () => void): unknown;
+  removeListener(event: string, listener: () => void): unknown;
+}): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController();
+  const onInterrupt = (): void => controller.abort();
+  emitter.once('SIGINT', onInterrupt);
+  emitter.once('SIGTERM', onInterrupt);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      emitter.removeListener('SIGINT', onInterrupt);
+      emitter.removeListener('SIGTERM', onInterrupt);
+    },
+  };
+}
+
 /** True when argv contains any of the given exact flag tokens. */
 function hasFlag(argv: readonly string[], ...flags: string[]): boolean {
   return argv.some((arg) => flags.includes(arg));
