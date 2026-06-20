@@ -17,8 +17,8 @@ Turn the stubbed `slc` bin into a working command-line compiler over the existin
 - [ ] `cli` spec package (`user`, `dev`, `test`), short form `CLI`, registered in `map.md`
 - [x] Concrete pipeline-reference resolver mapping a `<pipeline>` reference to one directory under a defined host policy ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md))
 - [x] Configuration-driven agent/model selection with credentials from the environment, backing the interpreted executor through Cligent ([DR-004](../decisions/004-slc-interpreted-phase-execution.md))
-- [ ] Working `slc` bin over `runSlc`: full-pipeline, single-phase, `.link`, `--link`, `-o`, and `--link-option`, plus `--version`/`--help` and cancellation
-- [ ] Result reporting: canonical artifact paths on success; a phase/target/reasons report with a non-zero exit on any failure or `BLOCKED` ([DR-003](../decisions/003-slc-phase-execution.md))
+- [x] Working `slc` bin over `runSlc`: full-pipeline, single-phase, `.link`, `--link`, `-o`, and `--link-option`, plus `--version`/`--help` and cancellation
+- [x] Result reporting: canonical artifact paths on success; a phase/target/reasons report with a non-zero exit on any failure or `BLOCKED` ([DR-003](../decisions/003-slc-phase-execution.md))
 - [ ] Integration tests covering the bin behaviors, with the runSlc core and DRs unchanged
 
 ## Tasks
