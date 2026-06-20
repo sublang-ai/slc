@@ -40,6 +40,13 @@ meta.md     The spec of specs
 
 ## Packages
 
+### CLI
+
+| Group | File | Summary |
+| --- | --- | --- |
+| user | [cli.md](user/cli.md) | Executable surface: version/help, success and failure reporting, cancellation |
+| dev | [cli.md](dev/cli.md) | Bin wiring: resolver, agent config, executor injection, process control |
+
 ### COMPILE
 
 | Group | File | Summary |
