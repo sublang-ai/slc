@@ -36,6 +36,12 @@ describe('pipelineSearchRoots (CLI-6)', () => {
     const value = ['/a', '', '/b', '/a'].join(delimiter);
     expect(pipelineSearchRoots(value, '/work')).toEqual(['/a', '/b']);
   });
+
+  it('normalizes absolute roots, stripping trailing slashes, and dedups variants', () => {
+    expect(pipelineSearchRoots('/abs/pipes/', '/work')).toEqual(['/abs/pipes']);
+    const value = ['/abs/pipes', '/abs/pipes/'].join(delimiter);
+    expect(pipelineSearchRoots(value, '/work')).toEqual(['/abs/pipes']);
+  });
 });
 
 describe('createPipelineResolver (CLI-6)', () => {
@@ -53,6 +59,14 @@ describe('createPipelineResolver (CLI-6)', () => {
     const rootA = join(root, 'a');
     await mkdir(join(rootA, 'playbook'), { recursive: true });
     const resolver = createPipelineResolver([rootA]);
+
+    expect(await resolver('playbook')).toEqual([join(rootA, 'playbook')]);
+  });
+
+  it('matches a direct child even when the root has a trailing slash', async () => {
+    const rootA = join(root, 'a');
+    await mkdir(join(rootA, 'playbook'), { recursive: true });
+    const resolver = createPipelineResolver([`${rootA}/`]);
 
     expect(await resolver('playbook')).toEqual([join(rootA, 'playbook')]);
   });
