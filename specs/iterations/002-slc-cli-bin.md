@@ -5,9 +5,9 @@
 
 ## Goal
 
-Turn the stubbed `slc` bin into a working command-line compiler over the IR-001 `runSlc` core, so the documented invocation forms run end-to-end with each phase interpreted by a coding agent ([DR-004](../decisions/004-slc-interpreted-phase-execution.md)) because the compiled path ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)) is unimplemented.
+Turn the stubbed `slc` bin into a working command-line compiler over the existing `runSlc` core, so the documented invocation forms run end-to-end with each phase interpreted by a coding agent ([DR-004](../decisions/004-slc-interpreted-phase-execution.md)) because the compiled path ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)) is unimplemented.
 
-- Dependencies: builds on the IR-001 `runSlc` core, which already parses the CLI grammar, resolves and loads pipelines, places artifacts, and enforces the execution boundary; `runSlc` takes the pipeline resolver and the phase executor as injected dependencies ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-004](../decisions/004-slc-interpreted-phase-execution.md)), and this IR supplies the production ones.
+- Dependencies: builds on the existing `runSlc` core, which already parses the CLI grammar, resolves and loads pipelines, places artifacts, and enforces the execution boundary; `runSlc` takes the pipeline resolver and the phase executor as injected dependencies ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-004](../decisions/004-slc-interpreted-phase-execution.md)), and this IR supplies the production ones.
 - Strategy: the bin constructs the interpreted executor ([DR-004](../decisions/004-slc-interpreted-phase-execution.md)) over a Cligent agent and injects it, so the resolver/executor seam stays the slot where a compiled executor ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)) lands later without bin rework.
 - Out of scope: compiled phase execution, pinning, and the file capability ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)), which DR-005 itself defers; until those land, the bin interprets every phase.
 - Constraint: no change to the `runSlc` core or to any DR; the bin is an additive host layer.
