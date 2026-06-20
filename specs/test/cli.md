@@ -27,7 +27,7 @@ Where no agent is configured, when the slc executable is run with `--version` or
 ### CLI-14
 Verifies: [CLI-2](../user/cli.md#cli-2), [CLI-9](../dev/cli.md#cli-9)
 
-Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms to standard output and exit zero without resolving a pipeline or selecting an agent.
+Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms and the environment configuration it reads to standard output and exit zero without resolving a pipeline or selecting an agent.
 
 ## Reporting
 

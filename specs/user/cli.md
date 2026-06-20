@@ -25,7 +25,7 @@ When the user runs `slc` with `--version` or `-v`, the slc executable shall prin
 
 ### CLI-2
 
-When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli)).
+When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms and the environment configuration it reads to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli), [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7)).
 
 ## Outcomes
 
