@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
+import { EventEmitter } from 'node:events';
 import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,7 +9,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { resolveAgentSelection } from '../src/config.js';
-import { run, version, type SlcDeps } from '../src/index.js';
+import { interruptSignal, run, version, type SlcDeps } from '../src/index.js';
 import {
   createInterpretedExecutor,
   type AgentClient,
@@ -232,23 +233,44 @@ describe('reporting (CLI-15, CLI-16)', () => {
 });
 
 describe('process control (CLI-17)', () => {
-  it('aborts the in-flight run on interrupt and exits non-zero without a success report', async () => {
+  it('aborts the in-flight run on a SIGINT interrupt through the shim wiring (CLI-17)', async () => {
     const { agent } = makeAgent({ waitAbort: true });
-    const controller = new AbortController();
+    // Drive cancellation through interruptSignal — the exact wiring cli.ts uses —
+    // with a fake emitter, so a broken SIGINT handler fails this test.
+    const signals = new EventEmitter();
+    const { signal } = interruptSignal(signals);
     const out: string[] = [];
     const pending = run(['playbook', source], {
       env: {},
       stdout: (t) => out.push(t),
       stderr: () => {},
-      signal: controller.signal,
+      signal,
       buildDeps: ({ signal }) => interpretedDeps(agent, signal),
     });
-    controller.abort();
+    signals.emit('SIGINT');
     const code = await pending;
 
     expect(code).not.toBe(0);
     expect(out.join('')).toBe('');
     expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(false);
+  });
+
+  it('wires SIGINT and SIGTERM to abort and disposes the listeners (CLI-10)', () => {
+    for (const sig of ['SIGINT', 'SIGTERM']) {
+      const emitter = new EventEmitter();
+      const { signal } = interruptSignal(emitter);
+      expect(signal.aborted).toBe(false);
+      emitter.emit(sig);
+      expect(signal.aborted).toBe(true);
+    }
+
+    const emitter = new EventEmitter();
+    const { dispose } = interruptSignal(emitter);
+    expect(emitter.listenerCount('SIGINT')).toBe(1);
+    expect(emitter.listenerCount('SIGTERM')).toBe(1);
+    dispose();
+    expect(emitter.listenerCount('SIGINT')).toBe(0);
+    expect(emitter.listenerCount('SIGTERM')).toBe(0);
   });
 });
 
@@ -279,8 +301,11 @@ describe('configuration (CLI-18, CLI-19)', () => {
     expect(err.join('')).toContain('not a supported');
   });
 
-  it('resolves via SLC_PIPELINE_PATH and interprets every phase with the configured model (CLI-19)', async () => {
+  it('resolves via SLC_PIPELINE_PATH and interprets every phase through the configured agent and model (CLI-19)', async () => {
     const { agent, calls, models } = makeAgent();
+    // Transport registry keyed by agent id: the selected SLC_AGENT must pick it.
+    const transports: Record<string, AgentClient> = { 'claude-code': agent };
+    let chosenAgent: string | undefined;
     const out: string[] = [];
     const code = await run(['playbook', source], {
       env: {
@@ -290,15 +315,16 @@ describe('configuration (CLI-18, CLI-19)', () => {
       },
       stdout: (t) => out.push(t),
       // Mirror production wiring (real resolver + real config selection),
-      // faking only the agent transport so no real agent runs.
+      // choosing the transport by the selected agent so SLC_AGENT is exercised.
       buildDeps: ({ env, cwd, signal }) => {
         const selection = resolveAgentSelection(env);
+        chosenAgent = selection.agent;
         return {
           resolver: createPipelineResolver(
             pipelineSearchRoots(env.SLC_PIPELINE_PATH, cwd),
           ),
           executor: createInterpretedExecutor({
-            agent,
+            agent: transports[selection.agent],
             config: { model: selection.model, cwd },
           }),
           signal,
@@ -307,6 +333,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
     });
 
     expect(code).toBe(0);
+    expect(chosenAgent).toBe('claude-code'); // SLC_AGENT drove the selection
     expect(calls).toHaveLength(2); // every phase interpreted (CLI-8)
     expect(models).toEqual(['opus-x', 'opus-x']); // configured model reaches the agent
     expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
