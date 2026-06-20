@@ -46,6 +46,7 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | user | [cli.md](user/cli.md) | Executable surface: version/help, success and failure reporting, cancellation |
 | dev | [cli.md](dev/cli.md) | Bin wiring: resolver, agent config, executor injection, process control |
+| test | [cli.md](test/cli.md) | Integration: version/help, reporting, exit codes, cancellation, config |
 
 ### COMPILE
 
