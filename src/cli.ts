@@ -6,21 +6,23 @@
  * The published `slc` executable shim (CLI package).
  *
  * It supplies the process-backed defaults `run` falls back to and wires
- * cancellation: an interrupt aborts the in-flight run through the signal passed
- * into `runSlc` (CLI-10), and the returned exit code becomes the process exit
- * status (CLI-11). All behavior lives in the testable `run`; see app.ts.
+ * cancellation through `interruptSignal`: an interrupt aborts the in-flight run
+ * via the signal passed into `runSlc` (CLI-10), and the returned exit code
+ * becomes the process exit status (CLI-11). All behavior lives in the testable
+ * `run`/`interruptSignal`; see app.ts.
  */
 
-import { run } from './index.js';
+import { interruptSignal, run } from './index.js';
 
-const controller = new AbortController();
-const abort = (): void => controller.abort();
-process.once('SIGINT', abort);
-process.once('SIGTERM', abort);
+const { signal, dispose } = interruptSignal(process);
 
-run(process.argv.slice(2), { signal: controller.signal })
-  .then((code) => process.exit(code))
+run(process.argv.slice(2), { signal })
+  .then((code) => {
+    dispose();
+    process.exit(code);
+  })
   .catch((error: unknown) => {
+    dispose();
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`slc: ${message}\n`);
     process.exit(1);
