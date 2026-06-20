@@ -20,9 +20,9 @@ coding agents.
 ## Conveniences
 
 ### CLI-13
-Verifies: [CLI-1](../user/cli.md#cli-1)
+Verifies: [CLI-1](../user/cli.md#cli-1), [CLI-9](../dev/cli.md#cli-9)
 
-When the slc executable is run with `--version` or `-v`, the slc executable shall print its version to standard output, exit zero, and run no pipeline.
+Where no agent is configured, when the slc executable is run with `--version` or `-v`, the slc executable shall print its version to standard output and exit zero without resolving a pipeline, selecting an agent, or invoking `runSlc`.
 
 ### CLI-14
 Verifies: [CLI-2](../user/cli.md#cli-2), [CLI-9](../dev/cli.md#cli-9)
@@ -39,7 +39,7 @@ Where the run succeeds, when the slc executable runs a documented invocation for
 ### CLI-16
 Verifies: [CLI-4](../user/cli.md#cli-4), [CLI-11](../dev/cli.md#cli-11)
 
-Where a run is rejected or a phase reports `BLOCKED`, when the slc executable runs, the slc executable shall print the failure report — naming the failing phase and its target when a phase is at fault — to standard error, write nothing to standard output, and exit non-zero.
+Where a run is rejected, a phase fails, or a phase reports `BLOCKED`, when the slc executable runs, the slc executable shall print the failure report — naming the failing phase and its target when a phase is at fault — to standard error, write nothing to standard output, and exit non-zero.
 
 ## Process control
 
@@ -56,9 +56,9 @@ Verifies: [CLI-12](../dev/cli.md#cli-12), [CLI-4](../user/cli.md#cli-4)
 Where `SLC_AGENT` is unset or names an unsupported agent CLI, when the slc executable runs a pipeline, the slc executable shall print a diagnostic to standard error, run no phase, and exit non-zero.
 
 ### CLI-19
-Verifies: [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7)
+Verifies: [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7), [CLI-8](../dev/cli.md#cli-8)
 
-Where `SLC_PIPELINE_PATH` locates the pipeline directory and `SLC_AGENT` with an optional `SLC_MODEL` are configured, when the slc executable runs a source, the slc executable shall resolve the reference to that directory and interpret each phase through the configured agent CLI with that model.
+Where `SLC_PIPELINE_PATH` locates the pipeline directory and `SLC_AGENT` with an optional `SLC_MODEL` are configured, when the slc executable runs a source, the slc executable shall resolve the reference to that directory and interpret every phase through the configured agent CLI with that model, applying no compiled phase artifact.
 
 ## References
 
