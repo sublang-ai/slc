@@ -157,8 +157,12 @@ describe('conveniences (CLI-13, CLI-14)', () => {
         },
       });
       expect(code).toBe(0);
-      expect(out.join('')).toMatch(/Usage:/);
-      expect(out.join('')).toContain('SLC_AGENT');
+      const help = out.join('');
+      expect(help).toMatch(/Usage:/);
+      expect(help).toContain('SLC_AGENT');
+      // Reworded CLI-2: help names --config and the config file, not just env.
+      expect(help).toContain('--config');
+      expect(help).toContain('slc.config.yaml');
     }
   });
 });
@@ -345,5 +349,49 @@ describe('configuration (CLI-18, CLI-19)', () => {
     expect(calls).toHaveLength(2); // every phase interpreted (CLI-8)
     expect(models).toEqual(['opus-x', 'opus-x']); // configured model reaches the agent
     expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
+  });
+});
+
+describe('--config flag (CLI-20)', () => {
+  it('forwards --config to buildDeps and strips it before runSlc', async () => {
+    const { agent } = makeAgent();
+    const out: string[] = [];
+    const outPath = join(srcDir, 'custom.fsm.ts');
+    let seenConfigPath: string | undefined;
+    const code = await run(
+      ['--config', '/cfg/slc.yaml', 'playbook', source, '-o', outPath],
+      {
+        env: {},
+        stdout: (t) => out.push(t),
+        buildDeps: ({ configPath, signal }) => {
+          seenConfigPath = configPath;
+          return interpretedDeps(agent, signal);
+        },
+      },
+    );
+
+    expect(seenConfigPath).toBe('/cfg/slc.yaml');
+    // Exit 0 with the expected output proves the flag was stripped before the
+    // grammar parser saw 'playbook <source> -o <path>'.
+    expect(code).toBe(0);
+    expect(out.join('')).toContain(outPath);
+  });
+
+  it('reports a missing --config value and builds no deps', async () => {
+    const { agent } = makeAgent();
+    const err: string[] = [];
+    let built = false;
+    const code = await run(['--config'], {
+      env: {},
+      stderr: (t) => err.push(t),
+      buildDeps: ({ signal }) => {
+        built = true;
+        return interpretedDeps(agent, signal);
+      },
+    });
+
+    expect(code).toBe(1);
+    expect(built).toBe(false);
+    expect(err.join('')).toContain('--config');
   });
 });
