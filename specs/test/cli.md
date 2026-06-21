@@ -60,6 +60,31 @@ Verifies: [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7), [CLI-8](..
 
 Where `SLC_PIPELINE_PATH` locates the pipeline directory and `SLC_AGENT` with an optional `SLC_MODEL` are configured, when the slc executable runs a source, the slc executable shall resolve the reference to that directory and interpret every phase through the configured agent CLI with that model, applying no compiled phase artifact.
 
+### CLI-23
+Verifies: [CLI-22](../user/cli.md#cli-22), [CLI-7](../dev/cli.md#cli-7), [CLI-6](../dev/cli.md#cli-6)
+
+Where a config file supplies the agent, model, and pipeline search path and no `SLC_*` variables are set, when the slc executable runs a source, the slc executable shall resolve the reference through the file's search path and interpret every phase through the file's agent CLI with the file's model, writing the artifact and exiting zero.
+
+### CLI-24
+Verifies: [CLI-7](../dev/cli.md#cli-7), [CLI-20](../dev/cli.md#cli-20)
+
+Where a config file and a non-blank environment variable both supply the agent or the model, when the slc executable runs a source, the slc executable shall select the environment value over the file value and interpret every phase through that agent CLI and model.
+
+### CLI-25
+Verifies: [CLI-20](../dev/cli.md#cli-20), [CLI-22](../user/cli.md#cli-22)
+
+Where `--config <path>` names an existing config file and a different config file sits in the working directory, when the slc executable runs a source, the slc executable shall load configuration from the `--config` file and ignore the discovered file.
+
+### CLI-26
+Verifies: [CLI-21](../dev/cli.md#cli-21)
+
+Where `--config <path>` names a file that does not exist, when the slc executable runs, the slc executable shall print a diagnostic to standard error, run no phase, and exit non-zero; whereas where no config file is discovered, the executable shall not refuse on that basis and shall fall through to the environment and built-in defaults.
+
+### CLI-27
+Verifies: [CLI-21](../dev/cli.md#cli-21)
+
+Where a loaded config file declares an unknown key or is malformed YAML, when the slc executable runs, the slc executable shall print a diagnostic to standard error, run no phase, and exit non-zero.
+
 ## References
 
 [1]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"
