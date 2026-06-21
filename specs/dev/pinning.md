@@ -13,10 +13,10 @@ inputs it records, and reports for each pinned phase a verdict of current, stale
 or malformed.
 It runs no compiled artifact and selects no execution strategy — that is the
 compiled executor's role
-([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)) — and resolving the
-artifact to the linked `phase` format is likewise deferred to the compiled
-executor, so the validator checks the artifact by existence and exact-byte hash
-only.
+([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)) — but beyond
+existing and matching its recorded hash, the compiled artifact must resolve to
+the linked `phase` format, recognized from its committed bytes, or the phase is
+stale.
 
 Essential project-specific references: `slc`, this project's compiler; the
 `slc.pins.json` pin file and currency contract of
@@ -34,7 +34,7 @@ Where a pipeline directory contains no `slc.pins.json`, when the validator evalu
 
 ### PIN-2
 
-Where a pipeline directory's `slc.pins.json` is well-formed and, for a phase, the recorded definition, compiled artifact, and semantic inputs each resolve inside the recorded path boundary and match their recorded exact-byte SHA-256 hashes, the recorded link-target locator resolves and its identity matches the recorded identity, the recorded semantic-input closure equals the closure derived from the definition's `## Pin Inputs` section, and every recorded external input carries a well-formed immutable content-addressed identity, when the validator evaluates that phase, the validator shall report it current ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#currency-and-selection)).
+Where a pipeline directory's `slc.pins.json` is well-formed and, for a phase, the recorded definition, compiled artifact, and semantic inputs each resolve inside the recorded path boundary and match their recorded exact-byte SHA-256 hashes, the compiled artifact resolves to the linked `phase` format, the recorded link-target locator resolves and its identity matches the recorded identity, the recorded semantic-input closure equals the closure derived from the definition's `## Pin Inputs` section, and every recorded external input carries a well-formed immutable content-addressed identity, when the validator evaluates that phase, the validator shall report it current ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#currency-and-selection)).
 
 ### PIN-3
 
@@ -43,6 +43,10 @@ Where a phase's recorded definition, compiled artifact, or semantic input no lon
 ### PIN-4
 
 Where a phase's recorded semantic-input closure differs from the closure derived from the definition's `## Pin Inputs` section and the transitive `## Pin Inputs` of its local Markdown inputs, when the validator evaluates that phase, the validator shall report it stale with a diagnostic naming the closure difference ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#semantic-input-closure)).
+
+### PIN-13
+
+Where a phase's recorded compiled artifact exists and matches its recorded hash but its committed bytes do not resolve to the linked `phase` format — a module exposing the phase-runner facade produced by the reserved `slc.link` phase — when the validator evaluates that phase, the validator shall report it stale, and shall report it current only when the artifact resolves to that format ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#currency-and-selection), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
 
 ## Rejection
 

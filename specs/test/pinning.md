@@ -39,6 +39,12 @@ Verifies: [PIN-4](../dev/pinning.md#pin-4)
 
 Where a fixture phase's recorded semantic-input closure omits or adds a file relative to the definition's `## Pin Inputs` closure, when the validator evaluates it, the validator shall report that phase stale, naming the closure difference.
 
+### PIN-14
+
+Verifies: [PIN-13](../dev/pinning.md#pin-13)
+
+Where a fixture phase's pinned artifact matches its recorded hash but its bytes are not a `phase` module — they do not expose the phase-runner facade — when the validator evaluates it, the validator shall report that phase stale.
+
 ## Rejection
 
 ### PIN-11
