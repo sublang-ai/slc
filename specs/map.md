@@ -60,6 +60,13 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, and run outcomes |
 
+### FCAP
+
+| Group | File | Summary |
+| --- | --- | --- |
+| dev | [file-capability.md](dev/file-capability.md) | Artifact-facing file capability: confined virtual paths, exact-byte hashes, atomic writes, compare-and-swap |
+| test | [file-capability.md](test/file-capability.md) | Acceptance: path confinement, hash round-trip, listing order, and ifMatch over a fixture root |
+
 ### GIT
 
 | Group | File | Summary |

@@ -18,8 +18,8 @@ Interpreted execution stays the reference semantics and the fallback, and the [D
 
 ## Deliverables
 
-- [ ] A `file-capability` spec package (`dev`, `test`), short form `FCAP`, registered in `map.md`
-- [ ] The artifact-facing `FileCapability` (`read`/`list`/`write`): virtual POSIX paths (a leading `/` is the virtual run root) normalized and confined to the run root after realpath, platform-absolute syntax such as Windows drive paths rejected, exact-byte `sha256:` hashes on read and write, atomic whole-file writes, and an `ifMatch` compare-and-swap that returns `stale`
+- [x] A `file-capability` spec package (`dev`, `test`), short form `FCAP`, registered in `map.md`
+- [x] The artifact-facing `FileCapability` (`read`/`list`/`write`): virtual POSIX paths (a leading `/` is the virtual run root) normalized and confined to the run root after realpath, platform-absolute syntax such as Windows drive paths rejected, exact-byte `sha256:` hashes on read and write, atomic whole-file writes, and an `ifMatch` compare-and-swap that returns `stale`
 - [ ] The host-side per-run grant model (default-deny): writable paths limited to `target`/`linked`, read grants closed over the run inputs and the [DR-007](../decisions/007-slc-phase-artifact-pinning.md) semantic-input closure, and capability scope failures mapped like a failed generic check
 - [ ] The SLC phase-runner facade (`PhaseInput`/`PhaseResult`/`PhaseRunner`/`createPhaseRunner`) bound to `@sublang/playbook` `PlaybookPorts`, with the `ok`/`blocked`/`error` → [DR-003](../decisions/003-slc-phase-execution.md) protocol mapping and diagnostics drain (extends `PHEXEC`)
 - [ ] A `PlaybookPorts` adapter backing `callPlayer`/`callJudge` with Cligent and supplying status and telemetry sinks
