@@ -98,7 +98,7 @@ When interpreting a phase, the slc command shall permit the agent to invoke the 
 
 ### PHEXEC-23
 
-Where a phase is executed by a compiled artifact, the slc command shall drive the artifact only through a stable phase-runner facade — a no-argument `createPhaseRunner` factory whose `run` is handed the phase input, the host ports (Playbook's source-owned ports together with the file capability), and an abort signal, and returns a terminal `ok`, `blocked`, or `error` status with diagnostics drained for every status ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
+Where a phase is executed by a compiled artifact, the slc command shall drive the artifact only through a stable phase-runner facade — a no-argument `createPhaseRunner` factory whose `run` is handed the phase input, the host ports (only Playbook's source-owned ports together with the file capability, and no other host capability), and an abort signal, and returns a terminal `ok`, `blocked`, or `error` status with diagnostics drained for every status ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
 
 ### PHEXEC-24
 

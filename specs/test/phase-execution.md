@@ -49,3 +49,11 @@ Where slc configuration selects an agent and model, when the slc command interpr
 Verifies: [PHEXEC-5](../dev/phase-execution.md#phexec-5), [COMPILE-4](../user/compiler.md#compile-4)
 
 While interpreting a phase, when the agent adds, removes, or renames a phase file so the pipeline chain no longer infers, the slc command shall fail the run with a diagnostic rather than report success.
+
+## Compiled runs
+
+### PHEXEC-26
+
+Verifies: [PHEXEC-23](../dev/phase-execution.md#phexec-23), [PHEXEC-24](../dev/phase-execution.md#phexec-24)
+
+Where a phase is backed by a fixture compiled `phase` artifact reached only through the runner ports, when the executor runs it, an `ok` artifact result shall have written the target and yield an `ok` outcome carrying the runtime's drained diagnostics, a `blocked` result shall yield a `blocked` outcome naming the reasons, and an `error` result shall yield an `error` outcome.
