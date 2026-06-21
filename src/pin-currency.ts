@@ -3,7 +3,7 @@
 
 /**
  * Pin-currency engine: the per-phase verdict that drives compiled selection
- * (PIN-1..PIN-6; DR-007).
+ * (PIN-1..PIN-6, PIN-13; DR-007).
  *
  * Given a pipeline directory, {@link evaluatePins} loads `slc.pins.json` and, for
  * each pinned phase, combines the validator stages into a verdict: `current` when
@@ -15,15 +15,17 @@
  * deterministic and reads only committed bytes; it issues no network request. A
  * file link target is verified by exact-byte hash and a directory or package
  * target by a deterministic `sha256:` tree hash over its files' sorted relative
- * paths and contents. It does not resolve the artifact to the linked `phase`
- * format — that awaits the compiled executor (DR-005) — so the artifact is
- * checked by existence and exact-byte hash only. See specs/dev/pinning.md.
+ * paths and contents. Beyond existing and matching its recorded hash, the
+ * compiled artifact must resolve to the linked `phase` format — a module exposing
+ * the phase-runner facade — or the phase is stale (PIN-13). See
+ * specs/dev/pinning.md.
  */
 
-import { readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { hashBytes, hashFile, isHash } from './hash.js';
+import { resolvesToPhase } from './phase-runner.js';
 import { closureMatchesRecord } from './pin-closure.js';
 import { resolvePinPath } from './pin-paths.js';
 import {
@@ -82,7 +84,8 @@ export async function evaluatePins(pipelineDir: string): Promise<PinsResult> {
 }
 
 /**
- * Evaluates one phase's pin record against the committed files (PIN-2..PIN-6).
+ * Evaluates one phase's pin record against the committed files (PIN-2..PIN-6,
+ * PIN-13).
  *
  * Structural defects are reported as `malformed` before currency is judged, so a
  * record that is both malformed and stale reports `malformed`.
@@ -116,6 +119,15 @@ export async function evaluatePin(
       if (reason !== null) {
         return stale(reason);
       }
+    }
+    // The hash-verified artifact must resolve to the linked `phase` format (PIN-13).
+    const artifactFormat = await artifactFormatStale(
+      pipelineDir,
+      boundary,
+      record.artifact,
+    );
+    if (artifactFormat !== null) {
+      return stale(artifactFormat);
     }
     if (!(await closureMatchesRecord(pipelineDir, boundary, record))) {
       return stale(
@@ -161,6 +173,34 @@ async function fileStale(
   }
   if (current !== ref.hash) {
     return `${field} changed (${ref.path})`;
+  }
+  return null;
+}
+
+/**
+ * Returns a stale reason when the compiled artifact's bytes do not resolve to the
+ * linked `phase` format, or `null` when they do (PIN-13). The caller has already
+ * verified the artifact exists and matches its recorded hash.
+ */
+async function artifactFormatStale(
+  pipelineDir: string,
+  boundary: string,
+  artifact: PinFileRef,
+): Promise<string | null> {
+  const resolved = resolvePinPath(
+    pipelineDir,
+    boundary,
+    artifact.path,
+    'artifact',
+  );
+  let source: string;
+  try {
+    source = await readFile(resolved, 'utf8');
+  } catch {
+    return `artifact is unreadable (${artifact.path})`;
+  }
+  if (!resolvesToPhase(source)) {
+    return `artifact does not resolve to the linked phase format (${artifact.path})`;
   }
   return null;
 }
