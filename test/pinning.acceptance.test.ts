@@ -179,6 +179,36 @@ describe('pin validator acceptance (PIN-7..PIN-12)', () => {
     },
   );
 
+  // Malformed recorded digests rejected per phase (PIN-11).
+  const digestCases: Array<[string, (record: PinRecord) => void, string]> = [
+    [
+      'a non-digest file hash',
+      (record) => {
+        record.definition.hash = 'not-a-hash';
+      },
+      'definition',
+    ],
+    [
+      'a non-content-addressed link-target identity',
+      (record) => {
+        record.linkTarget.identity = 'name@1.2.3';
+      },
+      'linkTarget',
+    ],
+  ];
+  it.each(digestCases)(
+    'reports malformed, naming the field, for %s (PIN-11)',
+    async (_label, mutate, field) => {
+      const record = await currentRecord();
+      mutate(record);
+      await writePinFile(record);
+
+      const verdict = (await evaluatePins(dir)).verdicts?.text2gears;
+      expect(verdict?.status).toBe('malformed');
+      expect((verdict as { reason: string }).reason).toContain(field);
+    },
+  );
+
   it.each([
     ['an unvendored mutable reference', 'latest'],
     ['a bare URL', 'https://example.com/data'],

@@ -13,8 +13,9 @@ This is a standalone, deterministic, `slc`-side library; it changes no runtime e
 - State today: `slc` has no pinning code and no compiled executor; the `PhaseExecutor` seam exists with only the interpreted executor, so every phase interprets.
 - Why a validator is implementable alone: pin currency is computed from committed bytes and definitions, which `slc` reads directly; it needs neither the compiled executor nor the host-supplied file capability (which sandboxes the artifact at run time, not the host-side validator).
 - Constraint: additive library only — the `runSlc` core, the interpreted executor, and the execution boundary ([DR-003](../decisions/003-slc-phase-execution.md)) are untouched.
-- Out of scope (blocked on the DR-005 compiled executor and meta-pipeline, deferred to later IRs):
+- Out of scope (deferred to later IRs; most blocked on the DR-005 compiled executor and meta-pipeline):
   - compiled execution, the `PhaseRunner` facade, `slc.link`, and the `phase` format;
+  - the package-manager integrity-digest link-target identity that [DR-007](../decisions/007-slc-phase-artifact-pinning.md#link-target-identity) permits for directory or package targets; this iteration's validator recomputes only a `sha256:` content or tree hash and does not yet validate integrity-digest identities, deferring that support to a later IR;
   - wiring the verdict into runtime strategy selection (no pin → interpret, current → run compiled, stale/malformed → fail closed);
   - pin generation and the build-and-review flow that writes pins;
   - the currency sub-check that the artifact "resolves to the linked `phase` format" (the validator does existence and exact-byte hash only, deferring format resolution to when the `phase` format lands);
@@ -50,7 +51,7 @@ This is a standalone, deterministic, `slc`-side library; it changes no runtime e
    Unit-test closure derivation, transitivity, termination, and a recorded-vs-derived mismatch.
 
 5. **Currency engine.**
-   Combine the checks into a per-phase verdict: supported schema/algorithm; every local path inside the boundary; definition exists and hash matches; artifact exists and hash matches (format resolution deferred); every semantic input exists and hash matches; recorded closure matches the derived closure; every external input carries a well-formed immutable content-addressed identity without any network fetch; the `linkTarget` locator resolves and its identity matches the committed content (file content hash, or directory tree / package integrity digest).
+   Combine the checks into a per-phase verdict: supported schema/algorithm; every local path inside the boundary; definition exists and hash matches; artifact exists and hash matches (format resolution deferred); every semantic input exists and hash matches; recorded closure matches the derived closure; every external input carries a well-formed immutable content-addressed identity without any network fetch; the `linkTarget` locator resolves and its identity matches the committed content (file content hash, or directory or package tree hash; integrity-digest identities deferred).
    Emit `current`, `stale` with the offending input, or `malformed` with the offending field; a phase absent from the pin file is unpinned.
    Unit-test that each failing check yields the expected verdict and names its input or field.
 
