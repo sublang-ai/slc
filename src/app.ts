@@ -15,8 +15,12 @@
  * and signal wiring. See specs/dev/cli.md and specs/user/cli.md.
  */
 
-import { createConfiguredExecutor, resolveAgentSelection } from './config.js';
-import { loadConfigFile } from './config-file.js';
+import {
+  createConfiguredExecutor,
+  resolveAgentSelection,
+  type AgentSelection,
+} from './config.js';
+import { loadConfigFile, type FileConfig } from './config-file.js';
 import { createPipelineResolver, pipelineSearchRoots } from './resolver.js';
 import { runSlc, type SlcDeps } from './runner.js';
 
@@ -69,21 +73,39 @@ export const buildSlcDeps: DepsBuilder = async ({
   configPath,
 }) => {
   const file = await loadConfigFile({ cwd, configPath, env });
-
-  const selection = resolveAgentSelection({
-    SLC_AGENT: nonBlank(env.SLC_AGENT) ?? file.config.agent,
-    SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.config.model,
-  });
-
-  const pipelinePath =
-    nonBlank(env.SLC_PIPELINE_PATH) ?? file.config.pipelinePath;
+  const { selection, pipelinePath } = resolveRunConfig(env, file.config);
   const resolver = createPipelineResolver(
     pipelineSearchRoots(pipelinePath, cwd),
   );
-
   const executor = createConfiguredExecutor(selection, { cwd });
   return { resolver, executor, signal };
 };
+
+/** The cligent-invocation selection after merging environment over file (DR-006). */
+export interface RunConfig {
+  selection: AgentSelection;
+  /** Search-root source: an `SLC_PIPELINE_PATH` string, the file's sequence, or undefined. */
+  pipelinePath: string | string[] | undefined;
+}
+
+/**
+ * Merges the environment over config-file values per key (DR-006, CLI-20): for
+ * each key a non-blank environment variable wins, otherwise the file value,
+ * otherwise the built-in default. The agent and model go through
+ * {@link resolveAgentSelection} so the supported-agent check stays single-sourced
+ * (CLI-7, CLI-12).
+ */
+export function resolveRunConfig(
+  env: Record<string, string | undefined>,
+  file: FileConfig,
+): RunConfig {
+  const selection = resolveAgentSelection({
+    SLC_AGENT: nonBlank(env.SLC_AGENT) ?? file.agent,
+    SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.model,
+  });
+  const pipelinePath = nonBlank(env.SLC_PIPELINE_PATH) ?? file.pipelinePath;
+  return { selection, pipelinePath };
+}
 
 /** Returns `value` when set and not all-whitespace, else `undefined` (DR-006). */
 function nonBlank(value: string | undefined): string | undefined {
