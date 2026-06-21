@@ -41,6 +41,8 @@ It shall declare:
 - `## Link Targets`: shall contain a target-form table; may also declare
   required symbols, supported `--link-option` names, and validation rules.
 
+`link.md` may additionally declare `## Pin Inputs` for compiled artifact pinning per [DR-007](007-slc-phase-artifact-pinning.md#semantic-input-closure); that section is optional and does not change link invocation.
+
 The linked format shall use a different format token from every accepted object
 format, even when formats share the same file extension.
 
