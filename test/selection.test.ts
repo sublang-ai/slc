@@ -93,7 +93,7 @@ describe('compiled selection (PHEXEC-28)', () => {
   const writeCurrentPin = async (): Promise<PinRecord> => {
     await writeFile(
       join(pipelineDir, 'text2gears.phase.mjs'),
-      'export default () => ({});\n',
+      'export default function createPhaseRunner() {\n  return { run: async () => ({ status: "ok", diagnostics: [] }) };\n}\n',
     );
     await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target bytes\n');
     const record: PinRecord = {

@@ -3,7 +3,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { type PhaseResult, mapPhaseResult } from '../src/phase-runner.js';
+import {
+  type PhaseResult,
+  mapPhaseResult,
+  resolvesToPhase,
+} from '../src/phase-runner.js';
 
 describe('mapPhaseResult (PHEXEC-24)', () => {
   it.each(['ok', 'blocked', 'error'] as const)(
@@ -24,5 +28,24 @@ describe('mapPhaseResult (PHEXEC-24)', () => {
     expect(
       mapPhaseResult({ status: 'error', diagnostics: ['a', 'b'] }).diagnostics,
     ).toEqual(['a', 'b']);
+  });
+});
+
+describe('resolvesToPhase (PIN-13)', () => {
+  it('recognizes a createPhaseRunner default export', () => {
+    expect(
+      resolvesToPhase('export default function createPhaseRunner() {}\n'),
+    ).toBe(true);
+    expect(
+      resolvesToPhase(
+        'const f = createPhaseRunner;\nexport default createPhaseRunner;',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects a module that does not expose the facade', () => {
+    expect(resolvesToPhase('export const value = 42;\n')).toBe(false);
+    expect(resolvesToPhase('export default () => ({});\n')).toBe(false);
+    expect(resolvesToPhase('compiled artifact bytes\n')).toBe(false);
   });
 });

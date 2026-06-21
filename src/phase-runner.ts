@@ -73,3 +73,20 @@ export type CreatePhaseRunner = () => PhaseRunner;
 export function mapPhaseResult(result: PhaseResult): ExecutorResult {
   return { status: result.status, diagnostics: result.diagnostics };
 }
+
+/**
+ * The `phase` linked format's entry point: a module's default export is the
+ * {@link CreatePhaseRunner} factory named `createPhaseRunner` (DR-005).
+ */
+const PHASE_DEFAULT_EXPORT =
+  /export\s+default\s+(?:async\s+)?(?:function\s+)?createPhaseRunner\b/;
+
+/**
+ * Reports whether a compiled artifact's source resolves to the linked `phase`
+ * format: a module exposing the phase-runner facade as a `createPhaseRunner`
+ * default export (DR-005). This is the static byte-level recognition the
+ * pin-currency validator uses; the loader confirms the contract at run time.
+ */
+export function resolvesToPhase(source: string): boolean {
+  return PHASE_DEFAULT_EXPORT.test(source);
+}

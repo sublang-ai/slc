@@ -17,6 +17,10 @@ import {
   type PinRecord,
 } from '../src/pins.js';
 
+/** A compiled artifact that resolves to the linked `phase` format (PIN-13). */
+const PHASE_ARTIFACT =
+  'export default function createPhaseRunner() {\n  return { run: async () => ({ status: "ok", diagnostics: [] }) };\n}\n';
+
 let dir: string;
 
 beforeEach(async () => {
@@ -39,7 +43,7 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 async function currentFixture(): Promise<{ file: PinFile; record: PinRecord }> {
   await write('text2gears.md', '## Pin Inputs\n\n- `reference/gears.md`\n');
   await write('reference/gears.md', 'gears reference body\n');
-  await write('text2gears.phase.ts', 'compiled artifact bytes\n');
+  await write('text2gears.phase.ts', PHASE_ARTIFACT);
   await write('link/code.ts', 'link target bytes\n');
 
   const record: PinRecord = {
@@ -102,6 +106,18 @@ describe('evaluatePin (PIN-2..PIN-6)', () => {
     const verdict = await evaluatePin(dir, file, dropped);
     expect(verdict.status).toBe('stale');
     expect((verdict as { reason: string }).reason).toContain('closure');
+  });
+
+  it('reports stale when the artifact does not resolve to the phase format (PIN-13)', async () => {
+    const { file, record } = await currentFixture();
+    // Hash-matching bytes that are not a `phase` module.
+    await write('text2gears.phase.ts', 'export const value = 42;\n');
+    const bad = clone(record);
+    bad.artifact.hash = await hashFile(join(dir, 'text2gears.phase.ts'));
+
+    const verdict = await evaluatePin(dir, file, bad);
+    expect(verdict.status).toBe('stale');
+    expect((verdict as { reason: string }).reason).toContain('phase format');
   });
 
   it('reports malformed for a recorded hash that is not a sha256 hash', async () => {

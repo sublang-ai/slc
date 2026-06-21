@@ -17,9 +17,13 @@ import {
   type PinRecord,
 } from '../src/pins.js';
 
+/** A compiled artifact that resolves to the linked `phase` format (PIN-13). */
+const PHASE_ARTIFACT =
+  'export default function createPhaseRunner() {\n  return { run: async () => ({ status: "ok", diagnostics: [] }) };\n}\n';
+
 // System-level acceptance over fixture pipeline directories with a committed
-// slc.pins.json, driving the validator through evaluatePins (PIN-7..PIN-12).
-describe('pin validator acceptance (PIN-7..PIN-12)', () => {
+// slc.pins.json, driving the validator through evaluatePins (PIN-7..PIN-14).
+describe('pin validator acceptance (PIN-7..PIN-14)', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -40,7 +44,7 @@ describe('pin validator acceptance (PIN-7..PIN-12)', () => {
   const currentRecord = async (): Promise<PinRecord> => {
     await write('text2gears.md', '## Pin Inputs\n\n- `reference/gears.md`\n');
     await write('reference/gears.md', 'gears reference body\n');
-    await write('text2gears.phase.ts', 'compiled artifact bytes\n');
+    await write('text2gears.phase.ts', PHASE_ARTIFACT);
     await write('link/code.ts', 'link target bytes\n');
     return {
       definition: {
@@ -113,6 +117,17 @@ describe('pin validator acceptance (PIN-7..PIN-12)', () => {
     const verdict = (await evaluatePins(dir)).verdicts?.text2gears;
     expect(verdict?.status).toBe('stale');
     expect((verdict as { reason: string }).reason).toContain('closure');
+  });
+
+  it('reports stale for an artifact that is not a phase module (PIN-14)', async () => {
+    const record = await currentRecord();
+    await write('text2gears.phase.ts', 'export const value = 42;\n');
+    record.artifact.hash = await hashFile(join(dir, 'text2gears.phase.ts'));
+    await writePinFile(record);
+
+    const verdict = (await evaluatePins(dir)).verdicts?.text2gears;
+    expect(verdict?.status).toBe('stale');
+    expect((verdict as { reason: string }).reason).toContain('phase format');
   });
 
   // File-level malformations rejected at parse time (PIN-11).
