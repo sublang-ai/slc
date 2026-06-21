@@ -40,6 +40,7 @@ meta.md     The spec of specs
 | IR-001 | [001-slc-phase-execution.md](iterations/001-slc-phase-execution.md) | Implement DR-003/DR-004: interpreted slc phase execution |
 | IR-002 | [002-slc-cli-bin.md](iterations/002-slc-cli-bin.md) | Wire the slc bin to runSlc: resolver, agent config, reporting, CLI |
 | IR-003 | [003-slc-config-file.md](iterations/003-slc-config-file.md) | Add a simple YAML config file for slc's cligent invocation |
+| IR-004 | [004-slc-pin-validator.md](iterations/004-slc-pin-validator.md) | Implement DR-007's pin model and host-side currency validator |
 
 ## Packages
 
