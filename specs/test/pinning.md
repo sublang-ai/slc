@@ -27,7 +27,7 @@ Where a fixture pipeline directory has no `slc.pins.json`, when the validator ev
 ### PIN-8
 Verifies: [PIN-2](../dev/pinning.md#pin-2)
 
-Where a fixture pipeline directory's `slc.pins.json` records a phase whose definition, compiled artifact, semantic inputs, link-target identity, semantic-input closure, and external inputs all match the committed files, when the validator evaluates it, the validator shall report that phase current.
+Where a fixture pipeline directory's `slc.pins.json` records a phase whose definition, compiled artifact, semantic inputs, link-target identity, semantic-input closure, and external inputs all match the committed files and whose compiled artifact resolves to the linked `phase` format, when the validator evaluates it, the validator shall report that phase current.
 
 ### PIN-9
 Verifies: [PIN-3](../dev/pinning.md#pin-3)
@@ -40,7 +40,6 @@ Verifies: [PIN-4](../dev/pinning.md#pin-4)
 Where a fixture phase's recorded semantic-input closure omits or adds a file relative to the definition's `## Pin Inputs` closure, when the validator evaluates it, the validator shall report that phase stale, naming the closure difference.
 
 ### PIN-14
-
 Verifies: [PIN-13](../dev/pinning.md#pin-13)
 
 Where a fixture phase's pinned artifact matches its recorded hash but its bytes are not a `phase` module — they do not expose the phase-runner facade — when the validator evaluates it, the validator shall report that phase stale.
