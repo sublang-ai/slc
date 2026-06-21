@@ -44,7 +44,7 @@ Where a fixture phase's recorded semantic-input closure omits or adds a file rel
 ### PIN-11
 Verifies: [PIN-5](../dev/pinning.md#pin-5)
 
-Where a fixture `slc.pins.json` is not JSON, declares an unsupported schema or hash algorithm, carries an unknown or wrong-typed field, or records an absolute or boundary-escaping path, when the validator evaluates it, the validator shall report the pin malformed, naming the field, and report no phase current.
+Where a fixture `slc.pins.json` is not JSON, declares an unsupported schema or hash algorithm, carries an unknown or wrong-typed field, records an absolute or boundary-escaping path, or records a file hash or link-target identity that is not a well-formed content-addressed digest, when the validator evaluates it, the validator shall report the pin malformed, naming the field, and report no phase current.
 
 ### PIN-12
 Verifies: [PIN-6](../dev/pinning.md#pin-6)

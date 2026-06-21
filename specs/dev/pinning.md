@@ -48,7 +48,7 @@ Where a phase's recorded semantic-input closure differs from the closure derived
 
 ### PIN-5
 
-Where `slc.pins.json` is not strict JSON, declares an unsupported schema identifier or hash algorithm, omits a required field, carries an unknown or wrong-typed field, or records an absolute path or a path that escapes the recorded path boundary, when the validator evaluates it, the validator shall report the pin malformed with a diagnostic naming the offending field and shall report no phase current ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#path-resolution)).
+Where `slc.pins.json` is not strict JSON, declares an unsupported schema identifier or hash algorithm, omits a required field, carries an unknown or wrong-typed field, records an absolute path or a path that escapes the recorded path boundary, records a file hash that is not a well-formed `sha256:` digest, or records a link-target identity that is not a well-formed content-addressed identity, when the validator evaluates it, the validator shall report the pin malformed with a diagnostic naming the offending field and shall report no phase current ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#path-resolution), [DR-007](../decisions/007-slc-phase-artifact-pinning.md#hashing-and-portability), [DR-007](../decisions/007-slc-phase-artifact-pinning.md#link-target-identity)).
 
 ### PIN-6
 
