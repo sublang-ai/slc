@@ -100,3 +100,11 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link |
 | test | [pipeline.md](test/pipeline.md) | End-to-end pipeline run, chain, naming, path, and link acceptance |
+
+### SELFHOST
+
+| Group | File | Summary |
+| --- | --- | --- |
+| user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `phase` artifact |
+| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name and the `phase` linked format realized through generic pipeline/link mechanics |
+| test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name resolution, `phase` linking, and DR-001 locations |
