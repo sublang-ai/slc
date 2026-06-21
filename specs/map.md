@@ -78,6 +78,13 @@ meta.md     The spec of specs
 | dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution |
 | test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, and blocked-protocol acceptance |
 
+### PIN
+
+| Group | File | Summary |
+| --- | --- | --- |
+| dev | [pinning.md](dev/pinning.md) | Pin-currency validator: presence, currency, and stale/malformed verdicts |
+| test | [pinning.md](test/pinning.md) | Acceptance: no-pins, current, stale, and malformed verdicts over fixtures |
+
 ### PIPE
 
 | Group | File | Summary |
