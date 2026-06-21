@@ -63,6 +63,7 @@ These declarations are authoritative: `slc` uses them to map formats to extensio
 `slc` shall refuse to run a pipeline whose phases declare conflicting extensions for the same format token.
 
 A phase's filename tokens shall match its `## Formats` table; `slc` shall refuse to load any phase that violates this.
+Phase definitions may additionally declare `## Pin Inputs` for compiled artifact pinning per [DR-007](007-slc-phase-artifact-pinning.md#semantic-input-closure); that section is optional and does not change the ordinary compile-chain format contract.
 
 ### Source filename convention
 
