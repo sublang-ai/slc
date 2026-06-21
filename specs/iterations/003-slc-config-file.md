@@ -21,7 +21,7 @@ exact behavior and the file is purely additive.
 
 ## Deliverables
 
-- [ ] A DR settling the slc configuration sources: YAML file format, discovery order, `--config` precedence, env-over-file precedence, schema, and validation, registered in `map.md`
+- [x] A DR settling the slc configuration sources: YAML file format, discovery order, `--config` precedence, env-over-file precedence, schema, and validation, registered in `map.md`
 - [ ] Revised and extended `cli` user/dev spec items so configuration is "config file overridden by environment," with the unset-agent refusal firing only when neither source supplies an agent ([CLI-7](../dev/cli.md#cli-7), [CLI-12](../dev/cli.md#cli-12), [CLI-2](../user/cli.md#cli-2))
 - [ ] A config-file loader: cwd/home discovery, `--config` override that errors on an absent explicit path, YAML parse, flat-schema validation with unknown-key rejection, and a partial selection result
 - [ ] The loader wired into `buildSlcDeps` with env-over-file precedence and a `--config <path>` flag, with `usageText` naming the config file
