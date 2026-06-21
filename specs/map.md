@@ -64,8 +64,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [file-capability.md](dev/file-capability.md) | Artifact-facing file capability: confined virtual paths, exact-byte hashes, atomic writes, compare-and-swap |
-| test | [file-capability.md](test/file-capability.md) | Acceptance: path confinement, hash round-trip, listing order, and ifMatch over a fixture root |
+| dev | [file-capability.md](dev/file-capability.md) | Artifact-facing file capability and host-side grants: confined paths, exact-byte hashes, atomic writes, compare-and-swap, default-deny grants |
+| test | [file-capability.md](test/file-capability.md) | Acceptance: path confinement, hash round-trip, listing order, ifMatch, and default-deny grants over a fixture root |
 
 ### GIT
 

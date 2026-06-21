@@ -57,3 +57,21 @@ When the artifact writes a file, the file capability shall atomically replace or
 ### FCAP-6
 
 Where a write supplies an `ifMatch` hash, the file capability shall apply the write only when the target's current exact-byte hash equals it, and shall otherwise report `stale` and leave the target unchanged; a fresh write that supplies no `ifMatch` shall not require a prior hash, and of two writes that supply the same `ifMatch` through one capability at most one shall apply ([DR-008](../decisions/008-slc-file-capability.md#hashes-and-writes)).
+
+## Grants
+
+### FCAP-11
+
+Where a capability is constructed from a per-run grant set, the file capability shall authorize an operation only when its path is covered by a grant of the matching access, and shall otherwise report `unauthorized`, so a path that no grant covers is denied even when it lies inside the run root ([DR-008](../decisions/008-slc-file-capability.md#capability-boundary), [DR-008](../decisions/008-slc-file-capability.md#host-side-grants)).
+
+### FCAP-12
+
+Where a per-run grant set authorizes writes, the only writable path shall be the run's `target` for a compile phase or `linked` for a link phase, and the file capability shall report `unauthorized` for a write to any other path ([DR-008](../decisions/008-slc-file-capability.md#host-side-grants)).
+
+### FCAP-13
+
+Where a per-run grant set authorizes reads, its read grants shall cover only the run's inputs — the source or object artifacts, the link target when applicable, and the recorded semantic-input closure — each enumerated as a file grant, so a read of any other in-root path is `unauthorized`; the grant set shall not allow directory listing or recursive directory reads until a pinning extension defines listing and subtree identities ([DR-008](../decisions/008-slc-file-capability.md#host-side-grants), [DR-007](../decisions/007-slc-phase-artifact-pinning.md)).
+
+### FCAP-14
+
+When an operation is refused for a path outside the run root, a symlink escape, an access no grant covers, or a write outside the writable path, the file capability shall report `invalid_path` or `unauthorized` — codes distinct from the operational `not_found`, `not_file`, `not_directory`, and `stale` — so a host can map a scope failure to a failed generic check rather than a phase `BLOCKED` ([DR-008](../decisions/008-slc-file-capability.md#failure-mapping), [DR-003](../decisions/003-slc-phase-execution.md)).
