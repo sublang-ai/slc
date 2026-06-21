@@ -6,10 +6,13 @@
 ## Intent
 
 This package specifies integration and system acceptance tests for the
-execution boundary and interpreted execution in the `phase-execution` dev
-package, exercising the `slc` command with a faked agent transport per
-[DR-003](../decisions/003-slc-phase-execution.md) and
-[DR-004](../decisions/004-slc-interpreted-phase-execution.md).
+execution boundary, interpreted and compiled phase execution, and pin-driven
+strategy selection in the `phase-execution` dev package, exercising the `slc`
+command with faked agent transports and fixture compiled artifacts per
+[DR-003](../decisions/003-slc-phase-execution.md),
+[DR-004](../decisions/004-slc-interpreted-phase-execution.md),
+[DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), and
+[DR-007](../decisions/007-slc-phase-artifact-pinning.md).
 
 Essential project-specific reference: `slc`, this project's compiler CLI.
 
@@ -57,3 +60,9 @@ While interpreting a phase, when the agent adds, removes, or renames a phase fil
 Verifies: [PHEXEC-23](../dev/phase-execution.md#phexec-23), [PHEXEC-24](../dev/phase-execution.md#phexec-24)
 
 Where a phase is backed by a fixture compiled `phase` artifact reached only through the runner ports, when the executor runs it, an `ok` artifact result shall have written the target and yield an `ok` outcome carrying the runtime's drained diagnostics, a `blocked` result shall yield a `blocked` outcome naming the reasons, and an `error` result shall yield an `error` outcome.
+
+### PHEXEC-28
+
+Verifies: [PHEXEC-27](../dev/phase-execution.md#phexec-27), [COMPILE-6](../user/compiler.md#compile-6)
+
+When the slc command runs a fixture phase, a phase with no pin file or absent from a present pin file shall interpret, a current pin shall run the compiled executor without interpreting, a current pin a host cannot run compiled shall fail closed, and a stale pin, a malformed pin record, or an unparseable pin file shall fail the run with a diagnostic and not interpret.

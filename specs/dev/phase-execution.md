@@ -7,9 +7,12 @@
 
 This package specifies the boundary between generic `slc` mechanics and
 phase-specific transformation, the generic checks and blocked protocol that
-guard a phase run, and interpreted phase execution by a coding agent, per
-[DR-003](../decisions/003-slc-phase-execution.md) and
-[DR-004](../decisions/004-slc-interpreted-phase-execution.md).
+guard a phase run, interpreted phase execution by a coding agent, and compiled
+phase execution through the phase-runner facade with pin-driven strategy
+selection, per [DR-003](../decisions/003-slc-phase-execution.md),
+[DR-004](../decisions/004-slc-interpreted-phase-execution.md),
+[DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), and
+[DR-007](../decisions/007-slc-phase-artifact-pinning.md).
 Generic pipeline mechanics are specified in the `pipeline` package.
 
 Essential project-specific references: `slc`, this project's compiler CLI; and
@@ -107,6 +110,10 @@ When a compiled artifact returns its terminal status, the slc command shall proc
 ### PHEXEC-25
 
 Where a compiled phase runs, the slc command shall back the runner's player and judge ports with a coding agent reached through Cligent [[1]] per [DR-004](../decisions/004-slc-interpreted-phase-execution.md), applying per-player model selection as configuration without changing phase semantics, and shall collect the runtime's status and telemetry emissions as drainable diagnostics ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
+
+### PHEXEC-27
+
+When the slc command runs a phase, the slc command shall select its execution from the pin index: a phase with no pin — including when the pipeline has no pin file — interprets; a current pin runs the phase's compiled artifact, and fails the run closed when it cannot run that artifact rather than interpreting it; and a stale or malformed pin, or an unparseable pin file, stops the run with a diagnostic, never silently interpreting the phase ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#strategy-selection), [DR-007](../decisions/007-slc-phase-artifact-pinning.md#currency-and-selection)).
 
 ## References
 

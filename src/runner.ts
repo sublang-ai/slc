@@ -23,6 +23,8 @@ import {
 } from './execution.js';
 import { type Invocation, parseInvocation } from './invocation.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
+import { evaluatePin } from './pin-currency.js';
+import { PinError, loadPinFile, type PinFile, type PinRecord } from './pins.js';
 import {
   type Pipeline,
   type PipelineResolver,
@@ -30,12 +32,28 @@ import {
   resolvePipeline,
 } from './pipeline.js';
 
+/** A current pinned phase and the record that selected its compiled artifact. */
+export interface CompiledSelection {
+  /** Pin key: the phase name, or `link` for the reserved link phase. */
+  phase: string;
+  /** The pipeline directory holding `slc.pins.json`. */
+  pipelineDir: string;
+  /** The current pin record naming the compiled artifact and its inputs. */
+  record: PinRecord;
+}
+
 /** Host-supplied capabilities for a run. */
 export interface SlcDeps {
   /** Resolves a pipeline reference to candidate directories (DR-001). */
   resolver: PipelineResolver;
-  /** Executes a phase (interpreted in production). */
+  /** Executes a phase by interpretation; the fallback for an unpinned phase (DR-004). */
   executor: PhaseExecutor;
+  /**
+   * Builds the executor for a current pinned phase (DR-005, DR-007). When absent,
+   * a host runs interpreted only, so a current pin fails closed rather than
+   * silently interpreting a phase the pipeline pinned to a compiled artifact.
+   */
+  compiled?: (selection: CompiledSelection) => PhaseExecutor;
   signal?: AbortSignal;
 }
 
@@ -257,22 +275,58 @@ interface PhaseStep {
   targetExt: string;
 }
 
-/** Runs steps in order, stopping at the first failure with its report (PHEXEC-9). */
+/**
+ * Runs steps in order, selecting interpreted or compiled execution per phase from
+ * the pin index and stopping at the first failure with its report (PHEXEC-9,
+ * PHEXEC-27). An unparseable pin file fails the run closed before any phase.
+ */
 async function executeSteps(
   steps: readonly PhaseStep[],
   pipeline: Pipeline,
   deps: SlcDeps,
 ): Promise<SlcResult> {
+  let pinFile: PinFile | undefined;
+  try {
+    pinFile = (await loadPinFile(pipeline.dir)).file;
+  } catch (error) {
+    if (error instanceof PinError) {
+      return { ok: false, outputs: [], diagnostics: [error.message] };
+    }
+    throw error;
+  }
+
   const definitions = chainDefinitions(pipeline);
   const outputs: string[] = [];
   const diagnostics: string[] = [];
 
   for (const step of steps) {
+    const target =
+      step.request.kind === 'compile'
+        ? step.request.target
+        : step.request.linked;
+
+    const selection = await selectExecutor(
+      step.phase,
+      pipeline.dir,
+      pinFile,
+      deps,
+    );
+    if (selection.kind === 'fail') {
+      diagnostics.push(
+        formatFailureReport({
+          phase: step.phase,
+          target,
+          reasons: selection.reasons,
+        }),
+      );
+      return { ok: false, outputs, diagnostics };
+    }
+
     const result = await runPhase({
       request: step.request,
       phase: step.phase,
       targetExt: step.targetExt,
-      executor: deps.executor,
+      executor: selection.executor,
       definitions,
       revalidate: () => revalidateChain(pipeline.dir),
       signal: deps.signal,
@@ -282,13 +336,52 @@ async function executeSteps(
       return { ok: false, outputs, diagnostics };
     }
     diagnostics.push(...result.diagnostics);
-    outputs.push(
-      step.request.kind === 'compile'
-        ? step.request.target
-        : step.request.linked,
-    );
+    outputs.push(target);
   }
   return { ok: true, outputs, diagnostics };
+}
+
+/** An executor to run, or a fail-closed verdict that stops the run (PHEXEC-27). */
+type Strategy =
+  | { kind: 'run'; executor: PhaseExecutor }
+  | { kind: 'fail'; reasons: string[] };
+
+/**
+ * Selects a phase's execution strategy from the pin index (PHEXEC-27; DR-005,
+ * DR-007): a phase with no pin interprets, a current pin runs its compiled
+ * artifact, and a stale or malformed pin fails closed and is never silently
+ * interpreted.
+ */
+async function selectExecutor(
+  phase: string,
+  pipelineDir: string,
+  pinFile: PinFile | undefined,
+  deps: SlcDeps,
+): Promise<Strategy> {
+  const record = pinFile?.pins[phase];
+  if (pinFile === undefined || record === undefined) {
+    return { kind: 'run', executor: deps.executor };
+  }
+
+  const verdict = await evaluatePin(pipelineDir, pinFile, record);
+  if (verdict.status === 'current') {
+    if (deps.compiled === undefined) {
+      return {
+        kind: 'fail',
+        reasons: [
+          `phase "${phase}" is pinned to a compiled artifact, but this host has no compiled executor configured`,
+        ],
+      };
+    }
+    return {
+      kind: 'run',
+      executor: deps.compiled({ phase, pipelineDir, record }),
+    };
+  }
+  return {
+    kind: 'fail',
+    reasons: [`pin is ${verdict.status}: ${verdict.reason}`],
+  };
 }
 
 function phaseDefinition(pipeline: Pipeline, name: string): string {
