@@ -31,6 +31,7 @@ meta.md     The spec of specs
 | DR-005 | [005-slc-self-hosting-meta-pipeline.md](decisions/005-slc-self-hosting-meta-pipeline.md) | Self-hosting meta pipeline: compiled phase artifacts |
 | DR-006 | [006-slc-configuration-sources.md](decisions/006-slc-configuration-sources.md) | Configuration sources and precedence: env over config file, discovery, schema |
 | DR-007 | [007-slc-phase-artifact-pinning.md](decisions/007-slc-phase-artifact-pinning.md) | Phase artifact pinning: currentness, semantic inputs, and compiled selection |
+| DR-008 | [008-slc-file-capability.md](decisions/008-slc-file-capability.md) | File capability: confined paths, exact-byte hashes, and target-scoped writes |
 
 ## Iterations
 
