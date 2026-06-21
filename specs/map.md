@@ -58,7 +58,7 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, and run outcomes |
+| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, and compiled-pin selection |
 
 ### FCAP
 
@@ -84,8 +84,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade and Cligent ports adapter |
-| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked-protocol, and compiled-artifact acceptance |
+| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade, Cligent ports adapter, and compiled selection |
+| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked-protocol, compiled-artifact, and pin-selection acceptance |
 
 ### PIN
 
