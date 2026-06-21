@@ -44,3 +44,23 @@ Where a fixture directory holds files and subdirectories, when the artifact list
 Verifies: [FCAP-6](../dev/file-capability.md#fcap-6)
 
 Where a file exists with a known hash, when the artifact writes with an `ifMatch` equal to that hash the write shall succeed and return the new hash, and when it writes with an `ifMatch` that does not match the capability shall report `stale` and leave the file unchanged; and when two writes supply the same prior hash, exactly one shall succeed and the other shall report `stale`.
+
+## Grants
+
+### FCAP-15
+
+Verifies: [FCAP-11](../dev/file-capability.md#fcap-11)
+
+Where a capability is built from a grant set over a fixture directory, when the artifact reads, lists, or writes an in-root path that no grant covers, the capability shall report `unauthorized`.
+
+### FCAP-16
+
+Verifies: [FCAP-12](../dev/file-capability.md#fcap-12)
+
+Where a grant set authorizes writing the run's target, when the artifact writes that target the write shall succeed, and when it writes any other in-root path the capability shall report `unauthorized` and leave that path unchanged.
+
+### FCAP-17
+
+Verifies: [FCAP-13](../dev/file-capability.md#fcap-13)
+
+Where a grant set is closed over a run's source and semantic-input closure, when the artifact reads a granted input the read shall succeed, and when it reads an in-root file outside that closure the capability shall report `unauthorized`.
