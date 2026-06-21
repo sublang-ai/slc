@@ -16,6 +16,7 @@
  */
 
 import { createConfiguredExecutor, resolveAgentSelection } from './config.js';
+import { loadConfigFile } from './config-file.js';
 import { createPipelineResolver, pipelineSearchRoots } from './resolver.js';
 import { runSlc, type SlcDeps } from './runner.js';
 
@@ -32,7 +33,9 @@ export type DepsBuilder = (io: {
   env: Record<string, string | undefined>;
   cwd: string;
   signal: AbortSignal;
-}) => SlcDeps;
+  /** Explicit `--config <path>`, when given (CLI-20). */
+  configPath?: string;
+}) => SlcDeps | Promise<SlcDeps>;
 
 /** Injectable IO and configuration for {@link run}; all fields default to the process. */
 export interface RunOptions {
@@ -47,22 +50,45 @@ export interface RunOptions {
 }
 
 /**
- * Builds the production {@link SlcDeps}: a pipeline resolver over the
- * `SLC_PIPELINE_PATH` search roots (CLI-6) and an interpreted executor for the
- * configured agent/model (CLI-7).
+ * Builds the production {@link SlcDeps}: a pipeline resolver over the resolved
+ * search roots (CLI-6) and an interpreted executor for the resolved agent/model
+ * (CLI-7). Configuration is loaded from the config file (DR-006, CLI-20) and
+ * then overridden per key by a non-blank environment variable, so existing
+ * env-only runs are unchanged and the file fills any key the environment leaves
+ * unset.
  *
- * @throws {import('./config.js').ConfigError} when the agent is unset or
- *   unsupported (CLI-12).
+ * @throws {import('./config-file.js').ConfigFileError} when an explicit
+ *   `--config` path is absent or the file is malformed or invalid (CLI-21).
+ * @throws {import('./config.js').ConfigError} when neither source supplies an
+ *   agent, or the resolved agent is unsupported (CLI-12).
  */
-export const buildSlcDeps: DepsBuilder = ({ env, cwd, signal }) => {
-  const resolver = createPipelineResolver(
-    pipelineSearchRoots(env.SLC_PIPELINE_PATH, cwd),
-  );
-  const executor = createConfiguredExecutor(resolveAgentSelection(env), {
-    cwd,
+export const buildSlcDeps: DepsBuilder = async ({
+  env,
+  cwd,
+  signal,
+  configPath,
+}) => {
+  const file = await loadConfigFile({ cwd, configPath, env });
+
+  const selection = resolveAgentSelection({
+    SLC_AGENT: nonBlank(env.SLC_AGENT) ?? file.config.agent,
+    SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.config.model,
   });
+
+  const pipelinePath =
+    nonBlank(env.SLC_PIPELINE_PATH) ?? file.config.pipelinePath;
+  const resolver = createPipelineResolver(
+    pipelineSearchRoots(pipelinePath, cwd),
+  );
+
+  const executor = createConfiguredExecutor(selection, { cwd });
   return { resolver, executor, signal };
 };
+
+/** Returns `value` when set and not all-whitespace, else `undefined` (DR-006). */
+function nonBlank(value: string | undefined): string | undefined {
+  return value !== undefined && value.trim() !== '' ? value : undefined;
+}
 
 /** Usage text naming the documented invocation forms and configuration (CLI-2). */
 export function usageText(): string {
@@ -73,18 +99,52 @@ export function usageText(): string {
     '  slc <pipeline>.link <object>... <target> [-o <linked>] [--link-option name=value]...',
     '',
     'Options:',
-    '  -o <path>                final output path override',
-    '  --link <target>          link the full-pipeline output to <target>',
+    '  -o <path>                 final output path override',
+    '  --link <target>           link the full-pipeline output to <target>',
     '  --link-option name=value  pass an opaque option to the link phase',
-    '  -v, --version            print version and exit',
-    '  -h, --help               print this help and exit',
+    '  --config <path>           load configuration from <path> (disables discovery)',
+    '  -v, --version             print version and exit',
+    '  -h, --help                print this help and exit',
     '',
-    'Configuration (environment):',
+    'Configuration:',
+    '  Config file (YAML), discovered in order, then overridden per key by the',
+    '  environment variable below:',
+    '    ./slc.config.yaml',
+    '    ${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml',
+    '  Keys: agent, model, pipelinePath.',
+    '',
     '  SLC_AGENT          agent CLI: claude-code | codex | gemini | opencode',
     '  SLC_MODEL          optional model for the agent CLI',
     '  SLC_PIPELINE_PATH  search roots for <pipeline> references (default: cwd)',
     '',
   ].join('\n');
+}
+
+/**
+ * Splits `--config <path>` out of argv, returning the path and the remaining
+ * arguments for `runSlc` (CLI-20). `--config` is a bin-level flag, so it is
+ * removed before the grammar parser, which rejects unknown options.
+ *
+ * @throws {Error} when `--config` is given without a following value.
+ */
+function extractConfigFlag(argv: readonly string[]): {
+  configPath?: string;
+  rest: string[];
+} {
+  const rest: string[] = [];
+  let configPath: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--config') {
+      const value = argv[++i];
+      if (value === undefined) {
+        throw new Error('missing value for --config <path>');
+      }
+      configPath = value;
+    } else {
+      rest.push(argv[i]);
+    }
+  }
+  return { configPath, rest };
 }
 
 /**
@@ -114,15 +174,26 @@ export async function run(
   const signal = options.signal ?? new AbortController().signal;
 
   let deps: SlcDeps;
+  let rest: readonly string[];
   try {
-    deps = (options.buildDeps ?? buildSlcDeps)({ env, cwd, signal });
+    // `--config <path>` is a bin-level flag: strip it before runSlc, whose
+    // grammar (parseInvocation) rejects unknown options (CLI-20).
+    const extracted = extractConfigFlag(argv);
+    rest = extracted.rest;
+    deps = await (options.buildDeps ?? buildSlcDeps)({
+      env,
+      cwd,
+      signal,
+      configPath: extracted.configPath,
+    });
   } catch (error) {
-    // Configuration refusals (e.g. unset/unsupported agent, CLI-12) fail the run.
+    // Configuration refusals — a bad `--config`, an invalid config file
+    // (CLI-21), or an unset/unsupported agent (CLI-12) — fail the run.
     stderr(`${name}: ${messageOf(error)}\n`);
     return 1;
   }
 
-  const result = await runSlc(argv, deps);
+  const result = await runSlc(rest, deps);
 
   if (result.ok) {
     if (result.outputs.length > 0) stdout(`${result.outputs.join('\n')}\n`);

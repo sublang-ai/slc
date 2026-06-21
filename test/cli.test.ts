@@ -279,7 +279,10 @@ describe('configuration (CLI-18, CLI-19)', () => {
     const out: string[] = [];
     const err: string[] = [];
     const code = await run(['playbook', source], {
-      env: { SLC_PIPELINE_PATH: pipelinesRoot },
+      // Isolate config-file discovery (DR-006): no config under cwd or this
+      // config home, so the run falls through to the (unset) environment.
+      cwd: root,
+      env: { SLC_PIPELINE_PATH: pipelinesRoot, XDG_CONFIG_HOME: root },
       stdout: (t) => out.push(t),
       stderr: (t) => err.push(t),
     });
@@ -293,7 +296,12 @@ describe('configuration (CLI-18, CLI-19)', () => {
   it('refuses an unsupported SLC_AGENT (CLI-18)', async () => {
     const err: string[] = [];
     const code = await run(['playbook', source], {
-      env: { SLC_AGENT: 'gpt', SLC_PIPELINE_PATH: pipelinesRoot },
+      cwd: root,
+      env: {
+        SLC_AGENT: 'gpt',
+        SLC_PIPELINE_PATH: pipelinesRoot,
+        XDG_CONFIG_HOME: root,
+      },
       stderr: (t) => err.push(t),
     });
 
