@@ -42,6 +42,18 @@ describe('pipelineSearchRoots (CLI-6)', () => {
     const value = ['/abs/pipes', '/abs/pipes/'].join(delimiter);
     expect(pipelineSearchRoots(value, '/work')).toEqual(['/abs/pipes']);
   });
+
+  it('accepts the config-file sequence form, resolving relative roots against cwd', () => {
+    expect(pipelineSearchRoots(['pipes', '/abs/pipes'], '/work')).toEqual([
+      resolve('/work', 'pipes'),
+      '/abs/pipes',
+    ]);
+  });
+
+  it('defaults to [cwd] for an empty or all-blank sequence', () => {
+    expect(pipelineSearchRoots([], '/work')).toEqual(['/work']);
+    expect(pipelineSearchRoots(['  ', ''], '/work')).toEqual(['/work']);
+  });
 });
 
 describe('createPipelineResolver (CLI-6)', () => {
