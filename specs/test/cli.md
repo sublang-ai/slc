@@ -27,7 +27,7 @@ Where no agent is configured, when the slc executable is run with `--version` or
 ### CLI-14
 Verifies: [CLI-2](../user/cli.md#cli-2), [CLI-9](../dev/cli.md#cli-9)
 
-Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms and the environment configuration it reads to standard output and exit zero without resolving a pipeline or selecting an agent.
+Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero without resolving a pipeline or selecting an agent.
 
 ## Reporting
 
@@ -53,7 +53,7 @@ While a run is in progress, when the process is interrupted, the slc executable 
 ### CLI-18
 Verifies: [CLI-12](../dev/cli.md#cli-12), [CLI-4](../user/cli.md#cli-4)
 
-Where `SLC_AGENT` is unset or names an unsupported agent CLI, when the slc executable runs a pipeline, the slc executable shall print a diagnostic to standard error, run no phase, and exit non-zero.
+Where neither `SLC_AGENT` nor a config file supplies an agent, or the resolved agent names an unsupported agent CLI, when the slc executable runs a pipeline, the slc executable shall print a diagnostic to standard error, run no phase, and exit non-zero.
 
 ### CLI-19
 Verifies: [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7), [CLI-8](../dev/cli.md#cli-8)
