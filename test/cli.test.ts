@@ -8,8 +8,16 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { resolveAgentSelection } from '../src/config.js';
-import { interruptSignal, run, version, type SlcDeps } from '../src/index.js';
+import { resolveAgentSelection, type AgentSelection } from '../src/config.js';
+import { loadConfigFile } from '../src/config-file.js';
+import {
+  interruptSignal,
+  resolveRunConfig,
+  run,
+  version,
+  type DepsBuilder,
+  type SlcDeps,
+} from '../src/index.js';
 import {
   createInterpretedExecutor,
   type AgentClient,
@@ -394,4 +402,191 @@ describe('--config flag (CLI-20)', () => {
     expect(built).toBe(false);
     expect(err.join('')).toContain('--config');
   });
+});
+
+describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
+  // buildDeps mirroring production config selection — the real loader and merge
+  // and a real resolver — with a fake transport keyed by agent id, so no real
+  // agent CLI runs. `configHome` is pinned to the test root for isolation.
+  const configDeps =
+    (
+      transports: Record<string, AgentClient>,
+      capture: { selection?: AgentSelection },
+    ): DepsBuilder =>
+    async ({ env, cwd, configPath, signal }) => {
+      const file = await loadConfigFile({
+        cwd,
+        configPath,
+        configHome: root,
+        env,
+      });
+      const cfg = resolveRunConfig(env, file.config);
+      capture.selection = cfg.selection;
+      const transport = transports[cfg.selection.agent];
+      if (!transport)
+        throw new Error(`no transport for ${cfg.selection.agent}`);
+      return {
+        resolver: createPipelineResolver(
+          pipelineSearchRoots(cfg.pipelinePath, cwd),
+        ),
+        executor: createInterpretedExecutor({
+          agent: transport,
+          config: { model: cfg.selection.model, cwd },
+        }),
+        signal,
+      };
+    };
+
+  const writeConfig = (dir: string, content: string): Promise<void> =>
+    writeFile(join(dir, 'slc.config.yaml'), content);
+
+  it('runs from a config file alone with no environment (CLI-23)', async () => {
+    const { agent, models } = makeAgent();
+    await writeConfig(
+      srcDir,
+      `agent: claude-code\nmodel: cfg-model\npipelinePath:\n  - ${pipelinesRoot}\n`,
+    );
+    const capture: { selection?: AgentSelection } = {};
+    const out: string[] = [];
+    const code = await run(['playbook', source], {
+      cwd: srcDir,
+      env: {},
+      stdout: (t) => out.push(t),
+      buildDeps: configDeps({ 'claude-code': agent }, capture),
+    });
+
+    expect(code).toBe(0);
+    expect(capture.selection).toEqual({
+      agent: 'claude-code',
+      model: 'cfg-model',
+    });
+    expect(models).toEqual(['cfg-model', 'cfg-model']);
+    expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
+  });
+
+  it('lets the environment override the file per key (CLI-24)', async () => {
+    const claude = makeAgent();
+    const codex = makeAgent();
+    // File names codex, cfg-model, and a non-existent path; the environment
+    // names claude-code, env-model, and the real pipelines root.
+    await writeConfig(
+      srcDir,
+      `agent: codex\nmodel: cfg-model\npipelinePath:\n  - ${join(root, 'nonexistent')}\n`,
+    );
+    const capture: { selection?: AgentSelection } = {};
+    const out: string[] = [];
+    const code = await run(['playbook', source], {
+      cwd: srcDir,
+      env: {
+        SLC_AGENT: 'claude-code',
+        SLC_MODEL: 'env-model',
+        SLC_PIPELINE_PATH: pipelinesRoot,
+      },
+      stdout: (t) => out.push(t),
+      buildDeps: configDeps(
+        { 'claude-code': claude.agent, codex: codex.agent },
+        capture,
+      ),
+    });
+
+    // Exit 0 proves the environment's pipeline path resolved 'playbook'; the
+    // file's non-existent path would have failed resolution.
+    expect(code).toBe(0);
+    expect(capture.selection).toEqual({
+      agent: 'claude-code',
+      model: 'env-model',
+    });
+    expect(claude.calls).toHaveLength(2);
+    expect(codex.calls).toHaveLength(0);
+    expect(claude.models).toEqual(['env-model', 'env-model']);
+  });
+
+  it('loads the --config file over a discovered cwd config (CLI-25)', async () => {
+    const claude = makeAgent();
+    const codex = makeAgent();
+    await writeConfig(
+      srcDir,
+      `agent: codex\npipelinePath:\n  - ${pipelinesRoot}\n`,
+    );
+    const explicit = join(root, 'explicit.yaml');
+    await writeFile(
+      explicit,
+      `agent: claude-code\npipelinePath:\n  - ${pipelinesRoot}\n`,
+    );
+    const capture: { selection?: AgentSelection } = {};
+    const out: string[] = [];
+    const code = await run(['--config', explicit, 'playbook', source], {
+      cwd: srcDir,
+      env: {},
+      stdout: (t) => out.push(t),
+      buildDeps: configDeps(
+        { 'claude-code': claude.agent, codex: codex.agent },
+        capture,
+      ),
+    });
+
+    expect(code).toBe(0);
+    expect(capture.selection?.agent).toBe('claude-code');
+    expect(codex.calls).toHaveLength(0);
+  });
+
+  it('falls through to the environment on a discovery miss (CLI-26)', async () => {
+    const { agent } = makeAgent();
+    const capture: { selection?: AgentSelection } = {};
+    const out: string[] = [];
+    const code = await run(['playbook', source], {
+      cwd: srcDir, // no slc.config.yaml present
+      env: { SLC_AGENT: 'claude-code', SLC_PIPELINE_PATH: pipelinesRoot },
+      stdout: (t) => out.push(t),
+      buildDeps: configDeps({ 'claude-code': agent }, capture),
+    });
+
+    expect(code).toBe(0);
+    expect(capture.selection?.agent).toBe('claude-code');
+    expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
+  });
+
+  it('refuses an absent --config path to stderr, non-zero (CLI-26)', async () => {
+    const err: string[] = [];
+    const code = await run(
+      ['--config', join(root, 'missing.yaml'), 'playbook', source],
+      {
+        cwd: srcDir,
+        env: {
+          SLC_AGENT: 'claude-code',
+          SLC_PIPELINE_PATH: pipelinesRoot,
+          XDG_CONFIG_HOME: root,
+        },
+        stderr: (t) => err.push(t),
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(err.join('')).toContain('--config');
+    expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(false);
+  });
+
+  for (const [label, content] of [
+    ['an unknown key', 'agent: claude-code\nbogus: 1\n'],
+    ['malformed YAML', 'agent: [unterminated\n'],
+    ['a wrong-typed value', 'agent: 42\n'],
+  ] as const) {
+    it(`refuses a config with ${label}, non-zero (CLI-27)`, async () => {
+      await writeConfig(srcDir, content);
+      const err: string[] = [];
+      const code = await run(['playbook', source], {
+        cwd: srcDir,
+        env: {
+          SLC_AGENT: 'claude-code',
+          SLC_PIPELINE_PATH: pipelinesRoot,
+          XDG_CONFIG_HOME: root,
+        },
+        stderr: (t) => err.push(t),
+      });
+
+      expect(code).toBe(1);
+      expect(err.join('')).not.toBe('');
+      expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(false);
+    });
+  }
 });
