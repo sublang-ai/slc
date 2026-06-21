@@ -85,7 +85,7 @@ meta.md     The spec of specs
 | Group | File | Summary |
 | --- | --- | --- |
 | dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade and Cligent ports adapter |
-| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, and blocked-protocol acceptance |
+| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked-protocol, and compiled-artifact acceptance |
 
 ### PIN
 
