@@ -24,7 +24,7 @@ This is a standalone, deterministic, `slc`-side library; it changes no runtime e
 
 - [x] A `PINNING` spec package (`dev`, `test`), short form `PIN`, registered in `map.md`
 - [x] A strict `slc.pins.json` model and parser — schema identifier, hash algorithm, `pathBoundary`, and the phase-to-record map — that rejects a malformed file with a diagnostic naming the field
-- [ ] Exact-byte SHA-256 hashing written as `sha256:` plus 64 lowercase hex, with no content transformation, and path-boundary resolution: relative POSIX paths from the pipeline directory, absolute paths rejected, `..` allowed only inside the recorded boundary
+- [x] Exact-byte SHA-256 hashing written as `sha256:` plus 64 lowercase hex, with no content transformation, and path-boundary resolution: relative POSIX paths from the pipeline directory, absolute paths rejected, `..` allowed only inside the recorded boundary
 - [ ] Semantic-input closure derivation from each definition's `## Pin Inputs` section (transitive, terminating at non-Markdown or sectionless inputs) and the check that the recorded closure matches it
 - [ ] A currency engine producing a per-phase `current`/`stale`/`malformed` verdict with a diagnostic naming the stale input or malformed field, covering external-input well-formedness and link-target identity over committed bytes
 - [ ] Integration/acceptance tests over fixture pipeline directories: current, each stale variant, malformed variants, and an absent pin file
