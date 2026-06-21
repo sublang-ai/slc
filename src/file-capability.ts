@@ -247,6 +247,22 @@ function isPlatformAbsolute(path: string): boolean {
   return /^[a-zA-Z]:[\\/]/.test(path) || path.startsWith('\\');
 }
 
+/**
+ * Canonicalizes a virtual POSIX path to its normalized `/`-prefixed form — the key
+ * the host-side grant model matches on — or `null` when the path is
+ * platform-absolute or escapes the run root (FCAP-2).
+ */
+export function canonicalize(path: SlcPath): string | null {
+  if (isPlatformAbsolute(path)) {
+    return null;
+  }
+  const segments = normalizeVirtual(path);
+  if (segments === null) {
+    return null;
+  }
+  return `/${segments.join('/')}`;
+}
+
 /** Resolves `host` through symlinks, falling back to the deepest existing ancestor. */
 async function realpathAllowingMissing(host: string): Promise<string> {
   try {
