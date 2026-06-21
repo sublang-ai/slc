@@ -25,7 +25,7 @@ When the user runs `slc` with `--version` or `-v`, the slc executable shall prin
 
 ### CLI-2
 
-When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms and the environment configuration it reads to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli), [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7)).
+When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli), [DR-006](../decisions/006-slc-configuration-sources.md#file-format-and-discovery), [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7)).
 
 ## Outcomes
 
@@ -40,3 +40,9 @@ When a run cannot complete — because the invocation or pipeline is rejected, a
 ### CLI-5
 
 While a run is in progress, when the process is interrupted, the slc executable shall cancel the in-flight execution, exit with a non-zero status, and not print a success report.
+
+## Configuration
+
+### CLI-22
+
+Where a config file is present — `slc.config.yaml` in the working directory, `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`, or a file named by `--config <path>` — when the user runs a documented invocation form, the slc executable shall take its agent, model, and pipeline search path from that file except where the matching environment variable overrides it, so a run is configurable without environment variables ([DR-006](../decisions/006-slc-configuration-sources.md#sources-and-precedence)).

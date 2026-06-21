@@ -25,15 +25,23 @@ executable reaches coding agents.
 
 ### CLI-6
 
-When the slc executable receives a `<pipeline>` reference, the executable shall resolve it to the directories named `<reference>` directly under each pipeline search root named by the `SLC_PIPELINE_PATH` environment variable (an OS path-list), defaulting to the working directory when `SLC_PIPELINE_PATH` is unset or empty, and supply those candidates to `runSlc` so that exactly one is required and zero or many is refused ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#directory-layout), [PIPE-16](pipeline.md#pipe-16)).
+When the slc executable receives a `<pipeline>` reference, the executable shall resolve it to the directories named `<reference>` directly under each pipeline search root — taking the roots from the `SLC_PIPELINE_PATH` environment variable (an OS path-list) when set, otherwise from the config file's `pipelinePath` sequence when present, otherwise the working directory, and resolving relative roots against the working directory — and supply those candidates to `runSlc` so that exactly one is required and zero or many is refused ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#directory-layout), [DR-006](../decisions/006-slc-configuration-sources.md#pipelinepath-shape-and-base), [PIPE-16](pipeline.md#pipe-16)).
 
 ### CLI-7
 
-Where the `SLC_AGENT` environment variable names one of the Cligent agent adapters the executable registers — `claude-code`, `codex`, `gemini`, or `opencode` — and the `SLC_MODEL` environment variable optionally names a model, the executable shall construct the coding-agent transport for that agent CLI through Cligent [[1]] with that model — omitting the model so the agent CLI uses its own default when `SLC_MODEL` is unset — leaving the agent CLI to read its credentials from the inherited process environment, and shall treat the selection as configuration that does not change phase semantics ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter), [PHEXEC-13](phase-execution.md#phexec-13)).
+Where the resolved agent — the `SLC_AGENT` environment variable when set, otherwise the config file's `agent` field — names one of the Cligent agent adapters the executable registers — `claude-code`, `codex`, `gemini`, or `opencode` — and the resolved model — `SLC_MODEL` when set, otherwise the config file's `model` field — optionally names a model, the executable shall construct the coding-agent transport for that agent CLI through Cligent [[1]] with that model — omitting the model so the agent CLI uses its own default when neither source sets it — leaving the agent CLI to read its credentials from the inherited process environment, and shall treat the selection as configuration that does not change phase semantics ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter), [DR-006](../decisions/006-slc-configuration-sources.md#sources-and-precedence), [PHEXEC-13](phase-execution.md#phexec-13)).
 
 ### CLI-12
 
-Where the `SLC_AGENT` environment variable is unset or names an agent CLI outside the set [CLI-7](#cli-7) registers, the executable shall refuse the run with a diagnostic and execute no phase, applying no implicit default agent ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter), [CLI-4](../user/cli.md#cli-4)).
+Where neither the `SLC_AGENT` environment variable nor the config file's `agent` field supplies an agent, or the resolved agent names an agent CLI outside the set [CLI-7](#cli-7) registers, the executable shall refuse the run with a diagnostic and execute no phase, applying no implicit default agent ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter), [DR-006](../decisions/006-slc-configuration-sources.md#sources-and-precedence), [CLI-4](../user/cli.md#cli-4)).
+
+### CLI-20
+
+When the slc executable builds run dependencies, the executable shall load configuration from the path given by `--config <path>` when present — disabling discovery — otherwise from the first existing of `slc.config.yaml` in the working directory then `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`, and shall apply each loaded value only where the corresponding environment variable does not set it ([DR-006](../decisions/006-slc-configuration-sources.md#file-format-and-discovery)).
+
+### CLI-21
+
+Where `--config <path>` names a file that does not exist, or a loaded config file is malformed, declares an unknown key, or holds a wrong-typed value, the executable shall refuse the run with a diagnostic and execute no phase, while a discovery miss instead leaves configuration to the environment and built-in defaults ([DR-006](../decisions/006-slc-configuration-sources.md#validation), [CLI-4](../user/cli.md#cli-4)).
 
 ### CLI-8
 
