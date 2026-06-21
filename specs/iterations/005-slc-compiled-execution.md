@@ -26,10 +26,10 @@ Interpreted execution stays the reference semantics and the fallback, and the [D
 - [x] A compiled-`phase` loader and `CompiledExecutor` implementing `PhaseExecutor`, running a loaded artifact under the ports and the file capability (extends `PHEXEC`)
 - [x] Compiled selection in `runSlc`: per phase, no pin interprets, a current pin runs the compiled artifact, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets (extends `PHEXEC`, `COMPILE`; selection is execution behavior, which `PIN` deliberately excludes)
 - [x] The deferred [DR-007](../decisions/007-slc-phase-artifact-pinning.md) currency sub-check that a pinned artifact resolves to the linked `phase` format (extends `PIN`)
-- [ ] A `self-hosting` spec package (`user`, `dev`, `test`), short form `SELFHOST`, for the reserved `slc` pipeline and the compiled `phase` artifact contract, registered in `map.md`, plus recognition of the reserved `slc` name and the `phase` linked format (`fsm` `.ts` → `phase` `.ts`) with [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) locations
+- [x] A `self-hosting` spec package (`user`, `dev`, `test`), short form `SELFHOST`, for the reserved `slc` pipeline and the compiled `phase` artifact contract, registered in `map.md`, plus recognition of the reserved `slc` name and the `phase` linked format (`fsm` `.ts` → `phase` `.ts`) with [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) locations
 - [ ] The `slc` meta-pipeline definitions — `text2gears.md`, `gears2fsm.md` preserving an auditable GEARS-to-FSM mapping, and the reserved `link.md` emitting `phase` — committed per [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)
 - [ ] Pin generation: an explicit build-and-review flow that writes `slc.pins.json` for a reviewed artifact and is not run during ordinary pipeline runs (extends `PIN`)
-- [ ] `map.md` updated for the new `FCAP` and `SELFHOST` packages
+- [x] `map.md` updated for the new `FCAP` and `SELFHOST` packages
 
 ## Tasks
 
