@@ -23,7 +23,7 @@ exact behavior and the file is purely additive.
 
 - [ ] A DR settling the slc configuration sources: YAML file format, discovery order, `--config` precedence, env-over-file precedence, schema, and validation, registered in `map.md`
 - [ ] Revised and extended `cli` user/dev spec items so configuration is "config file overridden by environment," with the unset-agent refusal firing only when neither source supplies an agent ([CLI-7](../dev/cli.md#cli-7), [CLI-12](../dev/cli.md#cli-12), [CLI-2](../user/cli.md#cli-2))
-- [ ] A config-file loader: cwd/home discovery, `--config` override, YAML parse, flat-schema validation with unknown-key rejection, and a partial selection result
+- [ ] A config-file loader: cwd/home discovery, `--config` override that errors on an absent explicit path, YAML parse, flat-schema validation with unknown-key rejection, and a partial selection result
 - [ ] The loader wired into `buildSlcDeps` with env-over-file precedence and a `--config <path>` flag, with `usageText` naming the config file
 - [ ] Integration tests covering file-only configuration, env override, `--config`, and the neither-source refusal, with the `runSlc` core and DRs unchanged
 - [ ] User-facing docs showing a minimal example config and the discovery order
@@ -31,7 +31,7 @@ exact behavior and the file is purely additive.
 ## Tasks
 
 1. **Author the configuration-sources DR.**
-   Record the design decision for `slc` configuration: a flat YAML file; discovery of `slc.config.yaml` in the cwd, then `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`; an explicit `--config <path>` that disables discovery; precedence of environment variable over file over built-in default; the schema (`agent`, `model`, `pipelinePath`); strict unknown-key rejection; and no auto-create in this iteration.
+   Record the design decision for `slc` configuration: a flat YAML file; discovery of `slc.config.yaml` in the cwd, then `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`; an explicit `--config <path>` that disables discovery and is an error when the named file is absent — distinct from a discovery miss, which falls through to environment and defaults so a `--config` typo never silently degrades (matching `tmux-play`, which errors on an explicit missing path while only discovery no-ops); precedence of environment variable over file over built-in default; the schema (`agent`, `model`, `pipelinePath`), settling whether `pipelinePath` is an OS path-list string or a YAML sequence and whether relative entries resolve against the cwd or the config-file directory (today `SLC_PIPELINE_PATH` is an OS path-list resolved against the cwd per [CLI-6](../dev/cli.md#cli-6), whereas `tmux-play` resolves a relative `captain.from` against the config-file directory); strict unknown-key rejection; and no auto-create in this iteration.
    State the rationale that env-over-file precedence keeps every current env-only run unchanged and preserves the [CLI-12](../dev/cli.md#cli-12) refusal when neither source supplies an agent.
    Register the DR in `map.md` and add SPDX headers per [LIC-1](../dev/licensing.md#lic-1)/[LIC-2](../dev/licensing.md#lic-2).
 
@@ -41,15 +41,15 @@ exact behavior and the file is purely additive.
    Update the `cli` summaries in `map.md`.
 
 3. **Implement the config-file loader.**
-   Add the `yaml` dependency; implement a loader that performs cwd/home discovery (or honors an explicit `--config` path), parses YAML, validates the flat schema, rejects unknown keys and malformed values with a clear diagnostic, and returns a partial `{ agent?, model?, pipelinePath? }` plus the resolved path, returning an empty result when no file is found.
-   Unit-test discovery order, the `--config` override, unknown-key and parse-error rejection, and the missing-file no-op.
+   Add the `yaml` dependency; implement a loader that performs cwd/home discovery (or honors an explicit `--config` path), parses YAML, validates the flat schema, rejects unknown keys and malformed values with a clear diagnostic, and returns a partial `{ agent?, model?, pipelinePath? }` plus the resolved path; a discovery miss returns an empty result that falls through to environment and defaults, whereas an explicit `--config` path that is absent is an error so a typo never silently falls back.
+   Unit-test discovery order, the `--config` override, unknown-key and parse-error rejection, the discovery-miss no-op, and the explicit-`--config`-miss error.
 
 4. **Wire the loader into the bin.**
    Merge the loaded file with the environment under env-over-file precedence, feed the merged values into `resolveAgentSelection`/`pipelineSearchRoots`, add a `--config <path>` flag, and update `usageText()` to name the config file and its discovery order.
    Leave the `runSlc` core, `createInterpretedExecutor`, and `createCligentAgent` unchanged.
 
 5. **Author the test `cli` items.**
-   Write integration/system test items, each with a `Verifies:` line ([META-20](../meta.md#meta-20), [META-21](../meta.md#meta-21)) citing the Task 2 user/dev items: file-only configuration runs; environment overrides the file; `--config` loads a specific file; an unknown key or malformed YAML is refused; and a run with neither source supplying an agent is refused.
+   Write integration/system test items, each with a `Verifies:` line ([META-20](../meta.md#meta-20), [META-21](../meta.md#meta-21)) citing the Task 2 user/dev items: file-only configuration runs; environment overrides the file; `--config` loads a specific file while an absent `--config` path is refused and a discovery miss falls through; an unknown key or malformed YAML is refused; and a run with neither source supplying an agent is refused.
    Register in `map.md`.
 
 6. **Integration tests and docs.**
@@ -59,6 +59,6 @@ exact behavior and the file is purely additive.
 
 - A run configured solely by `slc.config.yaml` (cwd) or `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` resolves the agent, model, and pipeline search path and runs, with no `SLC_*` variables set.
 - An environment variable overrides the corresponding file value; when neither the file nor `SLC_AGENT` supplies an agent, the run is refused with a diagnostic and no phase runs ([CLI-12](../dev/cli.md#cli-12) preserved).
-- `--config <path>` loads that file and disables cwd/home discovery.
+- `--config <path>` loads that file and disables cwd/home discovery; an explicit `--config` path that does not exist is refused with a diagnostic, distinct from a discovery miss, which falls through to environment and defaults.
 - An unknown key or malformed YAML is rejected with a clear diagnostic, no phase runs, and the exit code is non-zero.
 - The `runSlc` core, the interpreter, and the `createCligentAgent` transport are unchanged; `map.md` and the `cli` specs reflect the new configuration source; auto-create, permissions, and snapshotting remain out of scope.
