@@ -66,9 +66,9 @@ Verifies: [CLI-22](../user/cli.md#cli-22), [CLI-7](../dev/cli.md#cli-7), [CLI-6]
 Where a config file supplies the agent, model, and pipeline search path and no `SLC_*` variables are set, when the slc executable runs a source, the slc executable shall resolve the reference through the file's search path and interpret every phase through the file's agent CLI with the file's model, writing the artifact and exiting zero.
 
 ### CLI-24
-Verifies: [CLI-7](../dev/cli.md#cli-7), [CLI-20](../dev/cli.md#cli-20)
+Verifies: [CLI-7](../dev/cli.md#cli-7), [CLI-6](../dev/cli.md#cli-6), [CLI-20](../dev/cli.md#cli-20)
 
-Where a config file and a non-blank environment variable both supply the agent or the model, when the slc executable runs a source, the slc executable shall select the environment value over the file value and interpret every phase through that agent CLI and model.
+Where both a config file and a non-blank `SLC_AGENT`, `SLC_MODEL`, or `SLC_PIPELINE_PATH` supply the corresponding key — agent, model, or pipeline search path — when the slc executable runs a source, the slc executable shall use the environment value over the file value for that key, resolving the reference through `SLC_PIPELINE_PATH` rather than the file's `pipelinePath` and interpreting every phase through the environment's agent CLI and model rather than the file's.
 
 ### CLI-25
 Verifies: [CLI-20](../dev/cli.md#cli-20), [CLI-22](../user/cli.md#cli-22)
@@ -83,7 +83,7 @@ Where `--config <path>` names a file that does not exist, when the slc executabl
 ### CLI-27
 Verifies: [CLI-21](../dev/cli.md#cli-21)
 
-Where a loaded config file declares an unknown key or is malformed YAML, when the slc executable runs, the slc executable shall print a diagnostic to standard error, run no phase, and exit non-zero.
+Where a loaded config file is malformed YAML, declares an unknown key, or holds a wrong-typed value, when the slc executable runs, the slc executable shall print a diagnostic to standard error, run no phase, and exit non-zero.
 
 ## References
 
