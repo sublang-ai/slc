@@ -94,6 +94,16 @@ When interpreting a phase, the slc command shall establish in the agent prompt a
 
 When interpreting a phase, the slc command shall permit the agent to invoke the deterministic tools or commands the definition calls for and to read the content the definition cites or references, as part of following the definition, and shall treat that readable closure as the phase's semantic input closure ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter)).
 
+## Compiled execution
+
+### PHEXEC-23
+
+Where a phase is executed by a compiled artifact, the slc command shall drive the artifact only through a stable phase-runner facade — a no-argument `createPhaseRunner` factory whose `run` is handed the phase input, the host ports (Playbook's source-owned ports together with the file capability), and an abort signal, and returns a terminal `ok`, `blocked`, or `error` status with diagnostics drained for every status ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
+
+### PHEXEC-24
+
+When a compiled artifact returns its terminal status, the slc command shall proceed to the generic checks on `ok`, treat `blocked` as the `BLOCKED` outcome, and stop the pipeline like a failed generic check on `error`, and shall surface the drained diagnostics for every status so an `ok` run still reports any ambiguity it resolved ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-003](../decisions/003-slc-phase-execution.md#blocked-protocol)).
+
 ## References
 
 [1]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"
