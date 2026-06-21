@@ -19,18 +19,21 @@ import { delimiter, dirname, join, resolve } from 'node:path';
 import type { PipelineResolver } from './pipeline.js';
 
 /**
- * Computes the ordered pipeline search roots from an `SLC_PIPELINE_PATH` value
- * (CLI-6): an OS path-list whose entries are resolved to absolute, normalized
+ * Computes the ordered pipeline search roots from a pipeline-path value (CLI-6):
+ * either the `SLC_PIPELINE_PATH` OS path-list string or the config file's
+ * `pipelinePath` sequence (DR-006). Entries are resolved to absolute, normalized
  * roots against `cwd`, defaulting to `[cwd]` when the value is unset, empty, or
- * all blank. Normalization (via `resolve`) strips trailing slashes and
- * redundant segments so duplicate roots collapse while order is preserved.
+ * all blank. Normalization (via `resolve`) strips trailing slashes and redundant
+ * segments so duplicate roots collapse while order is preserved.
  */
 export function pipelineSearchRoots(
-  pipelinePath: string | undefined,
+  pipelinePath: string | string[] | undefined,
   cwd: string,
 ): string[] {
-  const entries = (pipelinePath ?? '')
-    .split(delimiter)
+  const rawEntries = Array.isArray(pipelinePath)
+    ? pipelinePath
+    : (pipelinePath ?? '').split(delimiter);
+  const entries = rawEntries
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
   const roots = entries.length > 0 ? entries : [cwd];
