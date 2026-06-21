@@ -24,6 +24,7 @@ This DR settles the sources and their precedence, discovery, the schema (includi
   2. the config file;
   3. the built-in default.
 - Environment overrides file so every current env-only run is unchanged and the unset-agent refusal ([CLI-12](../dev/cli.md#cli-12)) still fires only when neither environment nor file supplies an agent.
+- An unset, empty, or all-whitespace environment value does not supply its key, so resolution falls through to the config file and then the built-in default.
 - Each key maps one-to-one to an existing environment variable, so the two sources are interchangeable per key.
 
 | Key | Type | Meaning | Environment equivalent |
