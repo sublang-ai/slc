@@ -104,6 +104,10 @@ Where a phase is executed by a compiled artifact, the slc command shall drive th
 
 When a compiled artifact returns its terminal status, the slc command shall proceed to the generic checks on `ok`, treat `blocked` as the `BLOCKED` outcome, and stop the pipeline like a failed generic check on `error`, and shall surface the drained diagnostics for every status so an `ok` run still reports any ambiguity it resolved ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-003](../decisions/003-slc-phase-execution.md#blocked-protocol)).
 
+### PHEXEC-25
+
+Where a compiled phase runs, the slc command shall back the runner's player and judge ports with a coding agent reached through Cligent [[1]] per [DR-004](../decisions/004-slc-interpreted-phase-execution.md), applying per-player model selection as configuration without changing phase semantics, and shall collect the runtime's status and telemetry emissions as drainable diagnostics ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
+
 ## References
 
 [1]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"
