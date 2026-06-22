@@ -25,7 +25,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { hashBytes, hashFile, isHash } from './hash.js';
-import { resolvesToPhase } from './phase-runner.js';
+import { resolvesToPlaybook } from './phase-runner.js';
 import { closureMatchesRecord } from './pin-closure.js';
 import { resolvePinPath } from './pin-paths.js';
 import {
@@ -199,8 +199,8 @@ async function artifactFormatStale(
   } catch {
     return `artifact is unreadable (${artifact.path})`;
   }
-  if (!resolvesToPhase(source)) {
-    return `artifact does not resolve to the linked phase format (${artifact.path})`;
+  if (!resolvesToPlaybook(source)) {
+    return `artifact does not resolve to the linked playbook format (${artifact.path})`;
   }
   return null;
 }

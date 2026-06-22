@@ -19,7 +19,7 @@ import {
   type AgentClient,
 } from '../src/interpreter.js';
 import { loadLinkFile } from '../src/link.js';
-import { resolvesToPhase } from '../src/phase-runner.js';
+import { resolvesToPlaybook } from '../src/phase-runner.js';
 import { loadPipeline } from '../src/pipeline.js';
 import {
   reservedSlcPipelineDir,
@@ -29,7 +29,7 @@ import { runSlc, type SlcDeps } from '../src/runner.js';
 
 /** A compiled artifact that resolves to the `phase` format (DR-005). */
 const PHASE_MODULE =
-  'export default function createPhaseRunner() {\n  return { run: async () => ({ status: "ok", diagnostics: [] }) };\n}\n';
+  'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${sf} | ${se} |\n| target | ${tf} | ${te} |\n`;
@@ -117,7 +117,9 @@ describe('reserved slc pipeline and phase format (SELFHOST-4)', () => {
     expect(result.ok).toBe(true);
     const phaseArtifact = join(artDir, 'text2gears.phase.ts');
     expect(result.outputs).toContain(phaseArtifact);
-    expect(resolvesToPhase(await readFile(phaseArtifact, 'utf8'))).toBe(true);
+    expect(resolvesToPlaybook(await readFile(phaseArtifact, 'utf8'))).toBe(
+      true,
+    );
   });
 
   it('reserves `slc` with no built-in default: an unresolved `slc` fails', async () => {
