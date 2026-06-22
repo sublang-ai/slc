@@ -57,3 +57,9 @@ Where `slc.pins.json` is not strict JSON, declares an unsupported schema identif
 ### PIN-6
 
 Where a phase records external content, the validator shall report that phase current only when every external input carries a well-formed immutable content-addressed identity, and shall report the pin malformed — naming the external input — where an external input is a bare URL or an unvendored mutable reference rather than such an identity; ordinary validation shall not fetch network content ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#external-inputs)).
+
+## Generation
+
+### PIN-15
+
+When the build-and-review flow generates a pin for a built and reviewed compiled artifact, the generated pin shall record over committed bytes the definition, the compiled artifact, the semantic-input closure derived from the definition's `## Pin Inputs`, and the link-target identity, so the written pin validates as current; an ordinary pipeline run shall neither generate nor rewrite a pin ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#lifecycle)).

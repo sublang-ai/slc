@@ -91,8 +91,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [pinning.md](dev/pinning.md) | Pin-currency validator: presence, currency, and stale/malformed verdicts |
-| test | [pinning.md](test/pinning.md) | Acceptance: no-pins, current, stale, and malformed verdicts over fixtures |
+| dev | [pinning.md](dev/pinning.md) | Pin-currency validator and build-and-review generation: presence, currency, stale/malformed verdicts, pin writing |
+| test | [pinning.md](test/pinning.md) | Acceptance: no-pins, current, stale, malformed verdicts, and a generate-then-validate round-trip |
 
 ### PIPE
 
