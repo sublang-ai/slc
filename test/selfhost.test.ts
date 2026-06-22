@@ -18,6 +18,7 @@ import {
   createInterpretedExecutor,
   type AgentClient,
 } from '../src/interpreter.js';
+import { loadLinkFile } from '../src/link.js';
 import { resolvesToPhase } from '../src/phase-runner.js';
 import { loadPipeline } from '../src/pipeline.js';
 import {
@@ -146,6 +147,15 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
       'gears2fsm',
     ]);
     expect(pipeline.linkFile).not.toBeNull();
+  });
+
+  // The compile chain above loads, but Playbook ships its reserved `link` in the
+  // `playbook` runtime contract (no `## Link Targets`), which SLC's `phase`-format
+  // link machinery rejects. Producing a runnable artifact through it is the
+  // pending DR-005 reconciliation (SELFHOST-3); this asserts the current boundary.
+  it('does not yet link through Playbook definitions (reconciliation pending)', async () => {
+    const linkFile = join(reservedSlcPipelineDir(), 'link.md');
+    await expect(loadLinkFile(linkFile)).rejects.toThrow(/Link Targets/);
   });
 
   it('routes only the reserved `slc` reference to those definitions', async () => {
