@@ -23,6 +23,7 @@ import {
 } from './execution.js';
 import { type Invocation, parseInvocation } from './invocation.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
+import { RESERVED_SLC_PIPELINE } from './resolver.js';
 import { evaluatePin } from './pin-currency.js';
 import { PinError, loadPinFile, type PinFile, type PinRecord } from './pins.js';
 import {
@@ -405,7 +406,12 @@ async function requireLink(
   if (pipeline.linkFile === null) {
     throw new Error(`pipeline "${reference}" has no link phase`);
   }
-  return loadLinkFile(pipeline.linkFile);
+  // The reserved `slc` link consumes Playbook's `link.md`, which carries no
+  // ## Link Targets; Playbook's link compiler owns target validation (DR-002,
+  // PIPE-11), so relax the requirement for that reference only.
+  return loadLinkFile(pipeline.linkFile, {
+    requireTargetForms: reference !== RESERVED_SLC_PIPELINE,
+  });
 }
 
 async function revalidateChain(dir: string): Promise<void> {

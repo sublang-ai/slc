@@ -18,7 +18,6 @@ import {
   createInterpretedExecutor,
   type AgentClient,
 } from '../src/interpreter.js';
-import { loadLinkFile } from '../src/link.js';
 import { resolvesToPlaybook } from '../src/phase-runner.js';
 import { loadPipeline } from '../src/pipeline.js';
 import {
@@ -153,13 +152,43 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
     expect(pipeline.linkFile).not.toBeNull();
   });
 
-  // The compile chain above loads, but Playbook ships its reserved `link` as a
-  // phase definition with no `## Link Targets`, which SLC's generic link
-  // machinery (DR-002) rejects. Driving it as a `playbook` runtime is the pending
-  // reconciliation (Task 6, SELFHOST-3); this asserts the current boundary.
-  it('does not yet link through Playbook definitions (reconciliation pending)', async () => {
-    const linkFile = join(reservedSlcPipelineDir(), 'link.md');
-    await expect(loadLinkFile(linkFile)).rejects.toThrow(/Link Targets/);
+  // Playbook ships its reserved `link` as a phase definition with no
+  // `## Link Targets`; the reserved `slc` link relaxes that requirement
+  // (PIPE-11), so `slc slc <src> --link <tgt>` links end to end to a
+  // `.playbook.ts` runtime. The agent is faked, so this exercises the SLC link
+  // path, not Playbook's link-compiler behavior (PROVISIONAL: the interpreted
+  // link follows Playbook's `link.md` prose, validated by a real artifact).
+  it('links the reserved slc pipeline through Playbook definitions to a .playbook.ts artifact', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-reserved-link-'));
+    try {
+      const work = join(root, 'work');
+      await mkdir(work, { recursive: true });
+      const source = join(work, 'text2gears.md');
+      await writeFile(source, '# A phase definition\n');
+      await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
+
+      const result = await runSlc(
+        ['slc', source, '--link', join(work, 'runtime.ts')],
+        {
+          resolver: (reference) =>
+            reference === 'slc' ? [reservedSlcPipelineDir()] : [],
+          executor: createInterpretedExecutor({ agent: writingAgent() }),
+        },
+      );
+
+      expect(result.ok).toBe(true);
+      const playbookArtifact = join(
+        work,
+        'text2gears.slc',
+        'text2gears.playbook.ts',
+      );
+      expect(result.outputs).toContain(playbookArtifact);
+      expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
+        true,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('routes only the reserved `slc` reference to those definitions', async () => {

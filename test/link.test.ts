@@ -88,6 +88,13 @@ describe('parseLinkPhase (PIPE-11, PIPE-19)', () => {
     );
   });
 
+  it('accepts a missing ## Link Targets when target forms are not required (reserved slc)', () => {
+    const noTargets = linkDoc.slice(0, linkDoc.indexOf('## Link Targets'));
+    const link = parseLinkPhase(noTargets, { requireTargetForms: false });
+    expect(link.target).toEqual({ format: 'run', ext: '.ts' });
+    expect(link.targetForms).toEqual([]);
+  });
+
   it('refuses a ## Link Targets section with no target-form rows', () => {
     const emptyTargets = `## Formats
 

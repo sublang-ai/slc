@@ -26,7 +26,7 @@ export interface LinkPhase {
   source: FormatDecl;
   /** Declared linked target format (a distinct token from `source`). */
   target: FormatDecl;
-  /** Accepted target forms (the `Target form` column); at least one. */
+  /** Accepted target forms (the `Target form` column); at least one, or empty for the reserved `slc` link. */
   targetForms: string[];
   /** Symbols a link target must export, or empty when unspecified. */
   requiredSymbols: string[];
@@ -59,10 +59,19 @@ export class LinkError extends Error {
 /**
  * Parses a `link.md` definition (PIPE-11, PIPE-19).
  *
- * @throws {LinkError} when `## Formats`/`## Link Targets` are missing or
- *   malformed, or the linked format token equals the object source token.
+ * `## Link Targets` is required by default. The reserved `slc` link consumes
+ * Playbook's authored `link.md`, which declares none — Playbook's link compiler
+ * owns target validation (DR-002) — so its caller passes
+ * `requireTargetForms: false` to accept a link phase with no declared forms.
+ *
+ * @throws {LinkError} when `## Formats` is missing or malformed, the linked
+ *   format token equals the object source token, or `## Link Targets` is
+ *   missing while required.
  */
-export function parseLinkPhase(content: string): LinkPhase {
+export function parseLinkPhase(
+  content: string,
+  opts: { requireTargetForms?: boolean } = {},
+): LinkPhase {
   const { source, target } = readFormats(content, (code, message) => {
     throw new LinkError(code, message);
   });
@@ -74,8 +83,19 @@ export function parseLinkPhase(content: string): LinkPhase {
     );
   }
 
+  const relaxed = opts.requireTargetForms === false;
   const section = findSection(content, 'Link Targets');
   if (section === null) {
+    if (relaxed) {
+      return {
+        source,
+        target,
+        targetForms: [],
+        requiredSymbols: [],
+        options: [],
+        validation: null,
+      };
+    }
     throw new LinkError(
       'missing-link-targets',
       'missing a ## Link Targets section',
@@ -84,7 +104,7 @@ export function parseLinkPhase(content: string): LinkPhase {
 
   const { targetForms, requiredSymbols, options, validation } =
     parseLinkTargets(section);
-  if (targetForms.length === 0) {
+  if (targetForms.length === 0 && !relaxed) {
     throw new LinkError(
       'missing-link-targets',
       '## Link Targets has no target-form rows',
@@ -95,8 +115,11 @@ export function parseLinkPhase(content: string): LinkPhase {
 }
 
 /** Reads and parses a `link.md` file from disk (PIPE-11). */
-export async function loadLinkFile(path: string): Promise<LinkPhase> {
-  return parseLinkPhase(await readFile(path, 'utf8'));
+export async function loadLinkFile(
+  path: string,
+  opts: { requireTargetForms?: boolean } = {},
+): Promise<LinkPhase> {
+  return parseLinkPhase(await readFile(path, 'utf8'), opts);
 }
 
 /**
