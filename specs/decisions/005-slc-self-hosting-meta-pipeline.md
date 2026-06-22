@@ -27,12 +27,12 @@ Where the `slc` pipeline directory resolves from is consumer-defined per [DR-001
 The `slc` pipeline is named explicitly like any other pipeline, so it claims no default and leaves the [DR-001](001-slc-pipeline-layout-naming-invocation.md#cli) grammar unchanged.
 `slc slc <source>` runs it end-to-end and `slc slc.<phase> <source>` runs one named phase, per [DR-001](001-slc-pipeline-layout-naming-invocation.md#cli).
 
-The `slc` pipeline shall chain `text2gears` (`text` `.md` to `gears` `.md`) and `gears2fsm` (`gears` `.md` to `fsm` `.ts`), plus a reserved `link.md` link phase (`fsm` `.ts` to `phase` `.ts`) per [DR-002](002-slc-link-phases.md).
+The `slc` pipeline shall chain `text2gears` (`text` `.md` to `gears` `.md`) and `gears2fsm` (`gears` `.md` to `fsm` `.ts`), plus a reserved `link.md` link phase (`fsm` `.ts` to `playbook` `.ts`) per [DR-002](002-slc-link-phases.md).
 Each phase's transformation rules live in its own definition, not in this DR.
 This DR constrains only the properties self-hosting depends on:
 
 - `gears2fsm` shall preserve the GEARS-to-FSM mapping in machine-readable form, so a generated phase artifact can be audited against its phase definition.
-- The link phase shall emit the distinct `phase` linked format, whose runnable artifact exposes the SLC phase execution facade while using Playbook's source-owned runtime and port contract. Per [DR-002](002-slc-link-phases.md#cli), full-pipeline invocation without `--link` stops at the `fsm` object artifact.
+- The link phase shall emit the distinct `playbook` linked format — a `PlaybookRuntimeFactory` per Playbook's source-owned `slc/link.md` — which `slc` drives through a host-side phase-execution facade rather than an artifact-exported one. Per [DR-002](002-slc-link-phases.md#cli), full-pipeline invocation without `--link` stops at the `fsm` object artifact.
 
 ### Compiled phase execution
 
@@ -45,34 +45,41 @@ A compiled phase artifact shall be behavior-equivalent to interpreting its defin
 
 ### Linked phase artifact contract
 
-`slc` runs a compiled phase by loading its `phase` module and calling a stable
-SLC phase-runner facade over a linked Playbook runtime.
-A compiled phase runs as a non-interactive playbook: `run` seeds the FSM from
-`PhaseInput`, drives its internal turns to a terminal state, and returns.
+`slc` runs a compiled phase by loading its `playbook` module, constructing the
+`PlaybookRuntime` its default-exported `PlaybookRuntimeFactory` builds, and
+driving it through a stable host-side SLC phase-runner facade.
+A compiled phase runs as a non-interactive playbook: the facade seeds the
+runtime from `PhaseInput`, drives its turns to quiescence through
+`handleBossInput`, and derives the result from the host-observable outcome
+(`handleBossInput` returns `void`).
 
 | Result | Mapping |
 | --- | --- |
-| `ok` | Successful terminal state. |
-| `blocked` | Any stop where the FSM cannot proceed under the phase definition without guessing through incompatibility, including malformed or incompatible inputs under [DR-003](003-slc-phase-execution.md#blocked-protocol) and parking for Boss input a non-interactive run cannot supply. |
-| `error` | Error or abort terminal. |
+| `ok` | A clean resolve at a successful quiescent state. |
+| `blocked` | A quiescent stop where the FSM cannot proceed under the phase definition without guessing through incompatibility, including malformed or incompatible inputs under [DR-003](003-slc-phase-execution.md#blocked-protocol) and parking for Boss input a non-interactive run cannot supply. |
+| `error` | A throw out of `handleBossInput`, or a `failed` quiescent state. |
 
 Diagnostics are drained from the runtime's status and telemetry.
-Player and judge bindings are baked at link time, so `createPhaseRunner()`
-takes no construction options.
+Player and judge bindings are baked at link time; the factory's `options`
+carry only per-run knobs such as model identity strings.
 The artifact carries no host specifics: it reaches coding agents, judges,
 status, and telemetry only through Playbook's source-owned `PlaybookPorts`
-contract, and reaches deterministic file reads and writes only through SLC's
-standardized file capability.
-The same artifact runs under any host that can supply those ports and the file
-capability.
-This DR intentionally does not restate the Playbook port shape.
-The contract is owned by Playbook's authored `slc/link.md` source;
-CODE's generated `reference/sdlc/code.playbook/code.playbook.ts` is a
-reference realization of that contract, not the contract source.
-SLC should import or reference the Playbook-owned type once Playbook exposes a
-generic package surface for it.
+contract and touches no other host type.
+The same artifact runs under any host that can supply those ports.
+This DR intentionally does not restate the Playbook port or runtime shape.
+The contract is owned by Playbook's authored `slc/link.md` source.
+SLC imports the Playbook-owned `PlaybookPorts`, `PlaybookRuntime`, and
+`PlaybookRuntimeFactory` types from `@sublang/playbook`'s `./runtime` surface.
 
-The SLC phase-runner facade uses this shape:
+The artifact's default export is Playbook's runtime factory:
+
+```typescript
+export default function createPlaybookRuntime(
+  options: PlaybookRuntimeOptions,
+): PlaybookRuntime;
+```
+
+`slc` wraps it in a host-side phase-runner facade:
 
 ```typescript
 type PhaseInput =
@@ -85,25 +92,24 @@ interface PhaseResult {
 }
 
 interface PhaseRunner {
-  run(
-    input: PhaseInput,
-    ports: PlaybookPorts & FileCapability,
-    signal: AbortSignal,
-  ): Promise<PhaseResult>;
+  run(input: PhaseInput, signal: AbortSignal): Promise<PhaseResult>;
 }
-
-export default function createPhaseRunner(): PhaseRunner;
 ```
+
+`slc` constructs the facade with a `PlaybookPorts` adapter and the host-side
+file capability; the runtime itself receives only `PlaybookPorts` through
+`init`.
 
 `PhaseInput` carries workspace paths, not contents; the artifact performs no
 direct file I/O.
 Agentic phases reach the workspace through the coding agent (`callPlayer`),
 which also runs any tool the definition calls for.
-For deterministic reads and writes, `slc` supplies one standardized file
-capability alongside Playbook's ports -- the only host capability `slc` adds.
-The concrete `FileCapability` shape and any structured tool port, for phases
-needing a deterministic exit-code gate, are deferred to a dedicated capability
-DR.
+Deterministic reads and writes are performed host-side by `slc` through one
+standardized file capability that stages inputs and persists the `target` or
+`linked` output around the runtime, since the runtime receives only
+`PlaybookPorts`.
+The concrete `FileCapability` shape is settled by
+[DR-008](008-slc-file-capability.md).
 Per-step model selection flows through Playbook player and judge bindings plus
 host configuration.
 Playbook port semantics are source-owned; SLC defines only the phase input,
@@ -118,10 +124,10 @@ How a host maps Playbook ports to concrete agents, models, process limits,
 and diagnostic sinks is host-defined; portability holds over the Playbook
 contract and the SLC phase-runner facade, not the execution environment.
 
-The runner causes writes only to the `target` or `linked` path from its input,
-whether through Playbook-mediated agents or the file capability, honoring the
-[DR-003](003-slc-phase-execution.md) write-scope invariant.
-`slc` constructs the runner, supplies the ports, calls `run`, then maps the result onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol)).
+The run causes writes only to the `target` or `linked` path from its input,
+whether through Playbook-mediated agents or the host-side file capability,
+honoring the [DR-003](003-slc-phase-execution.md) write-scope invariant.
+`slc` constructs the runtime, supplies the ports, drives it to quiescence, then maps the host-observable outcome onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol)).
 
 ### Strategy selection
 
@@ -133,7 +139,7 @@ Selection shall be explicit and reproducible: a pinned phase whose artifact is m
 
 A pin associates a phase with a compiled artifact and the inputs that produced that artifact: the phase definition's semantic input closure and the `slc.link` target it was linked against.
 The closure is the definition together with the cited or referenced content its rules depend on, so a current pin stays behavior-equivalent to interpreting the definition ([DR-004](004-slc-interpreted-phase-execution.md)), which may read that content.
-Every `phase` artifact is produced by `slc.link`, so the link-target input applies to all of them, not only compiled link phases.
+Every `playbook` artifact is produced by `slc.link`, so the link-target input applies to all of them, not only compiled link phases.
 The execution-time `linkTarget` a compiled link phase receives in `PhaseInput` is a `run` input, not a producing input, and is not part of the pin.
 A pin is current when the artifact exists and those inputs are unchanged; `slc` then runs the artifact.
 A pin whose artifact is missing or whose inputs changed is stale, and `slc` fails per [Strategy selection](#strategy-selection).
@@ -155,7 +161,7 @@ Artifacts for the `slc` pipeline follow [DR-001](001-slc-pipeline-layout-naming-
 For example:
 
 - `slc slc playbook/text2gears.md` writes `playbook/text2gears.slc/text2gears.gears.md` and `playbook/text2gears.slc/text2gears.fsm.ts`.
-- `slc slc.link playbook/text2gears.slc/text2gears.fsm.ts <link-target>` writes `playbook/text2gears.slc/text2gears.phase.ts`, unless `-o` overrides.
+- `slc slc.link playbook/text2gears.slc/text2gears.fsm.ts <link-target>` writes `playbook/text2gears.slc/text2gears.playbook.ts`, unless `-o` overrides.
 
 ## Consequences
 
@@ -167,5 +173,5 @@ For example:
 
 ## References
 
-[1]: https://github.com/sublang-ai/playbook/blob/v0.5.0/slc/link.md "Playbook slc/link.md: FSM-to-runtime contract"
+[1]: https://github.com/sublang-ai/playbook/blob/v0.7.0/slc/link.md "Playbook slc/link.md: FSM-to-runtime contract"
 [2]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"
