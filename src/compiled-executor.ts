@@ -15,8 +15,9 @@
  * capability stay host-side. Drained status and telemetry become diagnostics.
  *
  * PROVISIONAL pending the first reviewed `playbook` artifact: the seeding of
- * {@link seedPhaseTurn}, the output-existence result derivation in
- * {@link drivePhase}, and host-side enforcement of the per-run grants against
+ * {@link seedPhaseTurn}, the output-produced (created-or-modified) result
+ * derivation in {@link drivePhase}, and host-side enforcement of the per-run
+ * grants against
  * the agents the runtime drives — the grant model (`file-grants`, DR-008) is
  * not yet wired to a player sandbox, so `runRoot`/`semanticInputs` are accepted
  * and reserved rather than enforced here. See specs/dev/phase-execution.md.
@@ -137,10 +138,11 @@ export function createCompiledExecutor(opts: {
  * Loads, constructs, and drives a runtime through one non-interactive turn, then
  * derives the result from the host-observable outcome (DR-005).
  *
- * PROVISIONAL: a turn that throws or aborts is `error`; a clean turn that leaves
- * the declared `target`/`linked` output in place is `ok`; a clean turn that
- * produces nothing is `blocked` — the FSM parked for Boss input a non-interactive
- * run cannot supply. The first reviewed artifact fixes the exact mapping.
+ * PROVISIONAL: a turn that throws or aborts is `error`; a clean turn that creates
+ * or updates the declared `target`/`linked` output is `ok`; a clean turn that
+ * leaves it untouched is `blocked` — the FSM parked for Boss input a
+ * non-interactive run cannot supply. The first reviewed artifact fixes the exact
+ * mapping.
  */
 async function drivePhase(
   load: (artifactPath: string) => Promise<PlaybookRuntimeFactory>,
@@ -159,6 +161,11 @@ async function drivePhase(
       diagnostics: [`compiled artifact failed to load: ${messageOf(error)}`],
     };
   }
+
+  // Snapshot the output before the turn so a pre-existing stale artifact is not
+  // mistaken for fresh output the turn produced.
+  const outputPath = input.kind === 'compile' ? input.target : input.linked;
+  const before = await outputState(outputPath);
 
   try {
     await runtime.init(ports);
@@ -179,7 +186,10 @@ async function drivePhase(
   if (signal.aborted) {
     return { status: 'error', diagnostics: ['compiled run aborted'] };
   }
-  return (await outputExists(input))
+  const after = await outputState(outputPath);
+  const produced =
+    after.exists && (!before.exists || after.mtimeMs !== before.mtimeMs);
+  return produced
     ? { status: 'ok', diagnostics: [] }
     : {
         status: 'blocked',
@@ -197,14 +207,15 @@ async function safeDispose(runtime: PlaybookRuntime): Promise<void> {
   }
 }
 
-/** Whether the run left its declared `target`/`linked` output in place. */
-async function outputExists(input: PhaseInput): Promise<boolean> {
-  const path = input.kind === 'compile' ? input.target : input.linked;
+/** A point-in-time view of an output path, to tell created/modified from stale. */
+async function outputState(
+  path: string,
+): Promise<{ exists: boolean; mtimeMs: number }> {
   try {
-    await stat(path);
-    return true;
+    const info = await stat(path);
+    return { exists: true, mtimeMs: info.mtimeMs };
   } catch {
-    return false;
+    return { exists: false, mtimeMs: 0 };
   }
 }
 
