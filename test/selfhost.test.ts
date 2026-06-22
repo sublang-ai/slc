@@ -19,6 +19,11 @@ import {
   type AgentClient,
 } from '../src/interpreter.js';
 import { resolvesToPhase } from '../src/phase-runner.js';
+import { loadPipeline } from '../src/pipeline.js';
+import {
+  reservedSlcPipelineDir,
+  withReservedSlcPipeline,
+} from '../src/resolver.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
 
 /** A compiled artifact that resolves to the `phase` format (DR-005). */
@@ -121,5 +126,31 @@ describe('reserved slc pipeline and phase format (SELFHOST-4)', () => {
     });
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toMatch(/did not resolve/);
+  });
+});
+
+// The reserved `slc` pipeline consumes the meta-pipeline definitions
+// `@sublang/playbook` ships, rather than a duplicate authored here (SELFHOST-2).
+describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () => {
+  it('locates Playbook-provided text2gears, gears2fsm, and link definitions', async () => {
+    const dir = reservedSlcPipelineDir();
+    for (const file of ['text2gears.md', 'gears2fsm.md', 'link.md']) {
+      expect(await exists(join(dir, file))).toBe(true);
+    }
+  });
+
+  it('chains and infers the Playbook meta-pipeline through slc', async () => {
+    const pipeline = await loadPipeline(reservedSlcPipelineDir());
+    expect(pipeline.phases.map((phase) => phase.name)).toEqual([
+      'text2gears',
+      'gears2fsm',
+    ]);
+    expect(pipeline.linkFile).not.toBeNull();
+  });
+
+  it('routes only the reserved `slc` reference to those definitions', async () => {
+    const wrapped = withReservedSlcPipeline(() => ['/configured/domain']);
+    expect(await wrapped('slc')).toEqual([reservedSlcPipelineDir()]);
+    expect(await wrapped('domain')).toEqual(['/configured/domain']);
   });
 });
