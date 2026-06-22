@@ -58,7 +58,7 @@ While interpreting a phase, when the agent adds, removes, or renames a phase fil
 ### PHEXEC-26
 Verifies: [PHEXEC-23](../dev/phase-execution.md#phexec-23), [PHEXEC-24](../dev/phase-execution.md#phexec-24)
 
-Where a phase is backed by a fixture compiled `phase` artifact reached only through the runner ports, when the executor runs it, an `ok` artifact result shall have written the target and yield an `ok` outcome carrying the runtime's drained diagnostics, a `blocked` result shall yield a `blocked` outcome naming the reasons, and an `error` result shall yield an `error` outcome.
+Where a phase is backed by a fixture compiled `playbook` artifact driven only through the runtime ports, when the executor runs it, a turn that writes the target shall yield an `ok` outcome carrying the runtime's drained diagnostics, a clean turn that produces no output shall yield a `blocked` outcome, and a turn that throws shall yield an `error` outcome.
 
 ### PHEXEC-28
 Verifies: [PHEXEC-27](../dev/phase-execution.md#phexec-27), [COMPILE-6](../user/compiler.md#compile-6)

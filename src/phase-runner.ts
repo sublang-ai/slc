@@ -2,30 +2,26 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * SLC phase-runner facade for compiled phase artifacts (PHEXEC-23, PHEXEC-24;
- * DR-005).
+ * SLC phase-runner facade for compiled `playbook` artifacts (PHEXEC-23,
+ * PHEXEC-24; DR-005).
  *
- * A compiled `phase` artifact exposes a stable facade: a no-argument
- * {@link CreatePhaseRunner} factory whose {@link PhaseRunner.run} is handed the
- * {@link PhaseInput} (workspace paths, not contents), the host {@link RunnerPorts}
- * — Playbook's source-owned ports plus SLC's {@link FileCapability} — and an
- * `AbortSignal`, and returns a {@link PhaseResult}: a terminal `ok`/`blocked`/
- * `error` status with diagnostics drained for every status. `slc` maps that result
- * onto the DR-003 protocol with {@link mapPhaseResult}: `ok` proceeds to the
- * generic checks, `blocked` is the BLOCKED outcome, and `error` stops the pipeline
- * like a failed generic check.
+ * A compiled `playbook` artifact default-exports a `PlaybookRuntimeFactory`
+ * (`createPlaybookRuntime`). `slc` drives it host-side — `init` with a
+ * `PlaybookPorts` adapter, one `handleBossInput` turn seeded from the
+ * {@link PhaseInput}, then `dispose` — and derives a {@link PhaseResult}
+ * (`ok`/`blocked`/`error`) that {@link mapPhaseResult} maps onto the DR-003
+ * protocol: `ok` proceeds to the generic checks, `blocked` is the BLOCKED
+ * outcome, and `error` stops the pipeline like a failed generic check.
  *
- * `PlaybookPorts` is the Playbook-owned contract; DR-005 binds SLC to it rather
- * than restating the port shape. It is imported from `@sublang/playbook`'s
- * generic `./runtime` surface. See specs/dev/phase-execution.md.
+ * The non-interactive driving lives in the compiled executor; this module owns
+ * the shared facade types, the static `playbook`-format recognition the
+ * pin-currency validator uses, and the provisional seeding of a phase request
+ * into the runtime's single Boss turn. See specs/dev/phase-execution.md.
  */
 
-import type { PlaybookPorts } from '@sublang/playbook/runtime';
-
 import type { ExecutorResult } from './execution.js';
-import type { FileCapability } from './file-capability.js';
 
-/** What a compiled phase artifact is asked to produce: a compile target or a linked artifact (DR-005). */
+/** What a compiled phase is asked to produce: a compile target or a linked artifact (DR-005). */
 export type PhaseInput =
   | { kind: 'compile'; source: string; target: string }
   | {
@@ -41,21 +37,6 @@ export interface PhaseResult {
   status: 'ok' | 'blocked' | 'error';
   diagnostics: string[];
 }
-
-/** The host capabilities a compiled phase receives: Playbook's ports plus SLC's file capability (DR-005, DR-008). */
-export type RunnerPorts = PlaybookPorts & FileCapability;
-
-/** The stable SLC phase-runner facade a compiled `phase` artifact exposes (DR-005). */
-export interface PhaseRunner {
-  run(
-    input: PhaseInput,
-    ports: RunnerPorts,
-    signal: AbortSignal,
-  ): Promise<PhaseResult>;
-}
-
-/** The default export of a compiled `phase` module: a no-options runner factory (DR-005). */
-export type CreatePhaseRunner = () => PhaseRunner;
 
 /**
  * Maps a compiled phase's {@link PhaseResult} onto the DR-003 execution-boundary
@@ -73,18 +54,31 @@ export function mapPhaseResult(result: PhaseResult): ExecutorResult {
 }
 
 /**
- * The `phase` linked format's entry point: a module's default export is the
- * {@link CreatePhaseRunner} factory named `createPhaseRunner` (DR-005).
+ * The `playbook` linked format's entry point: a module's default export is the
+ * `PlaybookRuntimeFactory` named `createPlaybookRuntime` (DR-005).
  */
-const PHASE_DEFAULT_EXPORT =
-  /export\s+default\s+(?:async\s+)?(?:function\s+)?createPhaseRunner\b/;
+const PLAYBOOK_DEFAULT_EXPORT =
+  /export\s+default\s+(?:async\s+)?(?:function\s+)?createPlaybookRuntime\b/;
 
 /**
- * Reports whether a compiled artifact's source resolves to the linked `phase`
- * format: a module exposing the phase-runner facade as a `createPhaseRunner`
- * default export (DR-005). This is the static byte-level recognition the
- * pin-currency validator uses; the loader confirms the contract at run time.
+ * Reports whether a compiled artifact's source resolves to the linked `playbook`
+ * format: a module exposing a `createPlaybookRuntime` default export (DR-005).
+ * This is the static byte-level recognition the pin-currency validator uses; the
+ * loader confirms the contract at run time.
  */
-export function resolvesToPhase(source: string): boolean {
-  return PHASE_DEFAULT_EXPORT.test(source);
+export function resolvesToPlaybook(source: string): boolean {
+  return PLAYBOOK_DEFAULT_EXPORT.test(source);
+}
+
+/**
+ * Seeds a phase request into the single non-interactive Boss turn `slc` hands
+ * the runtime through `handleBossInput` (DR-005).
+ *
+ * PROVISIONAL: the concrete SLC-to-runtime seeding contract — how a `PhaseInput`
+ * becomes the Boss text a runtime classifies — is pinned down by the first
+ * reviewed `playbook` artifact. Until then `slc` passes the run's workspace
+ * paths as JSON so a runtime's agents can act on them.
+ */
+export function seedPhaseTurn(input: PhaseInput): string {
+  return JSON.stringify(input);
 }

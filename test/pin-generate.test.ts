@@ -11,9 +11,9 @@ import { evaluatePins } from '../src/pin-currency.js';
 import { generatePinRecord, writePinFile } from '../src/pin-generate.js';
 import { PINS_FILE } from '../src/pins.js';
 
-/** A compiled artifact that resolves to the linked `phase` format (PIN-13). */
+/** A compiled artifact that resolves to the linked `playbook` format (PIN-13). */
 const PHASE_ARTIFACT =
-  'export default function createPhaseRunner() {\n  return { run: async () => ({ status: "ok", diagnostics: [] }) };\n}\n';
+  'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
 describe('pin generation (PIN-16)', () => {
   let dir: string;

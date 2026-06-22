@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type PhaseResult,
   mapPhaseResult,
-  resolvesToPhase,
+  resolvesToPlaybook,
 } from '../src/phase-runner.js';
 
 describe('mapPhaseResult (PHEXEC-24)', () => {
@@ -31,21 +31,23 @@ describe('mapPhaseResult (PHEXEC-24)', () => {
   });
 });
 
-describe('resolvesToPhase (PIN-13)', () => {
-  it('recognizes a createPhaseRunner default export', () => {
+describe('resolvesToPlaybook (PIN-13)', () => {
+  it('recognizes a createPlaybookRuntime default export', () => {
     expect(
-      resolvesToPhase('export default function createPhaseRunner() {}\n'),
+      resolvesToPlaybook(
+        'export default function createPlaybookRuntime() {}\n',
+      ),
     ).toBe(true);
     expect(
-      resolvesToPhase(
-        'const f = createPhaseRunner;\nexport default createPhaseRunner;',
+      resolvesToPlaybook(
+        'const f = createPlaybookRuntime;\nexport default createPlaybookRuntime;',
       ),
     ).toBe(true);
   });
 
-  it('rejects a module that does not expose the facade', () => {
-    expect(resolvesToPhase('export const value = 42;\n')).toBe(false);
-    expect(resolvesToPhase('export default () => ({});\n')).toBe(false);
-    expect(resolvesToPhase('compiled artifact bytes\n')).toBe(false);
+  it('rejects a module that does not expose the factory', () => {
+    expect(resolvesToPlaybook('export const value = 42;\n')).toBe(false);
+    expect(resolvesToPlaybook('export default () => ({});\n')).toBe(false);
+    expect(resolvesToPlaybook('compiled artifact bytes\n')).toBe(false);
   });
 });

@@ -1,37 +1,33 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-// A fixture compiled `phase` artifact for the compiled-executor tests. It reaches
-// the workspace only through the runner ports (the file capability) and returns a
-// terminal status chosen by its source content: "BLOCK" -> blocked, "ERR" ->
-// error, otherwise it writes the target and returns ok.
+// A fixture compiled `playbook` artifact for the compiled-executor tests. It is
+// driven non-interactively: `init` captures the Playbook ports, and one
+// `handleBossInput` turn reads the seeded source path and chooses an outcome by
+// content — "BLOCK" parks without writing (the executor derives blocked), "ERR"
+// throws (error), otherwise it writes the target so the executor derives ok.
 
-export default function createPhaseRunner() {
+import { readFile, writeFile } from 'node:fs/promises';
+
+export default function createPlaybookRuntime() {
+  let ports;
   return {
-    async run(input, ports) {
-      const read = await ports.read(input.source);
-      if (!read.ok) {
-        return { status: 'error', diagnostics: [`read failed: ${read.code}`] };
-      }
-      const text = new TextDecoder().decode(read.value.bytes).trim();
-      if (text === 'BLOCK') {
-        return { status: 'blocked', diagnostics: ['BLOCKED: fixture blocked'] };
-      }
-      if (text === 'ERR') {
-        return { status: 'error', diagnostics: ['fixture error'] };
-      }
-      const written = await ports.write(
-        input.target,
-        new TextEncoder().encode(`compiled:${text}`),
-      );
-      if (!written.ok) {
-        return {
-          status: 'error',
-          diagnostics: [`write failed: ${written.code}`],
-        };
-      }
-      await ports.emitStatus('fixture wrote target');
-      return { status: 'ok', diagnostics: ['compiled ok'] };
+    async init(p) {
+      ports = p;
     },
+    async handleBossInput({ text }) {
+      const { source, target } = JSON.parse(text);
+      const content = (await readFile(source, 'utf8')).trim();
+      if (content === 'BLOCK') {
+        await ports.emitStatus('fixture parked');
+        return;
+      }
+      if (content === 'ERR') {
+        throw new Error('fixture error');
+      }
+      await writeFile(target, `compiled:${content}`);
+      await ports.emitStatus('fixture wrote target');
+    },
+    async dispose() {},
   };
 }
