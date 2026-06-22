@@ -70,6 +70,16 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     expect(result.diagnostics).toContain('fixture parked');
   });
 
+  it('derives blocked when a stale target pre-exists and the turn writes nothing', async () => {
+    await writeFile(join(root, 'out.ts'), 'stale prior artifact\n');
+    const result = await runFixture('BLOCK');
+    // A pre-existing target must not be mistaken for produced output.
+    expect(result.status).toBe('blocked');
+    expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe(
+      'stale prior artifact\n',
+    );
+  });
+
   it('derives error when the turn throws', async () => {
     const result = await runFixture('ERR');
     expect(result.status).toBe('error');
