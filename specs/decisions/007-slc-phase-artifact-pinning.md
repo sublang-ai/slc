@@ -10,9 +10,9 @@ Accepted
 ## Context
 
 [DR-005](005-slc-self-hosting-meta-pipeline.md) defines compiled phase artifacts but defers the concrete pinning contract.
-Compiled selection cannot be available until the pinning contract and the file capability contract both exist.
+With this pinning contract and the file capability contract ([DR-008](008-slc-file-capability.md)) both settled, compiled selection follows [DR-005](005-slc-self-hosting-meta-pipeline.md#strategy-selection).
 This DR settles only pinning: how a pipeline records a compiled phase artifact, the inputs that produced it, and the checks that make the pin current.
-The concrete `FileCapability` shape and any structured tool port remain deferred to a dedicated capability DR.
+The concrete `FileCapability` shape and any structured tool port are settled by [DR-008](008-slc-file-capability.md).
 
 Interpreted execution remains the reference semantics of a phase definition per [DR-004](004-slc-interpreted-phase-execution.md).
 A current pin therefore certifies that a committed compiled artifact is still tied to the current phase definition and the semantic input closure an interpreted run may read.
@@ -168,4 +168,4 @@ The artifact and its pin are committed together per pipeline version.
 - Exact-byte hashes make the validator simple and conservative, while `.gitattributes` or equivalent checkout policy is required for cross-platform stability of pinned text files.
 - External mutable content must be snapshotted or content-addressed before a phase can be pinned.
 - The compiler version remains auditable without forcing churn across all pins on every meta-pipeline change.
-- Compiled selection still remains unavailable until the dedicated capability DR also exists, as required by [DR-005](005-slc-self-hosting-meta-pipeline.md#pinning).
+- Compiled selection follows [DR-005](005-slc-self-hosting-meta-pipeline.md#strategy-selection) now that the pinning and file capability ([DR-008](008-slc-file-capability.md)) contracts both exist; an unpinned phase interprets per [DR-004](004-slc-interpreted-phase-execution.md).

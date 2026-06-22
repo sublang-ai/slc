@@ -21,9 +21,10 @@ It updates the affected decisions ([DR-002](../decisions/002-slc-link-phases.md)
 - [x] [DR-002](../decisions/002-slc-link-phases.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md), and [DR-008](../decisions/008-slc-file-capability.md) updated to Playbook 0.7.0's `playbook`/`PlaybookRuntime` contract: the `playbook` linked format (`fsm` `.ts` → `playbook` `.ts`), the artifact as a `PlaybookRuntimeFactory`, the SLC facade as a host-side non-interactive driver, and the file capability host/executor-side
 - [ ] The phase-runner facade rebound to `@sublang/playbook`'s `PlaybookRuntime`/`PlaybookRuntimeFactory` (from its `./runtime` surface), with `playbook`-format detection replacing `resolvesToPhase` (extends `PHEXEC`)
 - [ ] The compiled loader and `CompiledExecutor` reworked into the non-interactive runtime driver — `init` → `handleBossInput` seeded from `PhaseInput` → drive to quiescence → `dispose` — deriving `ok`/`blocked`/`error` from the host-observable outcome (the `void`-returning `handleBossInput` resolving versus throwing, plus the quiescent state and diagnostics seen through `emitStatus`/`emitTelemetry`), with the file capability supplied host-side and writes confined to `target`/`linked` (extends `PHEXEC`)
+- [ ] The `FCAP` package (`dev`, `test`) and its `map.md` summary reconciled to [DR-008](../decisions/008-slc-file-capability.md)'s host-side capability — host-owned rather than artifact-facing — repointing FCAP-1's citation from the removed `#artifact-facing-api` anchor to `#capability-api`
 - [ ] Pin currency's artifact-format sub-check updated to recognize the `playbook` factory, and `PIN` items renamed `phase` → `playbook`
 - [ ] `SELFHOST` (`user`/`dev`/`test`) and the [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) output locations renamed `phase` → `playbook` (`.playbook.ts`), with `map.md` updated
-- [ ] The reserved `slc` link driven end-to-end so `slc slc <source> --link <target>` produces a `.playbook.ts` runtime through Playbook's link definition, replacing the IR-005 link boundary test with a passing reserved-`slc` link test
+- [ ] The reserved `slc` link driven end-to-end so `slc slc <source> --link <target>` produces a `.playbook.ts` runtime through Playbook's link definition, with [PIPE-11](../dev/pipeline.md#pipe-11)'s `## Link Targets` requirement reconciled to except the reserved `slc` link, replacing the IR-005 link boundary test with a passing reserved-`slc` link test
 
 ## Tasks
 
@@ -60,8 +61,13 @@ Each task is one-commit-sized and updates decisions, specs, code, and tests toge
 ### F. Reserved `slc` link ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-002](../decisions/002-slc-link-phases.md))
 
 6. **Drive the reserved `slc` link end-to-end.**
-   Make `slc slc <source> --link <target>` produce a `.playbook.ts` runtime through Playbook's link definition, reconciling the reserved link path with Playbook's `link.md` (which carries no `## Link Targets`).
+   Make `slc slc <source> --link <target>` produce a `.playbook.ts` runtime through Playbook's link definition, reconciling the reserved link path with Playbook's `link.md` (which carries no `## Link Targets`), and reconcile [PIPE-11](../dev/pipeline.md#pipe-11)'s `## Link Targets` requirement to except the reserved `slc` link.
    Replace the IR-005 link boundary test with a passing integration test of reserved-`slc` linking to a `.playbook.ts` artifact at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) location.
+
+### G. File capability package ([DR-008](../decisions/008-slc-file-capability.md))
+
+7. **Reconcile the `FCAP` package to host-side.**
+   Update `FCAP` (`dev`, `test`) and the `map.md` summary so the capability is host-owned rather than artifact-facing, repointing FCAP-1's citation from the removed `#artifact-facing-api` anchor to `#capability-api`, and adjust any `FCAP` test items the reframing touches. Unblocked by Task 1; the dead anchor it repairs is a Task-1 byproduct.
 
 ## Acceptance criteria
 

@@ -145,9 +145,9 @@ A pin is current when the artifact exists and those inputs are unchanged; `slc` 
 A pin whose artifact is missing or whose inputs changed is stale, and `slc` fails per [Strategy selection](#strategy-selection).
 A phase with no pin is interpreted.
 
-The concrete pin format — storage location, path resolution, hash algorithm, link-target identity, what belongs in the semantic input closure, and whether the producing meta-pipeline version is a pin input — is deferred to a dedicated pinning DR.
-The concrete capability format — `FileCapability` operations, path semantics, and any structured tool port — is deferred to a dedicated capability DR.
-Until both DRs exist, compiled selection is unavailable and `slc` interprets every phase ([DR-004](004-slc-interpreted-phase-execution.md)).
+The concrete pin format — storage location, path resolution, hash algorithm, link-target identity, what belongs in the semantic input closure, and whether the producing meta-pipeline version is a pin input — is settled by [DR-007](007-slc-phase-artifact-pinning.md).
+The concrete capability format — `FileCapability` operations, path semantics, and any structured tool port — is settled by [DR-008](008-slc-file-capability.md).
+With both settled, compiled selection follows [Strategy selection](#strategy-selection); a phase without a current pin interprets ([DR-004](004-slc-interpreted-phase-execution.md)).
 
 ### Artifact stability
 
