@@ -40,7 +40,7 @@ The reserved key `link` represents the pipeline's `link.md` phase.
   "pins": {
     "text2gears": {
       "artifact": {
-        "path": "text2gears.slc/text2gears.phase.ts",
+        "path": "text2gears.slc/text2gears.playbook.ts",
         "hash": "sha256:<hex>"
       },
       "definition": {
@@ -93,8 +93,8 @@ Relative paths containing `..` are allowed only when `pathBoundary.path` records
 Validators shall not depend on an unrecorded host workspace root to decide whether a committed pin path is valid.
 Hosts may still reject a pin whose recorded boundary violates host policy, but that is an environment refusal rather than pin currency.
 
-The artifact path shall identify a linked `phase` artifact produced by the reserved `slc.link` phase.
-It shall resolve to the `phase` linked format declared by the reserved meta-pipeline link phase.
+The artifact path shall identify a linked `playbook` artifact produced by the reserved `slc.link` phase.
+It shall resolve to the `playbook` linked format declared by the reserved meta-pipeline link phase.
 
 ### Semantic input closure
 
@@ -144,7 +144,7 @@ A pin is current only when all of these checks pass:
 - the pin file schema and hash algorithm are supported;
 - every local pin path resolves inside the recorded path boundary;
 - the phase definition path exists and its hash matches;
-- the compiled artifact path exists, its hash matches, and it resolves to the linked `phase` format;
+- the compiled artifact path exists, its hash matches, and it resolves to the linked `playbook` format;
 - every local semantic input path exists and its hash matches;
 - the semantic input closure set recorded in the pin matches the definition's declared `## Pin Inputs` closure;
 - every immutable external input, if any, has a well-formed immutable content-addressed identity;

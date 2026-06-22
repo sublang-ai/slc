@@ -153,6 +153,14 @@ reviewable FSM object artifact.
 `flows/onboarding.playbook/onboarding.fsm.ts` as the object artifact and
 `flows/onboarding.playbook/onboarding.playbook.ts` as the linked artifact.
 
+The reserved `slc` pipeline ([DR-005](005-slc-self-hosting-meta-pipeline.md)) is
+the canonical `playbook` link: it consumes Playbook's authored `slc/link.md`,
+which declares `## Formats` (`fsm` `.ts` → `playbook` `.ts`) but, being a
+Playbook-owned phase definition rather than a per-pipeline link config, carries
+no `## Link Targets` table. `slc` resolves the reserved link through
+[DR-005](005-slc-self-hosting-meta-pipeline.md)'s reserved-link handling rather
+than this section's generic target-form machinery.
+
 ## Consequences
 
 - `slc` gets generic linking without pipeline-specific compiler flags.
