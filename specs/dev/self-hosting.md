@@ -15,13 +15,14 @@ identity, its `phase` output format, and its locations.
 
 Essential project-specific references: `slc`, this project's compiler; the
 reserved `slc` pipeline, the `phase` linked format, and the phase-runner facade
-of [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md).
+of [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md); and
+`@sublang/playbook`, which provides the meta-pipeline definitions `slc` consumes.
 
 ## Reserved pipeline
 
 ### SELFHOST-2
 
-The slc command shall reserve the pipeline name `slc` for the meta-pipeline that compiles phase and link definitions into runnable artifacts, resolving that reference like any other pipeline, claiming no default for it, and leaving the invocation grammar unchanged ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#reserved-slc-pipeline), [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli)).
+The slc command shall reserve the pipeline name `slc` for the meta-pipeline that compiles phase and link definitions into runnable artifacts, resolving that reference to the meta-pipeline definitions `@sublang/playbook` provides rather than a duplicate, requiring it to be named explicitly (claiming no default), and leaving the invocation grammar unchanged ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#reserved-slc-pipeline), [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli)).
 
 ## Phase format
 
