@@ -17,9 +17,9 @@ import {
   type PinRecord,
 } from '../src/pins.js';
 
-/** A compiled artifact that resolves to the linked `phase` format (PIN-13). */
+/** A compiled artifact that resolves to the linked `playbook` format (PIN-13). */
 const PHASE_ARTIFACT =
-  'export default function createPhaseRunner() {\n  return { run: async () => ({ status: "ok", diagnostics: [] }) };\n}\n';
+  'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
 // System-level acceptance over fixture pipeline directories with a committed
 // slc.pins.json, driving the validator through evaluatePins (PIN-7..PIN-14).
@@ -119,7 +119,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     expect((verdict as { reason: string }).reason).toContain('closure');
   });
 
-  it('reports stale for an artifact that is not a phase module (PIN-14)', async () => {
+  it('reports stale for an artifact that is not a playbook module (PIN-14)', async () => {
     const record = await currentRecord();
     await write('text2gears.phase.ts', 'export const value = 42;\n');
     record.artifact.hash = await hashFile(join(dir, 'text2gears.phase.ts'));
@@ -127,7 +127,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
 
     const verdict = (await evaluatePins(dir)).verdicts?.text2gears;
     expect(verdict?.status).toBe('stale');
-    expect((verdict as { reason: string }).reason).toContain('phase format');
+    expect((verdict as { reason: string }).reason).toContain('playbook format');
   });
 
   // File-level malformations rejected at parse time (PIN-11).

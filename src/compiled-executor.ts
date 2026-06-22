@@ -2,23 +2,35 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Compiled phase execution: load a `phase` artifact and run it through the SLC
- * phase-runner facade (PHEXEC-23, PHEXEC-24, PHEXEC-25; DR-005).
+ * Compiled phase execution: load a `playbook` artifact and drive it host-side
+ * (PHEXEC-23, PHEXEC-24, PHEXEC-25; DR-005).
  *
- * {@link loadPhaseRunner} imports a compiled `phase` module and calls its
- * `createPhaseRunner` default export. {@link createCompiledExecutor} adapts that
- * runner to the DR-003 {@link PhaseExecutor} boundary: per run it constructs the
- * default-deny file capability (writable target/linked, reads closed over the run
- * inputs and the pin's semantic-input closure) and the Cligent-backed Playbook
- * ports, maps the request's host paths to the capability's virtual paths, calls
- * `run`, then maps the {@link PhaseResult} onto an {@link ExecutorResult} and
- * appends the runtime's drained status and telemetry. A thrown or unloadable
- * artifact becomes an `error` outcome, so `runPhase` stops the phase like a failed
- * generic check. See specs/dev/phase-execution.md.
+ * {@link loadPlaybookRuntime} imports a compiled `playbook` module and returns
+ * its `createPlaybookRuntime` factory. {@link createCompiledExecutor} adapts it
+ * to the DR-003 {@link PhaseExecutor} boundary: per run it builds the
+ * Cligent-backed Playbook ports, constructs the runtime, drives one
+ * non-interactive turn (`init` -> `handleBossInput` -> `dispose`), and derives
+ * the result from the host-observable outcome. The runtime receives only
+ * `PlaybookPorts` (DR-005); the host-only `drainDiagnostics` and any file
+ * capability stay host-side. Drained status and telemetry become diagnostics.
+ *
+ * PROVISIONAL pending the first reviewed `playbook` artifact: the seeding of
+ * {@link seedPhaseTurn}, the output-existence result derivation in
+ * {@link drivePhase}, and host-side enforcement of the per-run grants against
+ * the agents the runtime drives — the grant model (`file-grants`, DR-008) is
+ * not yet wired to a player sandbox, so `runRoot`/`semanticInputs` are accepted
+ * and reserved rather than enforced here. See specs/dev/phase-execution.md.
  */
 
-import { relative, resolve, sep } from 'node:path';
+import { stat } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+import type {
+  PlaybookPorts,
+  PlaybookRuntime,
+  PlaybookRuntimeFactory,
+} from '@sublang/playbook/runtime';
 
 import type {
   ExecuteRequest,
@@ -26,52 +38,49 @@ import type {
   LinkOptionPair,
   PhaseExecutor,
 } from './execution.js';
-import { buildRunGrants, createGuardedCapability } from './file-grants.js';
 import type { Hash } from './hash.js';
 import type { AgentClient } from './interpreter.js';
-import { mapPhaseResult } from './phase-runner.js';
-import type {
-  CreatePhaseRunner,
-  PhaseInput,
-  PhaseRunner,
-  RunnerPorts,
-} from './phase-runner.js';
+import { mapPhaseResult, seedPhaseTurn } from './phase-runner.js';
+import type { PhaseInput, PhaseResult } from './phase-runner.js';
 import { createPlaybookPorts } from './playbook-ports.js';
 
 /**
- * Imports a compiled `phase` module and returns its runner (PHEXEC-23).
+ * Imports a compiled `playbook` module and returns its runtime factory
+ * (PHEXEC-23).
  *
- * @throws when the module has no callable `createPhaseRunner` default export.
+ * @throws when the module has no callable `createPlaybookRuntime` default export.
  */
-export async function loadPhaseRunner(
+export async function loadPlaybookRuntime(
   artifactPath: string,
-): Promise<PhaseRunner> {
+): Promise<PlaybookRuntimeFactory> {
   const module: { default?: unknown } = await import(
     pathToFileURL(resolve(artifactPath)).href
   );
   const create = module.default;
   if (typeof create !== 'function') {
     throw new Error(
-      `compiled artifact "${artifactPath}" has no createPhaseRunner default export`,
+      `compiled artifact "${artifactPath}" has no createPlaybookRuntime default export`,
     );
   }
-  return (create as CreatePhaseRunner)();
+  return create as PlaybookRuntimeFactory;
 }
 
-/** A recorded semantic-input closure member for read grants (DR-007). */
+/** A recorded semantic-input closure member (DR-007); reserved for host-side grant enforcement. */
 export interface ClosureInput {
   path: string;
   identity?: Hash;
 }
 
 /**
- * Adapts a compiled `phase` artifact to the {@link PhaseExecutor} boundary
- * (PHEXEC-24, PHEXEC-25).
+ * Adapts a compiled `playbook` artifact to the {@link PhaseExecutor} boundary
+ * (PHEXEC-24, PHEXEC-25): build the Cligent-backed Playbook ports, load and
+ * construct the runtime, drive one non-interactive turn, and map the outcome,
+ * appending the runtime's drained status and telemetry.
  */
 export function createCompiledExecutor(opts: {
-  /** Path to the compiled `phase` module to load. */
+  /** Path to the compiled `playbook` module to load. */
   artifactPath: string;
-  /** Run root that bounds the file capability. */
+  /** Run root that will bound host-side grant enforcement (reserved). */
   runRoot: string;
   /** Agent transport backing `callPlayer`. */
   player: AgentClient;
@@ -81,12 +90,12 @@ export function createCompiledExecutor(opts: {
   models?: Readonly<Record<string, string>>;
   /** Working directory handed to the agent transports. */
   cwd?: string;
-  /** The pin's semantic-input closure, enumerated as read grants (DR-008). */
+  /** The pin's semantic-input closure (reserved for host-side grants, DR-008). */
   semanticInputs?: readonly ClosureInput[];
-  /** Loader seam; defaults to {@link loadPhaseRunner}. */
-  loadRunner?: (artifactPath: string) => Promise<PhaseRunner>;
+  /** Loader seam; defaults to {@link loadPlaybookRuntime}. */
+  loadFactory?: (artifactPath: string) => Promise<PlaybookRuntimeFactory>;
 }): PhaseExecutor {
-  const load = opts.loadRunner ?? loadPhaseRunner;
+  const load = opts.loadFactory ?? loadPlaybookRuntime;
 
   return {
     async run(
@@ -99,39 +108,23 @@ export function createCompiledExecutor(opts: {
         models: opts.models,
         cwd: opts.cwd,
       });
-      const toVirtual = (path: string): string =>
-        virtualPath(path, opts.runRoot);
-      const grants = buildRunGrants(
-        grantSpec(request, toVirtual, opts.semanticInputs),
-      );
-      const capability = createGuardedCapability(opts.runRoot, grants);
-      // Hand the artifact only Playbook's ports and the file capability — never
-      // the host-only drainDiagnostics, which the host keeps to itself so the
-      // artifact cannot clear its own diagnostics (DR-005, PHEXEC-23).
-      const ports: RunnerPorts = {
-        ...capability,
+      // Hand the runtime only Playbook's ports — never the host-only
+      // drainDiagnostics, nor a file capability (DR-005, PHEXEC-23).
+      const ports: PlaybookPorts = {
         callPlayer: adapter.callPlayer,
         callJudge: adapter.callJudge,
         emitStatus: adapter.emitStatus,
         emitTelemetry: adapter.emitTelemetry,
       };
 
-      let mapped: ExecutorResult;
-      try {
-        const runner = await load(opts.artifactPath);
-        const result = await runner.run(
-          phaseInput(request, toVirtual),
-          ports,
-          signal,
-        );
-        mapped = mapPhaseResult(result);
-      } catch (error) {
-        mapped = {
-          status: 'error',
-          diagnostics: [`compiled artifact failed: ${messageOf(error)}`],
-        };
-      }
-
+      const result = await drivePhase(
+        load,
+        opts.artifactPath,
+        ports,
+        phaseInput(request, opts.runRoot),
+        signal,
+      );
+      const mapped = mapPhaseResult(result);
       return {
         status: mapped.status,
         diagnostics: [...mapped.diagnostics, ...adapter.drainDiagnostics()],
@@ -140,58 +133,102 @@ export function createCompiledExecutor(opts: {
   };
 }
 
-/** Maps an {@link ExecuteRequest} to the artifact-facing {@link PhaseInput} (DR-005). */
-function phaseInput(
-  request: ExecuteRequest,
-  toVirtual: (path: string) => string,
-): PhaseInput {
+/**
+ * Loads, constructs, and drives a runtime through one non-interactive turn, then
+ * derives the result from the host-observable outcome (DR-005).
+ *
+ * PROVISIONAL: a turn that throws or aborts is `error`; a clean turn that leaves
+ * the declared `target`/`linked` output in place is `ok`; a clean turn that
+ * produces nothing is `blocked` — the FSM parked for Boss input a non-interactive
+ * run cannot supply. The first reviewed artifact fixes the exact mapping.
+ */
+async function drivePhase(
+  load: (artifactPath: string) => Promise<PlaybookRuntimeFactory>,
+  artifactPath: string,
+  ports: PlaybookPorts,
+  input: PhaseInput,
+  signal: AbortSignal,
+): Promise<PhaseResult> {
+  let runtime: PlaybookRuntime;
+  try {
+    const factory = await load(artifactPath);
+    runtime = factory({});
+  } catch (error) {
+    return {
+      status: 'error',
+      diagnostics: [`compiled artifact failed to load: ${messageOf(error)}`],
+    };
+  }
+
+  try {
+    await runtime.init(ports);
+    await runtime.handleBossInput({ text: seedPhaseTurn(input), signal });
+  } catch (error) {
+    await safeDispose(runtime);
+    return {
+      status: 'error',
+      diagnostics: [
+        signal.aborted
+          ? 'compiled run aborted'
+          : `compiled run failed: ${messageOf(error)}`,
+      ],
+    };
+  }
+
+  await safeDispose(runtime);
+  if (signal.aborted) {
+    return { status: 'error', diagnostics: ['compiled run aborted'] };
+  }
+  return (await outputExists(input))
+    ? { status: 'ok', diagnostics: [] }
+    : {
+        status: 'blocked',
+        diagnostics: [
+          'compiled phase produced no output (parked for Boss input)',
+        ],
+      };
+}
+
+async function safeDispose(runtime: PlaybookRuntime): Promise<void> {
+  try {
+    await runtime.dispose();
+  } catch {
+    // A dispose failure must not mask the turn's outcome.
+  }
+}
+
+/** Whether the run left its declared `target`/`linked` output in place. */
+async function outputExists(input: PhaseInput): Promise<boolean> {
+  const path = input.kind === 'compile' ? input.target : input.linked;
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Maps an {@link ExecuteRequest} to the {@link PhaseInput} the seed carries,
+ * resolving its workspace paths against the run root to absolute host paths the
+ * runtime's agents can act on (DR-005).
+ */
+function phaseInput(request: ExecuteRequest, runRoot: string): PhaseInput {
+  const abs = (path: string): string => resolve(runRoot, path);
   if (request.kind === 'compile') {
     return {
       kind: 'compile',
-      source: toVirtual(request.source),
-      target: toVirtual(request.target),
+      source: abs(request.source),
+      target: abs(request.target),
     };
   }
   return {
     kind: 'link',
-    objects: request.objects.map(toVirtual),
-    linkTarget: toVirtual(request.linkTarget),
+    objects: request.objects.map(abs),
+    linkTarget: abs(request.linkTarget),
     options: optionsRecord(request.options),
-    linked: toVirtual(request.linked),
+    linked: abs(request.linked),
   };
-}
-
-function grantSpec(
-  request: ExecuteRequest,
-  toVirtual: (path: string) => string,
-  semanticInputs: readonly ClosureInput[] = [],
-): Parameters<typeof buildRunGrants>[0] {
-  const inputs = semanticInputs.map((input) => ({
-    path: toVirtual(input.path),
-    identity: input.identity,
-  }));
-  if (request.kind === 'compile') {
-    return {
-      kind: 'compile',
-      source: toVirtual(request.source),
-      target: toVirtual(request.target),
-      semanticInputs: inputs,
-    };
-  }
-  return {
-    kind: 'link',
-    objects: request.objects.map(toVirtual),
-    linkTarget: toVirtual(request.linkTarget),
-    linked: toVirtual(request.linked),
-    semanticInputs: inputs,
-  };
-}
-
-/** Maps a host path to its virtual run-root path (a leading-`/` POSIX path). */
-function virtualPath(path: string, runRoot: string): string {
-  const root = resolve(runRoot);
-  const rel = relative(root, resolve(root, path));
-  return `/${rel.split(sep).join('/')}`;
 }
 
 function optionsRecord(

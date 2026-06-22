@@ -26,8 +26,8 @@ const idleAgent: AgentClient = {
   },
 };
 
-// Integration: a compiled `phase` artifact run through the executor over a fixture
-// run root (PHEXEC-26).
+// Integration: a compiled `playbook` artifact driven non-interactively through
+// the executor over a fixture run root (PHEXEC-26).
 describe('createCompiledExecutor (PHEXEC-26)', () => {
   let root: string;
 
@@ -56,38 +56,39 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     return executor.run(request, new AbortController().signal);
   };
 
-  it('writes the target and yields ok, carrying drained diagnostics', async () => {
+  it('drives the runtime, writes the target, and yields ok with drained diagnostics', async () => {
     const result = await runFixture('hello');
     expect(result.status).toBe('ok');
-    // The artifact's own diagnostics plus the drained status emission.
-    expect(result.diagnostics).toEqual(['compiled ok', 'fixture wrote target']);
+    // The runtime returns void; the only diagnostics are its drained status.
+    expect(result.diagnostics).toEqual(['fixture wrote target']);
     expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe('compiled:hello');
   });
 
-  it('maps a blocked artifact result to a blocked outcome', async () => {
+  it('derives blocked when a clean turn produces no output', async () => {
     const result = await runFixture('BLOCK');
     expect(result.status).toBe('blocked');
-    expect(result.diagnostics).toContain('BLOCKED: fixture blocked');
+    expect(result.diagnostics).toContain('fixture parked');
   });
 
-  it('maps an errored artifact result to an error outcome', async () => {
+  it('derives error when the turn throws', async () => {
     const result = await runFixture('ERR');
     expect(result.status).toBe('error');
-    expect(result.diagnostics).toContain('fixture error');
+    expect(result.diagnostics[0]).toMatch(/fixture error/);
   });
 
-  it('hands the artifact only Playbook ports and the file capability (PHEXEC-23)', async () => {
+  it('hands the runtime only Playbook ports (PHEXEC-23)', async () => {
     let keys: string[] = [];
     const executor = createCompiledExecutor({
       artifactPath: 'ignored',
       runRoot: root,
       player: idleAgent,
       judge: idleAgent,
-      loadRunner: async () => ({
-        async run(_input, ports) {
+      loadFactory: async () => () => ({
+        async init(ports: Record<string, unknown>) {
           keys = Object.keys(ports);
-          return { status: 'ok', diagnostics: [] };
         },
+        async handleBossInput() {},
+        async dispose() {},
       }),
     });
     await executor.run(
@@ -105,14 +106,11 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       'callPlayer',
       'emitStatus',
       'emitTelemetry',
-      'list',
-      'read',
-      'write',
     ]);
     expect(keys).not.toContain('drainDiagnostics');
   });
 
-  it('reports error when the artifact has no createPhaseRunner export', async () => {
+  it('reports error when the artifact has no createPlaybookRuntime export', async () => {
     const bad = join(root, 'bad.mjs');
     await writeFile(bad, 'export const notDefault = 1;\n');
     const executor = createCompiledExecutor({
@@ -131,6 +129,6 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       new AbortController().signal,
     );
     expect(result.status).toBe('error');
-    expect(result.diagnostics[0]).toMatch(/no createPhaseRunner/);
+    expect(result.diagnostics[0]).toMatch(/no createPlaybookRuntime/);
   });
 });
