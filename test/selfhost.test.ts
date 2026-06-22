@@ -27,18 +27,18 @@ import {
 } from '../src/resolver.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
 
-/** A compiled artifact that resolves to the `phase` format (DR-005). */
-const PHASE_MODULE =
+/** A compiled artifact that resolves to the `playbook` format (DR-005). */
+const PLAYBOOK_MODULE =
   'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${sf} | ${se} |\n| target | ${tf} | ${te} |\n`;
 
-// The reserved slc link phase: fsm .ts -> phase .ts (DR-005).
-const phaseLink = `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | fsm | .ts |\n| target | phase | .ts |\n\n## Link Targets\n\n| Target form | Meaning |\n| --- | --- |\n| <path>.ts | A runtime module. |\n`;
+// The reserved slc link phase: fsm .ts -> playbook .ts (DR-005).
+const playbookLink = `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | fsm | .ts |\n| target | playbook | .ts |\n\n## Link Targets\n\n| Target form | Meaning |\n| --- | --- |\n| <path>.ts | A runtime module. |\n`;
 
-// An agent that writes the prompt's declared target, emitting a real phase
-// module for the `phase` artifact so it resolves to the facade (SELFHOST-3).
+// An agent that writes the prompt's declared target, emitting a real
+// createPlaybookRuntime module for the `playbook` artifact (SELFHOST-3).
 const writingAgent = (): AgentClient => ({
   run: async ({ prompt }) => {
     const match = /artifact to write: (.+)/.exec(prompt);
@@ -46,7 +46,9 @@ const writingAgent = (): AgentClient => ({
       const target = match[1].trim();
       await writeFile(
         target,
-        target.endsWith('.phase.ts') ? PHASE_MODULE : 'export default 1;\n',
+        target.endsWith('.playbook.ts')
+          ? PLAYBOOK_MODULE
+          : 'export default 1;\n',
       );
     }
     return { status: 'success', text: 'wrote the artifact' };
@@ -60,8 +62,8 @@ const exists = (path: string): Promise<boolean> =>
   );
 
 // The reserved `slc` meta-pipeline run through the generic pipeline/link
-// machinery, emitting the `phase` linked format (SELFHOST-4).
-describe('reserved slc pipeline and phase format (SELFHOST-4)', () => {
+// machinery, emitting the `playbook` linked format (SELFHOST-4).
+describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
   let root: string;
   let slcDir: string;
   let source: string;
@@ -69,7 +71,7 @@ describe('reserved slc pipeline and phase format (SELFHOST-4)', () => {
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'slc-selfhost-'));
-    // The reserved `slc` pipeline: text -> gears -> fsm, plus a `phase` link.
+    // The reserved `slc` pipeline: text -> gears -> fsm, plus a `playbook` link.
     slcDir = join(root, 'slc');
     await mkdir(slcDir);
     await writeFile(
@@ -80,7 +82,7 @@ describe('reserved slc pipeline and phase format (SELFHOST-4)', () => {
       join(slcDir, 'gears2fsm.md'),
       formats('gears', '.md', 'fsm', '.ts'),
     );
-    await writeFile(join(slcDir, 'link.md'), phaseLink);
+    await writeFile(join(slcDir, 'link.md'), playbookLink);
 
     const work = join(root, 'work');
     await mkdir(work);
@@ -106,18 +108,18 @@ describe('reserved slc pipeline and phase format (SELFHOST-4)', () => {
     // text -> gears -> fsm; the full run stops at the fsm object (no --link).
     expect(await exists(join(artDir, 'text2gears.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'text2gears.fsm.ts'))).toBe(true);
-    expect(await exists(join(artDir, 'text2gears.phase.ts'))).toBe(false);
+    expect(await exists(join(artDir, 'text2gears.playbook.ts'))).toBe(false);
   });
 
-  it('links the fsm object to a phase artifact that resolves to the facade', async () => {
+  it('links the fsm object to a playbook artifact that resolves to a createPlaybookRuntime factory', async () => {
     const result = await runSlc(
       ['slc', source, '--link', join(root, 'work', 'runtime.ts')],
       deps(),
     );
     expect(result.ok).toBe(true);
-    const phaseArtifact = join(artDir, 'text2gears.phase.ts');
-    expect(result.outputs).toContain(phaseArtifact);
-    expect(resolvesToPlaybook(await readFile(phaseArtifact, 'utf8'))).toBe(
+    const playbookArtifact = join(artDir, 'text2gears.playbook.ts');
+    expect(result.outputs).toContain(playbookArtifact);
+    expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
       true,
     );
   });
@@ -151,10 +153,10 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
     expect(pipeline.linkFile).not.toBeNull();
   });
 
-  // The compile chain above loads, but Playbook ships its reserved `link` in the
-  // `playbook` runtime contract (no `## Link Targets`), which SLC's `phase`-format
-  // link machinery rejects. Producing a runnable artifact through it is the
-  // pending DR-005 reconciliation (SELFHOST-3); this asserts the current boundary.
+  // The compile chain above loads, but Playbook ships its reserved `link` as a
+  // phase definition with no `## Link Targets`, which SLC's generic link
+  // machinery (DR-002) rejects. Driving it as a `playbook` runtime is the pending
+  // reconciliation (Task 6, SELFHOST-3); this asserts the current boundary.
   it('does not yet link through Playbook definitions (reconciliation pending)', async () => {
     const linkFile = join(reservedSlcPipelineDir(), 'link.md');
     await expect(loadLinkFile(linkFile)).rejects.toThrow(/Link Targets/);
