@@ -106,6 +106,6 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `phase` artifact |
-| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name and the `phase` linked format realized through generic pipeline/link mechanics |
-| test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name resolution, `phase` linking, and DR-001 locations |
+| user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `playbook` artifact |
+| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name and the `playbook` linked format realized through generic pipeline/link mechanics |
+| test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name resolution, `playbook` linking, and DR-001 locations |
