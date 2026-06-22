@@ -25,7 +25,7 @@ It updates the affected decisions ([DR-002](../decisions/002-slc-link-phases.md)
 - [x] The `FCAP` package (`dev`, `test`) and its `map.md` summary reconciled to [DR-008](../decisions/008-slc-file-capability.md)'s host-side capability — host-owned rather than artifact-facing — repointing FCAP-1's citation from the removed `#artifact-facing-api` anchor to `#capability-api`
 - [x] Pin currency's artifact-format sub-check updated to recognize the `playbook` factory, and `PIN` items renamed `phase` → `playbook`
 - [x] `SELFHOST` (`user`/`dev`/`test`) and the [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) output locations renamed `phase` → `playbook` (`.playbook.ts`), with `map.md` updated
-- [ ] The reserved `slc` link driven end-to-end so `slc slc <source> --link <target>` produces a `.playbook.ts` runtime through Playbook's link definition, with [PIPE-11](../dev/pipeline.md#pipe-11)'s `## Link Targets` requirement reconciled to except the reserved `slc` link, replacing the IR-005 link boundary test with a passing reserved-`slc` link test
+- [x] The reserved `slc` link driven end-to-end so `slc slc <source> --link <target>` produces a `.playbook.ts` runtime through Playbook's link definition, with [PIPE-11](../dev/pipeline.md#pipe-11)'s `## Link Targets` requirement reconciled to except the reserved `slc` link, replacing the IR-005 link boundary test with a passing reserved-`slc` link test
 
 ## Tasks
 
