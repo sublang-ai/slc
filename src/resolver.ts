@@ -14,9 +14,15 @@
  */
 
 import { stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { delimiter, dirname, join, resolve } from 'node:path';
 
 import type { PipelineResolver } from './pipeline.js';
+
+const requireFrom = createRequire(import.meta.url);
+
+/** The reserved meta-pipeline reference (DR-005, SELFHOST-2). */
+export const RESERVED_SLC_PIPELINE = 'slc';
 
 /**
  * Computes the ordered pipeline search roots from a pipeline-path value (CLI-6):
@@ -67,6 +73,31 @@ export function createPipelineResolver(
     }
     return [...new Set(matches)];
   };
+}
+
+/**
+ * Locates the reserved `slc` meta-pipeline definitions that `@sublang/playbook`
+ * ships under `slc/` (its `text2gears`, `gears2fsm`, and `link` phases), so `slc`
+ * self-hosts on Playbook's canonical source rather than a duplicate (DR-005,
+ * SELFHOST-2).
+ *
+ * @throws when `@sublang/playbook` does not provide the `slc/` definitions.
+ */
+export function reservedSlcPipelineDir(): string {
+  return dirname(requireFrom.resolve('@sublang/playbook/slc/link.md'));
+}
+
+/**
+ * Wraps a resolver so the reserved `slc` reference resolves to Playbook's
+ * meta-pipeline definitions, leaving every other reference to `inner` (SELFHOST-2).
+ */
+export function withReservedSlcPipeline(
+  inner: PipelineResolver,
+): PipelineResolver {
+  return (reference) =>
+    reference === RESERVED_SLC_PIPELINE
+      ? [reservedSlcPipelineDir()]
+      : inner(reference);
 }
 
 async function isDirectory(path: string): Promise<boolean> {

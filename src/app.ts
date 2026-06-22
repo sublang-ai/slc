@@ -21,7 +21,11 @@ import {
   type AgentSelection,
 } from './config.js';
 import { loadConfigFile, type FileConfig } from './config-file.js';
-import { createPipelineResolver, pipelineSearchRoots } from './resolver.js';
+import {
+  createPipelineResolver,
+  pipelineSearchRoots,
+  withReservedSlcPipeline,
+} from './resolver.js';
 import { runSlc, type SlcDeps } from './runner.js';
 
 /** The program name. */
@@ -55,8 +59,9 @@ export interface RunOptions {
 
 /**
  * Builds the production {@link SlcDeps}: a pipeline resolver over the resolved
- * search roots (CLI-6) and an interpreted executor for the resolved agent/model
- * (CLI-7). Configuration is loaded from the config file (DR-006, CLI-20) and
+ * search roots (CLI-6) — with the reserved `slc` reference routed to the
+ * meta-pipeline definitions `@sublang/playbook` provides (SELFHOST-2) — and an
+ * interpreted executor for the resolved agent/model (CLI-7). Configuration is loaded from the config file (DR-006, CLI-20) and
  * then overridden per key by a non-blank environment variable, so existing
  * env-only runs are unchanged and the file fills any key the environment leaves
  * unset.
@@ -74,8 +79,8 @@ export const buildSlcDeps: DepsBuilder = async ({
 }) => {
   const file = await loadConfigFile({ cwd, configPath, env });
   const { selection, pipelinePath } = resolveRunConfig(env, file.config);
-  const resolver = createPipelineResolver(
-    pipelineSearchRoots(pipelinePath, cwd),
+  const resolver = withReservedSlcPipeline(
+    createPipelineResolver(pipelineSearchRoots(pipelinePath, cwd)),
   );
   const executor = createConfiguredExecutor(selection, { cwd });
   return { resolver, executor, signal };
