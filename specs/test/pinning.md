@@ -55,3 +55,10 @@ Where a fixture `slc.pins.json` is not JSON, declares an unsupported schema or h
 Verifies: [PIN-6](../dev/pinning.md#pin-6)
 
 Where a fixture phase records an external input as a bare URL or an unvendored mutable reference, when the validator evaluates it, the validator shall report the pin malformed, naming the external input, and the validation shall issue no network request.
+
+## Generation
+
+### PIN-16
+Verifies: [PIN-15](../dev/pinning.md#pin-15)
+
+Where a fixture phase's definition, its `## Pin Inputs` closure, a `phase`-module artifact, and a link target are committed, when the build-and-review flow generates and writes the pin, the validator shall report that phase current.
