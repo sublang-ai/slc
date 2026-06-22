@@ -17,10 +17,7 @@
  * specs/dev/phase-execution.md.
  */
 
-import type {
-  PlaybookPorts,
-  PlayerResult,
-} from '@sublang/playbook/code/playbook';
+import type { PlaybookPorts, PlayerResult } from '@sublang/playbook/runtime';
 
 import type { AgentClient, AgentRunResult } from './interpreter.js';
 
