@@ -16,13 +16,11 @@
  * like a failed generic check.
  *
  * `PlaybookPorts` is the Playbook-owned contract; DR-005 binds SLC to it rather
- * than restating the port shape. It is imported here from the published
- * `@sublang/playbook/code/playbook` reference realization until Playbook exposes a
- * generic package surface (its `./runtime` entry), at which point this import
- * should move there. See specs/dev/phase-execution.md.
+ * than restating the port shape. It is imported from `@sublang/playbook`'s
+ * generic `./runtime` surface. See specs/dev/phase-execution.md.
  */
 
-import type { PlaybookPorts } from '@sublang/playbook/code/playbook';
+import type { PlaybookPorts } from '@sublang/playbook/runtime';
 
 import type { ExecutorResult } from './execution.js';
 import type { FileCapability } from './file-capability.js';
