@@ -10,8 +10,8 @@ Accepted
 ## Context
 
 [DR-005](005-slc-self-hosting-meta-pipeline.md) defines the SLC phase-runner facade for compiled phase artifacts and defers the concrete `FileCapability` shape.
-Compiled artifacts receive `PlaybookPorts & FileCapability`, and `PhaseInput` carries workspace paths rather than file contents.
-The artifact performs no direct file I/O.
+A compiled artifact is a Playbook runtime that receives only `PlaybookPorts` through `init`, so the file capability is host-side: `slc`'s compiled executor owns it, and `PhaseInput` carries workspace paths rather than file contents.
+The artifact performs no direct file I/O; agentic work reaches the workspace through the coding agents the runtime drives, and `slc` stages deterministic reads and writes around the run.
 
 [DR-003](003-slc-phase-execution.md) requires every executing phase to write only its declared target or linked artifact, and it leaves broader write-scope enforcement to the host through sandboxes, snapshots, or write allowlists.
 [DR-007](007-slc-phase-artifact-pinning.md) requires exact-byte hashes, a closed semantic input closure for pinned phases, and fail-closed compiled selection.
@@ -24,9 +24,9 @@ It does not define Playbook ports, structured tool ports, process sandboxing, or
 
 ### Capability boundary
 
-`FileCapability` is an in-process host port supplied to a compiled phase runner.
+`FileCapability` is an in-process host port owned by `slc`'s compiled executor, which drives the compiled phase runner.
 It is not an MCP interface, command-line interface, or network protocol.
-It exposes deterministic file access through a small artifact-facing API and a host-side policy model.
+It exposes deterministic file access through a small host-side API and a per-run grant policy.
 
 The host constructs one capability per phase run from:
 
@@ -38,9 +38,9 @@ The host constructs one capability per phase run from:
 The capability is default-deny.
 An operation succeeds only when the normalized path is inside the run root, passes realpath containment, and is covered by the host's per-run grant policy.
 
-### Artifact-facing API
+### Capability API
 
-The artifact-facing `FileCapability` shall expose only whole-file reads, bounded directory listing, and whole-file writes:
+The host-side `FileCapability` shall expose only whole-file reads, bounded directory listing, and whole-file writes:
 
 ```typescript
 type SlcPath = string;
@@ -76,7 +76,7 @@ interface FileCapability {
 ```
 
 The API is byte-oriented.
-It shall not expose text-specific operations, line-editing operations, file deletion, host paths, session state, or grant introspection to the artifact.
+It shall not expose text-specific operations, line-editing operations, file deletion, host paths, session state, or grant introspection.
 If a later DR adds a text convenience, its hash shall still be over exact bytes, not decoded text.
 
 ### Paths
@@ -101,7 +101,7 @@ Fresh target writes do not require `ifMatch`.
 ### Host-side grants
 
 The host shall construct a per-run grant model before invoking a compiled artifact.
-The grant model is host-side policy and may be emitted in diagnostics or telemetry for audit, but it is not exposed through the artifact-facing `FileCapability`.
+The grant model is host-side policy and may be emitted in diagnostics or telemetry for audit, but it is not exposed through the `FileCapability` API.
 
 A grant records:
 
@@ -140,14 +140,14 @@ Capability errors are structured so `slc` can map them consistently after the ph
 An unauthorized read or write, invalid path, symlink escape, or write outside the allowlist is a host-enforced scope failure.
 It shall fail like a failed generic check under [DR-003](003-slc-phase-execution.md), because the executing artifact violated the run boundary.
 
-A missing or malformed input may cause the compiled artifact to return `blocked` when the phase definition says the input is incompatible.
+A missing or malformed input may make the compiled phase `blocked` when the phase definition says the input is incompatible.
 The host shall not rely on the artifact to perform DR-003 generic checks or DR-007 pin currency checks.
 Those checks remain `slc` responsibilities around phase execution.
 
 ## Consequences
 
-- Compiled artifacts get deterministic file access without direct file I/O or host-specific paths.
-- The artifact-facing port stays small: read bytes, list immediate children, and atomically write bytes.
+- Compiled phases get deterministic, host-mediated file access without the artifact performing direct file I/O or seeing host-specific paths.
+- The capability port stays small: read bytes, list immediate children, and atomically write bytes.
 - Write-scope enforcement is explicit and host-controlled, matching DR-003's target-or-linked invariant.
 - Pinned compiled phases cannot silently depend on undeclared files through recursive reads or directory discovery.
 - Exact-byte hashes align file access with DR-007 pin currentness and generic input integrity checks.
