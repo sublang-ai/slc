@@ -97,20 +97,15 @@ interface PhaseRunner {
 }
 ```
 
-`slc` constructs the facade with a `PlaybookPorts` adapter and the host-side
-file capability; the runtime itself receives only `PlaybookPorts` through
-`init`.
+`slc` constructs the facade with a `PlaybookPorts` adapter; the runtime itself
+receives only `PlaybookPorts` through `init`.
 
 `PhaseInput` carries workspace paths, not contents; the artifact performs no
 direct file I/O.
 Agentic phases reach the workspace through the coding agent (`callPlayer`),
-which also runs any tool the definition calls for.
-Deterministic reads and writes are performed host-side by `slc` through one
-standardized file capability that stages inputs and persists the `target` or
-`linked` output around the runtime, since the runtime receives only
-`PlaybookPorts`.
-The concrete `FileCapability` shape is settled by
-[DR-008](008-slc-file-capability.md).
+which reads the source and writes the `target` or `linked` output directly and
+runs any tool the definition calls for, as in interpreted execution
+([DR-004](004-slc-interpreted-phase-execution.md)).
 Per-step model selection flows through Playbook player and judge bindings plus
 host configuration.
 Playbook port semantics are source-owned; SLC defines only the phase input,
@@ -126,8 +121,9 @@ and diagnostic sinks is host-defined; portability holds over the Playbook
 contract and the SLC phase-runner facade, not the execution environment.
 
 The run causes writes only to the `target` or `linked` path from its input,
-whether through Playbook-mediated agents or the host-side file capability,
-honoring the [DR-003](003-slc-phase-execution.md) write-scope invariant.
+through the Playbook-mediated coding agent, with the
+[DR-003](003-slc-phase-execution.md) generic checks enforcing the write-scope
+invariant as they do for interpreted execution.
 `slc` constructs the runtime, supplies the ports, drives it to quiescence, then maps the host-observable outcome onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol)).
 
 ### Strategy selection
@@ -147,8 +143,7 @@ A pin whose artifact is missing or whose inputs changed is stale, and `slc` fail
 A phase with no pin is interpreted.
 
 The concrete pin format — storage location, path resolution, hash algorithm, link-target identity, what belongs in the semantic input closure, and whether the producing meta-pipeline version is a pin input — is settled by [DR-007](007-slc-phase-artifact-pinning.md).
-The concrete capability format — `FileCapability` operations, path semantics, and any structured tool port — is settled by [DR-008](008-slc-file-capability.md).
-With both settled, compiled selection follows [Strategy selection](#strategy-selection); a phase without a current pin interprets ([DR-004](004-slc-interpreted-phase-execution.md)).
+With that settled, compiled selection follows [Strategy selection](#strategy-selection); a phase without a current pin interprets ([DR-004](004-slc-interpreted-phase-execution.md)).
 
 ### Artifact stability
 
@@ -168,7 +163,7 @@ For example:
 
 - A pipeline can be bootstrapped by compiling its own phase definitions; once the pinning contract exists, `slc` runs it through the resulting artifacts rather than interpreting them.
 - Compiled phases gain auditable control flow (the GEARS-to-FSM mapping) while reusing Playbook's maintained runtime port boundary.
-- Host and OS specifics stay behind Playbook ports and the file capability, so compiled artifacts remain OS-agnostic.
+- Host and OS specifics stay behind Playbook ports, so compiled artifacts remain OS-agnostic.
 - Once the pinning contract exists, version-pinned artifacts keep the toolchain stable across runs.
 - Interpreted execution ([DR-004](004-slc-interpreted-phase-execution.md)) remains the reference semantics and the fallback for uncompiled phases.
 

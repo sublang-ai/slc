@@ -11,16 +11,14 @@
  * Cligent-backed Playbook ports, constructs the runtime, drives one
  * non-interactive turn (`init` -> `handleBossInput` -> `dispose`), and derives
  * the result from the host-observable outcome. The runtime receives only
- * `PlaybookPorts` (DR-005); the host-only `drainDiagnostics` and any file
- * capability stay host-side. Drained status and telemetry become diagnostics.
+ * `PlaybookPorts` (DR-005); the host-only `drainDiagnostics` stays host-side.
+ * Drained status and telemetry become diagnostics. Like interpreted execution,
+ * a compiled phase writes through its agents (`callPlayer`) and the DR-003
+ * generic checks enforce its write scope.
  *
  * PROVISIONAL pending the first reviewed `playbook` artifact: the seeding of
- * {@link seedPhaseTurn}, the output-produced (created-or-modified) result
- * derivation in {@link drivePhase}, and host-side enforcement of the per-run
- * grants against
- * the agents the runtime drives — the grant model (`file-grants`, DR-008) is
- * not yet wired to a player sandbox, so `runRoot`/`semanticInputs` are accepted
- * and reserved rather than enforced here. See specs/dev/phase-execution.md.
+ * {@link seedPhaseTurn} and the output-produced (created-or-modified) result
+ * derivation in {@link drivePhase}. See specs/dev/phase-execution.md.
  */
 
 import { stat } from 'node:fs/promises';
@@ -39,7 +37,6 @@ import type {
   LinkOptionPair,
   PhaseExecutor,
 } from './execution.js';
-import type { Hash } from './hash.js';
 import type { AgentClient } from './interpreter.js';
 import { mapPhaseResult, seedPhaseTurn } from './phase-runner.js';
 import type { PhaseInput, PhaseResult } from './phase-runner.js';
@@ -66,12 +63,6 @@ export async function loadPlaybookRuntime(
   return create as PlaybookRuntimeFactory;
 }
 
-/** A recorded semantic-input closure member (DR-007); reserved for host-side grant enforcement. */
-export interface ClosureInput {
-  path: string;
-  identity?: Hash;
-}
-
 /**
  * Adapts a compiled `playbook` artifact to the {@link PhaseExecutor} boundary
  * (PHEXEC-24, PHEXEC-25): build the Cligent-backed Playbook ports, load and
@@ -81,7 +72,7 @@ export interface ClosureInput {
 export function createCompiledExecutor(opts: {
   /** Path to the compiled `playbook` module to load. */
   artifactPath: string;
-  /** Run root that will bound host-side grant enforcement (reserved). */
+  /** Run root for resolving the phase's workspace paths to absolute host paths. */
   runRoot: string;
   /** Agent transport backing `callPlayer`. */
   player: AgentClient;
@@ -91,8 +82,6 @@ export function createCompiledExecutor(opts: {
   models?: Readonly<Record<string, string>>;
   /** Working directory handed to the agent transports. */
   cwd?: string;
-  /** The pin's semantic-input closure (reserved for host-side grants, DR-008). */
-  semanticInputs?: readonly ClosureInput[];
   /** Loader seam; defaults to {@link loadPlaybookRuntime}. */
   loadFactory?: (artifactPath: string) => Promise<PlaybookRuntimeFactory>;
 }): PhaseExecutor {

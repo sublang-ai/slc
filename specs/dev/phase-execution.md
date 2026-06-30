@@ -101,7 +101,7 @@ When interpreting a phase, the slc command shall permit the agent to invoke the 
 
 ### PHEXEC-23
 
-Where a phase is executed by a compiled `playbook` artifact, the slc command shall drive it host-side through a stable phase-runner facade — construct the `PlaybookRuntime` the artifact's `createPlaybookRuntime` factory builds, `init` it with only Playbook's source-owned ports (no file capability or other host capability), drive one non-interactive `handleBossInput` turn seeded from the phase input under an abort signal, then `dispose` it — and shall derive a terminal `ok`, `blocked`, or `error` status with diagnostics drained for every status ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
+Where a phase is executed by a compiled `playbook` artifact, the slc command shall drive it host-side through a stable phase-runner facade — construct the `PlaybookRuntime` the artifact's `createPlaybookRuntime` factory builds, `init` it with only Playbook's source-owned ports (no host capability beyond them), drive one non-interactive `handleBossInput` turn seeded from the phase input under an abort signal, then `dispose` it — and shall derive a terminal `ok`, `blocked`, or `error` status with diagnostics drained for every status ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
 
 ### PHEXEC-24
 
