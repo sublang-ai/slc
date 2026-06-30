@@ -21,7 +21,8 @@ Implementation sequencing across these DRs is tracked in iteration records, not 
 ### Reserved `slc` pipeline
 
 The pipeline name `slc` shall be reserved for the meta pipeline that compiles phase and link definitions into runnable phase artifacts.
-Its phase definitions are distinct from any domain pipeline's like-named phases: their source is a phase or link definition rather than a domain workflow, so a single `slc.text2gears` accepts any phase definition (for example `text2gears.md`, `gears2fsm.md`, or `link.md`).
+Its source is a phase or link definition rather than a domain workflow, so a single `slc.text2gears` accepts any phase definition (for example `text2gears.md`, `gears2fsm.md`, or `link.md`).
+The reserved `slc` resolves to Playbook's authored `slc/` definitions, which the `playbook` domain pipeline also uses ([DR-009](009-slc-playbook-pipeline-compilation.md)), so the reservation fixes the name's resolution and the source semantics rather than a phase-file set unique to `slc`.
 Where the `slc` pipeline directory resolves from is consumer-defined per [DR-001](001-slc-pipeline-layout-naming-invocation.md).
 
 The `slc` pipeline is named explicitly like any other pipeline, so it claims no default and leaves the [DR-001](001-slc-pipeline-layout-naming-invocation.md#cli) grammar unchanged.
