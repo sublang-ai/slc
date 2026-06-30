@@ -9,7 +9,8 @@ Accepted
 
 ## Context
 
-`slc playbook <source>` should compile a domain workflow description into a runnable Playbook runtime, comparable to the manual reference at `../playbook/reference/sdlc/code.playbook/`.
+`slc playbook <source>` should compile a domain workflow description through the `playbook` pipeline.
+With `--link <target>`, it should produce a runnable Playbook runtime comparable to the manual reference at `../playbook/reference/sdlc/code.playbook/`.
 The reserved `slc` meta-pipeline ([DR-005](005-slc-self-hosting-meta-pipeline.md)) already compiles phase and link definitions into `playbook` artifacts using Playbook's authored `slc/` definitions (`text2gears`, `gears2fsm`, `link`), which describe a generic procedure-to-runtime compilation.
 Playbook 0.9.0 [[1]] owns the `playbook` linked format and the `PlaybookRuntime` contract, and ships a generic playbook CLI and registry [[2]] that performs a compiled runtime against host-supplied agents.
 
