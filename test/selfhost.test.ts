@@ -233,4 +233,48 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  // The ## Link Targets relaxation keys on the `playbook` linked format, not the
+  // reference name, so an injected resolver mapping `playbook` to a directory
+  // whose link emits a different format and omits ## Link Targets is refused
+  // (PIPE-11, DR-009).
+  it('refuses a `playbook` reference whose link is not the Playbook `playbook` format and omits ## Link Targets', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-playbook-badlink-'));
+    try {
+      const dir = join(root, 'custom');
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        join(dir, 'text2gears.md'),
+        formats('text', '.md', 'gears', '.md'),
+      );
+      await writeFile(
+        join(dir, 'gears2fsm.md'),
+        formats('gears', '.md', 'fsm', '.ts'),
+      );
+      // A non-`playbook` linked format (run) with no ## Link Targets section.
+      await writeFile(
+        join(dir, 'link.md'),
+        formats('fsm', '.ts', 'run', '.ts'),
+      );
+
+      const work = join(root, 'work');
+      await mkdir(work, { recursive: true });
+      const source = join(work, 'flow.md');
+      await writeFile(source, '# A workflow\n');
+      await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
+
+      const result = await runSlc(
+        ['playbook', source, '--link', join(work, 'runtime.ts')],
+        {
+          resolver: (reference) => (reference === 'playbook' ? [dir] : []),
+          executor: createInterpretedExecutor({ agent: writingAgent() }),
+        },
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.diagnostics.join('\n')).toMatch(/Link Targets/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

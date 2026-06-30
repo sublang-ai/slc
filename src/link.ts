@@ -57,21 +57,25 @@ export class LinkError extends Error {
 }
 
 /**
+ * The Playbook-owned linked format token; Playbook validates its targets, so a
+ * `link.md` emitting it needs no per-pipeline `## Link Targets` (DR-002, DR-009).
+ */
+const PLAYBOOK_LINKED_FORMAT = 'playbook';
+
+/**
  * Parses a `link.md` definition (PIPE-11, PIPE-19).
  *
- * `## Link Targets` is required by default. The reserved `slc` link consumes
- * Playbook's authored `link.md`, which declares none — Playbook's link compiler
- * owns target validation (DR-002) — so its caller passes
- * `requireTargetForms: false` to accept a link phase with no declared forms.
+ * `## Link Targets` is required, except when the linked target format is the
+ * Playbook-owned `playbook` format, whose target validation Playbook owns and
+ * which therefore declares none (DR-002, DR-009). The exception keys on the
+ * linked target format, not the pipeline name, so a non-`playbook` link missing
+ * `## Link Targets` is refused however its pipeline reference resolved.
  *
  * @throws {LinkError} when `## Formats` is missing or malformed, the linked
  *   format token equals the object source token, or `## Link Targets` is
- *   missing while required.
+ *   missing for a non-`playbook` linked format.
  */
-export function parseLinkPhase(
-  content: string,
-  opts: { requireTargetForms?: boolean } = {},
-): LinkPhase {
+export function parseLinkPhase(content: string): LinkPhase {
   const { source, target } = readFormats(content, (code, message) => {
     throw new LinkError(code, message);
   });
@@ -83,7 +87,9 @@ export function parseLinkPhase(
     );
   }
 
-  const relaxed = opts.requireTargetForms === false;
+  // Playbook owns target validation for its `playbook` linked format, so a
+  // `link.md` emitting it carries no ## Link Targets (DR-002, DR-009, PIPE-11).
+  const relaxed = target.format === PLAYBOOK_LINKED_FORMAT;
   const section = findSection(content, 'Link Targets');
   if (section === null) {
     if (relaxed) {
@@ -115,11 +121,8 @@ export function parseLinkPhase(
 }
 
 /** Reads and parses a `link.md` file from disk (PIPE-11). */
-export async function loadLinkFile(
-  path: string,
-  opts: { requireTargetForms?: boolean } = {},
-): Promise<LinkPhase> {
-  return parseLinkPhase(await readFile(path, 'utf8'), opts);
+export async function loadLinkFile(path: string): Promise<LinkPhase> {
+  return parseLinkPhase(await readFile(path, 'utf8'));
 }
 
 /**
