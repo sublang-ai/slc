@@ -22,7 +22,7 @@ import { resolvesToPlaybook } from '../src/phase-runner.js';
 import { loadPipeline } from '../src/pipeline.js';
 import {
   reservedSlcPipelineDir,
-  withReservedSlcPipeline,
+  withReservedPipelines,
 } from '../src/resolver.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
 
@@ -191,9 +191,46 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
     }
   });
 
-  it('routes only the reserved `slc` reference to those definitions', async () => {
-    const wrapped = withReservedSlcPipeline(() => ['/configured/domain']);
+  it('routes the reserved `slc` and `playbook` references to the shared definitions, delegating others', async () => {
+    const wrapped = withReservedPipelines(() => ['/configured/domain']);
     expect(await wrapped('slc')).toEqual([reservedSlcPipelineDir()]);
+    expect(await wrapped('playbook')).toEqual([reservedSlcPipelineDir()]);
     expect(await wrapped('domain')).toEqual(['/configured/domain']);
+  });
+});
+
+// The `playbook` domain pipeline resolves to the same Playbook-provided
+// definitions as the reserved `slc`, and its target-less `link.md` loads under
+// the same relaxation, so `slc playbook <src> --link <tgt>` links to a
+// `.playbook.ts` runtime under `<basename>.playbook/` (SELFHOST-6, SELFHOST-7,
+// PIPE-11). The agent is faked, so this exercises SLC's resolution and link
+// loading, not Playbook's link-compiler behavior.
+describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)', () => {
+  it('resolves `playbook` to the shared definitions and loads its target-less link', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-playbook-link-'));
+    try {
+      const work = join(root, 'work');
+      await mkdir(work, { recursive: true });
+      const source = join(work, 'flow.md');
+      await writeFile(source, '# A workflow\n');
+      await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
+
+      const result = await runSlc(
+        ['playbook', source, '--link', join(work, 'runtime.ts')],
+        {
+          resolver: withReservedPipelines(() => []),
+          executor: createInterpretedExecutor({ agent: writingAgent() }),
+        },
+      );
+
+      expect(result.ok).toBe(true);
+      const playbookArtifact = join(work, 'flow.playbook', 'flow.playbook.ts');
+      expect(result.outputs).toContain(playbookArtifact);
+      expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
+        true,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
