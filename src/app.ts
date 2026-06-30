@@ -24,7 +24,7 @@ import { loadConfigFile, type FileConfig } from './config-file.js';
 import {
   createPipelineResolver,
   pipelineSearchRoots,
-  withReservedSlcPipeline,
+  withReservedPipelines,
 } from './resolver.js';
 import { runSlc, type SlcDeps } from './runner.js';
 
@@ -79,7 +79,7 @@ export const buildSlcDeps: DepsBuilder = async ({
 }) => {
   const file = await loadConfigFile({ cwd, configPath, env });
   const { selection, pipelinePath } = resolveRunConfig(env, file.config);
-  const resolver = withReservedSlcPipeline(
+  const resolver = withReservedPipelines(
     createPipelineResolver(pipelineSearchRoots(pipelinePath, cwd)),
   );
   const executor = createConfiguredExecutor(selection, { cwd });

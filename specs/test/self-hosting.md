@@ -7,9 +7,11 @@
 
 This package specifies integration acceptance tests for the reserved `slc`
 meta-pipeline and its `playbook` linked format in the `self-hosting` packages,
-running both an `slc`-named fixture pipeline and the reserved `slc` resolved to
-the definitions `@sublang/playbook` provides, end to end with a faked agent
-transport per [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md).
+running an `slc`-named fixture pipeline, the reserved `slc`, and the `playbook`
+domain pipeline resolved to the definitions `@sublang/playbook` provides, end to
+end with a faked agent transport per
+[DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) and
+[DR-009](../decisions/009-slc-playbook-pipeline-compilation.md).
 
 Essential project-specific references: `slc`, this project's compiler CLI; and
 `@sublang/playbook`, whose `slc/` definitions the reserved `slc` consumes.
@@ -25,3 +27,8 @@ Where a fixture reserves an `slc` pipeline that chains `text2gears` and `gears2f
 Verifies: [SELFHOST-2](../dev/self-hosting.md#selfhost-2), [SELFHOST-3](../dev/self-hosting.md#selfhost-3), [PIPE-11](../dev/pipeline.md#pipe-11)
 
 Where the reserved `slc` resolves to the meta-pipeline definitions `@sublang/playbook` provides — whose `link.md` declares no `## Link Targets` — when the user runs `slc slc <definition> --link <target>`, the slc command shall chain those definitions and link the result to a `playbook` artifact at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) location.
+
+### SELFHOST-7
+Verifies: [SELFHOST-6](../dev/self-hosting.md#selfhost-6), [PIPE-11](../dev/pipeline.md#pipe-11)
+
+Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` provides — whose `link.md` declares no `## Link Targets` — when the user runs `slc playbook <source> --link <target>`, the slc command shall resolve the `playbook` reference to those shared definitions, load that target-less link, and write the `playbook` artifact at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) location under `<basename>.playbook/`.
