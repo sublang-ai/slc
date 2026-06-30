@@ -5,7 +5,11 @@
 
 ## Status
 
-Accepted
+Superseded.
+`slc` compiled execution no longer uses a host-side file capability or a player sandbox.
+A compiled phase writes through the coding agents its runtime drives and relies on the [DR-003](003-slc-phase-execution.md) generic checks for write scope, exactly as interpreted execution does ([DR-004](004-slc-interpreted-phase-execution.md), [DR-005](005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
+The `FileCapability` and per-run grant model this record specified, the `FCAP` spec package, and their code are removed.
+This record is retained for history; the design below is no longer in force.
 
 ## Context
 
