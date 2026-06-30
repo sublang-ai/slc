@@ -11,7 +11,9 @@ its distinct `playbook` linked format, per
 runs through the generic pipeline and link mechanics specified in the `pipeline`
 package and produces an artifact that the `phase-execution` package executes and
 the `pinning` package pins; this package fixes only the meta-pipeline's reserved
-identity, its `playbook` output format, and its locations.
+identity, its `playbook` output format, its locations, and the `playbook` domain
+pipeline's resolution to those same definitions
+([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
 
 Essential project-specific references: `slc`, this project's compiler; the
 reserved `slc` pipeline, the `playbook` linked format, and the host-side phase-runner facade
@@ -23,6 +25,10 @@ of [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md); and
 ### SELFHOST-2
 
 The slc command shall reserve the pipeline name `slc` for the meta-pipeline that compiles phase and link definitions into runnable artifacts, resolving that reference to the meta-pipeline definitions `@sublang/playbook` provides rather than a duplicate, requiring it to be named explicitly (claiming no default), and leaving the invocation grammar unchanged ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#reserved-slc-pipeline), [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli)).
+
+### SELFHOST-6
+
+When resolving a `playbook` pipeline reference, the slc command shall resolve it to the same meta-pipeline definitions `@sublang/playbook` provides that back the reserved `slc` ([SELFHOST-2](#selfhost-2)), so the `playbook` and `slc` pipelines share one definition set and the same compiled artifacts, differing only by name and thus by [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) artifact directory ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
 
 ## Playbook format
 

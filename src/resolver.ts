@@ -25,6 +25,25 @@ const requireFrom = createRequire(import.meta.url);
 export const RESERVED_SLC_PIPELINE = 'slc';
 
 /**
+ * The `playbook` domain pipeline, which shares the reserved `slc` pipeline's
+ * Playbook-authored definitions (DR-009, SELFHOST-6).
+ */
+export const RESERVED_PLAYBOOK_PIPELINE = 'playbook';
+
+/**
+ * Whether a reference names a pipeline whose definitions `@sublang/playbook`
+ * provides — the reserved `slc` meta-pipeline or the `playbook` domain pipeline,
+ * which share one definition set and differ only by name (DR-009). Such a link
+ * phase consumes Playbook's target-less `link.md` (PIPE-11).
+ */
+export function isReservedPipeline(reference: string): boolean {
+  return (
+    reference === RESERVED_SLC_PIPELINE ||
+    reference === RESERVED_PLAYBOOK_PIPELINE
+  );
+}
+
+/**
  * Computes the ordered pipeline search roots from a pipeline-path value (CLI-6):
  * either the `SLC_PIPELINE_PATH` OS path-list string or the config file's
  * `pipelinePath` sequence (DR-006). Entries are resolved to absolute, normalized
@@ -76,10 +95,11 @@ export function createPipelineResolver(
 }
 
 /**
- * Locates the reserved `slc` meta-pipeline definitions that `@sublang/playbook`
- * ships under `slc/` (its `text2gears`, `gears2fsm`, and `link` phases), so `slc`
+ * Locates the meta-pipeline definitions that `@sublang/playbook` ships under
+ * `slc/` (its `text2gears`, `gears2fsm`, and `link` phases), which back both the
+ * reserved `slc` meta-pipeline and the `playbook` domain pipeline, so `slc`
  * self-hosts on Playbook's canonical source rather than a duplicate (DR-005,
- * SELFHOST-2).
+ * DR-009, SELFHOST-2).
  *
  * @throws when `@sublang/playbook` does not provide the `slc/` definitions.
  */
@@ -88,14 +108,17 @@ export function reservedSlcPipelineDir(): string {
 }
 
 /**
- * Wraps a resolver so the reserved `slc` reference resolves to Playbook's
- * meta-pipeline definitions, leaving every other reference to `inner` (SELFHOST-2).
+ * Wraps a resolver so a Playbook-owned reference — the reserved `slc`
+ * meta-pipeline or the `playbook` domain pipeline — resolves to the meta-pipeline
+ * definitions `@sublang/playbook` provides, leaving every other reference to
+ * `inner`. Both share one definition set and differ only by name, hence by their
+ * DR-001 artifact directory (DR-009, SELFHOST-2, SELFHOST-6).
  */
-export function withReservedSlcPipeline(
+export function withReservedPipelines(
   inner: PipelineResolver,
 ): PipelineResolver {
   return (reference) =>
-    reference === RESERVED_SLC_PIPELINE
+    isReservedPipeline(reference)
       ? [reservedSlcPipelineDir()]
       : inner(reference);
 }
