@@ -69,18 +69,18 @@ describe('createPipelineResolver (CLI-6)', () => {
 
   it('resolves a reference to the directory directly under a search root (hit)', async () => {
     const rootA = join(root, 'a');
-    await mkdir(join(rootA, 'playbook'), { recursive: true });
+    await mkdir(join(rootA, 'flow'), { recursive: true });
     const resolver = createPipelineResolver([rootA]);
 
-    expect(await resolver('playbook')).toEqual([join(rootA, 'playbook')]);
+    expect(await resolver('flow')).toEqual([join(rootA, 'flow')]);
   });
 
   it('matches a direct child even when the root has a trailing slash', async () => {
     const rootA = join(root, 'a');
-    await mkdir(join(rootA, 'playbook'), { recursive: true });
+    await mkdir(join(rootA, 'flow'), { recursive: true });
     const resolver = createPipelineResolver([`${rootA}/`]);
 
-    expect(await resolver('playbook')).toEqual([join(rootA, 'playbook')]);
+    expect(await resolver('flow')).toEqual([join(rootA, 'flow')]);
   });
 
   it('returns no candidate when the reference is absent (miss)', async () => {
@@ -88,29 +88,29 @@ describe('createPipelineResolver (CLI-6)', () => {
     await mkdir(rootA, { recursive: true });
     const resolver = createPipelineResolver([rootA]);
 
-    expect(await resolver('playbook')).toEqual([]);
+    expect(await resolver('flow')).toEqual([]);
   });
 
   it('returns every match across roots so runSlc refuses an ambiguous reference', async () => {
     const rootA = join(root, 'a');
     const rootB = join(root, 'b');
-    await mkdir(join(rootA, 'playbook'), { recursive: true });
-    await mkdir(join(rootB, 'playbook'), { recursive: true });
+    await mkdir(join(rootA, 'flow'), { recursive: true });
+    await mkdir(join(rootB, 'flow'), { recursive: true });
     const resolver = createPipelineResolver([rootA, rootB]);
 
-    expect(await resolver('playbook')).toEqual([
-      join(rootA, 'playbook'),
-      join(rootB, 'playbook'),
+    expect(await resolver('flow')).toEqual([
+      join(rootA, 'flow'),
+      join(rootB, 'flow'),
     ]);
   });
 
   it('ignores a non-directory match', async () => {
     const rootA = join(root, 'a');
     await mkdir(rootA, { recursive: true });
-    await writeFile(join(rootA, 'playbook'), 'not a dir');
+    await writeFile(join(rootA, 'flow'), 'not a dir');
     const resolver = createPipelineResolver([rootA]);
 
-    expect(await resolver('playbook')).toEqual([]);
+    expect(await resolver('flow')).toEqual([]);
   });
 
   it('ignores nested-path and parent-traversal references', async () => {
@@ -127,9 +127,9 @@ describe('createPipelineResolver (CLI-6)', () => {
 
   it('deduplicates when the same root appears more than once', async () => {
     const rootA = join(root, 'a');
-    await mkdir(join(rootA, 'playbook'), { recursive: true });
+    await mkdir(join(rootA, 'flow'), { recursive: true });
     const resolver = createPipelineResolver([rootA, rootA]);
 
-    expect(await resolver('playbook')).toEqual([join(rootA, 'playbook')]);
+    expect(await resolver('flow')).toEqual([join(rootA, 'flow')]);
   });
 });

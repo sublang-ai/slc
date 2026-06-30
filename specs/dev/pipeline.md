@@ -78,7 +78,7 @@ Where a pipeline directory contains `link.md`, the slc command shall load it as 
 
 ### PIPE-11
 
-When loading `link.md`, the slc command shall read its `## Formats` (the object source format and the linked target format) and its `## Link Targets` section, whose target-form table is required — except for the Playbook-authored `playbook`-format link shared by the reserved `slc` and the `playbook` pipeline ([SELFHOST-2](self-hosting.md#selfhost-2), [SELFHOST-6](self-hosting.md#selfhost-6), [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)), whose definition carries none and whose target validation Playbook owns — and whose required symbols, supported `--link-option` names, and validation rules are optional ([DR-002](../decisions/002-slc-link-phases.md#link-phase)).
+When loading `link.md`, the slc command shall read its `## Formats` (the object source format and the linked target format) and its `## Link Targets` section, whose target-form table is required — except when the linked target format is the Playbook-owned `playbook` format (used by the reserved `slc` and the `playbook` pipeline), whose target validation Playbook owns and which therefore declares none, so the exception keys on that linked format and not on the pipeline name ([SELFHOST-2](self-hosting.md#selfhost-2), [SELFHOST-6](self-hosting.md#selfhost-6), [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)) — and whose required symbols, supported `--link-option` names, and validation rules are optional ([DR-002](../decisions/002-slc-link-phases.md#link-phase)).
 
 ### PIPE-19
 
