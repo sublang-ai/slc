@@ -32,3 +32,8 @@ Where the reserved `slc` resolves to the meta-pipeline definitions `@sublang/pla
 Verifies: [SELFHOST-6](../dev/self-hosting.md#selfhost-6), [PIPE-11](../dev/pipeline.md#pipe-11)
 
 Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` provides — whose `link.md` declares no `## Link Targets` — when the user runs `slc playbook <source> --link <target>`, the slc command shall resolve the `playbook` reference to those shared definitions, load that target-less link, and write the `playbook` artifact at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) location under `<basename>.playbook/`.
+
+### SELFHOST-8
+Verifies: [COMPILE-1](../user/compiler.md#compile-1), [COMPILE-2](../user/compiler.md#compile-2), [SELFHOST-6](../dev/self-hosting.md#selfhost-6)
+
+Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` provides, when the user runs `slc playbook code.md` and then `slc playbook code.md --link <target>` through interpreted execution, the slc command shall write the `code.gears.md` intermediate and the `code.fsm.ts` object — stopping at the `fsm` object for the bare run — and, with `--link`, the `code.playbook.ts` runtime, each at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) location under `code.playbook/`.

@@ -278,3 +278,59 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
     }
   });
 });
+
+// `slc playbook code.md` compiles a domain workflow through the playbook pipeline
+// (text2gears -> gears2fsm) to the fsm object, and `--link` adds the playbook
+// runtime, each at its DR-001 location under `code.playbook/` (COMPILE-1,
+// COMPILE-2, SELFHOST-8). The agent is faked, so this exercises the pipeline
+// mechanics, not compilation quality.
+describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
+  let root: string;
+  let source: string;
+  let runtime: string;
+  let artDir: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'slc-playbook-e2e-'));
+    const work = join(root, 'work');
+    await mkdir(work, { recursive: true });
+    source = join(work, 'code.md');
+    await writeFile(
+      source,
+      '# Code\n\nPlayers:\n\n- Coder\n- Reviewer\n\n## Coder\n\nWhen Boss gives a coding intent, Captain shall relay it to Coder.\n',
+    );
+    runtime = join(work, 'runtime.ts');
+    await writeFile(runtime, 'export const rt = 1;\n');
+    artDir = join(work, 'code.playbook');
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const deps = (): SlcDeps => ({
+    resolver: withReservedPipelines(() => []),
+    executor: createInterpretedExecutor({ agent: writingAgent() }),
+  });
+
+  it('compiles code.md to the gears intermediate and fsm object, stopping at the fsm', async () => {
+    const result = await runSlc(['playbook', source], deps());
+    expect(result.ok).toBe(true);
+    expect(await exists(join(artDir, 'code.gears.md'))).toBe(true);
+    expect(await exists(join(artDir, 'code.fsm.ts'))).toBe(true);
+    expect(await exists(join(artDir, 'code.playbook.ts'))).toBe(false);
+  });
+
+  it('links code.md to the playbook runtime at its DR-001 location', async () => {
+    const result = await runSlc(
+      ['playbook', source, '--link', runtime],
+      deps(),
+    );
+    expect(result.ok).toBe(true);
+    const playbookArtifact = join(artDir, 'code.playbook.ts');
+    expect(result.outputs).toContain(playbookArtifact);
+    expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
+      true,
+    );
+  });
+});
