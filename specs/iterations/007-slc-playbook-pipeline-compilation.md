@@ -24,7 +24,7 @@ This bootstraps self-hosting: `slc slc` compiles the meta-pipeline's own phase d
 
 ## Deliverables
 
-- [ ] A decision record settling: `slc playbook` as the generic `playbook` pipeline (no new verb); the compile-output scope vs. host-performing infra; "performing" as compiled execution via pins; the non-reserved `playbook` link reconciliation; and the verification-test-generation contract — with the `@sublang/playbook` reference refreshed and `map.md` updated
+- [x] A decision record settling: `slc playbook` as the generic `playbook` pipeline (no new verb); the compile-output scope vs. host-performing infra; "performing" as compiled execution via pins; the non-reserved `playbook` link reconciliation; and the verification-test-generation contract — with the `@sublang/playbook` reference refreshed and `map.md` updated ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md))
 - [ ] `@sublang/playbook` installed and version-aligned to the release that ships the `slc/` definitions and the `./runtime` contract `slc` consumes, so the reserved `slc` and the `playbook` pipeline both resolve here
 - [ ] The `playbook` domain pipeline resolvable in this repo (its `text2gears`/`gears2fsm`/`link` definitions reused from the installed package or vendored), with [PIPE-11](../dev/pipeline.md#pipe-11) reconciled so the Playbook-authored target-less `link.md` loads for the `playbook` pipeline, not only the reserved `slc` name
 - [ ] `slc playbook <source>` producing `<basename>.playbook/{<basename>.gears.md, <basename>.fsm.ts}` and `slc playbook <source> --link <target>` additionally linking `<basename>.playbook.ts`, under interpreted execution, with an integration test over a faked agent transport (extends `COMPILE`, `SELFHOST`)
