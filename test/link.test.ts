@@ -81,17 +81,23 @@ describe('parseLinkPhase (PIPE-11, PIPE-19)', () => {
     );
   });
 
-  it('refuses a missing ## Link Targets section', () => {
+  it('refuses a missing ## Link Targets section for a non-`playbook` linked format', () => {
     const noTargets = linkDoc.slice(0, linkDoc.indexOf('## Link Targets'));
     expect(() => parseLinkPhase(noTargets)).toThrow(
       expect.objectContaining({ code: 'missing-link-targets' }),
     );
   });
 
-  it('accepts a missing ## Link Targets when target forms are not required (reserved slc)', () => {
-    const noTargets = linkDoc.slice(0, linkDoc.indexOf('## Link Targets'));
-    const link = parseLinkPhase(noTargets, { requireTargetForms: false });
-    expect(link.target).toEqual({ format: 'run', ext: '.ts' });
+  it('accepts a missing ## Link Targets for the Playbook-owned `playbook` format (PIPE-11, DR-009)', () => {
+    const playbookLink = `## Formats
+
+| Role | Format | Extension |
+| --- | --- | --- |
+| source | fsm | .ts |
+| target | playbook | .ts |
+`;
+    const link = parseLinkPhase(playbookLink);
+    expect(link.target).toEqual({ format: 'playbook', ext: '.ts' });
     expect(link.targetForms).toEqual([]);
   });
 

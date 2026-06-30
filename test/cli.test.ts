@@ -96,7 +96,7 @@ const interpretedDeps = (
   signal: AbortSignal,
   model?: string,
 ): SlcDeps => ({
-  resolver: (reference) => (reference === 'playbook' ? [pipelineDir] : []),
+  resolver: (reference) => (reference === 'flow' ? [pipelineDir] : []),
   executor: createInterpretedExecutor({
     agent,
     config: model ? { model } : {},
@@ -113,7 +113,7 @@ const exists = async (path: string): Promise<boolean> =>
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'slc-cli-'));
   pipelinesRoot = join(root, 'pipelines');
-  pipelineDir = join(pipelinesRoot, 'playbook');
+  pipelineDir = join(pipelinesRoot, 'flow');
   srcDir = join(root, 'work');
   await mkdir(pipelineDir, { recursive: true });
   await mkdir(srcDir);
@@ -128,7 +128,7 @@ beforeEach(async () => {
   await writeFile(join(pipelineDir, 'link.md'), linkDoc);
   source = join(srcDir, 'onboarding.md');
   await writeFile(source, 'prose');
-  artDir = join(srcDir, 'onboarding.playbook');
+  artDir = join(srcDir, 'onboarding.flow');
 });
 
 afterEach(async () => {
@@ -180,7 +180,7 @@ describe('reporting (CLI-15, CLI-16)', () => {
     const { agent } = makeAgent();
     const out: string[] = [];
     const outPath = join(srcDir, 'custom.fsm.ts');
-    const code = await run(['playbook', source, '-o', outPath], {
+    const code = await run(['flow', source, '-o', outPath], {
       env: {},
       stdout: (t) => out.push(t),
       buildDeps: ({ signal }) => interpretedDeps(agent, signal),
@@ -213,7 +213,7 @@ describe('reporting (CLI-15, CLI-16)', () => {
     const { agent } = makeAgent({ skip: true });
     const out: string[] = [];
     const err: string[] = [];
-    const code = await run(['playbook', source], {
+    const code = await run(['flow', source], {
       env: {},
       stdout: (t) => out.push(t),
       stderr: (t) => err.push(t),
@@ -231,7 +231,7 @@ describe('reporting (CLI-15, CLI-16)', () => {
     const { agent } = makeAgent({ block: true });
     const out: string[] = [];
     const err: string[] = [];
-    const code = await run(['playbook', source], {
+    const code = await run(['flow', source], {
       env: {},
       stdout: (t) => out.push(t),
       stderr: (t) => err.push(t),
@@ -252,7 +252,7 @@ describe('process control (CLI-17)', () => {
     const signals = new EventEmitter();
     const { signal } = interruptSignal(signals);
     const out: string[] = [];
-    const pending = run(['playbook', source], {
+    const pending = run(['flow', source], {
       env: {},
       stdout: (t) => out.push(t),
       stderr: () => {},
@@ -290,7 +290,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
   it('refuses an unset SLC_AGENT to stderr, runs no phase, non-zero (CLI-18)', async () => {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await run(['playbook', source], {
+    const code = await run(['flow', source], {
       // Isolate config-file discovery (DR-006): no config under cwd or this
       // config home, so the run falls through to the (unset) environment.
       cwd: root,
@@ -307,7 +307,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
 
   it('refuses an unsupported SLC_AGENT (CLI-18)', async () => {
     const err: string[] = [];
-    const code = await run(['playbook', source], {
+    const code = await run(['flow', source], {
       cwd: root,
       env: {
         SLC_AGENT: 'gpt',
@@ -327,7 +327,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
     const transports: Record<string, AgentClient> = { 'claude-code': agent };
     let chosenAgent: string | undefined;
     const out: string[] = [];
-    const code = await run(['playbook', source], {
+    const code = await run(['flow', source], {
       env: {
         SLC_PIPELINE_PATH: pipelinesRoot,
         SLC_AGENT: 'claude-code',
@@ -367,7 +367,7 @@ describe('--config flag (CLI-20)', () => {
     const outPath = join(srcDir, 'custom.fsm.ts');
     let seenConfigPath: string | undefined;
     const code = await run(
-      ['--config', '/cfg/slc.yaml', 'playbook', source, '-o', outPath],
+      ['--config', '/cfg/slc.yaml', 'flow', source, '-o', outPath],
       {
         env: {},
         stdout: (t) => out.push(t),
@@ -380,7 +380,7 @@ describe('--config flag (CLI-20)', () => {
 
     expect(seenConfigPath).toBe('/cfg/slc.yaml');
     // Exit 0 with the expected output proves the flag was stripped before the
-    // grammar parser saw 'playbook <source> -o <path>'.
+    // grammar parser saw 'flow <source> -o <path>'.
     expect(code).toBe(0);
     expect(out.join('')).toContain(outPath);
   });
@@ -448,7 +448,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     );
     const capture: { selection?: AgentSelection } = {};
     const out: string[] = [];
-    const code = await run(['playbook', source], {
+    const code = await run(['flow', source], {
       cwd: srcDir,
       env: {},
       stdout: (t) => out.push(t),
@@ -475,7 +475,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     );
     const capture: { selection?: AgentSelection } = {};
     const out: string[] = [];
-    const code = await run(['playbook', source], {
+    const code = await run(['flow', source], {
       cwd: srcDir,
       env: {
         SLC_AGENT: 'claude-code',
@@ -489,7 +489,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
       ),
     });
 
-    // Exit 0 proves the environment's pipeline path resolved 'playbook'; the
+    // Exit 0 proves the environment's pipeline path resolved 'flow'; the
     // file's non-existent path would have failed resolution.
     expect(code).toBe(0);
     expect(capture.selection).toEqual({
@@ -515,7 +515,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     );
     const capture: { selection?: AgentSelection } = {};
     const out: string[] = [];
-    const code = await run(['--config', explicit, 'playbook', source], {
+    const code = await run(['--config', explicit, 'flow', source], {
       cwd: srcDir,
       env: {},
       stdout: (t) => out.push(t),
@@ -534,7 +534,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     const { agent } = makeAgent();
     const capture: { selection?: AgentSelection } = {};
     const out: string[] = [];
-    const code = await run(['playbook', source], {
+    const code = await run(['flow', source], {
       cwd: srcDir, // no slc.config.yaml present
       env: { SLC_AGENT: 'claude-code', SLC_PIPELINE_PATH: pipelinesRoot },
       stdout: (t) => out.push(t),
@@ -549,7 +549,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
   it('refuses an absent --config path to stderr, non-zero (CLI-26)', async () => {
     const err: string[] = [];
     const code = await run(
-      ['--config', join(root, 'missing.yaml'), 'playbook', source],
+      ['--config', join(root, 'missing.yaml'), 'flow', source],
       {
         cwd: srcDir,
         env: {
@@ -574,7 +574,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     it(`refuses a config with ${label}, non-zero (CLI-27)`, async () => {
       await writeConfig(srcDir, content);
       const err: string[] = [];
-      const code = await run(['playbook', source], {
+      const code = await run(['flow', source], {
         cwd: srcDir,
         env: {
           SLC_AGENT: 'claude-code',
