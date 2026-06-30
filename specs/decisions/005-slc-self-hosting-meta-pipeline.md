@@ -173,5 +173,5 @@ For example:
 
 ## References
 
-[1]: https://github.com/sublang-ai/playbook/blob/v0.7.0/slc/link.md "Playbook slc/link.md: FSM-to-runtime contract"
+[1]: https://github.com/sublang-ai/playbook/blob/v0.9.0/slc/link.md "Playbook slc/link.md: FSM-to-runtime contract"
 [2]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"

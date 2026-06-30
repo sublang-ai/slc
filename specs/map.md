@@ -32,6 +32,7 @@ meta.md     The spec of specs
 | DR-006 | [006-slc-configuration-sources.md](decisions/006-slc-configuration-sources.md) | Configuration sources and precedence: env over config file, discovery, schema |
 | DR-007 | [007-slc-phase-artifact-pinning.md](decisions/007-slc-phase-artifact-pinning.md) | Phase artifact pinning: currentness, semantic inputs, and compiled selection |
 | DR-008 | [008-slc-file-capability.md](decisions/008-slc-file-capability.md) | File capability: confined paths, exact-byte hashes, and target-scoped writes |
+| DR-009 | [009-slc-playbook-pipeline-compilation.md](decisions/009-slc-playbook-pipeline-compilation.md) | `playbook` pipeline compilation: generic invocation, compile-output scope, compiled performing, link reconciliation, and artifact-derived verification |
 
 ## Iterations
 
