@@ -20,6 +20,9 @@
  * for every compiled `playbook`. See specs/dev/verification.md.
  */
 
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 /** A GEARS spec item: its id, the player it prompts, and its verbatim prompt body. */
 export interface GearsItem {
   id: string;
@@ -151,17 +154,24 @@ export function checkGearsFsmConformance(
   const states = enumerateCaptainStates(config);
   const findings: string[] = [];
 
-  const stateByItem = new Map<string, CaptainState>();
+  const statesByItem = new Map<string, CaptainState[]>();
   for (const state of states) {
-    if (!stateByItem.has(state.sourceItem))
-      stateByItem.set(state.sourceItem, state);
+    const matched = statesByItem.get(state.sourceItem);
+    if (matched === undefined) statesByItem.set(state.sourceItem, [state]);
+    else matched.push(state);
   }
   for (const item of items) {
-    const state = stateByItem.get(item.id);
-    if (state === undefined) {
+    const matched = statesByItem.get(item.id) ?? [];
+    if (matched.length === 0) {
       findings.push(`GEARS item ${item.id} maps to no FSM state`);
       continue;
     }
+    if (matched.length > 1) {
+      findings.push(
+        `GEARS item ${item.id} maps to ${matched.length} FSM states (expected exactly one: ${matched.map((s) => s.stateId).join(', ')})`,
+      );
+    }
+    const state = matched[0];
     if (state.player !== item.player) {
       findings.push(
         `${item.id}: FSM player "${state.player}" is not GEARS player "${item.player}"`,
@@ -182,18 +192,47 @@ export function checkGearsFsmConformance(
   return findings;
 }
 
+/** The default checker import specifier the emitted test uses (package export). */
+export const VERIFY_MODULE = '@sublang/slc/verify';
+
 /**
- * Emits a per-artifact vitest module that fails when the compiled FSM drifts from
- * its GEARS source. It reads the artifact's `gears` file and the machine its `fsm`
- * module exports, then asserts {@link checkGearsFsmConformance} finds nothing.
+ * Finds the XState machine an `fsm` module exports — the export whose value has a
+ * `.config.states` — so callers need not know its export name, and returns that
+ * machine's config for {@link checkGearsFsmConformance}.
+ *
+ * @throws when the module exports no such machine.
+ */
+export function findMachineConfig(fsmModule: unknown): MachineConfigLike {
+  if (typeof fsmModule === 'object' && fsmModule !== null) {
+    for (const value of Object.values(fsmModule)) {
+      if (typeof value === 'object' && value !== null && 'config' in value) {
+        const config = (value as { config?: unknown }).config;
+        if (
+          typeof config === 'object' &&
+          config !== null &&
+          'states' in config
+        ) {
+          return config as MachineConfigLike;
+        }
+      }
+    }
+  }
+  throw new Error(
+    'fsm module exports no XState machine with a `.config.states`',
+  );
+}
+
+/**
+ * Builds a per-artifact vitest module that fails when the compiled FSM drifts
+ * from its GEARS source: it reads the artifact's `gears` file and the machine its
+ * `fsm` module exports (via {@link findMachineConfig}, so no export name is
+ * needed), then asserts {@link checkGearsFsmConformance} finds nothing.
  */
 export function generateGearsFsmConformanceTest(opts: {
   /** Basename shared by the artifacts (e.g. `code`). */
   basename: string;
   /** Import specifier for the compiled `fsm` module, relative to the test. */
   fsmModule: string;
-  /** Exported machine name in the `fsm` module (has a `.config`). */
-  machineExport: string;
   /** Path to the `gears` artifact, relative to the test. */
   gearsFile: string;
   /** Import specifier for this checker, relative to the test. */
@@ -208,8 +247,8 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { checkGearsFsmConformance } from '${opts.verifyModule}';
-import { ${opts.machineExport} } from '${opts.fsmModule}';
+import { checkGearsFsmConformance, findMachineConfig } from '${opts.verifyModule}';
+import * as fsm from '${opts.fsmModule}';
 
 describe('${opts.basename}: GEARS↔FSM conformance', () => {
   it('maps every GEARS item to a state with its player and verbatim prompt', () => {
@@ -217,10 +256,35 @@ describe('${opts.basename}: GEARS↔FSM conformance', () => {
       fileURLToPath(new URL('${opts.gearsFile}', import.meta.url)),
       'utf8',
     );
-    expect(checkGearsFsmConformance(gears, ${opts.machineExport}.config)).toEqual(
-      [],
-    );
+    expect(checkGearsFsmConformance(gears, findMachineConfig(fsm))).toEqual([]);
   });
 });
 `;
+}
+
+/**
+ * Emits the GEARS↔FSM conformance test as `slc` output beside a compiled
+ * `playbook` artifact: writes `<basename>.gears-fsm.test.ts` into the artifact
+ * directory (`<basename>.playbook/`), wiring the artifact's `gears` file and its
+ * `fsm` module's machine to the checker, and returns the written path (VERIFY-2;
+ * [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+ */
+export async function emitGearsFsmConformanceTest(opts: {
+  /** The artifact directory (`<basename>.playbook/`) to emit the test into. */
+  artifactDir: string;
+  /** Basename shared by the artifacts (e.g. `code`). */
+  basename: string;
+  /** Checker import specifier; defaults to {@link VERIFY_MODULE}. */
+  verifyModule?: string;
+}): Promise<string> {
+  const content = generateGearsFsmConformanceTest({
+    basename: opts.basename,
+    fsmModule: `./${opts.basename}.fsm.js`,
+    gearsFile: `./${opts.basename}.gears.md`,
+    verifyModule: opts.verifyModule ?? VERIFY_MODULE,
+  });
+  await mkdir(opts.artifactDir, { recursive: true });
+  const path = join(opts.artifactDir, `${opts.basename}.gears-fsm.test.ts`);
+  await writeFile(path, content);
+  return path;
 }
