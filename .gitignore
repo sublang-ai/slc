@@ -137,3 +137,6 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# slc real-agent build scratch (uncommitted evidence)
+.scratch/
