@@ -319,6 +319,23 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
     expect(await exists(join(artDir, 'code.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'code.fsm.ts'))).toBe(true);
     expect(await exists(join(artDir, 'code.playbook.ts'))).toBe(false);
+    // The GEARS<->FSM verification test is emitted beside the artifacts
+    // (VERIFY-2): the reserved `playbook` run produced a gears+fsm pair.
+    expect(await exists(join(artDir, 'code.gears-fsm.test.ts'))).toBe(true);
+    expect(result.outputs).toContain(join(artDir, 'code.gears-fsm.test.ts'));
+  });
+
+  it('emits no verification when -o relocates the fsm out of the artifact dir (VERIFY-2, PIPE-8)', async () => {
+    const out = join(root, 'work', 'custom.fsm.ts');
+    const result = await runSlc(['playbook', source, '-o', out], deps());
+    expect(result.ok).toBe(true);
+    expect(await exists(out)).toBe(true);
+    // The fsm left `<basename>.playbook/`, so no test is emitted there (it would
+    // otherwise import a `./code.fsm.js` that was not written beside it).
+    expect(await exists(join(artDir, 'code.gears-fsm.test.ts'))).toBe(false);
+    expect(result.outputs).not.toContain(
+      join(artDir, 'code.gears-fsm.test.ts'),
+    );
   });
 
   it('links code.md to the playbook runtime at its DR-001 location', async () => {
