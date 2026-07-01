@@ -31,6 +31,8 @@ import {
   loadPipeline,
   resolvePipeline,
 } from './pipeline.js';
+import { isReservedPipeline } from './resolver.js';
+import { emitGearsFsmConformanceTest } from './verify.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
 export interface CompiledSelection {
@@ -131,7 +133,13 @@ async function runFull(
     phase: artifact.phase.name,
     targetExt: artifact.phase.target.ext,
   }));
-  return executeSteps(steps, pipeline, deps);
+  const result = await executeSteps(steps, pipeline, deps);
+  return emitVerification(result, {
+    pipeline: invocation.pipeline,
+    plan,
+    artDir,
+    basename,
+  });
 }
 
 async function runSinglePhase(
@@ -265,7 +273,61 @@ async function runFullLink(
     phase: 'link',
     targetExt: link.target.ext,
   };
-  return executeSteps([...compileSteps, linkStep], pipeline, deps);
+  const result = await executeSteps(
+    [...compileSteps, linkStep],
+    pipeline,
+    deps,
+  );
+  return emitVerification(result, {
+    pipeline: invocation.pipeline,
+    plan,
+    artDir,
+    basename,
+  });
+}
+
+/**
+ * After a reserved-pipeline full run produces a `gears` intermediate and an `fsm`
+ * object at their canonical `<basename>.playbook/` locations, emits the GEARS↔FSM
+ * conformance test beside them as `slc` output, appending its path to the outputs
+ * (VERIFY-2; [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+ * Non-reserved pipelines, runs without a gears+fsm pair, and runs whose `fsm` was
+ * relocated out of that directory by `-o` (PIPE-8) are left unchanged, so the
+ * emitted test never imports a file that was not written beside it.
+ */
+async function emitVerification(
+  result: SlcResult,
+  ctx: {
+    pipeline: string;
+    plan: readonly {
+      path: string;
+      phase: { target: { format: string; ext: string } };
+    }[];
+    artDir: string;
+    basename: string;
+  },
+): Promise<SlcResult> {
+  if (!result.ok || !isReservedPipeline(ctx.pipeline)) return result;
+  const fsm = ctx.plan.find(
+    (artifact) => artifact.phase.target.format === 'fsm',
+  );
+  const hasGears = ctx.plan.some(
+    (artifact) => artifact.phase.target.format === 'gears',
+  );
+  if (fsm === undefined || !hasGears) return result;
+  // The emitted test imports the canonical `./<basename>.fsm.js` beside it; skip
+  // when `-o` relocated the terminal fsm elsewhere (PIPE-8), so it never points
+  // at a file that was not written under `<basename>.playbook/`.
+  const canonicalFsm = join(
+    ctx.artDir,
+    `${ctx.basename}.fsm${fsm.phase.target.ext}`,
+  );
+  if (fsm.path !== canonicalFsm) return result;
+  const testPath = await emitGearsFsmConformanceTest({
+    artifactDir: ctx.artDir,
+    basename: ctx.basename,
+  });
+  return { ...result, outputs: [...result.outputs, testPath] };
 }
 
 /** One phase to run: its execute request and the checks `runPhase` needs. */

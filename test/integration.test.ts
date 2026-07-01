@@ -74,7 +74,7 @@ let artDir: string;
 
 const deps = (agent: AgentClient, model?: string): SlcDeps => ({
   resolver: (reference) => {
-    if (reference === 'playbook') return [pipelineDir];
+    if (reference === 'flow') return [pipelineDir];
     if (reference === 'broken') return [join(root, 'broken')];
     return [];
   },
@@ -107,7 +107,7 @@ beforeEach(async () => {
   await writeFile(join(pipelineDir, 'link.md'), linkDoc);
   source = join(srcDir, 'onboarding.md');
   await writeFile(source, 'prose');
-  artDir = join(srcDir, 'onboarding.playbook');
+  artDir = join(srcDir, 'onboarding.flow');
 });
 
 afterEach(async () => {
@@ -117,7 +117,7 @@ afterEach(async () => {
 describe('full pipeline run (PIPE-20, PHEXEC-16)', () => {
   it('writes the canonical intermediate and output with one agent call per phase', async () => {
     const { agent, calls } = makeAgent();
-    const result = await runSlc(['playbook', source], deps(agent));
+    const result = await runSlc(['flow', source], deps(agent));
 
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(2);
@@ -132,7 +132,7 @@ describe('full pipeline run (PIPE-20, PHEXEC-16)', () => {
   it('lets -o override the output while keeping intermediates canonical (PIPE-28)', async () => {
     const { agent } = makeAgent();
     const out = join(srcDir, 'custom.fsm.ts');
-    const result = await runSlc(['playbook', source, '-o', out], deps(agent));
+    const result = await runSlc(['flow', source, '-o', out], deps(agent));
 
     expect(result.ok).toBe(true);
     expect(await exists(out)).toBe(true);
@@ -142,7 +142,7 @@ describe('full pipeline run (PIPE-20, PHEXEC-16)', () => {
 
   it('passes the configured model to every interpreted phase (PHEXEC-21)', async () => {
     const { agent, models } = makeAgent();
-    await runSlc(['playbook', source], deps(agent, 'a-model'));
+    await runSlc(['flow', source], deps(agent, 'a-model'));
     expect(models).toEqual(['a-model', 'a-model']);
     // The source is unchanged: the agent wrote only targets.
     expect(await readFile(source, 'utf8')).toBe('prose');
@@ -150,7 +150,7 @@ describe('full pipeline run (PIPE-20, PHEXEC-16)', () => {
 
   it('builds an agent prompt with the definition verbatim and the full contract (PHEXEC-20)', async () => {
     const { agent, calls } = makeAgent();
-    await runSlc(['playbook', source], deps(agent));
+    await runSlc(['flow', source], deps(agent));
     const prompt = calls[0];
     // The definition is embedded verbatim, not just a fragment.
     expect(prompt).toContain(formats('text', '.md', 'gears', '.md'));
@@ -174,7 +174,7 @@ describe('full pipeline run (PIPE-20, PHEXEC-16)', () => {
 describe('single-phase run (PIPE-24)', () => {
   it('writes only the named phase target', async () => {
     const { agent, calls } = makeAgent();
-    const result = await runSlc(['playbook.text2gears', source], deps(agent));
+    const result = await runSlc(['flow.text2gears', source], deps(agent));
 
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(1);
@@ -186,7 +186,7 @@ describe('single-phase run (PIPE-24)', () => {
     const { agent } = makeAgent();
     const out = join(srcDir, 'custom.gears.md');
     const result = await runSlc(
-      ['playbook.text2gears', source, '-o', out],
+      ['flow.text2gears', source, '-o', out],
       deps(agent),
     );
 
@@ -201,10 +201,7 @@ describe('single-phase run (PIPE-24)', () => {
     await writeFile(intermediate, 'gears');
     const { agent } = makeAgent();
 
-    const result = await runSlc(
-      ['playbook.gears2fsm', intermediate],
-      deps(agent),
-    );
+    const result = await runSlc(['flow.gears2fsm', intermediate], deps(agent));
 
     expect(result.ok).toBe(true);
     expect(result.outputs).toEqual([join(artDir, 'onboarding.fsm.ts')]);
@@ -218,7 +215,7 @@ describe('single-phase run (PIPE-24)', () => {
     const { agent } = makeAgent();
 
     const result = await runSlc(
-      ['playbook.gears2fsm', intermediate, '-o', out],
+      ['flow.gears2fsm', intermediate, '-o', out],
       deps(agent),
     );
 
@@ -237,7 +234,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     const { agent } = makeAgent();
 
     const result = await runSlc(
-      ['playbook.link', object, join(srcDir, 'runner.ts')],
+      ['flow.link', object, join(srcDir, 'runner.ts')],
       deps(agent),
     );
 
@@ -248,7 +245,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
   it('refuses a multi-object .link without -o (PIPE-25)', async () => {
     const { agent } = makeAgent();
     const result = await runSlc(
-      ['playbook.link', 'a.fsm.ts', 'b.fsm.ts', join(srcDir, 'runner.ts')],
+      ['flow.link', 'a.fsm.ts', 'b.fsm.ts', join(srcDir, 'runner.ts')],
       deps(agent),
     );
     expect(result.ok).toBe(false);
@@ -259,7 +256,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     const { agent } = makeAgent();
 
     const result = await runSlc(
-      ['playbook', source, '--link', join(srcDir, 'runner.ts')],
+      ['flow', source, '--link', join(srcDir, 'runner.ts')],
       deps(agent),
     );
 
@@ -277,7 +274,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     const { agent } = makeAgent();
 
     const result = await runSlc(
-      ['playbook.link', object, join(srcDir, 'runner.ts'), '-o', out],
+      ['flow.link', object, join(srcDir, 'runner.ts'), '-o', out],
       deps(agent),
     );
 
@@ -295,7 +292,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
 
     await runSlc(
       [
-        'playbook.link',
+        'flow.link',
         object,
         join(srcDir, 'runner.ts'),
         '--link-option',
@@ -311,7 +308,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
 describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', () => {
   it('fails when the agent does not write the target (PHEXEC-17)', async () => {
     const { agent } = makeAgent({ skip: true });
-    const result = await runSlc(['playbook', source], deps(agent));
+    const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('was not written');
   });
@@ -319,28 +316,28 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
   it('fails when -o gives the output a wrong extension (PHEXEC-17)', async () => {
     const { agent } = makeAgent();
     const out = join(srcDir, 'onboarding.fsm.txt'); // terminal phase declares .ts
-    const result = await runSlc(['playbook', source, '-o', out], deps(agent));
+    const result = await runSlc(['flow', source, '-o', out], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('extension');
   });
 
   it('fails and reports when the agent blocks (PHEXEC-19)', async () => {
     const { agent } = makeAgent({ block: true });
-    const result = await runSlc(['playbook', source], deps(agent));
+    const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('BLOCKED');
   });
 
   it('fails when the agent mutates the source (PHEXEC-18)', async () => {
     const { agent } = makeAgent({ mutate: source });
-    const result = await runSlc(['playbook', source], deps(agent));
+    const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('changed during the run');
   });
 
   it('fails when the agent mutates a phase definition (PHEXEC-18)', async () => {
     const { agent } = makeAgent({ mutate: join(pipelineDir, 'text2gears.md') });
-    const result = await runSlc(['playbook', source], deps(agent));
+    const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('text2gears.md');
   });
@@ -352,7 +349,7 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     await writeFile(join(srcDir, 'runner.ts'), 'runner');
     const { agent } = makeAgent({ mutate: object });
     const result = await runSlc(
-      ['playbook.link', object, join(srcDir, 'runner.ts')],
+      ['flow.link', object, join(srcDir, 'runner.ts')],
       deps(agent),
     );
     expect(result.ok).toBe(false);
@@ -379,7 +376,7 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
 
   it('fails when the agent breaks the chain mid-run (PHEXEC-22)', async () => {
     const { agent } = makeAgent({ add: join(pipelineDir, 'text2foo.md') });
-    const result = await runSlc(['playbook', source], deps(agent));
+    const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('no longer valid');
   });
@@ -410,9 +407,9 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
       ...deps(agent),
       resolver: () => [pipelineDir, join(root, 'pipe-2')],
     };
-    const result = await runSlc(['playbook', source], ambiguous);
+    const result = await runSlc(['flow', source], ambiguous);
     expect(result.ok).toBe(false);
-    expect(result.diagnostics.join('\n')).toContain('playbook'); // names the reference
+    expect(result.diagnostics.join('\n')).toContain('flow'); // names the reference
     expect(result.outputs).toEqual([]);
   });
 
@@ -420,7 +417,7 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     const badSource = join(srcDir, 'onboarding.txt');
     await writeFile(badSource, 'prose');
     const { agent } = makeAgent();
-    const result = await runSlc(['playbook', badSource], deps(agent));
+    const result = await runSlc(['flow', badSource], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.length).toBeGreaterThan(0);
     expect(result.outputs).toEqual([]);
