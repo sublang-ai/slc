@@ -57,6 +57,9 @@ export interface RunOptions {
   buildDeps?: DepsBuilder;
 }
 
+/** The executor factory {@link buildSlcDeps} uses; injected in tests. */
+export type ExecutorFactory = typeof createConfiguredExecutor;
+
 /**
  * Builds the production {@link SlcDeps}: a pipeline resolver over the resolved
  * search roots (CLI-6) — with the reserved `slc` reference routed to the
@@ -71,12 +74,14 @@ export interface RunOptions {
  * @throws {import('./config.js').ConfigError} when neither source supplies an
  *   agent, or the resolved agent is unsupported (CLI-12).
  */
-export const buildSlcDeps: DepsBuilder = async ({
-  env,
-  cwd,
-  signal,
-  configPath,
-}) => {
+export async function buildSlcDeps(
+  { env, cwd, signal, configPath }: Parameters<DepsBuilder>[0],
+  // Injectable so a test can capture the executor options — notably the
+  // non-interactive write permission below — without constructing a real
+  // adapter, the same seam pattern as `createConfiguredExecutor`'s
+  // `adapterFactory`. Defaults to the production factory.
+  createExecutor: ExecutorFactory = createConfiguredExecutor,
+): Promise<SlcDeps> {
   const file = await loadConfigFile({ cwd, configPath, env });
   const { selection, pipelinePath } = resolveRunConfig(env, file.config);
   const resolver = withReservedPipelines(
@@ -85,12 +90,12 @@ export const buildSlcDeps: DepsBuilder = async ({
   // Auto-accept the agent's file operations so a non-interactive `slc` run can
   // write its target artifact; the DR-003 generic checks still guard the
   // protected inputs (DR-004).
-  const executor = createConfiguredExecutor(selection, {
+  const executor = createExecutor(selection, {
     cwd,
     permissions: { mode: 'auto' },
   });
   return { resolver, executor, signal };
-};
+}
 
 /** The cligent-invocation selection after merging environment over file (DR-006). */
 export interface RunConfig {
