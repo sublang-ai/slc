@@ -104,3 +104,9 @@ meta.md     The spec of specs
 | user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `playbook` artifact |
 | dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format, and the `playbook` pipeline sharing the same Playbook definitions, realized through generic pipeline/link mechanics |
 | test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name and `playbook`-pipeline resolution, compilation, and `playbook` linking — via a fixture and via Playbook's provided definitions — at DR-001 locations |
+
+### VERIFY
+
+| Group | File | Summary |
+| --- | --- | --- |
+| dev | [verification.md](dev/verification.md) | Compilation-correctness verification: GEARS↔FSM conformance (verbatim prompts, player bindings) and emitting the check beside the artifacts |
