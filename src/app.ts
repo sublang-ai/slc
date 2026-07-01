@@ -82,7 +82,13 @@ export const buildSlcDeps: DepsBuilder = async ({
   const resolver = withReservedPipelines(
     createPipelineResolver(pipelineSearchRoots(pipelinePath, cwd)),
   );
-  const executor = createConfiguredExecutor(selection, { cwd });
+  // Auto-accept the agent's file operations so a non-interactive `slc` run can
+  // write its target artifact; the DR-003 generic checks still guard the
+  // protected inputs (DR-004).
+  const executor = createConfiguredExecutor(selection, {
+    cwd,
+    permissions: { mode: 'auto' },
+  });
   return { resolver, executor, signal };
 };
 
