@@ -13,8 +13,9 @@
  * the result from the host-observable outcome. The runtime receives only
  * `PlaybookPorts` (DR-005); the host-only `drainDiagnostics` stays host-side.
  * Drained status and telemetry become diagnostics. Like interpreted execution,
- * a compiled phase writes through its agents (`callPlayer`) and the DR-003
- * generic checks enforce its write scope.
+ * a compiled phase writes through its agents (`callPlayer`) and relies on the
+ * DR-003 generic checks, which defend the protected inputs (not the full write
+ * scope); `slc` adds no host-side write-scope enforcement.
  *
  * PROVISIONAL pending the first reviewed `playbook` artifact: the seeding of
  * {@link seedPhaseTurn} and the output-produced (created-or-modified) result

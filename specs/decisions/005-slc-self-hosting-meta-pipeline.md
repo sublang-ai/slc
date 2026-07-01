@@ -120,10 +120,13 @@ How a host maps Playbook ports to concrete agents, models, process limits,
 and diagnostic sinks is host-defined; portability holds over the Playbook
 contract and the SLC phase-runner facade, not the execution environment.
 
-The run causes writes only to the `target` or `linked` path from its input,
-through the Playbook-mediated coding agent, with the
-[DR-003](003-slc-phase-execution.md) generic checks enforcing the write-scope
-invariant as they do for interpreted execution.
+The run is expected to write only the `target` or `linked` path from its input
+— the [DR-003](003-slc-phase-execution.md) write-scope invariant — through the
+Playbook-mediated coding agent.
+Compiled execution relies on the same DR-003 generic checks as interpreted
+execution ([DR-004](004-slc-interpreted-phase-execution.md)), which defend the
+protected inputs but do not prove the full write scope, and `slc` adds no
+host-side write-scope enforcement for compiled runs.
 `slc` constructs the runtime, supplies the ports, drives it to quiescence, then maps the host-observable outcome onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol)).
 
 ### Strategy selection
