@@ -11,11 +11,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveAgentSelection, type AgentSelection } from '../src/config.js';
 import { loadConfigFile } from '../src/config-file.js';
 import {
+  buildSlcDeps,
   interruptSignal,
   resolveRunConfig,
   run,
   version,
   type DepsBuilder,
+  type ExecutorFactory,
   type SlcDeps,
 } from '../src/index.js';
 import {
@@ -589,4 +591,42 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
       expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(false);
     });
   }
+});
+
+describe('buildSlcDeps executor construction (CLI-6, CLI-7)', () => {
+  let cwd: string;
+  beforeEach(async () => {
+    cwd = await mkdtemp(join(tmpdir(), 'slc-deps-'));
+  });
+  afterEach(async () => {
+    await rm(cwd, { recursive: true, force: true });
+  });
+
+  it('builds the interpreted executor with auto write-permissions so a non-interactive run can write its target (536efc2)', async () => {
+    let captured: Parameters<ExecutorFactory>[1] | undefined;
+    const stub: SlcDeps['executor'] = {
+      run: async () => ({ status: 'ok', diagnostics: [] }),
+    };
+    const createExecutor: ExecutorFactory = (_selection, opts = {}) => {
+      captured = opts;
+      return stub;
+    };
+
+    const deps = await buildSlcDeps(
+      {
+        // Pin both config-discovery roots at the empty temp dir so no real
+        // cwd/home `slc.config.yaml` is read: config falls through to env only.
+        env: { SLC_AGENT: 'claude-code', XDG_CONFIG_HOME: cwd },
+        cwd,
+        signal: new AbortController().signal,
+      },
+      createExecutor,
+    );
+
+    // The fix under guard: without `permissions: { mode: 'auto' }` the agent
+    // cannot write its artifact in a non-interactive run.
+    expect(captured?.permissions).toEqual({ mode: 'auto' });
+    expect(captured?.cwd).toBe(cwd);
+    expect(deps.executor).toBe(stub);
+  });
 });
