@@ -75,6 +75,48 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     });
   });
 
+  it('falls back to the default model for players the binding does not name', async () => {
+    const player = fakeAgent({ status: 'success', text: 'ok' });
+    const ports = createPlaybookPorts({
+      player,
+      judge: player,
+      models: { drafter: 'fast-model' },
+      defaultModel: 'base-model',
+    });
+
+    await ports.callPlayer('drafter', 'p', notAborted);
+    await ports.callPlayer('reviewer', 'p', notAborted);
+    expect(player.calls[0].model).toBe('fast-model');
+    expect(player.calls[1].model).toBe('base-model');
+  });
+
+  it('builds one transport per player id from a player factory and reuses it', async () => {
+    const built: Array<AgentClient & { calls: AgentRunRequest[] }> = [];
+    const ids: string[] = [];
+    const ports = createPlaybookPorts({
+      player: (playerId) => {
+        ids.push(playerId);
+        const client = fakeAgent({ status: 'success', text: 'ok' });
+        built.push(client);
+        return client;
+      },
+      judge: fakeAgent({ status: 'success', text: 'ok' }),
+    });
+
+    await ports.callPlayer('coder', 'first', notAborted);
+    await ports.callPlayer('reviewer', 'second', notAborted);
+    await ports.callPlayer('coder', 'third', notAborted);
+
+    // One client per player id, memoized across calls so each player keeps its
+    // own agent session (a Cligent transport is single-flight and resuming).
+    expect(ids).toEqual(['coder', 'reviewer']);
+    expect(built[0].calls.map((call) => call.prompt)).toEqual([
+      'first',
+      'third',
+    ]);
+    expect(built[1].calls.map((call) => call.prompt)).toEqual(['second']);
+  });
+
   it('returns judge text on success and throws otherwise', async () => {
     const judge = fakeAgent({ status: 'success', text: 'verdict: pass' });
     const okPorts = createPlaybookPorts({ player: judge, judge });

@@ -4,9 +4,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  type PhaseInput,
   type PhaseResult,
   mapPhaseResult,
   resolvesToPlaybook,
+  seedPhaseTurn,
 } from '../src/phase-runner.js';
 
 describe('mapPhaseResult (PHEXEC-24)', () => {
@@ -28,6 +30,42 @@ describe('mapPhaseResult (PHEXEC-24)', () => {
     expect(
       mapPhaseResult({ status: 'error', diagnostics: ['a', 'b'] }).diagnostics,
     ).toEqual(['a', 'b']);
+  });
+});
+
+// The settled SLC-to-runtime seeding contract: a prose directive naming the
+// request kind, then the full request as one `Request: `-introduced JSON line.
+describe('seedPhaseTurn (PHEXEC-29)', () => {
+  const requestLine = (seed: string): string => {
+    const line = seed
+      .split('\n')
+      .find((candidate) => candidate.startsWith('Request: '));
+    expect(line).toBeDefined();
+    return (line as string).slice('Request: '.length);
+  };
+
+  it('seeds a compile request as a directive plus one JSON line', () => {
+    const input: PhaseInput = {
+      kind: 'compile',
+      source: '/run/src.md',
+      target: '/run/out.ts',
+    };
+    const seed = seedPhaseTurn(input);
+    expect(seed.split('\n')[0]).toMatch(/compile phase non-interactively/);
+    expect(JSON.parse(requestLine(seed))).toEqual(input);
+  });
+
+  it('seeds a link request as a directive plus one JSON line', () => {
+    const input: PhaseInput = {
+      kind: 'link',
+      objects: ['/run/a.ts', '/run/b.ts'],
+      linkTarget: '/run/target',
+      options: { entry: 'main' },
+      linked: '/run/linked.ts',
+    };
+    const seed = seedPhaseTurn(input);
+    expect(seed.split('\n')[0]).toMatch(/link phase non-interactively/);
+    expect(JSON.parse(requestLine(seed))).toEqual(input);
   });
 });
 

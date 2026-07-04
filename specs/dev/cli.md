@@ -8,10 +8,10 @@
 This package specifies how the published `slc` executable wires the `runSlc`
 core to a concrete host: resolving a pipeline reference to a directory,
 selecting and constructing the coding agent from configuration with credentials
-from the environment, injecting an interpreted executor so every phase runs
-without compilation, passing a cancellation signal, short-circuiting
-`--version`/`--help`, and mapping the run result to process streams and an exit
-code.
+from the environment, injecting an interpreted executor for unpinned phases and
+the compiled-execution factory that pinned phases select, passing a cancellation
+signal, short-circuiting `--version`/`--help`, and mapping the run result to
+process streams and an exit code.
 The user-facing surface (streams, exit status, conveniences) is in the `cli`
 user package; generic mechanics and the execution boundary are in the `pipeline`
 and `phase-execution` packages.
@@ -45,7 +45,7 @@ Where `--config <path>` names a file that does not exist, or a loaded config fil
 
 ### CLI-8
 
-When the slc executable runs a pipeline, phase, or link, the executable shall inject into `runSlc` an interpreted executor built on the agent transport, so every phase is interpreted and no compiled phase artifact is applied ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#pinning)).
+When the slc executable runs a pipeline, phase, or link, the executable shall inject into `runSlc` an interpreted executor built on the agent transport — the execution for every unpinned phase — and a compiled-execution factory that runs a current pinned phase's compiled `playbook` artifact, resolved against its pipeline directory, with the runtime's player ports backed by one configured agent transport per player id, its judge port by its own transport, and the selected model applied as the default per-player model ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#strategy-selection), [PHEXEC-25](phase-execution.md#phexec-25), [PHEXEC-27](phase-execution.md#phexec-27)).
 
 ## Process control
 

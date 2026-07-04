@@ -58,7 +58,7 @@ Where neither `SLC_AGENT` nor a config file supplies an agent, or the resolved a
 ### CLI-19
 Verifies: [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7), [CLI-8](../dev/cli.md#cli-8)
 
-Where `SLC_PIPELINE_PATH` locates the pipeline directory and `SLC_AGENT` with an optional `SLC_MODEL` are configured, when the slc executable runs a source, the slc executable shall resolve the reference to that directory and interpret every phase through the configured agent CLI with that model, applying no compiled phase artifact.
+Where `SLC_PIPELINE_PATH` locates the pipeline directory and `SLC_AGENT` with an optional `SLC_MODEL` are configured, when the slc executable runs a source, the slc executable shall resolve the reference to that directory and interpret every unpinned phase through the configured agent CLI with that model.
 
 ### CLI-23
 Verifies: [CLI-22](../user/cli.md#cli-22), [CLI-7](../dev/cli.md#cli-7), [CLI-6](../dev/cli.md#cli-6)
@@ -84,6 +84,13 @@ Where `--config <path>` names a file that does not exist, when the slc executabl
 Verifies: [CLI-21](../dev/cli.md#cli-21)
 
 Where a loaded config file is malformed YAML, declares an unknown key, or holds a wrong-typed value, when the slc executable runs, the slc executable shall print a diagnostic to standard error, run no phase, and exit non-zero.
+
+## Compiled execution
+
+### CLI-28
+Verifies: [CLI-8](../dev/cli.md#cli-8), [COMPILE-6](../user/compiler.md#compile-6)
+
+Where a pipeline directory pins a phase to a current compiled `playbook` artifact, when the slc executable runs that phase, the slc executable shall run the pinned artifact through compiled execution — writing the artifact's declared target and exiting zero — without invoking the interpreted executor for that phase.
 
 ## References
 

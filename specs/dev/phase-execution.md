@@ -115,6 +115,10 @@ Where a compiled phase runs, the slc command shall back the runtime's player and
 
 When the slc command runs a phase, the slc command shall select its execution from the pin index: a phase with no pin — including when the pipeline has no pin file — interprets; a current pin runs the phase's compiled artifact, and fails the run closed when it cannot run that artifact rather than interpreting it; and a stale or malformed pin, or an unparseable pin file, stops the run with a diagnostic, never silently interpreting the phase ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#strategy-selection), [DR-007](../decisions/007-slc-phase-artifact-pinning.md#currency-and-selection)).
 
+### PHEXEC-29
+
+When the slc command seeds a compiled phase's non-interactive turn ([PHEXEC-23](#phexec-23)), the slc command shall pass one Boss turn whose text states the request kind — compile or link — in prose and carries the full request as a single JSON line introduced by `Request: `, with the request's workspace paths resolved to absolute host paths, so any compiled `playbook` artifact's classifier — or a deterministic consumer — recovers the exact phase input without host-specific parsing ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
+
 ## References
 
 [1]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"

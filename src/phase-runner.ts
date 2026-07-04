@@ -15,8 +15,8 @@
  *
  * The non-interactive driving lives in the compiled executor; this module owns
  * the shared facade types, the static `playbook`-format recognition the
- * pin-currency validator uses, and the provisional seeding of a phase request
- * into the runtime's single Boss turn. See specs/dev/phase-execution.md.
+ * pin-currency validator uses, and the seeding of a phase request into the
+ * runtime's single Boss turn (PHEXEC-29). See specs/dev/phase-execution.md.
  */
 
 import type { ExecutorResult } from './execution.js';
@@ -72,13 +72,19 @@ export function resolvesToPlaybook(source: string): boolean {
 
 /**
  * Seeds a phase request into the single non-interactive Boss turn `slc` hands
- * the runtime through `handleBossInput` (DR-005).
+ * the runtime through `handleBossInput` (PHEXEC-29; DR-005).
  *
- * PROVISIONAL: the concrete SLC-to-runtime seeding contract — how a `PhaseInput`
- * becomes the Boss text a runtime classifies — is pinned down by the first
- * reviewed `playbook` artifact. Until then `slc` passes the run's workspace
- * paths as JSON so a runtime's agents can act on them.
+ * The settled SLC-to-runtime seeding contract: one Boss turn whose text states
+ * the request kind in prose — so any compiled playbook's judge-backed classifier
+ * can route it — and carries the full request as a single-line JSON object
+ * introduced by `Request: `, with workspace paths already resolved to absolute
+ * host paths, so a runtime (or a deterministic fixture) recovers the exact
+ * `PhaseInput` without host-specific parsing.
  */
 export function seedPhaseTurn(input: PhaseInput): string {
-  return JSON.stringify(input);
+  const directive =
+    input.kind === 'compile'
+      ? 'Perform this compile phase non-interactively: transform the source into the target artifact, then stop.'
+      : 'Perform this link phase non-interactively: link the object artifacts against the link target into the linked artifact, then stop.';
+  return `${directive}\nRequest: ${JSON.stringify(input)}`;
 }

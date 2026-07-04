@@ -17,9 +17,9 @@
  * DR-003 generic checks, which defend the protected inputs (not the full write
  * scope); `slc` adds no host-side write-scope enforcement.
  *
- * PROVISIONAL pending the first reviewed `playbook` artifact: the seeding of
- * {@link seedPhaseTurn} and the output-produced (created-or-modified) result
- * derivation in {@link drivePhase}. See specs/dev/phase-execution.md.
+ * The turn is seeded per the PHEXEC-29 contract ({@link seedPhaseTurn}); the
+ * result is derived from the host-observable outcome in {@link drivePhase}.
+ * See specs/dev/phase-execution.md.
  */
 
 import { stat } from 'node:fs/promises';
@@ -41,7 +41,7 @@ import type {
 import type { AgentClient } from './interpreter.js';
 import { mapPhaseResult, seedPhaseTurn } from './phase-runner.js';
 import type { PhaseInput, PhaseResult } from './phase-runner.js';
-import { createPlaybookPorts } from './playbook-ports.js';
+import { createPlaybookPorts, type PlayerTransport } from './playbook-ports.js';
 
 /**
  * Imports a compiled `playbook` module and returns its runtime factory
@@ -75,12 +75,14 @@ export function createCompiledExecutor(opts: {
   artifactPath: string;
   /** Run root for resolving the phase's workspace paths to absolute host paths. */
   runRoot: string;
-  /** Agent transport backing `callPlayer`. */
-  player: AgentClient;
+  /** Agent transport(s) backing `callPlayer`; a factory yields one client per player id. */
+  player: PlayerTransport;
   /** Agent transport backing `callJudge`. */
   judge: AgentClient;
   /** Per-player model binding, applied as configuration (PHEXEC-13). */
   models?: Readonly<Record<string, string>>;
+  /** Model for players the `models` binding does not name (PHEXEC-13). */
+  defaultModel?: string;
   /** Working directory handed to the agent transports. */
   cwd?: string;
   /** Loader seam; defaults to {@link loadPlaybookRuntime}. */
@@ -97,6 +99,7 @@ export function createCompiledExecutor(opts: {
         player: opts.player,
         judge: opts.judge,
         models: opts.models,
+        defaultModel: opts.defaultModel,
         cwd: opts.cwd,
       });
       // Hand the runtime only Playbook's ports — never the host-only
@@ -126,13 +129,10 @@ export function createCompiledExecutor(opts: {
 
 /**
  * Loads, constructs, and drives a runtime through one non-interactive turn, then
- * derives the result from the host-observable outcome (DR-005).
- *
- * PROVISIONAL: a turn that throws or aborts is `error`; a clean turn that creates
- * or updates the declared `target`/`linked` output is `ok`; a clean turn that
- * leaves it untouched is `blocked` — the FSM parked for Boss input a
- * non-interactive run cannot supply. The first reviewed artifact fixes the exact
- * mapping.
+ * derives the result from the host-observable outcome (DR-005): a turn that
+ * throws or aborts is `error`; a clean turn that creates or updates the declared
+ * `target`/`linked` output is `ok`; a clean turn that leaves it untouched is
+ * `blocked` — the FSM parked for Boss input a non-interactive run cannot supply.
  */
 async function drivePhase(
   load: (artifactPath: string) => Promise<PlaybookRuntimeFactory>,

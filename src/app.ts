@@ -16,6 +16,7 @@
  */
 
 import {
+  createConfiguredCompiledFactory,
   createConfiguredExecutor,
   resolveAgentSelection,
   type AgentSelection,
@@ -60,11 +61,16 @@ export interface RunOptions {
 /** The executor factory {@link buildSlcDeps} uses; injected in tests. */
 export type ExecutorFactory = typeof createConfiguredExecutor;
 
+/** The compiled-execution factory builder {@link buildSlcDeps} uses; injected in tests. */
+export type CompiledFactoryBuilder = typeof createConfiguredCompiledFactory;
+
 /**
  * Builds the production {@link SlcDeps}: a pipeline resolver over the resolved
  * search roots (CLI-6) — with the reserved `slc` reference routed to the
- * meta-pipeline definitions `@sublang/playbook` provides (SELFHOST-2) — and an
- * interpreted executor for the resolved agent/model (CLI-7). Configuration is loaded from the config file (DR-006, CLI-20) and
+ * meta-pipeline definitions `@sublang/playbook` provides (SELFHOST-2) — an
+ * interpreted executor for the resolved agent/model (CLI-7), and the
+ * compiled-execution factory a current pinned phase selects (CLI-8, PHEXEC-27).
+ * Configuration is loaded from the config file (DR-006, CLI-20) and
  * then overridden per key by a non-blank environment variable, so existing
  * env-only runs are unchanged and the file fills any key the environment leaves
  * unset.
@@ -79,22 +85,22 @@ export async function buildSlcDeps(
   // Injectable so a test can capture the executor options — notably the
   // non-interactive write permission below — without constructing a real
   // adapter, the same seam pattern as `createConfiguredExecutor`'s
-  // `adapterFactory`. Defaults to the production factory.
+  // `adapterFactory`. Defaults to the production factories.
   createExecutor: ExecutorFactory = createConfiguredExecutor,
+  createCompiled: CompiledFactoryBuilder = createConfiguredCompiledFactory,
 ): Promise<SlcDeps> {
   const file = await loadConfigFile({ cwd, configPath, env });
   const { selection, pipelinePath } = resolveRunConfig(env, file.config);
   const resolver = withReservedPipelines(
     createPipelineResolver(pipelineSearchRoots(pipelinePath, cwd)),
   );
-  // Auto-accept the agent's file operations so a non-interactive `slc` run can
+  // Auto-accept the agents' file operations so a non-interactive `slc` run can
   // write its target artifact; the DR-003 generic checks still guard the
   // protected inputs (DR-004).
-  const executor = createExecutor(selection, {
-    cwd,
-    permissions: { mode: 'auto' },
-  });
-  return { resolver, executor, signal };
+  const agentOpts = { cwd, permissions: { mode: 'auto' as const } };
+  const executor = createExecutor(selection, agentOpts);
+  const compiled = createCompiled(selection, agentOpts);
+  return { resolver, executor, compiled, signal };
 }
 
 /** The cligent-invocation selection after merging environment over file (DR-006). */
