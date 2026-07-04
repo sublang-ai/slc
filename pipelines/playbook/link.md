@@ -101,6 +101,9 @@ The link compiler shall accept:
 - A **player binding** mapping GEARS players (declared in the
   [text2gears](text2gears.md#players) source) to opaque player-identifier
   strings.
+  Where no binding is supplied, the linker shall apply the default
+  binding — each player to its lowercased name (e.g. `Coder` → `coder`)
+  — and record the applied binding in the emitted header.
 - An **adjudication strategy** (default: LLM-judge per state) and a
   **Boss-event mapping** (default: free-text judge classification).
   Both strategies are host-agnostic.
@@ -122,7 +125,7 @@ Resolution inspects the `CaptainInput` fields populated at that state:
 
 Resolution shall be deterministic and recorded in the emitted module so future maintainers can audit it without re-running the linker.
 
-The linker shall not invent player identifiers and shall not silently collapse aliases at the FSM level — composite players keep their `player: 'Committer'` value on `CaptainInput`; resolution decides only the `callPlayer` invocation.
+The linker shall not invent player identifiers beyond the recorded default binding, and shall not silently collapse aliases at the FSM level — composite players keep their `player: 'Committer'` value on `CaptainInput`; resolution decides only the `callPlayer` invocation.
 
 ## Player prompt composition
 
@@ -276,11 +279,18 @@ The runtime shall not duplicate them into `emitTelemetry`.
 
 The link compiler emits **one** TypeScript module that:
 
-- Imports the FSM artifact by relative path.
+- Imports the FSM artifact by relative path, with an extension-bearing
+  specifier that resolves to a file sitting beside the module (e.g.
+  `./code.fsm.ts`, or `./code.fsm.js` where a compiled module ships), so
+  the emitted module loads without a build step.
 - Imports XState's actor primitives (`createActor`, `fromPromise`,
   `setup`'s `.provide`).
 - Exports `createPlaybookRuntime` and the typed `PlaybookRuntimeOptions`
   interface for that playbook.
+- Exposes, under an `_internal` export, the pure helpers verification
+  needs — at least the player-prompt composer (`composePlayerPrompt`) —
+  so compilation-correctness tests can exercise composition without a
+  host.
 - Holds no host-specific types and no host primitive calls. The runtime
   speaks only `PlaybookPorts`.
 - Records the linker inputs (FSM path, player binding, strategies) in a
