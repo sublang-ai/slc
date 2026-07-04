@@ -101,7 +101,7 @@ describe('reference equivalence harness (VERIFY-9)', () => {
   it('accepts real slc playbook output when produced (gated)', async () => {
     const producedDir =
       process.env.SLC_EQUIVALENCE_DIR ??
-      join(repoRoot, 'build/sdlc/code.playbook');
+      join(repoRoot, '.scratch/sdlc/code.playbook');
     if (!existsSync(join(producedDir, 'code.playbook.ts'))) {
       console.warn(
         `equivalence: no produced output at ${producedDir}; run \`slc playbook <code.md> --link @sublang/playbook\` there first`,
