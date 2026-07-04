@@ -32,7 +32,10 @@ import {
   resolvePipeline,
 } from './pipeline.js';
 import { isReservedPipeline } from './resolver.js';
-import { emitGearsFsmConformanceTest } from './verify.js';
+import {
+  emitFsmIntrospectionTest,
+  emitGearsFsmConformanceTest,
+} from './verify.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
 export interface CompiledSelection {
@@ -288,12 +291,16 @@ async function runFullLink(
 
 /**
  * After a reserved-pipeline full run produces a `gears` intermediate and an `fsm`
- * object at their canonical `<basename>.playbook/` locations, emits the GEARS↔FSM
- * conformance test beside them as `slc` output, appending its path to the outputs
- * (VERIFY-2; [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+ * object at their canonical `<basename>.playbook/` locations, emits the
+ * compilation-correctness tests beside them as `slc` output, appending their
+ * paths to the outputs (VERIFY-2, VERIFY-4;
+ * [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
  * Non-reserved pipelines, runs without a gears+fsm pair, and runs whose `fsm` was
- * relocated out of that directory by `-o` (PIPE-8) are left unchanged, so the
- * emitted test never imports a file that was not written beside it.
+ * relocated out of that directory by `-o` (PIPE-8) are left unchanged, so an
+ * emitted test never imports a file that was not written beside it. A test whose
+ * emission needs the produced `fsm` imported (the pinned introspection) degrades
+ * to a diagnostic when the artifact cannot be loaded, leaving the run outcome
+ * unchanged — the conformance test still fails at test time on a broken module.
  */
 async function emitVerification(
   result: SlcResult,
@@ -315,19 +322,35 @@ async function emitVerification(
     (artifact) => artifact.phase.target.format === 'gears',
   );
   if (fsm === undefined || !hasGears) return result;
-  // The emitted test imports the canonical `./<basename>.fsm.js` beside it; skip
-  // when `-o` relocated the terminal fsm elsewhere (PIPE-8), so it never points
-  // at a file that was not written under `<basename>.playbook/`.
+  // The emitted tests import the canonical `./<basename>.fsm.ts` beside them;
+  // skip when `-o` relocated the terminal fsm elsewhere (PIPE-8), so they never
+  // point at a file that was not written under `<basename>.playbook/`.
   const canonicalFsm = join(
     ctx.artDir,
     `${ctx.basename}.fsm${fsm.phase.target.ext}`,
   );
   if (fsm.path !== canonicalFsm) return result;
-  const testPath = await emitGearsFsmConformanceTest({
-    artifactDir: ctx.artDir,
-    basename: ctx.basename,
-  });
-  return { ...result, outputs: [...result.outputs, testPath] };
+  const outputs = [...result.outputs];
+  const diagnostics = [...result.diagnostics];
+  outputs.push(
+    await emitGearsFsmConformanceTest({
+      artifactDir: ctx.artDir,
+      basename: ctx.basename,
+    }),
+  );
+  try {
+    outputs.push(
+      await emitFsmIntrospectionTest({
+        artifactDir: ctx.artDir,
+        basename: ctx.basename,
+      }),
+    );
+  } catch (error) {
+    diagnostics.push(
+      `verification: introspection test not emitted: ${messageOf(error)}`,
+    );
+  }
+  return { ...result, outputs, diagnostics };
 }
 
 /** One phase to run: its execute request and the checks `runPhase` needs. */

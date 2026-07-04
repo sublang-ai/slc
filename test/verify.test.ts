@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,11 +11,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   checkGearsFsmConformance,
+  emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
   enumerateCaptainStates,
   findMachineConfig,
+  generateFsmIntrospectionTest,
   generateGearsFsmConformanceTest,
+  normalizeArms,
   parseGearsItems,
+  pinIntrospection,
   type MachineConfigLike,
 } from '../src/verify.js';
 
@@ -247,24 +251,223 @@ describe('checkGearsFsmConformance', () => {
   });
 });
 
-// The checker must hold for the real, human-reviewed reference artifacts that
+const referenceDir = fileURLToPath(
+  new URL(
+    '../node_modules/@sublang/playbook/reference/sdlc/code.playbook/',
+    import.meta.url,
+  ),
+);
+const referenceFsm = async (): Promise<unknown> =>
+  import(join(referenceDir, 'code.fsm.js'));
+
+// The checkers must hold for the real, human-reviewed reference artifacts that
 // model DR-009's verification contract (IR-007 Task 8: "test the generator
 // against the reference artifacts"). The installed @sublang/playbook ships them.
 describe('conformance against the reference artifacts', () => {
   it('finds nothing on the reference code.gears.md + code.fsm', async () => {
-    const dir = fileURLToPath(
-      new URL(
-        '../node_modules/@sublang/playbook/reference/sdlc/code.playbook/',
-        import.meta.url,
-      ),
+    const referenceGears = readFileSync(
+      join(referenceDir, 'code.gears.md'),
+      'utf8',
     );
-    const referenceGears = readFileSync(join(dir, 'code.gears.md'), 'utf8');
-    const fsm: unknown = await import(join(dir, 'code.fsm.js'));
     const items = parseGearsItems(referenceGears);
     expect(items).toHaveLength(19);
     expect(
-      checkGearsFsmConformance(referenceGears, findMachineConfig(fsm)),
+      checkGearsFsmConformance(
+        referenceGears,
+        findMachineConfig(await referenceFsm()),
+      ),
     ).toEqual([]);
+  });
+});
+
+describe('normalizeArms', () => {
+  it('normalizes string, object, array, and absent declarations', () => {
+    expect(normalizeArms(undefined)).toEqual([]);
+    expect(normalizeArms('#failed')).toEqual([
+      { index: 0, target: 'failed', guarded: false },
+    ]);
+    expect(
+      normalizeArms([
+        { target: '#done', guard: () => true },
+        { target: 'ready' },
+        { actions: 'remember' },
+      ]),
+    ).toEqual([
+      { index: 0, target: 'done', guarded: true },
+      { index: 1, target: 'ready', guarded: false },
+      { index: 2, target: null, guarded: false },
+    ]);
+  });
+});
+
+// A machine fixture with transitions, root events, and a quiescent surface, in
+// the `gears2fsm` shape the introspection pins (VERIFY-4).
+const introspectableConfig = (): MachineConfigLike => ({
+  initial: 'ready',
+  states: {
+    ready: { on: { START: { target: 'draft' } } },
+    draft: {
+      ...captain('Writer', 'GREETER-1', 'Draft a short hello message.'),
+      invoke: {
+        ...captain('Writer', 'GREETER-1', 'Draft a short hello message.')
+          .invoke,
+        onDone: [
+          { target: '#review', guard: () => true },
+          { target: '#awaitBossReply', guard: () => true },
+        ],
+        onError: { target: '#failed' },
+      },
+    },
+    review: {
+      ...captain('Reviewer', 'GREETER-2', 'Check it.'),
+      invoke: {
+        ...captain('Reviewer', 'GREETER-2', 'Check it.').invoke,
+        onDone: [{ target: '#done', guard: () => true }],
+        onError: { target: '#failed' },
+      },
+    },
+    awaitBossReply: {
+      on: { BOSS_REPLY: [{ target: '#draft', guard: () => true }] },
+    },
+    failed: { on: { START: { target: 'draft' } } },
+    done: { type: 'final' },
+  },
+  on: {
+    BOSS_INTERRUPT: [
+      { target: '#draft', guard: () => true },
+      { target: '#review', guard: () => true },
+    ],
+  },
+});
+
+describe('pinIntrospection (VERIFY-4)', () => {
+  it('pins captain bindings, transition arms, event surfaces, and the jumpable set', () => {
+    const pins = pinIntrospection(introspectableConfig());
+    expect(pins.initial).toBe('ready');
+    expect(pins.captain.map((state) => state.state)).toEqual([
+      'draft',
+      'review',
+    ]);
+    expect(pins.captain[0]).toMatchObject({
+      sourceItem: 'GREETER-1',
+      player: 'Writer',
+      resultKeys: ['done', 'needsBossReply'],
+      onDone: [
+        { index: 0, target: 'review', guarded: true },
+        { index: 1, target: 'awaitBossReply', guarded: true },
+      ],
+      onError: [{ index: 0, target: 'failed', guarded: false }],
+    });
+    expect(pins.quiescent.map((state) => state.state)).toEqual([
+      'ready',
+      'awaitBossReply',
+      'failed',
+      'done',
+    ]);
+    expect(pins.quiescent[3].final).toBe(true);
+    expect(Object.keys(pins.rootOn)).toEqual(['BOSS_INTERRUPT']);
+    expect(pins.interruptTargets).toEqual(['draft', 'review']);
+  });
+
+  it('pins the reference machine: 19 captain states, 21 interrupt targets', async () => {
+    const pins = pinIntrospection(findMachineConfig(await referenceFsm()));
+    expect(pins.captain).toHaveLength(19);
+    // Declaration order in the reference is not item order; coverage is a set.
+    expect(pins.captain.map((state) => state.sourceItem).sort()).toEqual(
+      Array.from({ length: 19 }, (_, i) => `CODE-${i + 1}`).sort(),
+    );
+    expect(pins.interruptTargets).toHaveLength(21);
+    expect(pins.quiescent.map((state) => state.state)).toEqual([
+      'ready',
+      'awaitBossReply',
+      'failed',
+      'done',
+    ]);
+    // Every captain state declares Boss-reply suspension and error wiring.
+    for (const state of pins.captain) {
+      expect(state.resultKeys).toContain('needsBossReply');
+      expect(state.onError.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('generateFsmIntrospectionTest / emitFsmIntrospectionTest', () => {
+  it('emits a test pinning the topology derived from the artifact at build time', async () => {
+    const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-intro-'));
+    try {
+      await writeFile(
+        join(artifactDir, 'code.fsm.ts'),
+        [
+          'export const machine = {',
+          '  config: {',
+          "    initial: 'ready',",
+          '    states: {',
+          "      ready: { on: { GO: { target: 'work' } } },",
+          '      work: {',
+          '        invoke: {',
+          "          src: 'captain',",
+          '          input: () => ({',
+          "            player: 'Writer',",
+          "            sourceItem: 'X-1',",
+          "            prompt: 'p',",
+          "            result: { done: 'd', needsBossReply: 'Output shall include `question: ...`' },",
+          '          }),',
+          "          onDone: [{ target: '#done', guard: () => true }],",
+          "          onError: { target: '#failed' },",
+          '        },',
+          '      },',
+          '      failed: {},',
+          "      done: { type: 'final' },",
+          '    },',
+          "    on: { BOSS_INTERRUPT: [{ target: '#work', guard: () => true }] },",
+          '  },',
+          '};',
+          '',
+        ].join('\n'),
+      );
+      const path = await emitFsmIntrospectionTest({
+        artifactDir,
+        basename: 'code',
+      });
+      expect(path).toBe(join(artifactDir, 'code.fsm.introspect.test.ts'));
+      const content = await readFile(path, 'utf8');
+      expect(content).toContain(
+        "import { findMachineConfig, pinIntrospection } from '@sublang/slc/verify'",
+      );
+      expect(content).toContain("import * as fsm from './code.fsm.ts'");
+      expect(content).toContain('"sourceItem": "X-1"');
+      expect(content).toContain('"interruptTargets": [\n    "work"\n  ]');
+      expect(content).toContain('pinIntrospection(findMachineConfig(fsm))');
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws when the fsm artifact cannot be imported, so emission degrades to a diagnostic', async () => {
+    const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-intro-bad-'));
+    try {
+      await writeFile(join(artifactDir, 'code.fsm.ts'), 'not typescript {{{\n');
+      await expect(
+        emitFsmIntrospectionTest({ artifactDir, basename: 'code' }),
+      ).rejects.toThrow();
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it('bakes drift detection: the generated pins differ when the machine changes', () => {
+    const pins = pinIntrospection(introspectableConfig());
+    const drifted = introspectableConfig();
+    delete drifted.states!.review;
+    expect(pinIntrospection(drifted)).not.toEqual(pins);
+    const generated = generateFsmIntrospectionTest({
+      basename: 'greeter',
+      fsmModule: './greeter.fsm.ts',
+      verifyModule: '@sublang/slc/verify',
+      pins,
+    });
+    expect(generated).toContain('const PINNED =');
+    expect(generated).toContain('"sourceItem": "GREETER-1"');
   });
 });
 
