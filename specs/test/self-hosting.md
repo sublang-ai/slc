@@ -37,3 +37,8 @@ Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` pr
 Verifies: [COMPILE-1](../user/compiler.md#compile-1), [COMPILE-2](../user/compiler.md#compile-2), [SELFHOST-6](../dev/self-hosting.md#selfhost-6)
 
 Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` provides, when the user runs `slc playbook code.md` and then `slc playbook code.md --link <target>` through interpreted execution, the slc command shall write the `code.gears.md` intermediate and the `code.fsm.ts` object — stopping at the `fsm` object for the bare run — and, with `--link`, the `code.playbook.ts` runtime, each at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) location under `code.playbook/`.
+
+### SELFHOST-10
+Verifies: [SELFHOST-9](../dev/self-hosting.md#selfhost-9)
+
+Where a pipeline search root holds a `playbook` directory vendoring the shared definitions, when the slc command resolves the reserved `slc` and the `playbook` references, both shall resolve to that vendored directory; whereas where no search root provides one, both shall resolve to the definitions the installed `@sublang/playbook` provides.

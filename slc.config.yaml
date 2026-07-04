@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
+#
+# Self-hosting configuration for this repository (DR-006): route the reserved
+# `slc` and `playbook` pipeline references to the committed vendor at
+# pipelines/playbook/ (SELFHOST-9), where the compiled meta-phase artifacts and
+# their pin index live. The environment overrides any key per run.
+agent: claude-code
+pipelinePath:
+  - pipelines

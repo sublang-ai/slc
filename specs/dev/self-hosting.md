@@ -24,11 +24,15 @@ of [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md); and
 
 ### SELFHOST-2
 
-The slc command shall reserve the pipeline name `slc` for the meta-pipeline that compiles phase and link definitions into runnable artifacts, resolving that reference to the meta-pipeline definitions `@sublang/playbook` provides rather than a duplicate, requiring it to be named explicitly (claiming no default), and leaving the invocation grammar unchanged ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#reserved-slc-pipeline), [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli)).
+The slc command shall reserve the pipeline name `slc` for the meta-pipeline that compiles phase and link definitions into runnable artifacts, resolving that reference to the shared Playbook-authored definition set ([SELFHOST-9](#selfhost-9)) rather than a duplicate, requiring it to be named explicitly (claiming no default), and leaving the invocation grammar unchanged ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#reserved-slc-pipeline), [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli)).
 
 ### SELFHOST-6
 
-When resolving a `playbook` pipeline reference, the slc command shall resolve it to the same meta-pipeline definitions `@sublang/playbook` provides that back the reserved `slc` ([SELFHOST-2](#selfhost-2)), so the `playbook` and `slc` pipelines share one definition set and the same compiled artifacts, differing only by name and thus by [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) artifact directory ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+When resolving a `playbook` pipeline reference, the slc command shall resolve it to the same shared definition set that backs the reserved `slc` ([SELFHOST-9](#selfhost-9)), so the `playbook` and `slc` pipelines share one definition set, one pin index, and the same compiled artifacts, differing only by name and thus by [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) artifact directory ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+
+### SELFHOST-9
+
+When resolving the reserved `slc` or the `playbook` pipeline reference, the slc command shall resolve to the pipeline-search-root directories named `playbook` when at least one exists — a committed vendor of Playbook's definitions, whose pin index can select compiled execution — and otherwise to the meta-pipeline definitions the installed `@sublang/playbook` provides ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#reserved-slc-pipeline), [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
 
 ## Playbook format
 
