@@ -148,10 +148,21 @@ function makeActor(machine: MachineLike, script: CaptainScript): DrivenActor {
   return actor;
 }
 
+/**
+ * An arming gate for drive scripts: a machine whose initial state invokes the
+ * captain fires an invocation at actor start, before the driver jumps into the
+ * state under test; an unarmed script leaves that eager invocation hanging so
+ * it can neither consume the one-shot output nor race the machine to a final
+ * state. Drives arm the gate after start and before the jump.
+ */
+interface ArmingGate {
+  armed: boolean;
+}
+
 /** A script that rejects the captain invocation for the given source item. */
-function throwingScript(sourceItem: string): CaptainScript {
+function throwingScript(sourceItem: string, gate: ArmingGate): CaptainScript {
   return (input) => {
-    if (input.sourceItem !== sourceItem) return null;
+    if (!gate.armed || input.sourceItem !== sourceItem) return null;
     return new Error('coverage: forced captain failure') as never;
   };
 }
@@ -160,10 +171,11 @@ function throwingScript(sourceItem: string): CaptainScript {
 function onceScript(
   sourceItem: string,
   output: Record<string, unknown>,
+  gate: ArmingGate,
 ): CaptainScript {
   let used = false;
   return (input) => {
-    if (used || input.sourceItem !== sourceItem) return null;
+    if (!gate.armed || used || input.sourceItem !== sourceItem) return null;
     used = true;
     return output;
   };
@@ -441,7 +453,12 @@ export async function checkFsmCoverage(
         }
       });
       if (!predicted) continue;
-      const actor = makeActor(machine, onceScript(state.sourceItem, output));
+      const gate: ArmingGate = { armed: false };
+      const actor = makeActor(
+        machine,
+        onceScript(state.sourceItem, output, gate),
+      );
+      gate.armed = true;
       actor.send({ type: INTERRUPT_EVENT, targetId: state.stateId });
       const left = await settle(actor, leftState(state.stateId));
       if (!left) {
@@ -467,10 +484,16 @@ export async function checkFsmCoverage(
         }
         actor.stop();
 
+        const blankGate: ArmingGate = { armed: false };
         const blank = makeActor(
           machine,
-          onceScript(state.sourceItem, synthOutput(state, NEEDS_BOSS_REPLY)),
+          onceScript(
+            state.sourceItem,
+            synthOutput(state, NEEDS_BOSS_REPLY),
+            blankGate,
+          ),
         );
+        blankGate.armed = true;
         blank.send({ type: INTERRUPT_EVENT, targetId: state.stateId });
         if (await settle(blank, atState(AWAIT_BOSS_REPLY_STATE))) {
           blank.send({ type: BOSS_REPLY_EVENT, answer: '   ' });
@@ -521,7 +544,9 @@ export async function checkFsmCoverage(
       findings.push(`state ${state.stateId} declares no onError transition`);
     } else {
       const target = onErrorArms[0].target;
-      const actor = makeActor(machine, throwingScript(state.sourceItem));
+      const gate: ArmingGate = { armed: false };
+      const actor = makeActor(machine, throwingScript(state.sourceItem, gate));
+      gate.armed = true;
       actor.send({ type: INTERRUPT_EVENT, targetId: state.stateId });
       const landed = await settle(
         actor,
