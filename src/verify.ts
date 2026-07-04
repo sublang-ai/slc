@@ -20,6 +20,7 @@
  * for every compiled `playbook`. See specs/dev/verification.md.
  */
 
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -370,6 +371,319 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
   };
 }
 
+/*
+ * Prompt-contract capture and composition checks (VERIFY-5).
+ *
+ * The contract is derived from the artifacts, never hand-authored: context
+ * reads are traced through each state's `invoke.input` thunk with a recording
+ * proxy, wiring by sentinel values, placeholders by scanning the prompt body,
+ * and substitution by composing with sentinels and observing which tokens the
+ * linked composer replaces. The derived facts are pinned into the emitted test
+ * so contract drift fails it (DR-009).
+ */
+
+/** The exact continuation preamble the link contract mandates (link.md). */
+export const CONTINUATION_PREAMBLE =
+  'You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.';
+export const BOSS_QUESTION_LABEL = 'Boss question:';
+export const BOSS_REPLY_LABEL = 'Boss reply:';
+
+/** One captain state's derived prompt contract (VERIFY-5). */
+export interface PromptContractRow {
+  state: string;
+  sourceItem: string;
+  player: string;
+  /** Context fields the state's input thunk reads. */
+  reads: string[];
+  /** Input fields carrying a read context field's value, by sentinel tracing. */
+  wires: Record<string, string[]>;
+  /** `<...>` placeholder tokens in the prompt body, first-appearance order. */
+  placeholders: string[];
+}
+
+const PLACEHOLDER = /<[^\s<>`]{1,60}>/g;
+
+/** Lists the distinct `<...>` placeholder tokens in a prompt body, in order. */
+export function placeholdersIn(prompt: string): string[] {
+  const seen: string[] = [];
+  for (const token of prompt.match(PLACEHOLDER) ?? []) {
+    if (!seen.includes(token)) seen.push(token);
+  }
+  return seen;
+}
+
+const sentinelFor = (field: string): string => `«${field}»`;
+
+/**
+ * Traces which context fields an `invoke.input` thunk reads, via a recording
+ * proxy context; reads collected up to a throw are kept.
+ */
+export function probeContextReads(
+  inputFn: (arg: { context: Record<string, unknown> }) => unknown,
+): string[] {
+  const reads = new Set<string>();
+  const context = new Proxy({} as Record<string, unknown>, {
+    get(_target, prop) {
+      if (typeof prop === 'string') reads.add(prop);
+      return undefined;
+    },
+    has() {
+      return true;
+    },
+  });
+  try {
+    inputFn({ context });
+  } catch {
+    // Reads observed before the throw still pin the contract.
+  }
+  return [...reads].sort();
+}
+
+function sentinelContext(reads: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(reads.map((field) => [field, sentinelFor(field)]));
+}
+
+// The gears2fsm-normative Boss-reply context fields: present only on a
+// continuation turn, so an ordinary-turn probe must leave them unset.
+const BOSS_CONTEXT_FIELDS = ['pendingBossQuestion', 'bossReply'];
+
+function ordinaryContext(reads: readonly string[]): Record<string, unknown> {
+  return sentinelContext(
+    reads.filter((field) => !BOSS_CONTEXT_FIELDS.includes(field)),
+  );
+}
+
+function carriesSentinel(value: unknown, sentinel: string): boolean {
+  try {
+    return (JSON.stringify(value) ?? '').includes(sentinel);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Derives every captain state's prompt contract from the machine config
+ * (VERIFY-5): traced context reads, sentinel-traced input wiring, and the
+ * prompt body's placeholder tokens.
+ */
+export function capturePromptContract(
+  config: MachineConfigLike,
+): PromptContractRow[] {
+  const rows: PromptContractRow[] = [];
+  for (const state of enumerateCaptainStates(config)) {
+    const inputFn = config.states?.[state.stateId]?.invoke?.input;
+    if (typeof inputFn !== 'function') continue;
+    const reads = probeContextReads(inputFn);
+    const wires: Record<string, string[]> = {};
+    try {
+      const input = inputFn({ context: sentinelContext(reads) });
+      if (typeof input === 'object' && input !== null) {
+        for (const [key, value] of Object.entries(input)) {
+          const carried = reads.filter((field) =>
+            carriesSentinel(value, sentinelFor(field)),
+          );
+          if (carried.length > 0) wires[key] = carried;
+        }
+      }
+    } catch {
+      // Wiring stays empty; the traced reads alone still pin the contract.
+    }
+    rows.push({
+      state: state.stateId,
+      sourceItem: state.sourceItem,
+      player: state.player,
+      reads,
+      wires,
+      placeholders: placeholdersIn(state.prompt),
+    });
+  }
+  return rows;
+}
+
+/**
+ * Derives, per captain state, which of its prompt's placeholder tokens the
+ * linked composer substitutes when the wired context is present — pinned into
+ * the emitted test so a token that later leaks unsubstituted fails it
+ * (VERIFY-5).
+ */
+export function deriveSubstitutions(
+  config: MachineConfigLike,
+  compose: (input: unknown) => string,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const state of enumerateCaptainStates(config)) {
+    const inputFn = config.states?.[state.stateId]?.invoke?.input;
+    if (typeof inputFn !== 'function') continue;
+    try {
+      const composed = compose(
+        inputFn({ context: ordinaryContext(probeContextReads(inputFn)) }),
+      );
+      out[state.stateId] = placeholdersIn(state.prompt).filter(
+        (token) => !composed.includes(token),
+      );
+    } catch {
+      out[state.stateId] = [];
+    }
+  }
+  return out;
+}
+
+/**
+ * Checks the linked composer against the link contract for every captain state
+ * (VERIFY-5), returning findings (empty when conformant): the prompt body is
+ * preserved modulo substituted placeholders, the adjudicator-facing Boss-reply
+ * contract never leaks into a player prompt, no continuation appears on an
+ * ordinary turn, and a Boss-reply continuation turn opens with the exact
+ * preamble and labelled Q&A blocks before the body.
+ */
+export function checkPromptComposition(opts: {
+  config: MachineConfigLike;
+  compose: (input: unknown) => string;
+}): string[] {
+  const findings: string[] = [];
+  const substitutions = deriveSubstitutions(opts.config, opts.compose);
+  for (const state of enumerateCaptainStates(opts.config)) {
+    const inputFn = opts.config.states?.[state.stateId]?.invoke?.input;
+    if (typeof inputFn !== 'function') continue;
+    const reads = probeContextReads(inputFn);
+    const substituted = substitutions[state.stateId] ?? [];
+
+    let ordinary: string;
+    try {
+      ordinary = opts.compose(inputFn({ context: ordinaryContext(reads) }));
+    } catch (error) {
+      findings.push(
+        `${state.stateId}: composePlayerPrompt threw on an ordinary turn: ${messageOf(error)}`,
+      );
+      continue;
+    }
+    findings.push(...bodyFindings(state, ordinary, substituted, 'ordinary'));
+    if (ordinary.includes(BOSS_QUESTION_MARKER)) {
+      findings.push(
+        `${state.stateId}: the adjudicator-facing ${NEEDS_BOSS_REPLY} contract leaks into the player prompt`,
+      );
+    }
+    if (
+      ordinary.includes(CONTINUATION_PREAMBLE) ||
+      ordinary.includes(BOSS_QUESTION_LABEL) ||
+      ordinary.includes(BOSS_REPLY_LABEL)
+    ) {
+      findings.push(
+        `${state.stateId}: continuation blocks appear on an ordinary turn`,
+      );
+    }
+
+    // A Boss-reply continuation turn: the thunk carries the pending question
+    // and reply, and the composer opens with the exact preamble and labelled
+    // Q&A blocks before the domain body (gears2fsm.md, link.md).
+    const question = sentinelFor('question');
+    const reply = sentinelFor('bossReply');
+    let continuation: string;
+    let input: unknown;
+    try {
+      input = inputFn({
+        context: {
+          ...ordinaryContext(reads),
+          pendingBossQuestion: {
+            resumeStateId: state.stateId,
+            sourceItem: state.sourceItem,
+            player: state.player,
+            question,
+          },
+          bossReply: reply,
+        },
+      });
+      continuation = opts.compose(input);
+    } catch (error) {
+      findings.push(
+        `${state.stateId}: composePlayerPrompt threw on a continuation turn: ${messageOf(error)}`,
+      );
+      continue;
+    }
+    if (!carriesSentinel(input, question) || !carriesSentinel(input, reply)) {
+      findings.push(
+        `${state.stateId}: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn`,
+      );
+      continue;
+    }
+    if (!continuation.startsWith(CONTINUATION_PREAMBLE)) {
+      findings.push(
+        `${state.stateId}: a continuation turn does not open with the exact preamble`,
+      );
+    }
+    const bodyStart = bodyIndex(state, continuation, substituted);
+    for (const [label, value] of [
+      [BOSS_QUESTION_LABEL, question],
+      [BOSS_REPLY_LABEL, reply],
+    ] as const) {
+      const at = continuation.indexOf(label);
+      if (at === -1 || !continuation.includes(value)) {
+        findings.push(
+          `${state.stateId}: a continuation turn lacks the "${label}" block`,
+        );
+      } else if (bodyStart !== -1 && at > bodyStart) {
+        findings.push(
+          `${state.stateId}: the "${label}" block appears after the domain prompt body`,
+        );
+      }
+    }
+    findings.push(
+      ...bodyFindings(state, continuation, substituted, 'continuation'),
+    );
+  }
+  return findings;
+}
+
+/** Escapes a literal for use inside a regular expression. */
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** A regex matching a prompt line with its substituted placeholders wildcarded. */
+function lineMatcher(line: string, substituted: readonly string[]): RegExp {
+  let pattern = escapeRegExp(line);
+  for (const token of substituted) {
+    // The pattern holds the token in escaped form; wildcard that occurrence.
+    pattern = pattern.split(escapeRegExp(token)).join('[^\\n]*');
+  }
+  return new RegExp(pattern);
+}
+
+/** Findings when a composed prompt does not preserve the domain body (VERIFY-5). */
+function bodyFindings(
+  state: CaptainState,
+  composed: string,
+  substituted: readonly string[],
+  turn: string,
+): string[] {
+  const findings: string[] = [];
+  for (const line of state.prompt.split('\n')) {
+    if (line.trim() === '') continue;
+    if (!lineMatcher(line, substituted).test(composed)) {
+      findings.push(
+        `${state.stateId}: a ${turn} turn does not preserve the body line "${line}"`,
+      );
+    }
+  }
+  return findings;
+}
+
+/** The index of the body's first preserved line in a composed prompt, or -1. */
+function bodyIndex(
+  state: CaptainState,
+  composed: string,
+  substituted: readonly string[],
+): number {
+  const first = state.prompt.split('\n').find((line) => line.trim() !== '');
+  if (first === undefined) return -1;
+  const match = lineMatcher(first, substituted).exec(composed);
+  return match === null ? -1 : match.index;
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** The default checker import specifier the emitted test uses (package export). */
 export const VERIFY_MODULE = '@sublang/slc/verify';
 
@@ -513,6 +827,150 @@ describe('${opts.basename}: FSM introspection', () => {
   });
 });
 `;
+}
+
+/**
+ * Builds a per-artifact vitest module pinning the prompt contract derived from
+ * the artifacts at build time (VERIFY-5): the per-state context reads, input
+ * wiring, and placeholders always; and, when the linked module exposes its
+ * composer under `_internal.composePlayerPrompt`, the composition checks and
+ * the pinned substitution map.
+ */
+export function generatePromptContractTest(opts: {
+  basename: string;
+  fsmModule: string;
+  verifyModule: string;
+  rows: PromptContractRow[];
+  /** Present when the linked module beside the artifacts exposes its composer. */
+  composer?: {
+    playbookModule: string;
+    substituted: Record<string, string[]>;
+  };
+}): string {
+  const composerImports = opts.composer
+    ? `import * as playbook from '${opts.composer.playbookModule}';\n`
+    : '';
+  const composerBlock = opts.composer
+    ? `
+const SUBSTITUTED = ${JSON.stringify(opts.composer.substituted, null, 2)};
+
+const compose = (
+  playbook as unknown as {
+    _internal: { composePlayerPrompt: (input: unknown) => string };
+  }
+)._internal.composePlayerPrompt;
+
+  it('composes player prompts per the link contract', () => {
+    expect(
+      checkPromptComposition({ config: findMachineConfig(fsm), compose }),
+    ).toEqual([]);
+  });
+
+  it('substitutes the placeholders pinned at build time', () => {
+    expect(deriveSubstitutions(findMachineConfig(fsm), compose)).toEqual(
+      SUBSTITUTED,
+    );
+  });
+`
+    : '';
+  const checkerImports = opts.composer
+    ? 'capturePromptContract,\n  checkPromptComposition,\n  deriveSubstitutions,\n  findMachineConfig,'
+    : 'capturePromptContract,\n  findMachineConfig,';
+  return `// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
+
+// Generated by slc (DR-009): prompt contract for ${opts.basename}.
+// The pinned rows were derived from the artifacts at build time; wiring,
+// placeholder, or composition drift fails this test.
+import { describe, expect, it } from 'vitest';
+
+import {
+  ${checkerImports}
+} from '${opts.verifyModule}';
+import * as fsm from '${opts.fsmModule}';
+${composerImports}
+const CONTRACT = ${JSON.stringify(opts.rows, null, 2)};
+
+describe('${opts.basename}: prompt contract', () => {
+  it('matches the prompt contract pinned at build time', () => {
+    expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
+  });
+${composerBlock}});
+`;
+}
+
+/**
+ * Emits the prompt-contract test beside a compiled `playbook` artifact
+ * (VERIFY-5): imports `<basename>.fsm.ts`, derives and pins the per-state
+ * contract, and — when a linked `<basename>.playbook.ts` sits beside the
+ * artifacts and exposes `_internal.composePlayerPrompt` — pins the substitution
+ * map and wires the composition checks. Returns the written path and any
+ * diagnostics (a linked module that cannot be imported or exposes no composer
+ * degrades to the FSM-only test).
+ *
+ * @throws when the `fsm` artifact cannot be imported or exports no machine.
+ */
+export async function emitPromptContractTest(opts: {
+  artifactDir: string;
+  basename: string;
+  verifyModule?: string;
+}): Promise<{ path: string; diagnostics: string[] }> {
+  const diagnostics: string[] = [];
+  const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
+  const config = findMachineConfig(await loadFsmModule(fsmPath));
+  const rows = capturePromptContract(config);
+
+  let composer:
+    | { playbookModule: string; substituted: Record<string, string[]> }
+    | undefined;
+  const linkedPath = join(opts.artifactDir, `${opts.basename}.playbook.ts`);
+  if (existsSync(linkedPath)) {
+    try {
+      const linked = (await loadFsmModule(linkedPath)) as {
+        _internal?: { composePlayerPrompt?: unknown };
+      };
+      const compose = linked._internal?.composePlayerPrompt;
+      if (typeof compose === 'function') {
+        composer = {
+          playbookModule: `./${opts.basename}.playbook.ts`,
+          substituted: deriveSubstitutions(
+            config,
+            compose as (input: unknown) => string,
+          ),
+        };
+        const findings = checkPromptComposition({
+          config,
+          compose: compose as (input: unknown) => string,
+        });
+        diagnostics.push(
+          ...findings.map((finding) => `prompt contract: ${finding}`),
+        );
+      } else {
+        diagnostics.push(
+          `prompt contract: linked module exposes no _internal.composePlayerPrompt; composition checks not emitted`,
+        );
+      }
+    } catch (error) {
+      diagnostics.push(
+        `prompt contract: linked module could not be imported (${messageOf(error)}); composition checks not emitted`,
+      );
+    }
+  }
+
+  const content = generatePromptContractTest({
+    basename: opts.basename,
+    fsmModule: `./${opts.basename}.fsm.ts`,
+    verifyModule: opts.verifyModule ?? VERIFY_MODULE,
+    rows,
+    composer,
+  });
+  await mkdir(opts.artifactDir, { recursive: true });
+  const path = join(
+    opts.artifactDir,
+    `${opts.basename}.prompt-contract.test.ts`,
+  );
+  await writeFile(path, content);
+  return { path, diagnostics };
 }
 
 /**
