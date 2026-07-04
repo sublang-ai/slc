@@ -2,17 +2,21 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Agent/model configuration and interpreted-executor construction for the `slc`
- * bin (CLI-7, CLI-12, DR-004).
+ * Agent/model configuration and executor construction for the `slc` bin (CLI-7,
+ * CLI-8, CLI-12, DR-004, DR-005).
  *
  * `resolveAgentSelection` reads `SLC_AGENT`/`SLC_MODEL` from the environment and
  * refuses an unset or unsupported agent with no implicit default (CLI-12).
- * `createConfiguredExecutor` builds the selected Cligent adapter, wraps it as a
- * transport, and binds the optional model as configuration — not phase
- * semantics (PHEXEC-13); credentials are left for the agent CLI to read from the
- * inherited process environment. The adapter factory is injectable so tests can
- * fake adapter construction. See specs/dev/cli.md.
+ * `createConfiguredExecutor` builds the interpreted executor and
+ * `createConfiguredCompiledFactory` the compiled-execution factory pinned phases
+ * select, both over Cligent-backed transports for the selected agent, binding
+ * the optional model as configuration — not phase semantics (PHEXEC-13);
+ * credentials are left for the agent CLI to read from the inherited process
+ * environment. The adapter factory is injectable so tests can fake adapter
+ * construction. See specs/dev/cli.md.
  */
+
+import { resolve } from 'node:path';
 
 import { ClaudeCodeAdapter } from '@sublang/cligent/adapters/claude-code';
 import { CodexAdapter } from '@sublang/cligent/adapters/codex';
@@ -21,8 +25,11 @@ import { OpenCodeAdapter } from '@sublang/cligent/adapters/opencode';
 import type { AgentAdapter, PermissionPolicy } from '@sublang/cligent';
 
 import { createCligentAgent } from './cligent-agent.js';
+import { createCompiledExecutor } from './compiled-executor.js';
 import type { PhaseExecutor } from './execution.js';
+import type { AgentClient } from './interpreter.js';
 import { createInterpretedExecutor } from './interpreter.js';
+import type { CompiledSelection } from './runner.js';
 
 /** Agent CLI ids the executable registers (CLI-7). */
 export const SUPPORTED_AGENTS = [
@@ -124,16 +131,63 @@ export function createConfiguredExecutor(
     permissions?: PermissionPolicy;
   } = {},
 ): PhaseExecutor {
-  const adapter = (opts.adapterFactory ?? defaultAdapterFactory)(
-    selection.agent,
-  );
-  const agent = createCligentAgent({
-    adapter,
-    maxTurns: opts.maxTurns,
-    permissions: opts.permissions,
-  });
+  const agent = createConfiguredAgentClient(selection, opts);
   return createInterpretedExecutor({
     agent,
     config: { model: selection.model, cwd: opts.cwd },
   });
+}
+
+/**
+ * Builds one Cligent-backed {@link AgentClient} for a selection (CLI-7): a fresh
+ * adapter wrapped as a transport. Each client is a single-flight Cligent
+ * instance that resumes its own agent session across calls, so callers wanting
+ * isolated sessions construct one client per role or player.
+ */
+export function createConfiguredAgentClient(
+  selection: AgentSelection,
+  opts: {
+    adapterFactory?: AdapterFactory;
+    maxTurns?: number;
+    permissions?: PermissionPolicy;
+  } = {},
+): AgentClient {
+  const adapter = (opts.adapterFactory ?? defaultAdapterFactory)(
+    selection.agent,
+  );
+  return createCligentAgent({
+    adapter,
+    maxTurns: opts.maxTurns,
+    permissions: opts.permissions,
+  });
+}
+
+/**
+ * Builds the compiled-execution factory the bin injects as `SlcDeps.compiled`
+ * (CLI-8, PHEXEC-27): for a current pinned phase it drives the pinned `playbook`
+ * artifact — resolved against its pipeline directory — through the compiled
+ * executor, backing the runtime's player ports with one agent transport per
+ * player id and its judge port with its own transport (PHEXEC-25), and applying
+ * the selected model as the default per-player model (PHEXEC-13).
+ */
+export function createConfiguredCompiledFactory(
+  selection: AgentSelection,
+  opts: {
+    adapterFactory?: AdapterFactory;
+    cwd?: string;
+    maxTurns?: number;
+    permissions?: PermissionPolicy;
+  } = {},
+): (choice: CompiledSelection) => PhaseExecutor {
+  const client = (): AgentClient =>
+    createConfiguredAgentClient(selection, opts);
+  return (choice) =>
+    createCompiledExecutor({
+      artifactPath: resolve(choice.pipelineDir, choice.record.artifact.path),
+      runRoot: opts.cwd ?? process.cwd(),
+      player: () => client(),
+      judge: client(),
+      defaultModel: selection.model,
+      cwd: opts.cwd,
+    });
 }

@@ -27,18 +27,37 @@ export interface PlaybookPortsAdapter extends PlaybookPorts {
   drainDiagnostics(): string[];
 }
 
+/**
+ * The transport(s) backing `callPlayer`: one shared client, or a per-player
+ * factory so each player id keeps its own agent session (a Cligent transport is
+ * single-flight and resumes its own session across calls).
+ */
+export type PlayerTransport = AgentClient | ((playerId: string) => AgentClient);
+
 /** Builds a {@link PlaybookPortsAdapter} over coding-agent transports (PHEXEC-25). */
 export function createPlaybookPorts(opts: {
-  /** Transport backing `callPlayer`. */
-  player: AgentClient;
+  /** Transport backing `callPlayer`; a factory yields one client per player id. */
+  player: PlayerTransport;
   /** Transport backing `callJudge`. */
   judge: AgentClient;
   /** Per-player model binding, applied as configuration (PHEXEC-13). */
   models?: Readonly<Record<string, string>>;
+  /** Model for players the `models` binding does not name (PHEXEC-13). */
+  defaultModel?: string;
   /** Working directory handed to the transports. */
   cwd?: string;
 }): PlaybookPortsAdapter {
   const diagnostics: string[] = [];
+  const players = new Map<string, AgentClient>();
+  const playerFor = (playerId: string): AgentClient => {
+    if (typeof opts.player !== 'function') return opts.player;
+    let client = players.get(playerId);
+    if (client === undefined) {
+      client = opts.player(playerId);
+      players.set(playerId, client);
+    }
+    return client;
+  };
 
   return {
     async callPlayer(
@@ -46,9 +65,9 @@ export function createPlaybookPorts(opts: {
       prompt: string,
       signal: AbortSignal,
     ): Promise<PlayerResult> {
-      const result = await opts.player.run({
+      const result = await playerFor(playerId).run({
         prompt,
-        model: opts.models?.[playerId],
+        model: opts.models?.[playerId] ?? opts.defaultModel,
         cwd: opts.cwd,
         signal,
       });
