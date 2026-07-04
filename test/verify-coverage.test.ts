@@ -141,7 +141,13 @@ const goodMachine = (
 
 describe('guardSatisfiable (VERIFY-6)', () => {
   it('satisfies a conjunctive guard by iterative deepening over its literals', () => {
-    const guard = ({ context, event }: { context: any; event: any }) =>
+    const guard = ({
+      context,
+      event,
+    }: {
+      context: Record<string, unknown>;
+      event: { output?: { guard?: string } };
+    }) =>
       event.output?.guard === 'accepted' &&
       context.reviewSubject === 'commit' &&
       context.afterReview === 'continueIr';
@@ -155,7 +161,7 @@ describe('guardSatisfiable (VERIFY-6)', () => {
 
   it('uses caller-supplied candidates for helper-bound comparisons', () => {
     const origin = 'bossSpecs';
-    const guard = ({ context }: { context: any }) =>
+    const guard = ({ context }: { context: Record<string, unknown> }) =>
       context.changeOrigin === origin;
     expect(guardSatisfiable(guard as never, { guard: 'ok' })).toBe(false);
     expect(
