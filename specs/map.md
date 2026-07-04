@@ -109,4 +109,5 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [verification.md](dev/verification.md) | Compilation-correctness verification: GEARS↔FSM conformance (verbatim prompts, player bindings) and emitting the check beside the artifacts |
+| dev | [verification.md](dev/verification.md) | Compilation-correctness verification: GEARS↔FSM conformance (verbatim prompts, player bindings, Boss-reply coverage), pinned FSM introspection, derived prompt contract, transition coverage, and emitting the tests beside the artifacts |
+| test | [verification.md](test/verification.md) | Acceptance: zero findings on the reference artifacts, injected-drift detection, and emission with degradation on an unimportable fsm |

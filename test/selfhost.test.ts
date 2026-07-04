@@ -38,19 +38,118 @@ const formats = (sf: string, se: string, tf: string, te: string): string =>
 // The reserved slc link phase: fsm .ts -> playbook .ts (DR-005).
 const playbookLink = `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | fsm | .ts |\n| target | playbook | .ts |\n\n## Link Targets\n\n| Target form | Meaning |\n| --- | --- |\n| <path>.ts | A runtime module. |\n`;
 
-// An agent that writes the prompt's declared target, emitting a real
-// createPlaybookRuntime module for the `playbook` artifact (SELFHOST-3).
+// A conformant gears+fsm artifact pair in the meta-pipeline output shapes, so
+// a faked full run exercises every verification emission (VERIFY-8): the fsm
+// carries the FLOW-1 binding verbatim plus the gears2fsm Boss surfaces.
+const GEARS_ARTIFACT = `# Flow
+
+## Behaviors
+
+### FLOW-1
+
+When Boss starts the flow, Captain shall prompt Writer:
+> Do the work.
+`;
+
+const FSM_ARTIFACT = `import { assign, fromPromise, setup } from 'xstate';
+
+export const machine = setup({
+  actors: {
+    captain: fromPromise(async () => {
+      throw new Error('captain actor must be provided by the runner');
+    }),
+  },
+}).createMachine({
+  id: 'flow',
+  initial: 'ready',
+  context: {},
+  on: {
+    BOSS_INTERRUPT: [
+      {
+        target: '#work',
+        reenter: true,
+        guard: ({ event }) => event.targetId === 'work',
+      },
+    ],
+  },
+  states: {
+    ready: { id: 'ready', on: { GO: { target: 'work' } } },
+    work: {
+      id: 'work',
+      invoke: {
+        src: 'captain',
+        input: ({ context }) => ({
+          player: 'Writer',
+          sourceItem: 'FLOW-1',
+          prompt: 'Do the work.',
+          result: {
+            ok: 'The work is done.',
+            needsBossReply:
+              'The player asks Boss. Output shall include \`question: <text>\`.',
+          },
+          pendingBossQuestion: context.pendingBossQuestion,
+          bossReply: context.bossReply,
+        }),
+        onDone: [
+          { target: '#done', guard: ({ event }) => event.output.guard === 'ok' },
+          {
+            target: '#awaitBossReply',
+            guard: ({ event }) =>
+              event.output.guard === 'needsBossReply' &&
+              typeof event.output.question === 'string',
+            actions: assign({
+              pendingBossQuestion: ({ event }) => ({
+                resumeStateId: 'work',
+                sourceItem: 'FLOW-1',
+                player: 'Writer',
+                question: event.output.question,
+              }),
+            }),
+          },
+        ],
+        onError: { target: '#failed' },
+      },
+    },
+    awaitBossReply: {
+      id: 'awaitBossReply',
+      on: {
+        BOSS_REPLY: [
+          {
+            target: '#work',
+            reenter: true,
+            guard: ({ context, event }) =>
+              context.pendingBossQuestion?.resumeStateId === 'work' &&
+              typeof event.answer === 'string' &&
+              event.answer.trim() !== '',
+            actions: assign({ bossReply: ({ event }) => event.answer }),
+          },
+          { target: '#failed' },
+        ],
+      },
+    },
+    failed: { id: 'failed', on: { GO: { target: 'work' } } },
+    done: { id: 'done', type: 'final' },
+  },
+});
+`;
+
+// An agent that writes the prompt's declared target, emitting realistic
+// artifacts per target kind — a gears package, a conformant machine, and a
+// real createPlaybookRuntime module — so verification emission runs end to end
+// (SELFHOST-3, VERIFY-8).
 const writingAgent = (): AgentClient => ({
   run: async ({ prompt }) => {
     const match = /artifact to write: (.+)/.exec(prompt);
     if (match) {
       const target = match[1].trim();
-      await writeFile(
-        target,
-        target.endsWith('.playbook.ts')
-          ? PLAYBOOK_MODULE
-          : 'export default 1;\n',
-      );
+      const content = target.endsWith('.playbook.ts')
+        ? PLAYBOOK_MODULE
+        : target.endsWith('.fsm.ts')
+          ? FSM_ARTIFACT
+          : target.endsWith('.md')
+            ? GEARS_ARTIFACT
+            : 'export default 1;\n';
+      await writeFile(target, content);
     }
     return { status: 'success', text: 'wrote the artifact' };
   },
@@ -345,10 +444,54 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
     expect(await exists(join(artDir, 'code.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'code.fsm.ts'))).toBe(true);
     expect(await exists(join(artDir, 'code.playbook.ts'))).toBe(false);
-    // The GEARS<->FSM verification test is emitted beside the artifacts
-    // (VERIFY-2): the reserved `playbook` run produced a gears+fsm pair.
+    // Every verification test is emitted beside the artifacts (VERIFY-8): the
+    // faked agents produced a conformant gears+fsm pair, so conformance,
+    // introspection, prompt-contract, and coverage all derive and emit.
+    for (const test of [
+      'code.gears-fsm.test.ts',
+      'code.fsm.introspect.test.ts',
+      'code.prompt-contract.test.ts',
+      'code.fsm.coverage.test.ts',
+    ]) {
+      expect(await exists(join(artDir, test))).toBe(true);
+      expect(result.outputs).toContain(join(artDir, test));
+    }
+  });
+
+  it('degrades fsm-derived emissions to diagnostics when the produced fsm cannot be imported (VERIFY-8)', async () => {
+    const junkAgent: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match) {
+          const target = match[1].trim();
+          await writeFile(
+            target,
+            target.endsWith('.gears.md')
+              ? GEARS_ARTIFACT
+              : 'not a module {{{\n',
+          );
+        }
+        return { status: 'success', text: 'wrote the artifact' };
+      },
+    };
+    const result = await runSlc(['playbook', source], {
+      resolver: withReservedPipelines(() => []),
+      executor: createInterpretedExecutor({ agent: junkAgent }),
+    });
+    expect(result.ok).toBe(true);
+    // The conformance test needs no emission-time import; the others degrade.
     expect(await exists(join(artDir, 'code.gears-fsm.test.ts'))).toBe(true);
-    expect(result.outputs).toContain(join(artDir, 'code.gears-fsm.test.ts'));
+    expect(await exists(join(artDir, 'code.fsm.introspect.test.ts'))).toBe(
+      false,
+    );
+    expect(await exists(join(artDir, 'code.prompt-contract.test.ts'))).toBe(
+      false,
+    );
+    expect(await exists(join(artDir, 'code.fsm.coverage.test.ts'))).toBe(false);
+    const diagnostics = result.diagnostics.join('\n');
+    expect(diagnostics).toMatch(/introspection test not emitted/);
+    expect(diagnostics).toMatch(/prompt-contract test not emitted/);
+    expect(diagnostics).toMatch(/coverage test not emitted/);
   });
 
   it('emits no verification when -o relocates the fsm out of the artifact dir (VERIFY-2, PIPE-8)', async () => {
