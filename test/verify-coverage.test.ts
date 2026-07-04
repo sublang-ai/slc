@@ -246,6 +246,63 @@ describe('checkFsmCoverage (VERIFY-6)', () => {
   });
 });
 
+describe('named guards (setup implementations)', () => {
+  it('resolves string guards through the machine implementations and flags unregistered ones', async () => {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const machine = setup({
+      actors: {
+        captain: fromPromise(async () => {
+          throw new Error('captain actor must be provided by the runner');
+        }),
+      },
+      guards: {
+        isOk: ({ event }: any) => event.output.guard === 'ok',
+      } as any,
+    }).createMachine({
+      id: 'named',
+      initial: 'ready',
+      context: {} as any,
+      on: {
+        BOSS_INTERRUPT: [
+          {
+            target: '#work',
+            reenter: true,
+            guard: ({ event }: any) => event.targetId === 'work',
+          },
+        ],
+      },
+      states: {
+        ready: { id: 'ready', on: { GO: { target: 'work' } } },
+        work: {
+          id: 'work',
+          invoke: {
+            src: 'captain',
+            input: () => ({
+              player: 'Writer',
+              sourceItem: 'X-1',
+              prompt: 'p',
+              result: { ok: 'done', needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+            }),
+            onDone: [
+              { target: '#done', guard: 'isOk' },
+              { target: '#failed', guard: 'unregistered' },
+            ],
+            onError: { target: '#failed' },
+          },
+        },
+        failed: { id: 'failed' },
+        done: { id: 'done', type: 'final' },
+      },
+    } as any);
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    const findings = await checkFsmCoverage({ machine });
+    const text = findings.join('\n');
+    // The registered named guard probes fine; the unregistered one surfaces.
+    expect(text).not.toMatch(/arm 0 .* unsatisfiable/);
+    expect(text).toMatch(/arm 1 names an unresolvable guard "unregistered"/);
+  });
+});
+
 describe('findMachine', () => {
   it('finds the providable machine export', () => {
     const machine = goodMachine();

@@ -115,6 +115,19 @@ describe('parseGearsItems', () => {
   // ("Captain shall compose ...") with no delegated player and a multi-line
   // prompt body, so a clean checkout reproduces the real-format coverage. Its
   // player is Captain itself.
+  it('parses quoted non-English player names (text2gears.md Players)', () => {
+    const md = `## Behaviors
+
+### DOC-1
+
+When Boss requests a draft, Captain shall prompt "作者":
+> 起草一段简短的问候。
+`;
+    expect(parseGearsItems(md)).toEqual([
+      { id: 'DOC-1', player: '作者', prompt: '起草一段简短的问候。' },
+    ]);
+  });
+
   it('treats a Captain-acts item (no delegated player) as player Captain', () => {
     const md = `## Behaviors
 
@@ -633,6 +646,31 @@ describe('checkPromptComposition (VERIFY-5)', () => {
     }).join('\n');
     expect(findings).toMatch(/does not open with the exact preamble/);
     expect(findings).toMatch(/lacks the "Boss question:" block/);
+  });
+
+  it('does not flag body-carried marker or continuation text (self-hosting)', () => {
+    // A self-hosted playbook's domain body legitimately QUOTES the adjudicator
+    // contract and continuation texts — instructions about them, not leaks.
+    const selfHostConfig: MachineConfigLike = {
+      states: {
+        work: contractCaptain('Writer', 'META-1', [
+          'Use this exact description: Output shall include `question: <text>`.',
+          `Preserve the continuation preamble exactly: ${CONTINUATION_PREAMBLE}`,
+          'Preserve the labels Boss question: and Boss reply: verbatim.',
+        ]),
+      },
+    };
+    expect(
+      checkPromptComposition({ config: selfHostConfig, compose: goodCompose }),
+    ).toEqual([]);
+    // A composer that actually ADDS the marker beyond the body still flags.
+    const leaky = (raw: unknown): string =>
+      `${goodCompose(raw)}\n\nOutput shall include \`question: ...\`.`;
+    expect(
+      checkPromptComposition({ config: selfHostConfig, compose: leaky }).join(
+        '\n',
+      ),
+    ).toMatch(/leaks into the player prompt/);
   });
 
   it('finds nothing on the reference fsm + linked composer', async () => {
