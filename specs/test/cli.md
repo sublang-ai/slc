@@ -63,12 +63,12 @@ Where `SLC_PIPELINE_PATH` locates the pipeline directory and `SLC_AGENT` with an
 ### CLI-23
 Verifies: [CLI-22](../user/cli.md#cli-22), [CLI-7](../dev/cli.md#cli-7), [CLI-6](../dev/cli.md#cli-6)
 
-Where a config file supplies the agent, model, and pipeline search path and no `SLC_*` variables are set, when the slc executable runs a source, the slc executable shall resolve the reference through the file's search path and interpret every phase through the file's agent CLI with the file's model, writing the artifact and exiting zero.
+Where a config file supplies the agent, model, and pipeline search path and no `SLC_*` variables are set, when the slc executable runs a source, the slc executable shall resolve the reference through the file's search path and interpret every unpinned phase through the file's agent CLI with the file's model, writing the artifact and exiting zero.
 
 ### CLI-24
 Verifies: [CLI-7](../dev/cli.md#cli-7), [CLI-6](../dev/cli.md#cli-6), [CLI-20](../dev/cli.md#cli-20)
 
-Where both a config file and a non-blank `SLC_AGENT`, `SLC_MODEL`, or `SLC_PIPELINE_PATH` supply the corresponding key — agent, model, or pipeline search path — when the slc executable runs a source, the slc executable shall use the environment value over the file value for that key, resolving the reference through `SLC_PIPELINE_PATH` rather than the file's `pipelinePath` and interpreting every phase through the environment's agent CLI and model rather than the file's.
+Where both a config file and a non-blank `SLC_AGENT`, `SLC_MODEL`, or `SLC_PIPELINE_PATH` supply the corresponding key — agent, model, or pipeline search path — when the slc executable runs a source, the slc executable shall use the environment value over the file value for that key, resolving the reference through `SLC_PIPELINE_PATH` rather than the file's `pipelinePath` and interpreting every unpinned phase through the environment's agent CLI and model rather than the file's.
 
 ### CLI-25
 Verifies: [CLI-20](../dev/cli.md#cli-20), [CLI-22](../user/cli.md#cli-22)
