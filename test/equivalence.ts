@@ -33,6 +33,15 @@ export interface CompiledPlaybook {
   fsmSource?: string;
 }
 
+/**
+ * Normalizes a prompt line for comparison: markdown escaping of angle brackets
+ * (`\<coder-llm\>`) is source syntax, not content — a faithful compilation may
+ * carry the token either escaped or plain.
+ */
+export function normalizePromptLine(line: string): string {
+  return line.replace(/\\([<>])/g, '$1');
+}
+
 /** The verbatim prompt-line sets per player bound in a `gears` artifact. */
 export function playerLineSets(gears: string): Map<string, Set<string>> {
   const sets = new Map<string, Set<string>>();
@@ -43,7 +52,7 @@ export function playerLineSets(gears: string): Map<string, Set<string>> {
       sets.set(item.player, lines);
     }
     for (const line of item.prompt.split('\n')) {
-      if (line.trim() !== '') lines.add(line);
+      if (line.trim() !== '') lines.add(normalizePromptLine(line));
     }
   }
   return sets;
@@ -54,7 +63,9 @@ export function sourceBlockquoteLines(sourceText: string): Set<string> {
   const lines = new Set<string>();
   for (const raw of sourceText.split('\n')) {
     const match = /^>\s?(.*)$/.exec(raw);
-    if (match !== null && match[1].trim() !== '') lines.add(match[1]);
+    if (match !== null && match[1].trim() !== '') {
+      lines.add(normalizePromptLine(match[1]));
+    }
   }
   return lines;
 }
