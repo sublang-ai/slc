@@ -35,6 +35,7 @@ import { isReservedPipeline } from './resolver.js';
 import {
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
+  emitPromptContractTest,
 } from './verify.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
@@ -348,6 +349,22 @@ async function emitVerification(
   } catch (error) {
     diagnostics.push(
       `verification: introspection test not emitted: ${messageOf(error)}`,
+    );
+  }
+  try {
+    const promptContract = await emitPromptContractTest({
+      artifactDir: ctx.artDir,
+      basename: ctx.basename,
+    });
+    outputs.push(promptContract.path);
+    diagnostics.push(
+      ...promptContract.diagnostics.map(
+        (diagnostic) => `verification: ${diagnostic}`,
+      ),
+    );
+  } catch (error) {
+    diagnostics.push(
+      `verification: prompt-contract test not emitted: ${messageOf(error)}`,
     );
   }
   return { ...result, outputs, diagnostics };

@@ -10,9 +10,14 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
+  CONTINUATION_PREAMBLE,
+  capturePromptContract,
   checkGearsFsmConformance,
+  checkPromptComposition,
+  deriveSubstitutions,
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
+  emitPromptContractTest,
   enumerateCaptainStates,
   findMachineConfig,
   generateFsmIntrospectionTest,
@@ -20,6 +25,8 @@ import {
   normalizeArms,
   parseGearsItems,
   pinIntrospection,
+  placeholdersIn,
+  probeContextReads,
   type MachineConfigLike,
 } from '../src/verify.js';
 
@@ -468,6 +475,296 @@ describe('generateFsmIntrospectionTest / emitFsmIntrospectionTest', () => {
     });
     expect(generated).toContain('const PINNED =');
     expect(generated).toContain('"sourceItem": "GREETER-1"');
+  });
+});
+
+// A composer following link.md's composition contract, for fixture states whose
+// prompts carry the <audience> placeholder wired from context.audience.
+const contractCaptain = (
+  player: string,
+  sourceItem: string,
+  promptLines: string[],
+) => ({
+  invoke: {
+    input: ({ context }: { context: Record<string, unknown> }) => ({
+      player,
+      sourceItem,
+      prompt: promptLines.join('\n'),
+      result: {
+        done: 'The player finished.',
+        needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+      },
+      audience: context.audience,
+      ...(context.pendingBossQuestion && context.bossReply
+        ? {
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
+          }
+        : {}),
+    }),
+  },
+});
+
+const contractConfig = (): MachineConfigLike => ({
+  states: {
+    ready: {},
+    draft: contractCaptain('Writer', 'GREETER-1', [
+      'Draft a short hello message for <audience>.',
+      'Keep it warm.',
+    ]),
+    done: { type: 'final' },
+  },
+});
+
+type ComposerInput = {
+  prompt: string;
+  audience?: string;
+  pendingBossQuestion?: { question: string };
+  bossReply?: string;
+};
+
+const goodCompose = (raw: unknown): string => {
+  const input = raw as ComposerInput;
+  const blocks: string[] = [];
+  if (input.pendingBossQuestion && input.bossReply) {
+    blocks.push(
+      CONTINUATION_PREAMBLE,
+      `Boss question:\n${input.pendingBossQuestion.question}`,
+      `Boss reply:\n${input.bossReply}`,
+    );
+  }
+  let body = input.prompt;
+  if (input.audience !== undefined) {
+    body = body.replaceAll('<audience>', input.audience);
+  }
+  blocks.push(body);
+  return blocks.join('\n\n');
+};
+
+describe('prompt contract capture (VERIFY-5)', () => {
+  it('probes context reads through a recording proxy', () => {
+    const reads = probeContextReads(({ context }) => ({
+      a: context.audience,
+      b: context.bossReply,
+    }));
+    expect(reads).toEqual(['audience', 'bossReply']);
+  });
+
+  it('lists distinct placeholder tokens in order', () => {
+    expect(
+      placeholdersIn('Use <coder-llm> then <#> and <coder-llm> again.'),
+    ).toEqual(['<coder-llm>', '<#>']);
+  });
+
+  it('captures per-state reads, wiring, and placeholders', () => {
+    const rows = capturePromptContract(contractConfig());
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      state: 'draft',
+      sourceItem: 'GREETER-1',
+      player: 'Writer',
+      placeholders: ['<audience>'],
+    });
+    expect(rows[0].reads).toContain('audience');
+    expect(rows[0].wires.audience).toEqual(['audience']);
+  });
+
+  it('derives which placeholders the composer substitutes', () => {
+    expect(deriveSubstitutions(contractConfig(), goodCompose)).toEqual({
+      draft: ['<audience>'],
+    });
+    // A composer that never substitutes leaves the token literal.
+    expect(
+      deriveSubstitutions(contractConfig(), (input) =>
+        String((input as ComposerInput).prompt),
+      ),
+    ).toEqual({ draft: [] });
+  });
+});
+
+describe('checkPromptComposition (VERIFY-5)', () => {
+  it('accepts a composer following the link contract', () => {
+    expect(
+      checkPromptComposition({
+        config: contractConfig(),
+        compose: goodCompose,
+      }),
+    ).toEqual([]);
+  });
+
+  it('flags a composer that mutates the body', () => {
+    const compose = (raw: unknown): string =>
+      goodCompose(raw).replace('Keep it warm.', 'Keep it professional.');
+    expect(
+      checkPromptComposition({ config: contractConfig(), compose }).join('\n'),
+    ).toMatch(/does not preserve the body line "Keep it warm."/);
+  });
+
+  it('flags adjudicator-contract leakage into the player prompt', () => {
+    const compose = (raw: unknown): string =>
+      `${goodCompose(raw)}\n\nIf unsure: Output shall include \`question: ...\`.`;
+    expect(
+      checkPromptComposition({ config: contractConfig(), compose }).join('\n'),
+    ).toMatch(/leaks into the player prompt/);
+  });
+
+  it('flags continuation blocks on an ordinary turn', () => {
+    const compose = (raw: unknown): string =>
+      `${CONTINUATION_PREAMBLE}\n\n${goodCompose(raw)}`;
+    expect(
+      checkPromptComposition({ config: contractConfig(), compose }).join('\n'),
+    ).toMatch(/continuation|preamble/);
+  });
+
+  it('flags a continuation turn missing the preamble or Q&A blocks', () => {
+    const compose = (raw: unknown): string => {
+      const input = raw as ComposerInput;
+      return input.audience !== undefined
+        ? goodCompose({
+            ...input,
+            pendingBossQuestion: undefined,
+            bossReply: undefined,
+          })
+        : goodCompose(raw);
+    };
+    const findings = checkPromptComposition({
+      config: contractConfig(),
+      compose,
+    }).join('\n');
+    expect(findings).toMatch(/does not open with the exact preamble/);
+    expect(findings).toMatch(/lacks the "Boss question:" block/);
+  });
+
+  it('finds nothing on the reference fsm + linked composer', async () => {
+    const fsm = await referenceFsm();
+    const playbook = (await import(join(referenceDir, 'code.playbook.js'))) as {
+      _internal: { composePlayerPrompt: (input: unknown) => string };
+    };
+    const config = findMachineConfig(fsm);
+    const rows = capturePromptContract(config);
+    expect(rows).toHaveLength(19);
+    expect(
+      checkPromptComposition({
+        config,
+        compose: playbook._internal.composePlayerPrompt,
+      }),
+    ).toEqual([]);
+    const substituted = deriveSubstitutions(
+      config,
+      playbook._internal.composePlayerPrompt,
+    );
+    // The reference substitutes <#> on IR states and player models on commits.
+    expect(substituted.continueIr).toEqual(['<#>']);
+    expect(substituted.commitJoint).toEqual(['<coder-llm>', '<reviewer-llm>']);
+  });
+});
+
+describe('emitPromptContractTest (VERIFY-5)', () => {
+  const fsmFixture = [
+    'export const machine = {',
+    '  config: {',
+    '    states: {',
+    '      work: {',
+    '        invoke: {',
+    "          src: 'captain',",
+    '          input: ({ context }: { context: Record<string, unknown> }) => ({',
+    "            player: 'Writer',",
+    "            sourceItem: 'X-1',",
+    "            prompt: 'Greet <audience>.',",
+    "            result: { done: 'd', needsBossReply: 'Output shall include `question: ...`' },",
+    '            audience: context.audience,',
+    '            ...(context.pendingBossQuestion && context.bossReply',
+    '              ? { pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply }',
+    '              : {}),',
+    '          }),',
+    '        },',
+    '      },',
+    '    },',
+    '  },',
+    '};',
+    '',
+  ].join('\n');
+
+  it('emits the FSM-only variant when no linked module sits beside', async () => {
+    const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-pc-'));
+    try {
+      await writeFile(join(artifactDir, 'code.fsm.ts'), fsmFixture);
+      const { path, diagnostics } = await emitPromptContractTest({
+        artifactDir,
+        basename: 'code',
+      });
+      expect(path).toBe(join(artifactDir, 'code.prompt-contract.test.ts'));
+      expect(diagnostics).toEqual([]);
+      const content = await readFile(path, 'utf8');
+      expect(content).toContain('capturePromptContract');
+      expect(content).toContain('"placeholders": [');
+      expect(content).toContain('"<audience>"');
+      expect(content).not.toContain('checkPromptComposition');
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it('emits composition checks when the linked module exposes its composer', async () => {
+    const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-pc-link-'));
+    try {
+      await writeFile(join(artifactDir, 'code.fsm.ts'), fsmFixture);
+      await writeFile(
+        join(artifactDir, 'code.playbook.ts'),
+        [
+          "const CONTINUATION = '" + CONTINUATION_PREAMBLE + "';",
+          'const compose = (input: any): string => {',
+          '  const blocks: string[] = [];',
+          '  if (input.pendingBossQuestion && input.bossReply) {',
+          '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
+          '  }',
+          '  let body: string = input.prompt;',
+          "  if (input.audience !== undefined) body = body.replaceAll('<audience>', input.audience);",
+          '  blocks.push(body);',
+          "  return blocks.join('\\n\\n');",
+          '};',
+          'export const _internal = { composePlayerPrompt: compose };',
+          'export default function createPlaybookRuntime() {',
+          '  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      const { path, diagnostics } = await emitPromptContractTest({
+        artifactDir,
+        basename: 'code',
+      });
+      expect(diagnostics).toEqual([]);
+      const content = await readFile(path, 'utf8');
+      expect(content).toContain('checkPromptComposition');
+      expect(content).toContain(
+        "import * as playbook from './code.playbook.ts'",
+      );
+      expect(content).toContain('"<audience>"');
+      expect(content).toContain('const SUBSTITUTED =');
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it('degrades to the FSM-only variant with a diagnostic when the composer is absent', async () => {
+    const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-pc-nocomp-'));
+    try {
+      await writeFile(join(artifactDir, 'code.fsm.ts'), fsmFixture);
+      await writeFile(
+        join(artifactDir, 'code.playbook.ts'),
+        'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n',
+      );
+      const { diagnostics } = await emitPromptContractTest({
+        artifactDir,
+        basename: 'code',
+      });
+      expect(diagnostics.join('\n')).toMatch(
+        /no _internal\.composePlayerPrompt/,
+      );
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
   });
 });
 
