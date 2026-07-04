@@ -42,7 +42,14 @@ export function normalizePromptLine(line: string): string {
   return line.replace(/\\([<>])/g, '$1');
 }
 
-/** The verbatim prompt-line sets per player bound in a `gears` artifact. */
+/**
+ * The verbatim prompt-line sets per player bound in a `gears` artifact.
+ *
+ * Known limit: sets dedupe, so a compilation that drops one of two items with
+ * identical prompts still compares equal here — cross-item duplication counts
+ * are partition judgment, and comparing them would flag legitimate variance.
+ * Structural completeness is covered by the conformance and coverage checks.
+ */
 export function playerLineSets(gears: string): Map<string, Set<string>> {
   const sets = new Map<string, Set<string>>();
   for (const item of parseGearsItems(gears)) {

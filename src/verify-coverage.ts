@@ -44,6 +44,23 @@ export const CAPTAIN_ACTOR = 'captain';
 interface MachineLike {
   config: MachineConfigLike;
   provide(implementations: { actors: Record<string, unknown> }): MachineLike;
+  /** XState exposes `setup()`-registered guards here. */
+  implementations?: { guards?: Record<string, unknown> };
+}
+
+/** Resolves an arm's guard to a callable: inline functions directly, named
+ * (string) guards through the machine's `setup()` implementations. */
+function resolveGuard(
+  machine: MachineLike,
+  guard: unknown,
+): ((arg: { context: unknown; event: unknown }) => unknown) | undefined {
+  const resolved =
+    typeof guard === 'string'
+      ? machine.implementations?.guards?.[guard]
+      : guard;
+  return typeof resolved === 'function'
+    ? (resolved as (arg: { context: unknown; event: unknown }) => unknown)
+    : undefined;
 }
 
 /**
@@ -439,15 +456,12 @@ export async function checkFsmCoverage(
     for (const key of Object.keys(state.result)) {
       const output = synthOutput(state, key);
       const predicted = rawArms.some((arm) => {
-        const guard = (arm as { guard?: unknown })?.guard;
-        if (typeof guard !== 'function') return true;
+        const raw = (arm as { guard?: unknown })?.guard;
+        if (raw === undefined) return true;
+        const guard = resolveGuard(machine, raw);
+        if (guard === undefined) return true;
         try {
-          return Boolean(
-            (guard as (arg: { context: unknown; event: unknown }) => unknown)({
-              context: {},
-              event: { output },
-            }),
-          );
+          return Boolean(guard({ context: {}, event: { output } }));
         } catch {
           return false;
         }
@@ -520,14 +534,22 @@ export async function checkFsmCoverage(
         : [key],
     );
     for (const [index, arm] of rawArms.entries()) {
-      const guard = (arm as { guard?: unknown })?.guard;
-      if (typeof guard !== 'function') continue;
+      const raw = (arm as { guard?: unknown })?.guard;
+      if (raw === undefined) continue;
+      const guard = resolveGuard(machine, raw);
+      if (guard === undefined) {
+        // A named guard the machine does not register cannot be probed —
+        // surface it rather than silently skipping (VERIFY-6).
+        findings.push(
+          `state ${state.stateId}: onDone arm ${index} names an unresolvable guard "${String(raw)}"`,
+        );
+        continue;
+      }
       const anyOutput = Object.keys(state.result).some((key) =>
-        guardSatisfiable(
-          guard as (arg: { context: unknown; event: unknown }) => unknown,
-          synthOutput(state, key),
-          [...stateKeys, ...sourceCandidates],
-        ),
+        guardSatisfiable(guard, synthOutput(state, key), [
+          ...stateKeys,
+          ...sourceCandidates,
+        ]),
       );
       if (!anyOutput) {
         findings.push(
