@@ -21,7 +21,10 @@
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { hashFile } from './hash.js';
 
 /** A GEARS spec item: its id, the player it prompts, and its verbatim prompt body. */
 export interface GearsItem {
@@ -51,13 +54,21 @@ export const BOSS_QUESTION_MARKER = 'Output shall include `question:';
 
 /** The minimal XState machine-config shape the introspector walks (`machine.config`). */
 export interface MachineConfigLike {
+  initial?: string;
   states?: Record<string, StateLike>;
+  on?: Record<string, unknown>;
 }
 
 interface StateLike {
+  id?: string;
+  type?: string;
   invoke?: {
+    src?: unknown;
     input?: (arg: { context: Record<string, unknown> }) => unknown;
+    onDone?: unknown;
+    onError?: unknown;
   };
+  on?: Record<string, unknown>;
 }
 
 const ITEM_HEADING = /^###\s+([A-Za-z][\w-]*)\s*$/;
@@ -230,6 +241,135 @@ export function checkGearsFsmConformance(
   return findings;
 }
 
+/*
+ * Machine introspection (VERIFY-4).
+ *
+ * `pinIntrospection` reduces a machine config to its structural facts — the
+ * captain-state bindings, every transition arm, the root and quiescent event
+ * surfaces, and the `BOSS_INTERRUPT` jumpable set — computed once at build time
+ * and baked into the emitted introspection test, so any unintended topology
+ * change to the artifact fails the test (DR-009).
+ */
+
+/** The `gears2fsm`-mandated root pre-emption event name. */
+export const INTERRUPT_EVENT = 'BOSS_INTERRUPT';
+/** The `gears2fsm`-mandated Boss-reply event and wait-state names. */
+export const BOSS_REPLY_EVENT = 'BOSS_REPLY';
+export const AWAIT_BOSS_REPLY_STATE = 'awaitBossReply';
+
+/** One normalized transition arm of an `onDone`/`onError`/`on` declaration. */
+export interface TransitionArm {
+  index: number;
+  /** Target state key/id with any leading `#` stripped; null for a target-less arm. */
+  target: string | null;
+  guarded: boolean;
+}
+
+/** Event name to its normalized transition arms. */
+export type EventArms = Record<string, TransitionArm[]>;
+
+/** The structural facts {@link pinIntrospection} pins for a machine (VERIFY-4). */
+export interface IntrospectionPins {
+  initial: string | null;
+  /** Captain-invoking states, in declaration order. */
+  captain: {
+    state: string;
+    sourceItem: string;
+    player: string;
+    resultKeys: string[];
+    onDone: TransitionArm[];
+    onError: TransitionArm[];
+    on: EventArms;
+  }[];
+  /** Non-captain states: finality and event surface. */
+  quiescent: { state: string; final: boolean; on: EventArms }[];
+  /** Root-level event surface. */
+  rootOn: EventArms;
+  /** Root `BOSS_INTERRUPT` targets in arm order — the jumpable set. */
+  interruptTargets: string[];
+}
+
+/**
+ * Normalizes an XState transition declaration — a string target, a
+ * target/guard/actions object, or an array of either — into ordered
+ * {@link TransitionArm}s.
+ */
+export function normalizeArms(raw: unknown): TransitionArm[] {
+  const arms = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+  return arms.map((arm, index) => {
+    if (typeof arm === 'string') {
+      return { index, target: stripHash(arm), guarded: false };
+    }
+    if (typeof arm === 'object' && arm !== null) {
+      const record = arm as { target?: unknown; guard?: unknown };
+      return {
+        index,
+        target:
+          typeof record.target === 'string' ? stripHash(record.target) : null,
+        guarded: record.guard !== undefined,
+      };
+    }
+    return { index, target: null, guarded: false };
+  });
+}
+
+function stripHash(target: string): string {
+  return target.startsWith('#') ? target.slice(1) : target;
+}
+
+function eventArms(on: Record<string, unknown> | undefined): EventArms {
+  const out: EventArms = {};
+  for (const [event, raw] of Object.entries(on ?? {})) {
+    out[event] = normalizeArms(raw);
+  }
+  return out;
+}
+
+/**
+ * Reduces a machine config to the structural facts the emitted introspection
+ * test pins (VERIFY-4): captain bindings with result keys and every transition
+ * arm, the quiescent states' event surfaces, the root event surface, and the
+ * `BOSS_INTERRUPT` jumpable set.
+ */
+export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
+  const captainByState = new Map(
+    enumerateCaptainStates(config).map((state) => [state.stateId, state]),
+  );
+  const captain: IntrospectionPins['captain'] = [];
+  const quiescent: IntrospectionPins['quiescent'] = [];
+  for (const [stateId, state] of Object.entries(config.states ?? {})) {
+    const binding = captainByState.get(stateId);
+    if (binding !== undefined) {
+      captain.push({
+        state: stateId,
+        sourceItem: binding.sourceItem,
+        player: binding.player,
+        resultKeys: Object.keys(binding.result).sort(),
+        onDone: normalizeArms(state.invoke?.onDone),
+        onError: normalizeArms(state.invoke?.onError),
+        on: eventArms(state.on),
+      });
+    } else {
+      quiescent.push({
+        state: stateId,
+        final: state.type === 'final',
+        on: eventArms(state.on),
+      });
+    }
+  }
+  const rootOn = eventArms(config.on);
+  const interruptTargets = (rootOn[INTERRUPT_EVENT] ?? [])
+    .map((arm) => arm.target)
+    .filter((target): target is string => target !== null);
+  return {
+    initial: typeof config.initial === 'string' ? config.initial : null,
+    captain,
+    quiescent,
+    rootOn,
+    interruptTargets,
+  };
+}
+
 /** The default checker import specifier the emitted test uses (package export). */
 export const VERIFY_MODULE = '@sublang/slc/verify';
 
@@ -325,6 +465,83 @@ export async function emitGearsFsmConformanceTest(opts: {
   });
   await mkdir(opts.artifactDir, { recursive: true });
   const path = join(opts.artifactDir, `${opts.basename}.gears-fsm.test.ts`);
+  await writeFile(path, content);
+  return path;
+}
+
+/**
+ * Imports a produced `fsm` artifact module for emission-time derivation. The
+ * artifact is TypeScript; under Node's type stripping (erasable-syntax-only)
+ * the direct import works, and a failure is reported to the caller so emission
+ * degrades to a diagnostic rather than failing the run. The URL carries the
+ * content hash so a rebuilt artifact at the same path is never served from the
+ * module cache.
+ */
+export async function loadFsmModule(fsmPath: string): Promise<unknown> {
+  const resolved = resolve(fsmPath);
+  const url = pathToFileURL(resolved);
+  url.searchParams.set('v', await hashFile(resolved));
+  return import(url.href);
+}
+
+/**
+ * Builds a per-artifact vitest module that fails when the machine's structure
+ * drifts from the topology pinned at build time (VERIFY-4).
+ */
+export function generateFsmIntrospectionTest(opts: {
+  basename: string;
+  fsmModule: string;
+  verifyModule: string;
+  pins: IntrospectionPins;
+}): string {
+  return `// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
+
+// Generated by slc (DR-009): FSM introspection pins for ${opts.basename}.
+// The PINNED topology was derived from the artifact at build time; any
+// unintended structural change to the machine fails this test.
+import { describe, expect, it } from 'vitest';
+
+import { findMachineConfig, pinIntrospection } from '${opts.verifyModule}';
+import * as fsm from '${opts.fsmModule}';
+
+const PINNED = ${JSON.stringify(opts.pins, null, 2)};
+
+describe('${opts.basename}: FSM introspection', () => {
+  it('matches the machine topology pinned at build time', () => {
+    expect(pinIntrospection(findMachineConfig(fsm))).toEqual(PINNED);
+  });
+});
+`;
+}
+
+/**
+ * Emits the introspection test beside a compiled `playbook` artifact
+ * (VERIFY-4): imports `<basename>.fsm.ts`, derives its topology pins, and
+ * writes `<basename>.fsm.introspect.test.ts` into the artifact directory.
+ *
+ * @throws when the `fsm` artifact cannot be imported or exports no machine.
+ */
+export async function emitFsmIntrospectionTest(opts: {
+  artifactDir: string;
+  basename: string;
+  verifyModule?: string;
+}): Promise<string> {
+  const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
+  const pins = pinIntrospection(
+    findMachineConfig(await loadFsmModule(fsmPath)),
+  );
+  const content = generateFsmIntrospectionTest({
+    basename: opts.basename,
+    fsmModule: `./${opts.basename}.fsm.ts`,
+    verifyModule: opts.verifyModule ?? VERIFY_MODULE,
+    pins,
+  });
+  await mkdir(opts.artifactDir, { recursive: true });
+  const path = join(
+    opts.artifactDir,
+    `${opts.basename}.fsm.introspect.test.ts`,
+  );
   await writeFile(path, content);
   return path;
 }
