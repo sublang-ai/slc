@@ -41,9 +41,29 @@ When Writer proposes a greeting, Captain shall prompt Reviewer:
 `;
 
 // A machine config in the `gears2fsm` shape: captain-invoking states whose
-// `invoke.input` carries player, sourceItem, and the verbatim prompt.
-const captain = (player: string, sourceItem: string, prompt: string) => ({
-  invoke: { input: () => ({ player, sourceItem, prompt, result: {} }) },
+// `invoke.input` carries player, sourceItem, the verbatim prompt, and the
+// per-state result map with the mandated Boss-reply key.
+const NEEDS_BOSS_REPLY_TEXT =
+  "The player's prose surfaces a clarifying question for Boss that the player cannot answer alone. Output shall include `question: <verbatim question text from the player's prose>`.";
+
+const captain = (
+  player: string,
+  sourceItem: string,
+  prompt: string,
+  result: Record<string, string> = {},
+) => ({
+  invoke: {
+    input: () => ({
+      player,
+      sourceItem,
+      prompt,
+      result: {
+        done: 'The player finished.',
+        needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+        ...result,
+      },
+    }),
+  },
 });
 
 const conformantConfig = (): MachineConfigLike => ({
@@ -121,6 +141,10 @@ describe('enumerateCaptainStates', () => {
       sourceItem: 'GREETER-1',
       player: 'Writer',
       prompt: 'Draft a short hello message for <audience>.',
+      result: {
+        done: 'The player finished.',
+        needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+      },
     });
   });
 });
@@ -193,6 +217,55 @@ describe('checkGearsFsmConformance', () => {
       /GEARS item GREETER-1 maps to 2 FSM states/,
     );
   });
+
+  it('detects a state with no needsBossReply result (VERIFY-3)', () => {
+    const config = conformantConfig();
+    const state = config.states!.draft as {
+      invoke: { input: () => Record<string, unknown> };
+    };
+    const input = state.invoke.input();
+    state.invoke.input = () => ({
+      ...input,
+      result: { done: 'The player finished.' },
+    });
+    expect(checkGearsFsmConformance(gears, config)).toContain(
+      'FSM state draft declares no needsBossReply result',
+    );
+  });
+
+  it('detects a needsBossReply description missing the question contract (VERIFY-3)', () => {
+    const config = conformantConfig();
+    config.states!.draft = captain(
+      'Writer',
+      'GREETER-1',
+      'Draft a short hello message for <audience>.',
+      { needsBossReply: 'The player asked something.' },
+    );
+    expect(checkGearsFsmConformance(gears, config).join('\n')).toMatch(
+      /draft: needsBossReply description lacks/,
+    );
+  });
+});
+
+// The checker must hold for the real, human-reviewed reference artifacts that
+// model DR-009's verification contract (IR-007 Task 8: "test the generator
+// against the reference artifacts"). The installed @sublang/playbook ships them.
+describe('conformance against the reference artifacts', () => {
+  it('finds nothing on the reference code.gears.md + code.fsm', async () => {
+    const dir = fileURLToPath(
+      new URL(
+        '../node_modules/@sublang/playbook/reference/sdlc/code.playbook/',
+        import.meta.url,
+      ),
+    );
+    const referenceGears = readFileSync(join(dir, 'code.gears.md'), 'utf8');
+    const fsm: unknown = await import(join(dir, 'code.fsm.js'));
+    const items = parseGearsItems(referenceGears);
+    expect(items).toHaveLength(19);
+    expect(
+      checkGearsFsmConformance(referenceGears, findMachineConfig(fsm)),
+    ).toEqual([]);
+  });
 });
 
 describe('generateGearsFsmConformanceTest', () => {
@@ -236,7 +309,8 @@ describe('emitGearsFsmConformanceTest', () => {
       expect(path).toBe(join(artifactDir, 'code.gears-fsm.test.ts'));
       const content = await readFile(path, 'utf8');
       expect(content).toContain("from '@sublang/slc/verify'");
-      expect(content).toContain("import * as fsm from './code.fsm.js'");
+      // The emitted test imports the `.fsm.ts` artifact the run wrote.
+      expect(content).toContain("import * as fsm from './code.fsm.ts'");
       expect(content).toContain('./code.gears.md');
       expect(content).toContain(
         'checkGearsFsmConformance(gears, findMachineConfig(fsm))',

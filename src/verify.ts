@@ -36,7 +36,18 @@ export interface CaptainState {
   sourceItem: string;
   player: string;
   prompt: string;
+  /** The state's per-state guard contract: result key to description. */
+  result: Record<string, string>;
 }
+
+/**
+ * The Boss-reply result key `gears2fsm` adds to every captain-invoking state's
+ * `result` map, and the load-bearing substring its adjudicator-facing
+ * description must carry so the runtime's judge requires a `question` payload
+ * (gears2fsm.md "Boss-reply suspension"; DR-009).
+ */
+export const NEEDS_BOSS_REPLY = 'needsBossReply';
+export const BOSS_QUESTION_MARKER = 'Output shall include `question:';
 
 /** The minimal XState machine-config shape the introspector walks (`machine.config`). */
 export interface MachineConfigLike {
@@ -129,6 +140,7 @@ export function enumerateCaptainStates(
       player?: unknown;
       sourceItem?: unknown;
       prompt?: unknown;
+      result?: unknown;
     };
     if (typeof fields.sourceItem !== 'string') continue;
     out.push({
@@ -136,7 +148,18 @@ export function enumerateCaptainStates(
       sourceItem: fields.sourceItem,
       player: typeof fields.player === 'string' ? fields.player : '',
       prompt: typeof fields.prompt === 'string' ? fields.prompt : '',
+      result: resultMap(fields.result),
     });
+  }
+  return out;
+}
+
+/** Narrows a state's `invoke.input.result` to its string-described guard keys. */
+function resultMap(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null) return {};
+  const out: Record<string, string> = {};
+  for (const [key, description] of Object.entries(value)) {
+    if (typeof description === 'string') out[key] = description;
   }
   return out;
 }
@@ -144,7 +167,9 @@ export function enumerateCaptainStates(
 /**
  * Checks GEARS↔FSM conformance and returns human-readable findings (empty when
  * conformant): every GEARS item maps to one state with the same player and the
- * prompt verbatim, and every captain state references a known item.
+ * prompt verbatim, every captain state references a known item, and every
+ * captain state's `result` map declares the Boss-reply suspension key with its
+ * adjudicator contract (VERIFY-1, VERIFY-3; DR-009).
  */
 export function checkGearsFsmConformance(
   gears: string,
@@ -186,6 +211,19 @@ export function checkGearsFsmConformance(
     if (!itemIds.has(state.sourceItem)) {
       findings.push(
         `FSM state ${state.stateId} references unknown GEARS item ${state.sourceItem}`,
+      );
+    }
+    // Every captain-invoking state supports Boss-reply suspension: its result
+    // map carries `needsBossReply` with the adjudicator-facing contract text
+    // (gears2fsm.md; VERIFY-3).
+    const bossReply = state.result[NEEDS_BOSS_REPLY];
+    if (bossReply === undefined) {
+      findings.push(
+        `FSM state ${state.stateId} declares no ${NEEDS_BOSS_REPLY} result`,
+      );
+    } else if (!bossReply.includes(BOSS_QUESTION_MARKER)) {
+      findings.push(
+        `FSM state ${state.stateId}: ${NEEDS_BOSS_REPLY} description lacks the ${BOSS_QUESTION_MARKER}\` contract`,
       );
     }
   }
@@ -279,7 +317,9 @@ export async function emitGearsFsmConformanceTest(opts: {
 }): Promise<string> {
   const content = generateGearsFsmConformanceTest({
     basename: opts.basename,
-    fsmModule: `./${opts.basename}.fsm.js`,
+    // Import the `.fsm.ts` artifact the run wrote; the test runs under a
+    // TypeScript-transforming runner (vitest) or Node's type stripping.
+    fsmModule: `./${opts.basename}.fsm.ts`,
     gearsFile: `./${opts.basename}.gears.md`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
   });
