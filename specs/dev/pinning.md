@@ -62,4 +62,4 @@ Where a phase records external content, the validator shall report that phase cu
 
 ### PIN-15
 
-When the build-and-review flow generates a pin for a built and reviewed compiled artifact, the generated pin shall record over committed bytes the definition, the compiled artifact, the semantic-input closure derived from the definition's `## Pin Inputs`, and the link-target identity, so the written pin validates as current; an ordinary pipeline run shall neither generate nor rewrite a pin ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#lifecycle)).
+When the build-and-review flow generates a pin for a built and reviewed compiled artifact, the generated pin shall record over committed bytes the definition, the compiled artifact, the semantic-input closure derived from the definition's `## Pin Inputs`, and the link-target identity — recording a widened path boundary when the link target lies outside the pipeline directory, such as an installed package module — so the written pin validates as current; an ordinary pipeline run shall neither generate nor rewrite a pin ([DR-007](../decisions/007-slc-phase-artifact-pinning.md#lifecycle)).
