@@ -33,6 +33,7 @@ import {
 } from './pipeline.js';
 import { isReservedPipeline } from './resolver.js';
 import {
+  emitFsmCoverageTest,
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
@@ -365,6 +366,22 @@ async function emitVerification(
   } catch (error) {
     diagnostics.push(
       `verification: prompt-contract test not emitted: ${messageOf(error)}`,
+    );
+  }
+  try {
+    const coverage = await emitFsmCoverageTest({
+      artifactDir: ctx.artDir,
+      basename: ctx.basename,
+    });
+    outputs.push(coverage.path);
+    diagnostics.push(
+      ...coverage.diagnostics.map(
+        (diagnostic) => `verification: ${diagnostic}`,
+      ),
+    );
+  } catch (error) {
+    diagnostics.push(
+      `verification: coverage test not emitted: ${messageOf(error)}`,
     );
   }
   return { ...result, outputs, diagnostics };

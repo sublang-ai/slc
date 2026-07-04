@@ -1003,3 +1003,8 @@ export async function emitFsmIntrospectionTest(opts: {
   await writeFile(path, content);
   return path;
 }
+
+// Transition-coverage verification (VERIFY-6) lives in its own module — it
+// depends on `xstate` to drive the machine — and is re-exported here so every
+// generated test imports one checker module (`@sublang/slc/verify`).
+export * from './verify-coverage.js';
