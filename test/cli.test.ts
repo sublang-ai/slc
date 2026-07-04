@@ -8,14 +8,22 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { resolveAgentSelection, type AgentSelection } from '../src/config.js';
+import type { AgentAdapter } from '@sublang/cligent';
+
+import {
+  createConfiguredCompiledFactory,
+  resolveAgentSelection,
+  type AgentSelection,
+} from '../src/config.js';
 import { loadConfigFile } from '../src/config-file.js';
+import { hashFile } from '../src/hash.js';
 import {
   buildSlcDeps,
   interruptSignal,
   resolveRunConfig,
   run,
   version,
+  type CompiledFactoryBuilder,
   type DepsBuilder,
   type ExecutorFactory,
   type SlcDeps,
@@ -24,6 +32,12 @@ import {
   createInterpretedExecutor,
   type AgentClient,
 } from '../src/interpreter.js';
+import {
+  PINS_FILE,
+  PIN_HASH_ALGORITHM,
+  PIN_SCHEMA,
+  type PinRecord,
+} from '../src/pins.js';
 import {
   createPipelineResolver,
   pipelineSearchRoots,
@@ -628,5 +642,131 @@ describe('buildSlcDeps executor construction (CLI-6, CLI-7)', () => {
     expect(captured?.permissions).toEqual({ mode: 'auto' });
     expect(captured?.cwd).toBe(cwd);
     expect(deps.executor).toBe(stub);
+  });
+
+  it('supplies the compiled-execution factory with the same agent options (CLI-8)', async () => {
+    let captured: Parameters<CompiledFactoryBuilder>[1] | undefined;
+    const compiledFactory = (): SlcDeps['executor'] => ({
+      run: async () => ({ status: 'ok', diagnostics: [] }),
+    });
+    const createCompiled: CompiledFactoryBuilder = (_selection, opts = {}) => {
+      captured = opts;
+      return compiledFactory;
+    };
+
+    const deps = await buildSlcDeps(
+      {
+        env: { SLC_AGENT: 'claude-code', XDG_CONFIG_HOME: cwd },
+        cwd,
+        signal: new AbortController().signal,
+      },
+      () => ({ run: async () => ({ status: 'ok', diagnostics: [] }) }),
+      createCompiled,
+    );
+
+    // A current pin must find a compiled factory, or PHEXEC-27 fails it closed.
+    expect(deps.compiled).toBe(compiledFactory);
+    expect(captured?.permissions).toEqual({ mode: 'auto' });
+    expect(captured?.cwd).toBe(cwd);
+  });
+});
+
+// End to end through the bin: a current pin runs the pinned compiled `playbook`
+// artifact via the production compiled factory — resolving the artifact against
+// the pipeline directory — without interpreting the phase (CLI-28; PHEXEC-27).
+describe('compiled execution through the bin (CLI-28)', () => {
+  it('runs a current pinned artifact and writes its target', async () => {
+    // A minimal compiled `playbook` artifact: parses the PHEXEC-29 seed and
+    // writes the requested target from the requested source.
+    await writeFile(
+      join(pipelineDir, 'text2gears.phase.mjs'),
+      [
+        "import { readFile, writeFile } from 'node:fs/promises';",
+        'export default function createPlaybookRuntime() {',
+        '  return {',
+        '    async init() {},',
+        '    async handleBossInput({ text }) {',
+        "      const marker = 'Request: ';",
+        '      const line = text.split(String.fromCharCode(10)).find((l) => l.startsWith(marker));',
+        '      const { source, target } = JSON.parse(line.slice(marker.length));',
+        "      await writeFile(target, `compiled:${(await readFile(source, 'utf8')).trim()}`);",
+        '    },',
+        '    async dispose() {},',
+        '  };',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target bytes\n');
+    const record: PinRecord = {
+      definition: {
+        path: 'text2gears.md',
+        hash: await hashFile(join(pipelineDir, 'text2gears.md')),
+      },
+      artifact: {
+        path: 'text2gears.phase.mjs',
+        hash: await hashFile(join(pipelineDir, 'text2gears.phase.mjs')),
+      },
+      semanticInputs: [],
+      externalInputs: [],
+      linkTarget: {
+        kind: 'file',
+        locator: 'linktarget.ts',
+        identity: await hashFile(join(pipelineDir, 'linktarget.ts')),
+      },
+    };
+    await writeFile(
+      join(pipelineDir, PINS_FILE),
+      JSON.stringify(
+        {
+          schema: PIN_SCHEMA,
+          hashAlgorithm: PIN_HASH_ALGORITHM,
+          pathBoundary: { path: '.' },
+          pins: { text2gears: record },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const interpretedRuns: string[] = [];
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await run(['flow.text2gears', source], {
+      env: {
+        SLC_AGENT: 'claude-code',
+        SLC_PIPELINE_PATH: pipelinesRoot,
+        XDG_CONFIG_HOME: root,
+      },
+      cwd: root,
+      stdout: (t) => out.push(t),
+      stderr: (t) => err.push(t),
+      buildDeps: (io) =>
+        buildSlcDeps(
+          io,
+          // The interpreted executor must stay unused for the pinned phase.
+          () => ({
+            run: async (request) => {
+              interpretedRuns.push(request.kind);
+              return { status: 'error', diagnostics: ['must not interpret'] };
+            },
+          }),
+          // The production factory, with adapter construction faked out so no
+          // real agent CLI is touched (the fixture artifact calls no ports).
+          (selection, opts = {}) =>
+            createConfiguredCompiledFactory(selection, {
+              ...opts,
+              adapterFactory: () => ({}) as unknown as AgentAdapter,
+            }),
+        ),
+    });
+
+    expect(err.join('')).toBe('');
+    expect(code).toBe(0);
+    const target = join(artDir, 'onboarding.gears.md');
+    expect(out.join('')).toContain(target);
+    expect(interpretedRuns).toEqual([]);
+    const { readFile } = await import('node:fs/promises');
+    expect(await readFile(target, 'utf8')).toBe('compiled:prose');
   });
 });

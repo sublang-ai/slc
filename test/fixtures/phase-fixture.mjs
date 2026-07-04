@@ -16,7 +16,13 @@ export default function createPlaybookRuntime() {
       ports = p;
     },
     async handleBossInput({ text }) {
-      const { source, target } = JSON.parse(text);
+      // The seed carries the request as a single-line JSON object introduced by
+      // `Request: ` (PHEXEC-29).
+      const marker = 'Request: ';
+      const line = text
+        .split('\n')
+        .find((candidate) => candidate.startsWith(marker));
+      const { source, target } = JSON.parse(line.slice(marker.length));
       const content = (await readFile(source, 'utf8')).trim();
       if (content === 'BLOCK') {
         await ports.emitStatus('fixture parked');
