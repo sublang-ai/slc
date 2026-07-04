@@ -53,8 +53,19 @@ export interface PinSpec {
   producer?: PinProducer;
 }
 
-/** The recorded path boundary the generated pin uses (the pipeline directory). */
+/** The default recorded path boundary (the pipeline directory). */
 const BOUNDARY = '.';
+
+/** Options for pin generation (PIN-15). */
+export interface PinGenerateOptions {
+  /**
+   * The recorded path boundary, a relative POSIX path from the pipeline
+   * directory; defaults to `.`. A wider boundary (e.g. `../..`) lets a pin
+   * record a link target outside the pipeline directory, such as the installed
+   * package module the artifacts were linked against.
+   */
+  boundary?: string;
+}
 
 /**
  * Generates a current {@link PinRecord} for one phase from its committed inputs
@@ -64,14 +75,16 @@ const BOUNDARY = '.';
 export async function generatePinRecord(
   pipelineDir: string,
   spec: PinSpec,
+  opts: PinGenerateOptions = {},
 ): Promise<PinRecord> {
+  const boundary = opts.boundary ?? BOUNDARY;
   const definitionResolved = resolvePinPath(
     pipelineDir,
-    BOUNDARY,
+    boundary,
     spec.definition,
     'definition',
   );
-  const closure = await deriveClosure(pipelineDir, BOUNDARY, spec.definition);
+  const closure = await deriveClosure(pipelineDir, boundary, spec.definition);
 
   const semanticInputs = await Promise.all(
     [...closure]
@@ -87,13 +100,13 @@ export async function generatePinRecord(
 
   const artifactResolved = resolvePinPath(
     pipelineDir,
-    BOUNDARY,
+    boundary,
     spec.artifact,
     'artifact',
   );
   const linkResolved = resolvePinPath(
     pipelineDir,
-    BOUNDARY,
+    boundary,
     spec.linkTarget.locator,
     'linkTarget.locator',
   );
@@ -131,11 +144,12 @@ export async function generatePinRecord(
 export async function writePinFile(
   pipelineDir: string,
   pins: Readonly<Record<string, PinRecord>>,
+  opts: PinGenerateOptions = {},
 ): Promise<string> {
   const file: PinFile = {
     schema: PIN_SCHEMA,
     hashAlgorithm: PIN_HASH_ALGORITHM,
-    pathBoundary: { path: BOUNDARY },
+    pathBoundary: { path: opts.boundary ?? BOUNDARY },
     pins: { ...pins },
   };
   const path = join(pipelineDir, PINS_FILE);

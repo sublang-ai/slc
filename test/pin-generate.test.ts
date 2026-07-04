@@ -86,4 +86,39 @@ describe('pin generation (PIN-16)', () => {
     expect(parsed.schema).toBe('sublang.slc.pins.v1');
     expect(parsed.pins.text2gears.artifact.path).toBe('text2gears.phase.ts');
   });
+
+  it('pins a link target outside the pipeline directory under a widened boundary', async () => {
+    // The pipeline directory sits two levels below a repo-like root; the link
+    // target (an installed package module) sits outside it (PIN-15, DR-007).
+    const pipelineDir = join(dir, 'pipelines', 'playbook');
+    await write('pipelines/playbook/text2gears.md', '# def\n');
+    await write('pipelines/playbook/text2gears.phase.ts', PHASE_ARTIFACT);
+    await write('node_modules/pkg/runtime.ts', 'export type Contract = 1;\n');
+
+    const boundary = { boundary: '../..' };
+    const record = await generatePinRecord(
+      pipelineDir,
+      {
+        definition: 'text2gears.md',
+        artifact: 'text2gears.phase.ts',
+        linkTarget: {
+          kind: 'file' as const,
+          locator: '../../node_modules/pkg/runtime.ts',
+        },
+      },
+      boundary,
+    );
+    await writePinFile(pipelineDir, { text2gears: record }, boundary);
+
+    const result = await evaluatePins(pipelineDir);
+    expect(result.verdicts?.text2gears).toEqual({ status: 'current' });
+
+    // The widened boundary still validates currency: a changed target is stale.
+    await write('node_modules/pkg/runtime.ts', 'export type Contract = 2;\n');
+    const drifted = await evaluatePins(pipelineDir);
+    expect(drifted.verdicts?.text2gears).toMatchObject({
+      status: 'stale',
+      reason: expect.stringMatching(/linkTarget changed/) as string,
+    });
+  });
 });
