@@ -16,12 +16,16 @@ import {
 } from './equivalence.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const referenceDir = join(
+// The sibling checkout is the canonical, evolving reference; the installed
+// package is the released fallback so a checkout without the sibling still
+// verifies. The source and gears must come from the same origin.
+const siblingReference = join(
   repoRoot,
-  'node_modules/@sublang/playbook/reference/sdlc/code.playbook',
+  '../playbook/reference/sdlc/code.playbook',
 );
-// The sibling checkout carries the workflow source the reference was compiled
-// from; the installed package ships only the compiled artifacts.
+const referenceDir = existsSync(siblingReference)
+  ? siblingReference
+  : join(repoRoot, 'node_modules/@sublang/playbook/reference/sdlc/code.playbook');
 const siblingSource = join(repoRoot, '../playbook/reference/sdlc/code.md');
 
 /** Loads the manual reference package as a {@link CompiledPlaybook}. */
