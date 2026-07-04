@@ -1,0 +1,30 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
+
+# VERIFY: Compilation-Correctness Verification
+
+## Intent
+
+This package specifies acceptance tests for the compilation-correctness
+verification of the `verification` dev package: the deterministic checks hold
+against the manual reference artifacts `@sublang/playbook` ships, injected
+drift is detected, and a successful reserved-pipeline run emits the
+verification tests beside its artifacts.
+
+Essential project-specific references: `slc`, this project's compiler CLI; and
+`@sublang/playbook`, whose installed package provides the manual reference
+artifacts (`code.gears.md`, `code.fsm`, and the linked `code.playbook` module).
+
+## Checks against the reference
+
+### VERIFY-7
+Verifies: [VERIFY-1](../dev/verification.md#verify-1), [VERIFY-3](../dev/verification.md#verify-3), [VERIFY-4](../dev/verification.md#verify-4), [VERIFY-5](../dev/verification.md#verify-5), [VERIFY-6](../dev/verification.md#verify-6)
+
+Where the installed `@sublang/playbook` provides the manual reference artifacts, when the conformance, introspection, prompt-contract, and transition-coverage checks run over the reference `gears`, `fsm`, and linked composer, each shall report no finding; whereas when a drift is injected — a changed prompt body, a dropped state, a mis-bound player, a missing `needsBossReply` result, a machine no longer matching its pinned topology, a mutated composed prompt, or an unreachable transition arm — the corresponding check shall report it.
+
+## Emission
+
+### VERIFY-8
+Verifies: [VERIFY-2](../dev/verification.md#verify-2), [VERIFY-4](../dev/verification.md#verify-4), [VERIFY-5](../dev/verification.md#verify-5), [VERIFY-6](../dev/verification.md#verify-6)
+
+Where a reserved pipeline's faked agents produce a conformant `gears` and `fsm` pair at their canonical locations, when a full run succeeds, the slc command shall emit the conformance, introspection, prompt-contract, and coverage tests beside the artifacts and list them among the outputs; whereas where the produced `fsm` cannot be imported for derivation, the slc command shall emit the conformance test only, report a diagnostic per degraded test, and leave the run successful.
