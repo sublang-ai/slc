@@ -176,7 +176,7 @@ function settle(
   ms = SETTLE_MS,
 ): Promise<boolean> {
   return new Promise((resolveSettled) => {
-    let subscription: { unsubscribe(): void } | undefined;
+    let subscription: { unsubscribe(): void } | undefined = undefined;
     const finish = (outcome: boolean): void => {
       clearTimeout(timer);
       subscription?.unsubscribe();
@@ -215,7 +215,7 @@ const GENERIC_VALUES: unknown[] = ['coverage', true, 1, ['coverage']];
 const MAX_PROBES = 30_000;
 
 function minedLiterals(fn: unknown): string[] {
-  let source = '';
+  let source: string;
   try {
     source = String(fn);
   } catch {
