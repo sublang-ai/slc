@@ -28,3 +28,10 @@ Where the installed `@sublang/playbook` provides the manual reference artifacts,
 Verifies: [VERIFY-2](../dev/verification.md#verify-2), [VERIFY-4](../dev/verification.md#verify-4), [VERIFY-5](../dev/verification.md#verify-5), [VERIFY-6](../dev/verification.md#verify-6)
 
 Where a reserved pipeline's faked agents produce a conformant `gears` and `fsm` pair at their canonical locations, when a full run succeeds, the slc command shall emit the conformance, introspection, prompt-contract, and coverage tests beside the artifacts and list them among the outputs; whereas where the produced `fsm` cannot be imported for derivation, the slc command shall emit the conformance test only, report a diagnostic per degraded test, and leave the run successful.
+
+## Reference equivalence
+
+### VERIFY-9
+Verifies: [COMPILE-1](../user/compiler.md#compile-1), [SELFHOST-6](../dev/self-hosting.md#selfhost-6), [VERIFY-1](../dev/verification.md#verify-1)
+
+Where `slc playbook` output for the reference workflow exists, when the equivalence harness compares it to the manual reference package, the harness shall accept exactly when the compilations are equivalent — the same player set, the same verbatim per-player prompt-line sets, each `fsm` conformant to its own `gears` with the Boss surfaces declared and its transitions reachable, and each linked module honoring the `createPlaybookRuntime` contract — without requiring byte-identity, item-partition identity, or state-name identity; whereas where no produced output exists, the harness shall skip with a notice instead of failing.
