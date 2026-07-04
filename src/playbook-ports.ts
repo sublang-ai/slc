@@ -75,7 +75,12 @@ export function createPlaybookPorts(opts: {
     },
 
     async callJudge(prompt: string, signal: AbortSignal): Promise<string> {
-      const result = await opts.judge.run({ prompt, cwd: opts.cwd, signal });
+      const result = await opts.judge.run({
+        prompt,
+        model: opts.defaultModel,
+        cwd: opts.cwd,
+        signal,
+      });
       if (result.status !== 'success') {
         throw new Error(
           `judge did not complete (${result.status})${result.text ? `: ${result.text}` : ''}`,

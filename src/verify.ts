@@ -74,9 +74,10 @@ interface StateLike {
 
 const ITEM_HEADING = /^###\s+([A-Za-z][\w-]*)\s*$/;
 // The `text2gears` item form names a delegated player as "Captain shall prompt
-// <Player>" (or a "relay ... to <Player>" variant); players are capitalized
-// (text2gears.md).
-const ITEM_PLAYER = /Captain shall (?:prompt|relay\b[^.]*?\bto)\s+([A-Z][\w]*)/;
+// <Player>" (or a "relay ... to <Player>" variant); English players are
+// capitalized, non-English names may be quoted (text2gears.md).
+const ITEM_PLAYER =
+  /Captain shall (?:prompt|relay\b[^.]*?\bto)\s+(?:"([^"]+)"|“([^”]+)”|([A-Z][\w]*))/;
 // Some items have Captain act directly ("Captain shall <verb> ...") with no
 // delegated player; their player is Captain itself.
 const CAPTAIN_ACTS = /\bCaptain shall\b/;
@@ -120,8 +121,9 @@ export function parseGearsItems(gears: string): GearsItem[] {
     }
     if (current === null) continue;
     const player = ITEM_PLAYER.exec(line);
-    if (player !== null && current.player === '') current.player = player[1];
-    else if (CAPTAIN_ACTS.test(line)) current.captainActs = true;
+    if (player !== null && current.player === '') {
+      current.player = player[1] ?? player[2] ?? player[3];
+    } else if (CAPTAIN_ACTS.test(line)) current.captainActs = true;
     const quote = BLOCKQUOTE.exec(line);
     if (quote !== null) current.prompt.push(quote[1]);
   }
@@ -558,15 +560,23 @@ export function checkPromptComposition(opts: {
       continue;
     }
     findings.push(...bodyFindings(state, ordinary, substituted, 'ordinary'));
-    if (ordinary.includes(BOSS_QUESTION_MARKER)) {
+    // A self-hosted playbook's domain body may legitimately quote the
+    // adjudicator contract or the continuation texts (it instructs a compiler
+    // about them); only occurrences the composer ADDS beyond the body's own
+    // are leaks.
+    if (
+      occurrences(ordinary, BOSS_QUESTION_MARKER) >
+      occurrences(state.prompt, BOSS_QUESTION_MARKER)
+    ) {
       findings.push(
         `${state.stateId}: the adjudicator-facing ${NEEDS_BOSS_REPLY} contract leaks into the player prompt`,
       );
     }
     if (
-      ordinary.includes(CONTINUATION_PREAMBLE) ||
-      ordinary.includes(BOSS_QUESTION_LABEL) ||
-      ordinary.includes(BOSS_REPLY_LABEL)
+      [CONTINUATION_PREAMBLE, BOSS_QUESTION_LABEL, BOSS_REPLY_LABEL].some(
+        (needle) =>
+          occurrences(ordinary, needle) > occurrences(state.prompt, needle),
+      )
     ) {
       findings.push(
         `${state.stateId}: continuation blocks appear on an ordinary turn`,
@@ -616,8 +626,13 @@ export function checkPromptComposition(opts: {
       [BOSS_QUESTION_LABEL, question],
       [BOSS_REPLY_LABEL, reply],
     ] as const) {
+      // The composer must ADD the labelled block (beyond any body-carried
+      // occurrence), carrying the sentinel value, before the body.
       const at = continuation.indexOf(label);
-      if (at === -1 || !continuation.includes(value)) {
+      if (
+        occurrences(continuation, label) <= occurrences(state.prompt, label) ||
+        !continuation.includes(value)
+      ) {
         findings.push(
           `${state.stateId}: a continuation turn lacks the "${label}" block`,
         );
@@ -632,6 +647,11 @@ export function checkPromptComposition(opts: {
     );
   }
   return findings;
+}
+
+/** Counts non-overlapping occurrences of `needle` in `hay`. */
+function occurrences(hay: string, needle: string): number {
+  return needle === '' ? 0 : hay.split(needle).length - 1;
 }
 
 /** Escapes a literal for use inside a regular expression. */

@@ -25,7 +25,10 @@ const siblingReference = join(
 );
 const referenceDir = existsSync(siblingReference)
   ? siblingReference
-  : join(repoRoot, 'node_modules/@sublang/playbook/reference/sdlc/code.playbook');
+  : join(
+      repoRoot,
+      'node_modules/@sublang/playbook/reference/sdlc/code.playbook',
+    );
 const siblingSource = join(repoRoot, '../playbook/reference/sdlc/code.md');
 
 /** Loads the manual reference package as a {@link CompiledPlaybook}. */

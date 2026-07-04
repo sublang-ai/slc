@@ -23,7 +23,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=23.6"
   },
   "scripts": {
     "build": "tsc",
