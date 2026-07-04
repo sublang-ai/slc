@@ -109,18 +109,24 @@ export function reservedSlcPipelineDir(): string {
 
 /**
  * Wraps a resolver so a Playbook-owned reference — the reserved `slc`
- * meta-pipeline or the `playbook` domain pipeline — resolves to the meta-pipeline
- * definitions `@sublang/playbook` provides, leaving every other reference to
- * `inner`. Both share one definition set and differ only by name, hence by their
- * DR-001 artifact directory (DR-009, SELFHOST-2, SELFHOST-6).
+ * meta-pipeline or the `playbook` domain pipeline — resolves to the shared
+ * definition set, leaving every other reference to `inner`. Both names share one
+ * definition set and differ only by name, hence by their DR-001 artifact
+ * directory (DR-009, SELFHOST-2, SELFHOST-6).
+ *
+ * The shared set is the first search-root directory named `playbook` when one
+ * exists — a committed vendor of Playbook's definitions, whose `slc.pins.json`
+ * can pin both pipelines to compiled artifacts — otherwise the definitions the
+ * installed `@sublang/playbook` provides (SELFHOST-9).
  */
 export function withReservedPipelines(
   inner: PipelineResolver,
 ): PipelineResolver {
-  return (reference) =>
-    isReservedPipeline(reference)
-      ? [reservedSlcPipelineDir()]
-      : inner(reference);
+  return async (reference) => {
+    if (!isReservedPipeline(reference)) return inner(reference);
+    const vendored = await inner(RESERVED_PLAYBOOK_PIPELINE);
+    return vendored.length > 0 ? vendored : [reservedSlcPipelineDir()];
+  };
 }
 
 async function isDirectory(path: string): Promise<boolean> {

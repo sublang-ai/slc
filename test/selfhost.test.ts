@@ -11,6 +11,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -21,6 +22,7 @@ import {
 import { resolvesToPlaybook } from '../src/phase-runner.js';
 import { loadPipeline } from '../src/pipeline.js';
 import {
+  createPipelineResolver,
   reservedSlcPipelineDir,
   withReservedPipelines,
 } from '../src/resolver.js';
@@ -191,11 +193,35 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
     }
   });
 
-  it('routes the reserved `slc` and `playbook` references to the shared definitions, delegating others', async () => {
-    const wrapped = withReservedPipelines(() => ['/configured/domain']);
-    expect(await wrapped('slc')).toEqual([reservedSlcPipelineDir()]);
-    expect(await wrapped('playbook')).toEqual([reservedSlcPipelineDir()]);
-    expect(await wrapped('domain')).toEqual(['/configured/domain']);
+  it('routes the reserved `slc` and `playbook` references to the shared definitions, delegating others (SELFHOST-10)', async () => {
+    // No search root provides a `playbook` directory: both reserved references
+    // fall back to the installed definitions.
+    const fallback = withReservedPipelines((reference) =>
+      reference === 'domain' ? ['/configured/domain'] : [],
+    );
+    expect(await fallback('slc')).toEqual([reservedSlcPipelineDir()]);
+    expect(await fallback('playbook')).toEqual([reservedSlcPipelineDir()]);
+    expect(await fallback('domain')).toEqual(['/configured/domain']);
+  });
+
+  it('prefers a search-root `playbook` vendor of the shared definitions for both references (SELFHOST-10)', async () => {
+    const wrapped = withReservedPipelines((reference) =>
+      reference === 'playbook' ? ['/roots/playbook'] : [],
+    );
+    // The vendored directory carries the shared definition set and the pin
+    // index, so `slc` and `playbook` stay one definition set (SELFHOST-9).
+    expect(await wrapped('slc')).toEqual(['/roots/playbook']);
+    expect(await wrapped('playbook')).toEqual(['/roots/playbook']);
+  });
+
+  it('resolves the vendored pipelines/playbook directory through real search roots (SELFHOST-10)', async () => {
+    const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+    const resolver = withReservedPipelines(
+      createPipelineResolver([join(repoRoot, 'pipelines')]),
+    );
+    const vendored = join(repoRoot, 'pipelines', 'playbook');
+    expect(await resolver('slc')).toEqual([vendored]);
+    expect(await resolver('playbook')).toEqual([vendored]);
   });
 });
 
