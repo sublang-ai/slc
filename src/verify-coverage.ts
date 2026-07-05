@@ -296,31 +296,38 @@ export function guardSatisfiable(
   ];
   let probes = 0;
 
-  const passes = (
-    context: Record<string, unknown>,
-    output: Record<string, unknown>,
-  ): boolean => {
+  // An assignment covers the context, the done-event output, and the event's
+  // own fields (a `setup()` guard may compare `event.type` against its
+  // done-actor id, which the mined literals supply).
+  type Assignment = {
+    context: Record<string, unknown>;
+    output: Record<string, unknown>;
+    event: Record<string, unknown>;
+  };
+
+  const passes = (a: Assignment): boolean => {
     probes++;
     try {
-      return Boolean(guard({ context, event: { output } }));
+      return Boolean(
+        guard({ context: a.context, event: { ...a.event, output: a.output } }),
+      );
     } catch {
       return false;
     }
   };
 
   // Records the unassigned fields the guard reads under the given assignment.
-  const readsUnder = (
-    context: Record<string, unknown>,
-    output: Record<string, unknown>,
-  ): string[] => {
+  const readsUnder = (a: Assignment): string[] => {
     const reads = new Set<string>();
     const recording = (
       assigned: Record<string, unknown>,
       tag: string,
+      fixed: Record<string, unknown> = {},
     ): unknown =>
       new Proxy(assigned, {
         get(target, prop) {
           if (typeof prop !== 'string') return undefined;
+          if (prop in fixed) return fixed[prop];
           if (prop in target) return target[prop];
           reads.add(`${tag}${prop}`);
           return undefined;
@@ -330,9 +337,10 @@ export function guardSatisfiable(
         },
       });
     try {
+      const output = recording(a.output, 'o:');
       guard({
-        context: recording(context, 'c:'),
-        event: { output: recording(output, 'o:') },
+        context: recording(a.context, 'c:'),
+        event: recording(a.event, 'e:', { output }),
       });
     } catch {
       // Reads observed before the throw still guide the search.
@@ -340,29 +348,28 @@ export function guardSatisfiable(
     return [...reads];
   };
 
-  const search = (
-    context: Record<string, unknown>,
-    output: Record<string, unknown>,
-    depth: number,
-  ): boolean => {
+  const search = (a: Assignment, depth: number): boolean => {
     if (probes > MAX_PROBES) return false;
-    if (passes(context, output)) return true;
+    if (passes(a)) return true;
     if (depth >= 4) return false;
-    for (const key of readsUnder(context, output)) {
-      const intoContext = key.startsWith('c:');
+    for (const key of readsUnder(a)) {
+      const tag = key.slice(0, 2);
       const field = key.slice(2);
       for (const value of values) {
         if (probes > MAX_PROBES) return false;
-        const next = intoContext
-          ? search({ ...context, [field]: value }, output, depth + 1)
-          : search(context, { ...output, [field]: value }, depth + 1);
-        if (next) return true;
+        const next =
+          tag === 'c:'
+            ? { ...a, context: { ...a.context, [field]: value } }
+            : tag === 'o:'
+              ? { ...a, output: { ...a.output, [field]: value } }
+              : { ...a, event: { ...a.event, [field]: value } };
+        if (search(next, depth + 1)) return true;
       }
     }
     return false;
   };
 
-  return search({}, { ...baseOutput }, 0);
+  return search({ context: {}, output: { ...baseOutput }, event: {} }, 0);
 }
 
 /**
@@ -545,11 +552,14 @@ export async function checkFsmCoverage(
         );
         continue;
       }
-      const anyOutput = Object.keys(state.result).some((key) =>
-        guardSatisfiable(guard, synthOutput(state, key), [
-          ...stateKeys,
-          ...sourceCandidates,
-        ]),
+      // Try each key's full synthesized output AND its bare {guard} form: a
+      // malformed-output arm (e.g. needsBossReply without its question) is
+      // satisfiable only when the required payload is absent.
+      const candidates = [...stateKeys, ...sourceCandidates];
+      const anyOutput = Object.keys(state.result).some(
+        (key) =>
+          guardSatisfiable(guard, synthOutput(state, key), candidates) ||
+          guardSatisfiable(guard, { guard: key }, candidates),
       );
       if (!anyOutput) {
         findings.push(
