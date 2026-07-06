@@ -50,7 +50,7 @@
     "link": {
       "definition": {
         "path": "link.md",
-        "hash": "sha256:cebbcb69aa29584e0517b4a502bf2312d094223725e776d7f8172e557218a8f2"
+        "hash": "sha256:8c3f2f0053d5fb5570528264ef538394000526b97df510b8582430d16985c570"
       },
       "artifact": {
         "path": "link.slc/link.playbook.ts",
