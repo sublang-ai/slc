@@ -34,7 +34,7 @@ This bootstraps self-hosting: `slc slc` compiles the meta-pipeline's own phase d
 - [x] The `playbook` pipeline pinned to those compiled meta-phase artifacts so `slc playbook <source>` performs through compiled execution, with current pins running compiled and stale/missing pins failing closed (extends `PHEXEC`, `COMPILE`)
 - [x] Auto-generated compilation-correctness tests modeled on the reference (gears↔fsm verbatim-prompt and player-binding and `needsBossReply` coverage; fsm introspection; prompt-contract; fsm coverage), emitted beside the artifacts, in a new spec package
 - [x] An equivalence harness comparing `slc playbook ../playbook/reference/sdlc/code.md` output to `../playbook/reference/sdlc/code.playbook/` for equivalence (states, verbatim prompts, player bindings, runtime contract), not byte-identity
-- [ ] `map.md` updated for IR-007, the new decision record, and any new spec package(s)
+- [x] `map.md` updated for IR-007, the new decision record, and any new spec package(s)
 
 ## Tasks
 

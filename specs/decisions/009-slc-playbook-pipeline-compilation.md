@@ -57,10 +57,14 @@ The `## Link Targets` exception applies to the Playbook-authored `playbook`-form
 `slc` shall generate compilation-correctness tests deterministically from the compiled artifacts — the `gears` source, the `fsm` object, and the linked runtime — with no agent involvement, so every build re-checks faithfulness.
 The invariants, modeled on the reference, are:
 
-- GEARS↔FSM conformance: each `gears` item maps to one state carrying that item's player binding and its prompt body verbatim, and `needsBossReply` results are present where the definition requires them.
-- FSM introspection: every `gears` item maps to exactly one captain-invoking state, and per-state transition counts are pinned so unintended topology changes are caught.
-- Prompt contract: each state wires the declared context fields, substitutes the declared placeholders, and orders labelled blocks as the link definition requires.
-- FSM coverage: every `onDone` and `onError` arm and every root and Boss-reply transition is reachable.
+- GEARS↔FSM conformance: each `gears` item maps to one executable working leaf carrying the item's actor kind and verbatim prompt or child-input body; Captain leaves also carry the player binding, and `needsBossReply` results are present where the definition requires them.
+- FSM introspection: every `gears` item maps to exactly one executable leaf, and the hierarchy, stable ids, state types, tags, parallel joins, actor kinds, and per-node transition surfaces are pinned so unintended topology changes are caught.
+- Prompt contract: each Captain state wires the declared context fields, substitutes the declared placeholders, and orders labelled blocks as the link definition requires.
+- FSM coverage: every `onDone` and `onError` arm, parallel join, root or local Boss-reply transition, and interrupt target is reachable or is reported explicitly as unsupported rather than silently counted as covered.
+
+Verification shall traverse nested and parallel state nodes through their public stable metadata rather than assume every state is a root child or that every snapshot value is scalar.
+Flat machines shall retain their existing deterministic verification representation so adding structured support does not churn reviewed artifacts that did not change.
+Reference equivalence shall compare like runtime capability profiles: legacy factories may compare to legacy factories, session/resumable factories may compare to the same profile, and a mixed pair is not equivalent.
 
 The tests verify structural faithfulness of artifacts to source, not domain behavior, and live beside the artifacts under `<basename>.playbook/`.
 The verification contract is realized as a new spec package whose items are authored when the generator lands.
