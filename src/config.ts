@@ -185,9 +185,21 @@ export function createConfiguredCompiledFactory(
     createCompiledExecutor({
       artifactPath: resolve(choice.pipelineDir, choice.record.artifact.path),
       runRoot: opts.cwd ?? process.cwd(),
+      playbookId: choice.phase,
+      runtimeContract: runtimeContractForPin(choice),
       player: () => client(),
       judge: client(),
       defaultModel: selection.model,
       cwd: opts.cwd,
     });
+}
+
+function runtimeContractForPin(choice: CompiledSelection): 'legacy' {
+  const provenance = choice.record.linkTarget.provenance;
+  if (provenance === undefined || provenance === '@sublang/playbook@0.9.0') {
+    return 'legacy';
+  }
+  throw new Error(
+    `unsupported pinned Playbook runtime contract: ${provenance}`,
+  );
 }

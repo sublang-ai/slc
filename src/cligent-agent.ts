@@ -34,15 +34,17 @@ export function createCligentAgent(opts: {
   });
 
   return {
-    async run({ prompt, cwd, model, signal }): Promise<AgentRunResult> {
+    async run({ prompt, cwd, model, resume, signal }): Promise<AgentRunResult> {
       const texts: string[] = [];
       let resultText = '';
       let status: AgentRunResult['status'] = 'incomplete';
+      let resumeToken: string | undefined;
 
       for await (const raw of cligent.run(prompt, {
         abortSignal: signal,
         cwd,
         model,
+        ...(resume !== undefined ? { resume } : {}),
       })) {
         const event: AgentEvent = raw;
         if (event.type === 'text') {
@@ -58,10 +60,15 @@ export function createCligentAgent(opts: {
                 ? 'error'
                 : 'incomplete';
           if (event.payload.result) resultText = event.payload.result;
+          resumeToken = event.payload.resumeToken;
         }
       }
 
-      return { status, text: (resultText || texts.join('\n')).trim() };
+      return {
+        status,
+        text: (resultText || texts.join('\n')).trim(),
+        ...(resumeToken !== undefined ? { resumeToken } : {}),
+      };
     },
   };
 }
