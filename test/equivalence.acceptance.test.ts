@@ -10,26 +10,17 @@ import { describe, expect, it } from 'vitest';
 import { loadFsmModule } from '../src/verify.js';
 import {
   checkReferenceEquivalence,
-  checkSourceFaithfulness,
   playerLineSets,
   type CompiledPlaybook,
 } from './equivalence.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-// The sibling checkout is the canonical, evolving reference; the installed
-// package is the released fallback so a checkout without the sibling still
-// verifies. The source and gears must come from the same origin.
-const siblingReference = join(
+// The dependency lock selects the released oracle used in every environment;
+// an unrelated mutable sibling checkout must not change acceptance semantics.
+const referenceDir = join(
   repoRoot,
-  '../playbook/reference/sdlc/code.playbook',
+  'node_modules/@sublang/playbook/reference/sdlc/code.playbook',
 );
-const referenceDir = existsSync(siblingReference)
-  ? siblingReference
-  : join(
-      repoRoot,
-      'node_modules/@sublang/playbook/reference/sdlc/code.playbook',
-    );
-const siblingSource = join(repoRoot, '../playbook/reference/sdlc/code.md');
 
 /** Loads the manual reference package as a {@link CompiledPlaybook}. */
 async function loadReference(): Promise<CompiledPlaybook> {
@@ -89,13 +80,6 @@ describe('reference equivalence harness (VERIFY-9)', () => {
     expect(findings.join('\n')).toMatch(/player sets differ/);
   });
 
-  it('holds source faithfulness for the reference gears against code.md', () => {
-    if (!existsSync(siblingSource)) return; // sibling checkout absent
-    const gears = readFileSync(join(referenceDir, 'code.gears.md'), 'utf8');
-    const source = readFileSync(siblingSource, 'utf8');
-    expect(checkSourceFaithfulness(source, gears)).toEqual([]);
-  });
-
   it('binds the reference prompt lines to Coder, Reviewer, and Committer', async () => {
     const reference = await loadReference();
     const players = [...playerLineSets(reference.gears).keys()].sort();
@@ -105,7 +89,7 @@ describe('reference equivalence harness (VERIFY-9)', () => {
   // The real acceptance: `slc playbook <source>` output compared to the manual
   // reference (IR-007 Task 9). Gated on a produced directory — a real agent
   // compile — so a clean checkout skips rather than fails.
-  it('accepts real slc playbook output when produced (gated)', async () => {
+  it('accepts real slc playbook output when produced (gated)', async (context) => {
     const producedDir =
       process.env.SLC_EQUIVALENCE_DIR ??
       join(repoRoot, '.scratch/sdlc/code.playbook');
@@ -113,6 +97,7 @@ describe('reference equivalence harness (VERIFY-9)', () => {
       console.warn(
         `equivalence: no produced output at ${producedDir}; run \`slc playbook <code.md> --link @sublang/playbook\` there first`,
       );
+      context.skip();
       return;
     }
     const produced = await loadProduced(producedDir);
@@ -120,13 +105,5 @@ describe('reference equivalence harness (VERIFY-9)', () => {
     expect(await checkReferenceEquivalence({ produced, reference })).toEqual(
       [],
     );
-    if (existsSync(siblingSource)) {
-      expect(
-        checkSourceFaithfulness(
-          readFileSync(siblingSource, 'utf8'),
-          produced.gears,
-        ),
-      ).toEqual([]);
-    }
   });
 });

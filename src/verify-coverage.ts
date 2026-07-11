@@ -46,21 +46,82 @@ interface MachineLike {
   provide(implementations: { actors: Record<string, unknown> }): MachineLike;
   /** XState exposes `setup()`-registered guards here. */
   implementations?: { guards?: Record<string, unknown> };
+  /** XState's resolved state nodes expose the actual invocation actor ids. */
+  root?: {
+    states?: Record<string, { invoke?: Array<{ id?: string }> }>;
+  };
 }
 
-/** Resolves an arm's guard to a callable: inline functions directly, named
- * (string) guards through the machine's `setup()` implementations. */
+type GuardArgs = { context: unknown; event: unknown };
+type GuardImplementation = (args: GuardArgs, params?: unknown) => unknown;
+
+interface ResolvedGuard {
+  run(args: GuardArgs): unknown;
+  /** Values hidden in an implementation or parameter descriptor seed probing. */
+  probeValues: unknown[];
+}
+
+/** Scalar values carried by a parameterized XState guard descriptor. */
+function descriptorValues(value: unknown, seen = new Set<object>()): unknown[] {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return [value];
+  }
+  if (typeof value !== 'object' || value === null || seen.has(value)) return [];
+  seen.add(value);
+  return Object.values(value).flatMap((item) => descriptorValues(item, seen));
+}
+
+/** Resolves inline, named, and parameterized named XState guards. */
 function resolveGuard(
   machine: MachineLike,
   guard: unknown,
-): ((arg: { context: unknown; event: unknown }) => unknown) | undefined {
-  const resolved =
+): ResolvedGuard | undefined {
+  if (typeof guard === 'function') {
+    const implementation = guard as GuardImplementation;
+    return {
+      run: (args) => implementation(args),
+      probeValues: minedLiterals(implementation),
+    };
+  }
+
+  const descriptor =
     typeof guard === 'string'
-      ? machine.implementations?.guards?.[guard]
-      : guard;
-  return typeof resolved === 'function'
-    ? (resolved as (arg: { context: unknown; event: unknown }) => unknown)
-    : undefined;
+      ? { type: guard, params: undefined }
+      : typeof guard === 'object' && guard !== null && 'type' in guard
+        ? (guard as { type?: unknown; params?: unknown })
+        : undefined;
+  if (typeof descriptor?.type !== 'string') return undefined;
+  const candidate = machine.implementations?.guards?.[descriptor.type];
+  if (typeof candidate !== 'function') return undefined;
+  const implementation = candidate as GuardImplementation;
+  const params = descriptor.params;
+  return {
+    run: (args) =>
+      implementation(
+        args,
+        typeof params === 'function'
+          ? (params as (args: GuardArgs) => unknown)(args)
+          : params,
+      ),
+    probeValues: [
+      ...minedLiterals(implementation),
+      ...(typeof params === 'function' ? minedLiterals(params) : []),
+      ...descriptorValues(params),
+    ],
+  };
+}
+
+function guardLabel(guard: unknown): string {
+  if (typeof guard === 'string') return guard;
+  try {
+    return JSON.stringify(guard) ?? String(guard);
+  } catch {
+    return String(guard);
+  }
 }
 
 /**
@@ -231,6 +292,97 @@ const leftState =
   (snapshot: Snapshot): boolean =>
     snapshot.value !== state;
 
+type States = NonNullable<MachineConfigLike['states']>;
+
+function stableStateId(states: States, stateKey: string): string {
+  const id = states[stateKey]?.id;
+  return typeof id === 'string' ? id : stateKey;
+}
+
+/** Resolves either a relative state key or a `#`-target's stable id to its key. */
+function stateKeyForTarget(states: States, target: string): string | undefined {
+  if (target in states) return target;
+  return Object.keys(states).find(
+    (key) => stableStateId(states, key) === target,
+  );
+}
+
+/** The actor id XState actually uses for a state's first invocation. */
+function invocationActorId(
+  machine: MachineLike,
+  stateKey: string,
+  state: States[string],
+): string {
+  const resolved = machine.root?.states?.[stateKey]?.invoke?.[0]?.id;
+  if (typeof resolved === 'string') return resolved;
+  const declared = (state.invoke as { id?: unknown } | undefined)?.id;
+  if (typeof declared === 'string') return declared;
+  const stateHasExplicitId = typeof state.id === 'string';
+  const machineId = (machine.config as { id?: unknown }).id;
+  return stateHasExplicitId
+    ? `0.${state.id}`
+    : `0.${typeof machineId === 'string' ? machineId : '(machine)'}.${stateKey}`;
+}
+
+function invocationEvent(
+  machine: MachineLike,
+  stateKey: string,
+  state: States[string],
+  kind: 'done' | 'error',
+): Record<string, unknown> {
+  const actorId = invocationActorId(machine, stateKey, state);
+  return { type: `xstate.${kind}.actor.${actorId}`, actorId };
+}
+
+function transitionArms(raw: unknown): unknown[] {
+  return Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+}
+
+function armGuard(arm: unknown): unknown {
+  return typeof arm === 'object' && arm !== null
+    ? (arm as { guard?: unknown }).guard
+    : undefined;
+}
+
+/**
+ * Builds the predicate that selects one ordered XState transition arm: every
+ * preceding guarded arm must reject and the selected arm must accept (or be
+ * the unguarded fallback). An earlier unguarded arm shadows all later arms.
+ */
+function orderedArmPredicate(
+  machine: MachineLike,
+  arms: readonly unknown[],
+  selected: number,
+): ResolvedGuard | undefined {
+  const prior: ResolvedGuard[] = [];
+  for (let index = 0; index <= selected; index++) {
+    const rawGuard = armGuard(arms[index]);
+    if (rawGuard === undefined) {
+      if (index < selected) {
+        return { run: () => false, probeValues: [] };
+      }
+      return {
+        run: (args) => prior.every((guard) => !guard.run(args)),
+        probeValues: prior.flatMap((guard) => guard.probeValues),
+      };
+    }
+    const guard = resolveGuard(machine, rawGuard);
+    if (guard === undefined) return undefined;
+    if (index === selected) {
+      return {
+        run: (args) =>
+          prior.every((candidate) => !candidate.run(args)) && guard.run(args),
+        probeValues: [
+          ...prior.flatMap((candidate) => candidate.probeValues),
+          ...guard.probeValues,
+        ],
+      };
+    }
+    prior.push(guard);
+  }
+  return undefined;
+}
+
 /*
  * Guard-satisfiability probing: a jumped-in actor carries the initial context,
  * so an arm guarded on accumulated state (e.g. a routing field set by an
@@ -290,26 +442,74 @@ export function guardSatisfiable(
   baseOutput: Record<string, unknown>,
   extraValues: readonly unknown[] = [],
 ): boolean {
+  return probeGuardSatisfiable(
+    guard,
+    {},
+    [{ eventField: 'output', tag: 'o:', base: baseOutput }],
+    extraValues,
+  );
+}
+
+interface ProbePayload {
+  eventField: string;
+  /** A two-character assignment/read tag, such as `o:` or `r:`. */
+  tag: string;
+  base: object;
+  /** Error properties are variable inputs even when the seed already has one. */
+  varyExisting?: boolean;
+}
+
+interface ProbeAssignment {
+  context: Record<string, unknown>;
+  payloads: Record<string, Record<string, unknown>>;
+}
+
+function overlaidObject(
+  base: object,
+  assigned: Record<string, unknown>,
+): Record<string, unknown> {
+  const copy = Object.create(Object.getPrototypeOf(base)) as Record<
+    string,
+    unknown
+  >;
+  Object.defineProperties(copy, Object.getOwnPropertyDescriptors(base));
+  Object.assign(copy, assigned);
+  return copy;
+}
+
+/**
+ * Bounded guard probing with a fixed, real event surface. Only context and the
+ * named nested payloads are assignable; event-level fields such as `type` and
+ * `actorId` remain the values XState actually supplies.
+ */
+function probeGuardSatisfiable(
+  guard: (arg: GuardArgs) => unknown,
+  fixedEvent: Readonly<Record<string, unknown>>,
+  payloads: readonly ProbePayload[],
+  extraValues: readonly unknown[],
+): boolean {
   // Guard-source literals first: the likeliest matches are tried earliest.
   const values = [
     ...new Set([...minedLiterals(guard), ...extraValues, ...GENERIC_VALUES]),
   ];
   let probes = 0;
 
-  // An assignment covers the context, the done-event output, and the event's
-  // own fields (a `setup()` guard may compare `event.type` against its
-  // done-actor id, which the mined literals supply).
-  type Assignment = {
-    context: Record<string, unknown>;
-    output: Record<string, unknown>;
-    event: Record<string, unknown>;
+  const eventFor = (assignment: ProbeAssignment): Record<string, unknown> => {
+    const event = { ...fixedEvent };
+    for (const payload of payloads) {
+      event[payload.eventField] = overlaidObject(
+        payload.base,
+        assignment.payloads[payload.tag] ?? {},
+      );
+    }
+    return event;
   };
 
-  const passes = (a: Assignment): boolean => {
+  const passes = (assignment: ProbeAssignment): boolean => {
     probes++;
     try {
       return Boolean(
-        guard({ context: a.context, event: { ...a.event, output: a.output } }),
+        guard({ context: assignment.context, event: eventFor(assignment) }),
       );
     } catch {
       return false;
@@ -317,30 +517,45 @@ export function guardSatisfiable(
   };
 
   // Records the unassigned fields the guard reads under the given assignment.
-  const readsUnder = (a: Assignment): string[] => {
+  const readsUnder = (assignment: ProbeAssignment): string[] => {
     const reads = new Set<string>();
     const recording = (
+      base: object,
       assigned: Record<string, unknown>,
       tag: string,
-      fixed: Record<string, unknown> = {},
     ): unknown =>
-      new Proxy(assigned, {
+      new Proxy(overlaidObject(base, assigned), {
         get(target, prop) {
           if (typeof prop !== 'string') return undefined;
-          if (prop in fixed) return fixed[prop];
-          if (prop in target) return target[prop];
+          if (prop in target) {
+            const payload = payloads.find((item) => item.tag === tag);
+            if (payload?.varyExisting === true && !(prop in assigned)) {
+              reads.add(`${tag}${prop}`);
+            }
+            return target[prop];
+          }
           reads.add(`${tag}${prop}`);
           return undefined;
         },
-        has() {
-          return true;
+        has(target, prop) {
+          if (typeof prop === 'string' && !(prop in target)) {
+            reads.add(`${tag}${prop}`);
+          }
+          return prop in target;
         },
       });
     try {
-      const output = recording(a.output, 'o:');
+      const event = { ...fixedEvent };
+      for (const payload of payloads) {
+        event[payload.eventField] = recording(
+          payload.base,
+          assignment.payloads[payload.tag] ?? {},
+          payload.tag,
+        );
+      }
       guard({
-        context: recording(a.context, 'c:'),
-        event: recording(a.event, 'e:', { output }),
+        context: recording({}, assignment.context, 'c:'),
+        event,
       });
     } catch {
       // Reads observed before the throw still guide the search.
@@ -348,28 +563,66 @@ export function guardSatisfiable(
     return [...reads];
   };
 
-  const search = (a: Assignment, depth: number): boolean => {
+  const search = (assignment: ProbeAssignment, depth: number): boolean => {
     if (probes > MAX_PROBES) return false;
-    if (passes(a)) return true;
+    if (passes(assignment)) return true;
     if (depth >= 4) return false;
-    for (const key of readsUnder(a)) {
+    for (const key of readsUnder(assignment)) {
       const tag = key.slice(0, 2);
       const field = key.slice(2);
       for (const value of values) {
         if (probes > MAX_PROBES) return false;
         const next =
           tag === 'c:'
-            ? { ...a, context: { ...a.context, [field]: value } }
-            : tag === 'o:'
-              ? { ...a, output: { ...a.output, [field]: value } }
-              : { ...a, event: { ...a.event, [field]: value } };
+            ? {
+                ...assignment,
+                context: { ...assignment.context, [field]: value },
+              }
+            : {
+                ...assignment,
+                payloads: {
+                  ...assignment.payloads,
+                  [tag]: {
+                    ...(assignment.payloads[tag] ?? {}),
+                    [field]: value,
+                  },
+                },
+              };
         if (search(next, depth + 1)) return true;
       }
     }
     return false;
   };
 
-  return search({ context: {}, output: { ...baseOutput }, event: {} }, 0);
+  return search({ context: {}, payloads: {} }, 0);
+}
+
+function doneGuardSatisfiable(
+  guard: ResolvedGuard,
+  event: Readonly<Record<string, unknown>>,
+  output: Record<string, unknown>,
+  extraValues: readonly unknown[],
+): boolean {
+  return probeGuardSatisfiable(
+    guard.run,
+    event,
+    [{ eventField: 'output', tag: 'o:', base: output }],
+    [...guard.probeValues, ...extraValues],
+  );
+}
+
+function errorGuardSatisfiable(
+  guard: ResolvedGuard,
+  event: Readonly<Record<string, unknown>>,
+  error: Error,
+  extraValues: readonly unknown[],
+): boolean {
+  return probeGuardSatisfiable(
+    guard.run,
+    event,
+    [{ eventField: 'error', tag: 'r:', base: error, varyExisting: true }],
+    [...guard.probeValues, ...extraValues],
+  );
 }
 
 /**
@@ -405,7 +658,8 @@ export async function checkFsmCoverage(
   if (!canJump) {
     findings.push(`machine declares no root ${INTERRUPT_EVENT} event`);
   }
-  const hasWaitState = AWAIT_BOSS_REPLY_STATE in states;
+  const waitStateKey = stateKeyForTarget(states, AWAIT_BOSS_REPLY_STATE);
+  const hasWaitState = waitStateKey !== undefined;
   if (!hasWaitState) {
     findings.push(`machine declares no ${AWAIT_BOSS_REPLY_STATE} state`);
   }
@@ -415,9 +669,15 @@ export async function checkFsmCoverage(
   if (canJump) {
     for (const arm of rootArms) {
       if (arm.target === null) continue;
+      const targetKey = stateKeyForTarget(states, arm.target);
+      const targetId =
+        targetKey === undefined ? arm.target : stableStateId(states, targetKey);
       const actor = makeActor(machine, () => null);
-      actor.send({ type: INTERRUPT_EVENT, targetId: arm.target });
-      if (!(await settle(actor, atState(arm.target)))) {
+      actor.send({ type: INTERRUPT_EVENT, targetId });
+      if (
+        targetKey === undefined ||
+        !(await settle(actor, atState(targetKey)))
+      ) {
         findings.push(
           `${INTERRUPT_EVENT} target ${arm.target} is not enterable`,
         );
@@ -447,63 +707,115 @@ export async function checkFsmCoverage(
     actor.stop();
   }
 
+  const stateCandidates = Object.entries(states).flatMap(([key, value]) =>
+    typeof value.id === 'string' && value.id !== key ? [key, value.id] : [key],
+  );
+
   for (const state of captainStates) {
     if (!canJump) break;
-    const raw = states[state.stateId];
-    const onDoneArms = normalizeArms(raw?.invoke?.onDone);
-    const rawArms = Array.isArray(raw?.invoke?.onDone)
-      ? (raw?.invoke?.onDone as unknown[])
-      : raw?.invoke?.onDone !== undefined
-        ? [raw?.invoke?.onDone]
-        : [];
+    const stateKey = state.stateId;
+    const stateNode = states[stateKey];
+    if (stateNode === undefined) continue;
+    const stateId = stableStateId(states, stateKey);
+    const candidates = [...stateCandidates, ...sourceCandidates];
+    const doneEvent = invocationEvent(machine, stateKey, stateNode, 'done');
+    const errorEvent = invocationEvent(machine, stateKey, stateNode, 'error');
+    const rawDoneArms = transitionArms(stateNode.invoke?.onDone);
+    const onDoneArms = normalizeArms(stateNode.invoke?.onDone);
 
-    // Every result key fires a transition out of the state; needsBossReply
-    // suspends in the wait state. A key whose matching arms are all
-    // context-guarded beyond the driven context is covered by probing below.
+    // Every declared result needs an arm that explicitly accepts its complete
+    // valid output. A sole unguarded arm accepts the whole local result
+    // contract; an array's unguarded arm is a fallback and cannot make an
+    // otherwise orphaned key look covered.
     for (const key of Object.keys(state.result)) {
       const output = synthOutput(state, key);
-      const predicted = rawArms.some((arm) => {
-        const raw = (arm as { guard?: unknown })?.guard;
-        if (raw === undefined) return true;
-        const guard = resolveGuard(machine, raw);
-        // An unresolvable named guard is reported during the arm audit below.
-        // Do not drive it here: XState treats the missing implementation as a
-        // runtime error, which would escape asynchronously from the checker.
-        if (guard === undefined) return false;
-        try {
-          return Boolean(guard({ context: {}, event: { output } }));
-        } catch {
-          return false;
+      const accepting = new Set<number>();
+      for (const [index, arm] of rawDoneArms.entries()) {
+        const target = onDoneArms[index]?.target ?? null;
+        const rawGuard = armGuard(arm);
+        if (rawGuard === undefined) {
+          if (rawDoneArms.length === 1 && target !== null) accepting.add(index);
+          continue;
         }
-      });
-      if (!predicted) continue;
+        if (target === null || resolveGuard(machine, rawGuard) === undefined) {
+          continue;
+        }
+        const guard = orderedArmPredicate(machine, rawDoneArms, index);
+        if (
+          guard !== undefined &&
+          doneGuardSatisfiable(guard, doneEvent, output, candidates)
+        ) {
+          accepting.add(index);
+        }
+      }
+
+      if (accepting.size === 0) {
+        findings.push(
+          `state ${stateKey}: result "${key}" has no reachable accepting transition`,
+        );
+        continue;
+      }
+
+      // Drive only when the first arm XState would inspect under the real
+      // initial context is a known accepting arm. Encountering an unresolved
+      // guard first makes driving unsafe: XState reports that error
+      // asynchronously, so the arm audit below owns the finding (c887fc4).
+      let directArm: number | undefined;
+      let safeToDrive = true;
+      for (const [index, arm] of rawDoneArms.entries()) {
+        const rawGuard = armGuard(arm);
+        if (rawGuard === undefined) {
+          directArm = index;
+          break;
+        }
+        const guard = resolveGuard(machine, rawGuard);
+        if (guard === undefined) {
+          safeToDrive = false;
+          break;
+        }
+        try {
+          if (guard.run({ context: {}, event: { ...doneEvent, output } })) {
+            directArm = index;
+            break;
+          }
+        } catch {
+          safeToDrive = false;
+          break;
+        }
+      }
+      if (
+        !safeToDrive ||
+        directArm === undefined ||
+        !accepting.has(directArm)
+      ) {
+        continue;
+      }
+
       const gate: ArmingGate = { armed: false };
       const actor = makeActor(
         machine,
         onceScript(state.sourceItem, output, gate),
       );
       gate.armed = true;
-      actor.send({ type: INTERRUPT_EVENT, targetId: state.stateId });
-      const left = await settle(actor, leftState(state.stateId));
+      actor.send({ type: INTERRUPT_EVENT, targetId: stateId });
+      const left = await settle(actor, leftState(stateKey));
       if (!left) {
-        findings.push(
-          `state ${state.stateId}: result "${key}" fired no transition`,
-        );
+        findings.push(`state ${stateKey}: result "${key}" fired no transition`);
       } else if (
         key === NEEDS_BOSS_REPLY &&
         hasWaitState &&
-        actor.getSnapshot().value !== AWAIT_BOSS_REPLY_STATE
+        actor.getSnapshot().value !== waitStateKey
       ) {
         findings.push(
-          `state ${state.stateId}: ${NEEDS_BOSS_REPLY} did not suspend in ${AWAIT_BOSS_REPLY_STATE}`,
+          `state ${stateKey}: ${NEEDS_BOSS_REPLY} did not suspend in ${AWAIT_BOSS_REPLY_STATE}`,
         );
-      } else if (key === NEEDS_BOSS_REPLY && hasWaitState) {
+      } else if (key === NEEDS_BOSS_REPLY && waitStateKey !== undefined) {
         // Boss-reply resume: BOSS_REPLY returns to the suspended state, and a
         // blank answer must not resume it.
         actor.send({ type: BOSS_REPLY_EVENT, answer: 'Proceed as planned.' });
-        if (!(await settle(actor, atState(state.stateId)))) {
+        if (!(await settle(actor, atState(stateKey)))) {
           findings.push(
-            `state ${state.stateId}: ${BOSS_REPLY_EVENT} did not resume the suspended state`,
+            `state ${stateKey}: ${BOSS_REPLY_EVENT} did not resume the suspended state`,
           );
         }
         actor.stop();
@@ -518,13 +830,13 @@ export async function checkFsmCoverage(
           ),
         );
         blankGate.armed = true;
-        blank.send({ type: INTERRUPT_EVENT, targetId: state.stateId });
-        if (await settle(blank, atState(AWAIT_BOSS_REPLY_STATE))) {
+        blank.send({ type: INTERRUPT_EVENT, targetId: stateId });
+        if (await settle(blank, atState(waitStateKey))) {
           blank.send({ type: BOSS_REPLY_EVENT, answer: '   ' });
-          const out = await settle(blank, leftState(AWAIT_BOSS_REPLY_STATE));
-          if (!out || blank.getSnapshot().value === state.stateId) {
+          const out = await settle(blank, leftState(waitStateKey));
+          if (!out || blank.getSnapshot().value === stateKey) {
             findings.push(
-              `state ${state.stateId}: a blank ${BOSS_REPLY_EVENT} answer must not resume the state`,
+              `state ${stateKey}: a blank ${BOSS_REPLY_EVENT} answer must not resume the state`,
             );
           }
         }
@@ -534,66 +846,126 @@ export async function checkFsmCoverage(
       actor.stop();
     }
 
-    // Every onDone arm is satisfiable: driven when the initial context allows,
-    // probed deterministically otherwise. Routing fields hold state keys/ids or
-    // helper-bound identifiers from the artifact source, so both seed the
-    // probe's candidate values.
-    const stateKeys = Object.entries(states).flatMap(([key, value]) =>
-      typeof value.id === 'string' && value.id !== key
-        ? [key, value.id]
-        : [key],
-    );
-    for (const [index, arm] of rawArms.entries()) {
-      const raw = (arm as { guard?: unknown })?.guard;
-      if (raw === undefined) continue;
-      const guard = resolveGuard(machine, raw);
-      if (guard === undefined) {
-        // A named guard the machine does not register cannot be probed —
-        // surface it rather than silently skipping (VERIFY-6).
+    // Every onDone arm is satisfiable under the actual done-event identity.
+    // Try each key's full output and bare malformed form; neither probe may
+    // invent a different event type or actor id.
+    for (const [index, arm] of rawDoneArms.entries()) {
+      const rawGuard = armGuard(arm);
+      if (rawGuard === undefined) continue;
+      const declaredGuard = resolveGuard(machine, rawGuard);
+      if (declaredGuard === undefined) {
         findings.push(
-          `state ${state.stateId}: onDone arm ${index} names an unresolvable guard "${String(raw)}"`,
+          `state ${stateKey}: onDone arm ${index} names an unresolvable guard "${guardLabel(rawGuard)}"`,
         );
         continue;
       }
-      // Try each key's full synthesized output AND its bare {guard} form: a
-      // malformed-output arm (e.g. needsBossReply without its question) is
-      // satisfiable only when the required payload is absent.
-      const candidates = [...stateKeys, ...sourceCandidates];
+      const guard = orderedArmPredicate(machine, rawDoneArms, index);
+      // A prior unresolvable arm already owns the actionable finding, and makes
+      // ordered reachability of later arms unsafe to evaluate.
+      if (guard === undefined) continue;
       const anyOutput = Object.keys(state.result).some(
         (key) =>
-          guardSatisfiable(guard, synthOutput(state, key), candidates) ||
-          guardSatisfiable(guard, { guard: key }, candidates),
+          doneGuardSatisfiable(
+            guard,
+            doneEvent,
+            synthOutput(state, key),
+            candidates,
+          ) ||
+          doneGuardSatisfiable(guard, doneEvent, { guard: key }, candidates),
       );
       if (!anyOutput) {
         findings.push(
-          `state ${state.stateId}: onDone arm ${index} (target ${
+          `state ${stateKey}: onDone arm ${index} (target ${
             onDoneArms[index]?.target ?? 'none'
           }) is unsatisfiable under probing`,
         );
       }
     }
 
-    // onError lands on its declared target.
-    const onErrorArms = normalizeArms(raw?.invoke?.onError);
+    // Audit every onError arm under the real error-event identity. Guarded arms
+    // are probed deterministically; one directly selected arm is also driven to
+    // confirm XState lands on its declared target.
+    const rawErrorArms = transitionArms(stateNode.invoke?.onError);
+    const onErrorArms = normalizeArms(stateNode.invoke?.onError);
     if (onErrorArms.length === 0) {
-      findings.push(`state ${state.stateId} declares no onError transition`);
-    } else {
-      const target = onErrorArms[0].target;
-      const gate: ArmingGate = { armed: false };
-      const actor = makeActor(machine, throwingScript(state.sourceItem, gate));
-      gate.armed = true;
-      actor.send({ type: INTERRUPT_EVENT, targetId: state.stateId });
-      const landed = await settle(
-        actor,
-        target !== null ? atState(target) : leftState(state.stateId),
-      );
-      if (!landed) {
+      findings.push(`state ${stateKey} declares no onError transition`);
+      continue;
+    }
+    const forcedError = new Error('coverage: forced captain failure');
+    let hasUnresolvableErrorGuard = false;
+    for (const [index, arm] of rawErrorArms.entries()) {
+      const rawGuard = armGuard(arm);
+      if (rawGuard !== undefined) {
+        const declaredGuard = resolveGuard(machine, rawGuard);
+        if (declaredGuard === undefined) {
+          hasUnresolvableErrorGuard = true;
+          findings.push(
+            `state ${stateKey}: onError arm ${index} names an unresolvable guard "${guardLabel(rawGuard)}"`,
+          );
+          continue;
+        }
+      }
+      const guard = orderedArmPredicate(machine, rawErrorArms, index);
+      if (guard === undefined) continue;
+      if (!errorGuardSatisfiable(guard, errorEvent, forcedError, candidates)) {
         findings.push(
-          `state ${state.stateId}: onError did not reach ${target ?? 'a quiescent state'}`,
+          `state ${stateKey}: onError arm ${index} (target ${
+            onErrorArms[index]?.target ?? 'none'
+          }) is unsatisfiable under probing`,
         );
       }
-      actor.stop();
     }
+
+    if (hasUnresolvableErrorGuard) continue;
+    let directErrorArm: number | undefined;
+    let errorDriveSafe = true;
+    for (const [index, arm] of rawErrorArms.entries()) {
+      const rawGuard = armGuard(arm);
+      if (rawGuard === undefined) {
+        directErrorArm = index;
+        break;
+      }
+      const guard = resolveGuard(machine, rawGuard);
+      if (guard === undefined) {
+        errorDriveSafe = false;
+        break;
+      }
+      try {
+        if (
+          guard.run({
+            context: {},
+            event: { ...errorEvent, error: forcedError },
+          })
+        ) {
+          directErrorArm = index;
+          break;
+        }
+      } catch {
+        errorDriveSafe = false;
+        break;
+      }
+    }
+    if (!errorDriveSafe || directErrorArm === undefined) continue;
+
+    const target = onErrorArms[directErrorArm]?.target ?? null;
+    const targetKey =
+      target === null ? undefined : stateKeyForTarget(states, target);
+    const gate: ArmingGate = { armed: false };
+    const actor = makeActor(machine, throwingScript(state.sourceItem, gate));
+    gate.armed = true;
+    actor.send({ type: INTERRUPT_EVENT, targetId: stateId });
+    const landed = await settle(
+      actor,
+      target !== null && targetKey !== undefined
+        ? atState(targetKey)
+        : leftState(stateKey),
+    );
+    if (!landed || (target !== null && targetKey === undefined)) {
+      findings.push(
+        `state ${stateKey}: onError arm ${directErrorArm} did not reach ${target ?? 'a quiescent state'}`,
+      );
+    }
+    actor.stop();
   }
 
   return findings;
@@ -608,22 +980,28 @@ export function generateFsmCoverageTest(opts: {
   fsmModule: string;
   verifyModule: string;
 }): string {
+  const commentBasename = JSON.stringify(opts.basename)
+    .replaceAll('\u2028', '\\u2028')
+    .replaceAll('\u2029', '\\u2029');
+  const fsmModule = JSON.stringify(opts.fsmModule);
+  const verifyModule = JSON.stringify(opts.verifyModule);
+  const suiteName = JSON.stringify(`${opts.basename}: FSM coverage`);
   return `// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-// Generated by slc (DR-009): FSM transition coverage for ${opts.basename}.
+// Generated by slc (DR-009): FSM transition coverage for ${commentBasename}.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { checkFsmCoverage } from '${opts.verifyModule}';
-import * as fsm from '${opts.fsmModule}';
+import { checkFsmCoverage } from ${verifyModule};
+import * as fsm from ${fsmModule};
 
-describe('${opts.basename}: FSM coverage', () => {
+describe(${suiteName}, () => {
   it('reaches every declared transition', async () => {
     const sourceText = readFileSync(
-      fileURLToPath(new URL('${opts.fsmModule}', import.meta.url)),
+      fileURLToPath(new URL(${fsmModule}, import.meta.url)),
       'utf8',
     );
     expect(await checkFsmCoverage(fsm, { sourceText })).toEqual([]);
