@@ -9,11 +9,13 @@ import { describe, expect, it } from 'vitest';
 
 import { loadFsmModule } from '../src/verify.js';
 import {
+  checkPlaybookIntegrity,
   checkReferenceEquivalence,
   hasBossReplySurface,
   playerLineSets,
   runtimeCapabilityProfile,
   type CompiledPlaybook,
+  type RuntimeCapabilityProfile,
 } from './equivalence.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -44,21 +46,68 @@ async function loadProduced(dir: string): Promise<CompiledPlaybook> {
   };
 }
 
+const profileState = {
+  value: 'ready',
+  activeStateIds: ['ready'],
+  tags: ['playbook.parked'],
+  status: 'active' as const,
+  quiescent: true,
+};
+
 function withRuntimeProfile(
   compiled: CompiledPlaybook,
-  profile: 'legacy' | 'structured',
+  profile: RuntimeCapabilityProfile,
 ): CompiledPlaybook {
   return {
     ...compiled,
     playbook: {
+      runtimeContractProfile: profile,
       default: () => ({
         init: async () => {},
-        handleBossInput: async () => {},
-        ...(profile === 'structured'
+        handleBossInput: async () =>
+          profile === 'composed-v2'
+            ? { outcome: 'no-action', state: profileState }
+            : undefined,
+        ...(profile === 'composed-v2'
           ? { resumePlaybookCall: async () => {} }
           : {}),
         dispose: async () => {},
       }),
+    },
+  };
+}
+
+function unmarkedStrictRuntime(profile: 'legacy' | 'session-v1'): unknown {
+  return {
+    default: () => {
+      let ports: { callJudge(prompt: string, signal: AbortSignal): unknown };
+      return {
+        async init(value: unknown) {
+          if (typeof value !== 'object' || value === null) {
+            throw new Error('invalid init value');
+          }
+          const record = value as Record<string, unknown>;
+          const selected =
+            profile === 'legacy'
+              ? record
+              : (record.ports as Record<string, unknown> | undefined);
+          if (
+            profile === 'session-v1' &&
+            (record.sessionId !== 'slc-profile-probe' ||
+              record.playbookId !== 'probe')
+          ) {
+            throw new Error('session identity is required');
+          }
+          if (typeof selected?.callJudge !== 'function') {
+            throw new Error('exact profile ports are required');
+          }
+          ports = selected as typeof ports;
+        },
+        async handleBossInput(turn: { signal: AbortSignal }) {
+          await ports.callJudge('classify probe', turn.signal);
+        },
+        async dispose() {},
+      };
     },
   };
 }
@@ -71,11 +120,11 @@ describe('reference equivalence harness (VERIFY-9)', () => {
     ).toEqual([]);
   });
 
-  it('accepts matching legacy and structured runtime capability profiles', async () => {
+  it('accepts each matching exact runtime contract profile', async () => {
     const reference = await loadReference();
-    for (const profile of ['legacy', 'structured'] as const) {
+    for (const profile of ['legacy', 'session-v1', 'composed-v2'] as const) {
       const compiled = withRuntimeProfile(reference, profile);
-      expect(runtimeCapabilityProfile(compiled.playbook)).toBe(profile);
+      expect(await runtimeCapabilityProfile(compiled.playbook)).toBe(profile);
       expect(
         await checkReferenceEquivalence({
           produced: compiled,
@@ -85,16 +134,75 @@ describe('reference equivalence harness (VERIFY-9)', () => {
     }
   });
 
-  it('rejects a mixed legacy and structured runtime capability profile', async () => {
+  it.each([
+    ['legacy', 'session-v1'],
+    ['session-v1', 'composed-v2'],
+    ['legacy', 'composed-v2'],
+  ] as const)(
+    'rejects a %s vs %s runtime contract mismatch',
+    async (producedProfile, referenceProfile) => {
+      const reference = await loadReference();
+      const findings = await checkReferenceEquivalence({
+        produced: withRuntimeProfile(reference, producedProfile),
+        reference: withRuntimeProfile(reference, referenceProfile),
+      });
+      expect(findings).toContain(
+        `runtime contract profiles differ: produced ${producedProfile} vs reference ${referenceProfile}`,
+      );
+    },
+  );
+
+  it('treats an unmarked released three-method runtime as legacy', async () => {
     const reference = await loadReference();
-    const findings = await checkReferenceEquivalence({
-      produced: withRuntimeProfile(reference, 'legacy'),
-      reference: withRuntimeProfile(reference, 'structured'),
-    });
-    expect(findings).toContain(
-      'runtime capability profiles differ: produced legacy vs reference structured',
-    );
+    expect(await runtimeCapabilityProfile(reference.playbook)).toBe('legacy');
   });
+
+  it('distinguishes unmarked legacy and session-v1 init boundaries', async () => {
+    expect(
+      await runtimeCapabilityProfile(unmarkedStrictRuntime('legacy')),
+    ).toBe('legacy');
+    expect(
+      await runtimeCapabilityProfile(unmarkedStrictRuntime('session-v1')),
+    ).toBe('session-v1');
+  });
+
+  it.each([
+    [
+      'session-v1 with a resumable surface',
+      {
+        runtimeContractProfile: 'session-v1',
+        default: () => ({
+          init: async () => {},
+          handleBossInput: async () => {},
+          resumePlaybookCall: async () => {},
+          dispose: async () => {},
+        }),
+      },
+      'session-v1 runtime unexpectedly exposes resumePlaybookCall()',
+    ],
+    [
+      'composed-v2 without a resumable surface',
+      {
+        runtimeContractProfile: 'composed-v2',
+        default: () => ({
+          init: async () => {},
+          handleBossInput: async () => {},
+          dispose: async () => {},
+        }),
+      },
+      'composed-v2 runtime lacks resumePlaybookCall()',
+    ],
+  ] as const)(
+    'rejects an inconsistent marker: %s',
+    async (_name, playbook, expected) => {
+      const reference = await loadReference();
+      const compiled = { ...reference, playbook };
+      expect(await runtimeCapabilityProfile(playbook)).toBeNull();
+      expect(await checkPlaybookIntegrity('marked', compiled)).toContain(
+        `marked: ${expected}`,
+      );
+    },
+  );
 
   it('recognizes a branch-local structured Boss-reply wait surface', () => {
     expect(
