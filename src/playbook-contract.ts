@@ -125,6 +125,23 @@ export interface CompatiblePlaybookPorts extends LegacyPlaybookPorts {
   ): Promise<PlaybookCallStart>;
 }
 
+/** The exact five-port composed-session boundary. */
+export interface ComposedPlaybookPorts {
+  callPlayer(
+    playerId: string,
+    prompt: string,
+    signal: AbortSignal,
+    options: PlayerCallOptions,
+  ): Promise<PlayerResult>;
+  callJudge(prompt: string, signal: AbortSignal): Promise<string>;
+  callPlaybook(
+    request: PlaybookCallRequest,
+    signal: AbortSignal,
+  ): Promise<PlaybookCallStart>;
+  emitStatus(message: string, data?: unknown): Promise<void>;
+  emitTelemetry(event: { topic: string; payload: unknown }): Promise<void>;
+}
+
 /** The committed traced-session contract: explicit resume but no child port. */
 export interface SessionV1PlaybookPorts {
   callPlayer(
@@ -151,7 +168,7 @@ export interface PlaybookSession {
   parentSessionId?: string;
   parentCallId?: string;
   depth: number;
-  ports: CompatiblePlaybookPorts;
+  ports: ComposedPlaybookPorts;
 }
 
 export interface SessionPlaybookRuntime {
@@ -186,50 +203,111 @@ export type CompatiblePlaybookRuntimeFactory<Options = unknown> = (
 export function isPlaybookRunResult(
   value: unknown,
 ): value is PlaybookRunResult {
-  if (!isRecord(value) || typeof value.outcome !== 'string') return false;
-  if (!isPlaybookState(value.state)) return false;
-  switch (value.outcome) {
-    case 'quiescent':
-    case 'no-action':
-    case 'failed':
-    case 'aborted':
-      return value.error === undefined || isNormalizedError(value.error);
-    case 'terminal':
-      return value.output === undefined || isJsonValue(value.output);
-    case 'suspended':
-      return (
-        isRecord(value.pendingCall) &&
-        nonEmptyString(value.pendingCall.callId) &&
-        nonEmptyString(value.pendingCall.playbookId) &&
-        nonEmptyString(value.pendingCall.childSessionId)
-      );
-    default:
-      return false;
+  try {
+    const fields = dataRecord(value);
+    if (fields === null || typeof fields.outcome !== 'string') return false;
+    if (!isPlaybookState(fields.state)) return false;
+    switch (fields.outcome) {
+      case 'quiescent':
+      case 'no-action':
+        return hasExactKeys(fields, ['outcome', 'state']);
+      case 'failed':
+      case 'aborted':
+        return (
+          hasExactKeys(fields, ['outcome', 'state', 'error']) &&
+          (fields.error === undefined || isNormalizedError(fields.error))
+        );
+      case 'terminal':
+        return (
+          hasExactKeys(fields, ['outcome', 'state', 'output']) &&
+          (fields.output === undefined || isJsonValue(fields.output))
+        );
+      case 'suspended': {
+        const pendingCall = dataRecord(fields.pendingCall);
+        return (
+          hasExactKeys(fields, ['outcome', 'state', 'pendingCall']) &&
+          pendingCall !== null &&
+          hasExactKeys(pendingCall, [
+            'callId',
+            'playbookId',
+            'childSessionId',
+          ]) &&
+          nonEmptyString(pendingCall.callId) &&
+          nonEmptyString(pendingCall.playbookId) &&
+          nonEmptyString(pendingCall.childSessionId)
+        );
+      }
+      default:
+        return false;
+    }
+  } catch {
+    // Hostile accessors/proxies are invalid results, not control-plane errors.
+    return false;
   }
 }
 
 function isPlaybookState(value: unknown): value is PlaybookState {
-  if (!isRecord(value)) return false;
+  const fields = dataRecord(value);
   if (
-    typeof value.quiescent !== 'boolean' ||
-    !Array.isArray(value.activeStateIds) ||
-    !value.activeStateIds.every((item) => typeof item === 'string') ||
-    !Array.isArray(value.tags) ||
-    !value.tags.every((item) => typeof item === 'string') ||
-    !['active', 'done', 'error', 'stopped'].includes(String(value.status)) ||
-    (value.stateId !== undefined && !nonEmptyString(value.stateId))
+    fields === null ||
+    !hasExactKeys(fields, [
+      'value',
+      'activeStateIds',
+      'tags',
+      'status',
+      'quiescent',
+      'stateId',
+    ])
   ) {
     return false;
   }
-  return isPlaybookStateValue(value.value);
+  if (
+    typeof fields.quiescent !== 'boolean' ||
+    !Array.isArray(fields.activeStateIds) ||
+    !fields.activeStateIds.every((item) => typeof item === 'string') ||
+    !Array.isArray(fields.tags) ||
+    !fields.tags.every((item) => typeof item === 'string') ||
+    typeof fields.status !== 'string' ||
+    !['active', 'done', 'error', 'stopped'].includes(fields.status) ||
+    (fields.stateId !== undefined && !nonEmptyString(fields.stateId))
+  ) {
+    return false;
+  }
+  return isPlaybookStateValue(fields.value);
 }
 
 function isNormalizedError(value: unknown): value is NormalizedError {
+  const fields = dataRecord(value);
   return (
-    isRecord(value) &&
-    typeof value.name === 'string' &&
-    typeof value.message === 'string' &&
-    (value.stack === undefined || typeof value.stack === 'string')
+    fields !== null &&
+    hasExactKeys(fields, ['name', 'message', 'stack']) &&
+    typeof fields.name === 'string' &&
+    typeof fields.message === 'string' &&
+    (fields.stack === undefined || typeof fields.stack === 'string')
+  );
+}
+
+function dataRecord(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value) || !isPlainRecord(value)) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const out = Object.create(null) as Record<string, unknown>;
+  for (const [key, descriptor] of Object.entries(
+    Object.getOwnPropertyDescriptors(value),
+  )) {
+    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) return null;
+    out[key] = descriptor.value;
+  }
+  return out;
+}
+
+function hasExactKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+): boolean {
+  const keys = Object.keys(value);
+  return (
+    (keys.includes('outcome') || !allowed.includes('outcome')) &&
+    keys.every((key) => allowed.includes(key))
   );
 }
 

@@ -132,18 +132,26 @@ const structuredCaptainInput =
     topic: context.topic,
   });
 
+const stateIdentity = (stateId: string) => ({
+  id: stateId,
+  meta: { playbook: { stateId } },
+});
+
 const structuredConfig = (): MachineConfigLike => ({
   initial: 'ready',
   states: {
-    ready: {},
+    ready: { ...stateIdentity('ready') },
     proposalRound: {
+      ...stateIdentity('proposalRound'),
       type: 'parallel',
       onDone: { target: '#reviewCall' },
       states: {
         host: {
+          ...stateIdentity('hostBranch'),
           initial: 'working',
           states: {
             working: {
+              ...stateIdentity('askHost'),
               tags: 'playbook.busy',
               invoke: [
                 { src: 'observer' },
@@ -160,13 +168,18 @@ const structuredConfig = (): MachineConfigLike => ({
                 },
               ],
             },
-            complete: { type: 'final' },
+            complete: {
+              ...stateIdentity('hostComplete'),
+              type: 'final',
+            },
           },
         },
         participant: {
+          ...stateIdentity('participantBranch'),
           initial: 'working',
           states: {
             working: {
+              ...stateIdentity('askParticipant'),
               tags: ['playbook.busy'],
               invoke: {
                 src: 'captain',
@@ -180,13 +193,16 @@ const structuredConfig = (): MachineConfigLike => ({
                 onError: { target: '#failed' },
               },
             },
-            complete: { type: 'final' },
+            complete: {
+              ...stateIdentity('participantComplete'),
+              type: 'final',
+            },
           },
         },
       },
     },
     reviewCall: {
-      id: 'reviewCall',
+      ...stateIdentity('reviewCall'),
       tags: 'playbook.suspended',
       invoke: [
         { src: 'observer' },
@@ -202,8 +218,8 @@ const structuredConfig = (): MachineConfigLike => ({
         },
       ],
     },
-    failed: {},
-    done: { type: 'final' },
+    failed: { ...stateIdentity('failed') },
+    done: { ...stateIdentity('done'), type: 'final' },
   },
   on: {
     BOSS_INTERRUPT: [
@@ -494,6 +510,26 @@ describe('checkGearsFsmConformance', () => {
     );
   });
 
+  it('validates and pins every structured state public identity', () => {
+    const config = structuredConfig();
+    const pinned = pinIntrospection(config);
+    config.states!.ready.meta = undefined;
+    config.states!.proposalRound.states!.host.states!.working.meta = {
+      playbook: { stateId: 'driftedHost' },
+    };
+
+    const findings = checkGearsFsmConformance(structuredGears, config).join(
+      '\n',
+    );
+    expect(findings).toMatch(
+      /structured state ready: state\.meta\.playbook\.stateId is not a non-empty string/,
+    );
+    expect(findings).toMatch(
+      /structured state proposalRound\.host\.working: state\.meta\.playbook\.stateId "driftedHost" does not match state\.id "askHost"/,
+    );
+    expect(pinIntrospection(config)).not.toEqual(pinned);
+  });
+
   it('rejects actor work declared on a compound state instead of a leaf', () => {
     const config = conformantConfig();
     config.states!.compoundWork = {
@@ -527,7 +563,7 @@ describe('checkGearsFsmConformance', () => {
     const duplicateCalls = `${structuredGears}\n### FLOW-4\n\nCaptain shall call playbook \`code-review\`:\n> Review these changes:\n> <changes>\n`;
     const config = structuredConfig();
     config.states!.secondReviewCall = {
-      id: 'secondReviewCall',
+      ...stateIdentity('secondReviewCall'),
       tags: 'playbook.suspended',
       invoke: {
         src: 'playbook',
