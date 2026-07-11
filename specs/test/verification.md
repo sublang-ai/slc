@@ -20,7 +20,7 @@ artifacts (`code.gears.md`, `code.fsm`, and the linked `code.playbook` module).
 ### VERIFY-7
 Verifies: [VERIFY-1](../dev/verification.md#verify-1), [VERIFY-3](../dev/verification.md#verify-3), [VERIFY-4](../dev/verification.md#verify-4), [VERIFY-5](../dev/verification.md#verify-5), [VERIFY-6](../dev/verification.md#verify-6)
 
-Where the installed `@sublang/playbook` provides the manual reference artifacts, when the conformance, introspection, prompt-contract, and transition-coverage checks run over the reference `gears`, `fsm`, and linked composer, each shall report no finding; whereas when a drift is injected — a changed prompt body, a dropped state, a mis-bound player, a missing `needsBossReply` result, a machine no longer matching its pinned topology, a mutated composed prompt, or an unreachable transition arm — the corresponding check shall report it.
+Where the installed `@sublang/playbook` provides the manual reference artifacts, when the conformance, introspection, prompt-contract, and transition-coverage checks run over the reference `gears`, `fsm`, and linked composer, each shall report no finding; whereas when a drift is injected — an inserted, deleted, split, or reordered prompt-body segment, a dropped state, a mis-bound player, a missing `needsBossReply` result, a machine no longer matching its pinned topology, a mutated composed prompt, or an unreachable transition arm — the corresponding check shall report it.
 
 ## Emission
 

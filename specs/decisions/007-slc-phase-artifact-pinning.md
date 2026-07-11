@@ -25,6 +25,7 @@ Each pipeline directory may contain one committed pin file named `slc.pins.json`
 The pipeline directory is the directory resolved for the domain pipeline, not the reserved `slc` meta-pipeline unless the meta-pipeline itself is being pinned.
 If `slc.pins.json` is absent, the pipeline has no pins and every phase is interpreted.
 If the file is present, it is the selection index for compiled execution in that pipeline.
+The present index shall be a regular file and shall not be a symbolic link.
 
 The file shall be strict JSON with a schema identifier, a hash algorithm, and a map from phase name to pin record.
 The reserved key `link` represents the pipeline's `link.md` phase.

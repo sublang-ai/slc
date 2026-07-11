@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -111,6 +111,22 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     const result = await evaluatePins(dir);
     expect(result.verdicts).toBeUndefined();
     expect(result.malformed).toBeUndefined();
+  });
+
+  it('reports a symbolic-link pin index malformed (PIN-11)', async () => {
+    await write(
+      'outside-pins.json',
+      JSON.stringify({
+        schema: PIN_SCHEMA,
+        hashAlgorithm: PIN_HASH_ALGORITHM,
+        pins: {},
+      }),
+    );
+    await symlink(join(dir, 'outside-pins.json'), join(dir, PINS_FILE));
+
+    const result = await evaluatePins(dir);
+    expect(result.malformed).toMatch(/regular non-symbolic-link file/);
+    expect(result.verdicts).toBeUndefined();
   });
 
   it('reports current for a fully matching pin (PIN-8)', async () => {
