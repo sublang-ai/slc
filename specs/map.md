@@ -49,6 +49,12 @@ meta.md     The spec of specs
 
 ## Packages
 
+### CI
+
+| Group | File | Summary |
+| --- | --- | --- |
+| dev | [continuous-integration.md](dev/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, and reproducible current pins |
+
 ### CLI
 
 | Group | File | Summary |
