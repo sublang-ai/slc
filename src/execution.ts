@@ -22,6 +22,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import type { Stats } from 'node:fs';
 import { lstat, readFile, readdir, readlink, stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
@@ -190,14 +191,31 @@ async function snapshot(
  */
 async function pathIdentity(path: string): Promise<string> {
   try {
-    const info = await stat(path);
-    if (info.isFile()) return `file:${await fileDigest(path)}`;
-    if (info.isDirectory()) return `directory:${await treeDigest(path)}`;
-    return `other:${info.mode}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+    const rootInfo = await lstat(path);
+    if (rootInfo.isSymbolicLink()) {
+      const target = await readlink(path);
+      return `symlink:${JSON.stringify(target)}:${await followedPathIdentity(path)}`;
+    }
+    return identityForInfo(path, rootInfo);
   } catch (error) {
     if (isMissing(error)) return 'missing';
     return `unreadable:${errorCode(error)}`;
   }
+}
+
+async function followedPathIdentity(path: string): Promise<string> {
+  try {
+    return await identityForInfo(path, await stat(path));
+  } catch (error) {
+    if (isMissing(error)) return 'missing';
+    return `unreadable:${errorCode(error)}`;
+  }
+}
+
+async function identityForInfo(path: string, info: Stats): Promise<string> {
+  if (info.isFile()) return `file:${await fileDigest(path)}`;
+  if (info.isDirectory()) return `directory:${await treeDigest(path)}`;
+  return `other:${info.mode}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
 }
 
 async function fileDigest(path: string): Promise<string> {
