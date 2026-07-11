@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -312,6 +312,78 @@ describe('runPhase link execution', () => {
     });
     expect(result.ok).toBe(true);
     expect(await readFile(join(dir, 'onboarding.fsm.ts'), 'utf8')).toBe('fsm');
+  });
+
+  it('fails when the executor mutates a file link target (PHEXEC-5, PHEXEC-6)', async () => {
+    const definition = join(dir, 'link.md');
+    const object = join(dir, 'onboarding.fsm.ts');
+    const linkTarget = join(dir, 'runner.ts');
+    const linked = join(dir, 'onboarding.playbook.ts');
+    await writeFile(definition, '# link');
+    await writeFile(object, 'fsm');
+    await writeFile(linkTarget, 'runner');
+
+    const result = await runPhase({
+      request: {
+        kind: 'link',
+        definitionPath: definition,
+        objects: [object],
+        linkTarget,
+        options: [],
+        linked,
+      },
+      phase: 'link',
+      targetExt: '.ts',
+      executor: executor(async () => {
+        await writeFile(linkTarget, 'tampered runner');
+        await writeFile(linked, 'linked');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain(
+        `protected path "${linkTarget}" changed during the run`,
+      );
+    }
+  });
+
+  it('fails when the executor mutates a nested file in a directory link target (PHEXEC-5, PHEXEC-6)', async () => {
+    const definition = join(dir, 'link.md');
+    const object = join(dir, 'onboarding.fsm.ts');
+    const linkTarget = join(dir, 'runtime');
+    const nested = join(linkTarget, 'bindings', 'runner.ts');
+    const linked = join(dir, 'onboarding.playbook.ts');
+    await mkdir(join(linkTarget, 'bindings'), { recursive: true });
+    await writeFile(definition, '# link');
+    await writeFile(object, 'fsm');
+    await writeFile(nested, 'runner');
+
+    const result = await runPhase({
+      request: {
+        kind: 'link',
+        definitionPath: definition,
+        objects: [object],
+        linkTarget,
+        options: [],
+        linked,
+      },
+      phase: 'link',
+      targetExt: '.ts',
+      executor: executor(async () => {
+        await writeFile(nested, 'tampered runner');
+        await writeFile(linked, 'linked');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain(
+        `protected path "${linkTarget}" changed during the run`,
+      );
+    }
   });
 });
 
