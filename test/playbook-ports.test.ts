@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type {
   AgentClient,
@@ -33,6 +33,29 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
     const result = await ports.callPlayer('drafter', 'do it', notAborted);
     expect(result).toEqual({ status: 'ok', finalText: 'wrote artifact' });
+  });
+
+  it('forwards explicit resume selection and returns continuation tokens', async () => {
+    const player = fakeAgent({
+      status: 'success',
+      text: 'continued',
+      resumeToken: 'next-session',
+    });
+    const ports = createPlaybookPorts({ player, judge: player });
+
+    const fresh = await ports.callPlayer('drafter', 'first', notAborted, {
+      resume: false,
+    });
+    const resumed = await ports.callPlayer('drafter', 'second', notAborted, {
+      resume: 'prior-session',
+    });
+
+    expect(player.calls.map((call) => call.resume)).toEqual([
+      false,
+      'prior-session',
+    ]);
+    expect(fresh.resumeToken).toBe('next-session');
+    expect(resumed.resumeToken).toBe('next-session');
   });
 
   it('maps an errored run to an error PlayerResult', async () => {
@@ -129,6 +152,80 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     );
   });
 
+  it('serializes concurrent judge calls through one FIFO', async () => {
+    let active = 0;
+    let maximum = 0;
+    const releases: Array<() => void> = [];
+    const calls: string[] = [];
+    const judge: AgentClient = {
+      async run(request) {
+        calls.push(request.prompt);
+        active++;
+        maximum = Math.max(maximum, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active--;
+        return { status: 'success', text: request.prompt };
+      },
+    };
+    const ports = createPlaybookPorts({ player: judge, judge });
+
+    const first = ports.callJudge('first', notAborted);
+    const second = ports.callJudge('second', notAborted);
+    await vi.waitFor(() => expect(calls).toEqual(['first']));
+    releases.shift()?.();
+    await expect(first).resolves.toBe('first');
+    await vi.waitFor(() => expect(calls).toEqual(['first', 'second']));
+    releases.shift()?.();
+    await expect(second).resolves.toBe('second');
+    expect(maximum).toBe(1);
+  });
+
+  it('removes an aborted queued judge call and continues the FIFO', async () => {
+    const releases: Array<() => void> = [];
+    const calls: string[] = [];
+    const judge: AgentClient = {
+      async run(request) {
+        calls.push(request.prompt);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        return { status: 'success', text: request.prompt };
+      },
+    };
+    const ports = createPlaybookPorts({ player: judge, judge });
+    const queued = new AbortController();
+
+    const first = ports.callJudge('first', notAborted);
+    const aborted = ports.callJudge('aborted', queued.signal);
+    const third = ports.callJudge('third', notAborted);
+    await vi.waitFor(() => expect(calls).toEqual(['first']));
+    queued.abort(new Error('cancel queued judge'));
+    await expect(aborted).rejects.toThrow('cancel queued judge');
+
+    releases.shift()?.();
+    await expect(first).resolves.toBe('first');
+    await vi.waitFor(() => expect(calls).toEqual(['first', 'third']));
+    releases.shift()?.();
+    await expect(third).resolves.toBe('third');
+  });
+
+  it('settles nested calls as unsupported host errors', async () => {
+    const agent = fakeAgent({ status: 'success', text: 'ok' });
+    const ports = createPlaybookPorts({ player: agent, judge: agent });
+
+    await expect(
+      ports.callPlaybook(
+        { callId: 'call-1', playbookId: 'child', text: 'work' },
+        notAborted,
+      ),
+    ).resolves.toMatchObject({
+      state: 'settled',
+      result: {
+        status: 'error',
+        playbookId: 'child',
+        error: { name: 'UnsupportedOperationError' },
+      },
+    });
+  });
+
   it('collects status and telemetry as drainable diagnostics', async () => {
     const agent = fakeAgent({ status: 'success', text: 'ok' });
     const ports = createPlaybookPorts({ player: agent, judge: agent });
@@ -136,6 +233,14 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     await ports.emitStatus('drafting');
     await ports.emitStatus('progress', { turn: 2 });
     await ports.emitTelemetry({ topic: 'cost', payload: { tokens: 100 } });
+    await ports.emitTelemetry({
+      topic: 'playbook.trace',
+      payload: {
+        prompt: 'private prompt',
+        reply: 'private reply',
+        resumeToken: 'private token',
+      },
+    });
 
     expect(ports.drainDiagnostics()).toEqual([
       'drafting',

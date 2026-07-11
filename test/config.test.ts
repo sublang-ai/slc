@@ -8,11 +8,13 @@ import {
   ConfigError,
   SUPPORTED_AGENTS,
   type AdapterFactory,
+  createConfiguredCompiledFactory,
   createConfiguredExecutor,
   defaultAdapterFactory,
   isSupportedAgent,
   resolveAgentSelection,
 } from '../src/config.js';
+import type { CompiledSelection } from '../src/runner.js';
 
 describe('resolveAgentSelection (CLI-7, CLI-12)', () => {
   it('resolves a supported agent and model', () => {
@@ -121,5 +123,29 @@ describe('createConfiguredExecutor (CLI-7, CLI-8)', () => {
     createConfiguredExecutor({ agent: 'gemini' }, { adapterFactory: factory });
 
     expect(requested).toEqual(['gemini']);
+  });
+
+  it('binds compiled execution to the pin-recorded runtime contract', () => {
+    const compiled = createConfiguredCompiledFactory(
+      { agent: 'codex' },
+      { adapterFactory: () => fakeAdapter('codex') },
+    );
+    const choice = (provenance?: string): CompiledSelection =>
+      ({
+        phase: 'text2gears',
+        pipelineDir: '/pipeline',
+        record: {
+          artifact: { path: 'text2gears.slc/text2gears.playbook.ts' },
+          linkTarget: provenance === undefined ? {} : { provenance },
+        },
+      }) as unknown as CompiledSelection;
+
+    expect(typeof compiled(choice('@sublang/playbook@0.9.0')).run).toBe(
+      'function',
+    );
+    expect(typeof compiled(choice()).run).toBe('function');
+    expect(() => compiled(choice('@sublang/playbook@0.10.0'))).toThrow(
+      /unsupported pinned Playbook runtime contract/,
+    );
   });
 });

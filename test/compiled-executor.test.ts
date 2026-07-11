@@ -36,6 +36,22 @@ const idleAgent: AgentClient = {
   },
 };
 
+const structuredState = {
+  value: 'ready',
+  activeStateIds: ['ready'],
+  tags: ['playbook.parked'],
+  status: 'active' as const,
+  quiescent: true,
+  stateId: 'ready',
+};
+const sparseJson: unknown[] = [];
+sparseJson.length = 1;
+const accessorJson = Object.defineProperty({}, 'secret', {
+  enumerable: true,
+  get: () => 'hidden',
+});
+const symbolJson = { [Symbol('secret')]: 'hidden' };
+
 // Integration: a compiled `playbook` artifact driven non-interactively through
 // the executor over a fixture run root (PHEXEC-26).
 describe('createCompiledExecutor (PHEXEC-26)', () => {
@@ -176,7 +192,7 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     expect(result.diagnostics[0]).toMatch(/fixture error/);
   });
 
-  it('hands the runtime only Playbook ports (PHEXEC-23)', async () => {
+  it('initializes a legacy runtime with exactly four recorded ports', async () => {
     let keys: string[] = [];
     const executor = createCompiledExecutor({
       artifactPath: 'ignored',
@@ -184,8 +200,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       player: idleAgent,
       judge: idleAgent,
       loadFactory: async () => () => ({
-        async init(ports: Record<string, unknown>) {
-          keys = Object.keys(ports);
+        async init(value: unknown) {
+          keys = Object.keys(value as object);
         },
         async handleBossInput() {},
         async dispose() {},
@@ -201,14 +217,356 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       new AbortController().signal,
     );
 
-    expect([...keys].sort()).toEqual([
+    expect(keys.sort()).toEqual([
       'callJudge',
       'callPlayer',
       'emitStatus',
       'emitTelemetry',
     ]);
-    expect(keys).not.toContain('drainDiagnostics');
   });
+
+  it('initializes a traced session-v1 runtime with its exact boundary', async () => {
+    const target = join(root, 'out.ts');
+    let initValue: unknown;
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'session-v1',
+      playbookId: 'phase',
+      createSessionId: () => 'session-v1',
+      player: idleAgent,
+      judge: idleAgent,
+      loadFactory: async () => () => ({
+        async init(value: unknown) {
+          initValue = value;
+        },
+        async handleBossInput() {
+          await writeFile(target, 'fresh');
+        },
+        async dispose() {},
+      }),
+    });
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: 'src.md',
+        target,
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(Object.keys(initValue as object).sort()).toEqual([
+      'playbookId',
+      'ports',
+      'sessionId',
+    ]);
+    const session = initValue as { ports: Record<string, unknown> };
+    expect(Object.keys(session.ports).sort()).toEqual([
+      'callJudge',
+      'callPlayer',
+      'emitStatus',
+      'emitTelemetry',
+    ]);
+  });
+
+  it('initializes a causal root session with exactly five runtime ports', async () => {
+    let initValue: unknown;
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      playbookId: 'text2gears',
+      createSessionId: () => 'session-1',
+      runtimeContract: 'composed-v2',
+      player: idleAgent,
+      judge: idleAgent,
+      loadFactory: async () => () => ({
+        async init(value: unknown) {
+          initValue = value;
+        },
+        async handleBossInput() {
+          return { outcome: 'no-action', state: structuredState };
+        },
+        async resumePlaybookCall() {
+          return { outcome: 'no-action', state: structuredState };
+        },
+        async dispose() {},
+      }),
+    });
+    await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: 'src.md',
+        target: 'out.ts',
+      },
+      new AbortController().signal,
+    );
+
+    expect(initValue).toMatchObject({
+      sessionId: 'session-1',
+      playbookId: 'text2gears',
+      rootSessionId: 'session-1',
+      depth: 0,
+    });
+    const session = initValue as { ports: Record<string, unknown> };
+    expect(Object.keys(session.ports).sort()).toEqual([
+      'callJudge',
+      'callPlaybook',
+      'callPlayer',
+      'emitStatus',
+      'emitTelemetry',
+    ]);
+    expect(Object.keys(session.ports)).not.toContain('drainDiagnostics');
+  });
+
+  it('maps structured outcomes directly instead of failed telemetry', async () => {
+    const target = join(root, 'out.ts');
+    let ports: { emitTelemetry(event: unknown): Promise<void> } | undefined;
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'composed-v2',
+      player: idleAgent,
+      judge: idleAgent,
+      loadFactory: async () => () => ({
+        async init(value: unknown) {
+          ports = (value as typeof value & { ports: typeof ports }).ports;
+        },
+        async handleBossInput() {
+          await writeFile(target, 'fresh');
+          await ports?.emitTelemetry({
+            topic: 'playbook.fsm.state',
+            payload: { to: 'failed' },
+          });
+          await ports?.emitTelemetry({
+            topic: 'playbook.trace',
+            payload: {
+              prompt: 'private prompt',
+              reply: 'private reply',
+              resumeToken: 'private token',
+            },
+          });
+          return { outcome: 'quiescent', state: structuredState };
+        },
+        async resumePlaybookCall() {
+          return { outcome: 'no-action', state: structuredState };
+        },
+        async dispose() {},
+      }),
+    });
+
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: join(root, 'src.md'),
+        target,
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(result.diagnostics.join('\n')).not.toMatch(
+      /private prompt|private reply|private token/,
+    );
+  });
+
+  it.each([
+    ['no-action', { outcome: 'no-action', state: structuredState }, 'blocked'],
+    ['failed', { outcome: 'failed', state: structuredState }, 'error'],
+    ['aborted', { outcome: 'aborted', state: structuredState }, 'error'],
+    ['missing', undefined, 'error'],
+    [
+      'non-json output',
+      {
+        outcome: 'terminal',
+        state: structuredState,
+        output: 1n,
+      },
+      'error',
+    ],
+    [
+      'sparse output',
+      {
+        outcome: 'terminal',
+        state: structuredState,
+        output: sparseJson,
+      },
+      'error',
+    ],
+    [
+      'accessor output',
+      {
+        outcome: 'terminal',
+        state: structuredState,
+        output: accessorJson,
+      },
+      'error',
+    ],
+    [
+      'symbol output',
+      {
+        outcome: 'terminal',
+        state: structuredState,
+        output: symbolJson,
+      },
+      'error',
+    ],
+    [
+      'malformed state',
+      {
+        outcome: 'quiescent',
+        state: { ...structuredState, stateId: 7 },
+      },
+      'error',
+    ],
+    [
+      'accessor state value',
+      {
+        outcome: 'quiescent',
+        state: { ...structuredState, value: accessorJson },
+      },
+      'error',
+    ],
+    [
+      'symbol state value',
+      {
+        outcome: 'quiescent',
+        state: { ...structuredState, value: symbolJson },
+      },
+      'error',
+    ],
+    [
+      'suspended',
+      {
+        outcome: 'suspended',
+        state: structuredState,
+        pendingCall: {
+          callId: 'child-1',
+          playbookId: 'child',
+          childSessionId: 'session-child',
+        },
+      },
+      'error',
+    ],
+    ['invalid', { outcome: 'quiescent', state: {} }, 'error'],
+  ] as const)(
+    'maps a structured %s result to %s',
+    async (_name, outcome, status) => {
+      const executor = createCompiledExecutor({
+        artifactPath: 'ignored',
+        runRoot: root,
+        runtimeContract: 'composed-v2',
+        player: idleAgent,
+        judge: idleAgent,
+        loadFactory: async () => () => ({
+          async init() {},
+          async handleBossInput() {
+            return outcome;
+          },
+          async resumePlaybookCall() {
+            return { outcome: 'no-action', state: structuredState };
+          },
+          async dispose() {},
+        }),
+      });
+
+      const result = await executor.run(
+        {
+          kind: 'compile',
+          definitionPath: join(root, 'phase.md'),
+          source: join(root, 'src.md'),
+          target: join(root, 'out.ts'),
+        },
+        new AbortController().signal,
+      );
+      expect(result.status).toBe(status);
+    },
+  );
+
+  it('reports disposal failure instead of returning success', async () => {
+    const target = join(root, 'out.ts');
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'composed-v2',
+      player: idleAgent,
+      judge: idleAgent,
+      loadFactory: async () => () => ({
+        async init() {},
+        async handleBossInput() {
+          await writeFile(target, 'fresh');
+          return { outcome: 'terminal', state: structuredState };
+        },
+        async resumePlaybookCall() {
+          return { outcome: 'no-action', state: structuredState };
+        },
+        async dispose() {
+          throw new Error('trace drain failed');
+        },
+      }),
+    });
+
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: join(root, 'src.md'),
+        target,
+      },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe('error');
+    expect(result.diagnostics).toContain(
+      'compiled runtime disposal failed: trace drain failed',
+    );
+  });
+
+  it.each([
+    ['session id', { sessionId: ' ', playbookId: 'phase' }],
+    ['playbook id', { sessionId: 'session', playbookId: '' }],
+  ])(
+    'rejects an empty %s before runtime initialization',
+    async (_name, ids) => {
+      let initialized = false;
+      const executor = createCompiledExecutor({
+        artifactPath: 'ignored',
+        runRoot: root,
+        runtimeContract: 'composed-v2',
+        playbookId: ids.playbookId,
+        createSessionId: () => ids.sessionId,
+        player: idleAgent,
+        judge: idleAgent,
+        loadFactory: async () => () => ({
+          async init() {
+            initialized = true;
+          },
+          async handleBossInput() {
+            return { outcome: 'no-action', state: structuredState };
+          },
+          async resumePlaybookCall() {
+            return { outcome: 'no-action', state: structuredState };
+          },
+          async dispose() {},
+        }),
+      });
+
+      await expect(
+        executor.run(
+          {
+            kind: 'compile',
+            definitionPath: join(root, 'phase.md'),
+            source: join(root, 'src.md'),
+            target: join(root, 'out.ts'),
+          },
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow(/must be non-empty/);
+      expect(initialized).toBe(false);
+    },
+  );
 
   it('reports error when the artifact has no createPlaybookRuntime export', async () => {
     const bad = join(root, 'bad.mjs');
