@@ -42,14 +42,57 @@ export const CAPTAIN_ACTOR = 'captain';
 
 /** The minimal machine surface the coverage driver needs. */
 interface MachineLike {
-  config: MachineConfigLike;
+  config: MachineConfigLike & { id?: string };
   provide(implementations: { actors: Record<string, unknown> }): MachineLike;
   /** XState exposes `setup()`-registered guards here. */
   implementations?: { guards?: Record<string, unknown> };
   /** XState's resolved state nodes expose the actual invocation actor ids. */
-  root?: {
-    states?: Record<string, { invoke?: Array<{ id?: string }> }>;
-  };
+  root?: ResolvedStateNodeLike;
+}
+
+interface InvokeLike {
+  id?: string;
+  src?: unknown;
+  input?: (arg: { context: Record<string, unknown> }) => unknown;
+  onDone?: unknown;
+  onError?: unknown;
+}
+
+interface StateNodeLike {
+  id?: string;
+  meta?: { playbook?: { stateId?: unknown } };
+  type?: string;
+  tags?: string | readonly string[];
+  initial?: string;
+  states?: Record<string, StateNodeLike>;
+  invoke?: InvokeLike | readonly InvokeLike[];
+  onDone?: unknown;
+  on?: Record<string, unknown>;
+}
+
+interface ResolvedStateNodeLike {
+  states?: Record<string, ResolvedStateNodeLike>;
+  invoke?: Array<{ id?: string }>;
+}
+
+interface StateRef {
+  key: string;
+  path: readonly string[];
+  configId?: string;
+  stableId: string;
+  state: StateNodeLike;
+  parent?: StateRef;
+}
+
+interface CaptainRef {
+  binding: CaptainState;
+  invocation: InvokeLike;
+  invocationIndex: number;
+  ref: StateRef;
+}
+
+function captainPublicStateId(captain: CaptainRef): string {
+  return captain.binding.stateId || captain.ref.stableId;
 }
 
 type GuardArgs = { context: unknown; event: unknown };
@@ -180,10 +223,178 @@ function synthOutput(
   return output;
 }
 
+function invocations(state: StateNodeLike): readonly InvokeLike[] {
+  if (Array.isArray(state.invoke)) return state.invoke;
+  return state.invoke === undefined ? [] : [state.invoke as InvokeLike];
+}
+
+function invocationSource(src: unknown): string | undefined {
+  if (typeof src === 'string') return src;
+  if (
+    typeof src === 'object' &&
+    src !== null &&
+    'type' in src &&
+    typeof src.type === 'string'
+  ) {
+    return src.type;
+  }
+  return undefined;
+}
+
+/** Walks every state node in declaration order while retaining its ancestry. */
+function stateRefs(config: MachineConfigLike): StateRef[] {
+  const out: StateRef[] = [];
+  const visit = (
+    states: Record<string, StateNodeLike>,
+    parent?: StateRef,
+  ): void => {
+    for (const [key, state] of Object.entries(states)) {
+      const path = [...(parent?.path ?? []), key];
+      const ref: StateRef = {
+        key,
+        path,
+        ...(typeof state.id === 'string' ? { configId: state.id } : {}),
+        stableId:
+          typeof state.meta?.playbook?.stateId === 'string'
+            ? state.meta.playbook.stateId
+            : typeof state.id === 'string'
+              ? state.id
+              : path.join('.'),
+        state,
+        ...(parent === undefined ? {} : { parent }),
+      };
+      out.push(ref);
+      if (state.states !== undefined) visit(state.states, ref);
+    }
+  };
+  visit((config.states ?? {}) as Record<string, StateNodeLike>);
+  return out;
+}
+
+/** Captain bindings paired with the nested state node that owns the invoke. */
+function captainRefs(config: MachineConfigLike): CaptainRef[] {
+  const out: CaptainRef[] = [];
+  const refs = stateRefs(config);
+  const used = new Set<InvokeLike>();
+  for (const binding of enumerateCaptainStates(config)) {
+    const statePath = binding.statePath;
+    const ref =
+      (statePath === undefined
+        ? undefined
+        : refs.find((candidate) => candidate.path.join('.') === statePath)) ??
+      refs.find(
+        (candidate) =>
+          candidate.stableId === binding.stateId ||
+          (candidate.path.length === 1 && candidate.key === binding.stateId),
+      );
+    if (ref === undefined) continue;
+    const choices = invocations(ref.state);
+    const invocationIndex = choices.findIndex((invocation) => {
+      if (used.has(invocation)) return false;
+      const source = invocationSource(invocation.src);
+      const explicitlyCaptain = source === 'captain';
+      if (
+        (!explicitlyCaptain && source !== undefined) ||
+        typeof invocation.input !== 'function'
+      ) {
+        return explicitlyCaptain && binding.sourceItem === '';
+      }
+      try {
+        const input = invocation.input({ context: {} });
+        if (
+          typeof input !== 'object' ||
+          input === null ||
+          Array.isArray(input)
+        ) {
+          return explicitlyCaptain && binding.sourceItem === '';
+        }
+        const sourceItem = (input as { sourceItem?: unknown }).sourceItem;
+        if (binding.sourceItem !== '') return sourceItem === binding.sourceItem;
+        return explicitlyCaptain;
+      } catch {
+        return explicitlyCaptain && binding.sourceItem === '';
+      }
+    });
+    // A malformed explicit captain invoke can lack a distinguishable input;
+    // retain declaration order rather than silently dropping coverage.
+    const selected =
+      invocationIndex >= 0
+        ? invocationIndex
+        : choices.findIndex(
+            (invocation) =>
+              !used.has(invocation) &&
+              invocationSource(invocation.src) === 'captain',
+          );
+    if (selected < 0) continue;
+    used.add(choices[selected]);
+    out.push({
+      binding,
+      invocation: choices[selected],
+      invocationIndex: selected,
+      ref,
+    });
+  }
+  return out;
+}
+
+function playbookRefs(config: MachineConfigLike): StateRef[] {
+  return stateRefs(config).filter((ref) =>
+    invocations(ref.state).some(
+      (invocation) => invocationSource(invocation.src) === 'playbook',
+    ),
+  );
+}
+
+function tagsOf(state: StateNodeLike): readonly string[] {
+  if (typeof state.tags === 'string') return [state.tags];
+  return Array.isArray(state.tags) ? state.tags : [];
+}
+
+function stateRefForTarget(
+  refs: readonly StateRef[],
+  target: string,
+  source?: StateRef,
+): StateRef | undefined {
+  const absolute = target.startsWith('#');
+  const normalized = absolute
+    ? target.slice(1)
+    : target.startsWith('.')
+      ? target.slice(1)
+      : target;
+  if (!absolute && source?.parent !== undefined) {
+    const siblingPath = [...source.parent.path, normalized].join('.');
+    const sibling = refs.find((ref) => ref.path.join('.') === siblingPath);
+    if (sibling !== undefined) return sibling;
+  }
+
+  const byStableId = refs.find(
+    (ref) => ref.stableId === normalized || ref.configId === normalized,
+  );
+  if (byStableId !== undefined) return byStableId;
+
+  const byPath = refs.find((ref) => ref.path.join('.') === normalized);
+  if (byPath !== undefined) return byPath;
+  const byKey = refs.filter((ref) => ref.key === normalized);
+  return byKey.length === 1 ? byKey[0] : undefined;
+}
+
+function resolvedStateNode(
+  machine: MachineLike,
+  ref: StateRef,
+): ResolvedStateNodeLike | undefined {
+  let node = machine.root;
+  for (const key of ref.path) {
+    node = node?.states?.[key];
+    if (node === undefined) return undefined;
+  }
+  return node;
+}
+
 type Snapshot = {
   value: unknown;
   context: Record<string, unknown>;
   status?: string;
+  getMeta?: () => Record<string, unknown>;
 };
 
 interface DrivenActor {
@@ -203,6 +414,7 @@ type CaptainScript = (
 ) => Record<string, unknown> | null;
 
 function makeActor(machine: MachineLike, script: CaptainScript): DrivenActor {
+  const hangingActor = fromPromise(async () => new Promise(() => {}));
   const provided = machine.provide({
     actors: {
       [CAPTAIN_ACTOR]: fromPromise(
@@ -213,6 +425,10 @@ function makeActor(machine: MachineLike, script: CaptainScript): DrivenActor {
           return output;
         },
       ),
+      // Keep a nested-call state enterable so the verifier can report its
+      // explicit unsupported-coverage finding instead of racing the FSM's
+      // authored throwing placeholder into an unrelated failure state.
+      playbook: hangingActor,
     },
   });
   const actor = createActor(
@@ -282,60 +498,92 @@ function settle(
   });
 }
 
+/** Lets XState process an event whose correct outcome is no transition. */
+async function settleNoTransition(): Promise<void> {
+  await new Promise((resolveSettled) => setTimeout(resolveSettled, 10));
+}
+
+function activeStateIds(snapshot: Snapshot): Set<string> {
+  const ids = new Set<string>();
+  if (typeof snapshot.getMeta === 'function') {
+    for (const [nodeId, raw] of Object.entries(snapshot.getMeta())) {
+      if (typeof raw !== 'object' || raw === null) continue;
+      const playbook = (raw as { playbook?: unknown }).playbook;
+      if (typeof playbook !== 'object' || playbook === null) continue;
+      const stateId = (playbook as { stateId?: unknown }).stateId;
+      if (typeof stateId === 'string') ids.add(stateId);
+      // XState's metadata map keys are public state-node ids. Retain them as
+      // an additional compatibility surface for authored metadata that omits
+      // playbook.stateId.
+      ids.add(nodeId.startsWith('#') ? nodeId.slice(1) : nodeId);
+    }
+  }
+
+  const walkValue = (value: unknown, prefix: readonly string[] = []): void => {
+    if (typeof value === 'string') {
+      ids.add(value);
+      ids.add([...prefix, value].join('.'));
+      return;
+    }
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return;
+    }
+    for (const [key, nested] of Object.entries(value)) {
+      walkValue(nested, [...prefix, key]);
+    }
+  };
+  walkValue(snapshot.value);
+  return ids;
+}
+
 const atState =
-  (state: string) =>
-  (snapshot: Snapshot): boolean =>
-    snapshot.value === state;
+  (ref: StateRef) =>
+  (snapshot: Snapshot): boolean => {
+    const active = activeStateIds(snapshot);
+    return (
+      active.has(ref.stableId) ||
+      active.has(ref.path.join('.')) ||
+      (ref.path.length === 1 && active.has(ref.key))
+    );
+  };
 
 const leftState =
-  (state: string) =>
+  (ref: StateRef) =>
   (snapshot: Snapshot): boolean =>
-    snapshot.value !== state;
-
-type States = NonNullable<MachineConfigLike['states']>;
-
-function stableStateId(states: States, stateKey: string): string {
-  const id = states[stateKey]?.id;
-  return typeof id === 'string' ? id : stateKey;
-}
-
-/** Resolves either a relative state key or a `#`-target's stable id to its key. */
-function stateKeyForTarget(states: States, target: string): string | undefined {
-  if (target in states) return target;
-  return Object.keys(states).find(
-    (key) => stableStateId(states, key) === target,
-  );
-}
+    !atState(ref)(snapshot);
 
 /** The actor id XState actually uses for a state's first invocation. */
-function invocationActorId(
-  machine: MachineLike,
-  stateKey: string,
-  state: States[string],
-): string {
-  const resolved = machine.root?.states?.[stateKey]?.invoke?.[0]?.id;
+function invocationActorId(machine: MachineLike, captain: CaptainRef): string {
+  const resolved = resolvedStateNode(machine, captain.ref)?.invoke?.[
+    captain.invocationIndex
+  ]?.id;
   if (typeof resolved === 'string') return resolved;
-  const declared = (state.invoke as { id?: unknown } | undefined)?.id;
+  const declared = captain.invocation.id;
   if (typeof declared === 'string') return declared;
-  const stateHasExplicitId = typeof state.id === 'string';
-  const machineId = (machine.config as { id?: unknown }).id;
-  return stateHasExplicitId
-    ? `0.${state.id}`
-    : `0.${typeof machineId === 'string' ? machineId : '(machine)'}.${stateKey}`;
+  if (typeof captain.ref.state.id === 'string') {
+    return `0.${captain.ref.state.id}`;
+  }
+  return `0.${typeof machine.config.id === 'string' ? machine.config.id : '(machine)'}.${captain.ref.path.join('.')}`;
 }
 
 function invocationEvent(
   machine: MachineLike,
-  stateKey: string,
-  state: States[string],
+  captain: CaptainRef,
   kind: 'done' | 'error',
 ): Record<string, unknown> {
-  const actorId = invocationActorId(machine, stateKey, state);
+  const actorId = invocationActorId(machine, captain);
   return { type: `xstate.${kind}.actor.${actorId}`, actorId };
 }
 
 function transitionArms(raw: unknown): unknown[] {
   return Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+}
+
+function rawArmTarget(arm: unknown): string | undefined {
+  if (typeof arm === 'string') return arm;
+  if (typeof arm !== 'object' || arm === null) return undefined;
+  const target = (arm as { target?: unknown }).target;
+  return typeof target === 'string' ? target : undefined;
 }
 
 function armGuard(arm: unknown): unknown {
@@ -381,6 +629,47 @@ function orderedArmPredicate(
     prior.push(guard);
   }
   return undefined;
+}
+
+/** The arm XState selects for one concrete invocation output and empty context. */
+function directlySelectedArm(
+  machine: MachineLike,
+  captain: CaptainRef,
+  output: Record<string, unknown>,
+): number | undefined {
+  const event = {
+    ...invocationEvent(machine, captain, 'done'),
+    output,
+  };
+  for (const [index, arm] of transitionArms(
+    captain.invocation.onDone,
+  ).entries()) {
+    const rawGuard = armGuard(arm);
+    if (rawGuard === undefined) return index;
+    const guard = resolveGuard(machine, rawGuard);
+    if (guard === undefined) return undefined;
+    try {
+      if (guard.run({ context: {}, event })) return index;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function directTargetRef(
+  machine: MachineLike,
+  refs: readonly StateRef[],
+  captain: CaptainRef,
+  output: Record<string, unknown>,
+): StateRef | undefined {
+  const arms = transitionArms(captain.invocation.onDone);
+  const selected = directlySelectedArm(machine, captain, output);
+  if (selected === undefined) return undefined;
+  const target = rawArmTarget(arms[selected]);
+  return target === undefined
+    ? undefined
+    : stateRefForTarget(refs, target, captain.ref);
 }
 
 /*
@@ -625,6 +914,237 @@ function errorGuardSatisfiable(
   );
 }
 
+function isDescendantOf(ref: StateRef, ancestor: StateRef): boolean {
+  return (
+    ref.path.length > ancestor.path.length &&
+    ancestor.path.every((part, index) => ref.path[index] === part)
+  );
+}
+
+/** Picks the initially active Captain leaf from each immediate parallel region. */
+function parallelBranchCaptains(
+  parallel: StateRef,
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+): CaptainRef[] {
+  const regions = refs.filter((ref) => ref.parent === parallel);
+  const selected: CaptainRef[] = [];
+  for (const region of regions) {
+    const candidates = captains.filter((captain) =>
+      isDescendantOf(captain.ref, region),
+    );
+    const initial = region.state.initial;
+    const captain =
+      (initial === undefined
+        ? undefined
+        : candidates.find(
+            (candidate) => candidate.ref.path[region.path.length] === initial,
+          )) ?? candidates[0];
+    if (captain !== undefined) selected.push(captain);
+  }
+  return selected;
+}
+
+function scriptedOutputs(
+  entries: readonly {
+    captain: CaptainRef;
+    output: Record<string, unknown>;
+  }[],
+): { script: CaptainScript; calls: Map<string, number> } {
+  const calls = new Map<string, number>();
+  const byState = new Map(
+    entries.map(({ captain, output }) => [
+      captainPublicStateId(captain),
+      output,
+    ]),
+  );
+  const bySource = new Map(
+    entries.map(({ captain, output }) => [captain.binding.sourceItem, output]),
+  );
+  return {
+    calls,
+    script: (input) => {
+      const stateId =
+        typeof input.stateId === 'string' ? input.stateId : undefined;
+      const sourceItem =
+        typeof input.sourceItem === 'string' ? input.sourceItem : undefined;
+      const key = stateId ?? sourceItem;
+      const output =
+        (stateId === undefined ? undefined : byState.get(stateId)) ??
+        (sourceItem === undefined ? undefined : bySource.get(sourceItem));
+      if (key === undefined || output === undefined) return null;
+      const count = (calls.get(key) ?? 0) + 1;
+      calls.set(key, count);
+      return count === 1 ? output : null;
+    },
+  };
+}
+
+function callCount(
+  calls: ReadonlyMap<string, number>,
+  captain: CaptainRef,
+): number {
+  return (
+    calls.get(captainPublicStateId(captain)) ??
+    calls.get(captain.binding.sourceItem) ??
+    0
+  );
+}
+
+async function probeParallelQuestions(
+  machine: MachineLike,
+  parallel: StateRef,
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+): Promise<string[]> {
+  const branches = parallelBranchCaptains(parallel, refs, captains);
+  const plans = branches.flatMap((captain) => {
+    if (captain.binding.result[NEEDS_BOSS_REPLY] === undefined) return [];
+    const output = synthOutput(captain.binding, NEEDS_BOSS_REPLY);
+    const wait = directTargetRef(machine, refs, captain, output);
+    if (
+      wait === undefined ||
+      (wait.stableId !== AWAIT_BOSS_REPLY_STATE &&
+        !tagsOf(wait.state).includes('playbook.parked'))
+    ) {
+      return [];
+    }
+    return [{ captain, output, wait }];
+  });
+  if (plans.length < 2) return [];
+
+  const { script, calls } = scriptedOutputs(plans);
+  const actor = makeActor(machine, script);
+  actor.send({
+    type: INTERRUPT_EVENT,
+    targetId: captainPublicStateId(plans[0].captain),
+  });
+  const parked = await settle(
+    actor,
+    (snapshot) => plans.every(({ wait }) => atState(wait)(snapshot)),
+    500,
+  );
+  if (!parked) {
+    actor.stop();
+    return [
+      `parallel state ${parallel.stableId}: branch questions did not become simultaneously pending`,
+    ];
+  }
+
+  const [selected, ...others] = plans;
+  actor.send({
+    type: BOSS_REPLY_EVENT,
+    questionId: captainPublicStateId(selected.captain),
+    answer: 'Continue only this branch.',
+  });
+  const isolated = await settle(
+    actor,
+    (snapshot) =>
+      callCount(calls, selected.captain) >= 2 &&
+      atState(selected.captain.ref)(snapshot) &&
+      others.every(({ wait }) => atState(wait)(snapshot)),
+    500,
+  );
+  actor.stop();
+  return isolated
+    ? []
+    : [
+        `parallel state ${parallel.stableId}: a keyed Boss reply did not resume exactly one pending branch`,
+      ];
+}
+
+function combinations<T>(lists: readonly (readonly T[])[], limit = 64): T[][] {
+  let out: T[][] = [[]];
+  for (const list of lists) {
+    out = out.flatMap((prefix) => list.map((item) => [...prefix, item]));
+    if (out.length > limit) return out.slice(0, limit);
+  }
+  return out;
+}
+
+async function probeParallelJoins(
+  machine: MachineLike,
+  parallel: StateRef,
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+): Promise<string[]> {
+  const arms = transitionArms(parallel.state.onDone);
+  if (arms.length === 0) return [];
+  const branches = parallelBranchCaptains(parallel, refs, captains);
+  if (branches.length < 2) {
+    return [
+      `parallel state ${parallel.stableId}: onDone join coverage is unsupported without one Captain leaf per branch`,
+    ];
+  }
+
+  const branchOutputs = branches.map((captain) =>
+    Object.keys(captain.binding.result).flatMap((key) => {
+      if (key === NEEDS_BOSS_REPLY) return [];
+      const output = synthOutput(captain.binding, key);
+      const target = directTargetRef(machine, refs, captain, output);
+      return target?.state.type === 'final' ? [output] : [];
+    }),
+  );
+  if (branchOutputs.some((outputs) => outputs.length === 0)) {
+    return [
+      `parallel state ${parallel.stableId}: onDone join coverage is unsupported without a final-reaching branch result`,
+    ];
+  }
+
+  const outputs = combinations(branchOutputs);
+  const normalizedTargets = arms.map((arm) => rawArmTarget(arm) ?? null);
+  const findings: string[] = [];
+  for (const [armIndex, rawTarget] of normalizedTargets.entries()) {
+    if (rawTarget === null) {
+      findings.push(
+        `parallel state ${parallel.stableId}: onDone join arm ${armIndex} coverage is unsupported for a target-less arm`,
+      );
+      continue;
+    }
+    const duplicateTarget = normalizedTargets.some(
+      (candidate, index) => index !== armIndex && candidate === rawTarget,
+    );
+    const target = stateRefForTarget(refs, rawTarget, parallel);
+    if (duplicateTarget || target === undefined) {
+      findings.push(
+        `parallel state ${parallel.stableId}: onDone join arm ${armIndex} coverage is unsupported because its target is not uniquely observable`,
+      );
+      continue;
+    }
+
+    let exercised = false;
+    for (const combination of outputs) {
+      const entries = branches.map((captain, index) => ({
+        captain,
+        output: combination[index],
+      }));
+      const { script, calls } = scriptedOutputs(entries);
+      const actor = makeActor(machine, script);
+      actor.send({
+        type: INTERRUPT_EVENT,
+        targetId: captainPublicStateId(branches[0]),
+      });
+      exercised = await settle(
+        actor,
+        (snapshot) =>
+          target === parallel
+            ? branches.every((captain) => callCount(calls, captain) >= 2) &&
+              branches.every((captain) => atState(captain.ref)(snapshot))
+            : atState(target)(snapshot),
+        250,
+      );
+      actor.stop();
+      if (exercised) break;
+    }
+    if (!exercised) {
+      findings.push(
+        `parallel state ${parallel.stableId}: onDone join arm ${armIndex} could not be exercised under bounded branch-result probing`,
+      );
+    }
+  }
+  return findings;
+}
+
 /**
  * Checks transition coverage over a compiled `playbook` artifact's machine
  * (VERIFY-6) and returns findings (empty when every declared transition is
@@ -642,9 +1162,25 @@ export async function checkFsmCoverage(
   const findings: string[] = [];
   const machine = findMachine(fsmModule);
   const config = machine.config;
-  const states = config.states ?? {};
-  const captainStates = enumerateCaptainStates(config);
+  const states = (config.states ?? {}) as Record<string, StateNodeLike>;
+  const refs = stateRefs(config);
+  const captains = captainRefs(config);
+  const captainByRef = new Map(
+    captains.map((captain) => [captain.ref, captain]),
+  );
   const sourceCandidates = identifierLiterals(opts.sourceText ?? '');
+
+  for (const ref of playbookRefs(config)) {
+    findings.push(
+      `state ${ref.stableId}: nested playbook invocation coverage is unsupported`,
+    );
+  }
+  const parallelRefs = refs.filter((ref) => ref.state.type === 'parallel');
+  for (const ref of parallelRefs) {
+    if (!normalizeArms(ref.state.onDone).some((arm) => arm.target !== null)) {
+      findings.push(`parallel state ${ref.stableId} declares no onDone join`);
+    }
+  }
 
   const finalStates = Object.entries(states).filter(
     ([, state]) => state.type === 'final',
@@ -658,10 +1194,24 @@ export async function checkFsmCoverage(
   if (!canJump) {
     findings.push(`machine declares no root ${INTERRUPT_EVENT} event`);
   }
-  const waitStateKey = stateKeyForTarget(states, AWAIT_BOSS_REPLY_STATE);
-  const hasWaitState = waitStateKey !== undefined;
-  if (!hasWaitState) {
-    findings.push(`machine declares no ${AWAIT_BOSS_REPLY_STATE} state`);
+  if (canJump) {
+    for (const parallel of parallelRefs) {
+      findings.push(
+        ...(await probeParallelQuestions(machine, parallel, refs, captains)),
+        ...(await probeParallelJoins(machine, parallel, refs, captains)),
+      );
+    }
+  }
+  const waitStates = refs.filter(
+    (ref) =>
+      ref.stableId === AWAIT_BOSS_REPLY_STATE ||
+      (tagsOf(ref.state).includes('playbook.parked') &&
+        ref.state.on?.[BOSS_REPLY_EVENT] !== undefined),
+  );
+  if (waitStates.length === 0) {
+    findings.push(
+      `machine declares no ${AWAIT_BOSS_REPLY_STATE} state or branch-local Boss-reply wait state`,
+    );
   }
 
   // Every BOSS_INTERRUPT target is enterable (the captain hangs, so entering a
@@ -669,15 +1219,16 @@ export async function checkFsmCoverage(
   if (canJump) {
     for (const arm of rootArms) {
       if (arm.target === null) continue;
-      const targetKey = stateKeyForTarget(states, arm.target);
+      const target = stateRefForTarget(refs, arm.target);
+      const targetCaptain =
+        target === undefined ? undefined : captainByRef.get(target);
       const targetId =
-        targetKey === undefined ? arm.target : stableStateId(states, targetKey);
+        targetCaptain === undefined
+          ? (target?.stableId ?? arm.target)
+          : captainPublicStateId(targetCaptain);
       const actor = makeActor(machine, () => null);
       actor.send({ type: INTERRUPT_EVENT, targetId });
-      if (
-        targetKey === undefined ||
-        !(await settle(actor, atState(targetKey)))
-      ) {
+      if (target === undefined || !(await settle(actor, atState(target)))) {
         findings.push(
           `${INTERRUPT_EVENT} target ${arm.target} is not enterable`,
         );
@@ -688,6 +1239,10 @@ export async function checkFsmCoverage(
 
   // Guard-free root entry events transition from the initial state.
   const initial = typeof config.initial === 'string' ? config.initial : null;
+  const initialRef =
+    initial === null
+      ? undefined
+      : refs.find((ref) => ref.path.length === 1 && ref.key === initial);
   const entryArms: Record<string, unknown> = {
     ...(initial !== null ? (states[initial]?.on ?? {}) : {}),
     ...(config.on ?? {}),
@@ -701,27 +1256,31 @@ export async function checkFsmCoverage(
     if (free === undefined) continue;
     const actor = makeActor(machine, () => null);
     actor.send({ type: event });
-    if (!(await settle(actor, leftState(initial ?? '')))) {
+    if (
+      initialRef === undefined ||
+      !(await settle(actor, leftState(initialRef)))
+    ) {
       findings.push(`root event ${event} fired no transition`);
     }
     actor.stop();
   }
 
-  const stateCandidates = Object.entries(states).flatMap(([key, value]) =>
-    typeof value.id === 'string' && value.id !== key ? [key, value.id] : [key],
-  );
+  const stateCandidates = refs.flatMap((ref) => [
+    ref.key,
+    ref.stableId,
+    ...(ref.configId === undefined ? [] : [ref.configId]),
+  ]);
 
-  for (const state of captainStates) {
+  for (const captain of captains) {
     if (!canJump) break;
+    const state = captain.binding;
     const stateKey = state.stateId;
-    const stateNode = states[stateKey];
-    if (stateNode === undefined) continue;
-    const stateId = stableStateId(states, stateKey);
+    const stateId = captainPublicStateId(captain);
     const candidates = [...stateCandidates, ...sourceCandidates];
-    const doneEvent = invocationEvent(machine, stateKey, stateNode, 'done');
-    const errorEvent = invocationEvent(machine, stateKey, stateNode, 'error');
-    const rawDoneArms = transitionArms(stateNode.invoke?.onDone);
-    const onDoneArms = normalizeArms(stateNode.invoke?.onDone);
+    const doneEvent = invocationEvent(machine, captain, 'done');
+    const errorEvent = invocationEvent(machine, captain, 'error');
+    const rawDoneArms = transitionArms(captain.invocation.onDone);
+    const onDoneArms = normalizeArms(captain.invocation.onDone);
 
     // Every declared result needs an arm that explicitly accepts its complete
     // valid output. A sole unguarded arm accepts the whole local result
@@ -798,22 +1357,53 @@ export async function checkFsmCoverage(
       );
       gate.armed = true;
       actor.send({ type: INTERRUPT_EVENT, targetId: stateId });
-      const left = await settle(actor, leftState(stateKey));
+      const left = await settle(actor, leftState(captain.ref));
       if (!left) {
         findings.push(`state ${stateKey}: result "${key}" fired no transition`);
-      } else if (
-        key === NEEDS_BOSS_REPLY &&
-        hasWaitState &&
-        actor.getSnapshot().value !== waitStateKey
-      ) {
-        findings.push(
-          `state ${stateKey}: ${NEEDS_BOSS_REPLY} did not suspend in ${AWAIT_BOSS_REPLY_STATE}`,
-        );
-      } else if (key === NEEDS_BOSS_REPLY && waitStateKey !== undefined) {
+      } else if (key === NEEDS_BOSS_REPLY) {
+        const waitTarget =
+          rawArmTarget(rawDoneArms[directArm]) ?? onDoneArms[directArm]?.target;
+        const waitRef =
+          waitTarget === null || waitTarget === undefined
+            ? undefined
+            : stateRefForTarget(refs, waitTarget, captain.ref);
+        if (
+          waitRef === undefined ||
+          (waitRef.stableId !== AWAIT_BOSS_REPLY_STATE &&
+            !tagsOf(waitRef.state).includes('playbook.parked')) ||
+          !(await settle(actor, atState(waitRef)))
+        ) {
+          findings.push(
+            `state ${stateKey}: ${NEEDS_BOSS_REPLY} did not suspend in ${AWAIT_BOSS_REPLY_STATE} or a branch-local Boss-reply wait state`,
+          );
+          actor.stop();
+          continue;
+        }
+
+        if (waitRef.stableId !== AWAIT_BOSS_REPLY_STATE) {
+          actor.send({
+            type: BOSS_REPLY_EVENT,
+            questionId: 'coverage-unknown-question',
+            answer: 'This answer belongs to no pending branch.',
+          });
+          await settleNoTransition();
+          if (!atState(waitRef)(actor.getSnapshot())) {
+            findings.push(
+              `state ${stateKey}: an unknown ${BOSS_REPLY_EVENT} questionId moved the branch`,
+            );
+            actor.stop();
+            continue;
+          }
+        }
+
         // Boss-reply resume: BOSS_REPLY returns to the suspended state, and a
         // blank answer must not resume it.
-        actor.send({ type: BOSS_REPLY_EVENT, answer: 'Proceed as planned.' });
-        if (!(await settle(actor, atState(stateKey)))) {
+        actor.send({
+          type: BOSS_REPLY_EVENT,
+          questionId: stateId,
+          answer: 'Proceed as planned.',
+        });
+        if (!(await settle(actor, atState(captain.ref)))) {
           findings.push(
             `state ${stateKey}: ${BOSS_REPLY_EVENT} did not resume the suspended state`,
           );
@@ -831,10 +1421,14 @@ export async function checkFsmCoverage(
         );
         blankGate.armed = true;
         blank.send({ type: INTERRUPT_EVENT, targetId: stateId });
-        if (await settle(blank, atState(waitStateKey))) {
-          blank.send({ type: BOSS_REPLY_EVENT, answer: '   ' });
-          const out = await settle(blank, leftState(waitStateKey));
-          if (!out || blank.getSnapshot().value === stateKey) {
+        if (await settle(blank, atState(waitRef))) {
+          blank.send({
+            type: BOSS_REPLY_EVENT,
+            questionId: stateId,
+            answer: '   ',
+          });
+          await settleNoTransition();
+          if (atState(captain.ref)(blank.getSnapshot())) {
             findings.push(
               `state ${stateKey}: a blank ${BOSS_REPLY_EVENT} answer must not resume the state`,
             );
@@ -885,8 +1479,8 @@ export async function checkFsmCoverage(
     // Audit every onError arm under the real error-event identity. Guarded arms
     // are probed deterministically; one directly selected arm is also driven to
     // confirm XState lands on its declared target.
-    const rawErrorArms = transitionArms(stateNode.invoke?.onError);
-    const onErrorArms = normalizeArms(stateNode.invoke?.onError);
+    const rawErrorArms = transitionArms(captain.invocation.onError);
+    const onErrorArms = normalizeArms(captain.invocation.onError);
     if (onErrorArms.length === 0) {
       findings.push(`state ${stateKey} declares no onError transition`);
       continue;
@@ -948,19 +1542,22 @@ export async function checkFsmCoverage(
     if (!errorDriveSafe || directErrorArm === undefined) continue;
 
     const target = onErrorArms[directErrorArm]?.target ?? null;
-    const targetKey =
-      target === null ? undefined : stateKeyForTarget(states, target);
+    const rawTarget = rawArmTarget(rawErrorArms[directErrorArm]) ?? target;
+    const targetRef =
+      rawTarget === null
+        ? undefined
+        : stateRefForTarget(refs, rawTarget, captain.ref);
     const gate: ArmingGate = { armed: false };
     const actor = makeActor(machine, throwingScript(state.sourceItem, gate));
     gate.armed = true;
     actor.send({ type: INTERRUPT_EVENT, targetId: stateId });
     const landed = await settle(
       actor,
-      target !== null && targetKey !== undefined
-        ? atState(targetKey)
-        : leftState(stateKey),
+      target !== null && targetRef !== undefined
+        ? atState(targetRef)
+        : leftState(captain.ref),
     );
-    if (!landed || (target !== null && targetKey === undefined)) {
+    if (!landed || (target !== null && targetRef === undefined)) {
       findings.push(
         `state ${stateKey}: onError arm ${directErrorArm} did not reach ${target ?? 'a quiescent state'}`,
       );

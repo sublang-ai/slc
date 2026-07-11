@@ -20,6 +20,7 @@ import {
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
   enumerateCaptainStates,
+  enumeratePlaybookStates,
   findMachineConfig,
   generateFsmIntrospectionTest,
   generateGearsFsmConformanceTest,
@@ -96,6 +97,123 @@ const conformantConfig = (): MachineConfigLike => ({
   },
 });
 
+const structuredGears = `## Behaviors
+
+### FLOW-1
+Parallel group: initial-proposals
+
+When Boss starts a flow, Captain shall prompt Host:
+> Propose independently for <topic>.
+
+### FLOW-2
+Parallel group: initial-proposals
+
+When Boss starts a flow, Captain shall prompt Participant:
+> Challenge independently for <topic>.
+
+### FLOW-3
+
+When both proposals complete, Captain shall call playbook \`code-review\`:
+> Review these changes:
+> <changes>
+`;
+
+const structuredCaptainInput =
+  (stateId: string, player: string, sourceItem: string, prompt: string) =>
+  ({ context }: { context: Record<string, unknown> }) => ({
+    stateId,
+    player,
+    sourceItem,
+    prompt,
+    result: {
+      done: 'The player finished.',
+      needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+    },
+    topic: context.topic,
+  });
+
+const structuredConfig = (): MachineConfigLike => ({
+  initial: 'ready',
+  states: {
+    ready: {},
+    proposalRound: {
+      type: 'parallel',
+      onDone: { target: '#reviewCall' },
+      states: {
+        host: {
+          initial: 'working',
+          states: {
+            working: {
+              tags: 'playbook.busy',
+              invoke: [
+                { src: 'observer' },
+                {
+                  src: 'captain',
+                  input: structuredCaptainInput(
+                    'askHost',
+                    'Host',
+                    'FLOW-1',
+                    'Propose independently for <topic>.',
+                  ),
+                  onDone: { target: 'complete' },
+                  onError: { target: '#failed' },
+                },
+              ],
+            },
+            complete: { type: 'final' },
+          },
+        },
+        participant: {
+          initial: 'working',
+          states: {
+            working: {
+              tags: ['playbook.busy'],
+              invoke: {
+                src: 'captain',
+                input: structuredCaptainInput(
+                  'askParticipant',
+                  'Participant',
+                  'FLOW-2',
+                  'Challenge independently for <topic>.',
+                ),
+                onDone: { target: 'complete' },
+                onError: { target: '#failed' },
+              },
+            },
+            complete: { type: 'final' },
+          },
+        },
+      },
+    },
+    reviewCall: {
+      id: 'reviewCall',
+      tags: 'playbook.suspended',
+      invoke: [
+        { src: 'observer' },
+        {
+          src: 'playbook',
+          input: () => ({
+            stateId: 'reviewCall',
+            playbookId: 'code-review',
+            text: 'Review these changes:\n<changes>',
+          }),
+          onDone: { target: '#done' },
+          onError: { target: '#failed' },
+        },
+      ],
+    },
+    failed: {},
+    done: { type: 'final' },
+  },
+  on: {
+    BOSS_INTERRUPT: [
+      { target: '#askHost', guard: () => true },
+      { target: '#askParticipant', guard: () => true },
+      { target: '#reviewCall', guard: () => true },
+    ],
+  },
+});
+
 describe('parseGearsItems', () => {
   it('parses each item id, player, and verbatim prompt body', () => {
     expect(parseGearsItems(gears)).toEqual([
@@ -155,6 +273,15 @@ When Boss provides a free-form procedure description as the Source, Captain shal
         ].join('\n'),
       },
     ]);
+  });
+
+  it('records a nested playbook target without changing the legacy item fields', () => {
+    expect(parseGearsItems(structuredGears)[2]).toEqual({
+      id: 'FLOW-3',
+      player: 'Captain',
+      prompt: 'Review these changes:\n<changes>',
+      playbookId: 'code-review',
+    });
   });
 });
 
@@ -225,6 +352,58 @@ describe('enumerateCaptainStates', () => {
     ]);
     expect(pins.quiescent).toEqual([]);
   });
+
+  it('walks nested states and normalizes object and array invokes', () => {
+    const captains = enumerateCaptainStates(structuredConfig());
+    expect(captains.map(({ stateId }) => stateId)).toEqual([
+      'askHost',
+      'askParticipant',
+    ]);
+    expect(captains.map(({ statePath }) => statePath)).toEqual([
+      'proposalRound.host.working',
+      'proposalRound.participant.working',
+    ]);
+
+    expect(enumeratePlaybookStates(structuredConfig())).toEqual([
+      {
+        stateId: 'reviewCall',
+        playbookId: 'code-review',
+        text: 'Review these changes:\n<changes>',
+      },
+    ]);
+  });
+
+  it('recognizes typed actor descriptors as captain and playbook mappings', () => {
+    const config: MachineConfigLike = {
+      states: {
+        captainWork: {
+          invoke: {
+            src: { type: 'captain' },
+            input: () => ({
+              stateId: 'captainWork',
+              sourceItem: 'FLOW-1',
+              player: 'Host',
+              prompt: 'Propose independently for <topic>.',
+              result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+            }),
+          },
+        },
+        childWork: {
+          invoke: {
+            src: { type: 'playbook' },
+            input: () => ({
+              stateId: 'childWork',
+              playbookId: 'code-review',
+              text: 'Review these changes:\n<changes>',
+            }),
+          },
+        },
+      },
+    };
+
+    expect(enumerateCaptainStates(config)).toHaveLength(1);
+    expect(enumeratePlaybookStates(config)).toHaveLength(1);
+  });
 });
 
 describe('findMachineConfig', () => {
@@ -245,6 +424,124 @@ describe('findMachineConfig', () => {
 describe('checkGearsFsmConformance', () => {
   it('reports no findings when the FSM matches the GEARS source', () => {
     expect(checkGearsFsmConformance(gears, conformantConfig())).toEqual([]);
+  });
+
+  it('maps nested parallel captain work and a playbook actor', () => {
+    expect(
+      checkGearsFsmConformance(structuredGears, structuredConfig()),
+    ).toEqual([]);
+  });
+
+  it('detects a drifted nested-playbook target and child-input body', () => {
+    const config = structuredConfig();
+    config.states!.reviewCall.invoke = {
+      src: 'playbook',
+      input: () => ({
+        stateId: 'reviewCall',
+        sourceItem: 'FLOW-3',
+        playbookId: 'security-review',
+        text: 'Review something else.',
+      }),
+    };
+
+    const findings = checkGearsFsmConformance(structuredGears, config).join(
+      '\n',
+    );
+    expect(findings).toMatch(/FSM playbook "security-review"/);
+    expect(findings).toMatch(
+      /FSM playbook text is not the GEARS prompt verbatim/,
+    );
+  });
+
+  it('rejects invocation state ids that disagree with public stable state ids', () => {
+    const config = conformantConfig();
+    config.states!.draft = {
+      id: 'actualDraft',
+      meta: { playbook: { stateId: 'publicDraft' } },
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          stateId: 'wrongDraft',
+          sourceItem: 'GREETER-1',
+          player: 'Writer',
+          prompt: 'Draft a short hello message for <audience>.',
+          result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+        }),
+      },
+    };
+    config.states!.childCall = {
+      id: 'actualChildCall',
+      invoke: {
+        src: 'playbook',
+        input: () => ({
+          stateId: 'wrongChildCall',
+          playbookId: 'code-review',
+          text: 'Review these changes:\n<changes>',
+        }),
+      },
+    };
+
+    const combinedGears = `${gears}\n### GREETER-3\n\nCaptain shall call playbook \`code-review\`:\n> Review these changes:\n> <changes>\n`;
+    const findings = checkGearsFsmConformance(combinedGears, config).join('\n');
+    expect(findings).toMatch(
+      /stateId "wrongDraft" does not match state\.id "actualDraft"/,
+    );
+    expect(findings).toMatch(
+      /stateId "wrongDraft" does not match state\.meta\.playbook\.stateId "publicDraft"/,
+    );
+    expect(findings).toMatch(
+      /stateId "wrongChildCall" does not match state\.id "actualChildCall"/,
+    );
+  });
+
+  it('rejects actor work declared on a compound state instead of a leaf', () => {
+    const config = conformantConfig();
+    config.states!.compoundWork = {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          sourceItem: 'GREETER-1',
+          player: 'Writer',
+          prompt: 'Draft a short hello message for <audience>.',
+          result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+        }),
+      },
+      states: { child: {} },
+    };
+
+    expect(checkGearsFsmConformance(gears, config).join('\n')).toMatch(
+      /captain invocation is declared on a compound state instead of a leaf/,
+    );
+  });
+
+  it('rejects one playbook actor reused by identical GEARS call items', () => {
+    const duplicateCalls = `${structuredGears}\n### FLOW-4\n\nCaptain shall call playbook \`code-review\`:\n> Review these changes:\n> <changes>\n`;
+    const findings = checkGearsFsmConformance(
+      duplicateCalls,
+      structuredConfig(),
+    ).join('\n');
+    expect(findings).toMatch(/GEARS item FLOW-4 maps to no FSM playbook state/);
+  });
+
+  it('pairs equal duplicate playbook calls deterministically by cardinality', () => {
+    const duplicateCalls = `${structuredGears}\n### FLOW-4\n\nCaptain shall call playbook \`code-review\`:\n> Review these changes:\n> <changes>\n`;
+    const config = structuredConfig();
+    config.states!.secondReviewCall = {
+      id: 'secondReviewCall',
+      tags: 'playbook.suspended',
+      invoke: {
+        src: 'playbook',
+        input: () => ({
+          stateId: 'secondReviewCall',
+          playbookId: 'code-review',
+          text: 'Review these changes:\n<changes>',
+        }),
+        onDone: { target: '#done' },
+        onError: { target: '#failed' },
+      },
+    };
+
+    expect(checkGearsFsmConformance(duplicateCalls, config)).toEqual([]);
   });
 
   it('detects a mis-bound player', () => {
@@ -471,6 +768,46 @@ describe('pinIntrospection (VERIFY-4)', () => {
     expect(pins.quiescent[3].final).toBe(true);
     expect(Object.keys(pins.rootOn)).toEqual(['BOSS_INTERRUPT']);
     expect(pins.interruptTargets).toEqual(['draft', 'review']);
+    expect(Object.keys(pins)).toEqual([
+      'initial',
+      'captain',
+      'quiescent',
+      'rootOn',
+      'interruptTargets',
+    ]);
+  });
+
+  it('adds recursive topology and playbook bindings only for a structured machine', () => {
+    const pins = pinIntrospection(structuredConfig());
+    expect(pins.captain.map(({ state, path }) => ({ state, path }))).toEqual([
+      { state: 'askHost', path: 'proposalRound.host.working' },
+      {
+        state: 'askParticipant',
+        path: 'proposalRound.participant.working',
+      },
+    ]);
+    expect(pins.playbook).toEqual([
+      {
+        state: 'reviewCall',
+        playbookId: 'code-review',
+        onDone: [{ index: 0, target: 'done', guarded: false }],
+        onError: [{ index: 0, target: 'failed', guarded: false }],
+        on: {},
+      },
+    ]);
+    expect(
+      pins.structured?.states.find(({ path }) => path === 'proposalRound'),
+    ).toMatchObject({
+      type: 'parallel',
+      children: ['host', 'participant'],
+      onDone: [{ index: 0, target: 'reviewCall', guarded: false }],
+    });
+    expect(
+      pins.structured?.states.find(({ path }) => path === 'reviewCall'),
+    ).toMatchObject({
+      tags: ['playbook.suspended'],
+      invokes: ['observer', 'playbook'],
+    });
   });
 
   it('pins the reference machine: 19 captain states, 21 interrupt targets', async () => {
@@ -664,6 +1001,27 @@ describe('prompt contract capture (VERIFY-5)', () => {
     });
     expect(rows[0].reads).toContain('audience');
     expect(rows[0].wires.audience).toEqual(['audience']);
+  });
+
+  it('captures prompt contracts from nested parallel leaves', () => {
+    expect(capturePromptContract(structuredConfig())).toEqual([
+      {
+        state: 'askHost',
+        sourceItem: 'FLOW-1',
+        player: 'Host',
+        reads: ['topic'],
+        wires: { topic: ['topic'] },
+        placeholders: ['<topic>'],
+      },
+      {
+        state: 'askParticipant',
+        sourceItem: 'FLOW-2',
+        player: 'Participant',
+        reads: ['topic'],
+        wires: { topic: ['topic'] },
+        placeholders: ['<topic>'],
+      },
+    ]);
   });
 
   it('derives which placeholders the composer substitutes', () => {
