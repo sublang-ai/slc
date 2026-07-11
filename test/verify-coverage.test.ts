@@ -31,6 +31,21 @@ const NEEDS_BOSS_REPLY_TEXT =
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+const needsBossReplyArm = (workId = 'work') => ({
+  target: '#awaitBossReply',
+  guard: ({ event }: any) =>
+    event.output.guard === 'needsBossReply' &&
+    typeof event.output.question === 'string',
+  actions: assign({
+    pendingBossQuestion: ({ event }: any) => ({
+      resumeStateId: workId,
+      sourceItem: 'X-1',
+      player: 'Writer',
+      question: event.output.question,
+    }),
+  } as any),
+});
+
 /**
  * A minimal machine in the gears2fsm shape: one captain state with a plain
  * result key and the Boss-reply suspension surfaces (interrupts, wait state,
@@ -41,32 +56,23 @@ const goodMachine = (
     onDone?: unknown[];
     onError?: unknown;
     dropWaitState?: boolean;
+    guards?: Record<string, (...args: any[]) => boolean>;
+    result?: Record<string, string>;
+    workId?: string;
   } = {},
 ) => {
+  const workId = overrides.workId ?? 'work';
   const onDone = overrides.onDone ?? [
     {
       target: '#done',
       guard: ({ event }: any) => event.output.guard === 'ok',
     },
-    {
-      target: '#awaitBossReply',
-      guard: ({ event }: any) =>
-        event.output.guard === 'needsBossReply' &&
-        typeof event.output.question === 'string',
-      actions: assign({
-        pendingBossQuestion: ({ event }: any) => ({
-          resumeStateId: 'work',
-          sourceItem: 'X-1',
-          player: 'Writer',
-          question: event.output.question,
-        }),
-      } as any),
-    },
+    needsBossReplyArm(workId),
   ];
   const states: Record<string, unknown> = {
     ready: { id: 'ready', on: { GO: { target: 'work' } } },
     work: {
-      id: 'work',
+      id: workId,
       invoke: {
         src: 'captain',
         input: ({ context }: any) => ({
@@ -76,6 +82,7 @@ const goodMachine = (
           result: {
             ok: 'The work is done.',
             needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            ...overrides.result,
           },
           pendingBossQuestion: context.pendingBossQuestion,
           bossReply: context.bossReply,
@@ -94,10 +101,10 @@ const goodMachine = (
       on: {
         BOSS_REPLY: [
           {
-            target: '#work',
+            target: `#${workId}`,
             reenter: true,
             guard: ({ context, event }: any) =>
-              context.pendingBossQuestion?.resumeStateId === 'work' &&
+              context.pendingBossQuestion?.resumeStateId === workId &&
               typeof event.answer === 'string' &&
               event.answer.trim() !== '',
             actions: assign({
@@ -115,6 +122,9 @@ const goodMachine = (
         throw new Error('captain actor must be provided by the runner');
       }),
     },
+    ...(overrides.guards === undefined
+      ? {}
+      : { guards: overrides.guards as any }),
   }).createMachine({
     id: 'flow',
     initial: 'ready',
@@ -122,9 +132,9 @@ const goodMachine = (
     on: {
       BOSS_INTERRUPT: [
         {
-          target: '#work',
+          target: `#${workId}`,
           reenter: true,
-          guard: ({ event }: any) => event.targetId === 'work',
+          guard: ({ event }: any) => event.targetId === workId,
         },
         {
           target: '#ready',
@@ -138,6 +148,17 @@ const goodMachine = (
 };
 
 /* eslint-enable @typescript-eslint/no-explicit-any */
+
+type DoneGuardArgs = {
+  event: {
+    type: string;
+    output: { guard?: string; question?: unknown };
+  };
+};
+
+type ErrorGuardArgs = {
+  event: { error: Error };
+};
 
 describe('guardSatisfiable (VERIFY-6)', () => {
   it('satisfies a conjunctive guard by iterative deepening over its literals', () => {
@@ -168,6 +189,15 @@ describe('guardSatisfiable (VERIFY-6)', () => {
       guardSatisfiable(guard as never, { guard: 'ok' }, ['bossSpecs']),
     ).toBe(true);
   });
+
+  it('does not invent event-level fields while probing', () => {
+    const guard = ({
+      event,
+    }: {
+      event: { type?: string; output?: { guard?: string } };
+    }) => event.type === 'BOSS_REPLY' && event.output?.guard === 'accepted';
+    expect(guardSatisfiable(guard as never, { guard: 'accepted' })).toBe(false);
+  });
 });
 
 describe('identifierLiterals', () => {
@@ -180,6 +210,49 @@ describe('identifierLiterals', () => {
 describe('checkFsmCoverage (VERIFY-6)', () => {
   it('finds nothing on a machine covering all its transitions', async () => {
     expect(await checkFsmCoverage({ machine: goodMachine() })).toEqual([]);
+  });
+
+  it('drives stable state ids that differ from their states-object keys', async () => {
+    expect(
+      await checkFsmCoverage({ machine: goodMachine({ workId: 'workItem' }) }),
+    ).toEqual([]);
+  });
+
+  it('detects a declared result key handled only by the failure fallback', async () => {
+    const machine = goodMachine({
+      result: { orphan: 'No onDone guard accepts this declared result.' },
+      onDone: [
+        {
+          target: '#done',
+          guard: ({ event }: DoneGuardArgs) => event.output.guard === 'ok',
+        },
+        needsBossReplyArm(),
+        { target: '#failed' },
+      ],
+    });
+    expect((await checkFsmCoverage({ machine })).join('\n')).toMatch(
+      /result "orphan" has no reachable accepting transition/,
+    );
+  });
+
+  it('keeps the actual done-event type fixed during arm probing', async () => {
+    const machine = goodMachine({
+      onDone: [
+        {
+          target: '#done',
+          guard: ({ event }: DoneGuardArgs) =>
+            event.type === 'BOSS_REPLY' && event.output.guard === 'ok',
+        },
+        {
+          target: '#done',
+          guard: ({ event }: DoneGuardArgs) => event.output.guard === 'ok',
+        },
+        needsBossReplyArm(),
+      ],
+    });
+    expect((await checkFsmCoverage({ machine })).join('\n')).toMatch(
+      /onDone arm 0 .* is unsatisfiable under probing/,
+    );
   });
 
   it('detects a missing onError transition', async () => {
@@ -222,6 +295,68 @@ describe('checkFsmCoverage (VERIFY-6)', () => {
     );
   });
 
+  it('audits every guarded onError arm', async () => {
+    const machine = goodMachine({
+      onError: [
+        {
+          target: '#failed',
+          guard: ({ event }: ErrorGuardArgs) =>
+            event.error.message === 'coverage: forced captain failure',
+        },
+        { target: '#done', guard: () => false },
+        { target: '#failed' },
+      ],
+    });
+    const findings = (await checkFsmCoverage({ machine })).join('\n');
+    expect(findings).toMatch(
+      /onError arm 1 \(target done\) is unsatisfiable under probing/,
+    );
+    expect(findings).not.toMatch(/onError arm 0/);
+  });
+
+  it('detects an onError arm shadowed by an earlier unconditional guard', async () => {
+    const machine = goodMachine({
+      onError: [
+        { target: '#failed', guard: () => true },
+        { target: '#done', guard: () => true },
+      ],
+    });
+    expect((await checkFsmCoverage({ machine })).join('\n')).toMatch(
+      /onError arm 1 \(target done\) is unsatisfiable under probing/,
+    );
+  });
+
+  it('probes alternate error payloads for later onError arms', async () => {
+    const machine = goodMachine({
+      onError: [
+        {
+          target: '#failed',
+          guard: ({ event }: ErrorGuardArgs) =>
+            event.error.message === 'coverage: forced captain failure',
+        },
+        {
+          target: '#done',
+          guard: ({ event }: ErrorGuardArgs) =>
+            event.error.message === 'retryable',
+        },
+        { target: '#failed' },
+      ],
+    });
+    expect(await checkFsmCoverage({ machine })).toEqual([]);
+  });
+
+  it('reports an unregistered onError guard without driving it', async () => {
+    const machine = goodMachine({
+      onError: [
+        { target: '#done', guard: 'unregistered' },
+        { target: '#failed' },
+      ],
+    });
+    await expect(checkFsmCoverage({ machine })).resolves.toContain(
+      'state work: onError arm 0 names an unresolvable guard "unregistered"',
+    );
+  });
+
   it('detects a machine without the Boss-reply wait state', async () => {
     const machine = goodMachine({
       dropWaitState: true,
@@ -247,6 +382,23 @@ describe('checkFsmCoverage (VERIFY-6)', () => {
 });
 
 describe('named guards (setup implementations)', () => {
+  it('resolves parameterized named guard objects with their params', async () => {
+    const machine = goodMachine({
+      guards: {
+        matches: ({ event }: DoneGuardArgs, params: { key: string }): boolean =>
+          event.output.guard === params.key,
+      },
+      onDone: [
+        {
+          target: '#done',
+          guard: { type: 'matches', params: { key: 'ok' } },
+        },
+        needsBossReplyArm(),
+      ],
+    });
+    expect(await checkFsmCoverage({ machine })).toEqual([]);
+  });
+
   it('resolves string guards through the machine implementations and flags unregistered ones', async () => {
     /* eslint-disable @typescript-eslint/no-explicit-any */
     const machine = setup({
@@ -347,9 +499,9 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
       expect(diagnostics.join('\n')).toMatch(/BOSS_INTERRUPT/);
       const content = await readFile(path, 'utf8');
       expect(content).toContain(
-        "import { checkFsmCoverage } from '@sublang/slc/verify'",
+        'import { checkFsmCoverage } from "@sublang/slc/verify"',
       );
-      expect(content).toContain("import * as fsm from './code.fsm.ts'");
+      expect(content).toContain('import * as fsm from "./code.fsm.ts"');
       expect(content).toContain('checkFsmCoverage(fsm, { sourceText })');
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
@@ -362,7 +514,24 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
       fsmModule: './flow.fsm.ts',
       verifyModule: '@sublang/slc/verify',
     });
-    expect(generated).toContain("new URL('./flow.fsm.ts', import.meta.url)");
+    expect(generated).toContain('new URL("./flow.fsm.ts", import.meta.url)');
     expect(generated).toContain('reaches every declared transition');
+  });
+
+  it('quotes generated strings and comments for punctuation-heavy basenames', () => {
+    const basename = `flow's "quoted"\nname`;
+    const fsmModule = `./flow's.fsm.ts`;
+    const verifyModule = `@scope/pkg's/verify`;
+    const generated = generateFsmCoverageTest({
+      basename,
+      fsmModule,
+      verifyModule,
+    });
+    expect(generated).toContain(`coverage for ${JSON.stringify(basename)}.`);
+    expect(generated).toContain(`from ${JSON.stringify(verifyModule)}`);
+    expect(generated).toContain(`from ${JSON.stringify(fsmModule)}`);
+    expect(generated).toContain(
+      `describe(${JSON.stringify(`${basename}: FSM coverage`)}, () => {`,
+    );
   });
 });
