@@ -14,6 +14,8 @@
  */
 
 import {
+  AWAIT_BOSS_REPLY_STATE,
+  BOSS_REPLY_EVENT,
   checkGearsFsmConformance,
   findMachineConfig,
   parseGearsItems,
@@ -31,6 +33,81 @@ export interface CompiledPlaybook {
   playbook: unknown;
   /** The `fsm` artifact source text, for coverage probing. */
   fsmSource?: string;
+}
+
+export type RuntimeCapabilityProfile = 'legacy' | 'structured';
+
+/**
+ * Returns the linked runtime's callable capability profile.
+ *
+ * Released 0.9 artifacts expose the legacy three-method surface. The
+ * structured session contract adds `resumePlaybookCall`; comparing profiles
+ * lets old artifacts remain self-equivalent while refusing a mixed toolchain.
+ */
+export function runtimeCapabilityProfile(
+  playbook: unknown,
+): RuntimeCapabilityProfile | null {
+  const factory = (playbook as { default?: unknown })?.default;
+  if (typeof factory !== 'function') return null;
+  try {
+    const runtime = (factory as (options: unknown) => unknown)({});
+    if (typeof runtime !== 'object' || runtime === null) return null;
+    const surface = runtime as Record<string, unknown>;
+    if (
+      !['init', 'handleBossInput', 'dispose'].every(
+        (member) => typeof surface[member] === 'function',
+      )
+    ) {
+      return null;
+    }
+    if (surface.resumePlaybookCall === undefined) return 'legacy';
+    return typeof surface.resumePlaybookCall === 'function'
+      ? 'structured'
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+interface StateSurface {
+  id?: string;
+  tags?: string | readonly string[];
+  on?: Record<string, unknown>;
+  states?: Record<string, StateSurface>;
+}
+
+/** Accepts the legacy scalar wait or a structured branch-local parked wait. */
+export function hasBossReplySurface(config: unknown): boolean {
+  if (typeof config !== 'object' || config === null) return false;
+  const states = (config as { states?: unknown }).states;
+  if (typeof states !== 'object' || states === null || Array.isArray(states)) {
+    return false;
+  }
+
+  const visit = (entries: Record<string, StateSurface>): boolean =>
+    Object.entries(entries).some(([key, state]) => {
+      if (
+        key === AWAIT_BOSS_REPLY_STATE ||
+        state.id === AWAIT_BOSS_REPLY_STATE
+      ) {
+        return true;
+      }
+      const tags =
+        typeof state.tags === 'string'
+          ? [state.tags]
+          : Array.isArray(state.tags)
+            ? state.tags
+            : [];
+      if (
+        tags.includes('playbook.parked') &&
+        state.on?.[BOSS_REPLY_EVENT] !== undefined
+      ) {
+        return true;
+      }
+      return state.states === undefined ? false : visit(state.states);
+    });
+
+  return visit(states as Record<string, StateSurface>);
 }
 
 /**
@@ -53,10 +130,17 @@ export function normalizePromptLine(line: string): string {
 export function playerLineSets(gears: string): Map<string, Set<string>> {
   const sets = new Map<string, Set<string>>();
   for (const item of parseGearsItems(gears)) {
-    let lines = sets.get(item.player);
+    // A nested call is an authored playbook dependency, not a Captain player
+    // prompt. Key it by target so changing `code-review` to `security-review`
+    // cannot compare equal merely because both behaviors say Captain calls it.
+    const participant =
+      item.playbookId === undefined
+        ? item.player
+        : `playbook:${item.playbookId}`;
+    let lines = sets.get(participant);
     if (lines === undefined) {
       lines = new Set();
-      sets.set(item.player, lines);
+      sets.set(participant, lines);
     }
     for (const line of item.prompt.split('\n')) {
       if (line.trim() !== '') lines.add(normalizePromptLine(line));
@@ -125,7 +209,8 @@ export async function checkPlaybookIntegrity(
   );
 
   // Runtime contract: a callable createPlaybookRuntime default export whose
-  // runtime exposes init/handleBossInput/dispose (DR-005, link.md).
+  // runtime exposes the released legacy surface or the structured session
+  // surface. A partially-present resume member is neither profile.
   const factory = (compiled.playbook as { default?: unknown }).default;
   if (typeof factory !== 'function') {
     findings.push(`${label}: linked module has no callable default export`);
@@ -138,6 +223,12 @@ export async function checkPlaybookIntegrity(
         if (typeof runtime?.[member] !== 'function') {
           findings.push(`${label}: runtime lacks ${member}()`);
         }
+      }
+      if (
+        runtime?.resumePlaybookCall !== undefined &&
+        typeof runtime.resumePlaybookCall !== 'function'
+      ) {
+        findings.push(`${label}: runtime has non-callable resumePlaybookCall`);
       }
     } catch (error) {
       findings.push(
@@ -164,6 +255,18 @@ export async function checkReferenceEquivalence(opts: {
 
   findings.push(...(await checkPlaybookIntegrity('produced', opts.produced)));
   findings.push(...(await checkPlaybookIntegrity('reference', opts.reference)));
+
+  const producedProfile = runtimeCapabilityProfile(opts.produced.playbook);
+  const referenceProfile = runtimeCapabilityProfile(opts.reference.playbook);
+  if (
+    producedProfile !== null &&
+    referenceProfile !== null &&
+    producedProfile !== referenceProfile
+  ) {
+    findings.push(
+      `runtime capability profiles differ: produced ${producedProfile} vs reference ${referenceProfile}`,
+    );
+  }
 
   const produced = playerLineSets(opts.produced.gears);
   const reference = playerLineSets(opts.reference.gears);
@@ -204,8 +307,8 @@ export async function checkReferenceEquivalence(opts: {
     if (!pins.quiescent.some((state) => state.final)) {
       findings.push(`${label}: machine declares no final state`);
     }
-    if (!pins.quiescent.some((state) => state.state === 'awaitBossReply')) {
-      findings.push(`${label}: machine declares no awaitBossReply state`);
+    if (!hasBossReplySurface(findMachineConfig(compiled.fsm))) {
+      findings.push(`${label}: machine declares no Boss-reply wait state`);
     }
   }
 
