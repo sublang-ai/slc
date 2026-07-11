@@ -22,8 +22,8 @@
  */
 
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { extname } from 'node:path';
+import { lstat, readFile, readdir, readlink, stat } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 
 /** An opaque link option pair (PIPE-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
@@ -175,21 +175,95 @@ function failure(
 
 async function snapshot(
   paths: readonly string[],
-): Promise<Map<string, string | null>> {
+): Promise<Map<string, string>> {
   const entries = await Promise.all(
-    paths.map(async (path) => [path, await hashFile(path)] as const),
+    paths.map(async (path) => [path, await pathIdentity(path)] as const),
   );
   return new Map(entries);
 }
 
-async function hashFile(path: string): Promise<string | null> {
+/**
+ * Returns a deterministic identity for one protected path. The kind prefix
+ * keeps a missing path, a file, and a directory distinct; directory identities
+ * cover every nested entry so modifying a directory link target cannot pass the
+ * DR-003 before/after check merely because `readFile(directory)` fails.
+ */
+async function pathIdentity(path: string): Promise<string> {
   try {
-    return createHash('sha256')
-      .update(await readFile(path))
-      .digest('hex');
-  } catch {
-    return null;
+    const info = await stat(path);
+    if (info.isFile()) return `file:${await fileDigest(path)}`;
+    if (info.isDirectory()) return `directory:${await treeDigest(path)}`;
+    return `other:${info.mode}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+  } catch (error) {
+    if (isMissing(error)) return 'missing';
+    return `unreadable:${errorCode(error)}`;
   }
+}
+
+async function fileDigest(path: string): Promise<string> {
+  return createHash('sha256')
+    .update(await readFile(path))
+    .digest('hex');
+}
+
+/** Exact-content identity for a directory, including empty directories and links. */
+async function treeDigest(root: string): Promise<string> {
+  const records: string[][] = [];
+  await collectTreeRecords(root, '', records);
+  return createHash('sha256').update(JSON.stringify(records)).digest('hex');
+}
+
+async function collectTreeRecords(
+  root: string,
+  prefix: string,
+  records: string[][],
+): Promise<void> {
+  const entries = await readdir(root, { withFileTypes: true });
+  entries.sort((left, right) => compareNames(left.name, right.name));
+
+  for (const entry of entries) {
+    const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      records.push(['directory', relative]);
+      await collectTreeRecords(path, relative, records);
+    } else if (entry.isFile()) {
+      records.push(['file', relative, await fileDigest(path)]);
+    } else if (entry.isSymbolicLink()) {
+      records.push(['symlink', relative, await readlink(path)]);
+    } else {
+      const info = await lstat(path);
+      records.push([
+        'other',
+        relative,
+        String(info.mode),
+        String(info.size),
+        String(info.mtimeMs),
+        String(info.ctimeMs),
+      ]);
+    }
+  }
+}
+
+function compareNames(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function isMissing(error: unknown): boolean {
+  const code = errorCode(error);
+  return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
+function errorCode(error: unknown): string {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+  ) {
+    return error.code;
+  }
+  return 'unknown';
 }
 
 async function exists(path: string): Promise<boolean> {

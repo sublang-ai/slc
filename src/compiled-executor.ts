@@ -22,7 +22,8 @@
  * See specs/dev/phase-execution.md.
  */
 
-import { stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -95,6 +96,7 @@ export function createCompiledExecutor(opts: {
       request: ExecuteRequest,
       signal: AbortSignal,
     ): Promise<ExecutorResult> {
+      let lastFsmState: string | undefined;
       const adapter = createPlaybookPorts({
         player: opts.player,
         judge: opts.judge,
@@ -108,22 +110,56 @@ export function createCompiledExecutor(opts: {
         callPlayer: adapter.callPlayer,
         callJudge: adapter.callJudge,
         emitStatus: adapter.emitStatus,
-        emitTelemetry: adapter.emitTelemetry,
+        emitTelemetry: async (event) => {
+          const state = fsmTransitionTarget(event);
+          if (state !== undefined) lastFsmState = state;
+          await adapter.emitTelemetry(event);
+        },
       };
 
-      const result = await drivePhase(
+      const driven = await drivePhase(
         load,
         opts.artifactPath,
         ports,
         phaseInput(request, opts.runRoot),
         signal,
       );
+      const result = mapFailedQuiescentState(driven, lastFsmState);
       const mapped = mapPhaseResult(result);
       return {
         status: mapped.status,
         diagnostics: [...mapped.diagnostics, ...adapter.drainDiagnostics()],
       };
     },
+  };
+}
+
+/** Returns the destination carried by Playbook's standard FSM telemetry. */
+function fsmTransitionTarget(event: {
+  topic: string;
+  payload: unknown;
+}): string | undefined {
+  if (
+    event.topic !== 'playbook.fsm.state' ||
+    typeof event.payload !== 'object' ||
+    event.payload === null ||
+    !('to' in event.payload) ||
+    typeof event.payload.to !== 'string'
+  ) {
+    return undefined;
+  }
+  return event.payload.to;
+}
+
+/** DR-005 maps a quiescent `failed` FSM state to an executor error. */
+function mapFailedQuiescentState(
+  result: PhaseResult,
+  lastFsmState: string | undefined,
+): PhaseResult {
+  if (result.status === 'error' || lastFsmState !== 'failed') return result;
+  return {
+    status: 'error',
+    diagnostics: ['compiled runtime reached the failed quiescent state'],
   };
 }
 
@@ -177,8 +213,7 @@ async function drivePhase(
     return { status: 'error', diagnostics: ['compiled run aborted'] };
   }
   const after = await outputState(outputPath);
-  const produced =
-    after.exists && (!before.exists || after.mtimeMs !== before.mtimeMs);
+  const produced = outputWasProduced(before, after);
   return produced
     ? { status: 'ok', diagnostics: [] }
     : {
@@ -197,16 +232,65 @@ async function safeDispose(runtime: PlaybookRuntime): Promise<void> {
   }
 }
 
-/** A point-in-time view of an output path, to tell created/modified from stale. */
-async function outputState(
-  path: string,
-): Promise<{ exists: boolean; mtimeMs: number }> {
+type OutputState =
+  | { kind: 'missing' }
+  | {
+      kind: 'file';
+      digest: string;
+      dev: number;
+      ino: number;
+      mode: number;
+      size: number;
+      mtimeMs: number;
+      ctimeMs: number;
+    }
+  | {
+      kind: 'other';
+      dev: number;
+      ino: number;
+      mode: number;
+      size: number;
+      mtimeMs: number;
+      ctimeMs: number;
+    };
+
+/**
+ * A point-in-time output view. Content and file identity supplement timestamps,
+ * so an atomic replacement or preserved mtime still counts as produced output.
+ */
+async function outputState(path: string): Promise<OutputState> {
   try {
     const info = await stat(path);
-    return { exists: true, mtimeMs: info.mtimeMs };
+    const identity = {
+      dev: info.dev,
+      ino: info.ino,
+      mode: info.mode,
+      size: info.size,
+      mtimeMs: info.mtimeMs,
+      ctimeMs: info.ctimeMs,
+    };
+    if (!info.isFile()) return { kind: 'other', ...identity };
+    const digest = createHash('sha256')
+      .update(await readFile(path))
+      .digest('hex');
+    return { kind: 'file', digest, ...identity };
   } catch {
-    return { exists: false, mtimeMs: 0 };
+    return { kind: 'missing' };
   }
+}
+
+function outputWasProduced(before: OutputState, after: OutputState): boolean {
+  if (after.kind !== 'file') return false;
+  if (before.kind !== 'file') return true;
+  return (
+    before.digest !== after.digest ||
+    before.dev !== after.dev ||
+    before.ino !== after.ino ||
+    before.mode !== after.mode ||
+    before.size !== after.size ||
+    before.mtimeMs !== after.mtimeMs ||
+    before.ctimeMs !== after.ctimeMs
+  );
 }
 
 /**
