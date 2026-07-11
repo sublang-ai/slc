@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Review compiled meta-phase artifacts
+        run: |
+          node scripts/verify-artifacts.mjs pipelines/playbook/text2gears.slc text2gears
+          node scripts/verify-artifacts.mjs pipelines/playbook/gears2fsm.slc gears2fsm
+          node scripts/verify-artifacts.mjs pipelines/playbook/link.slc link
+
+      - name: Verify reproducible current pins
+        run: |
+          node scripts/generate-pins.mjs
+          git diff --exit-code -- pipelines/playbook/slc.pins.json
