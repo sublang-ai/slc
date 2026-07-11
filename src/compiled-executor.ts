@@ -44,12 +44,14 @@ import { mapPhaseResult, seedPhaseTurn } from './phase-runner.js';
 import type { PhaseInput, PhaseResult } from './phase-runner.js';
 import {
   isPlaybookRunResult,
+  type ComposedPlaybookPorts,
   type CompatiblePlaybookPorts,
   type CompatiblePlaybookRuntime,
   type CompatiblePlaybookRuntimeFactory,
   type PlaybookSessionV1,
   type PlaybookRunResult,
   type PlaybookSession,
+  type PlayerCallOptions,
   type RuntimeContractProfile,
   type SessionV1PlaybookPorts,
 } from './playbook-contract.js';
@@ -286,7 +288,7 @@ function rootSession(
     playbookId: identity.playbookId,
     rootSessionId: identity.sessionId,
     depth: 0,
-    ports,
+    ports: composedPorts(ports),
   };
 }
 
@@ -304,11 +306,51 @@ function sessionV1Ports(
 ): SessionV1PlaybookPorts {
   return {
     callPlayer: (playerId, prompt, signal, options) =>
-      ports.callPlayer(playerId, prompt, signal, options),
+      ports.callPlayer(
+        playerId,
+        prompt,
+        signal,
+        requirePlayerCallOptions(options),
+      ),
     callJudge: ports.callJudge,
     emitStatus: ports.emitStatus,
     emitTelemetry: ports.emitTelemetry,
   };
+}
+
+function composedPorts(ports: CompatiblePlaybookPorts): ComposedPlaybookPorts {
+  return {
+    callPlayer: (playerId, prompt, signal, options) =>
+      ports.callPlayer(
+        playerId,
+        prompt,
+        signal,
+        requirePlayerCallOptions(options),
+      ),
+    callJudge: ports.callJudge,
+    callPlaybook: ports.callPlaybook,
+    emitStatus: ports.emitStatus,
+    emitTelemetry: ports.emitTelemetry,
+  };
+}
+
+function requirePlayerCallOptions(value: unknown): PlayerCallOptions {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(
+      'session runtime callPlayer requires explicit PlayerCallOptions',
+    );
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, 'resume');
+  if (
+    descriptor === undefined ||
+    !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
+    (descriptor.value !== false && typeof descriptor.value !== 'string')
+  ) {
+    throw new TypeError(
+      'session runtime callPlayer options.resume must be false or a string',
+    );
+  }
+  return { resume: descriptor.value };
 }
 
 function runtimeInitValue(
