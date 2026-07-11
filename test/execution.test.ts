@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -336,6 +344,46 @@ describe('runPhase link execution', () => {
       targetExt: '.ts',
       executor: executor(async () => {
         await writeFile(linkTarget, 'tampered runner');
+        await writeFile(linked, 'linked');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain(
+        `protected path "${linkTarget}" changed during the run`,
+      );
+    }
+  });
+
+  it('fails when the executor retargets a root symlink to identical bytes', async () => {
+    const definition = join(dir, 'link.md');
+    const object = join(dir, 'onboarding.fsm.ts');
+    const firstTarget = join(dir, 'runner-a.ts');
+    const secondTarget = join(dir, 'runner-b.ts');
+    const linkTarget = join(dir, 'runner.ts');
+    const linked = join(dir, 'onboarding.playbook.ts');
+    await writeFile(definition, '# link');
+    await writeFile(object, 'fsm');
+    await writeFile(firstTarget, 'identical runner');
+    await writeFile(secondTarget, 'identical runner');
+    await symlink(firstTarget, linkTarget);
+
+    const result = await runPhase({
+      request: {
+        kind: 'link',
+        definitionPath: definition,
+        objects: [object],
+        linkTarget,
+        options: [],
+        linked,
+      },
+      phase: 'link',
+      targetExt: '.ts',
+      executor: executor(async () => {
+        await unlink(linkTarget);
+        await symlink(secondTarget, linkTarget);
         await writeFile(linked, 'linked');
         return { status: 'ok', diagnostics: [] };
       }),
