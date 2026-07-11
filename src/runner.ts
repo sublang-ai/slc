@@ -23,7 +23,7 @@ import {
 } from './execution.js';
 import { type Invocation, parseInvocation } from './invocation.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
-import { evaluatePin } from './pin-currency.js';
+import { evaluatePin, evaluatePinFile } from './pin-currency.js';
 import { PinError, loadPinFile, type PinFile, type PinRecord } from './pins.js';
 import {
   type Pipeline,
@@ -413,6 +413,25 @@ async function executeSteps(
     }
     throw error;
   }
+  if (pinFile !== undefined) {
+    const verdicts = await evaluatePinFile(pipeline.dir, pinFile);
+    const malformed = Object.entries(verdicts).find(
+      ([, verdict]) => verdict.status === 'malformed',
+    );
+    if (malformed !== undefined) {
+      return {
+        ok: false,
+        outputs: [],
+        diagnostics: [
+          `pin is malformed: ${
+            malformed[1].status === 'malformed'
+              ? malformed[1].reason
+              : 'invalid pin index'
+          }`,
+        ],
+      };
+    }
+  }
 
   const definitions = chainDefinitions(pipeline);
   const outputs: string[] = [];
@@ -482,7 +501,7 @@ async function selectExecutor(
     return { kind: 'run', executor: deps.executor };
   }
 
-  const verdict = await evaluatePin(pipelineDir, pinFile, record);
+  const verdict = await evaluatePin(pipelineDir, pinFile, phase, record);
   if (verdict.status === 'current') {
     if (deps.compiled === undefined) {
       return {

@@ -19,6 +19,8 @@
  * runtime's single Boss turn (PHEXEC-29). See specs/dev/phase-execution.md.
  */
 
+import ts from 'typescript';
+
 import type { ExecutorResult } from './execution.js';
 
 /** What a compiled phase is asked to produce: a compile target or a linked artifact (DR-005). */
@@ -53,12 +55,7 @@ export function mapPhaseResult(result: PhaseResult): ExecutorResult {
   return { status: result.status, diagnostics: result.diagnostics };
 }
 
-/**
- * The `playbook` linked format's entry point: a module's default export is the
- * `PlaybookRuntimeFactory` named `createPlaybookRuntime` (DR-005).
- */
-const PLAYBOOK_DEFAULT_EXPORT =
-  /export\s+default\s+(?:async\s+)?(?:function\s+)?createPlaybookRuntime\b/;
+const PLAYBOOK_FACTORY = 'createPlaybookRuntime';
 
 /**
  * Reports whether a compiled artifact's source resolves to the linked `playbook`
@@ -67,7 +64,219 @@ const PLAYBOOK_DEFAULT_EXPORT =
  * loader confirms the contract at run time.
  */
 export function resolvesToPlaybook(source: string): boolean {
-  return PLAYBOOK_DEFAULT_EXPORT.test(source);
+  const file = ts.createSourceFile(
+    'artifact.playbook.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const diagnostics = (
+    file as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }
+  ).parseDiagnostics;
+  if (
+    diagnostics?.some((item) => item.category === ts.DiagnosticCategory.Error)
+  ) {
+    return false;
+  }
+  if (!usesErasableTypeScript(file) || defaultExportCount(file) !== 1) {
+    return false;
+  }
+  if (factoryValueBindingCount(file, PLAYBOOK_FACTORY) !== 1) return false;
+
+  const hasFactoryBinding = factoryBindingIsCallable(file, PLAYBOOK_FACTORY);
+  for (const statement of file.statements) {
+    if (
+      ts.isFunctionDeclaration(statement) &&
+      statement.name?.text === PLAYBOOK_FACTORY &&
+      statement.body !== undefined &&
+      hasModifier(statement, ts.SyntaxKind.ExportKeyword) &&
+      hasModifier(statement, ts.SyntaxKind.DefaultKeyword) &&
+      isSynchronousFunction(statement)
+    ) {
+      return true;
+    }
+    if (
+      ts.isExportAssignment(statement) &&
+      !statement.isExportEquals &&
+      ts.isIdentifier(unwrapExpression(statement.expression)) &&
+      (unwrapExpression(statement.expression) as ts.Identifier).text ===
+        PLAYBOOK_FACTORY &&
+      hasFactoryBinding
+    ) {
+      return true;
+    }
+    if (
+      ts.isExportDeclaration(statement) &&
+      statement.exportClause !== undefined
+    ) {
+      if (
+        ts.isNamedExports(statement.exportClause) &&
+        statement.exportClause.elements.some(
+          (element) =>
+            !statement.isTypeOnly &&
+            !element.isTypeOnly &&
+            element.name.text === 'default' &&
+            (element.propertyName?.text ?? element.name.text) ===
+              PLAYBOOK_FACTORY,
+        ) &&
+        statement.moduleSpecifier === undefined &&
+        hasFactoryBinding
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function usesErasableTypeScript(file: ts.SourceFile): boolean {
+  let erasable = true;
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isEnumDeclaration(node) ||
+      ts.isModuleDeclaration(node) ||
+      ts.isImportEqualsDeclaration(node) ||
+      (ts.isExportAssignment(node) && node.isExportEquals) ||
+      (ts.isParameter(node) &&
+        ts.isParameterPropertyDeclaration(node, node.parent))
+    ) {
+      erasable = false;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return erasable;
+}
+
+function defaultExportCount(file: ts.SourceFile): number {
+  let count = 0;
+  for (const statement of file.statements) {
+    if (
+      (ts.isFunctionDeclaration(statement) ||
+        ts.isClassDeclaration(statement)) &&
+      hasModifier(statement, ts.SyntaxKind.DefaultKeyword)
+    ) {
+      count++;
+    } else if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+      count++;
+    } else if (
+      ts.isExportDeclaration(statement) &&
+      statement.exportClause !== undefined &&
+      ts.isNamedExports(statement.exportClause)
+    ) {
+      count += statement.exportClause.elements.filter(
+        (element) =>
+          !statement.isTypeOnly &&
+          !element.isTypeOnly &&
+          element.name.text === 'default',
+      ).length;
+    }
+  }
+  return count;
+}
+
+function factoryValueBindingCount(file: ts.SourceFile, name: string): number {
+  let count = 0;
+  for (const statement of file.statements) {
+    if (
+      ts.isFunctionDeclaration(statement) &&
+      statement.name?.text === name &&
+      statement.body !== undefined
+    ) {
+      count++;
+    }
+    if (ts.isVariableStatement(statement)) {
+      count += statement.declarationList.declarations.filter(
+        (declaration) =>
+          ts.isIdentifier(declaration.name) &&
+          declaration.name.text === name &&
+          declaration.initializer !== undefined,
+      ).length;
+    }
+  }
+  return count;
+}
+
+function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
+  return (
+    ts.canHaveModifiers(node) &&
+    ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) === true
+  );
+}
+
+function factoryBindingIsCallable(
+  file: ts.SourceFile,
+  name: string,
+  seen: ReadonlySet<string> = new Set(),
+): boolean {
+  if (seen.has(name)) return false;
+  const nextSeen = new Set(seen).add(name);
+  for (const statement of file.statements) {
+    if (
+      ts.isFunctionDeclaration(statement) &&
+      statement.name?.text === name &&
+      statement.body !== undefined &&
+      isSynchronousFunction(statement)
+    ) {
+      return true;
+    }
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.name.text === name &&
+          declaration.initializer !== undefined &&
+          callableExpression(file, declaration.initializer, nextSeen)
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function callableExpression(
+  file: ts.SourceFile,
+  expression: ts.Expression,
+  seen: ReadonlySet<string>,
+): boolean {
+  const value = unwrapExpression(expression);
+  if (
+    (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) &&
+    isSynchronousFunction(value)
+  ) {
+    return true;
+  }
+  if (ts.isIdentifier(value)) {
+    return factoryBindingIsCallable(file, value.text, seen);
+  }
+  return false;
+}
+
+function isSynchronousFunction(
+  node: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
+): boolean {
+  return (
+    !hasModifier(node, ts.SyntaxKind.AsyncKeyword) &&
+    (!('asteriskToken' in node) || node.asteriskToken === undefined)
+  );
+}
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
 }
 
 /**

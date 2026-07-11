@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { resolve } from 'node:path';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -34,6 +42,17 @@ describe('resolvePinPath (PIN-2, PIN-5)', () => {
 
   it('rejects a Windows-absolute path', () => {
     expect(() => resolvePinPath(DIR, '.', 'C:/x', 'f')).toThrow(PinError);
+    expect(() => resolvePinPath(DIR, '.', 'C:relative', 'f')).toThrow(PinError);
+  });
+
+  it.each([
+    ['artifact path', 'inside\\..\\outside.ts', '.'],
+    ['path boundary', 'inside.ts', '..\\..'],
+    ['empty artifact path', '', '.'],
+  ])('rejects a non-portable %s', (_label, path, boundary) => {
+    expect(() => resolvePinPath(DIR, boundary, path, 'artifact.path')).toThrow(
+      PinError,
+    );
   });
 
   it('rejects an absolute recorded boundary, naming pathBoundary.path', () => {
@@ -66,5 +85,39 @@ describe('resolvePinPath (PIN-2, PIN-5)', () => {
     );
     // a path outside even the widened boundary stays rejected.
     expect(() => resolvePinPath(DIR, '..', '../../far', 'f')).toThrow(PinError);
+  });
+
+  it('rejects an in-boundary symlink that resolves outside the boundary', () => {
+    const root = mkdtempSync(join(tmpdir(), 'slc-pin-path-'));
+    try {
+      const pipeline = join(root, 'pipeline');
+      const outside = join(root, 'outside.ts');
+      mkdirSync(pipeline);
+      writeFileSync(outside, 'outside\n');
+      symlinkSync(outside, join(pipeline, 'artifact.ts'));
+
+      expect(() =>
+        resolvePinPath(pipeline, '.', 'artifact.ts', 'artifact.path'),
+      ).toThrow(/resolves outside/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a missing descendant reached through an escaping symlink', () => {
+    const root = mkdtempSync(join(tmpdir(), 'slc-pin-path-'));
+    try {
+      const pipeline = join(root, 'pipeline');
+      const outside = join(root, 'outside');
+      mkdirSync(pipeline);
+      mkdirSync(outside);
+      symlinkSync(outside, join(pipeline, 'bundle'));
+
+      expect(() =>
+        resolvePinPath(pipeline, '.', 'bundle/missing.ts', 'artifact.path'),
+      ).toThrow(/resolves outside/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

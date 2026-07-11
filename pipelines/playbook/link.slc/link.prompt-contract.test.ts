@@ -17,36 +17,26 @@ import * as playbook from './link.playbook.ts';
 
 const CONTRACT = [
   {
-    "state": "linking",
-    "sourceItem": "LINK-10",
-    "player": "Captain",
-    "reads": [
-      "bossReply",
-      "bossRequest",
-      "pendingBossQuestion"
-    ],
-    "wires": {
-      "bossRequest": [
-        "bossRequest"
-      ],
-      "pendingBossQuestion": [
-        "pendingBossQuestion"
-      ],
-      "bossReply": [
-        "bossReply"
-      ]
+    state: 'linking',
+    sourceItem: 'LINK-10',
+    player: 'Captain',
+    reads: ['bossReply', 'bossRequest', 'pendingBossQuestion'],
+    wires: {
+      bossRequest: ['bossRequest'],
+      pendingBossQuestion: ['pendingBossQuestion'],
+      bossReply: ['bossReply'],
     },
-    "placeholders": [
-      "<PlaybookRuntimeOptions>",
-      "<void>",
-      "<PlayerResult>",
-      "<string>",
-      "<playerName>",
-      "<pendingBossQuestion.question>",
-      "<bossReply>",
-      "<state>"
-    ]
-  }
+    placeholders: [
+      '<PlaybookRuntimeOptions>',
+      '<void>',
+      '<PlayerResult>',
+      '<string>',
+      '<playerName>',
+      '<pendingBossQuestion.question>',
+      '<bossReply>',
+      '<state>',
+    ],
+  },
 ];
 
 describe('link: prompt contract', () => {
@@ -54,15 +44,15 @@ describe('link: prompt contract', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
 
-const SUBSTITUTED = {
-  "linking": []
-};
+  const SUBSTITUTED = {
+    linking: [],
+  };
 
-const compose = (
-  playbook as unknown as {
-    _internal: { composePlayerPrompt: (input: unknown) => string };
-  }
-)._internal.composePlayerPrompt;
+  const compose = (
+    playbook as unknown as {
+      _internal: { composePlayerPrompt: (input: unknown) => string };
+    }
+  )._internal.composePlayerPrompt;
 
   it('composes player prompts per the link contract', () => {
     expect(

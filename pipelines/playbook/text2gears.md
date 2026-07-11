@@ -18,6 +18,12 @@ The second phase (spec items → state machine) is out of scope.
 | source | text | .md |
 | target | gears | .md |
 
+## Pin Inputs
+
+- `../../specs/meta.md`
+- `../../specs/decisions/000-spec-structure-format.md`
+- `../../package-lock.json`
+
 ## Players
 
 Players name AI agents and the user.
