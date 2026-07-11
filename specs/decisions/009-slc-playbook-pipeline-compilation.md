@@ -58,13 +58,16 @@ The `## Link Targets` exception applies to the Playbook-authored `playbook`-form
 The invariants, modeled on the reference, are:
 
 - GEARS↔FSM conformance: each `gears` item maps to one executable working leaf carrying the item's actor kind and verbatim prompt or child-input body; Captain leaves also carry the player binding, and `needsBossReply` results are present where the definition requires them.
-- FSM introspection: every `gears` item maps to exactly one executable leaf, and the hierarchy, stable ids, state types, tags, parallel joins, actor kinds, and per-node transition surfaces are pinned so unintended topology changes are caught.
+- FSM introspection: every `gears` item maps to exactly one executable leaf; every node in a structured machine carries a non-empty explicit state id and matching `meta.playbook.stateId`; and the hierarchy, both config path and public id, state types, tags, parallel joins, actor kinds, and per-node transition surfaces are pinned so unintended topology or runtime-visible identity changes are caught.
 - Prompt contract: each Captain state wires the declared context fields, substitutes the declared placeholders, and orders labelled blocks as the link definition requires.
-- FSM coverage: every `onDone` and `onError` arm, parallel join, root or local Boss-reply transition, and interrupt target is reachable or is reported explicitly as unsupported rather than silently counted as covered.
+- FSM coverage: Captain results, `onDone` and `onError` arms, parallel joins, root or keyed branch-local Boss replies, and interrupt targets are driven through public state identities; nested-playbook invocations and any other transition the bounded driver cannot exercise are reported explicitly as unsupported rather than silently counted as covered.
 
 Verification shall traverse nested and parallel state nodes through their public stable metadata rather than assume every state is a root child or that every snapshot value is scalar.
 Flat machines shall retain their existing deterministic verification representation so adding structured support does not churn reviewed artifacts that did not change.
-Reference equivalence shall compare like runtime capability profiles: legacy factories may compare to legacy factories, session/resumable factories may compare to the same profile, and a mixed pair is not equivalent.
+Reference equivalence shall key nested-call content by the target playbook id and compare like observable runtime capability profiles.
+Because `legacy` and `session-v1` expose the same three runtime methods, the harness shall initialize fresh runtimes through each candidate's exact boundary and drive one inert non-empty turn, requiring a void result from those two profiles and a valid structured result plus `resumePlaybookCall` from `composed-v2`.
+An optional immutable named export `runtimeContractProfile` may disambiguate a runtime intentionally accepting more than one initialization shape, but the marker, callable surface, and driven result boundary shall agree, and produced and reference profiles shall match exactly.
+This artifact probe or marker does not replace the pin-provenance execution selection settled by [DR-010](010-playbook-runtime-contract-evolution.md).
 
 The tests verify structural faithfulness of artifacts to source, not domain behavior, and live beside the artifacts under `<basename>.playbook/`.
 The verification contract is realized as a new spec package whose items are authored when the generator lands.
