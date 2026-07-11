@@ -20,7 +20,7 @@ artifacts (`code.gears.md`, `code.fsm`, and the linked `code.playbook` module).
 ### VERIFY-7
 Verifies: [VERIFY-1](../dev/verification.md#verify-1), [VERIFY-3](../dev/verification.md#verify-3), [VERIFY-4](../dev/verification.md#verify-4), [VERIFY-5](../dev/verification.md#verify-5), [VERIFY-6](../dev/verification.md#verify-6)
 
-Where the installed `@sublang/playbook` provides the manual reference artifacts, when the conformance, introspection, prompt-contract, and transition-coverage checks run over the reference `gears`, `fsm`, and linked composer, each shall report no finding; whereas when a drift is injected — an inserted, deleted, split, or reordered prompt-body segment, a dropped state, a mis-bound player, a missing `needsBossReply` result, a machine no longer matching its pinned topology, a mutated composed prompt, or an unreachable transition arm — the corresponding check shall report it.
+Where the installed `@sublang/playbook` provides the manual reference artifacts, when the conformance, introspection, prompt-contract, and transition-coverage checks run over the reference `gears`, `fsm`, and linked composer, each shall report no finding; whereas when a drift is injected — an inserted, deleted, split, or reordered prompt-body segment, a dropped nested leaf, a mis-bound player or child playbook, a missing `needsBossReply` result, a changed hierarchy, type, tag, join, or local wait, a machine no longer matching its pinned topology, a mutated composed prompt, or an unreachable transition arm — the corresponding check shall report it.
 
 ## Emission
 
@@ -32,6 +32,11 @@ Where a reserved pipeline's faked agents produce a conformant `gears` and `fsm` 
 ## Reference equivalence
 
 ### VERIFY-9
-Verifies: [COMPILE-1](../user/compiler.md#compile-1), [SELFHOST-6](../dev/self-hosting.md#selfhost-6), [VERIFY-1](../dev/verification.md#verify-1)
+Verifies: [COMPILE-1](../user/compiler.md#compile-1), [SELFHOST-6](../dev/self-hosting.md#selfhost-6), [VERIFY-1](../dev/verification.md#verify-1), [VERIFY-10](../dev/verification.md#verify-10)
 
-Where `slc playbook` output for the reference workflow exists, when the equivalence harness compares it to the manual reference package, the harness shall accept exactly when the compilations are equivalent — the same player set, the same verbatim per-player prompt-line sets, each `fsm` conformant to its own `gears` with the Boss surfaces declared and its transitions reachable, and each linked module honoring the `createPlaybookRuntime` contract — without requiring byte-identity, item-partition identity, or state-name identity; whereas where no produced output exists, the harness shall skip with a notice instead of failing.
+Where `slc playbook` output for the reference workflow exists, when the equivalence harness compares it to the manual reference package, the harness shall accept exactly when the compilations are equivalent — the same actor bindings, the same verbatim per-actor prompt or child-input line sets, each flat or structured `fsm` conformant to its own `gears` with the Boss surfaces declared and its transitions reachable, and each linked module honoring the same legacy or session/resumable `createPlaybookRuntime` capability profile — without requiring byte-identity, item-partition identity, or state-name identity; whereas where the profiles differ it shall report that incompatibility, and where no produced output exists it shall skip with a notice instead of failing.
+
+### VERIFY-11
+Verifies: [VERIFY-1](../dev/verification.md#verify-1), [VERIFY-4](../dev/verification.md#verify-4), [VERIFY-6](../dev/verification.md#verify-6), [VERIFY-10](../dev/verification.md#verify-10)
+
+Where synthetic artifacts contain nested parallel regions, branch-local Boss waits, a parallel join, and a nested-playbook actor, when the conformance, introspection, coverage, and runtime-profile checks run, the checks shall traverse every stable nested leaf without a missing-state false finding, retain the existing flat representation for a flat control fixture, address only the selected pending question, recognize matching legacy and session/resumable runtime pairs, reject a mixed pair, and report any nested transition that cannot yet be driven as explicitly unsupported rather than silently covered.

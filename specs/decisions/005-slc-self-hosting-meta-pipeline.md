@@ -50,17 +50,20 @@ A compiled phase artifact shall be behavior-equivalent to interpreting its defin
 `PlaybookRuntime` its default-exported `PlaybookRuntimeFactory` builds, and
 driving it through a stable host-side SLC phase-runner facade.
 A compiled phase runs as a non-interactive playbook: the facade seeds the
-runtime from `PhaseInput`, drives its turns to quiescence through
-`handleBossInput`, and derives the result from the host-observable outcome
-(`handleBossInput` returns `void`).
+runtime from `PhaseInput`, drives one turn to the runtime's declared boundary
+through `handleBossInput`, and derives the result from the source-owned runtime
+outcome and the declared-output postcondition.
+The causal session, structured-result mapping, bounded legacy compatibility,
+nested-call host policy, and trace handling are settled by
+[DR-010](010-playbook-runtime-contract-evolution.md).
 
 | Result | Mapping |
 | --- | --- |
-| `ok` | A clean resolve at a successful quiescent state. |
-| `blocked` | A quiescent stop where the FSM cannot proceed under the phase definition without guessing through incompatibility, including malformed or incompatible inputs under [DR-003](003-slc-phase-execution.md#blocked-protocol) and parking for Boss input a non-interactive run cannot supply. |
-| `error` | A throw out of `handleBossInput`, or a `failed` quiescent state. |
+| `ok` | A successful runtime outcome that newly produces the declared output. |
+| `blocked` | A clean no-action or quiescent stop where the phase produces no output and cannot proceed without guessing through incompatibility or receiving more Boss input. |
+| `error` | A failed, aborted, invalid, unexpectedly suspended, or thrown runtime outcome. |
 
-Diagnostics are drained from the runtime's status and telemetry.
+Diagnostics are drained from the runtime's status and non-trace operational telemetry.
 Player and judge bindings are baked at link time; the factory's `options`
 carry only per-run knobs such as model identity strings.
 The artifact carries no host specifics: it reaches coding agents, judges,
@@ -97,8 +100,10 @@ interface PhaseRunner {
 }
 ```
 
-`slc` constructs the facade with a `PlaybookPorts` adapter; the runtime itself
-receives only `PlaybookPorts` through `init`.
+`slc` constructs the facade with a `PlaybookPorts` adapter.
+A session-contract runtime receives those ports only through its root
+`PlaybookSession`; a current legacy artifact may receive the legacy port shape
+directly under [DR-010](010-playbook-runtime-contract-evolution.md).
 
 `PhaseInput` carries workspace paths, not contents; the artifact performs no
 direct file I/O.
@@ -127,7 +132,7 @@ Compiled execution relies on the same DR-003 generic checks as interpreted
 execution ([DR-004](004-slc-interpreted-phase-execution.md)), which defend the
 protected inputs but do not prove the full write scope, and `slc` adds no
 host-side write-scope enforcement for compiled runs.
-`slc` constructs the runtime, supplies the ports, drives it to quiescence, then maps the host-observable outcome onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol)).
+`slc` constructs the runtime, supplies the root session or bounded legacy ports, drives it to its declared boundary, then maps the outcome onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; non-sensitive diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol), [DR-010](010-playbook-runtime-contract-evolution.md)).
 
 ### Strategy selection
 
