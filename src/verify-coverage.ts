@@ -466,7 +466,10 @@ export async function checkFsmCoverage(
         const raw = (arm as { guard?: unknown })?.guard;
         if (raw === undefined) return true;
         const guard = resolveGuard(machine, raw);
-        if (guard === undefined) return true;
+        // An unresolvable named guard is reported during the arm audit below.
+        // Do not drive it here: XState treats the missing implementation as a
+        // runtime error, which would escape asynchronously from the checker.
+        if (guard === undefined) return false;
         try {
           return Boolean(guard({ context: {}, event: { output } }));
         } catch {
