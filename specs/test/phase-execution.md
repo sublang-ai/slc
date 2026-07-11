@@ -56,9 +56,9 @@ While interpreting a phase, when the agent adds, removes, or renames a phase fil
 ## Compiled runs
 
 ### PHEXEC-26
-Verifies: [PHEXEC-23](../dev/phase-execution.md#phexec-23), [PHEXEC-24](../dev/phase-execution.md#phexec-24)
+Verifies: [PHEXEC-23](../dev/phase-execution.md#phexec-23), [PHEXEC-24](../dev/phase-execution.md#phexec-24), [PHEXEC-25](../dev/phase-execution.md#phexec-25)
 
-Where a phase is backed by a fixture compiled `playbook` artifact driven only through the runtime ports, when the executor runs it, a turn that writes the target shall yield an `ok` outcome carrying the runtime's drained diagnostics, a clean turn that reaches a non-failed quiescent state without producing output shall yield a `blocked` outcome, and a turn that throws or whose standard FSM telemetry ends at the `failed` quiescent state shall yield an `error` outcome.
+Where phases are backed by legacy and session-contract fixture `playbook` artifacts driven only through the runtime boundary, when the executor runs them, the legacy fixture shall receive only its recorded port contract and retain its output-delta mapping; the session fixture shall receive a unique causal root session and the exact five source-owned ports; structured `quiescent` or `terminal` output-producing runs shall yield `ok`, an outputless `quiescent` run or `no-action` shall yield `blocked`, and `failed`, `aborted`, invalid, unexpectedly `suspended`, thrown, or otherwise-successful but disposal-failing runs shall yield `error`; explicit false or token player resume selection and returned tokens shall cross the Cligent adapter unchanged; concurrent judge calls shall run serially; nested calls shall fail deterministically; and exact `playbook.trace` prompts, replies, and resume tokens shall not occur in the returned diagnostics.
 
 ### PHEXEC-28
 Verifies: [PHEXEC-27](../dev/phase-execution.md#phexec-27), [COMPILE-6](../user/compiler.md#compile-6)

@@ -21,7 +21,7 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 
 ### VERIFY-1
 
-When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc command shall report a finding unless every `gears` item maps to exactly one captain-invoking FSM state that carries that item's player and its prompt body verbatim, and every captain-invoking FSM state references a `gears` item that exists ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc command shall recursively traverse nested and parallel state nodes and report a finding unless every `gears` item maps to exactly one executable working leaf and every such leaf references a `gears` item that exists; a Captain leaf shall carry the item's player and prompt body verbatim, while a nested-playbook leaf shall carry its declared playbook id and child-input body verbatim ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
 
 ### VERIFY-3
 
@@ -35,7 +35,7 @@ When a compiled `playbook` artifact's `gears` and `fsm` are produced at their ca
 
 ### VERIFY-4
 
-When a compiled `playbook` artifact's `gears` and `fsm` are produced at their canonical `<basename>.playbook/` locations, the slc command shall derive the machine's structural topology from the produced `fsm` — the captain-state bindings with their result keys, every `onDone`/`onError`/event transition arm, the quiescent and root event surfaces, and the `BOSS_INTERRUPT` jumpable set — and emit a test beside the artifacts that fails when the machine no longer matches that pinned topology; when the produced `fsm` module cannot be imported for derivation, the slc command shall report a diagnostic and emit no introspection test while leaving the run outcome unchanged ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+When a compiled `playbook` artifact's `gears` and `fsm` are produced at their canonical `<basename>.playbook/` locations, the slc command shall derive the machine's structural topology from the produced `fsm` — recursively including executable actor bindings and result keys, hierarchy, stable ids, compound or parallel type, tags, parent joins, every `onDone`/`onError`/local-event transition arm, quiescent and root event surfaces, and the `BOSS_INTERRUPT` jumpable set — and emit a test beside the artifacts that fails when the machine no longer matches that pinned topology while omitting the structured extension for an unchanged flat machine; when the produced `fsm` module cannot be imported for derivation, the slc command shall report a diagnostic and emit no introspection test while leaving the run outcome unchanged ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
 
 ### VERIFY-5
 
@@ -43,4 +43,10 @@ When a compiled `playbook` artifact's `gears` and `fsm` are produced at their ca
 
 ### VERIFY-6
 
-When a compiled `playbook` artifact's `gears` and `fsm` are produced at their canonical `<basename>.playbook/` locations, the slc command shall emit a transition-coverage test beside the artifacts that drives the machine with a scripted captain and fails when a declared transition is unreachable: every captain state's result key shall fire a transition out of the state — `needsBossReply` suspending in the Boss-reply wait state, resuming on a Boss reply, and not resuming on a blank answer — every `onError` arm shall reach its target, every `BOSS_INTERRUPT` target shall be enterable, guard-free root entry events shall transition, and every guarded `onDone` arm shall be satisfiable under bounded probing seeded from the machine's state keys and the artifact's identifier literals; the check shall also fail when the machine declares no final state, no `BOSS_INTERRUPT` root event, or no Boss-reply wait state ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+When a compiled `playbook` artifact's `gears` and `fsm` are produced at their canonical `<basename>.playbook/` locations, the slc command shall emit a transition-coverage test beside the artifacts that drives the machine with scripted actors and fails when a declared transition is unreachable: every Captain result key shall fire a transition out of its nested working leaf — `needsBossReply` suspending in the correct scalar or branch-local wait, resuming only the addressed question on a nonblank Boss reply, and not resuming on a blank answer — every nested-playbook `onDone`/`onError` arm and parallel-parent join shall be exercised or reported explicitly as unsupported, every other `onError` arm shall reach its target, every nested `BOSS_INTERRUPT` target shall be enterable through public stable metadata, guard-free root entry events shall transition, and every guarded `onDone` arm shall be satisfiable under bounded probing seeded from the machine's stable state ids and artifact identifier literals; the check shall also fail when the machine declares no final state, no `BOSS_INTERRUPT` root event, or no scalar or branch-local Boss-reply wait ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+
+## Runtime equivalence
+
+### VERIFY-10
+
+When comparing produced and reference linked modules, the slc equivalence harness shall derive each runtime factory's observable capability profile and accept only matching profiles — legacy `init`/`handleBossInput`/`dispose` or session/resumable `init`/`handleBossInput`/`resumePlaybookCall`/`dispose` — while continuing to compare source players, verbatim prompts, structured-machine conformance, Boss surfaces, and reachable transitions without requiring byte, item-partition, or state-name identity ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).

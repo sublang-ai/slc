@@ -33,6 +33,7 @@ meta.md     The spec of specs
 | DR-007 | [007-slc-phase-artifact-pinning.md](decisions/007-slc-phase-artifact-pinning.md) | Phase artifact pinning: currentness, semantic inputs, and compiled selection |
 | DR-008 | [008-slc-file-capability.md](decisions/008-slc-file-capability.md) | File capability (superseded): compiled execution writes through agents and relies on the DR-003 generic checks |
 | DR-009 | [009-slc-playbook-pipeline-compilation.md](decisions/009-slc-playbook-pipeline-compilation.md) | `playbook` pipeline compilation: generic invocation, compile-output scope, compiled performing, link reconciliation, and artifact-derived verification |
+| DR-010 | [010-playbook-runtime-contract-evolution.md](decisions/010-playbook-runtime-contract-evolution.md) | Playbook runtime evolution: reproducible adoption, causal phase sessions, structured outcomes, host ports, and trace privacy |
 
 ## Iterations
 
@@ -46,6 +47,7 @@ meta.md     The spec of specs
 | IR-005 | [005-slc-compiled-execution.md](iterations/005-slc-compiled-execution.md) | Implement DR-005, DR-008 (since superseded), and the compiled-execution DR-007 items: file capability, compiled execution, selection, meta-pipeline |
 | IR-006 | [006-slc-playbook-runtime-reconciliation.md](iterations/006-slc-playbook-runtime-reconciliation.md) | Reconcile compiled execution with Playbook 0.7.0's playbook/PlaybookRuntime contract |
 | IR-007 | [007-slc-playbook-pipeline-compilation.md](iterations/007-slc-playbook-pipeline-compilation.md) | Implement `slc playbook` end to end: resolve the playbook pipeline, complete compiled execution, bootstrap pinned meta-phase artifacts, auto-generate verification tests, and compare to the reference |
+| IR-008 | [008-playbook-runtime-contract-evolution.md](iterations/008-playbook-runtime-contract-evolution.md) | Reconcile causal sessions, structured results, composition-aware verification, and the immutable-release boundary |
 
 ## Packages
 
