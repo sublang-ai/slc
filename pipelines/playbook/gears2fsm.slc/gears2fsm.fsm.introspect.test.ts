@@ -10,136 +10,130 @@ import { findMachineConfig, pinIntrospection } from '@sublang/slc/verify';
 import * as fsm from './gears2fsm.fsm.ts';
 
 const PINNED = {
-  "initial": "ready",
-  "captain": [
+  initial: 'ready',
+  captain: [
     {
-      "state": "transform",
-      "sourceItem": "G2F-1",
-      "player": "Captain",
-      "resultKeys": [
-        "needsBossReply",
-        "transformed"
-      ],
-      "onDone": [
+      state: 'transform',
+      sourceItem: 'G2F-1',
+      player: 'Captain',
+      resultKeys: ['needsBossReply', 'transformed'],
+      onDone: [
         {
-          "index": 0,
-          "target": "awaitBossReply",
-          "guarded": true
+          index: 0,
+          target: 'awaitBossReply',
+          guarded: true,
         },
         {
-          "index": 1,
-          "target": "failed",
-          "guarded": true
+          index: 1,
+          target: 'failed',
+          guarded: true,
         },
         {
-          "index": 2,
-          "target": "done",
-          "guarded": true
+          index: 2,
+          target: 'done',
+          guarded: true,
         },
         {
-          "index": 3,
-          "target": "failed",
-          "guarded": false
-        }
+          index: 3,
+          target: 'failed',
+          guarded: false,
+        },
       ],
-      "onError": [
+      onError: [
         {
-          "index": 0,
-          "target": "failed",
-          "guarded": false
-        }
+          index: 0,
+          target: 'failed',
+          guarded: false,
+        },
       ],
-      "on": {}
-    }
+      on: {},
+    },
   ],
-  "quiescent": [
+  quiescent: [
     {
-      "state": "ready",
-      "final": false,
-      "on": {
-        "START": [
+      state: 'ready',
+      final: false,
+      on: {
+        START: [
           {
-            "index": 0,
-            "target": "transform",
-            "guarded": false
-          }
-        ]
-      }
+            index: 0,
+            target: 'transform',
+            guarded: false,
+          },
+        ],
+      },
     },
     {
-      "state": "awaitBossReply",
-      "final": false,
-      "on": {
-        "BOSS_REPLY": [
+      state: 'awaitBossReply',
+      final: false,
+      on: {
+        BOSS_REPLY: [
           {
-            "index": 0,
-            "target": "failed",
-            "guarded": true
+            index: 0,
+            target: 'failed',
+            guarded: true,
           },
           {
-            "index": 1,
-            "target": "transform",
-            "guarded": true
-          }
+            index: 1,
+            target: 'transform',
+            guarded: true,
+          },
         ],
-        "BOSS_INTERRUPT": [
+        BOSS_INTERRUPT: [
           {
-            "index": 0,
-            "target": "ready",
-            "guarded": true
+            index: 0,
+            target: 'ready',
+            guarded: true,
           },
           {
-            "index": 1,
-            "target": "transform",
-            "guarded": true
-          }
+            index: 1,
+            target: 'transform',
+            guarded: true,
+          },
         ],
-        "START": [
+        START: [
           {
-            "index": 0,
-            "target": "transform",
-            "guarded": false
-          }
-        ]
-      }
+            index: 0,
+            target: 'transform',
+            guarded: false,
+          },
+        ],
+      },
     },
     {
-      "state": "failed",
-      "final": false,
-      "on": {
-        "START": [
+      state: 'failed',
+      final: false,
+      on: {
+        START: [
           {
-            "index": 0,
-            "target": "transform",
-            "guarded": false
-          }
-        ]
-      }
+            index: 0,
+            target: 'transform',
+            guarded: false,
+          },
+        ],
+      },
     },
     {
-      "state": "done",
-      "final": true,
-      "on": {}
-    }
+      state: 'done',
+      final: true,
+      on: {},
+    },
   ],
-  "rootOn": {
-    "BOSS_INTERRUPT": [
+  rootOn: {
+    BOSS_INTERRUPT: [
       {
-        "index": 0,
-        "target": "ready",
-        "guarded": true
+        index: 0,
+        target: 'ready',
+        guarded: true,
       },
       {
-        "index": 1,
-        "target": "transform",
-        "guarded": true
-      }
-    ]
+        index: 1,
+        target: 'transform',
+        guarded: true,
+      },
+    ],
   },
-  "interruptTargets": [
-    "ready",
-    "transform"
-  ]
+  interruptTargets: ['ready', 'transform'],
 };
 
 describe('gears2fsm: FSM introspection', () => {

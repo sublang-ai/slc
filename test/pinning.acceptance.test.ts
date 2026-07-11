@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { hashFile } from '../src/hash.js';
-import { evaluatePins } from '../src/pin-currency.js';
+import { evaluatePins, hashTree } from '../src/pin-currency.js';
 import {
   PINS_FILE,
   PIN_HASH_ALGORITHM,
@@ -40,20 +40,39 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     await writeFile(path, content);
   };
 
+  const writeReviewedBundle = async (phase: string): Promise<void> => {
+    await write(`${phase}.slc/${phase}.playbook.ts`, PHASE_ARTIFACT);
+    for (const suffix of [
+      'fsm.ts',
+      'gears.md',
+      'gears-fsm.test.ts',
+      'fsm.introspect.test.ts',
+      'prompt-contract.test.ts',
+      'fsm.coverage.test.ts',
+    ]) {
+      await write(`${phase}.slc/${phase}.${suffix}`, `fixture: ${suffix}\n`);
+    }
+  };
+
   /** Writes a matching pipeline and returns its pin record with current hashes. */
-  const currentRecord = async (): Promise<PinRecord> => {
-    await write('text2gears.md', '## Pin Inputs\n\n- `reference/gears.md`\n');
+  const currentRecord = async (phase = 'text2gears'): Promise<PinRecord> => {
+    await write(`${phase}.md`, '## Pin Inputs\n\n- `reference/gears.md`\n');
     await write('reference/gears.md', 'gears reference body\n');
-    await write('text2gears.phase.ts', PHASE_ARTIFACT);
+    await writeReviewedBundle(phase);
     await write('link/code.ts', 'link target bytes\n');
+    await write('runtime/runtime.ts', 'export const version = 1;\n');
     return {
       definition: {
-        path: 'text2gears.md',
-        hash: await hashFile(join(dir, 'text2gears.md')),
+        path: `${phase}.md`,
+        hash: await hashFile(join(dir, `${phase}.md`)),
       },
       artifact: {
-        path: 'text2gears.phase.ts',
-        hash: await hashFile(join(dir, 'text2gears.phase.ts')),
+        path: `${phase}.slc/${phase}.playbook.ts`,
+        hash: await hashFile(join(dir, `${phase}.slc/${phase}.playbook.ts`)),
+      },
+      artifactBundle: {
+        path: `${phase}.slc`,
+        hash: await hashTree(join(dir, `${phase}.slc`)),
       },
       semanticInputs: [
         {
@@ -63,6 +82,13 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
         },
       ],
       externalInputs: [],
+      runtimeDependencies: [
+        {
+          kind: 'file',
+          locator: 'runtime/runtime.ts',
+          identity: await hashFile(join(dir, 'runtime/runtime.ts')),
+        },
+      ],
       linkTarget: {
         kind: 'file',
         locator: 'link/code.ts',
@@ -95,10 +121,28 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     expect(result.verdicts?.text2gears).toEqual({ status: 'current' });
   });
 
+  it('reports swapped otherwise-current phase records malformed', async () => {
+    const text2gears = await currentRecord('text2gears');
+    const gears2fsm = await currentRecord('gears2fsm');
+    const file: PinFile = {
+      schema: PIN_SCHEMA,
+      hashAlgorithm: PIN_HASH_ALGORITHM,
+      pathBoundary: { path: '.' },
+      pins: { text2gears: gears2fsm, gears2fsm: text2gears },
+    };
+    await write(PINS_FILE, JSON.stringify(file, null, 2));
+
+    const result = await evaluatePins(dir);
+    expect(result.verdicts?.text2gears?.status).toBe('malformed');
+    expect(result.verdicts?.gears2fsm?.status).toBe('malformed');
+  });
+
   it.each([
     ['definition', 'text2gears.md'],
-    ['artifact', 'text2gears.phase.ts'],
+    ['artifact', 'text2gears.slc/text2gears.playbook.ts'],
+    ['artifactBundle', 'text2gears.slc/text2gears.fsm.ts'],
     ['semanticInput', 'reference/gears.md'],
+    ['runtimeDependencies[0]', 'runtime/runtime.ts'],
     ['linkTarget', 'link/code.ts'],
   ])('reports stale when the %s changes (PIN-9)', async (label, rel) => {
     await writePinFile(await currentRecord());
@@ -121,8 +165,14 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
 
   it('reports stale for an artifact that is not a playbook module (PIN-14)', async () => {
     const record = await currentRecord();
-    await write('text2gears.phase.ts', 'export const value = 42;\n');
-    record.artifact.hash = await hashFile(join(dir, 'text2gears.phase.ts'));
+    await write(
+      'text2gears.slc/text2gears.playbook.ts',
+      'export const value = 42;\n',
+    );
+    record.artifact.hash = await hashFile(
+      join(dir, 'text2gears.slc/text2gears.playbook.ts'),
+    );
+    record.artifactBundle.hash = await hashTree(join(dir, 'text2gears.slc'));
     await writePinFile(record);
 
     const verdict = (await evaluatePins(dir)).verdicts?.text2gears;
@@ -177,7 +227,8 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     },
   );
 
-  // Path malformations rejected per phase at resolution time (PIN-11).
+  // Portable-path syntax is rejected while parsing; boundary escapes are
+  // rejected when the parsed phase is resolved (PIN-11).
   it.each([
     ['an absolute', '/etc/passwd'],
     ['a boundary-escaping', '../escape'],
@@ -188,9 +239,19 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
       record.artifact.path = badPath;
       await writePinFile(record);
 
-      const verdict = (await evaluatePins(dir)).verdicts?.text2gears;
-      expect(verdict?.status).toBe('malformed');
-      expect((verdict as { reason: string }).reason).toContain('artifact');
+      const result = await evaluatePins(dir);
+      const verdict = result.verdicts?.text2gears;
+      expect(
+        result.malformed !== undefined || verdict?.status === 'malformed',
+      ).toBe(true);
+      expect(
+        result.malformed ?? (verdict as { reason: string }).reason,
+      ).toContain('artifact');
+      expect(
+        Object.values(result.verdicts ?? {}).some(
+          (candidate) => candidate.status === 'current',
+        ),
+      ).toBe(false);
     },
   );
 

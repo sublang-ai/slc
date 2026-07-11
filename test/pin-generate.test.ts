@@ -32,18 +32,59 @@ describe('pin generation (PIN-16)', () => {
     await writeFile(path, content);
   };
 
+  const writeReviewedBundle = async (prefix = ''): Promise<void> => {
+    const root = `${prefix}text2gears.slc/`;
+    await write(`${root}text2gears.playbook.ts`, PHASE_ARTIFACT);
+    for (const name of [
+      'text2gears.fsm.ts',
+      'text2gears.gears.md',
+      'text2gears.gears-fsm.test.ts',
+      'text2gears.fsm.introspect.test.ts',
+      'text2gears.prompt-contract.test.ts',
+      'text2gears.fsm.coverage.test.ts',
+    ]) {
+      await write(`${root}${name}`, `fixture: ${name}\n`);
+    }
+  };
+
+  const writePackage = async (
+    root: string,
+    version: string,
+    implementation: string,
+  ): Promise<void> => {
+    await write(
+      `${root}/package.json`,
+      `${JSON.stringify({ name: 'pkg', version, main: 'index.js' })}\n`,
+    );
+    await write(`${root}/index.js`, implementation);
+  };
+
   /** Writes a phase whose definition cites one semantic input and a link target. */
   const writeFixture = async (): Promise<void> => {
     await write('text2gears.md', '## Pin Inputs\n\n- `reference/gears.md`\n');
     await write('reference/gears.md', 'gears reference body\n');
-    await write('text2gears.phase.ts', PHASE_ARTIFACT);
+    await writeReviewedBundle();
     await write('link/code.ts', 'link target bytes\n');
+    await writePackage(
+      'node_modules/pkg',
+      '1.0.0',
+      'export const version = 1;\n',
+    );
   };
 
   const spec = {
     definition: 'text2gears.md',
-    artifact: 'text2gears.phase.ts',
+    artifact: 'text2gears.slc/text2gears.playbook.ts',
+    artifactBundle: 'text2gears.slc',
     linkTarget: { kind: 'file' as const, locator: 'link/code.ts' },
+    runtimeDependencies: [
+      {
+        kind: 'package' as const,
+        locator: 'node_modules/pkg',
+        provenance: 'pkg@1',
+        specifier: 'pkg',
+      },
+    ],
     roles: { 'reference/gears.md': 'reference' },
   };
 
@@ -76,15 +117,135 @@ describe('pin generation (PIN-16)', () => {
       identity: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
     });
     expect(record.externalInputs).toEqual([]);
+    expect(record.runtimeDependencies).toEqual([
+      {
+        kind: 'package',
+        locator: 'node_modules/pkg',
+        identity: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        provenance: 'pkg@1',
+        specifier: 'pkg',
+      },
+    ]);
+    expect(record.artifactBundle).toEqual({
+      path: 'text2gears.slc',
+      hash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+    });
   });
+
+  it('reports a generated pin stale when its runtime dependency drifts', async () => {
+    await writeFixture();
+    const record = await generatePinRecord(dir, spec);
+    await writePinFile(dir, { text2gears: record });
+
+    await write('node_modules/pkg/index.js', 'export const version = 2;\n');
+
+    expect((await evaluatePins(dir)).verdicts?.text2gears).toMatchObject({
+      status: 'stale',
+      reason: expect.stringMatching(
+        /runtimeDependencies\[0\] changed/,
+      ) as string,
+    });
+  });
+
+  it.each([
+    [
+      'with a manifest',
+      true,
+      /runtimeDependencies\[0\] (?:resolution changed|import no longer resolves)/,
+    ],
+    [
+      'without a manifest',
+      false,
+      /runtimeDependencies\[0\] (?:resolution changed|import no longer resolves)/,
+    ],
+  ])(
+    'reports stale when a nearer package %s shadows the pinned dependency',
+    async (_label, withManifest, reason) => {
+      const pipelineDir = join(dir, 'pipelines', 'playbook');
+      await write('pipelines/playbook/text2gears.md', '# definition\n');
+      await writeReviewedBundle('pipelines/playbook/');
+      await write('pipelines/playbook/link/code.ts', 'link target bytes\n');
+      await writePackage(
+        'node_modules/pkg',
+        '1.0.0',
+        'export const selected = "root";\n',
+      );
+      const boundary = { boundary: '../..' };
+      const record = await generatePinRecord(
+        pipelineDir,
+        {
+          definition: 'text2gears.md',
+          artifact: 'text2gears.slc/text2gears.playbook.ts',
+          artifactBundle: 'text2gears.slc',
+          linkTarget: { kind: 'file', locator: 'link/code.ts' },
+          runtimeDependencies: [
+            {
+              kind: 'package',
+              locator: '../../node_modules/pkg',
+              specifier: 'pkg',
+            },
+          ],
+        },
+        boundary,
+      );
+      await writePinFile(pipelineDir, { text2gears: record }, boundary);
+      expect((await evaluatePins(pipelineDir)).verdicts?.text2gears).toEqual({
+        status: 'current',
+      });
+
+      if (withManifest) {
+        await writePackage(
+          'pipelines/playbook/node_modules/pkg',
+          '1.0.0',
+          'export const selected = "shadow";\n',
+        );
+      } else {
+        await write(
+          'pipelines/playbook/node_modules/pkg/index.js',
+          'export const selected = "manifestless-shadow";\n',
+        );
+      }
+
+      expect(
+        (await evaluatePins(pipelineDir)).verdicts?.text2gears,
+      ).toMatchObject({
+        status: 'stale',
+        reason: expect.stringMatching(reason) as string,
+      });
+    },
+  );
 
   it('writes a well-formed pin file the validator re-reads', async () => {
     await writeFixture();
     await writePinFile(dir, { text2gears: await generatePinRecord(dir, spec) });
 
     const parsed = JSON.parse(await readFile(join(dir, PINS_FILE), 'utf8'));
-    expect(parsed.schema).toBe('sublang.slc.pins.v1');
-    expect(parsed.pins.text2gears.artifact.path).toBe('text2gears.phase.ts');
+    expect(parsed.schema).toBe('sublang.slc.pins.v2');
+    expect(parsed.pins.text2gears.artifact.path).toBe(
+      'text2gears.slc/text2gears.playbook.ts',
+    );
+  });
+
+  it('rejects an artifact outside its reviewed bundle', async () => {
+    await writeFixture();
+    await write('standalone.playbook.ts', PHASE_ARTIFACT);
+    await expect(
+      generatePinRecord(dir, {
+        ...spec,
+        artifact: 'standalone.playbook.ts',
+      }),
+    ).rejects.toThrow(/child of artifactBundle/);
+  });
+
+  it('rejects a nested artifact inside its reviewed bundle', async () => {
+    await writeFixture();
+    await write('text2gears.slc/nested/text2gears.playbook.ts', PHASE_ARTIFACT);
+    await expect(
+      generatePinRecord(dir, {
+        ...spec,
+        artifact: 'text2gears.slc/nested/text2gears.playbook.ts',
+      }),
+    ).rejects.toThrow(/direct child/);
   });
 
   it('pins a link target outside the pipeline directory under a widened boundary', async () => {
@@ -92,7 +253,7 @@ describe('pin generation (PIN-16)', () => {
     // target (an installed package module) sits outside it (PIN-15, DR-007).
     const pipelineDir = join(dir, 'pipelines', 'playbook');
     await write('pipelines/playbook/text2gears.md', '# def\n');
-    await write('pipelines/playbook/text2gears.phase.ts', PHASE_ARTIFACT);
+    await writeReviewedBundle('pipelines/playbook/');
     await write('node_modules/pkg/runtime.ts', 'export type Contract = 1;\n');
 
     const boundary = { boundary: '../..' };
@@ -100,7 +261,8 @@ describe('pin generation (PIN-16)', () => {
       pipelineDir,
       {
         definition: 'text2gears.md',
-        artifact: 'text2gears.phase.ts',
+        artifact: 'text2gears.slc/text2gears.playbook.ts',
+        artifactBundle: 'text2gears.slc',
         linkTarget: {
           kind: 'file' as const,
           locator: '../../node_modules/pkg/runtime.ts',

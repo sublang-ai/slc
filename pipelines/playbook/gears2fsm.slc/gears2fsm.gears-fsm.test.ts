@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { checkGearsFsmConformance, findMachineConfig } from '@sublang/slc/verify';
+import {
+  checkGearsFsmConformance,
+  findMachineConfig,
+} from '@sublang/slc/verify';
 import * as fsm from './gears2fsm.fsm.ts';
 
 describe('gears2fsm: GEARS↔FSM conformance', () => {

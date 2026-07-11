@@ -28,10 +28,11 @@ If the file is present, it is the selection index for compiled execution in that
 
 The file shall be strict JSON with a schema identifier, a hash algorithm, and a map from phase name to pin record.
 The reserved key `link` represents the pipeline's `link.md` phase.
+Each map key shall bind to that phase's canonical definition, artifact bundle, and linked entry paths (`<phase>.md`, `<phase>.slc`, and `<phase>.slc/<phase>.playbook.ts`); swapping otherwise-current records shall therefore be malformed rather than selecting another phase's compiled semantics.
 
 ```json
 {
-  "schema": "sublang.slc.pins.v1",
+  "schema": "sublang.slc.pins.v2",
   "hashAlgorithm": "sha256",
   "pathBoundary": {
     "path": "."
@@ -41,6 +42,10 @@ The reserved key `link` represents the pipeline's `link.md` phase.
       "artifact": {
         "path": "text2gears.slc/text2gears.playbook.ts",
         "hash": "sha256:<hex>"
+      },
+      "artifactBundle": {
+        "path": "text2gears.slc",
+        "hash": "sha256:<tree-hex>"
       },
       "definition": {
         "path": "text2gears.md",
@@ -54,6 +59,15 @@ The reserved key `link` represents the pipeline's `link.md` phase.
         }
       ],
       "externalInputs": [],
+      "runtimeDependencies": [
+        {
+          "kind": "package",
+          "locator": "../../node_modules/xstate",
+          "specifier": "xstate",
+          "identity": "sha256:<tree-hex>",
+          "provenance": "xstate@<version>"
+        }
+      ],
       "linkTarget": {
         "kind": "file",
         "locator": "reference/sdlc/code.playbook/code.playbook.ts",
@@ -78,6 +92,18 @@ It shall not be a currency input, because equivalence is judged against the curr
 Pin hashes shall use SHA-256 over exact file bytes and shall be written as `sha256:` followed by 64 lowercase hexadecimal characters.
 The hash algorithm name is recorded for schema agility.
 The validator shall not normalize line endings, parse text, or otherwise transform content before hashing.
+Tree hashes shall use this canonical byte framing:
+
+- one compact JSON array per entry with no insignificant whitespace: `["file","<relative-posix-path>","sha256:<exact-byte-hash>"]` for a file, or `["symlink","<relative-posix-path>","<lowercase-hex-raw-link-target-bytes>"]` for a recorded symbolic link;
+- each JSON string shall escape `"` and `\\` with one preceding backslash, encode every U+0000 through U+001F control character as lowercase `\\u00xx`, leave every other Unicode scalar value unescaped, and reject unpaired surrogates; the resulting scalar values are encoded as UTF-8, so optional JSON escapes and ASCII-only substitutions are not equivalent encodings;
+- records sorted by the bytewise order of their UTF-8 relative paths, joined by one LF byte with no trailing LF, then hashed as exact UTF-8 bytes with SHA-256;
+- the empty tree hashes the empty byte string;
+- a root symbolic link, where allowed, contributes the relative path `.` and the files reached through that directory root are also recorded; a nested symbolic link contributes its link-target record and is not traversed.
+
+Tree entry names shall be valid UTF-8 and shall be rejected rather than decoded lossily, so distinct raw filesystem names cannot collapse to the same serialized path.
+
+Artifact-bundle tree hashing shall reject every symbolic link and other non-file/non-directory entry.
+Directory and package link targets or runtime dependencies shall record symbolic-link targets with the canonical symlink record rather than ignore or reject them.
 
 A repository or workspace that commits pins shall enforce stable checkout bytes for pinnable text inputs and artifacts, normally with `.gitattributes`.
 This portability requirement prevents routine checkout policy differences from making every pinned text artifact stale while preserving exact-byte identity for validation.
@@ -86,14 +112,16 @@ This portability requirement prevents routine checkout policy differences from m
 
 All pin paths shall be relative POSIX-style paths resolved from the pipeline directory that contains `slc.pins.json`.
 Absolute paths shall be rejected.
+Empty paths, NUL bytes, and backslashes shall be rejected so a committed pin resolves identically on POSIX and Windows hosts.
 The pin file records one `pathBoundary` as a relative POSIX-style path from the pipeline directory; when absent, it defaults to `.` and means the pipeline directory.
 Every local pin path shall resolve inside that recorded boundary.
 Relative paths containing `..` are allowed only when `pathBoundary.path` records a wider boundary that contains the resolved path.
 Validators shall not depend on an unrecorded host workspace root to decide whether a committed pin path is valid.
 Hosts may still reject a pin whose recorded boundary violates host policy, but that is an environment refusal rather than pin currency.
 
-The artifact path shall identify a linked `playbook` artifact produced by the reserved `slc.link` phase.
+The artifact path shall identify the canonical `.playbook.ts` linked `playbook` entry module produced by the reserved `slc.link` phase.
 It shall resolve to the `playbook` linked format declared by the reserved meta-pipeline link phase.
+The artifact-bundle path shall identify the reviewed artifact directory directly containing that entry module and its canonical local FSM, GEARS, GEARS↔FSM, FSM-introspection, prompt-contract, and FSM-coverage files, so changing a runtime dependency beside the entry module makes the pin stale even when the entry module's own bytes do not change.
 
 ### Semantic input closure
 
@@ -125,6 +153,14 @@ A bare URL in `externalInputs` shall not make a pin current.
 Ordinary currency validation shall not fetch mutable network content.
 For immutable content-addressed external inputs, currentness means the committed pin contains a well-formed immutable identity; any later unavailability of the external source is a liveness failure that vendoring avoids, not a currency change.
 
+### Runtime dependencies
+
+The `runtimeDependencies` array records local executable files, directories, or packages that the compiled artifact imports but that are not files inside its reviewed artifact bundle.
+Each entry uses the link-target `kind`, `locator`, `identity`, and optional `provenance` shape, resolves within the recorded path boundary, and is a currentness input.
+The array is required even when empty, so a v2 record explicitly attests that its reviewed artifact has no out-of-bundle executable dependency.
+A package dependency shall also record its bare import `specifier`; generation and validation shall resolve that specifier from the compiled entry module and require the selected package root to equal the recorded locator, so adding a nearer shadow package makes the pin stale.
+For the reviewed Playbook meta artifacts this includes the installed XState package, while the dependency lock is also a local semantic input so both intended and installed runtime dependency identity are bound.
+
 ### Link-target identity
 
 The `linkTarget` record identifies the exact target consumed by `slc.link` when producing the phase artifact.
@@ -143,10 +179,12 @@ A pin is current only when all of these checks pass:
 - the pin file schema and hash algorithm are supported;
 - every local pin path resolves inside the recorded path boundary;
 - the phase definition path exists and its hash matches;
-- the compiled artifact path exists, its hash matches, and it resolves to the linked `playbook` format;
+- the compiled artifact path identifies the bundle's direct-child `.playbook.ts` entry module, exists, its hash matches, and it resolves to the linked `playbook` format;
+- the artifact-bundle directory exists, directly contains the entry module and its canonical local FSM, GEARS, GEARS↔FSM, FSM-introspection, prompt-contract, and FSM-coverage files, contains no symbolic links or other unsupported entries, and its deterministic tree hash matches;
 - every local semantic input path exists and its hash matches;
 - the semantic input closure set recorded in the pin matches the definition's declared `## Pin Inputs` closure;
 - every immutable external input, if any, has a well-formed immutable content-addressed identity;
+- every local runtime dependency, if any, exists and matches its recorded file or canonical tree identity;
 - the `linkTarget` locator can be resolved and its identity matches the content consumed by the reserved `slc.link` target.
 
 When a phase has no pin, `slc` shall interpret it.
