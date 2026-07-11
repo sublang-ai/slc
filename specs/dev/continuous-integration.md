@@ -23,3 +23,9 @@ Where a commit is pushed or proposed by pull request, when repository continuous
 ### CI-2
 
 Where a commit is pushed or proposed by pull request, when repository continuous integration runs, the workflow shall independently review each committed Playbook meta-phase artifact with the deterministic compilation-correctness checks, regenerate the pin index through the explicit build-and-review generator, and fail unless every generated pin is current and the regenerated index is byte-identical to the committed index.
+
+## Runtime-transition boundary
+
+### CI-3
+
+While the `session-v1` and `composed-v2` Playbook contracts are unavailable as an immutable dependency and the reviewed meta-phase assets remain bound to published 0.9.0, when repository continuous integration runs, the workflow shall use the existing locked-install, source-quality, full-test, independent-artifact-review, and byte-identical pin-regeneration gates without a mutable sibling checkout or a new artifact-refresh step; the full test gate shall exercise the explicit future-profile and structured-verification fixtures, while artifact review and pin regeneration shall continue to exercise only the committed flat 0.9.0 assets ([DR-010](../decisions/010-playbook-runtime-contract-evolution.md#continuous-integration-during-deferral)).

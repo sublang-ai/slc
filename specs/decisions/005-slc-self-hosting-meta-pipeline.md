@@ -53,14 +53,15 @@ A compiled phase runs as a non-interactive playbook: the facade seeds the
 runtime from `PhaseInput`, drives one turn to the runtime's declared boundary
 through `handleBossInput`, and derives the result from the source-owned runtime
 outcome and the declared-output postcondition.
-The causal session, structured-result mapping, bounded legacy compatibility,
-nested-call host policy, and trace handling are settled by
+The exact `legacy`, `session-v1`, and `composed-v2` initialization profiles,
+pin-provenance selection, structured-result mapping, nested-call host policy,
+and trace handling are settled by
 [DR-010](010-playbook-runtime-contract-evolution.md).
 
 | Result | Mapping |
 | --- | --- |
 | `ok` | A successful runtime outcome that newly produces the declared output. |
-| `blocked` | A clean no-action or quiescent stop where the phase produces no output and cannot proceed without guessing through incompatibility or receiving more Boss input. |
+| `blocked` | A clean no-action, quiescent, or terminal stop where the phase produces no output and cannot proceed without guessing through incompatibility or receiving more Boss input. |
 | `error` | A failed, aborted, invalid, unexpectedly suspended, or thrown runtime outcome. |
 
 Diagnostics are drained from the runtime's status and non-trace operational telemetry.
@@ -101,9 +102,10 @@ interface PhaseRunner {
 ```
 
 `slc` constructs the facade with a `PlaybookPorts` adapter.
-A session-contract runtime receives those ports only through its root
-`PlaybookSession`; a current legacy artifact may receive the legacy port shape
-directly under [DR-010](010-playbook-runtime-contract-evolution.md).
+A `legacy` runtime receives the four published ports directly, `session-v1`
+receives the exact four traced-session ports through its minimal session, and
+`composed-v2` receives five ports through a causal root `PlaybookSession`, per
+[DR-010](010-playbook-runtime-contract-evolution.md).
 
 `PhaseInput` carries workspace paths, not contents; the artifact performs no
 direct file I/O.
@@ -132,7 +134,7 @@ Compiled execution relies on the same DR-003 generic checks as interpreted
 execution ([DR-004](004-slc-interpreted-phase-execution.md)), which defend the
 protected inputs but do not prove the full write scope, and `slc` adds no
 host-side write-scope enforcement for compiled runs.
-`slc` constructs the runtime, supplies the root session or bounded legacy ports, drives it to its declared boundary, then maps the outcome onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; non-sensitive diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol), [DR-010](010-playbook-runtime-contract-evolution.md)).
+`slc` constructs the runtime, supplies the exact pin-selected profile boundary, drives it to that boundary, then maps the outcome onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; non-sensitive diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol), [DR-010](010-playbook-runtime-contract-evolution.md)).
 
 ### Strategy selection
 
