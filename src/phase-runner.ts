@@ -6,9 +6,10 @@
  * PHEXEC-24; DR-005).
  *
  * A compiled `playbook` artifact default-exports a `PlaybookRuntimeFactory`
- * (`createPlaybookRuntime`). `slc` drives it host-side — `init` with a
- * `PlaybookPorts` adapter, one `handleBossInput` turn seeded from the
- * {@link PhaseInput}, then `dispose` — and derives a {@link PhaseResult}
+ * (`createPlaybookRuntime`). `slc` drives it host-side — `init` with the
+ * DR-010 session/legacy compatibility view over a `PlaybookPorts` adapter, one
+ * `handleBossInput` turn seeded from the {@link PhaseInput}, then `dispose` —
+ * and derives a {@link PhaseResult}
  * (`ok`/`blocked`/`error`) that {@link mapPhaseResult} maps onto the DR-003
  * protocol: `ok` proceeds to the generic checks, `blocked` is the BLOCKED
  * outcome, and `error` stops the pipeline like a failed generic check.

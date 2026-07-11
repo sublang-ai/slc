@@ -9,29 +9,29 @@
  * its `createPlaybookRuntime` factory. {@link createCompiledExecutor} adapts it
  * to the DR-003 {@link PhaseExecutor} boundary: per run it builds the
  * Cligent-backed Playbook ports, constructs the runtime, drives one
- * non-interactive turn (`init` -> `handleBossInput` -> `dispose`), and derives
- * the result from the host-observable outcome. The runtime receives only
- * `PlaybookPorts` (DR-005); the host-only `drainDiagnostics` stays host-side.
- * Drained status and telemetry become diagnostics. Like interpreted execution,
- * a compiled phase writes through its agents (`callPlayer`) and relies on the
- * DR-003 generic checks, which defend the protected inputs (not the full write
- * scope); `slc` adds no host-side write-scope enforcement.
+ * non-interactive turn (`init` -> `handleBossInput` -> `dispose`), and maps a
+ * structured result when present or the bounded legacy host-observable outcome
+ * otherwise. The pin-selected contract profile chooses the exact legacy,
+ * traced-session, or composed-session init shape without a retry heuristic
+ * (DR-010). The host-only `drainDiagnostics` stays host-side;
+ * human status and non-trace operational telemetry become diagnostics. Like
+ * interpreted execution, a compiled phase writes through its agents
+ * (`callPlayer`) and relies on the DR-003 generic checks, which defend the
+ * protected inputs (not the full write scope); `slc` adds no host-side
+ * write-scope enforcement.
  *
  * The turn is seeded per the PHEXEC-29 contract ({@link seedPhaseTurn}); the
- * result is derived from the host-observable outcome in {@link drivePhase}.
+ * result is derived in {@link drivePhase} from the structured runtime boundary
+ * or, for a void-result legacy runtime, the host-observable output delta.
  * See specs/dev/phase-execution.md.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type {
-  PlaybookPorts,
-  PlaybookRuntime,
-  PlaybookRuntimeFactory,
-} from '@sublang/playbook/runtime';
+import type { PlaybookPorts as LegacyPlaybookPorts } from '@sublang/playbook/runtime';
 
 import type {
   ExecuteRequest,
@@ -42,6 +42,17 @@ import type {
 import type { AgentClient } from './interpreter.js';
 import { mapPhaseResult, seedPhaseTurn } from './phase-runner.js';
 import type { PhaseInput, PhaseResult } from './phase-runner.js';
+import {
+  isPlaybookRunResult,
+  type CompatiblePlaybookPorts,
+  type CompatiblePlaybookRuntime,
+  type CompatiblePlaybookRuntimeFactory,
+  type PlaybookSessionV1,
+  type PlaybookRunResult,
+  type PlaybookSession,
+  type RuntimeContractProfile,
+  type SessionV1PlaybookPorts,
+} from './playbook-contract.js';
 import { createPlaybookPorts, type PlayerTransport } from './playbook-ports.js';
 
 /**
@@ -52,7 +63,7 @@ import { createPlaybookPorts, type PlayerTransport } from './playbook-ports.js';
  */
 export async function loadPlaybookRuntime(
   artifactPath: string,
-): Promise<PlaybookRuntimeFactory> {
+): Promise<CompatiblePlaybookRuntimeFactory> {
   const module: { default?: unknown } = await import(
     pathToFileURL(resolve(artifactPath)).href
   );
@@ -62,14 +73,14 @@ export async function loadPlaybookRuntime(
       `compiled artifact "${artifactPath}" has no createPlaybookRuntime default export`,
     );
   }
-  return create as PlaybookRuntimeFactory;
+  return create as CompatiblePlaybookRuntimeFactory;
 }
 
 /**
  * Adapts a compiled `playbook` artifact to the {@link PhaseExecutor} boundary
  * (PHEXEC-24, PHEXEC-25): build the Cligent-backed Playbook ports, load and
- * construct the runtime, drive one non-interactive turn, and map the outcome,
- * appending the runtime's drained status and telemetry.
+ * construct the runtime, drive one non-interactive root-session turn, and map
+ * the outcome, appending drained status and non-trace operational telemetry.
  */
 export function createCompiledExecutor(opts: {
   /** Path to the compiled `playbook` module to load. */
@@ -86,8 +97,16 @@ export function createCompiledExecutor(opts: {
   defaultModel?: string;
   /** Working directory handed to the agent transports. */
   cwd?: string;
+  /** Stable authored phase identity used as the Playbook session's playbook id. */
+  playbookId?: string;
+  /** Session-id seam for deterministic tests; defaults to {@link randomUUID}. */
+  createSessionId?: () => string;
+  /** Exact pinned runtime boundary; defaults to the current legacy contract. */
+  runtimeContract?: RuntimeContractProfile;
   /** Loader seam; defaults to {@link loadPlaybookRuntime}. */
-  loadFactory?: (artifactPath: string) => Promise<PlaybookRuntimeFactory>;
+  loadFactory?: (
+    artifactPath: string,
+  ) => Promise<CompatiblePlaybookRuntimeFactory>;
 }): PhaseExecutor {
   const load = opts.loadFactory ?? loadPlaybookRuntime;
 
@@ -106,9 +125,10 @@ export function createCompiledExecutor(opts: {
       });
       // Hand the runtime only Playbook's ports — never the host-only
       // drainDiagnostics, nor a file capability (DR-005, PHEXEC-23).
-      const ports: PlaybookPorts = {
+      const ports: CompatiblePlaybookPorts = {
         callPlayer: adapter.callPlayer,
         callJudge: adapter.callJudge,
+        callPlaybook: adapter.callPlaybook,
         emitStatus: adapter.emitStatus,
         emitTelemetry: async (event) => {
           const state = fsmTransitionTarget(event);
@@ -117,14 +137,26 @@ export function createCompiledExecutor(opts: {
         },
       };
 
+      const runtimeContract = opts.runtimeContract ?? 'legacy';
+      const identity = phaseSessionIdentity({
+        sessionId: (opts.createSessionId ?? randomUUID)(),
+        playbookId:
+          opts.playbookId ?? playbookIdFromArtifact(opts.artifactPath),
+      });
       const driven = await drivePhase(
         load,
         opts.artifactPath,
         ports,
         phaseInput(request, opts.runRoot),
         signal,
+        identity,
+        runtimeContract,
       );
-      const result = mapFailedQuiescentState(driven, lastFsmState);
+      const result = mapVoidContractFailedState(
+        driven,
+        lastFsmState,
+        runtimeContract !== 'composed-v2',
+      );
       const mapped = mapPhaseResult(result);
       return {
         status: mapped.status,
@@ -152,11 +184,14 @@ function fsmTransitionTarget(event: {
 }
 
 /** DR-005 maps a quiescent `failed` FSM state to an executor error. */
-function mapFailedQuiescentState(
+function mapVoidContractFailedState(
   result: PhaseResult,
   lastFsmState: string | undefined,
+  voidContract: boolean,
 ): PhaseResult {
-  if (result.status === 'error' || lastFsmState !== 'failed') return result;
+  if (!voidContract || result.status === 'error' || lastFsmState !== 'failed') {
+    return result;
+  }
   return {
     status: 'error',
     diagnostics: ['compiled runtime reached the failed quiescent state'],
@@ -164,20 +199,20 @@ function mapFailedQuiescentState(
 }
 
 /**
- * Loads, constructs, and drives a runtime through one non-interactive turn, then
- * derives the result from the host-observable outcome (DR-005): a turn that
- * throws or aborts is `error`; a clean turn that creates or updates the declared
- * `target`/`linked` output is `ok`; a clean turn that leaves it untouched is
- * `blocked` — the FSM parked for Boss input a non-interactive run cannot supply.
+ * Loads, constructs, and drives one non-interactive turn. Structured results
+ * are authoritative; a void legacy result retains DR-010's output-delta and
+ * host-observed failed-state mapping.
  */
 async function drivePhase(
-  load: (artifactPath: string) => Promise<PlaybookRuntimeFactory>,
+  load: (artifactPath: string) => Promise<CompatiblePlaybookRuntimeFactory>,
   artifactPath: string,
-  ports: PlaybookPorts,
+  ports: CompatiblePlaybookPorts,
   input: PhaseInput,
   signal: AbortSignal,
+  identity: { sessionId: string; playbookId: string },
+  runtimeContract: RuntimeContractProfile,
 ): Promise<PhaseResult> {
-  let runtime: PlaybookRuntime;
+  let runtime: CompatiblePlaybookRuntime;
   try {
     const factory = await load(artifactPath);
     runtime = factory({});
@@ -192,28 +227,173 @@ async function drivePhase(
   // mistaken for fresh output the turn produced.
   const outputPath = input.kind === 'compile' ? input.target : input.linked;
   const before = await outputState(outputPath);
+  const initValue = runtimeInitValue(runtimeContract, identity, ports);
+  let runResult: unknown;
 
   try {
-    await runtime.init(ports);
-    await runtime.handleBossInput({ text: seedPhaseTurn(input), signal });
+    await callRuntimeInit(runtime, initValue);
+    runResult = await callRuntimeTurn(runtime, seedPhaseTurn(input), signal);
   } catch (error) {
-    await safeDispose(runtime);
+    const disposal = await disposeRuntime(runtime);
     return {
       status: 'error',
       diagnostics: [
         signal.aborted
           ? 'compiled run aborted'
           : `compiled run failed: ${messageOf(error)}`,
+        ...(disposal === undefined
+          ? []
+          : [`compiled runtime disposal also failed: ${messageOf(disposal)}`]),
       ],
     };
   }
 
-  await safeDispose(runtime);
+  const disposal = await disposeRuntime(runtime);
+  if (disposal !== undefined) {
+    return {
+      status: 'error',
+      diagnostics: [`compiled runtime disposal failed: ${messageOf(disposal)}`],
+    };
+  }
   if (signal.aborted) {
-    return { status: 'error', diagnostics: ['compiled run aborted'] };
+    return {
+      status: 'error',
+      diagnostics: ['compiled run aborted'],
+    };
   }
   const after = await outputState(outputPath);
   const produced = outputWasProduced(before, after);
+  return mapRuntimeOutcome(runResult, produced, runtimeContract);
+}
+
+async function disposeRuntime(
+  runtime: CompatiblePlaybookRuntime,
+): Promise<unknown | undefined> {
+  try {
+    await runtime.dispose();
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
+
+function rootSession(
+  identity: { sessionId: string; playbookId: string },
+  ports: CompatiblePlaybookPorts,
+): PlaybookSession {
+  return {
+    sessionId: identity.sessionId,
+    playbookId: identity.playbookId,
+    rootSessionId: identity.sessionId,
+    depth: 0,
+    ports,
+  };
+}
+
+function legacyPorts(ports: CompatiblePlaybookPorts): LegacyPlaybookPorts {
+  return {
+    callPlayer: ports.callPlayer,
+    callJudge: ports.callJudge,
+    emitStatus: ports.emitStatus,
+    emitTelemetry: ports.emitTelemetry,
+  };
+}
+
+function sessionV1Ports(
+  ports: CompatiblePlaybookPorts,
+): SessionV1PlaybookPorts {
+  return {
+    callPlayer: (playerId, prompt, signal, options) =>
+      ports.callPlayer(playerId, prompt, signal, options),
+    callJudge: ports.callJudge,
+    emitStatus: ports.emitStatus,
+    emitTelemetry: ports.emitTelemetry,
+  };
+}
+
+function runtimeInitValue(
+  contract: RuntimeContractProfile,
+  identity: { sessionId: string; playbookId: string },
+  ports: CompatiblePlaybookPorts,
+): LegacyPlaybookPorts | PlaybookSessionV1 | PlaybookSession {
+  switch (contract) {
+    case 'legacy':
+      return legacyPorts(ports);
+    case 'session-v1':
+      return {
+        sessionId: identity.sessionId,
+        playbookId: identity.playbookId,
+        ports: sessionV1Ports(ports),
+      };
+    case 'composed-v2':
+      return rootSession(identity, ports);
+  }
+}
+
+async function callRuntimeInit(
+  runtime: CompatiblePlaybookRuntime,
+  value: LegacyPlaybookPorts | PlaybookSessionV1 | PlaybookSession,
+): Promise<void> {
+  const init = runtime.init as (input: unknown) => Promise<void>;
+  await init.call(runtime, value);
+}
+
+async function callRuntimeTurn(
+  runtime: CompatiblePlaybookRuntime,
+  text: string,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const handle = runtime.handleBossInput as (turn: {
+    text: string;
+    signal: AbortSignal;
+  }) => Promise<unknown>;
+  return handle.call(runtime, { text, signal });
+}
+
+function mapRuntimeOutcome(
+  result: unknown,
+  produced: boolean,
+  contract: RuntimeContractProfile,
+): PhaseResult {
+  if (contract !== 'composed-v2') {
+    return result === undefined
+      ? legacyOutputResult(produced)
+      : {
+          status: 'error',
+          diagnostics: [
+            `compiled ${contract} runtime returned an unexpected structured result`,
+          ],
+        };
+  }
+  if (result === undefined) {
+    return {
+      status: 'error',
+      diagnostics: ['compiled composed-v2 runtime returned no run result'],
+    };
+  }
+  if (!isPlaybookRunResult(result)) {
+    return {
+      status: 'error',
+      diagnostics: ['compiled runtime returned an invalid run result'],
+    };
+  }
+  return structuredOutputResult(result, produced);
+}
+
+function phaseSessionIdentity(identity: {
+  sessionId: string;
+  playbookId: string;
+}): { sessionId: string; playbookId: string } {
+  if (identity.sessionId.trim().length === 0) {
+    throw new Error('compiled runtime session id must be non-empty');
+  }
+  if (identity.playbookId.trim().length === 0) {
+    throw new Error('compiled runtime playbook id must be non-empty');
+  }
+  return identity;
+}
+
+function legacyOutputResult(produced: boolean): PhaseResult {
   return produced
     ? { status: 'ok', diagnostics: [] }
     : {
@@ -224,12 +404,49 @@ async function drivePhase(
       };
 }
 
-async function safeDispose(runtime: PlaybookRuntime): Promise<void> {
-  try {
-    await runtime.dispose();
-  } catch {
-    // A dispose failure must not mask the turn's outcome.
+function structuredOutputResult(
+  result: PlaybookRunResult,
+  produced: boolean,
+): PhaseResult {
+  switch (result.outcome) {
+    case 'quiescent':
+    case 'terminal':
+      return produced
+        ? { status: 'ok', diagnostics: [] }
+        : {
+            status: 'blocked',
+            diagnostics: [
+              `compiled runtime ${result.outcome} without producing output`,
+            ],
+          };
+    case 'no-action':
+      return {
+        status: 'blocked',
+        diagnostics: ['compiled runtime accepted no phase action'],
+      };
+    case 'failed':
+    case 'aborted':
+      return {
+        status: 'error',
+        diagnostics: [
+          `compiled runtime ${result.outcome}${result.error ? `: ${result.error.message}` : ''}`,
+        ],
+      };
+    case 'suspended':
+      return {
+        status: 'error',
+        diagnostics: [
+          `compiled runtime suspended for unsupported nested playbook call ${result.pendingCall.callId}`,
+        ],
+      };
   }
+}
+
+function playbookIdFromArtifact(artifactPath: string): string {
+  const name = basename(artifactPath);
+  return name.endsWith('.playbook.ts')
+    ? name.slice(0, -'.playbook.ts'.length)
+    : name.replace(/\.[^.]+$/, '');
 }
 
 type OutputState =

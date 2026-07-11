@@ -29,6 +29,8 @@ export interface AgentRunRequest {
   prompt: string;
   cwd?: string;
   model?: string;
+  /** Explicit backend continuation selection for Playbook player calls. */
+  resume?: string | false;
   signal: AbortSignal;
 }
 
@@ -38,6 +40,8 @@ export interface AgentRunResult {
   status: 'success' | 'error' | 'incomplete';
   /** The agent's final textual report (its summary, or `BLOCKED:` lines). */
   text: string;
+  /** Opaque backend continuation token, when the transport exposes one. */
+  resumeToken?: string;
 }
 
 /** The transport to a coding agent, backed by Cligent in production. */
