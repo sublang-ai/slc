@@ -10,7 +10,9 @@ import { describe, expect, it } from 'vitest';
 import { loadFsmModule } from '../src/verify.js';
 import {
   checkReferenceEquivalence,
+  hasBossReplySurface,
   playerLineSets,
+  runtimeCapabilityProfile,
   type CompiledPlaybook,
 } from './equivalence.js';
 
@@ -42,12 +44,79 @@ async function loadProduced(dir: string): Promise<CompiledPlaybook> {
   };
 }
 
+function withRuntimeProfile(
+  compiled: CompiledPlaybook,
+  profile: 'legacy' | 'structured',
+): CompiledPlaybook {
+  return {
+    ...compiled,
+    playbook: {
+      default: () => ({
+        init: async () => {},
+        handleBossInput: async () => {},
+        ...(profile === 'structured'
+          ? { resumePlaybookCall: async () => {} }
+          : {}),
+        dispose: async () => {},
+      }),
+    },
+  };
+}
+
 describe('reference equivalence harness (VERIFY-9)', () => {
   it('accepts the reference compared to itself', async () => {
     const reference = await loadReference();
     expect(
       await checkReferenceEquivalence({ produced: reference, reference }),
     ).toEqual([]);
+  });
+
+  it('accepts matching legacy and structured runtime capability profiles', async () => {
+    const reference = await loadReference();
+    for (const profile of ['legacy', 'structured'] as const) {
+      const compiled = withRuntimeProfile(reference, profile);
+      expect(runtimeCapabilityProfile(compiled.playbook)).toBe(profile);
+      expect(
+        await checkReferenceEquivalence({
+          produced: compiled,
+          reference: compiled,
+        }),
+      ).toEqual([]);
+    }
+  });
+
+  it('rejects a mixed legacy and structured runtime capability profile', async () => {
+    const reference = await loadReference();
+    const findings = await checkReferenceEquivalence({
+      produced: withRuntimeProfile(reference, 'legacy'),
+      reference: withRuntimeProfile(reference, 'structured'),
+    });
+    expect(findings).toContain(
+      'runtime capability profiles differ: produced legacy vs reference structured',
+    );
+  });
+
+  it('recognizes a branch-local structured Boss-reply wait surface', () => {
+    expect(
+      hasBossReplySurface({
+        states: {
+          parallel: {
+            type: 'parallel',
+            states: {
+              branch: {
+                states: {
+                  waiting: {
+                    id: 'waitBranchReply',
+                    tags: 'playbook.parked',
+                    on: { BOSS_REPLY: { target: 'working' } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).toBe(true);
   });
 
   it('rejects a compilation that drops or rewrites a prompt line', async () => {
@@ -84,6 +153,22 @@ describe('reference equivalence harness (VERIFY-9)', () => {
     const reference = await loadReference();
     const players = [...playerLineSets(reference.gears).keys()].sort();
     expect(players).toEqual(['Coder', 'Committer', 'Reviewer']);
+  });
+
+  it('keys nested calls by playbook target rather than Captain', () => {
+    const nested = (target: string) => `## Behaviors
+
+### FLOW-1
+
+When review is needed, Captain shall call playbook \`${target}\`:
+> Review the current changes.
+`;
+    expect([...playerLineSets(nested('code-review')).keys()]).toEqual([
+      'playbook:code-review',
+    ]);
+    expect([...playerLineSets(nested('security-review')).keys()]).toEqual([
+      'playbook:security-review',
+    ]);
   });
 
   // The real acceptance: `slc playbook <source>` output compared to the manual

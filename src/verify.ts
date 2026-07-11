@@ -32,6 +32,8 @@ export interface GearsItem {
   id: string;
   player: string;
   prompt: string;
+  /** Target id when this item invokes another playbook rather than a player. */
+  playbookId?: string;
 }
 
 /** A captain-invoking FSM state's introspected binding (`gears2fsm` `invoke.input`). */
@@ -42,6 +44,21 @@ export interface CaptainState {
   prompt: string;
   /** The state's per-state guard contract: result key to description. */
   result: Record<string, string>;
+  /** Dot-separated config path, present only for a nested state node. */
+  statePath?: string;
+  /** Malformed binding details retained for fail-closed conformance reporting. */
+  bindingFindings?: string[];
+}
+
+/** A playbook-actor invocation recovered from an FSM state. */
+export interface PlaybookInvocationState {
+  stateId: string;
+  playbookId: string;
+  text: string;
+  /** Optional source item emitted by linkers that retain the GEARS identity. */
+  sourceItem?: string;
+  /** Dot-separated config path, present only for a nested state node. */
+  statePath?: string;
   /** Malformed binding details retained for fail-closed conformance reporting. */
   bindingFindings?: string[];
 }
@@ -62,16 +79,33 @@ export interface MachineConfigLike {
   on?: Record<string, unknown>;
 }
 
+interface InvokeLike {
+  src?: unknown;
+  input?: (arg: { context: Record<string, unknown> }) => unknown;
+  onDone?: unknown;
+  onError?: unknown;
+}
+
+// Optional object fields keep ordinary arrays assignable while letting legacy
+// consumers read `state.invoke?.onDone` without first normalizing the shape.
+interface InvokeArrayLike extends ReadonlyArray<InvokeLike> {
+  src?: unknown;
+  input?: (arg: { context: Record<string, unknown> }) => unknown;
+  onDone?: unknown;
+  onError?: unknown;
+}
+
 interface StateLike {
   id?: string;
+  initial?: string;
   type?: string;
-  invoke?: {
-    src?: unknown;
-    input?: (arg: { context: Record<string, unknown> }) => unknown;
-    onDone?: unknown;
-    onError?: unknown;
-  };
+  meta?: unknown;
+  tags?: string | readonly string[];
+  states?: Record<string, StateLike>;
+  invoke?: InvokeLike | InvokeArrayLike;
   on?: Record<string, unknown>;
+  onDone?: unknown;
+  onError?: unknown;
 }
 
 const ITEM_HEADING = /^###\s+([A-Za-z][\w-]*)\s*$/;
@@ -80,6 +114,8 @@ const ITEM_HEADING = /^###\s+([A-Za-z][\w-]*)\s*$/;
 // capitalized, non-English names may be quoted (text2gears.md).
 const ITEM_PLAYER =
   /Captain shall (?:prompt|relay\b[^.]*?\bto)\s+(?:"([^"]+)"|“([^”]+)”|([A-Z][\w]*))/;
+const ITEM_PLAYBOOK =
+  /Captain shall call playbook\s+(?:`([^`]+)`|"([^"]+)"|“([^”]+)”|([A-Za-z0-9][\w.-]*))\s*:/;
 // Some items have Captain act directly ("Captain shall <verb> ...") with no
 // delegated player; their player is Captain itself.
 const CAPTAIN_ACTS = /\bCaptain shall\b/;
@@ -96,6 +132,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
     id: string;
     player: string;
     captainActs: boolean;
+    playbookId: string;
     prompt: string[];
   } | null = null;
   const flush = (): void => {
@@ -106,7 +143,14 @@ export function parseGearsItems(gears: string): GearsItem[] {
           : current.captainActs
             ? 'Captain'
             : '';
-      items.push({ id: current.id, player, prompt: current.prompt.join('\n') });
+      items.push({
+        id: current.id,
+        player,
+        prompt: current.prompt.join('\n'),
+        ...(current.playbookId !== ''
+          ? { playbookId: current.playbookId }
+          : {}),
+      });
     }
     current = null;
   };
@@ -114,7 +158,13 @@ export function parseGearsItems(gears: string): GearsItem[] {
     const heading = ITEM_HEADING.exec(line);
     if (heading !== null) {
       flush();
-      current = { id: heading[1], player: '', captainActs: false, prompt: [] };
+      current = {
+        id: heading[1],
+        player: '',
+        captainActs: false,
+        playbookId: '',
+        prompt: [],
+      };
       continue;
     }
     if (SECTION_HEADING.test(line)) {
@@ -125,12 +175,224 @@ export function parseGearsItems(gears: string): GearsItem[] {
     const player = ITEM_PLAYER.exec(line);
     if (player !== null && current.player === '') {
       current.player = player[1] ?? player[2] ?? player[3];
-    } else if (CAPTAIN_ACTS.test(line)) current.captainActs = true;
+    }
+    const playbook = ITEM_PLAYBOOK.exec(line);
+    if (playbook !== null && current.playbookId === '') {
+      current.playbookId =
+        playbook[1] ?? playbook[2] ?? playbook[3] ?? playbook[4];
+    }
+    if (CAPTAIN_ACTS.test(line)) current.captainActs = true;
     const quote = BLOCKQUOTE.exec(line);
     if (quote !== null) current.prompt.push(quote[1]);
   }
   flush();
   return items;
+}
+
+interface StateNodeRef {
+  key: string;
+  path: readonly string[];
+  statePath: string;
+  state: StateLike;
+}
+
+interface CaptainBinding {
+  state: CaptainState;
+  node: StateNodeRef;
+  invoke: InvokeLike;
+  inputFn?: InvokeLike['input'];
+}
+
+interface PlaybookBinding {
+  state: PlaybookInvocationState;
+  node: StateNodeRef;
+  invoke: InvokeLike;
+}
+
+/** Walks every state node depth-first in declaration order. */
+function walkStateNodes(config: MachineConfigLike): StateNodeRef[] {
+  const out: StateNodeRef[] = [];
+  const visit = (
+    states: Record<string, StateLike> | undefined,
+    parent: readonly string[],
+  ): void => {
+    for (const [key, state] of Object.entries(states ?? {})) {
+      const path = [...parent, key];
+      out.push({ key, path, statePath: path.join('.'), state });
+      visit(state.states, path);
+    }
+  };
+  visit(config.states, []);
+  return out;
+}
+
+/** Normalizes XState's one-or-many invoke declaration to declaration order. */
+function normalizeInvokes(invoke: StateLike['invoke']): readonly InvokeLike[] {
+  if (invoke === undefined) return [];
+  if (Array.isArray(invoke)) {
+    return invoke.filter(
+      (candidate): candidate is InvokeLike =>
+        typeof candidate === 'object' && candidate !== null,
+    );
+  }
+  return typeof invoke === 'object' && invoke !== null ? [invoke] : [];
+}
+
+function invocationInput(
+  invoke: InvokeLike,
+): { value: Record<string, unknown> } | { error: string } | { invalid: true } {
+  if (typeof invoke.input !== 'function') return { invalid: true };
+  let value: unknown;
+  try {
+    value = invoke.input({ context: {} });
+  } catch (error) {
+    return { error: messageOf(error) };
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { invalid: true };
+  }
+  return { value: value as Record<string, unknown> };
+}
+
+function publicStateId(
+  node: StateNodeRef,
+  input: Record<string, unknown> | undefined,
+): string {
+  if (isNonEmptyString(input?.stateId)) return input.stateId;
+  if (isNonEmptyString(node.state.id)) return node.state.id;
+  return node.path.length === 1 ? node.key : node.statePath;
+}
+
+function nestedStatePath(node: StateNodeRef): { statePath: string } | object {
+  return node.path.length > 1 ? { statePath: node.statePath } : {};
+}
+
+function metadataStateId(state: StateLike): string | undefined {
+  if (typeof state.meta !== 'object' || state.meta === null) return undefined;
+  const playbook = (state.meta as { playbook?: unknown }).playbook;
+  if (typeof playbook !== 'object' || playbook === null) return undefined;
+  const stateId = (playbook as { stateId?: unknown }).stateId;
+  return isNonEmptyString(stateId) ? stateId : undefined;
+}
+
+function stateIdConsistencyFindings(
+  node: StateNodeRef,
+  inputStateId: unknown,
+): string[] {
+  if (!isNonEmptyString(inputStateId)) return [];
+  const findings: string[] = [];
+  if (isNonEmptyString(node.state.id) && node.state.id !== inputStateId) {
+    findings.push(
+      `invoke.input.stateId "${inputStateId}" does not match state.id "${node.state.id}"`,
+    );
+  }
+  const metaStateId = metadataStateId(node.state);
+  if (metaStateId !== undefined && metaStateId !== inputStateId) {
+    findings.push(
+      `invoke.input.stateId "${inputStateId}" does not match state.meta.playbook.stateId "${metaStateId}"`,
+    );
+  }
+  return findings;
+}
+
+function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
+  const out: CaptainBinding[] = [];
+  for (const node of walkStateNodes(config)) {
+    for (const invoke of normalizeInvokes(node.state.invoke)) {
+      const source = invokeSource(invoke.src);
+      const explicitlyCaptain = source === 'captain';
+      if (!explicitlyCaptain && invoke.src !== undefined) continue;
+      const inspected = invocationInput(invoke);
+      if ('error' in inspected) {
+        if (explicitlyCaptain) {
+          out.push({
+            state: malformedCaptainState(
+              publicStateId(node, undefined),
+              `invoke.input threw during introspection: ${inspected.error}`,
+              node,
+            ),
+            node,
+            invoke,
+            inputFn: invoke.input,
+          });
+        }
+        continue;
+      }
+      if ('invalid' in inspected) {
+        if (explicitlyCaptain) {
+          out.push({
+            state: malformedCaptainState(
+              publicStateId(node, undefined),
+              typeof invoke.input === 'function'
+                ? 'invoke.input returned a non-object'
+                : 'invoke.input is not a function',
+              node,
+            ),
+            node,
+            invoke,
+            inputFn: invoke.input,
+          });
+        }
+        continue;
+      }
+      const fields = inspected.value;
+      // Preserve the legacy sourceItem-recognition path only when no explicit
+      // actor is named. A playbook actor carrying source metadata is not a
+      // player invocation.
+      if (
+        !explicitlyCaptain &&
+        (invoke.src !== undefined || !isNonEmptyString(fields.sourceItem))
+      ) {
+        continue;
+      }
+
+      const bindingFindings: string[] = [];
+      if (!isNonEmptyString(fields.sourceItem)) {
+        bindingFindings.push(
+          'invoke.input.sourceItem is not a non-empty string',
+        );
+      }
+      if (typeof fields.player !== 'string') {
+        bindingFindings.push('invoke.input.player is not a string');
+      }
+      if (typeof fields.prompt !== 'string') {
+        bindingFindings.push('invoke.input.prompt is not a string');
+      }
+      if (!isStringMap(fields.result)) {
+        bindingFindings.push(
+          'invoke.input.result is not a string-valued object',
+        );
+      }
+      if (node.path.length > 1 && !isNonEmptyString(fields.stateId)) {
+        bindingFindings.push(
+          'nested invoke.input.stateId is not a non-empty string',
+        );
+      }
+      bindingFindings.push(...stateIdConsistencyFindings(node, fields.stateId));
+      if (Object.keys(node.state.states ?? {}).length > 0) {
+        bindingFindings.push(
+          'captain invocation is declared on a compound state instead of a leaf',
+        );
+      }
+      out.push({
+        state: {
+          stateId: publicStateId(node, fields),
+          sourceItem: isNonEmptyString(fields.sourceItem)
+            ? fields.sourceItem
+            : '',
+          player: typeof fields.player === 'string' ? fields.player : '',
+          prompt: typeof fields.prompt === 'string' ? fields.prompt : '',
+          result: resultMap(fields.result),
+          ...nestedStatePath(node),
+          ...(bindingFindings.length > 0 ? { bindingFindings } : {}),
+        },
+        node,
+        invoke,
+        inputFn: invoke.input,
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -141,84 +403,116 @@ export function parseGearsItems(gears: string): GearsItem[] {
 export function enumerateCaptainStates(
   config: MachineConfigLike,
 ): CaptainState[] {
-  const out: CaptainState[] = [];
-  for (const [stateId, state] of Object.entries(config.states ?? {})) {
-    const explicitlyCaptain = state.invoke?.src === 'captain';
-    const inputFn = state.invoke?.input;
-    if (typeof inputFn !== 'function') {
-      if (explicitlyCaptain) {
-        out.push(
-          malformedCaptainState(stateId, 'invoke.input is not a function'),
-        );
-      }
-      continue;
-    }
-    let input: unknown;
-    try {
-      input = inputFn({ context: {} });
-    } catch (error) {
-      if (explicitlyCaptain) {
-        out.push(
-          malformedCaptainState(
-            stateId,
-            `invoke.input threw during introspection: ${messageOf(error)}`,
-          ),
-        );
-      }
-      continue;
-    }
-    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-      if (explicitlyCaptain) {
-        out.push(
-          malformedCaptainState(stateId, 'invoke.input returned a non-object'),
-        );
-      }
-      continue;
-    }
-    const fields = input as {
-      player?: unknown;
-      sourceItem?: unknown;
-      prompt?: unknown;
-      result?: unknown;
-    };
-    // Legacy/fixture configs without an explicit `src` are still recognized by
-    // their static sourceItem binding. An explicit `src: 'captain'`, however,
-    // is always retained so malformed input cannot make the state disappear
-    // from conformance, introspection, prompt checks, or coverage.
-    if (!explicitlyCaptain && !isNonEmptyString(fields.sourceItem)) continue;
+  return enumerateCaptainBindings(config).map(({ state }) => state);
+}
 
-    const bindingFindings: string[] = [];
-    if (!isNonEmptyString(fields.sourceItem)) {
-      bindingFindings.push('invoke.input.sourceItem is not a non-empty string');
+function enumeratePlaybookBindings(
+  config: MachineConfigLike,
+): PlaybookBinding[] {
+  const out: PlaybookBinding[] = [];
+  for (const node of walkStateNodes(config)) {
+    for (const invoke of normalizeInvokes(node.state.invoke)) {
+      if (invokeSource(invoke.src) !== 'playbook') continue;
+      const inspected = invocationInput(invoke);
+      if ('error' in inspected) {
+        out.push({
+          state: malformedPlaybookState(
+            publicStateId(node, undefined),
+            `invoke.input threw during introspection: ${inspected.error}`,
+            node,
+          ),
+          node,
+          invoke,
+        });
+        continue;
+      }
+      if ('invalid' in inspected) {
+        out.push({
+          state: malformedPlaybookState(
+            publicStateId(node, undefined),
+            typeof invoke.input === 'function'
+              ? 'invoke.input returned a non-object'
+              : 'invoke.input is not a function',
+            node,
+          ),
+          node,
+          invoke,
+        });
+        continue;
+      }
+      const fields = inspected.value;
+      const bindingFindings: string[] = [];
+      if (!isNonEmptyString(fields.stateId)) {
+        bindingFindings.push('invoke.input.stateId is not a non-empty string');
+      }
+      if (!isNonEmptyString(fields.playbookId)) {
+        bindingFindings.push(
+          'invoke.input.playbookId is not a non-empty string',
+        );
+      }
+      if (typeof fields.text !== 'string') {
+        bindingFindings.push('invoke.input.text is not a string');
+      }
+      bindingFindings.push(...stateIdConsistencyFindings(node, fields.stateId));
+      if (Object.keys(node.state.states ?? {}).length > 0) {
+        bindingFindings.push(
+          'playbook invocation is declared on a compound state instead of a leaf',
+        );
+      }
+      out.push({
+        state: {
+          stateId: publicStateId(node, fields),
+          playbookId: isNonEmptyString(fields.playbookId)
+            ? fields.playbookId
+            : '',
+          text: typeof fields.text === 'string' ? fields.text : '',
+          ...(isNonEmptyString(fields.sourceItem)
+            ? { sourceItem: fields.sourceItem }
+            : {}),
+          ...nestedStatePath(node),
+          ...(bindingFindings.length > 0 ? { bindingFindings } : {}),
+        },
+        node,
+        invoke,
+      });
     }
-    if (typeof fields.player !== 'string') {
-      bindingFindings.push('invoke.input.player is not a string');
-    }
-    if (typeof fields.prompt !== 'string') {
-      bindingFindings.push('invoke.input.prompt is not a string');
-    }
-    if (!isStringMap(fields.result)) {
-      bindingFindings.push('invoke.input.result is not a string-valued object');
-    }
-    out.push({
-      stateId,
-      sourceItem: isNonEmptyString(fields.sourceItem) ? fields.sourceItem : '',
-      player: typeof fields.player === 'string' ? fields.player : '',
-      prompt: typeof fields.prompt === 'string' ? fields.prompt : '',
-      result: resultMap(fields.result),
-      ...(bindingFindings.length > 0 ? { bindingFindings } : {}),
-    });
   }
   return out;
 }
 
-function malformedCaptainState(stateId: string, finding: string): CaptainState {
+/** Enumerates typed `playbook` actor calls across the complete state tree. */
+export function enumeratePlaybookStates(
+  config: MachineConfigLike,
+): PlaybookInvocationState[] {
+  return enumeratePlaybookBindings(config).map(({ state }) => state);
+}
+
+function malformedCaptainState(
+  stateId: string,
+  finding: string,
+  node?: StateNodeRef,
+): CaptainState {
   return {
     stateId,
     sourceItem: '',
     player: '',
     prompt: '',
     result: {},
+    ...(node === undefined ? {} : nestedStatePath(node)),
+    bindingFindings: [finding],
+  };
+}
+
+function malformedPlaybookState(
+  stateId: string,
+  finding: string,
+  node: StateNodeRef,
+): PlaybookInvocationState {
+  return {
+    stateId,
+    playbookId: '',
+    text: '',
+    ...nestedStatePath(node),
     bindingFindings: [finding],
   };
 }
@@ -259,12 +553,20 @@ export function checkGearsFsmConformance(
 ): string[] {
   const items = parseGearsItems(gears);
   const states = enumerateCaptainStates(config);
+  const playbookStates = enumeratePlaybookStates(config);
   const findings: string[] = [];
 
   for (const state of states) {
     findings.push(
       ...(state.bindingFindings ?? []).map(
         (finding) => `FSM state ${state.stateId}: ${finding}`,
+      ),
+    );
+  }
+  for (const state of playbookStates) {
+    findings.push(
+      ...(state.bindingFindings ?? []).map(
+        (finding) => `FSM playbook state ${state.stateId}: ${finding}`,
       ),
     );
   }
@@ -276,7 +578,100 @@ export function checkGearsFsmConformance(
     if (matched === undefined) statesByItem.set(state.sourceItem, [state]);
     else matched.push(state);
   }
+
+  const playbookItems = items.filter(
+    (item): item is GearsItem & { playbookId: string } =>
+      item.playbookId !== undefined,
+  );
+  const matchedPlaybookStates = new Set<PlaybookInvocationState>();
+  const playbookMatchesByItem = new Map<GearsItem, PlaybookInvocationState[]>();
+  const playbookItemsByState = new Map<PlaybookInvocationState, string[]>();
+  const addPlaybookMatch = (
+    item: GearsItem,
+    state: PlaybookInvocationState,
+  ): void => {
+    const matchedStates = playbookMatchesByItem.get(item);
+    if (matchedStates === undefined) {
+      playbookMatchesByItem.set(item, [state]);
+    } else {
+      matchedStates.push(state);
+    }
+    const matchedItems = playbookItemsByState.get(state);
+    if (matchedItems === undefined) {
+      playbookItemsByState.set(state, [item.id]);
+    } else {
+      matchedItems.push(item.id);
+    }
+    matchedPlaybookStates.add(state);
+  };
+
+  // An explicit sourceItem is authoritative, including when its target or text
+  // drifted; retaining that pairing lets conformance report the precise drift.
+  for (const state of playbookStates) {
+    if (state.sourceItem === undefined) continue;
+    for (const item of playbookItems) {
+      if (item.id === state.sourceItem) addPlaybookMatch(item, state);
+    }
+  }
+
+  // The PlaybookInput contract does not require sourceItem. Pair otherwise
+  // indistinguishable calls by signature and declaration order, comparing each
+  // signature as a multiset. Equal duplicate cardinalities are conformant;
+  // surplus items or states remain unmatched and are reported below.
+  const signature = (playbookId: string, text: string): string =>
+    JSON.stringify([playbookId, text]);
+  const itemsBySignature = new Map<
+    string,
+    Array<GearsItem & { playbookId: string }>
+  >();
+  for (const item of playbookItems) {
+    if ((playbookMatchesByItem.get(item)?.length ?? 0) > 0) continue;
+    const key = signature(item.playbookId, item.prompt);
+    const grouped = itemsBySignature.get(key);
+    if (grouped === undefined) itemsBySignature.set(key, [item]);
+    else grouped.push(item);
+  }
+  const statesBySignature = new Map<string, PlaybookInvocationState[]>();
+  for (const state of playbookStates) {
+    if (state.sourceItem !== undefined) continue;
+    const key = signature(state.playbookId, state.text);
+    const grouped = statesBySignature.get(key);
+    if (grouped === undefined) statesBySignature.set(key, [state]);
+    else grouped.push(state);
+  }
+  for (const [key, groupedItems] of itemsBySignature) {
+    const groupedStates = statesBySignature.get(key) ?? [];
+    const pairs = Math.min(groupedItems.length, groupedStates.length);
+    for (let index = 0; index < pairs; index += 1) {
+      addPlaybookMatch(groupedItems[index], groupedStates[index]);
+    }
+  }
+
   for (const item of items) {
+    if (item.playbookId !== undefined) {
+      const matched = playbookMatchesByItem.get(item) ?? [];
+      if (matched.length === 0) {
+        findings.push(`GEARS item ${item.id} maps to no FSM playbook state`);
+        continue;
+      }
+      if (matched.length > 1) {
+        findings.push(
+          `GEARS item ${item.id} maps to ${matched.length} FSM playbook states (expected exactly one: ${matched.map((state) => state.stateId).join(', ')})`,
+        );
+      }
+      const state = matched[0];
+      if (state.playbookId !== item.playbookId) {
+        findings.push(
+          `${item.id}: FSM playbook "${state.playbookId}" is not GEARS playbook "${item.playbookId}"`,
+        );
+      }
+      if (state.text !== item.prompt) {
+        findings.push(
+          `${item.id}: FSM playbook text is not the GEARS prompt verbatim`,
+        );
+      }
+      continue;
+    }
     const matched = statesByItem.get(item.id) ?? [];
     if (matched.length === 0) {
       findings.push(`GEARS item ${item.id} maps to no FSM state`);
@@ -298,6 +693,7 @@ export function checkGearsFsmConformance(
     }
   }
   const itemIds = new Set(items.map((item) => item.id));
+  const playbookItemIds = new Set(playbookItems.map((item) => item.id));
   for (const state of states) {
     if (state.sourceItem !== '' && !itemIds.has(state.sourceItem)) {
       findings.push(
@@ -315,6 +711,26 @@ export function checkGearsFsmConformance(
     } else if (!bossReply.includes(BOSS_QUESTION_MARKER)) {
       findings.push(
         `FSM state ${state.stateId}: ${NEEDS_BOSS_REPLY} description lacks the ${BOSS_QUESTION_MARKER}\` contract`,
+      );
+    }
+  }
+  for (const state of playbookStates) {
+    const matchedItems = playbookItemsByState.get(state) ?? [];
+    if (matchedItems.length > 1) {
+      findings.push(
+        `FSM playbook state ${state.stateId} maps to ${matchedItems.length} GEARS playbook-call items (expected exactly one: ${matchedItems.join(', ')})`,
+      );
+    }
+    if (
+      state.sourceItem !== undefined &&
+      !playbookItemIds.has(state.sourceItem)
+    ) {
+      findings.push(
+        `FSM playbook state ${state.stateId} references unknown GEARS playbook item ${state.sourceItem}`,
+      );
+    } else if (!matchedPlaybookStates.has(state)) {
+      findings.push(
+        `FSM playbook state ${state.stateId} maps to no GEARS playbook-call item`,
       );
     }
   }
@@ -348,12 +764,28 @@ export interface TransitionArm {
 /** Event name to its normalized transition arms. */
 export type EventArms = Record<string, TransitionArm[]>;
 
+/** One state node in the optional recursive topology for compound machines. */
+export interface StructuredStatePin {
+  path: string;
+  parent: string | null;
+  id: string | null;
+  type: string | null;
+  initial: string | null;
+  tags: string[];
+  children: string[];
+  invokes: string[];
+  onDone: TransitionArm[];
+  onError: TransitionArm[];
+  on: EventArms;
+}
+
 /** The structural facts {@link pinIntrospection} pins for a machine (VERIFY-4). */
 export interface IntrospectionPins {
   initial: string | null;
   /** Captain-invoking states, in declaration order. */
   captain: {
     state: string;
+    path?: string;
     sourceItem: string;
     player: string;
     resultKeys: string[];
@@ -367,6 +799,18 @@ export interface IntrospectionPins {
   rootOn: EventArms;
   /** Root `BOSS_INTERRUPT` targets in arm order — the jumpable set. */
   interruptTargets: string[];
+  /** Playbook-actor bindings, omitted when a machine declares none. */
+  playbook?: {
+    state: string;
+    path?: string;
+    playbookId: string;
+    sourceItem?: string;
+    onDone: TransitionArm[];
+    onError: TransitionArm[];
+    on: EventArms;
+  }[];
+  /** Recursive topology, omitted to preserve flat-machine pin bytes. */
+  structured?: { states: StructuredStatePin[] };
 }
 
 /**
@@ -405,6 +849,26 @@ function eventArms(on: Record<string, unknown> | undefined): EventArms {
   return out;
 }
 
+function normalizedTags(tags: StateLike['tags']): string[] {
+  if (typeof tags === 'string') return [tags];
+  return Array.isArray(tags)
+    ? tags.filter((tag): tag is string => typeof tag === 'string')
+    : [];
+}
+
+function invokeSource(src: unknown): string | null {
+  if (typeof src === 'string') return src;
+  if (
+    typeof src === 'object' &&
+    src !== null &&
+    'type' in src &&
+    typeof src.type === 'string'
+  ) {
+    return src.type;
+  }
+  return null;
+}
+
 /**
  * Reduces a machine config to the structural facts the emitted introspection
  * test pins (VERIFY-4): captain bindings with result keys and every transition
@@ -412,24 +876,31 @@ function eventArms(on: Record<string, unknown> | undefined): EventArms {
  * `BOSS_INTERRUPT` jumpable set.
  */
 export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
-  const captainByState = new Map(
-    enumerateCaptainStates(config).map((state) => [state.stateId, state]),
-  );
+  const nodes = walkStateNodes(config);
+  const captainBindings = enumerateCaptainBindings(config);
+  const playbookBindings = enumeratePlaybookBindings(config);
+  const invokingPaths = new Set([
+    ...captainBindings.map(({ node }) => node.statePath),
+    ...playbookBindings.map(({ node }) => node.statePath),
+  ]);
   const captain: IntrospectionPins['captain'] = [];
   const quiescent: IntrospectionPins['quiescent'] = [];
+  for (const binding of captainBindings) {
+    captain.push({
+      state: binding.state.stateId,
+      ...(binding.state.statePath !== undefined
+        ? { path: binding.state.statePath }
+        : {}),
+      sourceItem: binding.state.sourceItem,
+      player: binding.state.player,
+      resultKeys: Object.keys(binding.state.result).sort(),
+      onDone: normalizeArms(binding.invoke.onDone),
+      onError: normalizeArms(binding.invoke.onError),
+      on: eventArms(binding.node.state.on),
+    });
+  }
   for (const [stateId, state] of Object.entries(config.states ?? {})) {
-    const binding = captainByState.get(stateId);
-    if (binding !== undefined) {
-      captain.push({
-        state: stateId,
-        sourceItem: binding.sourceItem,
-        player: binding.player,
-        resultKeys: Object.keys(binding.result).sort(),
-        onDone: normalizeArms(state.invoke?.onDone),
-        onError: normalizeArms(state.invoke?.onError),
-        on: eventArms(state.on),
-      });
-    } else {
+    if (!invokingPaths.has(stateId)) {
       quiescent.push({
         state: stateId,
         final: state.type === 'final',
@@ -441,12 +912,53 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
   const interruptTargets = (rootOn[INTERRUPT_EVENT] ?? [])
     .map((arm) => arm.target)
     .filter((target): target is string => target !== null);
+  const playbook: NonNullable<IntrospectionPins['playbook']> =
+    playbookBindings.map((binding) => ({
+      state: binding.state.stateId,
+      ...(binding.state.statePath !== undefined
+        ? { path: binding.state.statePath }
+        : {}),
+      playbookId: binding.state.playbookId,
+      ...(binding.state.sourceItem !== undefined
+        ? { sourceItem: binding.state.sourceItem }
+        : {}),
+      onDone: normalizeArms(binding.invoke.onDone),
+      onError: normalizeArms(binding.invoke.onError),
+      on: eventArms(binding.node.state.on),
+    }));
+  const hasStructuredTopology = nodes.some(
+    ({ path, state }) =>
+      path.length > 1 ||
+      state.type === 'parallel' ||
+      Object.keys(state.states ?? {}).length > 0,
+  );
+  const structured = hasStructuredTopology
+    ? {
+        states: nodes.map(({ path, state, statePath }) => ({
+          path: statePath,
+          parent: path.length > 1 ? path.slice(0, -1).join('.') : null,
+          id: typeof state.id === 'string' ? state.id : null,
+          type: typeof state.type === 'string' ? state.type : null,
+          initial: typeof state.initial === 'string' ? state.initial : null,
+          tags: normalizedTags(state.tags),
+          children: Object.keys(state.states ?? {}),
+          invokes: normalizeInvokes(state.invoke)
+            .map(({ src }) => invokeSource(src))
+            .filter((source): source is string => source !== null),
+          onDone: normalizeArms(state.onDone),
+          onError: normalizeArms(state.onError),
+          on: eventArms(state.on),
+        })),
+      }
+    : undefined;
   return {
     initial: typeof config.initial === 'string' ? config.initial : null,
     captain,
     quiescent,
     rootOn,
     interruptTargets,
+    ...(playbook.length > 0 ? { playbook } : {}),
+    ...(structured !== undefined ? { structured } : {}),
   };
 }
 
@@ -549,8 +1061,8 @@ export function capturePromptContract(
   config: MachineConfigLike,
 ): PromptContractRow[] {
   const rows: PromptContractRow[] = [];
-  for (const state of enumerateCaptainStates(config)) {
-    const inputFn = config.states?.[state.stateId]?.invoke?.input;
+  for (const binding of enumerateCaptainBindings(config)) {
+    const { state, inputFn } = binding;
     if (typeof inputFn !== 'function') continue;
     const reads = probeContextReads(inputFn);
     const wires: Record<string, string[]> = {};
@@ -590,8 +1102,8 @@ export function deriveSubstitutions(
   compose: (input: unknown) => string,
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
-  for (const state of enumerateCaptainStates(config)) {
-    const inputFn = config.states?.[state.stateId]?.invoke?.input;
+  for (const binding of enumerateCaptainBindings(config)) {
+    const { state, inputFn } = binding;
     if (typeof inputFn !== 'function') continue;
     try {
       const reads = probeContextReads(inputFn);
@@ -636,8 +1148,8 @@ export function checkPromptComposition(opts: {
 }): string[] {
   const findings: string[] = [];
   const substitutions = deriveSubstitutions(opts.config, opts.compose);
-  for (const state of enumerateCaptainStates(opts.config)) {
-    const inputFn = opts.config.states?.[state.stateId]?.invoke?.input;
+  for (const binding of enumerateCaptainBindings(opts.config)) {
+    const { state, inputFn } = binding;
     if (typeof inputFn !== 'function') continue;
     const reads = probeContextReads(inputFn);
     const substituted = substitutions[state.stateId] ?? [];

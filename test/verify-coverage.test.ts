@@ -59,9 +59,12 @@ const goodMachine = (
     guards?: Record<string, (...args: any[]) => boolean>;
     result?: Record<string, string>;
     workId?: string;
+    publicStateId?: string;
+    blankStaysParked?: boolean;
   } = {},
 ) => {
   const workId = overrides.workId ?? 'work';
+  const publicStateId = overrides.publicStateId ?? workId;
   const onDone = overrides.onDone ?? [
     {
       target: '#done',
@@ -73,9 +76,13 @@ const goodMachine = (
     ready: { id: 'ready', on: { GO: { target: 'work' } } },
     work: {
       id: workId,
+      meta: {
+        playbook: { stateId: publicStateId, description: 'Working' },
+      },
       invoke: {
         src: 'captain',
         input: ({ context }: any) => ({
+          stateId: publicStateId,
           player: 'Writer',
           sourceItem: 'X-1',
           prompt: 'Do the work.',
@@ -96,23 +103,24 @@ const goodMachine = (
     done: { id: 'done', type: 'final' },
   };
   if (!overrides.dropWaitState) {
+    const replyArms: unknown[] = [
+      {
+        target: `#${workId}`,
+        reenter: true,
+        guard: ({ context, event }: any) =>
+          context.pendingBossQuestion?.resumeStateId === workId &&
+          typeof event.answer === 'string' &&
+          event.answer.trim() !== '',
+        actions: assign({
+          bossReply: ({ event }: any) => event.answer,
+        } as any),
+      },
+    ];
+    if (!overrides.blankStaysParked) replyArms.push({ target: '#failed' });
     states.awaitBossReply = {
       id: 'awaitBossReply',
       on: {
-        BOSS_REPLY: [
-          {
-            target: `#${workId}`,
-            reenter: true,
-            guard: ({ context, event }: any) =>
-              context.pendingBossQuestion?.resumeStateId === workId &&
-              typeof event.answer === 'string' &&
-              event.answer.trim() !== '',
-            actions: assign({
-              bossReply: ({ event }: any) => event.answer,
-            } as any),
-          },
-          { target: '#failed' },
-        ],
+        BOSS_REPLY: replyArms,
       },
     };
   }
@@ -134,7 +142,7 @@ const goodMachine = (
         {
           target: `#${workId}`,
           reenter: true,
-          guard: ({ event }: any) => event.targetId === workId,
+          guard: ({ event }: any) => event.targetId === publicStateId,
         },
         {
           target: '#ready',
@@ -142,6 +150,167 @@ const goodMachine = (
           guard: ({ event }: any) => event.targetId === 'ready',
         },
       ],
+    },
+    states: states as any,
+  } as any);
+};
+
+/** A two-region structured machine with branch-local Boss-reply waits. */
+const parallelMachine = (
+  opts: {
+    nestedPlaybook?: boolean;
+    dropJoin?: boolean;
+    acceptUnknownQuestionId?: boolean;
+    crossResume?: boolean;
+    unreachableJoin?: boolean;
+  } = {},
+) => {
+  const meta = (stateId: string) => ({
+    description: stateId,
+    meta: { playbook: { stateId, description: stateId } },
+  });
+  const branch = (side: 'left' | 'right') => {
+    const stateId = `${side}Work`;
+    const waitId = `${side}Wait`;
+    return {
+      id: `${side}Branch`,
+      initial: 'working',
+      ...meta(`${side}Branch`),
+      states: {
+        working: {
+          id: stateId,
+          tags: 'playbook.busy',
+          ...meta(stateId),
+          invoke: {
+            id: `${side}Captain`,
+            src: 'captain',
+            input: () => ({
+              stateId,
+              player: side === 'left' ? 'Writer' : 'Reviewer',
+              sourceItem: side === 'left' ? 'X-1' : 'X-2',
+              prompt: `${side} prompt`,
+              result: {
+                ok: `${side} complete`,
+                needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+              },
+            }),
+            onDone: [
+              {
+                target: 'complete',
+                guard: ({ event }: any) => event.output.guard === 'ok',
+              },
+              {
+                target: 'waiting',
+                guard: ({ event }: any) =>
+                  event.output.guard === 'needsBossReply' &&
+                  typeof event.output.question === 'string',
+              },
+            ],
+            onError: { target: '#failed' },
+          },
+        },
+        waiting: {
+          id: waitId,
+          tags: 'playbook.parked',
+          ...meta(waitId),
+          on: {
+            BOSS_REPLY: [
+              {
+                target: '#failed',
+                guard: ({ event }: any) =>
+                  event.questionId === stateId &&
+                  String(event.answer).trim() === '',
+              },
+              {
+                target: 'working',
+                guard: ({ event }: any) =>
+                  (event.questionId === stateId ||
+                    opts.acceptUnknownQuestionId === true ||
+                    (opts.crossResume === true &&
+                      ['leftWork', 'rightWork'].includes(event.questionId))) &&
+                  String(event.answer).trim() !== '',
+              },
+            ],
+          },
+        },
+        complete: {
+          id: `${side}Complete`,
+          type: 'final',
+          ...meta(`${side}Complete`),
+        },
+      },
+    };
+  };
+
+  const states: Record<string, unknown> = {
+    ready: {
+      id: 'ready',
+      tags: 'playbook.parked',
+      ...meta('ready'),
+      on: { GO: { target: 'parallelRound' } },
+    },
+    parallelRound: {
+      id: 'parallelRound',
+      type: 'parallel',
+      ...meta('parallelRound'),
+      states: { left: branch('left'), right: branch('right') },
+      ...(opts.dropJoin === true
+        ? {}
+        : opts.unreachableJoin === true
+          ? {
+              onDone: [
+                { target: '#failed', guard: () => false },
+                { target: '#done' },
+              ],
+            }
+          : { onDone: { target: '#done' } }),
+    },
+    failed: { id: 'failed', ...meta('failed') },
+    done: { id: 'done', type: 'final', ...meta('done') },
+  };
+  if (opts.nestedPlaybook === true) {
+    states.callChild = {
+      id: 'callChild',
+      tags: 'playbook.suspended',
+      ...meta('callChild'),
+      invoke: {
+        id: 'childPlaybook',
+        src: 'playbook',
+        input: () => ({
+          stateId: 'callChild',
+          playbookId: 'child',
+          text: '{"request":"review"}',
+        }),
+        onDone: { target: '#done' },
+        onError: { target: '#failed' },
+      },
+    };
+  }
+
+  const targets = [
+    'leftWork',
+    'rightWork',
+    ...(opts.nestedPlaybook === true ? ['callChild'] : []),
+  ];
+  return setup({
+    actors: {
+      captain: fromPromise(async () => {
+        throw new Error('captain actor must be provided by the runner');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('playbook actor must be provided by the runner');
+      }),
+    },
+  }).createMachine({
+    id: 'structured',
+    initial: 'ready',
+    context: {} as any,
+    on: {
+      BOSS_INTERRUPT: targets.map((targetId) => ({
+        target: `#${targetId}`,
+        reenter: true,
+        guard: ({ event }: any) => event.targetId === targetId,
+      })),
     },
     states: states as any,
   } as any);
@@ -212,9 +381,106 @@ describe('checkFsmCoverage (VERIFY-6)', () => {
     expect(await checkFsmCoverage({ machine: goodMachine() })).toEqual([]);
   });
 
+  it('drives nested parallel leaves through stable public state metadata', async () => {
+    expect(await checkFsmCoverage({ machine: parallelMachine() })).toEqual([]);
+  });
+
+  it('reports nested playbook invocation coverage as explicitly unsupported', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({ nestedPlaybook: true }),
+      }),
+    ).toContain(
+      'state callChild: nested playbook invocation coverage is unsupported',
+    );
+  });
+
+  it('reports a parallel state whose join is missing', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({ dropJoin: true }),
+      }),
+    ).toContain('parallel state parallelRound declares no onDone join');
+  });
+
+  it('rejects an unknown branch question id that moves a parked branch', async () => {
+    expect(
+      (
+        await checkFsmCoverage({
+          machine: parallelMachine({ acceptUnknownQuestionId: true }),
+        })
+      ).join('\n'),
+    ).toMatch(/unknown BOSS_REPLY questionId moved the branch/);
+  });
+
+  it('detects one keyed reply resuming multiple pending branches', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({ crossResume: true }),
+      }),
+    ).toContain(
+      'parallel state parallelRound: a keyed Boss reply did not resume exactly one pending branch',
+    );
+  });
+
+  it('reports a guarded parallel join arm that bounded probing cannot exercise', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({ unreachableJoin: true }),
+      }),
+    ).toContain(
+      'parallel state parallelRound: onDone join arm 0 could not be exercised under bounded branch-result probing',
+    );
+  });
+
   it('drives stable state ids that differ from their states-object keys', async () => {
     expect(
       await checkFsmCoverage({ machine: goodMachine({ workId: 'workItem' }) }),
+    ).toEqual([]);
+  });
+
+  it('targets the public metadata and Captain-input id rather than the config id', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: goodMachine({
+          workId: 'privateConfigWork',
+          publicStateId: 'publicWork',
+        }),
+      }),
+    ).toEqual([]);
+  });
+
+  it('uses public metadata ids as bounded guard-probe candidates', async () => {
+    const publicStateId = 'publicWork';
+    expect(
+      await checkFsmCoverage({
+        machine: goodMachine({
+          publicStateId,
+          onDone: [
+            {
+              target: '#done',
+              guard: ({
+                context,
+                event,
+              }: {
+                context: Record<string, unknown>;
+                event: { output: { guard?: string } };
+              }) =>
+                event.output.guard === 'ok' &&
+                context.routeTarget === publicStateId,
+            },
+            needsBossReplyArm(),
+          ],
+        }),
+      }),
+    ).toEqual([]);
+  });
+
+  it('accepts a blank Boss reply that leaves the task parked', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: goodMachine({ blankStaysParked: true }),
+      }),
     ).toEqual([]);
   });
 
