@@ -22,6 +22,10 @@ import {
   pinIntrospection,
 } from '../src/verify.js';
 import { checkFsmCoverage } from '../src/verify-coverage.js';
+import {
+  isPlaybookRunResult,
+  type RuntimeContractProfile,
+} from '../src/playbook-contract.js';
 
 /** One compilation's artifacts, loaded by the acceptance test. */
 export interface CompiledPlaybook {
@@ -35,38 +39,259 @@ export interface CompiledPlaybook {
   fsmSource?: string;
 }
 
-export type RuntimeCapabilityProfile = 'legacy' | 'structured';
+export type RuntimeCapabilityProfile = RuntimeContractProfile;
+
+/** Immutable linked-module export used where callable shape is ambiguous. */
+export const RUNTIME_CONTRACT_PROFILE_EXPORT = 'runtimeContractProfile';
+
+interface RuntimeProfileInspection {
+  profile: RuntimeCapabilityProfile | null;
+  findings: string[];
+}
 
 /**
- * Returns the linked runtime's callable capability profile.
+ * Returns the linked runtime's exact observable contract profile.
  *
- * Released 0.9 artifacts expose the legacy three-method surface. The
- * structured session contract adds `resumePlaybookCall`; comparing profiles
- * lets old artifacts remain self-equivalent while refusing a mixed toolchain.
+ * `legacy` and `session-v1` have the same three methods, so callable shape is
+ * insufficient. The harness initializes fresh runtimes through each candidate
+ * boundary and drives one inert, non-empty turn. An optional immutable marker
+ * resolves a deliberately permissive fixture, but never overrides a boundary
+ * or method-surface conflict.
  */
-export function runtimeCapabilityProfile(
+export async function runtimeCapabilityProfile(
   playbook: unknown,
-): RuntimeCapabilityProfile | null {
-  const factory = (playbook as { default?: unknown })?.default;
-  if (typeof factory !== 'function') return null;
-  try {
-    const runtime = (factory as (options: unknown) => unknown)({});
-    if (typeof runtime !== 'object' || runtime === null) return null;
-    const surface = runtime as Record<string, unknown>;
-    if (
-      !['init', 'handleBossInput', 'dispose'].every(
-        (member) => typeof surface[member] === 'function',
-      )
-    ) {
-      return null;
-    }
-    if (surface.resumePlaybookCall === undefined) return 'legacy';
-    return typeof surface.resumePlaybookCall === 'function'
-      ? 'structured'
-      : null;
-  } catch {
-    return null;
+): Promise<RuntimeCapabilityProfile | null> {
+  return (await inspectRuntimeProfile(playbook)).profile;
+}
+
+async function inspectRuntimeProfile(
+  playbook: unknown,
+): Promise<RuntimeProfileInspection> {
+  const findings: string[] = [];
+  if (typeof playbook !== 'object' || playbook === null) {
+    return { profile: null, findings };
   }
+  const linked = playbook as Record<string, unknown>;
+  const rawMarker = linked[RUNTIME_CONTRACT_PROFILE_EXPORT];
+  const marker = isRuntimeContractProfile(rawMarker) ? rawMarker : undefined;
+  if (rawMarker !== undefined && marker === undefined) {
+    findings.push(
+      `linked module declares unsupported ${RUNTIME_CONTRACT_PROFILE_EXPORT} ${JSON.stringify(rawMarker)}`,
+    );
+    return { profile: null, findings };
+  }
+
+  const factory = linked.default;
+  if (typeof factory !== 'function') {
+    findings.push('linked module has no callable default export');
+    return { profile: null, findings };
+  }
+  const create = factory as (options: unknown) => unknown;
+  const surface = inspectFactorySurface(create);
+  findings.push(...surface.findings);
+  if (!surface.valid) return { profile: null, findings };
+
+  if (marker === 'composed-v2' && !surface.resumable) {
+    findings.push('composed-v2 runtime lacks resumePlaybookCall()');
+    return { profile: null, findings };
+  }
+  if ((marker === 'legacy' || marker === 'session-v1') && surface.resumable) {
+    findings.push(
+      `${marker} runtime unexpectedly exposes resumePlaybookCall()`,
+    );
+    return { profile: null, findings };
+  }
+
+  const candidates: readonly RuntimeContractProfile[] =
+    marker !== undefined
+      ? [marker]
+      : surface.resumable
+        ? ['composed-v2']
+        : ['legacy', 'session-v1'];
+  const probes = await Promise.all(
+    candidates.map(async (profile) => ({
+      profile,
+      ...(await probeRuntimeProfile(create, profile)),
+    })),
+  );
+  const accepted = probes.filter((probe) => probe.accepted);
+  if (accepted.length === 1) {
+    return { profile: accepted[0].profile, findings };
+  }
+  if (accepted.length > 1) {
+    findings.push(
+      `runtime accepts ambiguous contract profiles: ${accepted
+        .map(({ profile }) => profile)
+        .join(', ')}`,
+    );
+    return { profile: null, findings };
+  }
+  findings.push(
+    `runtime matches no exact contract profile (${probes
+      .map(({ profile, reason }) => `${profile}: ${reason}`)
+      .join('; ')})`,
+  );
+  return { profile: null, findings };
+}
+
+function inspectFactorySurface(factory: (options: unknown) => unknown): {
+  valid: boolean;
+  resumable: boolean;
+  findings: string[];
+} {
+  const findings: string[] = [];
+  let runtime: unknown;
+  try {
+    runtime = factory({});
+  } catch (error) {
+    return {
+      valid: false,
+      resumable: false,
+      findings: [`createPlaybookRuntime({}) threw: ${messageOf(error)}`],
+    };
+  }
+  if (typeof runtime !== 'object' || runtime === null) {
+    return {
+      valid: false,
+      resumable: false,
+      findings: ['createPlaybookRuntime({}) returned a non-object'],
+    };
+  }
+  const surface = runtime as Record<string, unknown>;
+  for (const member of ['init', 'handleBossInput', 'dispose']) {
+    if (typeof surface[member] !== 'function') {
+      findings.push(`runtime lacks ${member}()`);
+    }
+  }
+  if (
+    surface.resumePlaybookCall !== undefined &&
+    typeof surface.resumePlaybookCall !== 'function'
+  ) {
+    findings.push('runtime has non-callable resumePlaybookCall');
+  }
+  return {
+    valid: findings.length === 0,
+    resumable: typeof surface.resumePlaybookCall === 'function',
+    findings,
+  };
+}
+
+async function probeRuntimeProfile(
+  factory: (options: unknown) => unknown,
+  profile: RuntimeContractProfile,
+): Promise<{ accepted: boolean; reason: string }> {
+  let runtime: Record<string, unknown> | undefined;
+  let reason = '';
+  try {
+    const created = factory({});
+    if (typeof created !== 'object' || created === null) {
+      return { accepted: false, reason: 'factory returned a non-object' };
+    }
+    runtime = created as Record<string, unknown>;
+    const init = callable(runtime.init, 'init');
+    const handle = callable(runtime.handleBossInput, 'handleBossInput');
+    callable(runtime.dispose, 'dispose');
+    const resumable = typeof runtime.resumePlaybookCall === 'function';
+    if ((profile === 'composed-v2') !== resumable) {
+      return {
+        accepted: false,
+        reason:
+          profile === 'composed-v2'
+            ? 'resumePlaybookCall is absent'
+            : 'resumePlaybookCall is unexpectedly present',
+      };
+    }
+
+    const signal = new AbortController().signal;
+    await init.call(runtime, probeInitValue(profile));
+    const result = await handle.call(runtime, {
+      text: 'SLC runtime contract profile probe',
+      signal,
+    });
+    if (profile === 'composed-v2') {
+      if (!isPlaybookRunResult(result)) {
+        reason = 'turn did not return a valid structured result';
+      }
+    } else if (result !== undefined) {
+      reason = 'void-result profile returned a value';
+    }
+  } catch (error) {
+    reason = messageOf(error);
+  } finally {
+    if (runtime !== undefined && typeof runtime.dispose === 'function') {
+      try {
+        await (runtime.dispose as () => Promise<void>).call(runtime);
+      } catch (error) {
+        if (reason === '') reason = `dispose failed: ${messageOf(error)}`;
+      }
+    }
+  }
+  return { accepted: reason === '', reason: reason || 'accepted' };
+}
+
+function probeInitValue(profile: RuntimeContractProfile): unknown {
+  const ports = probePorts(profile === 'composed-v2');
+  if (profile === 'legacy') return ports;
+  if (profile === 'session-v1') {
+    return { sessionId: 'slc-profile-probe', playbookId: 'probe', ports };
+  }
+  return {
+    sessionId: 'slc-profile-probe',
+    playbookId: 'probe',
+    rootSessionId: 'slc-profile-probe',
+    depth: 0,
+    ports,
+  };
+}
+
+function probePorts(composed: boolean): Record<string, unknown> {
+  return {
+    callPlayer: async () => ({
+      status: 'error',
+      error: 'profile probe does not invoke players',
+    }),
+    callJudge: async () => '{}',
+    ...(composed
+      ? {
+          callPlaybook: async (request: { playbookId?: unknown }) => ({
+            state: 'settled',
+            result: {
+              status: 'error',
+              playbookId:
+                typeof request.playbookId === 'string'
+                  ? request.playbookId
+                  : 'probe',
+              error: {
+                name: 'UnsupportedOperationError',
+                message: 'profile probe does not invoke child playbooks',
+              },
+            },
+          }),
+        }
+      : {}),
+    emitStatus: async () => {},
+    emitTelemetry: async () => {},
+  };
+}
+
+function callable(
+  value: unknown,
+  name: string,
+): (...args: unknown[]) => unknown {
+  if (typeof value !== 'function') throw new Error(`runtime lacks ${name}()`);
+  return value as (...args: unknown[]) => unknown;
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRuntimeContractProfile(
+  value: unknown,
+): value is RuntimeContractProfile {
+  return (
+    value === 'legacy' || value === 'session-v1' || value === 'composed-v2'
+  );
 }
 
 interface StateSurface {
@@ -208,36 +433,8 @@ export async function checkPlaybookIntegrity(
     ).map((finding) => `${label}: ${finding}`),
   );
 
-  // Runtime contract: a callable createPlaybookRuntime default export whose
-  // runtime exposes the released legacy surface or the structured session
-  // surface. A partially-present resume member is neither profile.
-  const factory = (compiled.playbook as { default?: unknown }).default;
-  if (typeof factory !== 'function') {
-    findings.push(`${label}: linked module has no callable default export`);
-  } else {
-    try {
-      const runtime = (
-        factory as (options: unknown) => Record<string, unknown>
-      )({});
-      for (const member of ['init', 'handleBossInput', 'dispose']) {
-        if (typeof runtime?.[member] !== 'function') {
-          findings.push(`${label}: runtime lacks ${member}()`);
-        }
-      }
-      if (
-        runtime?.resumePlaybookCall !== undefined &&
-        typeof runtime.resumePlaybookCall !== 'function'
-      ) {
-        findings.push(`${label}: runtime has non-callable resumePlaybookCall`);
-      }
-    } catch (error) {
-      findings.push(
-        `${label}: createPlaybookRuntime({}) threw: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
+  const runtime = await inspectRuntimeProfile(compiled.playbook);
+  findings.push(...runtime.findings.map((finding) => `${label}: ${finding}`));
   return findings;
 }
 
@@ -256,15 +453,17 @@ export async function checkReferenceEquivalence(opts: {
   findings.push(...(await checkPlaybookIntegrity('produced', opts.produced)));
   findings.push(...(await checkPlaybookIntegrity('reference', opts.reference)));
 
-  const producedProfile = runtimeCapabilityProfile(opts.produced.playbook);
-  const referenceProfile = runtimeCapabilityProfile(opts.reference.playbook);
+  const [producedProfile, referenceProfile] = await Promise.all([
+    runtimeCapabilityProfile(opts.produced.playbook),
+    runtimeCapabilityProfile(opts.reference.playbook),
+  ]);
   if (
     producedProfile !== null &&
     referenceProfile !== null &&
     producedProfile !== referenceProfile
   ) {
     findings.push(
-      `runtime capability profiles differ: produced ${producedProfile} vs reference ${referenceProfile}`,
+      `runtime contract profiles differ: produced ${producedProfile} vs reference ${referenceProfile}`,
     );
   }
 
