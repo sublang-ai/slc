@@ -295,6 +295,41 @@ function stateIdConsistencyFindings(
   return findings;
 }
 
+function hasStructuredTopology(nodes: readonly StateNodeRef[]): boolean {
+  return nodes.some(
+    ({ path, state }) =>
+      path.length > 1 ||
+      state.type === 'parallel' ||
+      Object.keys(state.states ?? {}).length > 0,
+  );
+}
+
+function structuredStateIdentityFindings(
+  nodes: readonly StateNodeRef[],
+): string[] {
+  if (!hasStructuredTopology(nodes)) return [];
+  const findings: string[] = [];
+  for (const node of nodes) {
+    const configId = node.state.id;
+    const metaId = metadataStateId(node.state);
+    if (!isNonEmptyString(configId)) {
+      findings.push(
+        `FSM structured state ${node.statePath}: state.id is not a non-empty string`,
+      );
+    }
+    if (metaId === undefined) {
+      findings.push(
+        `FSM structured state ${node.statePath}: state.meta.playbook.stateId is not a non-empty string`,
+      );
+    } else if (isNonEmptyString(configId) && metaId !== configId) {
+      findings.push(
+        `FSM structured state ${node.statePath}: state.meta.playbook.stateId "${metaId}" does not match state.id "${configId}"`,
+      );
+    }
+  }
+  return findings;
+}
+
 function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
   const out: CaptainBinding[] = [];
   for (const node of walkStateNodes(config)) {
@@ -556,6 +591,8 @@ export function checkGearsFsmConformance(
   const playbookStates = enumeratePlaybookStates(config);
   const findings: string[] = [];
 
+  findings.push(...structuredStateIdentityFindings(walkStateNodes(config)));
+
   for (const state of states) {
     findings.push(
       ...(state.bindingFindings ?? []).map(
@@ -769,6 +806,7 @@ export interface StructuredStatePin {
   path: string;
   parent: string | null;
   id: string | null;
+  publicStateId: string | null;
   type: string | null;
   initial: string | null;
   tags: string[];
@@ -926,18 +964,13 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
       onError: normalizeArms(binding.invoke.onError),
       on: eventArms(binding.node.state.on),
     }));
-  const hasStructuredTopology = nodes.some(
-    ({ path, state }) =>
-      path.length > 1 ||
-      state.type === 'parallel' ||
-      Object.keys(state.states ?? {}).length > 0,
-  );
-  const structured = hasStructuredTopology
+  const structured = hasStructuredTopology(nodes)
     ? {
         states: nodes.map(({ path, state, statePath }) => ({
           path: statePath,
           parent: path.length > 1 ? path.slice(0, -1).join('.') : null,
           id: typeof state.id === 'string' ? state.id : null,
+          publicStateId: metadataStateId(state) ?? null,
           type: typeof state.type === 'string' ? state.type : null,
           initial: typeof state.initial === 'string' ? state.initial : null,
           tags: normalizedTags(state.tags),

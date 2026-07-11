@@ -21,6 +21,7 @@ import type { PlaybookPorts } from '@sublang/playbook/runtime';
 import { createCompiledExecutor } from '../src/compiled-executor.js';
 import type { ExecuteRequest } from '../src/execution.js';
 import type { AgentClient } from '../src/interpreter.js';
+import { isPlaybookRunResult } from '../src/playbook-contract.js';
 
 const fixture = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -51,6 +52,57 @@ const accessorJson = Object.defineProperty({}, 'secret', {
   get: () => 'hidden',
 });
 const symbolJson = { [Symbol('secret')]: 'hidden' };
+
+describe('structured PlaybookRunResult validation', () => {
+  it('rejects fields owned by another outcome variant', () => {
+    const pendingCall = {
+      callId: 'call-1',
+      playbookId: 'child',
+      childSessionId: 'child-session',
+    };
+    for (const result of [
+      { outcome: 'quiescent', state: structuredState, output: 'wrong' },
+      { outcome: 'no-action', state: structuredState, pendingCall },
+      { outcome: 'failed', state: structuredState, output: 'wrong' },
+      { outcome: 'terminal', state: structuredState, pendingCall },
+      { outcome: 'suspended', state: structuredState, pendingCall, output: 1 },
+    ]) {
+      expect(isPlaybookRunResult(result)).toBe(false);
+    }
+  });
+
+  it('rejects coerced status values and hostile result accessors', () => {
+    expect(
+      isPlaybookRunResult({
+        outcome: 'quiescent',
+        state: {
+          ...structuredState,
+          status: { toString: () => 'active' },
+        },
+      }),
+    ).toBe(false);
+
+    const accessor = Object.defineProperty({}, 'outcome', {
+      enumerable: true,
+      get() {
+        throw new Error('do not read me');
+      },
+    });
+    expect(() => isPlaybookRunResult(accessor)).not.toThrow();
+    expect(isPlaybookRunResult(accessor)).toBe(false);
+
+    const proxy = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error('hostile proxy');
+        },
+      },
+    );
+    expect(() => isPlaybookRunResult(proxy)).not.toThrow();
+    expect(isPlaybookRunResult(proxy)).toBe(false);
+  });
+});
 
 // Integration: a compiled `playbook` artifact driven non-interactively through
 // the executor over a fixture run root (PHEXEC-26).
@@ -321,6 +373,115 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     expect(Object.keys(session.ports)).not.toContain('drainDiagnostics');
   });
 
+  it.each(['session-v1', 'composed-v2'] as const)(
+    'rejects omitted or invalid %s player continuation options',
+    async (runtimeContract) => {
+      for (const supplied of ['missing', 'invalid'] as const) {
+        let playerCalls = 0;
+        let runtimePorts:
+          | {
+              callPlayer(
+                playerId: string,
+                prompt: string,
+                signal: AbortSignal,
+                options?: unknown,
+              ): Promise<unknown>;
+            }
+          | undefined;
+        const player: AgentClient = {
+          async run() {
+            playerCalls++;
+            return { status: 'success', text: 'unexpected' };
+          },
+        };
+        const executor = createCompiledExecutor({
+          artifactPath: 'ignored',
+          runRoot: root,
+          runtimeContract,
+          player,
+          judge: idleAgent,
+          loadFactory: async () => () =>
+            ({
+              async init(value: unknown) {
+                runtimePorts = (value as { ports: typeof runtimePorts }).ports;
+              },
+              async handleBossInput({ signal }: { signal: AbortSignal }) {
+                if (supplied === 'missing') {
+                  await runtimePorts?.callPlayer('writer', 'work', signal);
+                } else {
+                  await runtimePorts?.callPlayer('writer', 'work', signal, {
+                    resume: true,
+                  });
+                }
+                return runtimeContract === 'composed-v2'
+                  ? { outcome: 'no-action', state: structuredState }
+                  : undefined;
+              },
+              async resumePlaybookCall() {
+                return { outcome: 'no-action', state: structuredState };
+              },
+              async dispose() {},
+            }) as never,
+        });
+
+        const result = await executor.run(
+          {
+            kind: 'compile',
+            definitionPath: join(root, 'phase.md'),
+            source: 'src.md',
+            target: 'out.ts',
+          },
+          new AbortController().signal,
+        );
+        expect(result.status).toBe('error');
+        expect(result.diagnostics.join('\n')).toMatch(
+          /explicit PlayerCallOptions|options\.resume must be false or a string/,
+        );
+        expect(playerCalls).toBe(0);
+      }
+    },
+  );
+
+  it('preserves omitted player options on the legacy port boundary', async () => {
+    const target = join(root, 'out.ts');
+    let ports: PlaybookPorts | undefined;
+    let playerCalls = 0;
+    const player: AgentClient = {
+      async run() {
+        playerCalls++;
+        return { status: 'success', text: 'legacy result' };
+      },
+    };
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      player,
+      judge: idleAgent,
+      loadFactory: async () => () => ({
+        async init(value) {
+          ports = value;
+        },
+        async handleBossInput({ signal }) {
+          await ports?.callPlayer('writer', 'legacy work', signal);
+          await writeFile(target, 'fresh');
+        },
+        async dispose() {},
+      }),
+    });
+
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: 'src.md',
+        target,
+      },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe('ok');
+    expect(playerCalls).toBe(1);
+  });
+
   it('maps structured outcomes directly instead of failed telemetry', async () => {
     const target = join(root, 'out.ts');
     let ports: { emitTelemetry(event: unknown): Promise<void> } | undefined;
@@ -371,6 +532,47 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     expect(result.diagnostics.join('\n')).not.toMatch(
       /private prompt|private reply|private token/,
     );
+  });
+
+  it('maps a hostile structured-result accessor to an invalid-result error', async () => {
+    const hostile = Object.defineProperty({}, 'outcome', {
+      enumerable: true,
+      get() {
+        throw new Error('hostile outcome getter');
+      },
+    });
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'composed-v2',
+      player: idleAgent,
+      judge: idleAgent,
+      loadFactory: async () => () =>
+        ({
+          async init() {},
+          async handleBossInput() {
+            return hostile;
+          },
+          async resumePlaybookCall() {
+            return { outcome: 'no-action', state: structuredState };
+          },
+          async dispose() {},
+        }) as never,
+    });
+
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: 'src.md',
+        target: 'out.ts',
+      },
+      new AbortController().signal,
+    );
+    expect(result).toEqual({
+      status: 'error',
+      diagnostics: ['compiled runtime returned an invalid run result'],
+    });
   });
 
   it.each([
