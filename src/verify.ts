@@ -42,6 +42,8 @@ export interface CaptainState {
   prompt: string;
   /** The state's per-state guard contract: result key to description. */
   result: Record<string, string>;
+  /** Malformed binding details retained for fail-closed conformance reporting. */
+  bindingFindings?: string[];
 }
 
 /**
@@ -141,31 +143,97 @@ export function enumerateCaptainStates(
 ): CaptainState[] {
   const out: CaptainState[] = [];
   for (const [stateId, state] of Object.entries(config.states ?? {})) {
+    const explicitlyCaptain = state.invoke?.src === 'captain';
     const inputFn = state.invoke?.input;
-    if (typeof inputFn !== 'function') continue;
+    if (typeof inputFn !== 'function') {
+      if (explicitlyCaptain) {
+        out.push(
+          malformedCaptainState(stateId, 'invoke.input is not a function'),
+        );
+      }
+      continue;
+    }
     let input: unknown;
     try {
       input = inputFn({ context: {} });
-    } catch {
+    } catch (error) {
+      if (explicitlyCaptain) {
+        out.push(
+          malformedCaptainState(
+            stateId,
+            `invoke.input threw during introspection: ${messageOf(error)}`,
+          ),
+        );
+      }
       continue;
     }
-    if (typeof input !== 'object' || input === null) continue;
+    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+      if (explicitlyCaptain) {
+        out.push(
+          malformedCaptainState(stateId, 'invoke.input returned a non-object'),
+        );
+      }
+      continue;
+    }
     const fields = input as {
       player?: unknown;
       sourceItem?: unknown;
       prompt?: unknown;
       result?: unknown;
     };
-    if (typeof fields.sourceItem !== 'string') continue;
+    // Legacy/fixture configs without an explicit `src` are still recognized by
+    // their static sourceItem binding. An explicit `src: 'captain'`, however,
+    // is always retained so malformed input cannot make the state disappear
+    // from conformance, introspection, prompt checks, or coverage.
+    if (!explicitlyCaptain && !isNonEmptyString(fields.sourceItem)) continue;
+
+    const bindingFindings: string[] = [];
+    if (!isNonEmptyString(fields.sourceItem)) {
+      bindingFindings.push('invoke.input.sourceItem is not a non-empty string');
+    }
+    if (typeof fields.player !== 'string') {
+      bindingFindings.push('invoke.input.player is not a string');
+    }
+    if (typeof fields.prompt !== 'string') {
+      bindingFindings.push('invoke.input.prompt is not a string');
+    }
+    if (!isStringMap(fields.result)) {
+      bindingFindings.push('invoke.input.result is not a string-valued object');
+    }
     out.push({
       stateId,
-      sourceItem: fields.sourceItem,
+      sourceItem: isNonEmptyString(fields.sourceItem) ? fields.sourceItem : '',
       player: typeof fields.player === 'string' ? fields.player : '',
       prompt: typeof fields.prompt === 'string' ? fields.prompt : '',
       result: resultMap(fields.result),
+      ...(bindingFindings.length > 0 ? { bindingFindings } : {}),
     });
   }
   return out;
+}
+
+function malformedCaptainState(stateId: string, finding: string): CaptainState {
+  return {
+    stateId,
+    sourceItem: '',
+    player: '',
+    prompt: '',
+    result: {},
+    bindingFindings: [finding],
+  };
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isStringMap(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((entry) => typeof entry === 'string')
+  );
 }
 
 /** Narrows a state's `invoke.input.result` to its string-described guard keys. */
@@ -193,8 +261,17 @@ export function checkGearsFsmConformance(
   const states = enumerateCaptainStates(config);
   const findings: string[] = [];
 
+  for (const state of states) {
+    findings.push(
+      ...(state.bindingFindings ?? []).map(
+        (finding) => `FSM state ${state.stateId}: ${finding}`,
+      ),
+    );
+  }
+
   const statesByItem = new Map<string, CaptainState[]>();
   for (const state of states) {
+    if (state.sourceItem === '') continue;
     const matched = statesByItem.get(state.sourceItem);
     if (matched === undefined) statesByItem.set(state.sourceItem, [state]);
     else matched.push(state);
@@ -222,7 +299,7 @@ export function checkGearsFsmConformance(
   }
   const itemIds = new Set(items.map((item) => item.id));
   for (const state of states) {
-    if (!itemIds.has(state.sourceItem)) {
+    if (state.sourceItem !== '' && !itemIds.has(state.sourceItem)) {
       findings.push(
         `FSM state ${state.stateId} references unknown GEARS item ${state.sourceItem}`,
       );
@@ -517,11 +594,26 @@ export function deriveSubstitutions(
     const inputFn = config.states?.[state.stateId]?.invoke?.input;
     if (typeof inputFn !== 'function') continue;
     try {
-      const composed = compose(
-        inputFn({ context: ordinaryContext(probeContextReads(inputFn)) }),
-      );
-      out[state.stateId] = placeholdersIn(state.prompt).filter(
-        (token) => !composed.includes(token),
+      const reads = probeContextReads(inputFn);
+      const composed = compose(inputFn({ context: ordinaryContext(reads) }));
+      if (typeof composed !== 'string') {
+        out[state.stateId] = [];
+        continue;
+      }
+      // A placeholder counts as substituted only when the exact body survives
+      // on its source line and that token's position carries one of the context
+      // sentinels. Derive line-by-line so an unrelated mutated line does not
+      // hide valid evidence, while merely deleting a token still cannot
+      // masquerade as substitution.
+      const evidenced = new Set<string>();
+      for (const line of state.prompt.split('\n')) {
+        for (const token of matchPromptBody(line, composed, reads)
+          ?.substitutions ?? []) {
+          evidenced.add(token);
+        }
+      }
+      out[state.stateId] = placeholdersIn(state.prompt).filter((token) =>
+        evidenced.has(token),
       );
     } catch {
       out[state.stateId] = [];
@@ -553,13 +645,18 @@ export function checkPromptComposition(opts: {
     let ordinary: string;
     try {
       ordinary = opts.compose(inputFn({ context: ordinaryContext(reads) }));
+      if (typeof ordinary !== 'string') {
+        throw new Error('composePlayerPrompt returned a non-string value');
+      }
     } catch (error) {
       findings.push(
         `${state.stateId}: composePlayerPrompt threw on an ordinary turn: ${messageOf(error)}`,
       );
       continue;
     }
-    findings.push(...bodyFindings(state, ordinary, substituted, 'ordinary'));
+    findings.push(
+      ...bodyFindings(state, ordinary, substituted, reads, 'ordinary'),
+    );
     // A self-hosted playbook's domain body may legitimately quote the
     // adjudicator contract or the continuation texts (it instructs a compiler
     // about them); only occurrences the composer ADDS beyond the body's own
@@ -604,6 +701,9 @@ export function checkPromptComposition(opts: {
         },
       });
       continuation = opts.compose(input);
+      if (typeof continuation !== 'string') {
+        throw new Error('composePlayerPrompt returned a non-string value');
+      }
     } catch (error) {
       findings.push(
         `${state.stateId}: composePlayerPrompt threw on a continuation turn: ${messageOf(error)}`,
@@ -616,22 +716,24 @@ export function checkPromptComposition(opts: {
       );
       continue;
     }
-    if (!continuation.startsWith(CONTINUATION_PREAMBLE)) {
+    if (!continuation.startsWith(`${CONTINUATION_PREAMBLE}\n\n`)) {
       findings.push(
         `${state.stateId}: a continuation turn does not open with the exact preamble`,
       );
     }
-    const bodyStart = bodyIndex(state, continuation, substituted);
+    const bodyStart = bodyIndex(state, continuation, substituted, reads);
+    const questionBlock = `${BOSS_QUESTION_LABEL}\n${question}`;
+    const replyBlock = `${BOSS_REPLY_LABEL}\n${reply}`;
     for (const [label, value] of [
-      [BOSS_QUESTION_LABEL, question],
-      [BOSS_REPLY_LABEL, reply],
+      [BOSS_QUESTION_LABEL, questionBlock],
+      [BOSS_REPLY_LABEL, replyBlock],
     ] as const) {
       // The composer must ADD the labelled block (beyond any body-carried
-      // occurrence), carrying the sentinel value, before the body.
-      const at = continuation.indexOf(label);
+      // occurrence), with its sentinel value immediately below the label and
+      // before the body.
+      const at = continuation.indexOf(value);
       if (
-        occurrences(continuation, label) <= occurrences(state.prompt, label) ||
-        !continuation.includes(value)
+        occurrences(continuation, value) <= occurrences(state.prompt, value)
       ) {
         findings.push(
           `${state.stateId}: a continuation turn lacks the "${label}" block`,
@@ -642,8 +744,14 @@ export function checkPromptComposition(opts: {
         );
       }
     }
+    const exactContinuationPrefix = `${CONTINUATION_PREAMBLE}\n\n${questionBlock}\n\n${replyBlock}\n\n`;
+    if (!continuation.startsWith(exactContinuationPrefix)) {
+      findings.push(
+        `${state.stateId}: a continuation turn does not preserve the exact ordered Boss question/reply blocks`,
+      );
+    }
     findings.push(
-      ...bodyFindings(state, continuation, substituted, 'continuation'),
+      ...bodyFindings(state, continuation, substituted, reads, 'continuation'),
     );
   }
   return findings;
@@ -659,14 +767,69 @@ function escapeRegExp(literal: string): string {
   return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** A regex matching a prompt line with its substituted placeholders wildcarded. */
-function lineMatcher(line: string, substituted: readonly string[]): RegExp {
-  let pattern = escapeRegExp(line);
-  for (const token of substituted) {
-    // The pattern holds the token in escaped form; wildcard that occurrence.
-    pattern = pattern.split(escapeRegExp(token)).join('[^\\n]*');
+interface PromptBodyMatch {
+  index: number;
+  substitutions: string[];
+}
+
+/**
+ * Finds the prompt body as one exact, line-bounded block inside a composed
+ * prompt. In derivation mode, a placeholder may remain literal or be replaced
+ * by one exact non-empty context sentinel; mixed replacement of repeated
+ * tokens is rejected. With `expectedSubstitutions`, substituted positions must
+ * carry a sentinel and every other placeholder must remain literal.
+ */
+function matchPromptBody(
+  prompt: string,
+  composed: string,
+  reads: readonly string[],
+  expectedSubstitutions?: readonly string[],
+): PromptBodyMatch | null {
+  const sentinels = reads.map(sentinelFor);
+  const sentinelPattern =
+    sentinels.length > 0 ? sentinels.map(escapeRegExp).join('|') : '(?!)';
+  const captures: string[] = [];
+  let pattern = '';
+  let offset = 0;
+  for (const match of prompt.matchAll(PLACEHOLDER)) {
+    const index = match.index;
+    const token = match[0];
+    pattern += escapeRegExp(prompt.slice(offset, index));
+    if (expectedSubstitutions === undefined) {
+      pattern += `(${escapeRegExp(token)}|${sentinelPattern})`;
+      captures.push(token);
+    } else if (expectedSubstitutions.includes(token)) {
+      pattern += `(?:${sentinelPattern})`;
+    } else {
+      pattern += escapeRegExp(token);
+    }
+    offset = index + token.length;
   }
-  return new RegExp(pattern);
+  pattern += escapeRegExp(prompt.slice(offset));
+
+  const matched = new RegExp(`(?:^|\\n)${pattern}(?=\\n|$)`).exec(composed);
+  if (matched === null) return null;
+
+  const index = matched.index + (matched[0].startsWith('\n') ? 1 : 0);
+  if (expectedSubstitutions !== undefined) {
+    return { index, substitutions: [...expectedSubstitutions] };
+  }
+
+  const modes = new Map<string, Set<'literal' | 'sentinel'>>();
+  for (let capture = 0; capture < captures.length; capture++) {
+    const token = captures[capture];
+    const value = matched[capture + 1];
+    const tokenModes = modes.get(token) ?? new Set();
+    tokenModes.add(value === token ? 'literal' : 'sentinel');
+    modes.set(token, tokenModes);
+  }
+  if ([...modes.values()].some((tokenModes) => tokenModes.size > 1)) {
+    return null;
+  }
+  const substitutions = placeholdersIn(prompt).filter(
+    (token) => modes.get(token)?.has('sentinel') === true,
+  );
+  return { index, substitutions };
 }
 
 /** Findings when a composed prompt does not preserve the domain body (VERIFY-5). */
@@ -674,18 +837,27 @@ function bodyFindings(
   state: CaptainState,
   composed: string,
   substituted: readonly string[],
+  reads: readonly string[],
   turn: string,
 ): string[] {
-  const findings: string[] = [];
+  if (matchPromptBody(state.prompt, composed, reads, substituted) !== null) {
+    return [];
+  }
+
+  // Preserve the established line-specific diagnostic where possible, while
+  // the whole-body match above additionally catches reordering, inserted
+  // lines, and prefixes/suffixes around otherwise present lines.
   for (const line of state.prompt.split('\n')) {
     if (line.trim() === '') continue;
-    if (!lineMatcher(line, substituted).test(composed)) {
-      findings.push(
+    if (matchPromptBody(line, composed, reads, substituted) === null) {
+      return [
         `${state.stateId}: a ${turn} turn does not preserve the body line "${line}"`,
-      );
+      ];
     }
   }
-  return findings;
+  return [
+    `${state.stateId}: a ${turn} turn does not preserve the prompt body verbatim and in order`,
+  ];
 }
 
 /** The index of the body's first preserved line in a composed prompt, or -1. */
@@ -693,15 +865,22 @@ function bodyIndex(
   state: CaptainState,
   composed: string,
   substituted: readonly string[],
+  reads: readonly string[],
 ): number {
-  const first = state.prompt.split('\n').find((line) => line.trim() !== '');
-  if (first === undefined) return -1;
-  const match = lineMatcher(first, substituted).exec(composed);
-  return match === null ? -1 : match.index;
+  return (
+    matchPromptBody(state.prompt, composed, reads, substituted)?.index ?? -1
+  );
 }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Serializes an arbitrary string as a safe JavaScript/TypeScript literal. */
+function sourceString(value: string): string {
+  return JSON.stringify(value)
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 /** The default checker import specifier the emitted test uses (package export). */
@@ -753,19 +932,19 @@ export function generateGearsFsmConformanceTest(opts: {
   return `// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-// Generated by slc (IR-007 Task 8): GEARS↔FSM conformance for ${opts.basename}.
+// Generated by slc (IR-007 Task 8): GEARS↔FSM conformance.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { checkGearsFsmConformance, findMachineConfig } from '${opts.verifyModule}';
-import * as fsm from '${opts.fsmModule}';
+import { checkGearsFsmConformance, findMachineConfig } from ${sourceString(opts.verifyModule)};
+import * as fsm from ${sourceString(opts.fsmModule)};
 
-describe('${opts.basename}: GEARS↔FSM conformance', () => {
+describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
   it('maps every GEARS item to a state with its player and verbatim prompt', () => {
     const gears = readFileSync(
-      fileURLToPath(new URL('${opts.gearsFile}', import.meta.url)),
+      fileURLToPath(new URL(${sourceString(opts.gearsFile)}, import.meta.url)),
       'utf8',
     );
     expect(checkGearsFsmConformance(gears, findMachineConfig(fsm))).toEqual([]);
@@ -831,17 +1010,17 @@ export function generateFsmIntrospectionTest(opts: {
   return `// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-// Generated by slc (DR-009): FSM introspection pins for ${opts.basename}.
+// Generated by slc (DR-009): FSM introspection pins.
 // The PINNED topology was derived from the artifact at build time; any
 // unintended structural change to the machine fails this test.
 import { describe, expect, it } from 'vitest';
 
-import { findMachineConfig, pinIntrospection } from '${opts.verifyModule}';
-import * as fsm from '${opts.fsmModule}';
+import { findMachineConfig, pinIntrospection } from ${sourceString(opts.verifyModule)};
+import * as fsm from ${sourceString(opts.fsmModule)};
 
 const PINNED = ${JSON.stringify(opts.pins, null, 2)};
 
-describe('${opts.basename}: FSM introspection', () => {
+describe(${sourceString(`${opts.basename}: FSM introspection`)}, () => {
   it('matches the machine topology pinned at build time', () => {
     expect(pinIntrospection(findMachineConfig(fsm))).toEqual(PINNED);
   });
@@ -868,7 +1047,7 @@ export function generatePromptContractTest(opts: {
   };
 }): string {
   const composerImports = opts.composer
-    ? `import * as playbook from '${opts.composer.playbookModule}';\n`
+    ? `import * as playbook from ${sourceString(opts.composer.playbookModule)};\n`
     : '';
   const composerBlock = opts.composer
     ? `
@@ -899,19 +1078,19 @@ const compose = (
   return `// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-// Generated by slc (DR-009): prompt contract for ${opts.basename}.
+// Generated by slc (DR-009): prompt contract.
 // The pinned rows were derived from the artifacts at build time; wiring,
 // placeholder, or composition drift fails this test.
 import { describe, expect, it } from 'vitest';
 
 import {
   ${checkerImports}
-} from '${opts.verifyModule}';
-import * as fsm from '${opts.fsmModule}';
+} from ${sourceString(opts.verifyModule)};
+import * as fsm from ${sourceString(opts.fsmModule)};
 ${composerImports}
 const CONTRACT = ${JSON.stringify(opts.rows, null, 2)};
 
-describe('${opts.basename}: prompt contract', () => {
+describe(${sourceString(`${opts.basename}: prompt contract`)}, () => {
   it('matches the prompt contract pinned at build time', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });

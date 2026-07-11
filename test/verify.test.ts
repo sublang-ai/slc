@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -22,6 +23,7 @@ import {
   findMachineConfig,
   generateFsmIntrospectionTest,
   generateGearsFsmConformanceTest,
+  generatePromptContractTest,
   normalizeArms,
   parseGearsItems,
   pinIntrospection,
@@ -171,6 +173,58 @@ describe('enumerateCaptainStates', () => {
       },
     });
   });
+
+  it('retains explicit captain invokes whose input cannot be introspected', () => {
+    const config: MachineConfigLike = {
+      states: {
+        missingSource: {
+          invoke: {
+            src: 'captain',
+            input: () => ({
+              player: 'Writer',
+              prompt: 'Hidden work.',
+              result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+            }),
+          },
+        },
+        throwing: {
+          invoke: {
+            src: 'captain',
+            input: () => {
+              throw new Error('context unavailable');
+            },
+          },
+        },
+        malformed: {
+          invoke: { src: 'captain', input: () => 'not an input object' },
+        },
+      },
+    };
+
+    const states = enumerateCaptainStates(config);
+    expect(states.map((state) => state.stateId)).toEqual([
+      'missingSource',
+      'throwing',
+      'malformed',
+    ]);
+    expect(states[0].bindingFindings).toContain(
+      'invoke.input.sourceItem is not a non-empty string',
+    );
+    expect(states[1].bindingFindings?.join('\n')).toMatch(
+      /threw during introspection: context unavailable/,
+    );
+    expect(states[2].bindingFindings).toContain(
+      'invoke.input returned a non-object',
+    );
+
+    const pins = pinIntrospection(config);
+    expect(pins.captain.map((state) => state.state)).toEqual([
+      'missingSource',
+      'throwing',
+      'malformed',
+    ]);
+    expect(pins.quiescent).toEqual([]);
+  });
 });
 
 describe('findMachineConfig', () => {
@@ -239,6 +293,36 @@ describe('checkGearsFsmConformance', () => {
     );
     expect(checkGearsFsmConformance(gears, config).join('\n')).toMatch(
       /GEARS item GREETER-1 maps to 2 FSM states/,
+    );
+  });
+
+  it('reports malformed explicit captain bindings instead of omitting them', () => {
+    const config = conformantConfig();
+    config.states!.missingSource = {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          player: 'Writer',
+          prompt: 'Hidden work.',
+          result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+        }),
+      },
+    };
+    config.states!.throwing = {
+      invoke: {
+        src: 'captain',
+        input: () => {
+          throw new Error('cannot inspect');
+        },
+      },
+    };
+
+    const findings = checkGearsFsmConformance(gears, config).join('\n');
+    expect(findings).toMatch(
+      /FSM state missingSource: invoke\.input\.sourceItem is not a non-empty string/,
+    );
+    expect(findings).toMatch(
+      /FSM state throwing: invoke\.input threw during introspection: cannot inspect/,
     );
   });
 
@@ -452,9 +536,9 @@ describe('generateFsmIntrospectionTest / emitFsmIntrospectionTest', () => {
       expect(path).toBe(join(artifactDir, 'code.fsm.introspect.test.ts'));
       const content = await readFile(path, 'utf8');
       expect(content).toContain(
-        "import { findMachineConfig, pinIntrospection } from '@sublang/slc/verify'",
+        'import { findMachineConfig, pinIntrospection } from "@sublang/slc/verify"',
       );
-      expect(content).toContain("import * as fsm from './code.fsm.ts'");
+      expect(content).toContain('import * as fsm from "./code.fsm.ts"');
       expect(content).toContain('"sourceItem": "X-1"');
       expect(content).toContain('"interruptTargets": [\n    "work"\n  ]');
       expect(content).toContain('pinIntrospection(findMachineConfig(fsm))');
@@ -592,6 +676,14 @@ describe('prompt contract capture (VERIFY-5)', () => {
         String((input as ComposerInput).prompt),
       ),
     ).toEqual({ draft: [] });
+
+    // Absence alone is not substitution: the replacement position must carry
+    // the context sentinel, so deleting a token derives no substitution.
+    const deleting = (input: unknown): string =>
+      goodCompose(input).replaceAll('«audience»', '');
+    expect(deriveSubstitutions(contractConfig(), deleting)).toEqual({
+      draft: [],
+    });
   });
 });
 
@@ -611,6 +703,49 @@ describe('checkPromptComposition (VERIFY-5)', () => {
     expect(
       checkPromptComposition({ config: contractConfig(), compose }).join('\n'),
     ).toMatch(/does not preserve the body line "Keep it warm."/);
+  });
+
+  it('flags placeholder deletion instead of treating absence as substitution', () => {
+    const compose = (raw: unknown): string =>
+      goodCompose(raw).replaceAll('«audience»', '');
+    expect(
+      checkPromptComposition({ config: contractConfig(), compose }).join('\n'),
+    ).toMatch(/does not preserve the body line/);
+  });
+
+  it('flags prefixes, suffixes, and reordered body lines', () => {
+    const prefixed = (raw: unknown): string =>
+      goodCompose(raw).replace(
+        'Draft a short hello message',
+        'MUTATED: Draft a short hello message',
+      );
+    expect(
+      checkPromptComposition({
+        config: contractConfig(),
+        compose: prefixed,
+      }).join('\n'),
+    ).toMatch(/does not preserve the body line/);
+
+    const suffixed = (raw: unknown): string =>
+      goodCompose(raw).replace('Keep it warm.', 'Keep it warm. EXTRA');
+    expect(
+      checkPromptComposition({
+        config: contractConfig(),
+        compose: suffixed,
+      }).join('\n'),
+    ).toMatch(/does not preserve the body line/);
+
+    const reordered = (raw: unknown): string =>
+      goodCompose(raw).replace(
+        'Draft a short hello message for «audience».\nKeep it warm.',
+        'Keep it warm.\nDraft a short hello message for «audience».',
+      );
+    expect(
+      checkPromptComposition({
+        config: contractConfig(),
+        compose: reordered,
+      }).join('\n'),
+    ).toMatch(/verbatim and in order/);
   });
 
   it('flags adjudicator-contract leakage into the player prompt', () => {
@@ -646,6 +781,52 @@ describe('checkPromptComposition (VERIFY-5)', () => {
     }).join('\n');
     expect(findings).toMatch(/does not open with the exact preamble/);
     expect(findings).toMatch(/lacks the "Boss question:" block/);
+  });
+
+  it('flags reversed or non-adjacent continuation Q&A blocks', () => {
+    const continuationBody = (input: ComposerInput): string =>
+      goodCompose({
+        ...input,
+        pendingBossQuestion: undefined,
+        bossReply: undefined,
+      });
+    const reversed = (raw: unknown): string => {
+      const input = raw as ComposerInput;
+      if (!input.pendingBossQuestion || input.bossReply === undefined) {
+        return goodCompose(raw);
+      }
+      return [
+        CONTINUATION_PREAMBLE,
+        `Boss reply:\n${input.bossReply}`,
+        `Boss question:\n${input.pendingBossQuestion.question}`,
+        continuationBody(input),
+      ].join('\n\n');
+    };
+    expect(
+      checkPromptComposition({
+        config: contractConfig(),
+        compose: reversed,
+      }).join('\n'),
+    ).toMatch(/exact ordered Boss question\/reply blocks/);
+
+    const nonAdjacent = (raw: unknown): string => {
+      const input = raw as ComposerInput;
+      if (!input.pendingBossQuestion || input.bossReply === undefined) {
+        return goodCompose(raw);
+      }
+      return [
+        CONTINUATION_PREAMBLE,
+        `Boss question:\nextra text\n${input.pendingBossQuestion.question}`,
+        `Boss reply:\n${input.bossReply}`,
+        continuationBody(input),
+      ].join('\n\n');
+    };
+    const findings = checkPromptComposition({
+      config: contractConfig(),
+      compose: nonAdjacent,
+    }).join('\n');
+    expect(findings).toMatch(/lacks the "Boss question:" block/);
+    expect(findings).toMatch(/exact ordered Boss question\/reply blocks/);
   });
 
   it('does not flag body-carried marker or continuation text (self-hosting)', () => {
@@ -776,7 +957,7 @@ describe('emitPromptContractTest (VERIFY-5)', () => {
       const content = await readFile(path, 'utf8');
       expect(content).toContain('checkPromptComposition');
       expect(content).toContain(
-        "import * as playbook from './code.playbook.ts'",
+        'import * as playbook from "./code.playbook.ts"',
       );
       expect(content).toContain('"<audience>"');
       expect(content).toContain('const SUBSTITUTED =');
@@ -814,15 +995,56 @@ describe('generateGearsFsmConformanceTest', () => {
       gearsFile: './code.gears.md',
       verifyModule: '@sublang/slc/verify',
     });
-    expect(emitted).toContain("import * as fsm from './code.fsm.js'");
+    expect(emitted).toContain('import * as fsm from "./code.fsm.js"');
     expect(emitted).toContain(
-      "import { checkGearsFsmConformance, findMachineConfig } from '@sublang/slc/verify'",
+      'import { checkGearsFsmConformance, findMachineConfig } from "@sublang/slc/verify"',
     );
     expect(emitted).toContain(
       'checkGearsFsmConformance(gears, findMachineConfig(fsm))',
     );
     expect(emitted).toContain('./code.gears.md');
     expect(emitted).toContain('SPDX-License-Identifier');
+  });
+
+  it('quotes legal basenames and module specifiers as parseable TypeScript', () => {
+    const basename = "boss's flow";
+    const fsmModule = `./${basename}.fsm.ts`;
+    const verifyModule = "@sublang/slc/verify's-fixture";
+    const generated = [
+      generateGearsFsmConformanceTest({
+        basename,
+        fsmModule,
+        gearsFile: `./${basename}.gears.md`,
+        verifyModule,
+      }),
+      generateFsmIntrospectionTest({
+        basename,
+        fsmModule,
+        verifyModule,
+        pins: pinIntrospection(introspectableConfig()),
+      }),
+      generatePromptContractTest({
+        basename,
+        fsmModule,
+        verifyModule,
+        rows: [],
+        composer: {
+          playbookModule: `./${basename}.playbook.ts`,
+          substituted: {},
+        },
+      }),
+    ];
+
+    for (const source of generated) {
+      const result = ts.transpileModule(source, {
+        compilerOptions: {
+          module: ts.ModuleKind.ESNext,
+          target: ts.ScriptTarget.ES2022,
+        },
+        reportDiagnostics: true,
+      });
+      expect(result.diagnostics ?? []).toEqual([]);
+    }
   });
 
   it("exports './verify' so a generated test's @sublang/slc/verify import resolves", () => {
@@ -846,9 +1068,9 @@ describe('emitGearsFsmConformanceTest', () => {
       });
       expect(path).toBe(join(artifactDir, 'code.gears-fsm.test.ts'));
       const content = await readFile(path, 'utf8');
-      expect(content).toContain("from '@sublang/slc/verify'");
+      expect(content).toContain('from "@sublang/slc/verify"');
       // The emitted test imports the `.fsm.ts` artifact the run wrote.
-      expect(content).toContain("import * as fsm from './code.fsm.ts'");
+      expect(content).toContain('import * as fsm from "./code.fsm.ts"');
       expect(content).toContain('./code.gears.md');
       expect(content).toContain(
         'checkGearsFsmConformance(gears, findMachineConfig(fsm))',
