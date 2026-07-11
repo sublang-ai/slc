@@ -37,7 +37,7 @@ Unit tests shall be part of the implementation and shall not be specified as spe
 
 ### META-4
 
-Each decision record (DR) shall follow the ADR format [[2]] with the following sections: Status, Context, Decision, and Consequences.
+Each decision record (DR) shall follow the ADR format with the following sections: Status, Context, Decision, and Consequences.
 
 ### META-5
 
@@ -63,7 +63,7 @@ Fixed-width column wrapping within a sentence is allowed.
 
 ### META-6
 
-Each spec item shall use the GEARS pattern [[1]]:
+Each spec item shall use the GEARS pattern:
 
 ```text
 [Where <static precondition(s)>] [While <stateful precondition(s)>] [When <trigger>] The <subject> shall <behavior>.
@@ -80,7 +80,7 @@ Clauses and punctuation shall follow standard English conventions.
 
 ### META-7
 
-Where test cases are expressed by Given-When-Then (GWT), their spec items shall map GWT to GEARS [[1]]:
+Where test cases are expressed by Given-When-Then (GWT), their spec items shall map GWT to GEARS:
 
 | GWT | Clause |
 | --- | ------ |
@@ -158,8 +158,3 @@ External references in specs shall cite authoritative sources (e.g., official do
 Each test item shall include one `Verifies:` metadata line immediately below its item ID heading.
 
 The `Verifies:` line shall contain one or more comma-separated [citations](#meta-16) to the user or dev items that the test item verifies.
-
-## References
-
-[1]: https://sublang.ai/ref/gears-ai-ready-spec-syntax "GEARS: AI-Ready Spec Syntax"
-[2]: https://github.com/npryce/adr-tools "ADR Tools"

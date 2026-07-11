@@ -26,7 +26,9 @@ import {
 
 const [dir, basename] = process.argv.slice(2);
 if (!dir || !basename) {
-  console.error('usage: node scripts/verify-artifacts.mjs <artifactDir> <basename>');
+  console.error(
+    'usage: node scripts/verify-artifacts.mjs <artifactDir> <basename>',
+  );
   process.exit(2);
 }
 const artifactDir = resolve(dir);

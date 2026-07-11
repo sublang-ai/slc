@@ -17,27 +17,16 @@ import * as playbook from './gears2fsm.playbook.ts';
 
 const CONTRACT = [
   {
-    "state": "transform",
-    "sourceItem": "G2F-1",
-    "player": "Captain",
-    "reads": [
-      "bossReply",
-      "pendingBossQuestion",
-      "request"
-    ],
-    "wires": {
-      "pendingBossQuestion": [
-        "pendingBossQuestion"
-      ],
-      "bossReply": [
-        "bossReply"
-      ]
+    state: 'transform',
+    sourceItem: 'G2F-1',
+    player: 'Captain',
+    reads: ['bossReply', 'pendingBossQuestion', 'request'],
+    wires: {
+      pendingBossQuestion: ['pendingBossQuestion'],
+      bossReply: ['bossReply'],
     },
-    "placeholders": [
-      "<id>",
-      "<new>"
-    ]
-  }
+    placeholders: ['<id>', '<new>'],
+  },
 ];
 
 describe('gears2fsm: prompt contract', () => {
@@ -45,15 +34,15 @@ describe('gears2fsm: prompt contract', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
 
-const SUBSTITUTED = {
-  "transform": []
-};
+  const SUBSTITUTED = {
+    transform: [],
+  };
 
-const compose = (
-  playbook as unknown as {
-    _internal: { composePlayerPrompt: (input: unknown) => string };
-  }
-)._internal.composePlayerPrompt;
+  const compose = (
+    playbook as unknown as {
+      _internal: { composePlayerPrompt: (input: unknown) => string };
+    }
+  )._internal.composePlayerPrompt;
 
   it('composes player prompts per the link contract', () => {
     expect(

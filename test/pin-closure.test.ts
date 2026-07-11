@@ -18,9 +18,11 @@ const H = `sha256:${'a'.repeat(64)}`;
 
 const record = (definition: string, semanticInputs: string[]): PinRecord => ({
   artifact: { path: 'a.phase.ts', hash: H },
+  artifactBundle: { path: 'a.phase', hash: H },
   definition: { path: definition, hash: H },
   semanticInputs: semanticInputs.map((path) => ({ path, hash: H })),
   externalInputs: [],
+  runtimeDependencies: [],
   linkTarget: { kind: 'file', locator: 'x', identity: H },
 });
 

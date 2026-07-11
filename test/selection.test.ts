@@ -13,6 +13,7 @@ import type {
   PhaseExecutor,
 } from '../src/execution.js';
 import { hashFile } from '../src/hash.js';
+import { hashTree } from '../src/pin-currency.js';
 import {
   PINS_FILE,
   PIN_HASH_ALGORITHM,
@@ -91,10 +92,22 @@ describe('compiled selection (PHEXEC-28)', () => {
 
   /** Writes a current pin for `text2gears` over committed artifact and link files. */
   const writeCurrentPin = async (): Promise<PinRecord> => {
+    const bundleDir = join(pipelineDir, 'text2gears.slc');
+    await mkdir(bundleDir);
     await writeFile(
-      join(pipelineDir, 'text2gears.phase.mjs'),
+      join(bundleDir, 'text2gears.playbook.ts'),
       'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n',
     );
+    for (const name of [
+      'text2gears.fsm.ts',
+      'text2gears.gears.md',
+      'text2gears.gears-fsm.test.ts',
+      'text2gears.fsm.introspect.test.ts',
+      'text2gears.prompt-contract.test.ts',
+      'text2gears.fsm.coverage.test.ts',
+    ]) {
+      await writeFile(join(bundleDir, name), `fixture: ${name}\n`);
+    }
     await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target bytes\n');
     const record: PinRecord = {
       definition: {
@@ -102,11 +115,16 @@ describe('compiled selection (PHEXEC-28)', () => {
         hash: await hashFile(join(pipelineDir, 'text2gears.md')),
       },
       artifact: {
-        path: 'text2gears.phase.mjs',
-        hash: await hashFile(join(pipelineDir, 'text2gears.phase.mjs')),
+        path: 'text2gears.slc/text2gears.playbook.ts',
+        hash: await hashFile(join(bundleDir, 'text2gears.playbook.ts')),
+      },
+      artifactBundle: {
+        path: 'text2gears.slc',
+        hash: await hashTree(bundleDir),
       },
       semanticInputs: [],
       externalInputs: [],
+      runtimeDependencies: [],
       linkTarget: {
         kind: 'file',
         locator: 'linktarget.ts',
@@ -157,13 +175,18 @@ describe('compiled selection (PHEXEC-28)', () => {
     expect(compiled.calls).toHaveLength(1);
     expect(interpreted.calls).toHaveLength(0);
     expect(selections[0]?.phase).toBe('text2gears');
-    expect(selections[0]?.record.artifact.path).toBe('text2gears.phase.mjs');
+    expect(selections[0]?.record.artifact.path).toBe(
+      'text2gears.slc/text2gears.playbook.ts',
+    );
   });
 
   it('fails closed for a stale pin without interpreting', async () => {
     await writeCurrentPin();
     // Mutate the pinned artifact after pinning so its hash no longer matches.
-    await writeFile(join(pipelineDir, 'text2gears.phase.mjs'), 'changed\n');
+    await writeFile(
+      join(pipelineDir, 'text2gears.slc/text2gears.playbook.ts'),
+      'changed\n',
+    );
     const result = await runPhase();
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toMatch(/stale/);
@@ -178,6 +201,29 @@ describe('compiled selection (PHEXEC-28)', () => {
     const result = await runPhase();
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toMatch(/malformed/);
+    expect(compiled.calls).toHaveLength(0);
+  });
+
+  it('fails closed when an unselected pin record is malformed', async () => {
+    const record = await writeCurrentPin();
+    const unrelated: PinRecord = {
+      ...record,
+      definition: { path: 'gears2fsm.md', hash: 'not-a-hash' },
+      artifact: {
+        path: 'gears2fsm.slc/gears2fsm.playbook.ts',
+        hash: record.artifact.hash,
+      },
+      artifactBundle: {
+        path: 'gears2fsm.slc',
+        hash: record.artifactBundle.hash,
+      },
+    };
+    await writePins({ text2gears: record, gears2fsm: unrelated });
+
+    const result = await runPhase();
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toMatch(/malformed/);
+    expect(interpreted.calls).toHaveLength(0);
     expect(compiled.calls).toHaveLength(0);
   });
 

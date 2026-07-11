@@ -30,7 +30,7 @@ export type {
   PlaybookRuntimeFactory,
 } from '../../../../node_modules/@sublang/playbook/src/runtime.ts';
 
-export interface PlaybookRuntimeOptions {}
+export type PlaybookRuntimeOptions = Record<string, never>;
 
 type Actor = ReturnType<typeof createActor>;
 type Snapshot = ReturnType<Actor['getSnapshot']>;
@@ -101,6 +101,15 @@ function assertAbort(signal: AbortSignal): void {
     error.name = 'AbortError';
     throw error;
   }
+}
+
+function combineSignals(
+  actorSignal: AbortSignal,
+  turnSignal: AbortSignal | undefined,
+): AbortSignal {
+  return turnSignal === undefined
+    ? actorSignal
+    : AbortSignal.any([actorSignal, turnSignal]);
 }
 
 function composeStructuredBlocks(input: CaptainInput): string[] {
@@ -185,7 +194,10 @@ function parseBossEvent(text: string): BossEvent {
 
   switch (parsed.type) {
     case 'START_TEXT_TO_GEARS':
-      if (typeof parsed.source !== 'string' || typeof parsed.target !== 'string') {
+      if (
+        typeof parsed.source !== 'string' ||
+        typeof parsed.target !== 'string'
+      ) {
         throw new Error('START_TEXT_TO_GEARS requires source and target');
       }
 
@@ -213,7 +225,10 @@ function parseBossEvent(text: string): BossEvent {
   }
 }
 
-function composeAdjudicatorPrompt(input: CaptainInput, finalText: string): string {
+function composeAdjudicatorPrompt(
+  input: CaptainInput,
+  finalText: string,
+): string {
   const results = Object.entries(input.result)
     .map(([guard, description]) => `- ${guard}: ${description}`)
     .join('\n');
@@ -290,17 +305,24 @@ async function adjudicateCaptainOutput(
 
 function createCaptainActor(
   ports: PlaybookPorts,
+  activeTurnSignal: () => AbortSignal | undefined,
   rememberControlPlaneError: (error: unknown) => void,
 ) {
   return fromPromise<CaptainOutput, CaptainInput>(async ({ input, signal }) => {
+    const activeSignal = combineSignals(signal, activeTurnSignal());
     const playerId = playerBinding[input.player];
     const prompt = composePlayerPrompt(input);
-    const playerResult = await ports.callPlayer(playerId, prompt, signal);
+    const playerResult = await ports.callPlayer(playerId, prompt, activeSignal);
 
-    assertAbort(signal);
+    assertAbort(activeSignal);
 
     try {
-      return await adjudicateCaptainOutput(ports, input, playerResult, signal);
+      return await adjudicateCaptainOutput(
+        ports,
+        input,
+        playerResult,
+        activeSignal,
+      );
     } catch (error) {
       if (error instanceof AdjudicationError) {
         rememberControlPlaneError(error);
@@ -311,7 +333,9 @@ function createCaptainActor(
   });
 }
 
-function contextPendingQuestion(snapshot: Snapshot): PendingBossQuestion | undefined {
+function contextPendingQuestion(
+  snapshot: Snapshot,
+): PendingBossQuestion | undefined {
   return snapshot.context.pendingBossQuestion;
 }
 
@@ -320,7 +344,10 @@ class Text2GearsPlaybookRuntime implements PlaybookRuntime {
   private actor?: Actor;
   private previousState?: string;
   private emissions: Promise<void> = Promise.resolve();
+  private emissionError?: unknown;
+  private hasEmissionError = false;
   private controlPlaneError?: unknown;
+  private activeTurnSignal?: AbortSignal;
 
   constructor(_options: PlaybookRuntimeOptions) {
     void _options;
@@ -332,15 +359,24 @@ class Text2GearsPlaybookRuntime implements PlaybookRuntime {
     await this.drainEmissions();
   }
 
-  async handleBossInput(turn: { text: string; signal: AbortSignal }): Promise<void> {
+  async handleBossInput(turn: {
+    text: string;
+    signal: AbortSignal;
+  }): Promise<void> {
     const ports = this.requirePorts();
+    // A host emission failure may have masked a same-turn adjudicator failure.
+    // Never let that saved control-plane fault escape from a later Boss turn.
+    this.controlPlaneError = undefined;
     const text = turn.text.trim();
 
     if (!text) {
       return;
     }
 
-    assertAbort(turn.signal);
+    if (turn.signal.aborted) {
+      await this.drainEmissions();
+      return;
+    }
 
     if (!this.actor || isFinalSnapshot(this.actor.getSnapshot())) {
       this.stopActor();
@@ -348,11 +384,16 @@ class Text2GearsPlaybookRuntime implements PlaybookRuntime {
     }
 
     const actor = this.requireActor();
-    const classifyPrompt = composeClassifierPrompt(actor.getSnapshot(), turn.text);
+    const classifyPrompt = composeClassifierPrompt(
+      actor.getSnapshot(),
+      turn.text,
+    );
     let event: BossEvent;
 
     try {
-      event = parseBossEvent(await ports.callJudge(classifyPrompt, turn.signal));
+      event = parseBossEvent(
+        await ports.callJudge(classifyPrompt, turn.signal),
+      );
     } catch (error) {
       if (turn.signal.aborted) {
         await this.drainEmissions();
@@ -362,17 +403,25 @@ class Text2GearsPlaybookRuntime implements PlaybookRuntime {
       throw error;
     }
 
-    assertAbort(turn.signal);
+    if (turn.signal.aborted) {
+      await this.drainEmissions();
+      return;
+    }
 
     if (event.type === 'NO_EVENT') {
       await this.drainEmissions();
       return;
     }
 
-    actor.send(event);
-    await this.driveToQuiescence(turn.signal);
-    await this.drainEmissions();
-    this.throwControlPlaneError();
+    this.activeTurnSignal = turn.signal;
+    try {
+      actor.send(event);
+      await this.driveToQuiescence();
+      await this.drainEmissions();
+      this.throwControlPlaneError();
+    } finally {
+      this.activeTurnSignal = undefined;
+    }
   }
 
   async dispose(): Promise<void> {
@@ -384,9 +433,13 @@ class Text2GearsPlaybookRuntime implements PlaybookRuntime {
     const ports = this.requirePorts();
     const machine = text2GearsMachine.provide({
       actors: {
-        captain: createCaptainActor(ports, (error) => {
-          this.controlPlaneError = error;
-        }),
+        captain: createCaptainActor(
+          ports,
+          () => this.activeTurnSignal,
+          (error) => {
+            this.controlPlaneError = error;
+          },
+        ),
       },
     });
 
@@ -432,27 +485,48 @@ class Text2GearsPlaybookRuntime implements PlaybookRuntime {
     }
 
     this.previousState = to;
-    this.emissions = this.emissions.then(async () => {
-      await ports.emitTelemetry({
+    this.queueEmission(() =>
+      ports.emitTelemetry({
         topic: 'playbook.fsm.state',
         payload: {
           from,
           to,
           event: (snapshot as { event?: unknown }).event,
         },
-      });
-      await ports.emitStatus(`Entered ${to}.`, {
+      }),
+    );
+    this.queueEmission(() =>
+      ports.emitStatus(`Entered ${to}.`, {
         from,
         to,
         lastError: to === 'failed' ? snapshot.context.lastError : undefined,
         pendingBossQuestion:
-          to === 'awaitBossReply' ? contextPendingQuestion(snapshot) : undefined,
-      });
+          to === 'awaitBossReply'
+            ? contextPendingQuestion(snapshot)
+            : undefined,
+      }),
+    );
+  }
+
+  private queueEmission(emit: () => Promise<void>): void {
+    this.emissions = this.emissions.then(async () => {
+      try {
+        await emit();
+      } catch (error) {
+        if (!this.hasEmissionError) this.emissionError = error;
+        this.hasEmissionError = true;
+      }
     });
   }
 
   private async drainEmissions(): Promise<void> {
     await this.emissions;
+    if (this.hasEmissionError) {
+      const error = this.emissionError;
+      this.emissionError = undefined;
+      this.hasEmissionError = false;
+      throw error;
+    }
   }
 
   private throwControlPlaneError(): void {
@@ -466,10 +540,8 @@ class Text2GearsPlaybookRuntime implements PlaybookRuntime {
     throw error;
   }
 
-  private async driveToQuiescence(signal: AbortSignal): Promise<void> {
+  private async driveToQuiescence(): Promise<void> {
     const actor = this.requireActor();
-
-    void signal;
 
     if (isQuiescentSnapshot(actor.getSnapshot())) {
       return;

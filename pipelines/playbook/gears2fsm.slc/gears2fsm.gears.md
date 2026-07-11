@@ -22,6 +22,7 @@ When a transformation request names a GEARS spec-item package (`.md`) as source 
 > Transform the source's normative GEARS spec items into an XState v5 finite state machine written as a TypeScript object artifact.
 > Produce an object artifact only: define the machine, actor contracts, and typed inputs; do not bind a runner or supply concrete runtime implementations.
 > Build the machine with XState v5's `setup(...)` followed by `.createMachine(...)`.
+> Restrict the artifact to erasable TypeScript syntax — type annotations that strip cleanly, with no constructor parameter properties, `enum`s, or namespaces — so a host running under type stripping loads it directly.
 > In the `types` block declare `context`, `events`, machine `input`, and a typed `Captain` actor contract.
 > Do not import a runner or bake in a concrete Captain implementation; make any actor placeholder fail explicitly (e.g., throw `'captain actor must be provided by the runner'`).
 > Type `CaptainInput` as an object with at least: `player` (the player Captain is to invoke), `sourceItem` (the GEARS item ID this state realizes), `prompt` (the source item's full final prompt, verbatim), and `result` (a record whose keys are the valid guard names this invocation may return).
@@ -51,6 +52,7 @@ When a transformation request names a GEARS spec-item package (`.md`) as source 
 > Emit a `bossInterrupts(ids)` helper rather than hand-writing one transition per state.
 > Use `BOSS_INTERRUPT` to jump into an active machine, pre-empting whichever state is running; use Boss entry events to start or resume from idle or recoverable states when Boss-supplied parameters cannot be inferred from machine state alone.
 > Type entry events alongside `BOSS_INTERRUPT` and populate context via a dedicated action.
+> Make an entry event's copy action preserve an existing input-seeded per-run parameter when the event omits its optional field; do not clear omitted per-run parameters.
 > Do not collapse the two surfaces: `BOSS_INTERRUPT` cannot carry payload, and a parameterless entry event may collapse to interrupt-style routing only when state-jump semantics are identical.
 > Do not make entry events root-level transitions from every active state unless the workflow supports pre-emption; put them on idle and recoverable states (e.g., `failed`).
 > When a Captain-invoking state needs a Boss decision the player cannot supply alone, suspend in a dedicated quiescent state and resume the same state with the Q+A in the next prompt; every Captain-invoking state supports this path.

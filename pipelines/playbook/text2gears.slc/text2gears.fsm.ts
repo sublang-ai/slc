@@ -21,7 +21,7 @@ export interface Text2GearsContext {
   lastError?: unknown;
 }
 
-export interface Text2GearsMachineInput {}
+export type Text2GearsMachineInput = Record<string, never>;
 
 export type Text2GearsEvent =
   | { type: 'START_TEXT_TO_GEARS'; source: string; target: string }
@@ -96,7 +96,8 @@ const NEEDS_BOSS_REPLY_DESCRIPTION =
   "The player's prose surfaces a clarifying question for Boss that the player cannot answer alone. Output shall include `question: <verbatim question text from the player's prose>`.";
 
 const captainResult = {
-  completed: 'Captain completed the transformation and wrote the target artifact.',
+  completed:
+    'Captain completed the transformation and wrote the target artifact.',
   needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
 } satisfies Record<string, string>;
 
@@ -171,7 +172,8 @@ export const text2GearsMachine = setup({
       pendingBossQuestion: ({ event }) => {
         const output = (event as CaptainDoneEvent).output;
 
-        return output.guard === 'needsBossReply' && typeof output.question === 'string'
+        return output.guard === 'needsBossReply' &&
+          typeof output.question === 'string'
           ? {
               resumeStateId: 'transformTextToGears',
               sourceItem: 'TEXT2GEARS-10',
@@ -276,7 +278,10 @@ export const text2GearsMachine = setup({
           },
           {
             target: 'failed',
-            actions: ['rememberMalformedCaptainOutput', 'clearBossReplyContext'],
+            actions: [
+              'rememberMalformedCaptainOutput',
+              'clearBossReplyContext',
+            ],
           },
         ],
         onError: {
@@ -313,7 +318,8 @@ export const text2GearsMachine = setup({
     },
     failed: {
       id: 'failed',
-      description: 'The transformation failed and is waiting for Boss recovery.',
+      description:
+        'The transformation failed and is waiting for Boss recovery.',
       on: {
         START_TEXT_TO_GEARS: {
           target: 'transformTextToGears',

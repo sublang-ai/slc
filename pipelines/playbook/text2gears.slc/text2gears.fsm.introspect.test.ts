@@ -10,163 +10,160 @@ import { findMachineConfig, pinIntrospection } from '@sublang/slc/verify';
 import * as fsm from './text2gears.fsm.ts';
 
 const PINNED = {
-  "initial": "ready",
-  "captain": [
+  initial: 'ready',
+  captain: [
     {
-      "state": "transformTextToGears",
-      "sourceItem": "TEXT2GEARS-10",
-      "player": "Captain",
-      "resultKeys": [
-        "completed",
-        "needsBossReply"
-      ],
-      "onDone": [
+      state: 'transformTextToGears',
+      sourceItem: 'TEXT2GEARS-10',
+      player: 'Captain',
+      resultKeys: ['completed', 'needsBossReply'],
+      onDone: [
         {
-          "index": 0,
-          "target": "awaitBossReply",
-          "guarded": true
+          index: 0,
+          target: 'awaitBossReply',
+          guarded: true,
         },
         {
-          "index": 1,
-          "target": "failed",
-          "guarded": true
+          index: 1,
+          target: 'failed',
+          guarded: true,
         },
         {
-          "index": 2,
-          "target": "done",
-          "guarded": true
+          index: 2,
+          target: 'done',
+          guarded: true,
         },
         {
-          "index": 3,
-          "target": "failed",
-          "guarded": false
-        }
+          index: 3,
+          target: 'failed',
+          guarded: false,
+        },
       ],
-      "onError": [
+      onError: [
         {
-          "index": 0,
-          "target": "failed",
-          "guarded": false
-        }
+          index: 0,
+          target: 'failed',
+          guarded: false,
+        },
       ],
-      "on": {}
-    }
+      on: {},
+    },
   ],
-  "quiescent": [
+  quiescent: [
     {
-      "state": "ready",
-      "final": false,
-      "on": {
-        "START_TEXT_TO_GEARS": [
+      state: 'ready',
+      final: false,
+      on: {
+        START_TEXT_TO_GEARS: [
           {
-            "index": 0,
-            "target": "transformTextToGears",
-            "guarded": false
-          }
-        ]
-      }
-    },
-    {
-      "state": "awaitBossReply",
-      "final": false,
-      "on": {
-        "BOSS_REPLY": [
-          {
-            "index": 0,
-            "target": "failed",
-            "guarded": true
+            index: 0,
+            target: 'transformTextToGears',
+            guarded: false,
           },
-          {
-            "index": 1,
-            "target": "transformTextToGears",
-            "guarded": true
-          },
-          {
-            "index": 2,
-            "target": "failed",
-            "guarded": false
-          }
         ],
-        "START_TEXT_TO_GEARS": [
+      },
+    },
+    {
+      state: 'awaitBossReply',
+      final: false,
+      on: {
+        BOSS_REPLY: [
           {
-            "index": 0,
-            "target": "transformTextToGears",
-            "guarded": false
-          }
+            index: 0,
+            target: 'failed',
+            guarded: true,
+          },
+          {
+            index: 1,
+            target: 'transformTextToGears',
+            guarded: true,
+          },
+          {
+            index: 2,
+            target: 'failed',
+            guarded: false,
+          },
         ],
-        "BOSS_INTERRUPT": [
+        START_TEXT_TO_GEARS: [
           {
-            "index": 0,
-            "target": "ready",
-            "guarded": true
+            index: 0,
+            target: 'transformTextToGears',
+            guarded: false,
+          },
+        ],
+        BOSS_INTERRUPT: [
+          {
+            index: 0,
+            target: 'ready',
+            guarded: true,
           },
           {
-            "index": 1,
-            "target": "transformTextToGears",
-            "guarded": true
+            index: 1,
+            target: 'transformTextToGears',
+            guarded: true,
           },
           {
-            "index": 2,
-            "target": "awaitBossReply",
-            "guarded": true
+            index: 2,
+            target: 'awaitBossReply',
+            guarded: true,
           },
           {
-            "index": 3,
-            "target": "failed",
-            "guarded": true
-          }
-        ]
-      }
+            index: 3,
+            target: 'failed',
+            guarded: true,
+          },
+        ],
+      },
     },
     {
-      "state": "failed",
-      "final": false,
-      "on": {
-        "START_TEXT_TO_GEARS": [
+      state: 'failed',
+      final: false,
+      on: {
+        START_TEXT_TO_GEARS: [
           {
-            "index": 0,
-            "target": "transformTextToGears",
-            "guarded": false
-          }
-        ]
-      }
+            index: 0,
+            target: 'transformTextToGears',
+            guarded: false,
+          },
+        ],
+      },
     },
     {
-      "state": "done",
-      "final": true,
-      "on": {}
-    }
+      state: 'done',
+      final: true,
+      on: {},
+    },
   ],
-  "rootOn": {
-    "BOSS_INTERRUPT": [
+  rootOn: {
+    BOSS_INTERRUPT: [
       {
-        "index": 0,
-        "target": "ready",
-        "guarded": true
+        index: 0,
+        target: 'ready',
+        guarded: true,
       },
       {
-        "index": 1,
-        "target": "transformTextToGears",
-        "guarded": true
+        index: 1,
+        target: 'transformTextToGears',
+        guarded: true,
       },
       {
-        "index": 2,
-        "target": "awaitBossReply",
-        "guarded": true
+        index: 2,
+        target: 'awaitBossReply',
+        guarded: true,
       },
       {
-        "index": 3,
-        "target": "failed",
-        "guarded": true
-      }
-    ]
+        index: 3,
+        target: 'failed',
+        guarded: true,
+      },
+    ],
   },
-  "interruptTargets": [
-    "ready",
-    "transformTextToGears",
-    "awaitBossReply",
-    "failed"
-  ]
+  interruptTargets: [
+    'ready',
+    'transformTextToGears',
+    'awaitBossReply',
+    'failed',
+  ],
 };
 
 describe('text2gears: FSM introspection', () => {

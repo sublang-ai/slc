@@ -78,7 +78,12 @@ describe('resolvesToPlaybook (PIN-13)', () => {
     ).toBe(true);
     expect(
       resolvesToPlaybook(
-        'const f = createPlaybookRuntime;\nexport default createPlaybookRuntime;',
+        'const createPlaybookRuntime = () => ({});\nexport default createPlaybookRuntime;',
+      ),
+    ).toBe(true);
+    expect(
+      resolvesToPlaybook(
+        'export function createPlaybookRuntime() {}\nexport { createPlaybookRuntime as default };',
       ),
     ).toBe(true);
   });
@@ -87,5 +92,69 @@ describe('resolvesToPlaybook (PIN-13)', () => {
     expect(resolvesToPlaybook('export const value = 42;\n')).toBe(false);
     expect(resolvesToPlaybook('export default () => ({});\n')).toBe(false);
     expect(resolvesToPlaybook('compiled artifact bytes\n')).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        '// export default function createPlaybookRuntime() {}\nexport const value = 1;',
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        'const decoy = "export default function createPlaybookRuntime() {}";',
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook('export default function createPlaybookRuntime('),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        'const createPlaybookRuntime = 42; export default createPlaybookRuntime;',
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        'const createPlaybookRuntime = Number(42); export default createPlaybookRuntime;',
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        'enum Mode { Run } export default function createPlaybookRuntime() {}',
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        'namespace Runtime { export const value = 1 } export default function createPlaybookRuntime() {}',
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        'class Runtime { constructor(public value: string) {} } export default function createPlaybookRuntime() {}',
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        'export default function createPlaybookRuntime() {} export default createPlaybookRuntime;',
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        'export default async function createPlaybookRuntime() {}',
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook('export default function* createPlaybookRuntime() {}'),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        'const createPlaybookRuntime = async () => ({}); export default createPlaybookRuntime;',
+      ),
+    ).toBe(false);
+  });
+
+  it('accepts an erasable angle-bracket assertion around the factory', () => {
+    expect(
+      resolvesToPlaybook(
+        'type Factory = () => unknown; const createPlaybookRuntime = <Factory>(() => ({})); export default createPlaybookRuntime;',
+      ),
+    ).toBe(true);
   });
 });

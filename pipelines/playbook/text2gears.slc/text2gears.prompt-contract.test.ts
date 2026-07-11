@@ -17,35 +17,18 @@ import * as playbook from './text2gears.playbook.ts';
 
 const CONTRACT = [
   {
-    "state": "transformTextToGears",
-    "sourceItem": "TEXT2GEARS-10",
-    "player": "Captain",
-    "reads": [
-      "bossReply",
-      "pendingBossQuestion",
-      "source",
-      "target"
-    ],
-    "wires": {
-      "source": [
-        "source"
-      ],
-      "target": [
-        "target"
-      ],
-      "pendingBossQuestion": [
-        "pendingBossQuestion"
-      ],
-      "bossReply": [
-        "bossReply"
-      ]
+    state: 'transformTextToGears',
+    sourceItem: 'TEXT2GEARS-10',
+    player: 'Captain',
+    reads: ['bossReply', 'pendingBossQuestion', 'source', 'target'],
+    wires: {
+      source: ['source'],
+      target: ['target'],
+      pendingBossQuestion: ['pendingBossQuestion'],
+      bossReply: ['bossReply'],
     },
-    "placeholders": [
-      "<source>",
-      "<target>",
-      "<placeholder>"
-    ]
-  }
+    placeholders: ['<source>', '<target>', '<placeholder>'],
+  },
 ];
 
 describe('text2gears: prompt contract', () => {
@@ -53,15 +36,15 @@ describe('text2gears: prompt contract', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
 
-const SUBSTITUTED = {
-  "transformTextToGears": []
-};
+  const SUBSTITUTED = {
+    transformTextToGears: [],
+  };
 
-const compose = (
-  playbook as unknown as {
-    _internal: { composePlayerPrompt: (input: unknown) => string };
-  }
-)._internal.composePlayerPrompt;
+  const compose = (
+    playbook as unknown as {
+      _internal: { composePlayerPrompt: (input: unknown) => string };
+    }
+  )._internal.composePlayerPrompt;
 
   it('composes player prompts per the link contract', () => {
     expect(

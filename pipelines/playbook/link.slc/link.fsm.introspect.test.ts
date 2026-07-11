@@ -10,142 +10,135 @@ import { findMachineConfig, pinIntrospection } from '@sublang/slc/verify';
 import * as fsm from './link.fsm.ts';
 
 const PINNED = {
-  "initial": "ready",
-  "captain": [
+  initial: 'ready',
+  captain: [
     {
-      "state": "linking",
-      "sourceItem": "LINK-10",
-      "player": "Captain",
-      "resultKeys": [
-        "completed",
-        "needsBossReply"
-      ],
-      "onDone": [
+      state: 'linking',
+      sourceItem: 'LINK-10',
+      player: 'Captain',
+      resultKeys: ['completed', 'needsBossReply'],
+      onDone: [
         {
-          "index": 0,
-          "target": "awaitBossReply",
-          "guarded": true
+          index: 0,
+          target: 'awaitBossReply',
+          guarded: true,
         },
         {
-          "index": 1,
-          "target": "failed",
-          "guarded": true
+          index: 1,
+          target: 'failed',
+          guarded: true,
         },
         {
-          "index": 2,
-          "target": "done",
-          "guarded": true
-        }
+          index: 2,
+          target: 'done',
+          guarded: true,
+        },
       ],
-      "onError": [
+      onError: [
         {
-          "index": 0,
-          "target": "failed",
-          "guarded": false
-        }
+          index: 0,
+          target: 'failed',
+          guarded: false,
+        },
       ],
-      "on": {}
-    }
+      on: {},
+    },
   ],
-  "quiescent": [
+  quiescent: [
     {
-      "state": "ready",
-      "final": false,
-      "on": {
-        "START_LINK": [
+      state: 'ready',
+      final: false,
+      on: {
+        START_LINK: [
           {
-            "index": 0,
-            "target": "linking",
-            "guarded": false
-          }
-        ]
-      }
-    },
-    {
-      "state": "awaitBossReply",
-      "final": false,
-      "on": {
-        "BOSS_REPLY": [
-          {
-            "index": 0,
-            "target": "failed",
-            "guarded": true
+            index: 0,
+            target: 'linking',
+            guarded: false,
           },
-          {
-            "index": 1,
-            "target": "linking",
-            "guarded": true
-          }
         ],
-        "BOSS_INTERRUPT": [
+      },
+    },
+    {
+      state: 'awaitBossReply',
+      final: false,
+      on: {
+        BOSS_REPLY: [
           {
-            "index": 0,
-            "target": "ready",
-            "guarded": true
+            index: 0,
+            target: 'failed',
+            guarded: true,
           },
           {
-            "index": 1,
-            "target": "linking",
-            "guarded": true
+            index: 1,
+            target: 'linking',
+            guarded: true,
           },
-          {
-            "index": 2,
-            "target": "failed",
-            "guarded": true
-          }
         ],
-        "START_LINK": [
+        BOSS_INTERRUPT: [
           {
-            "index": 0,
-            "target": "linking",
-            "guarded": false
-          }
-        ]
-      }
+            index: 0,
+            target: 'ready',
+            guarded: true,
+          },
+          {
+            index: 1,
+            target: 'linking',
+            guarded: true,
+          },
+          {
+            index: 2,
+            target: 'failed',
+            guarded: true,
+          },
+        ],
+        START_LINK: [
+          {
+            index: 0,
+            target: 'linking',
+            guarded: false,
+          },
+        ],
+      },
     },
     {
-      "state": "failed",
-      "final": false,
-      "on": {
-        "START_LINK": [
+      state: 'failed',
+      final: false,
+      on: {
+        START_LINK: [
           {
-            "index": 0,
-            "target": "linking",
-            "guarded": false
-          }
-        ]
-      }
+            index: 0,
+            target: 'linking',
+            guarded: false,
+          },
+        ],
+      },
     },
     {
-      "state": "done",
-      "final": true,
-      "on": {}
-    }
+      state: 'done',
+      final: true,
+      on: {},
+    },
   ],
-  "rootOn": {
-    "BOSS_INTERRUPT": [
+  rootOn: {
+    BOSS_INTERRUPT: [
       {
-        "index": 0,
-        "target": "ready",
-        "guarded": true
+        index: 0,
+        target: 'ready',
+        guarded: true,
       },
       {
-        "index": 1,
-        "target": "linking",
-        "guarded": true
+        index: 1,
+        target: 'linking',
+        guarded: true,
       },
       {
-        "index": 2,
-        "target": "failed",
-        "guarded": true
-      }
-    ]
+        index: 2,
+        target: 'failed',
+        guarded: true,
+      },
+    ],
   },
-  "interruptTargets": [
-    "ready",
-    "linking",
-    "failed"
-  ]
+  interruptTargets: ['ready', 'linking', 'failed'],
 };
 
 describe('link: FSM introspection', () => {

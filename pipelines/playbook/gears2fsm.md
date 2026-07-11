@@ -7,7 +7,7 @@ Second phase of a playbook (a state-machine agent orchestrating other agents).
 Transforms normative GEARS spec items into an XState v5 finite state machine.
 
 - Source: GEARS spec items produced by the first phase.
-- Target: an XState v5 machine object artifact [[1]].
+- Target: an XState v5 machine object artifact.
 
 Target is an object artifact only: it defines the machine, actor contracts, and typed inputs, but shall not bind a runner or supply concrete runtime implementations.
 
@@ -18,11 +18,17 @@ Target is an object artifact only: it defines the machine, actor contracts, and 
 | source | gears | .md |
 | target | fsm | .ts |
 
+## Pin Inputs
+
+- `text2gears.md`
+- `link.md`
+- `../../package-lock.json`
+
 ## Setup
 
-The artifact shall use XState v5's `setup(...)` then `.createMachine(...)` [[10]].
+The artifact shall use XState v5's `setup(...)` then `.createMachine(...)`.
 The artifact shall restrict itself to erasable TypeScript syntax — type annotations that strip cleanly, no constructor parameter properties, `enum`s, or namespaces — so a host running under type stripping loads it directly.
-The `types` block shall declare `context`, `events`, machine `input`, and a typed `Captain` actor contract [[11]].
+The `types` block shall declare `context`, `events`, machine `input`, and a typed `Captain` actor contract.
 The artifact shall not import a runner or bake in a concrete Captain implementation; any actor placeholder shall fail explicitly (e.g., throw `'captain actor must be provided by the runner'`).
 
 `CaptainInput` shall be a typed object with at least:
@@ -53,8 +59,8 @@ A state's `invoke.input.player` shall match its source item's player.
 The machine's initial state shall be a quiescent idle hub (no `invoke`) — typically `ready` — that accepts the Boss entry events.
 Captain-invoking work begins only on a Boss-originated event, so constructing and starting the machine performs no player call.
 
-Captain returns a discriminated result with `guard` set to one of `input.result`'s keys [[4]].
-Guards [[5]] on `onDone` transitions inspect `event.output.guard` to route.
+Captain returns a discriminated result with `guard` set to one of `input.result`'s keys.
+Guards on `onDone` transitions inspect `event.output.guard` to route.
 
 Example:
 
@@ -100,9 +106,9 @@ The artifact shall not bake in player bindings, model names, or per-run values.
 
 ## Transitions
 
-A transition fires on an event — typically `onDone` (actor completed) [[4]].
-When multiple are possible, a synchronous guard [[5]] picks the path.
-Transitions shall persist relevant typed fields from `event.output` to context via `assign` [[6]] so downstream prompts can read them.
+A transition fires on an event — typically `onDone` (actor completed).
+When multiple are possible, a synchronous guard picks the path.
+Transitions shall persist relevant typed fields from `event.output` to context via `assign` so downstream prompts can read them.
 Transitions shall be self-driving when source items define the next obligation.
 Routing to an idle hub is for recovery, unrecoverable Boss input, or one-shot entry events — not the happy path.
 
@@ -127,10 +133,10 @@ Phases may set typed routing fields so terminal outcomes return to the originati
 
 ### Boss interrupts
 
-Boss may interrupt any active state at any time. Every jumpable state shall have a stable `id` [[9]].
-The runtime sends `{ type: 'BOSS_INTERRUPT', targetId: '<id>' }`; the root machine handles it with one guarded transition per jumpable state targeting `#<id>` with `reenter: true` [[7]][[8]][[9]], so invoked actors restart cleanly.
+Boss may interrupt any active state at any time. Every jumpable state shall have a stable `id`.
+The runtime sends `{ type: 'BOSS_INTERRUPT', targetId: '<id>' }`; the root machine handles it with one guarded transition per jumpable state targeting `#<id>` with `reenter: true`, so invoked actors restart cleanly.
 The compiler shall emit a `bossInterrupts(ids)` helper rather than hand-writing one transition per state.
-XState automatically stops the current state's invoked actor on transition [[2]].
+XState automatically stops the current state's invoked actor on transition.
 
 ### Boss entry events vs. BOSS_INTERRUPT
 
@@ -198,17 +204,3 @@ Every `invoke` shall declare an `onError` handler routing to a dedicated `failed
 
 Every machine shall declare at least one `type: 'final'` state (typically `done`) reachable on completion.
 A never-terminating machine is a defect: the runner has no completion signal.
-
-## References
-
-[1]: https://stately.ai/docs/xstate "XState Official Documentation"
-[2]: https://stately.ai/docs/invoke "Invoke — invoking actors from states"
-[3]: https://stately.ai/docs/input "Input — passing data to invoked actors"
-[4]: https://stately.ai/docs/output "Output — receiving actor results via onDone"
-[5]: https://stately.ai/docs/guards "Guards — synchronous transition conditions"
-[6]: https://stately.ai/docs/context "Context — persistent state and assign"
-[7]: https://stately.ai/docs/transitions "Transitions — reenter, root-level routing"
-[8]: https://stately.ai/docs/parent-states "Parent states — root-level event handling"
-[9]: https://stately.ai/docs/finite-states "Finite states — state IDs"
-[10]: https://stately.ai/docs/setup "Setup — typed machine setup"
-[11]: https://stately.ai/docs/actors "Actors — typed actor contracts"

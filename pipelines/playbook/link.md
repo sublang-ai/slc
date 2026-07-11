@@ -31,6 +31,12 @@ The link compiler shall not modify the FSM artifact and shall not re-derive Capt
 | source | fsm | .ts |
 | target | playbook | .ts |
 
+## Pin Inputs
+
+- `text2gears.md`
+- `gears2fsm.md`
+- `../../package-lock.json`
+
 ## PlaybookRuntime contract
 
 The emitted module shall default-export a factory of the following shape:
@@ -81,7 +87,7 @@ interface PlayerResult {
 }
 ```
 
-`PlayerResult` mirrors cligent's `PlayerRunResult` shape ([TMUX-033](https://github.com/sublang-ai/cligent/blob/main/specs/user/tmux-play.md#tmux-033)), so a tmux-play port adapter is direct assignment.
+`PlayerResult` is deliberately adapter-friendly: its status, final-text, and error fields map directly onto a host's player-result channel.
 The runtime treats `status !== 'ok'` as a player failure and routes it through the FSM's error path (§Abort).
 
 `callJudge` returns free-form text.
@@ -204,7 +210,7 @@ The adjudicator shall fail loudly on:
 
 Adjudicator failures are control-plane errors.
 The runtime shall propagate them by throwing out of `handleBossInput` after attempting cleanup.
-The host adapter surfaces the throw on its control-plane channel (cligent surfaces such throws as `runtime_error` per [TMUX-025](https://github.com/sublang-ai/cligent/blob/main/specs/user/tmux-play.md#tmux-025)).
+The host adapter surfaces the throw on its control-plane channel.
 The host's player-result channels (`player_finished` and equivalents) are reserved for failures the player itself produced; the host emits them when `callPlayer` resolves with `status !== 'ok'`.
 
 ## Session lifecycle
@@ -273,7 +279,7 @@ The runtime shall emit, at minimum:
   (recommended `playbook.fsm.state`), with payload `{ from, to, event }`.
   Observers consume telemetry; the runtime never interprets the topic.
 
-Player prompts and adjudicator JSON ride the host's own record channels when the host has them (cligent's `captain_*` / `player_*`).
+Player prompts and adjudicator JSON ride the host's own record channels when the host has them.
 The runtime shall not duplicate them into `emitTelemetry`.
 
 ## Output
@@ -318,10 +324,9 @@ A host integrates with playbooks via a small adapter that:
    surface in a generic adapter).
 2. Imports the module and constructs the runtime with options forwarded
    verbatim from the host config.
-3. Implements `PlaybookPorts` by wrapping the host's own primitives —
-   for cligent/tmux-play this is `callPlayer ← context.callPlayer`,
-   `callJudge ← context.callCaptain`, `emitStatus`/`emitTelemetry` ←
-   `session.emitStatus`/`session.emitTelemetry`.
+3. Implements `PlaybookPorts` by wiring `callPlayer`, `callJudge`,
+   `emitStatus`, and `emitTelemetry` to the host's corresponding
+   primitives.
 4. Calls `runtime.init(ports)` once at session start, forwards each
    Boss turn to `runtime.handleBossInput`, and calls
    `runtime.dispose()` at session end.
@@ -348,9 +353,3 @@ This spec is silent on the choice; the contract is the same in any location.
   changing this spec.
 
 New behavior in any of these areas requires a separate slc spec.
-
-## References
-
-[1]: [text2gears](text2gears.md) "First phase: text → GEARS spec items."
-[2]: [gears2fsm](gears2fsm.md) "Second phase: GEARS items → FSM artifact."
-[3]: https://stately.ai/docs/actors "XState actors — `createActor`, snapshots, abort signal handling."

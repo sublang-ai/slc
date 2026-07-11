@@ -17,6 +17,7 @@ import {
 } from '../src/config.js';
 import { loadConfigFile } from '../src/config-file.js';
 import { hashFile } from '../src/hash.js';
+import { hashTree } from '../src/pin-currency.js';
 import {
   buildSlcDeps,
   interruptSignal,
@@ -678,8 +679,10 @@ describe('compiled execution through the bin (CLI-28)', () => {
   it('runs a current pinned artifact and writes its target', async () => {
     // A minimal compiled `playbook` artifact: parses the PHEXEC-29 seed and
     // writes the requested target from the requested source.
+    const bundleDir = join(pipelineDir, 'text2gears.slc');
+    await mkdir(bundleDir);
     await writeFile(
-      join(pipelineDir, 'text2gears.phase.mjs'),
+      join(bundleDir, 'text2gears.playbook.ts'),
       [
         "import { readFile, writeFile } from 'node:fs/promises';",
         'export default function createPlaybookRuntime() {',
@@ -697,6 +700,16 @@ describe('compiled execution through the bin (CLI-28)', () => {
         '',
       ].join('\n'),
     );
+    for (const name of [
+      'text2gears.fsm.ts',
+      'text2gears.gears.md',
+      'text2gears.gears-fsm.test.ts',
+      'text2gears.fsm.introspect.test.ts',
+      'text2gears.prompt-contract.test.ts',
+      'text2gears.fsm.coverage.test.ts',
+    ]) {
+      await writeFile(join(bundleDir, name), `fixture: ${name}\n`);
+    }
     await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target bytes\n');
     const record: PinRecord = {
       definition: {
@@ -704,11 +717,16 @@ describe('compiled execution through the bin (CLI-28)', () => {
         hash: await hashFile(join(pipelineDir, 'text2gears.md')),
       },
       artifact: {
-        path: 'text2gears.phase.mjs',
-        hash: await hashFile(join(pipelineDir, 'text2gears.phase.mjs')),
+        path: 'text2gears.slc/text2gears.playbook.ts',
+        hash: await hashFile(join(bundleDir, 'text2gears.playbook.ts')),
+      },
+      artifactBundle: {
+        path: 'text2gears.slc',
+        hash: await hashTree(bundleDir),
       },
       semanticInputs: [],
       externalInputs: [],
+      runtimeDependencies: [],
       linkTarget: {
         kind: 'file',
         locator: 'linktarget.ts',

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -24,12 +24,14 @@ const validPinObject = (): Record<string, unknown> => ({
   hashAlgorithm: PIN_HASH_ALGORITHM,
   pins: {
     text2gears: {
-      artifact: { path: 'text2gears.slc/text2gears.phase.ts', hash: H },
+      artifact: { path: 'text2gears.slc/text2gears.playbook.ts', hash: H },
+      artifactBundle: { path: 'text2gears.slc', hash: H },
       definition: { path: 'text2gears.md', hash: H },
       semanticInputs: [
         { path: 'reference/gears.md', hash: H, role: 'reference' },
       ],
       externalInputs: [],
+      runtimeDependencies: [],
       linkTarget: {
         kind: 'file',
         locator: 'reference/code.ts',
@@ -52,6 +54,10 @@ describe('parsePinFile (PIN-5)', () => {
     expect(file.pathBoundary).toEqual({ path: '.' }); // default
     const pin = file.pins.text2gears;
     expect(pin.definition).toEqual({ path: 'text2gears.md', hash: H });
+    expect(pin.artifactBundle).toEqual({
+      path: 'text2gears.slc',
+      hash: H,
+    });
     expect(pin.semanticInputs[0].role).toBe('reference');
     expect(pin.linkTarget.kind).toBe('file');
     expect(pin.producer?.pipeline).toBe('slc');
@@ -78,6 +84,14 @@ describe('parsePinFile (PIN-5)', () => {
     obj.pins = { link: (obj.pins as Record<string, unknown>).text2gears };
 
     expect(() => parsePinFile(json(obj))).not.toThrow();
+  });
+
+  it('rejects a pin-map key that is not a phase name', () => {
+    const obj = validPinObject();
+    const pins = obj.pins as Record<string, unknown>;
+    pins['../text2gears'] = pins.text2gears;
+    delete pins.text2gears;
+    expect(() => parsePinFile(json(obj))).toThrow(/phase key/);
   });
 
   it('rejects non-JSON', () => {
@@ -107,6 +121,13 @@ describe('parsePinFile (PIN-5)', () => {
     expect(() => parsePinFile(json(obj))).toThrow(/hashAlgorithm/);
   });
 
+  it('rejects an absolute boundary even when the pin map is empty', () => {
+    const obj = validPinObject();
+    obj.pathBoundary = { path: '/tmp' };
+    obj.pins = {};
+    expect(() => parsePinFile(json(obj))).toThrow(/pathBoundary\.path/);
+  });
+
   it('rejects an unknown top-level field', () => {
     const obj = { ...validPinObject(), extra: true };
     expect(() => parsePinFile(json(obj))).toThrow(/extra.*unknown/);
@@ -132,6 +153,45 @@ describe('parsePinFile (PIN-5)', () => {
       .definition;
     expect(() => parsePinFile(json(obj))).toThrow(/definition/);
   });
+
+  it('rejects a record that omits its runtime dependency attestation', () => {
+    const obj = validPinObject();
+    delete (obj.pins as Record<string, Record<string, unknown>>).text2gears
+      .runtimeDependencies;
+    expect(() => parsePinFile(json(obj))).toThrow(/runtimeDependencies/);
+  });
+
+  it('requires a package runtime dependency to name its import specifier', () => {
+    const obj = validPinObject();
+    const pin = (obj.pins as Record<string, Record<string, unknown>>)
+      .text2gears;
+    pin.runtimeDependencies = [
+      {
+        kind: 'package',
+        locator: 'node_modules/pkg',
+        identity: H,
+      },
+    ];
+    expect(() => parsePinFile(json(obj))).toThrow(/specifier/);
+  });
+
+  it.each(['../local.js', 'node:fs'])(
+    'rejects a non-bare package runtime specifier (%s)',
+    (specifier) => {
+      const obj = validPinObject();
+      const pin = (obj.pins as Record<string, Record<string, unknown>>)
+        .text2gears;
+      pin.runtimeDependencies = [
+        {
+          kind: 'package',
+          locator: 'node_modules/pkg',
+          identity: H,
+          specifier,
+        },
+      ];
+      expect(() => parsePinFile(json(obj))).toThrow(/bare package specifier/);
+    },
+  );
 
   it('rejects an unsupported link-target kind', () => {
     const obj = validPinObject();
@@ -184,5 +244,13 @@ describe('loadPinFile (PIN-1, PIN-5)', () => {
     await writeFile(join(dir, PINS_FILE), '{not json');
 
     await expect(loadPinFile(dir)).rejects.toBeInstanceOf(PinError);
+  });
+
+  it('rejects a pin index that is itself a symbolic link', async () => {
+    const outside = join(dir, 'outside.json');
+    await writeFile(outside, json(validPinObject()));
+    await symlink(outside, join(dir, PINS_FILE));
+
+    await expect(loadPinFile(dir)).rejects.toThrow(/non-symbolic-link/);
   });
 });

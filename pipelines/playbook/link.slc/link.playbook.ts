@@ -164,7 +164,9 @@ function enumerateInterruptTargets(): InterruptTarget[] {
 // A captain-invoking state is registered as resumable when `awaitBossReply`
 // carries a BOSS_REPLY arm that targets it; the empty-answer arm targets a
 // non-captain sink and is excluded.
-function enumerateResumableStateIds(captainIds: ReadonlySet<string>): Set<string> {
+function enumerateResumableStateIds(
+  captainIds: ReadonlySet<string>,
+): Set<string> {
   const ids = new Set<string>();
   for (const state of Object.values(MACHINE_CONFIG.states ?? {})) {
     const raw = state.on?.[BOSS_REPLY_EVENT];
@@ -183,7 +185,9 @@ function enumerateResumableStateIds(captainIds: ReadonlySet<string>): Set<string
 // event (or are final) and so end a `handleBossInput` drive (link.md §Session
 // lifecycle step 4). The lone captain-invoking state (`linking`) is the only
 // non-quiescent one.
-function enumerateQuiescentStateIds(captainIds: ReadonlySet<string>): Set<string> {
+function enumerateQuiescentStateIds(
+  captainIds: ReadonlySet<string>,
+): Set<string> {
   const ids = new Set<string>();
   for (const stateId of Object.keys(MACHINE_CONFIG.states ?? {})) {
     if (!captainIds.has(stateId)) ids.add(stateId);
@@ -275,9 +279,14 @@ const BOSS_REQUEST_LABEL = 'Boss request:';
 function composePlayerPrompt(input: CaptainInput): string {
   const blocks: string[] = [];
 
-  if (input.pendingBossQuestion !== undefined && input.bossReply !== undefined) {
+  if (
+    input.pendingBossQuestion !== undefined &&
+    input.bossReply !== undefined
+  ) {
     blocks.push(CONTINUATION_PREAMBLE);
-    blocks.push(`${BOSS_QUESTION_LABEL}\n${input.pendingBossQuestion.question}`);
+    blocks.push(
+      `${BOSS_QUESTION_LABEL}\n${input.pendingBossQuestion.question}`,
+    );
     blocks.push(`${BOSS_REPLY_LABEL}\n${input.bossReply}`);
   }
 
@@ -461,7 +470,9 @@ function validateBossReplyOutput(
 ): void {
   if (output.guard !== 'needsBossReply') return;
   if (typeof output.question !== 'string') {
-    throw new Error("adjudicate: needsBossReply outcome missing 'question' field");
+    throw new Error(
+      "adjudicate: needsBossReply outcome missing 'question' field",
+    );
   }
   const stateId = STATE_ID_BY_SOURCE_ITEM.get(input.sourceItem);
   if (stateId === undefined || !RESUMABLE_STATE_IDS.has(stateId)) {
@@ -514,7 +525,8 @@ function pendingBossQuestionFromContext(
 // current state and pending question let the judge distinguish a reply from a
 // fresh directive.
 function buildClassifierPrompt(text: string, state: ClassifierState): string {
-  const currentState = typeof state.value === 'string' ? state.value : 'unknown';
+  const currentState =
+    typeof state.value === 'string' ? state.value : 'unknown';
   const pending = pendingBossQuestionFromContext(state.context);
   const lines: string[] = [];
   lines.push(
@@ -523,7 +535,9 @@ function buildClassifierPrompt(text: string, state: ClassifierState): string {
   lines.push(
     'Respond with a single JSON object: { "event": "<TYPE>", "payload": { ...fields } }.',
   );
-  lines.push('Use { "event": "NO_ACTION", "payload": {} } when no FSM action applies.');
+  lines.push(
+    'Use { "event": "NO_ACTION", "payload": {} } when no FSM action applies.',
+  );
   lines.push('');
   lines.push(`Current state: ${currentState}`);
   if (pending !== undefined) {
@@ -577,7 +591,9 @@ async function classifyBossText(
 
   let raw: string;
   try {
+    signal.throwIfAborted();
     raw = await ports.callJudge(prompt, signal);
+    signal.throwIfAborted();
   } catch (error) {
     if (signal.aborted) throw error;
     await ports.emitStatus('Classifier call failed');
@@ -637,13 +653,17 @@ async function classifyBossText(
         return undefined;
       }
       if (typeof payload.answer !== 'string') {
-        await ports.emitStatus(`Classifier omitted answer for ${BOSS_REPLY_EVENT}`);
+        await ports.emitStatus(
+          `Classifier omitted answer for ${BOSS_REPLY_EVENT}`,
+        );
         return undefined;
       }
       return { type: 'BOSS_REPLY', answer: payload.answer };
     }
     default:
-      await ports.emitStatus(`Classifier returned unknown event type: ${eventType}`);
+      await ports.emitStatus(
+        `Classifier returned unknown event type: ${eventType}`,
+      );
       return undefined;
   }
 }
@@ -667,8 +687,8 @@ async function classifyBossText(
 //     re-throws the fault out of the turn.
 //
 // `getActiveSignal` flows the Boss's per-turn `handleBossInput.signal` into the
-// port calls; XState's actor-scoped signal (which only fires on actor.stop())
-// is the fallback for direct-bridge tests.
+// port calls. It is combined with XState's actor-scoped signal so either a turn
+// cancellation or invocation stop/re-entry aborts the in-flight port work.
 function captainBridge(
   ports: PlaybookPorts,
   binding: PlayerBinding,
@@ -676,11 +696,15 @@ function captainBridge(
   onControlPlaneError: (error: unknown) => void,
 ) {
   return fromPromise<CaptainOutput, CaptainInput>(async ({ input, signal }) => {
-    const activeSignal = getActiveSignal() ?? signal;
+    const turnSignal = getActiveSignal();
+    const activeSignal =
+      turnSignal === undefined ? signal : AbortSignal.any([signal, turnSignal]);
     const playerId = resolvePlayerId(input, binding);
     const prompt = composePlayerPrompt(input);
 
+    activeSignal.throwIfAborted();
     const result = await ports.callPlayer(playerId, prompt, activeSignal);
+    activeSignal.throwIfAborted();
     if (result.status !== 'ok') {
       throw new Error(
         result.error ?? `callPlayer resolved with status "${result.status}"`,
@@ -691,7 +715,13 @@ function captainBridge(
     }
 
     try {
-      const output = await adjudicate(input, result.finalText, ports, activeSignal);
+      const output = await adjudicate(
+        input,
+        result.finalText,
+        ports,
+        activeSignal,
+      );
+      activeSignal.throwIfAborted();
       validateBossReplyOutput(input, output);
       return output;
     } catch (error) {
@@ -751,7 +781,8 @@ function formatStateEntry(
 
 function isQuiescent(snapshot: { value: unknown }): boolean {
   return (
-    typeof snapshot.value === 'string' && QUIESCENT_STATE_IDS.has(snapshot.value)
+    typeof snapshot.value === 'string' &&
+    QUIESCENT_STATE_IDS.has(snapshot.value)
   );
 }
 
@@ -760,7 +791,9 @@ function isQuiescent(snapshot: { value: unknown }): boolean {
 // by the provided `captain` actor, whose settling advances the machine; on
 // abort the natural-rejection path lands the machine in `failed`, which is
 // quiescent, so this resolves without a separate poll.
-function driveToQuiescence(actor: ReturnType<typeof createActor>): Promise<void> {
+function driveToQuiescence(
+  actor: ReturnType<typeof createActor>,
+): Promise<void> {
   return new Promise<void>((resolve) => {
     if (isQuiescent(actor.getSnapshot())) {
       resolve();
@@ -825,6 +858,7 @@ export function createPlaybookRuntime(
   // of `handleBossInput` after the actor cleans up. Undefined when the turn had
   // none.
   let controlPlaneError: unknown;
+  let hasControlPlaneError = false;
   // Previous root-machine state value, for the inspect-driven emitter.
   let priorState: unknown;
 
@@ -834,6 +868,8 @@ export function createPlaybookRuntime(
   // them sequentially.
   const emitQueue: Array<() => Promise<void>> = [];
   let drainer: Promise<void> | undefined;
+  let emissionError: unknown;
+  let hasEmissionError = false;
 
   function enqueueEmit(fn: () => Promise<void>): void {
     emitQueue.push(fn);
@@ -844,9 +880,11 @@ export function createPlaybookRuntime(
           if (next === undefined) break;
           try {
             await next();
-          } catch {
-            // Host-side emission failures are suppressed; genuine faults reach
-            // the control plane through `handleBossInput` throws.
+          } catch (error) {
+            // Keep draining in order so later emissions are not dropped, then
+            // surface the first host-side emission failure at the turn boundary.
+            if (!hasEmissionError) emissionError = error;
+            hasEmissionError = true;
           }
         }
         drainer = undefined;
@@ -854,8 +892,14 @@ export function createPlaybookRuntime(
     }
   }
 
-  function drainEmissions(): Promise<void> {
-    return drainer ?? Promise.resolve();
+  async function drainEmissions(): Promise<void> {
+    await (drainer ?? Promise.resolve());
+    if (hasEmissionError) {
+      const error = emissionError;
+      emissionError = undefined;
+      hasEmissionError = false;
+      throw error;
+    }
   }
 
   // Construct the session-scoped actor: provide the concrete `captain` bridge,
@@ -872,7 +916,8 @@ export function createPlaybookRuntime(
             binding,
             () => activeSignal,
             (error) => {
-              controlPlaneError = error;
+              if (!hasControlPlaneError) controlPlaneError = error;
+              hasControlPlaneError = true;
             },
           ),
         },
@@ -940,6 +985,7 @@ export function createPlaybookRuntime(
       const ports = savedPorts;
       activeSignal = turn.signal;
       controlPlaneError = undefined;
+      hasControlPlaneError = false;
       try {
         // 1. Classify the turn into an FSM event through the Boss-event mapping.
         let event: LinkEvent | undefined;
@@ -958,6 +1004,10 @@ export function createPlaybookRuntime(
             return;
           }
           throw error;
+        }
+        if (turn.signal.aborted) {
+          await drainEmissions();
+          return;
         }
         // No event (empty text, no-action, or an unusable classifier reply):
         // drain any emissions and return.
@@ -987,9 +1037,10 @@ export function createPlaybookRuntime(
 
         // A control-plane (adjudicator) fault is propagated out of the turn
         // after the actor's cleanup and the emission drain.
-        if (controlPlaneError !== undefined) {
+        if (hasControlPlaneError) {
           const error = controlPlaneError;
           controlPlaneError = undefined;
+          hasControlPlaneError = false;
           throw error;
         }
       } finally {

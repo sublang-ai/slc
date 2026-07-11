@@ -7,38 +7,44 @@
  *
  * This is the inverse of the currency validator: given a built and reviewed
  * compiled artifact, {@link generatePinRecord} records — over committed bytes —
- * the definition, the compiled artifact, the semantic-input closure derived from
- * the definition's `## Pin Inputs`, and the link-target identity, so the resulting
- * record validates as current. {@link writePinFile} writes the pin index for a
- * pipeline directory. Generation is invoked only by an explicit build-and-review
- * step, never during an ordinary pipeline run; `slc` does not regenerate or
- * rewrite pins per invocation (DR-007 lifecycle). See specs/dev/pinning.md.
+ * the definition, compiled entry module and reviewed artifact bundle, the
+ * semantic-input closure derived from the definition's `## Pin Inputs`, and the
+ * link-target identity, so the resulting record validates as current.
+ * {@link writePinFile} writes the pin index for a pipeline directory. Generation
+ * is invoked only by an explicit build-and-review step, never during an ordinary
+ * pipeline run; `slc` does not regenerate or rewrite pins per invocation
+ * (DR-007 lifecycle). See specs/dev/pinning.md.
  */
 
 import { writeFile } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { hashFile } from './hash.js';
 import { deriveClosure } from './pin-closure.js';
-import { hashTree } from './pin-currency.js';
+import { artifactBundleLayoutIssue, hashTree } from './pin-currency.js';
 import { resolvePinPath } from './pin-paths.js';
 import {
   PINS_FILE,
   PIN_HASH_ALGORITHM,
   PIN_SCHEMA,
+  PinError,
   type PinExternalInput,
   type PinFile,
   type PinLinkTarget,
   type PinProducer,
   type PinRecord,
+  type PinRuntimeDependency,
 } from './pins.js';
+import { resolveRuntimePackage } from './runtime-package.js';
 
 /** The committed inputs that produced one compiled phase, to pin (DR-007). */
 export interface PinSpec {
   /** Pipeline-dir-relative path to the phase definition. */
   definition: string;
-  /** Pipeline-dir-relative path to the compiled `phase` artifact. */
+  /** Pipeline-dir-relative path to the compiled `.playbook.ts` entry module. */
   artifact: string;
+  /** Pipeline-dir-relative directory containing the reviewed artifact and its local modules/tests. */
+  artifactBundle: string;
   /** The link target the artifact was linked against. */
   linkTarget: {
     kind: PinLinkTarget['kind'];
@@ -49,6 +55,8 @@ export interface PinSpec {
   roles?: Readonly<Record<string, string>>;
   /** Immutable content-addressed external inputs, if any. */
   externalInputs?: readonly PinExternalInput[];
+  /** Local executable dependencies loaded by the compiled artifact. */
+  runtimeDependencies?: readonly Omit<PinRuntimeDependency, 'identity'>[];
   /** Provenance of the producing run; never a currency input. */
   producer?: PinProducer;
 }
@@ -104,6 +112,32 @@ export async function generatePinRecord(
     spec.artifact,
     'artifact',
   );
+  const artifactBundleResolved = resolvePinPath(
+    pipelineDir,
+    boundary,
+    spec.artifactBundle,
+    'artifactBundle',
+  );
+  const artifactRelative = relative(artifactBundleResolved, artifactResolved);
+  if (
+    artifactRelative === '' ||
+    artifactRelative === '..' ||
+    artifactRelative.startsWith(`..${sep}`) ||
+    isAbsolute(artifactRelative) ||
+    dirname(artifactRelative) !== '.'
+  ) {
+    throw new PinError(
+      'pin-invalid',
+      'artifact must be a direct child of artifactBundle',
+    );
+  }
+  const bundleLayout = await artifactBundleLayoutIssue(
+    artifactBundleResolved,
+    artifactResolved,
+  );
+  if (bundleLayout !== null) {
+    throw new PinError('pin-invalid', bundleLayout);
+  }
   const linkResolved = resolvePinPath(
     pipelineDir,
     boundary,
@@ -114,6 +148,48 @@ export async function generatePinRecord(
     spec.linkTarget.kind === 'file'
       ? await hashFile(linkResolved)
       : await hashTree(linkResolved);
+
+  const runtimeDependencies = await Promise.all(
+    (spec.runtimeDependencies ?? []).map(async (dependency) => {
+      const resolved = resolvePinPath(
+        pipelineDir,
+        boundary,
+        dependency.locator,
+        'runtimeDependencies.locator',
+      );
+      const dependencyIdentity =
+        dependency.kind === 'file'
+          ? await hashFile(resolved)
+          : await hashTree(resolved);
+      if (dependency.kind === 'package') {
+        if (dependency.specifier === undefined) {
+          throw new PinError(
+            'pin-invalid',
+            'package runtime dependency must declare its import specifier',
+          );
+        }
+        let selected: string;
+        try {
+          selected = resolveRuntimePackage(
+            artifactResolved,
+            dependency.specifier,
+          ).root;
+        } catch (error) {
+          throw new PinError(
+            'pin-invalid',
+            `runtime dependency specifier cannot be resolved: ${messageOf(error)}`,
+          );
+        }
+        if (resolve(selected) !== resolve(resolved)) {
+          throw new PinError(
+            'pin-invalid',
+            `runtime dependency locator is not the package selected by "${dependency.specifier}"`,
+          );
+        }
+      }
+      return { ...dependency, identity: dependencyIdentity };
+    }),
+  );
 
   const linkTarget: PinLinkTarget = {
     kind: spec.linkTarget.kind,
@@ -130,8 +206,13 @@ export async function generatePinRecord(
       hash: await hashFile(definitionResolved),
     },
     artifact: { path: spec.artifact, hash: await hashFile(artifactResolved) },
+    artifactBundle: {
+      path: spec.artifactBundle,
+      hash: await hashTree(artifactBundleResolved, { rejectSymlinks: true }),
+    },
     semanticInputs,
     externalInputs: [...(spec.externalInputs ?? [])],
+    runtimeDependencies,
     linkTarget,
     ...(spec.producer !== undefined ? { producer: spec.producer } : {}),
   };
@@ -159,4 +240,8 @@ export async function writePinFile(
 
 function toPosix(path: string): string {
   return path.split(sep).join('/');
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
