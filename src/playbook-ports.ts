@@ -89,12 +89,14 @@ export function createPlaybookPorts(opts: {
       signal: AbortSignal,
       options: CaptainCallOptions,
     ): Promise<CaptainResult> {
-      requireCaptainCallOptions(options);
+      const isolation = requireCaptainCallOptions(options);
       return withSerialCaptain(signal, async () => {
         const result = await opts.judge.run({
           prompt,
           model: opts.defaultModel,
           cwd: opts.cwd,
+          resume: isolation.resume,
+          allowedTools: isolation.allowedTools,
           signal,
         });
         return toCaptainResult(result, signal);
@@ -107,6 +109,8 @@ export function createPlaybookPorts(opts: {
           prompt,
           model: opts.defaultModel,
           cwd: opts.cwd,
+          resume: false,
+          allowedTools: [],
           signal,
         });
         if (result.status !== 'success') {
@@ -193,7 +197,10 @@ function toCaptainResult(
   }
 }
 
-function requireCaptainCallOptions(options: CaptainCallOptions): void {
+function requireCaptainCallOptions(options: CaptainCallOptions): {
+  resume: false;
+  allowedTools: readonly [];
+} {
   if (typeof options !== 'object' || options === null) {
     throw new TypeError('callCaptain requires CaptainCallOptions');
   }
@@ -207,6 +214,26 @@ function requireCaptainCallOptions(options: CaptainCallOptions): void {
       'callCaptain options.visibility must be visible or hidden',
     );
   }
+  const resume = Object.getOwnPropertyDescriptor(options, 'resume');
+  if (
+    resume === undefined ||
+    !Object.prototype.hasOwnProperty.call(resume, 'value') ||
+    resume.value !== false
+  ) {
+    throw new TypeError('callCaptain options.resume must be false');
+  }
+  const allowedTools = Object.getOwnPropertyDescriptor(options, 'allowedTools');
+  if (
+    allowedTools === undefined ||
+    !Object.prototype.hasOwnProperty.call(allowedTools, 'value') ||
+    !Array.isArray(allowedTools.value) ||
+    allowedTools.value.length !== 0
+  ) {
+    throw new TypeError(
+      'callCaptain options.allowedTools must be an explicitly empty array',
+    );
+  }
+  return { resume: false, allowedTools: [] };
 }
 
 /** Maps a normalized agent outcome onto Playbook's {@link PlayerResult} (DR-005). */

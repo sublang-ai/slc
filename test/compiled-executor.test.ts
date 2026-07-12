@@ -374,12 +374,20 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     expect(Object.keys(session.ports)).not.toContain('drainDiagnostics');
   });
 
-  it('routes direct Captain calls without player continuation semantics', async () => {
+  it('routes isolated direct Captain calls without continuation output', async () => {
     const target = join(root, 'out.ts');
-    const calls: Array<{ prompt: string; resume?: string | false }> = [];
+    const calls: Array<{
+      prompt: string;
+      resume?: string | false;
+      allowedTools?: readonly string[];
+    }> = [];
     const captain: AgentClient = {
       async run(request) {
-        calls.push({ prompt: request.prompt, resume: request.resume });
+        calls.push({
+          prompt: request.prompt,
+          resume: request.resume,
+          allowedTools: request.allowedTools,
+        });
         return {
           status: 'success',
           text: 'Captain response',
@@ -392,8 +400,13 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
           callCaptain(
             prompt: string,
             signal: AbortSignal,
-            options: { visibility: 'visible' | 'hidden' },
+            options: {
+              visibility: 'visible' | 'hidden';
+              resume: false;
+              allowedTools: readonly [];
+            },
           ): Promise<unknown>;
+          callJudge(prompt: string, signal: AbortSignal): Promise<string>;
         }
       | undefined;
     let captainResult: unknown;
@@ -411,8 +424,9 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
           captainResult = await ports?.callCaptain(
             'Handle this directly.',
             signal,
-            { visibility: 'visible' },
+            { visibility: 'visible', resume: false, allowedTools: [] },
           );
+          await ports?.callJudge('Adjudicate this.', signal);
           await writeFile(target, 'fresh');
           return { outcome: 'terminal', state: structuredState };
         },
@@ -439,7 +453,16 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       finalText: 'Captain response',
     });
     expect(calls).toEqual([
-      { prompt: 'Handle this directly.', resume: undefined },
+      {
+        prompt: 'Handle this directly.',
+        resume: false,
+        allowedTools: [],
+      },
+      {
+        prompt: 'Adjudicate this.',
+        resume: false,
+        allowedTools: [],
+      },
     ]);
   });
 

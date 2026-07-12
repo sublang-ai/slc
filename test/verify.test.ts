@@ -173,6 +173,43 @@ const directConfig = (): MachineConfigLike => ({
   },
 });
 
+const resultGears = `## Behaviors
+
+### ROUTE-1
+
+When Boss supplies an intent, Captain shall choose the next route:
+> Decide whether one material routing question is needed or select a playbook.
+
+Results:
+- \`question\`: Captain needs one material routing answer from Boss.
+- \`delegation\`: Captain selected a playbook and supplied its call input.
+`;
+
+const resultConfig = (
+  result: Record<string, string> = {
+    question: 'Captain needs one material routing answer from Boss.',
+    delegation: 'Captain selected a playbook and supplied its call input.',
+  },
+): MachineConfigLike => ({
+  states: {
+    route: {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          stateId: 'route',
+          sourceItem: 'ROUTE-1',
+          prompt:
+            'Decide whether one material routing question is needed or select a playbook.',
+          result: {
+            ...result,
+            needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+          },
+        }),
+      },
+    },
+  },
+});
+
 const structuredCaptainInput =
   (stateId: string, player: string, sourceItem: string, prompt: string) =>
   ({ context }: { context: Record<string, unknown> }) => ({
@@ -371,6 +408,23 @@ When Boss provides a free-form procedure description as the Source, Captain shal
         prompt: '<nextPlaybookInput>',
         playbookIdContext: 'nextPlaybookId',
         textContext: 'nextPlaybookInput',
+      },
+    ]);
+  });
+
+  it('parses ordered Results metadata outside the acting prompt', () => {
+    expect(parseGearsItems(resultGears)).toEqual([
+      {
+        id: 'ROUTE-1',
+        actor: 'captain',
+        player: 'Captain',
+        prompt:
+          'Decide whether one material routing question is needed or select a playbook.',
+        result: {
+          question: 'Captain needs one material routing answer from Boss.',
+          delegation:
+            'Captain selected a playbook and supplied its call input.',
+        },
       },
     ]);
   });
@@ -586,6 +640,95 @@ describe('checkGearsFsmConformance', () => {
 
   it('accepts direct Captain work without a player binding', () => {
     expect(checkGearsFsmConformance(directGears, directConfig())).toEqual([]);
+  });
+
+  it('matches explicit ordered domain results apart from needsBossReply', () => {
+    expect(checkGearsFsmConformance(resultGears, resultConfig())).toEqual([]);
+  });
+
+  it.each([
+    [
+      'missing',
+      {
+        question: 'Captain needs one material routing answer from Boss.',
+      },
+    ],
+    [
+      'extra',
+      {
+        question: 'Captain needs one material routing answer from Boss.',
+        delegation: 'Captain selected a playbook and supplied its call input.',
+        direct: 'Captain handled the routed work.',
+      },
+    ],
+    [
+      'reordered',
+      {
+        delegation: 'Captain selected a playbook and supplied its call input.',
+        question: 'Captain needs one material routing answer from Boss.',
+      },
+    ],
+    [
+      'description-drifted',
+      {
+        question: 'Captain asked something.',
+        delegation: 'Captain selected a playbook and supplied its call input.',
+      },
+    ],
+  ])('rejects a %s FSM domain result contract', (_label, result) => {
+    expect(
+      checkGearsFsmConformance(resultGears, resultConfig(result)).join('\n'),
+    ).toMatch(/FSM domain result contract .* is not GEARS Results/);
+  });
+
+  it.each([
+    [
+      'malformed',
+      resultGears.replace(
+        '- `question`: Captain needs one material routing answer from Boss.',
+        '- question: Captain needs one material routing answer from Boss.',
+      ),
+      /malformed Results entry/,
+    ],
+    [
+      'empty',
+      resultGears.replace(
+        '- `question`: Captain needs one material routing answer from Boss.\n- `delegation`: Captain selected a playbook and supplied its call input.',
+        '',
+      ),
+      /Results block declares no valid entries/,
+    ],
+    [
+      'duplicate',
+      `${resultGears}- \`question\`: Duplicate.\n`,
+      /duplicate Results guard question/,
+    ],
+    [
+      'framework-owned',
+      `${resultGears}- \`needsBossReply\`: Source tries to own it.\n`,
+      /needsBossReply is compiler-owned/,
+    ],
+    [
+      'misplaced',
+      resultGears.replace('\nResults:\n', '\nIntervening prose.\n\nResults:\n'),
+      /Results block shall immediately follow the acting blockquote/,
+    ],
+    [
+      'near-miss label',
+      resultGears.replace('\nResults:\n', '\nResults :\n'),
+      /malformed Results label/,
+    ],
+  ])('reports %s source result metadata', (_label, source, finding) => {
+    expect(checkGearsFsmConformance(source, resultConfig()).join('\n')).toMatch(
+      finding,
+    );
+  });
+
+  it('rejects Results metadata on a nested-playbook call item', () => {
+    const source = `${dynamicGears}\nResults:\n- \`done\`: Child finished.\n`;
+    expect(
+      checkGearsFsmConformance(source, dynamicConfig()).join('\n'),
+    ).toMatch(/nested-playbook call item shall not declare Results metadata/);
   });
 
   it('accepts new player actors and legacy captain-with-player actors', () => {

@@ -27,6 +27,8 @@ export interface PlayerResult extends LegacyPlayerResult {
 
 export interface CaptainCallOptions {
   visibility: 'visible' | 'hidden';
+  resume: false;
+  allowedTools: readonly [];
 }
 
 export interface CaptainResult {
