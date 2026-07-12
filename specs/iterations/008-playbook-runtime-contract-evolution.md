@@ -37,7 +37,7 @@ Prepare SLC's compiled phase host and artifact verification for Playbook's causa
 ## Acceptance criteria
 
 - Current published 0.9.0 artifacts still execute and all committed pins remain current without byte changes.
-- The `legacy` fixture receives four direct ports, `session-v1` receives its minimal session and four ports, and `composed-v2` receives a unique causal root `PlaybookSession` and exact five-port adapter; explicit player continuation crosses the adapter and only the composed result controls the SLC outcome directly.
+- The `legacy` fixture receives four direct ports, `session-v1` receives its minimal session and four ports, and `composed-v2` receives a unique causal root `PlaybookSession` and the exact five-port adapter prepared by this iteration; explicit player continuation crosses the adapter and only the composed result controls the SLC outcome directly. IR-009 supersedes that provisional composed adapter with the final six-port Captain boundary.
 - `failed`, `aborted`, invalid, and unexpectedly suspended structured runs fail; a no-action or outputless quiescent run blocks; and a successful quiescent or terminal run proceeds only after producing its declared output.
 - Exact trace prompts, replies, and resume tokens never appear in phase diagnostics, concurrent judge calls are serialized, and nested phase calls fail deterministically.
 - Parallel and nested synthetic machines are traversed through public ids without the flat verifier's missing-state false findings, nested calls are bound by target and reported unsupported for transition driving, keyed replies isolate pending branches, and current flat verification output stays unchanged.

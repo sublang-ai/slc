@@ -12,7 +12,7 @@ Adopt Playbook 1.0's final six-port composed runtime and compiler definitions as
 - [x] [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md), `PHEXEC`, `VERIFY`, `SELFHOST`, `CI`, and `map.md` record the immutable boundary and required verification.
 - [ ] Exact `@sublang/playbook@1.0.0` provenance selects the six-port `composed-v2` phase boundary while 0.9.0 remains legacy and other versions fail closed.
 - [x] The phase adapter implements first-class Captain calls and serializes Captain and judge work without player resume semantics or trace leakage.
-- [ ] Conformance distinguishes Captain, player, and playbook actors, validates dynamic context metadata and sentinel wiring, and drives nested success and failure transitions.
+- [x] Conformance distinguishes Captain, player, and playbook actors, validates dynamic context metadata and sentinel wiring, and drives nested success and failure transitions.
 - [ ] The dependency lock, three shared definitions, all three reviewed artifact bundles, and the pin index form one clean-install Playbook 1.0 set.
 - [ ] Full source, acceptance, artifact-review, pin-reproduction, and licensing checks pass.
 
@@ -20,14 +20,20 @@ Adopt Playbook 1.0's final six-port composed runtime and compiler definitions as
 
 1. **Record the immutable adoption.** _[done]_
    Add DR-011 and this iteration, then amend the affected dev, test, CI, and map items before implementation.
-2. **Finalize the composed phase boundary.**
+2. **Finalize the composed phase boundary.** _[in progress]_
    Import the released runtime contract, add `callCaptain`, share Captain/judge serialization, and map exact 1.0.0 provenance.
-3. **Verify the new compiler primitives.**
+3. **Verify the new compiler primitives.** _[done]_
    Separate direct Captain and delegated player bindings, validate dynamic target/input context wiring, and script nested `onDone` and `onError` coverage.
-4. **Refresh the reviewed set atomically.**
+4. **Refresh the reviewed set atomically.** _[pending release gate]_
    Install Playbook 1.0 from the registry, merge its three definitions while retaining pin inputs, rebuild and review every meta-phase bundle, and regenerate all pins.
-5. **Validate and finalize.**
+5. **Validate and finalize.** _[in progress]_
    Run a clean install, source quality, the full suite, independent artifact review, byte-identical pin regeneration, and licensing checks before commit.
+
+The local six-port compatibility surface, Captain transport, shared
+serialization, compiler conformance, dynamic child verification, and full
+suite are complete. Immutable adoption remains release-coordinated: install
+the published Playbook 1.0 contract, then refresh provenance selection,
+definitions, reviewed artifacts, pins, and clean-install evidence as one set.
 
 ## Acceptance criteria
 
