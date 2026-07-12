@@ -1395,6 +1395,46 @@ describe('checkPromptComposition (VERIFY-5)', () => {
     ).toEqual([]);
   });
 
+  it('accepts a state-keyed branch continuation mapper', () => {
+    const config: MachineConfigLike = {
+      states: {
+        draft: {
+          invoke: {
+            src: 'player',
+            input: ({ context }) => {
+              const pendingBossQuestion = (
+                context.pendingBossQuestions as
+                  | Record<string, { question: string }>
+                  | undefined
+              )?.draft;
+              const bossReply = (
+                context.bossReplies as Record<string, string> | undefined
+              )?.draft;
+              return {
+                stateId: 'draft',
+                player: 'Writer',
+                sourceItem: 'GREETER-1',
+                prompt: 'Draft a short hello message for <audience>.',
+                result: {
+                  done: 'The player finished.',
+                  needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+                },
+                audience: context.audience,
+                ...(pendingBossQuestion && bossReply
+                  ? { pendingBossQuestion, bossReply }
+                  : {}),
+              };
+            },
+          },
+        },
+      },
+    };
+
+    expect(checkPromptComposition({ config, compose: goodCompose })).toEqual(
+      [],
+    );
+  });
+
   it('recognizes a sentinel rendered as deterministic JSON', () => {
     const config: MachineConfigLike = {
       states: {

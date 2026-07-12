@@ -628,10 +628,33 @@ type PlaybookScript = (
   actorId: string,
 ) => ScriptResult;
 
+function persistedSnapshotWithContext(
+  provided: MachineLike,
+  context: Record<string, unknown>,
+): Record<string, unknown> {
+  const seed = createActor(
+    provided as never,
+    { input: COVERAGE_MACHINE_INPUT } as never,
+  ) as unknown as {
+    getPersistedSnapshot(): Record<string, unknown>;
+    stop(): unknown;
+  };
+  try {
+    return {
+      ...seed.getPersistedSnapshot(),
+      context: { ...context },
+      children: {},
+    };
+  } finally {
+    seed.stop();
+  }
+}
+
 function makeActor(
   machine: MachineLike,
   script: CaptainScript,
   playbookScript: PlaybookScript = () => null,
+  restoredContext?: Record<string, unknown>,
 ): DrivenActor {
   const coverageErrors: { eventType: string; error: unknown }[] = [];
   const workActor = fromPromise(
@@ -664,10 +687,15 @@ function makeActor(
       ),
     },
   });
+  const restoredSnapshot =
+    restoredContext === undefined
+      ? undefined
+      : persistedSnapshotWithContext(provided, restoredContext);
   const actor = createActor(
     provided as never,
     {
       input: COVERAGE_MACHINE_INPUT,
+      ...(restoredSnapshot === undefined ? {} : { snapshot: restoredSnapshot }),
       inspect: (inspection: unknown) => {
         if (
           typeof inspection !== 'object' ||
@@ -919,28 +947,50 @@ function orderedArmPredicate(
   return undefined;
 }
 
-/**
- * Synthesizes optional typed payload fields for the authored interrupt arm
- * while keeping its event type and public target id fixed.
- */
-function interruptEventForRef(
+interface InterruptDrive {
+  event: Record<string, unknown>;
+  context: Record<string, unknown>;
+  satisfiable: boolean;
+}
+
+/** A bounded satisfying context/event pair for one authored interrupt arm. */
+function interruptDriveForRef(
   machine: MachineLike,
   refs: readonly StateRef[],
   target: StateRef,
   targetId: string,
-): Record<string, unknown> {
+  extraValues: readonly unknown[] = [],
+  selectedArmIndex?: number,
+): InterruptDrive {
   const base = { type: INTERRUPT_EVENT, targetId };
   const arms = transitionArms((machine.config.on ?? {})[INTERRUPT_EVENT]);
-  const armIndex = arms.findIndex((arm) => {
-    const rawTarget = rawArmTarget(arm);
-    return (
-      rawTarget !== undefined &&
-      sameStateRef(stateRefForTarget(refs, rawTarget), target)
-    );
-  });
-  if (armIndex < 0) return base;
+  const armIndex =
+    selectedArmIndex ??
+    arms.findIndex((arm) => {
+      const rawTarget = rawArmTarget(arm);
+      if (rawTarget === undefined) return false;
+      const resolvedTarget = stateRefForTarget(refs, rawTarget);
+      return (
+        sameStateRef(resolvedTarget, target) ||
+        resolvedTarget?.stableId === targetId
+      );
+    });
+  const targetPlaybook = playbookRefs(machine.config).find((playbook) =>
+    sameStateRef(playbook.ref, target),
+  );
+  const initialContext = initializedCoverageContext(
+    machine,
+    targetPlaybook === undefined
+      ? undefined
+      : dynamicPlaybookFields(targetPlaybook),
+  );
+  if (armIndex < 0 || armIndex >= arms.length) {
+    return { event: base, context: initialContext, satisfiable: false };
+  }
   const guard = orderedArmPredicate(machine, arms, armIndex);
-  if (guard === undefined) return base;
+  if (guard === undefined) {
+    return { event: base, context: initialContext, satisfiable: false };
+  }
   const assignment = probeGuardAssignment(
     guard.run,
     {},
@@ -952,15 +1002,20 @@ function interruptEventForRef(
         ref.stableId,
         ...(ref.configId === undefined ? [] : [ref.configId]),
       ]),
+      ...extraValues,
     ],
     {
-      initialContext: initializedMachineContext(machine),
-      assignContext: false,
+      initialContext,
+      varyExistingContext: true,
     },
   );
   return assignment === undefined
-    ? base
-    : assignedPayload(base, assignment, 'e:');
+    ? { event: base, context: initialContext, satisfiable: false }
+    : {
+        event: assignedPayload(base, assignment, 'e:'),
+        context: assignment.context,
+        satisfiable: true,
+      };
 }
 
 /** The arm XState selects for one concrete invocation output and context. */
@@ -1080,6 +1135,8 @@ interface ProbeOptions {
   initialContext?: Record<string, unknown>;
   /** Nested-call driving varies actor output, not unreachable context. */
   assignContext?: boolean;
+  /** Interrupt entry may replace initialized accumulated-state sentinels. */
+  varyExistingContext?: boolean;
 }
 
 function probeGuardAssignment(
@@ -1089,6 +1146,7 @@ function probeGuardAssignment(
   extraValues: readonly unknown[],
   options: ProbeOptions = {},
 ): ProbeAssignment | undefined {
+  const baseContext = { ...(options.initialContext ?? {}) };
   // Guard-source literals first: the likeliest matches are tried earliest.
   const values = [
     ...new Set([...minedLiterals(guard), ...extraValues, ...GENERIC_VALUES]),
@@ -1128,13 +1186,17 @@ function probeGuardAssignment(
       base: object,
       assigned: Record<string, unknown>,
       tag: string,
+      varyExisting = false,
     ): unknown =>
       new Proxy(overlaidObject(base, assigned), {
         get(target, prop) {
           if (typeof prop !== 'string') return undefined;
           if (prop in target) {
             const payload = payloads.find((item) => item.tag === tag);
-            if (payload?.varyExisting === true && !(prop in assigned)) {
+            if (
+              (varyExisting || payload?.varyExisting === true) &&
+              !(prop in assigned)
+            ) {
               reads.add(`${tag}${prop}`);
             }
             return target[prop];
@@ -1167,7 +1229,12 @@ function probeGuardAssignment(
         }
       }
       guard({
-        context: recording({}, assignment.context, 'c:'),
+        context: recording(
+          baseContext,
+          assignment.contextOverrides,
+          'c:',
+          options.varyExistingContext === true,
+        ),
         event,
       });
     } catch {
@@ -1187,13 +1254,30 @@ function probeGuardAssignment(
       const tag = key.slice(0, 2);
       const field = key.slice(2);
       if (tag === 'c:' && options.assignContext === false) continue;
-      for (const value of values) {
+      const assigned =
+        tag === 'c:'
+          ? assignment.contextOverrides
+          : (assignment.payloads[tag] ?? {});
+      const payload = payloads.find((item) => item.tag === tag);
+      const base = tag === 'c:' ? baseContext : payload?.base;
+      const hasBaseline =
+        base !== undefined && Object.prototype.hasOwnProperty.call(base, field);
+      const baseline = hasBaseline
+        ? (base as Record<string, unknown>)[field]
+        : undefined;
+      const candidates = [
+        ...(hasBaseline ? [baseline] : []),
+        ...values.filter((value) => !hasBaseline || value !== baseline),
+      ];
+      for (const value of candidates) {
         if (probes > MAX_PROBES) return undefined;
+        const nextDepth = depth + (hasBaseline && value === baseline ? 0 : 1);
         const next =
           tag === 'c:'
             ? {
                 ...assignment,
                 context: { ...assignment.context, [field]: value },
+                contextOverrides: { ...assigned, [field]: value },
               }
             : {
                 ...assignment,
@@ -1205,7 +1289,7 @@ function probeGuardAssignment(
                   },
                 },
               };
-        const found = search(next, depth + 1);
+        const found = search(next, nextDepth);
         if (found !== undefined) return found;
       }
     }
@@ -1214,7 +1298,8 @@ function probeGuardAssignment(
 
   return search(
     {
-      context: { ...(options.initialContext ?? {}) },
+      context: baseContext,
+      contextOverrides: {},
       payloads: {},
     },
     0,
@@ -1244,6 +1329,7 @@ interface ProbePayload {
 
 interface ProbeAssignment {
   context: Record<string, unknown>;
+  contextOverrides: Record<string, unknown>;
   payloads: Record<string, Record<string, unknown>>;
 }
 
@@ -1561,6 +1647,7 @@ function captainProbeActor(
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
   playbooks: readonly PlaybookRef[],
+  interruptValues: readonly unknown[],
 ): { actor: DrivenActor; event: Record<string, unknown> } {
   const predecessor = captainPredecessorPlan(
     machine,
@@ -1570,19 +1657,23 @@ function captainProbeActor(
     captains,
   );
   if (predecessor === undefined) {
+    const drive = interruptDriveForRef(
+      machine,
+      refs,
+      captain.ref,
+      captainInterruptTarget(captain),
+      interruptValues,
+    );
     return {
       actor: makeActor(
         machine,
         result instanceof Error
           ? throwingScript(captain.binding.sourceItem, gate)
           : onceScript(captain.binding.sourceItem, result, gate),
+        () => null,
+        drive.context,
       ),
-      event: interruptEventForRef(
-        machine,
-        refs,
-        captain.ref,
-        captainInterruptTarget(captain),
-      ),
+      event: drive.event,
     };
   }
 
@@ -1591,6 +1682,21 @@ function captainProbeActor(
   let childUsed = false;
   const actorId = invocationActorId(machine, predecessor.playbook);
   const dynamic = dynamicPlaybookFields(predecessor.playbook);
+  const entryRef = predecessor.entry?.captain.ref ?? predecessor.playbook.ref;
+  const entryId =
+    predecessor.entry === undefined
+      ? interruptTargetForRef(
+          predecessor.playbook.ref,
+          predecessor.playbook.ref.stableId,
+        )
+      : captainInterruptTarget(predecessor.entry.captain);
+  const drive = interruptDriveForRef(
+    machine,
+    refs,
+    entryRef,
+    entryId,
+    interruptValues,
+  );
   const actor = makeActor(
     machine,
     (input) => {
@@ -1624,26 +1730,11 @@ function captainProbeActor(
       childUsed = true;
       return predecessor.childOutput;
     },
+    drive.context,
   );
   return {
     actor,
-    event:
-      predecessor.entry === undefined
-        ? interruptEventForRef(
-            machine,
-            refs,
-            predecessor.playbook.ref,
-            interruptTargetForRef(
-              predecessor.playbook.ref,
-              predecessor.playbook.ref.stableId,
-            ),
-          )
-        : interruptEventForRef(
-            machine,
-            refs,
-            predecessor.entry.captain.ref,
-            captainInterruptTarget(predecessor.entry.captain),
-          ),
+    event: drive.event,
   };
 }
 
@@ -1660,6 +1751,7 @@ async function probePlaybookOutcome(
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
   outcome: PlaybookOutcome,
+  interruptValues: readonly unknown[],
 ): Promise<string[]> {
   const rawArms = transitionArms(
     outcome === 'onDone'
@@ -1683,6 +1775,18 @@ async function probePlaybookOutcome(
       `state ${playbook.ref.stableId}: dynamic nested playbook has no reachable Captain entry transition`,
     ];
   }
+  const entryRef = entry?.captain.ref ?? playbook.ref;
+  const entryId =
+    entry === undefined
+      ? interruptTargetForRef(playbook.ref, playbook.ref.stableId)
+      : captainInterruptTarget(entry.captain);
+  const drive = interruptDriveForRef(
+    machine,
+    refs,
+    entryRef,
+    entryId,
+    interruptValues,
+  );
   const input = playbookCoverageInput(machine, playbook, dynamic);
   const expectedPlaybookId =
     typeof input?.playbookId === 'string'
@@ -1802,23 +1906,10 @@ async function probePlaybookOutcome(
         calls++;
         return scriptedResult!;
       },
+      drive.context,
     );
     gate.armed = true;
-    actor.send(
-      entry === undefined
-        ? interruptEventForRef(
-            machine,
-            refs,
-            playbook.ref,
-            interruptTargetForRef(playbook.ref, playbook.ref.stableId),
-          )
-        : interruptEventForRef(
-            machine,
-            refs,
-            entry.captain.ref,
-            captainInterruptTarget(entry.captain),
-          ),
-    );
+    actor.send(drive.event);
     let enteredCall = false;
     const settled = await settle(actor, (snapshot) => {
       if (atState(playbook.ref)(snapshot)) enteredCall = true;
@@ -1862,6 +1953,7 @@ async function probePlaybookInvocation(
   playbook: PlaybookRef,
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
+  interruptValues: readonly unknown[],
 ): Promise<string[]> {
   return [
     ...(await probePlaybookOutcome(
@@ -1870,6 +1962,7 @@ async function probePlaybookInvocation(
       refs,
       captains,
       'onDone',
+      interruptValues,
     )),
     ...(await probePlaybookOutcome(
       machine,
@@ -1877,6 +1970,7 @@ async function probePlaybookInvocation(
       refs,
       captains,
       'onError',
+      interruptValues,
     )),
   ];
 }
@@ -1886,6 +1980,7 @@ async function probeParallelQuestions(
   parallel: StateRef,
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
+  interruptValues: readonly unknown[],
 ): Promise<string[]> {
   const branches = parallelBranchCaptains(parallel, refs, captains);
   const plans = branches.flatMap((captain) => {
@@ -1903,9 +1998,16 @@ async function probeParallelQuestions(
   });
   if (plans.length < 2) return [];
 
+  const drive = interruptDriveForRef(
+    machine,
+    refs,
+    parallel,
+    parallel.stableId,
+    interruptValues,
+  );
   const { script, calls } = scriptedOutputs(plans);
-  const actor = makeActor(machine, script);
-  actor.send(interruptEventForRef(machine, refs, parallel, parallel.stableId));
+  const actor = makeActor(machine, script, () => null, drive.context);
+  actor.send(drive.event);
   const parked = await settle(
     actor,
     (snapshot) => plans.every(({ wait }) => atState(wait)(snapshot)),
@@ -1957,6 +2059,7 @@ async function probeParallelJoins(
   parallel: StateRef,
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
+  interruptValues: readonly unknown[],
 ): Promise<string[]> {
   const arms = transitionArms(parallel.state.onDone);
   if (arms.length === 0) return [];
@@ -1982,6 +2085,13 @@ async function probeParallelJoins(
   }
 
   const outputs = combinations(branchOutputs);
+  const drive = interruptDriveForRef(
+    machine,
+    refs,
+    parallel,
+    parallel.stableId,
+    interruptValues,
+  );
   const normalizedTargets = arms.map((arm) => rawArmTarget(arm) ?? null);
   const findings: string[] = [];
   for (const [armIndex, rawTarget] of normalizedTargets.entries()) {
@@ -2009,10 +2119,8 @@ async function probeParallelJoins(
         output: combination[index],
       }));
       const { script, calls } = scriptedOutputs(entries);
-      const actor = makeActor(machine, script);
-      actor.send(
-        interruptEventForRef(machine, refs, parallel, parallel.stableId),
-      );
+      const actor = makeActor(machine, script, () => null, drive.context);
+      actor.send(drive.event);
       exercised = await settle(
         actor,
         (snapshot) =>
@@ -2050,8 +2158,10 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
   const playbooks = playbookRefs(config);
   const parallels = refs.filter((ref) => ref.state.type === 'parallel');
 
-  const rootSettles =
-    transitionArms((config.on ?? {})[INTERRUPT_EVENT]).length * SETTLE_MS;
+  const rootInterruptProbes = transitionArms(
+    (config.on ?? {})[INTERRUPT_EVENT],
+  ).length;
+  const rootSettles = rootInterruptProbes * SETTLE_MS;
   const initial =
     typeof config.initial === 'string' ? config.initial : undefined;
   const entryEvents = new Set([
@@ -2062,7 +2172,7 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
   const entrySettles = entryEvents.size * SETTLE_MS;
 
   let captainSettles = 0;
-  let guardProbeCalls = 0;
+  let guardProbeCalls = rootInterruptProbes;
   for (const captain of captains) {
     const resultKeys = Object.keys(captain.binding.result);
     captainSettles +=
@@ -2080,6 +2190,10 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
     // Result acceptance probes each guarded arm once, then the arm audit probes
     // every result's structured and bare output forms.
     guardProbeCalls += resultKeys.length * guardedDoneArms * 3 + errorArms;
+    // Every result, the blank Boss-reply check, and onError enter through an
+    // independently context-probed interrupt plan.
+    guardProbeCalls +=
+      resultKeys.length + (resultKeys.includes(NEEDS_BOSS_REPLY) ? 1 : 0) + 1;
   }
   guardProbeCalls += playbooks.reduce(
     (total, playbook) =>
@@ -2088,6 +2202,9 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
       transitionArms(playbook.invocation.onError).length,
     0,
   );
+  // Nested success/error and parallel question/join helpers each reuse one
+  // context-probed entry plan per state and outcome.
+  guardProbeCalls += 2 * playbooks.length + 2 * parallels.length;
 
   const playbookSettles = playbooks.reduce(
     (total, playbook) =>
@@ -2177,7 +2294,6 @@ export async function checkFsmCoverage(
     findings.push('machine declares no final state');
   }
 
-  const rawRootArms = transitionArms((config.on ?? {})[INTERRUPT_EVENT]);
   const rootArms = normalizeArms((config.on ?? {})[INTERRUPT_EVENT]);
   const canJump = rootArms.length > 0;
   if (!canJump) {
@@ -2186,13 +2302,31 @@ export async function checkFsmCoverage(
   if (canJump) {
     for (const playbook of playbooks) {
       findings.push(
-        ...(await probePlaybookInvocation(machine, playbook, refs, captains)),
+        ...(await probePlaybookInvocation(
+          machine,
+          playbook,
+          refs,
+          captains,
+          sourceCandidates,
+        )),
       );
     }
     for (const parallel of parallelRefs) {
       findings.push(
-        ...(await probeParallelQuestions(machine, parallel, refs, captains)),
-        ...(await probeParallelJoins(machine, parallel, refs, captains)),
+        ...(await probeParallelQuestions(
+          machine,
+          parallel,
+          refs,
+          captains,
+          sourceCandidates,
+        )),
+        ...(await probeParallelJoins(
+          machine,
+          parallel,
+          refs,
+          captains,
+          sourceCandidates,
+        )),
       );
     }
   }
@@ -2218,56 +2352,43 @@ export async function checkFsmCoverage(
         (playbook) =>
           target !== undefined && sameStateRef(playbook.ref, target),
       );
-      const dynamic =
-        targetPlaybook === undefined
-          ? undefined
-          : dynamicPlaybookFields(targetPlaybook);
       const targetCaptain =
         target === undefined
           ? undefined
           : captainByRef.get(stateRefKey(target));
-      const preconditioned =
-        target?.state.type === 'final' ||
-        dynamic !== undefined ||
-        (arm.guarded && targetCaptain !== undefined);
       const targetId =
         targetCaptain === undefined
           ? (target?.stableId ?? arm.target)
           : captainPublicStateId(targetCaptain);
-      const interruptEvent =
-        target === undefined
-          ? { type: INTERRUPT_EVENT, targetId }
-          : interruptEventForRef(machine, refs, target, targetId);
-
-      // A context-preconditioned target intentionally rejects a jump until
-      // prior transitions have populated its state. Evaluate the actual
-      // ordered guard with valid context and any typed Boss-supplied payload
-      // instead of reporting an empty-initial-context jump as unreachable.
-      if (preconditioned) {
-        const guard = orderedArmPredicate(machine, rawRootArms, armIndex);
-        const acceptsValidContext = (() => {
-          try {
-            return Boolean(
-              guard?.run({
-                context: initializedCoverageContext(machine, dynamic),
-                event: interruptEvent,
-              }),
-            );
-          } catch {
-            return false;
-          }
-        })();
-        if (acceptsValidContext) continue;
+      if (target === undefined) {
         findings.push(
-          `${INTERRUPT_EVENT} target ${arm.target} rejects valid precondition context`,
+          `${INTERRUPT_EVENT} target ${arm.target} is not enterable`,
+        );
+        continue;
+      }
+      const drive = interruptDriveForRef(
+        machine,
+        refs,
+        target,
+        targetId,
+        sourceCandidates,
+        armIndex,
+      );
+      if (!drive.satisfiable) {
+        findings.push(
+          `${INTERRUPT_EVENT} target ${arm.target} is unsatisfiable under context/event probing`,
         );
         continue;
       }
 
-      const actor = makeActor(machine, () => null);
-      actor.send(interruptEvent);
-      const entered =
-        target !== undefined && (await settle(actor, atState(target)));
+      const actor = makeActor(
+        machine,
+        () => null,
+        () => null,
+        drive.context,
+      );
+      actor.send(drive.event);
+      const entered = await settle(actor, atState(target));
       if (
         !entered &&
         !(targetPlaybook !== undefined && actor.coverageErrors.length > 0)
@@ -2407,6 +2528,7 @@ export async function checkFsmCoverage(
         refs,
         captains,
         playbooks,
+        sourceCandidates,
       );
       const actor = probe.actor;
       gate.armed = true;
@@ -2473,6 +2595,7 @@ export async function checkFsmCoverage(
           refs,
           captains,
           playbooks,
+          sourceCandidates,
         );
         const blank = blankProbe.actor;
         blankGate.armed = true;
@@ -2612,6 +2735,7 @@ export async function checkFsmCoverage(
       refs,
       captains,
       playbooks,
+      sourceCandidates,
     );
     const actor = probe.actor;
     gate.armed = true;
