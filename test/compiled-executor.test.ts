@@ -323,7 +323,7 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     ]);
   });
 
-  it('initializes a causal root session with exactly five runtime ports', async () => {
+  it('initializes a causal root session with exactly six runtime ports', async () => {
     let initValue: unknown;
     const executor = createCompiledExecutor({
       artifactPath: 'ignored',
@@ -364,6 +364,7 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     });
     const session = initValue as { ports: Record<string, unknown> };
     expect(Object.keys(session.ports).sort()).toEqual([
+      'callCaptain',
       'callJudge',
       'callPlaybook',
       'callPlayer',
@@ -371,6 +372,75 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       'emitTelemetry',
     ]);
     expect(Object.keys(session.ports)).not.toContain('drainDiagnostics');
+  });
+
+  it('routes direct Captain calls without player continuation semantics', async () => {
+    const target = join(root, 'out.ts');
+    const calls: Array<{ prompt: string; resume?: string | false }> = [];
+    const captain: AgentClient = {
+      async run(request) {
+        calls.push({ prompt: request.prompt, resume: request.resume });
+        return {
+          status: 'success',
+          text: 'Captain response',
+          resumeToken: 'private-player-token',
+        };
+      },
+    };
+    let ports:
+      | {
+          callCaptain(
+            prompt: string,
+            signal: AbortSignal,
+            options: { visibility: 'visible' | 'hidden' },
+          ): Promise<unknown>;
+        }
+      | undefined;
+    let captainResult: unknown;
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'composed-v2',
+      player: idleAgent,
+      judge: captain,
+      loadFactory: async () => () => ({
+        async init(value: unknown) {
+          ports = (value as { ports: typeof ports }).ports;
+        },
+        async handleBossInput({ signal }: { signal: AbortSignal }) {
+          captainResult = await ports?.callCaptain(
+            'Handle this directly.',
+            signal,
+            { visibility: 'visible' },
+          );
+          await writeFile(target, 'fresh');
+          return { outcome: 'terminal', state: structuredState };
+        },
+        async resumePlaybookCall() {
+          return { outcome: 'no-action', state: structuredState };
+        },
+        async dispose() {},
+      }),
+    });
+
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: 'src.md',
+        target,
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(captainResult).toEqual({
+      status: 'ok',
+      finalText: 'Captain response',
+    });
+    expect(calls).toEqual([
+      { prompt: 'Handle this directly.', resume: undefined },
+    ]);
   });
 
   it.each(['session-v1', 'composed-v2'] as const)(

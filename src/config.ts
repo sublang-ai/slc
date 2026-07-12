@@ -167,8 +167,8 @@ export function createConfiguredAgentClient(
  * (CLI-8, PHEXEC-27): for a current pinned phase it drives the pinned `playbook`
  * artifact — resolved against its pipeline directory — through the compiled
  * executor, backing the runtime's player ports with one agent transport per
- * player id and its judge port with its own transport (PHEXEC-25), and applying
- * the selected model as the default per-player model (PHEXEC-13).
+ * player id and its Captain/judge ports with one shared transport (PHEXEC-25),
+ * and applying the selected model as the default per-player model (PHEXEC-13).
  */
 export function createConfiguredCompiledFactory(
   selection: AgentSelection,
