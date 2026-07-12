@@ -29,6 +29,14 @@ const referenceDir = fileURLToPath(
 
 const NEEDS_BOSS_REPLY_TEXT =
   "The player's prose surfaces a clarifying question for Boss. Output shall include `question: <verbatim question text>`.";
+const CONTEXT_INTERRUPT_PHASE = 'reviewing';
+const CONTEXT_INTERRUPT_SCOPE = 'specItems';
+
+const contextInterruptReady = (context: Record<string, unknown>): boolean =>
+  context.phase === CONTEXT_INTERRUPT_PHASE &&
+  typeof context.topic === 'string' &&
+  context.topic.trim() !== '' &&
+  context.reviewScope === CONTEXT_INTERRUPT_SCOPE;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -63,6 +71,7 @@ const goodMachine = (
     publicStateId?: string;
     blankStaysParked?: boolean;
     interruptRequiresIntent?: boolean;
+    unsatisfiableInterrupt?: boolean;
     dropFailedParkTag?: boolean;
   } = {},
 ) => {
@@ -156,6 +165,7 @@ const goodMachine = (
           reenter: true,
           guard: ({ event }: any) =>
             event.targetId === publicStateId &&
+            overrides.unsatisfiableInterrupt !== true &&
             (overrides.interruptRequiresIntent !== true ||
               (typeof event.intent === 'string' && event.intent.trim() !== '')),
         },
@@ -184,6 +194,7 @@ const parallelMachine = (
     nestedInputThrows?: boolean;
     nestedInputThrowsAfterInterrupt?: boolean;
     nestedInputUsesInitializedContext?: boolean;
+    contextGuardedInterrupt?: boolean;
   } = {},
 ) => {
   const meta = (stateId: string) => ({
@@ -349,14 +360,23 @@ const parallelMachine = (
     id: 'structured',
     initial: 'ready',
     context: ({ input }: any) =>
-      (opts.nestedInputUsesInitializedContext === true
-        ? { request: input.bossIntent }
-        : {}) as any,
+      ({
+        ...(opts.nestedInputUsesInitializedContext === true
+          ? { request: input.bossIntent }
+          : {}),
+        ...(opts.contextGuardedInterrupt === true
+          ? { phase: 'idle', topic: '', reviewScope: '' }
+          : {}),
+      }) as any,
     on: {
       BOSS_INTERRUPT: targets.map(({ publicId, configId }) => ({
         target: `#${configId}`,
         reenter: true,
-        guard: ({ event }: any) => event.targetId === publicId,
+        guard: ({ context, event }: any) =>
+          event.targetId === publicId &&
+          (configId !== 'parallelRound' ||
+            opts.contextGuardedInterrupt !== true ||
+            contextInterruptReady(context)),
         ...(configId === 'callChild' &&
         opts.nestedInputThrowsAfterInterrupt === true
           ? {
@@ -713,6 +733,30 @@ describe('checkFsmCoverage (VERIFY-6)', () => {
         machine: goodMachine({ interruptRequiresIntent: true }),
       }),
     ).toEqual([]);
+  });
+
+  it('restores satisfying context before driving a guarded parallel parent', async () => {
+    expect(
+      await checkFsmCoverage(
+        {
+          machine: parallelMachine({ contextGuardedInterrupt: true }),
+        },
+        {
+          sourceText:
+            "const phase = 'reviewing'; const reviewScope = 'specItems';",
+        },
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports an interrupt guard that bounded probing cannot satisfy', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: goodMachine({ unsatisfiableInterrupt: true }),
+      }),
+    ).toContain(
+      'BOSS_INTERRUPT target work is unsatisfiable under context/event probing',
+    );
   });
 
   it('requires a recoverable failure state to be parked', async () => {
