@@ -25,6 +25,11 @@ function fakeAgent(
 }
 
 const notAborted = new AbortController().signal;
+const captainOptions = (visibility: 'visible' | 'hidden') => ({
+  visibility,
+  resume: false as const,
+  allowedTools: [] as const,
+});
 
 describe('createPlaybookPorts (PHEXEC-25)', () => {
   it('maps a successful agent run to an ok PlayerResult', async () => {
@@ -44,9 +49,12 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     const ports = createPlaybookPorts({ player: captain, judge: captain });
 
     await expect(
-      ports.callCaptain('handle it', notAborted, { visibility: 'hidden' }),
+      ports.callCaptain('handle it', notAborted, captainOptions('hidden')),
     ).resolves.toEqual({ status: 'ok', finalText: 'Captain handled it' });
-    expect(captain.calls[0]).not.toHaveProperty('resume');
+    expect(captain.calls[0]).toMatchObject({
+      resume: false,
+      allowedTools: [],
+    });
   });
 
   it('preserves direct Captain error and abort statuses', async () => {
@@ -56,9 +64,11 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
       judge: errored,
     });
     await expect(
-      errorPorts.callCaptain('handle it', notAborted, {
-        visibility: 'visible',
-      }),
+      errorPorts.callCaptain(
+        'handle it',
+        notAborted,
+        captainOptions('visible'),
+      ),
     ).resolves.toEqual({ status: 'error', error: 'Captain failed' });
 
     const abort = new AbortController();
@@ -75,9 +85,11 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
       judge: aborting,
     });
     await expect(
-      abortedPorts.callCaptain('handle it', abort.signal, {
-        visibility: 'hidden',
-      }),
+      abortedPorts.callCaptain(
+        'handle it',
+        abort.signal,
+        captainOptions('hidden'),
+      ),
     ).resolves.toEqual({ status: 'aborted' });
     expect(incomplete.calls).toHaveLength(1);
   });
@@ -89,9 +101,92 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     await expect(
       ports.callCaptain('handle it', notAborted, {
         visibility: 'private',
+        resume: false,
+        allowedTools: [],
       } as never),
     ).rejects.toThrow(/visibility must be visible or hidden/);
     expect(captain.calls).toEqual([]);
+  });
+
+  it.each([
+    ['missing resume', { visibility: 'hidden', allowedTools: [] }],
+    [
+      'inherited resume',
+      Object.assign(Object.create({ resume: false }), {
+        visibility: 'hidden',
+        allowedTools: [],
+      }),
+    ],
+    [
+      'accessor resume',
+      Object.defineProperty(
+        { visibility: 'hidden', allowedTools: [] },
+        'resume',
+        { get: () => false },
+      ),
+    ],
+    [
+      'resuming',
+      { visibility: 'hidden', resume: 'prior-session', allowedTools: [] },
+    ],
+    ['missing tools', { visibility: 'hidden', resume: false }],
+    [
+      'inherited tools',
+      Object.assign(Object.create({ allowedTools: [] }), {
+        visibility: 'hidden',
+        resume: false,
+      }),
+    ],
+    [
+      'accessor tools',
+      Object.defineProperty(
+        { visibility: 'hidden', resume: false },
+        'allowedTools',
+        { get: () => [] },
+      ),
+    ],
+    [
+      'nonempty tools',
+      { visibility: 'hidden', resume: false, allowedTools: ['Read'] },
+    ],
+  ])('rejects %s before direct Captain transport', async (_label, options) => {
+    const captain = fakeAgent({ status: 'success', text: 'unexpected' });
+    const ports = createPlaybookPorts({ player: captain, judge: captain });
+
+    await expect(
+      ports.callCaptain('route it', notAborted, options as never),
+    ).rejects.toThrow(/options\.(?:resume|allowedTools)/);
+    expect(captain.calls).toEqual([]);
+  });
+
+  it('forwards fresh-session and empty-tool Captain isolation', async () => {
+    const captain = fakeAgent({ status: 'success', text: 'route selected' });
+    const ports = createPlaybookPorts({ player: captain, judge: captain });
+
+    await ports.callCaptain('route it', notAborted, captainOptions('visible'));
+
+    expect(captain.calls).toEqual([
+      expect.objectContaining({ resume: false, allowedTools: [] }),
+    ]);
+  });
+
+  it('snapshots Captain isolation before queued transport work', async () => {
+    const captain = fakeAgent({ status: 'success', text: 'route selected' });
+    const ports = createPlaybookPorts({ player: captain, judge: captain });
+    const options: {
+      visibility: 'visible';
+      resume: false | string;
+      allowedTools: string[];
+    } = { visibility: 'visible', resume: false, allowedTools: [] };
+
+    const result = ports.callCaptain('route it', notAborted, options as never);
+    options.resume = 'late-session';
+    options.allowedTools.push('Read');
+
+    await result;
+    expect(captain.calls).toEqual([
+      expect.objectContaining({ resume: false, allowedTools: [] }),
+    ]);
   });
 
   it('forwards explicit resume selection and returns continuation tokens', async () => {
@@ -203,6 +298,10 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     const judge = fakeAgent({ status: 'success', text: 'verdict: pass' });
     const okPorts = createPlaybookPorts({ player: judge, judge });
     expect(await okPorts.callJudge('grade', notAborted)).toBe('verdict: pass');
+    expect(judge.calls[0]).toMatchObject({
+      resume: false,
+      allowedTools: [],
+    });
 
     const badJudge = fakeAgent({ status: 'error', text: 'judge crashed' });
     const badPorts = createPlaybookPorts({ player: badJudge, judge: badJudge });
@@ -256,13 +355,17 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     };
     const ports = createPlaybookPorts({ player: captain, judge: captain });
 
-    const first = ports.callCaptain('first', notAborted, {
-      visibility: 'visible',
-    });
+    const first = ports.callCaptain(
+      'first',
+      notAborted,
+      captainOptions('visible'),
+    );
     const second = ports.callJudge('second', notAborted);
-    const third = ports.callCaptain('third', notAborted, {
-      visibility: 'hidden',
-    });
+    const third = ports.callCaptain(
+      'third',
+      notAborted,
+      captainOptions('hidden'),
+    );
     await vi.waitFor(() => expect(calls).toEqual(['first']));
     releases.shift()?.();
     await expect(first).resolves.toEqual({

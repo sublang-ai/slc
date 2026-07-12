@@ -35,6 +35,7 @@ meta.md     The spec of specs
 | DR-009 | [009-slc-playbook-pipeline-compilation.md](decisions/009-slc-playbook-pipeline-compilation.md) | `playbook` pipeline compilation: generic invocation, compile-output scope, compiled performing, link reconciliation, and artifact-derived verification |
 | DR-010 | [010-playbook-runtime-contract-evolution.md](decisions/010-playbook-runtime-contract-evolution.md) | Playbook runtime evolution: exact legacy/session-v1/composed-v2 profiles, fail-closed adoption, structured outcomes, host ports, trace privacy, and CI deferral |
 | DR-011 | [011-playbook-1-0-captain-contract-adoption.md](decisions/011-playbook-1-0-captain-contract-adoption.md) | Playbook 1.0 adoption: final six-port composed profile, distinct Captain/player verification, dynamic child wiring, scripted child coverage, and atomic reviewed assets |
+| DR-012 | [012-playbook-routing-control-separation.md](decisions/012-playbook-routing-control-separation.md) | Playbook routing/control separation: source-owned result metadata, exact Boss text, isolated Captain calls, and visible-prose ownership |
 
 ## Iterations
 
@@ -50,6 +51,7 @@ meta.md     The spec of specs
 | IR-007 | [007-slc-playbook-pipeline-compilation.md](iterations/007-slc-playbook-pipeline-compilation.md) | Implement `slc playbook` end to end: resolve the playbook pipeline, complete compiled execution, bootstrap pinned meta-phase artifacts, auto-generate verification tests, and compare to the reference |
 | IR-008 | [008-playbook-runtime-contract-evolution.md](iterations/008-playbook-runtime-contract-evolution.md) | Reconcile three runtime profiles, structured results, composition-aware verification, CI, and the immutable-release boundary |
 | IR-009 | [009-playbook-1-0-captain-adoption.md](iterations/009-playbook-1-0-captain-adoption.md) | Adopt Playbook 1.0's six-port runtime, Captain and dynamic-child compiler primitives, reviewed definitions and artifacts, and pins as one reproducible set |
+| IR-010 | [010-playbook-routing-control-separation.md](iterations/010-playbook-routing-control-separation.md) | Separate routing prose from control metadata, preserve exact Boss text, isolate Captain calls, and verify explicit result contracts |
 
 ## Packages
 

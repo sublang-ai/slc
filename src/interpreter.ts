@@ -31,6 +31,8 @@ export interface AgentRunRequest {
   model?: string;
   /** Explicit backend continuation selection for Playbook player calls. */
   resume?: string | false;
+  /** Explicit tool allowlist for isolated Playbook Captain control calls. */
+  allowedTools?: readonly string[];
   signal: AbortSignal;
 }
 
