@@ -1395,6 +1395,60 @@ describe('checkPromptComposition (VERIFY-5)', () => {
     ).toEqual([]);
   });
 
+  it('recognizes a sentinel rendered as deterministic JSON', () => {
+    const config: MachineConfigLike = {
+      states: {
+        route: {
+          invoke: {
+            src: 'captain',
+            input: ({ context }) => ({
+              stateId: 'route',
+              sourceItem: 'ROUTE-1',
+              prompt: 'Enabled playbooks: <enabled-playbooks>',
+              result: {
+                done: 'The Captain finished.',
+                needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+              },
+              enabledPlaybooks: context.enabledPlaybooks,
+              ...(context.pendingBossQuestion && context.bossReply
+                ? {
+                    pendingBossQuestion: context.pendingBossQuestion,
+                    bossReply: context.bossReply,
+                  }
+                : {}),
+            }),
+          },
+        },
+      },
+    };
+    const compose = (raw: unknown): string => {
+      const input = raw as {
+        prompt: string;
+        enabledPlaybooks: unknown;
+        pendingBossQuestion?: { question: string };
+        bossReply?: string;
+      };
+      const body = input.prompt.replace(
+        '<enabled-playbooks>',
+        JSON.stringify(input.enabledPlaybooks),
+      );
+      return input.pendingBossQuestion && input.bossReply
+        ? [
+            CONTINUATION_PREAMBLE,
+            `Boss question:\n${input.pendingBossQuestion.question}`,
+            `Boss reply:\n${input.bossReply}`,
+            body,
+          ].join('\n\n')
+        : body;
+    };
+    expect(
+      checkPromptComposition({ config, compose, actor: 'captain' }),
+    ).toEqual([]);
+    expect(deriveSubstitutions(config, compose, 'captain')).toEqual({
+      route: ['<enabled-playbooks>'],
+    });
+  });
+
   it('flags a composer that mutates the body', () => {
     const compose = (raw: unknown): string =>
       goodCompose(raw).replace('Keep it warm.', 'Keep it professional.');

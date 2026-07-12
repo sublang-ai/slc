@@ -62,6 +62,8 @@ const goodMachine = (
     workId?: string;
     publicStateId?: string;
     blankStaysParked?: boolean;
+    interruptRequiresIntent?: boolean;
+    dropFailedParkTag?: boolean;
   } = {},
 ) => {
   const workId = overrides.workId ?? 'work';
@@ -100,7 +102,16 @@ const goodMachine = (
           'onError' in overrides ? overrides.onError : { target: '#failed' },
       },
     },
-    failed: { id: 'failed', on: { GO: { target: 'work' } } },
+    failed: {
+      id: 'failed',
+      meta: {
+        playbook: { stateId: 'failed', description: 'Recoverable failure' },
+      },
+      ...(overrides.dropFailedParkTag === true
+        ? {}
+        : { tags: 'playbook.parked' }),
+      on: { GO: { target: 'work' } },
+    },
     done: { id: 'done', type: 'final' },
   };
   if (!overrides.dropWaitState) {
@@ -143,7 +154,10 @@ const goodMachine = (
         {
           target: `#${workId}`,
           reenter: true,
-          guard: ({ event }: any) => event.targetId === publicStateId,
+          guard: ({ event }: any) =>
+            event.targetId === publicStateId &&
+            (overrides.interruptRequiresIntent !== true ||
+              (typeof event.intent === 'string' && event.intent.trim() !== '')),
         },
         {
           target: '#ready',
@@ -272,7 +286,7 @@ const parallelMachine = (
             }
           : { onDone: { target: '#done' } }),
     },
-    failed: { id: 'failed', ...meta('failed') },
+    failed: { id: 'failed', tags: 'playbook.parked', ...meta('failed') },
     done: { id: 'done', type: 'final', ...meta('done') },
   };
   if (opts.nestedPlaybook === true) {
@@ -375,6 +389,9 @@ const dynamicCaptainMachine = () => {
     context.enabledPlaybooks.some(
       (entry: { id: string }) => entry.id === output.nextPlaybookId,
     ) &&
+    !context.attemptedCallSignatures.includes(
+      JSON.stringify([output.nextPlaybookId, output.nextPlaybookInput]),
+    ) &&
     typeof output.nextPlaybookInput === 'string' &&
     output.nextPlaybookInput.trim() !== '';
   const assignNextCall = assign(({ event }: any) => ({
@@ -469,6 +486,7 @@ const dynamicCaptainMachine = () => {
       enabledPlaybooks: input.enabledPlaybooks,
       remainingPlan: [],
       completedCallResults: [],
+      attemptedCallSignatures: [],
       nextPlaybookId: '',
       nextPlaybookInput: '',
     }),
@@ -539,7 +557,11 @@ const dynamicCaptainMachine = () => {
           ],
         },
       },
-      failed: { id: 'failed', meta: metadata('failed') },
+      failed: {
+        id: 'failed',
+        tags: 'playbook.parked',
+        meta: metadata('failed'),
+      },
       done: { id: 'done', type: 'final', meta: metadata('done') },
     },
   } as any);
@@ -683,6 +705,22 @@ describe('identifierLiterals', () => {
 describe('checkFsmCoverage (VERIFY-6)', () => {
   it('finds nothing on a machine covering all its transitions', async () => {
     expect(await checkFsmCoverage({ machine: goodMachine() })).toEqual([]);
+  });
+
+  it('synthesizes typed payload fields required by an interrupt arm', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: goodMachine({ interruptRequiresIntent: true }),
+      }),
+    ).toEqual([]);
+  });
+
+  it('requires a recoverable failure state to be parked', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: goodMachine({ dropFailedParkTag: true }),
+      }),
+    ).toContain('recoverable failure state failed lacks playbook.parked tag');
   });
 
   it('drives explicit player leaves by entering their parallel parent', async () => {
