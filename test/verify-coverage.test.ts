@@ -14,6 +14,7 @@ import {
   checkFsmCoverage,
   emitFsmCoverageTest,
   findMachine,
+  fsmCoverageTestTimeout,
   generateFsmCoverageTest,
   guardSatisfiable,
   identifierLiterals,
@@ -166,6 +167,9 @@ const parallelMachine = (
     nestedPublicStateId?: string;
     dropNestedOnDone?: boolean;
     dropNestedOnError?: boolean;
+    nestedInputThrows?: boolean;
+    nestedInputThrowsAfterInterrupt?: boolean;
+    nestedInputUsesInitializedContext?: boolean;
   } = {},
 ) => {
   const meta = (stateId: string) => ({
@@ -186,7 +190,7 @@ const parallelMachine = (
           ...meta(stateId),
           invoke: {
             id: `${side}Captain`,
-            src: 'captain',
+            src: 'player',
             input: () => ({
               stateId,
               player: side === 'left' ? 'Writer' : 'Reviewer',
@@ -280,11 +284,23 @@ const parallelMachine = (
       invoke: {
         id: 'childPlaybook',
         src: 'playbook',
-        input: () => ({
-          stateId: publicStateId,
-          playbookId: 'child',
-          text: '{"request":"review"}',
-        }),
+        input: ({ context }: any) => {
+          if (
+            opts.nestedInputThrows === true ||
+            (opts.nestedInputThrowsAfterInterrupt === true &&
+              context.failNestedInput === true)
+          ) {
+            throw new Error('coverage fixture nested input failure');
+          }
+          return {
+            stateId: publicStateId,
+            playbookId: 'child',
+            text:
+              opts.nestedInputUsesInitializedContext === true
+                ? context.request.trim()
+                : '{"request":"review"}',
+          };
+        },
         ...(opts.dropNestedOnDone === true
           ? {}
           : { onDone: { target: '#done' } }),
@@ -296,8 +312,7 @@ const parallelMachine = (
   }
 
   const targets = [
-    { publicId: 'leftWork', configId: 'leftWork' },
-    { publicId: 'rightWork', configId: 'rightWork' },
+    { publicId: 'parallelRound', configId: 'parallelRound' },
     ...(opts.nestedPlaybook === true
       ? [
           {
@@ -309,8 +324,8 @@ const parallelMachine = (
   ];
   return setup({
     actors: {
-      captain: fromPromise(async () => {
-        throw new Error('captain actor must be provided by the runner');
+      player: fromPromise(async () => {
+        throw new Error('player actor must be provided by the runner');
       }),
       playbook: fromPromise(async () => {
         throw new Error('playbook actor must be provided by the runner');
@@ -319,17 +334,291 @@ const parallelMachine = (
   }).createMachine({
     id: 'structured',
     initial: 'ready',
-    context: {} as any,
+    context: ({ input }: any) =>
+      (opts.nestedInputUsesInitializedContext === true
+        ? { request: input.bossIntent }
+        : {}) as any,
     on: {
       BOSS_INTERRUPT: targets.map(({ publicId, configId }) => ({
         target: `#${configId}`,
         reenter: true,
         guard: ({ event }: any) => event.targetId === publicId,
+        ...(configId === 'callChild' &&
+        opts.nestedInputThrowsAfterInterrupt === true
+          ? {
+              actions: assign({
+                failNestedInput: () => true,
+              } as any),
+            }
+          : {}),
       })),
     },
     states: states as any,
   } as any);
 };
+
+/** A compact Captain planner with exact catalog guards and a dynamic child. */
+const dynamicCaptainMachine = () => {
+  const metadata = (stateId: string) => ({
+    playbook: { stateId, description: stateId },
+  });
+  const needsBossReply = {
+    guard: 'needsBossReply',
+    target: '#awaitBossReply',
+  };
+  const callOutputIsValid = (context: any, output: any, guard: string) =>
+    output.guard === guard &&
+    Array.isArray(output.remainingPlan) &&
+    typeof output.nextPlaybookId === 'string' &&
+    output.nextPlaybookId.trim() !== '' &&
+    output.nextPlaybookId !== context.selfPlaybookId &&
+    context.enabledPlaybooks.some(
+      (entry: { id: string }) => entry.id === output.nextPlaybookId,
+    ) &&
+    typeof output.nextPlaybookInput === 'string' &&
+    output.nextPlaybookInput.trim() !== '';
+  const assignNextCall = assign(({ event }: any) => ({
+    nextPlaybookId: event.output.nextPlaybookId,
+    nextPlaybookInput: event.output.nextPlaybookInput,
+    remainingPlan: event.output.remainingPlan,
+  }));
+  const result = (callGuard: 'delegated' | 'continuing') => ({
+    [callGuard]:
+      'Captain selected an enabled playbook and output includes remainingPlan, nextPlaybookId, and nextPlaybookInput.',
+    ...(callGuard === 'continuing'
+      ? {
+          finalResponse:
+            'Captain completed the intent and output includes one concise final response.',
+        }
+      : {}),
+    needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+  });
+  const captainState = (
+    stateId: 'initialRouting' | 'reassessAfterCall',
+    sourceItem: 'CAPTAIN-1' | 'CAPTAIN-3',
+    callGuard: 'delegated' | 'continuing',
+  ) => ({
+    id: stateId,
+    meta: metadata(stateId),
+    invoke: {
+      src: 'captain',
+      input: ({ context }: any) => ({
+        stateId,
+        sourceItem,
+        prompt: `${stateId} prompt`,
+        result: result(callGuard),
+        enabledPlaybooks: context.enabledPlaybooks,
+      }),
+      onDone: [
+        ...(callGuard === 'continuing'
+          ? [
+              {
+                target: '#done',
+                guard: ({ event }: any) =>
+                  event.output.guard === 'finalResponse' &&
+                  typeof event.output.response === 'string' &&
+                  event.output.response.trim() !== '',
+                actions: assign(({ event }: any) => ({
+                  finalResponse: event.output.response,
+                })),
+              },
+            ]
+          : []),
+        {
+          target: '#callPlaybook',
+          guard: ({ context, event }: any) =>
+            callOutputIsValid(context, event.output, callGuard),
+          actions: assignNextCall,
+        },
+        {
+          ...needsBossReply,
+          guard: ({ event }: any) =>
+            event.output.guard === 'needsBossReply' &&
+            typeof event.output.question === 'string',
+        },
+        { target: '#failed' },
+      ],
+      onError: { target: '#failed' },
+    },
+  });
+
+  const ids = [
+    'ready',
+    'initialRouting',
+    'callPlaybook',
+    'reassessAfterCall',
+    'awaitBossReply',
+    'failed',
+    'done',
+  ];
+  return setup({
+    actors: {
+      captain: fromPromise(async () => {
+        throw new Error('captain actor must be provided by the runner');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('playbook actor must be provided by the runner');
+      }),
+    },
+  }).createMachine({
+    id: 'captainPlanner',
+    initial: 'ready',
+    context: ({ input }: any) => ({
+      stateId: input.stateId,
+      selfPlaybookId: input.selfPlaybookId,
+      enabledPlaybooks: input.enabledPlaybooks,
+      remainingPlan: [],
+      completedCallResults: [],
+      nextPlaybookId: '',
+      nextPlaybookInput: '',
+    }),
+    on: {
+      BOSS_INTERRUPT: ids.map((id) => ({
+        target: `#${id}`,
+        reenter: true,
+        guard: ({ context, event }: any) =>
+          event.targetId === id &&
+          (id === 'callPlaybook'
+            ? context.nextPlaybookInput.trim() !== '' &&
+              context.enabledPlaybooks.some(
+                (entry: { id: string }) => entry.id === context.nextPlaybookId,
+              )
+            : id === 'done'
+              ? typeof context.finalResponse === 'string' &&
+                context.finalResponse.trim() !== ''
+              : true),
+      })),
+    },
+    states: {
+      ready: {
+        id: 'ready',
+        meta: metadata('ready'),
+        on: { GO: { target: 'initialRouting' } },
+      },
+      initialRouting: captainState('initialRouting', 'CAPTAIN-1', 'delegated'),
+      callPlaybook: {
+        id: 'callPlaybook',
+        meta: metadata('callPlaybook'),
+        invoke: {
+          id: 'dynamicChild',
+          src: 'playbook',
+          input: ({ context }: any) => ({
+            stateId: 'callPlaybook',
+            sourceItem: 'CAPTAIN-2',
+            playbookId: context.nextPlaybookId,
+            text: context.nextPlaybookInput,
+            playbookIdContext: 'nextPlaybookId',
+            textContext: 'nextPlaybookInput',
+          }),
+          onDone: { target: '#reassessAfterCall' },
+          onError: { target: '#reassessAfterCall' },
+        },
+      },
+      reassessAfterCall: captainState(
+        'reassessAfterCall',
+        'CAPTAIN-3',
+        'continuing',
+      ),
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        meta: metadata('awaitBossReply'),
+        on: {
+          BOSS_REPLY: [
+            {
+              target: '#initialRouting',
+              guard: ({ event }: any) =>
+                event.questionId === 'initialRouting' &&
+                String(event.answer).trim() !== '',
+            },
+            {
+              target: '#reassessAfterCall',
+              guard: ({ event }: any) =>
+                event.questionId === 'reassessAfterCall' &&
+                String(event.answer).trim() !== '',
+            },
+          ],
+        },
+      },
+      failed: { id: 'failed', meta: metadata('failed') },
+      done: { id: 'done', type: 'final', meta: metadata('done') },
+    },
+  } as any);
+};
+
+/** A literal child call with independently selectable success/error arms. */
+const nestedMultiArmMachine = (
+  opts: { deadDoneArm?: boolean; deadErrorArm?: boolean } = {},
+) =>
+  setup({
+    actors: {
+      playbook: fromPromise(async () => {
+        throw new Error('playbook actor must be provided by the runner');
+      }),
+    },
+  }).createMachine({
+    id: 'nestedMultiArm',
+    initial: 'ready',
+    context: {} as any,
+    on: {
+      BOSS_INTERRUPT: {
+        target: '#callChild',
+        reenter: true,
+        guard: ({ event }: any) => event.targetId === 'callChild',
+      },
+    },
+    states: {
+      ready: { id: 'ready', on: { GO: { target: 'callChild' } } },
+      callChild: {
+        id: 'callChild',
+        invoke: {
+          id: 'multiArmChild',
+          src: 'playbook',
+          input: () => ({
+            stateId: 'callChild',
+            playbookId: 'child',
+            text: 'Handle the nested request.',
+          }),
+          onDone: [
+            {
+              target: '#doneFirst',
+              guard: ({ event }: any) => event.output.route === 'first',
+            },
+            {
+              target: '#doneSecond',
+              guard: ({ event }: any) =>
+                opts.deadDoneArm !== true && event.output.route === 'second',
+            },
+            { target: '#doneFallback' },
+          ],
+          onError: [
+            {
+              target: '#errorFirst',
+              guard: ({ event }: any) =>
+                event.error.name === 'RetryableChildError',
+            },
+            {
+              target: '#errorSecond',
+              guard: ({ event }: any) =>
+                opts.deadErrorArm !== true &&
+                event.error.message === 'second-child-failure',
+            },
+            { target: '#errorFallback' },
+          ],
+        },
+      },
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        tags: 'playbook.parked',
+        on: { BOSS_REPLY: { target: '#ready' } },
+      },
+      doneFirst: { id: 'doneFirst', type: 'final' },
+      doneSecond: { id: 'doneSecond', type: 'final' },
+      doneFallback: { id: 'doneFallback', type: 'final' },
+      errorFirst: { id: 'errorFirst', type: 'final' },
+      errorSecond: { id: 'errorSecond', type: 'final' },
+      errorFallback: { id: 'errorFallback', type: 'final' },
+    },
+  } as any);
 
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -396,7 +685,7 @@ describe('checkFsmCoverage (VERIFY-6)', () => {
     expect(await checkFsmCoverage({ machine: goodMachine() })).toEqual([]);
   });
 
-  it('drives nested parallel leaves through stable public state metadata', async () => {
+  it('drives explicit player leaves by entering their parallel parent', async () => {
     expect(await checkFsmCoverage({ machine: parallelMachine() })).toEqual([]);
   });
 
@@ -408,6 +697,12 @@ describe('checkFsmCoverage (VERIFY-6)', () => {
           nestedPublicStateId: 'publicChildCall',
         }),
       }),
+    ).toEqual([]);
+  });
+
+  it('drives exact-catalog Captain delegation into a dynamic child', async () => {
+    expect(
+      await checkFsmCoverage({ machine: dynamicCaptainMachine() }),
     ).toEqual([]);
   });
 
@@ -434,6 +729,69 @@ describe('checkFsmCoverage (VERIFY-6)', () => {
       }),
     ).toContain(
       'state callChild declares no nested playbook onError transition',
+    );
+  });
+
+  it('reports a nested invoke.input failure without rejecting the checker', async () => {
+    await expect(
+      checkFsmCoverage({
+        machine: parallelMachine({
+          nestedPlaybook: true,
+          nestedInputThrows: true,
+        }),
+      }),
+    ).resolves.toContain(
+      'state callChild: nested playbook actor failed to start during onDone coverage: coverage fixture nested input failure',
+    );
+  });
+
+  it('evaluates nested input with the machine initialized context', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({
+          nestedPlaybook: true,
+          nestedInputUsesInitializedContext: true,
+        }),
+      }),
+    ).toEqual([]);
+  });
+
+  it('drives every satisfiable nested success and error arm', async () => {
+    expect(
+      await checkFsmCoverage({ machine: nestedMultiArmMachine() }),
+    ).toEqual([]);
+  });
+
+  it('reports a dead later nested onDone arm', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: nestedMultiArmMachine({ deadDoneArm: true }),
+      }),
+    ).toContain(
+      'state callChild: nested playbook onDone arm 1 is unsatisfiable under probing',
+    );
+  });
+
+  it('reports a dead later nested onError arm', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: nestedMultiArmMachine({ deadErrorArm: true }),
+      }),
+    ).toContain(
+      'state callChild: nested playbook onError arm 1 is unsatisfiable under probing',
+    );
+  });
+
+  it('captures an invoke.input failure caused by transition context', async () => {
+    await expect(
+      checkFsmCoverage({
+        machine: parallelMachine({
+          nestedPlaybook: true,
+          nestedInputThrowsAfterInterrupt: true,
+        }),
+      }),
+    ).resolves.toContain(
+      'state callChild: nested playbook actor failed to start during onDone coverage: coverage fixture nested input failure',
     );
   });
 
@@ -777,6 +1135,12 @@ describe('findMachine', () => {
 });
 
 describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
+  it('derives a timeout above the default from bounded checker work', () => {
+    expect(
+      fsmCoverageTestTimeout({ machine: dynamicCaptainMachine() }),
+    ).toBeGreaterThan(5_000);
+  });
+
   it('emits a test that reads the artifact source and runs the checker', async () => {
     const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-cov-'));
     try {
@@ -807,10 +1171,12 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
       expect(diagnostics.join('\n')).toMatch(/BOSS_INTERRUPT/);
       const content = await readFile(path, 'utf8');
       expect(content).toContain(
-        'import { checkFsmCoverage } from "@sublang/slc/verify"',
+        'import { checkFsmCoverage, fsmCoverageTestTimeout } from "@sublang/slc/verify"',
       );
-      expect(content).toContain('import * as fsm from "./code.fsm.ts"');
+      expect(content).toContain('import * as fsm from "./code.fsm.js"');
+      expect(content).toContain('new URL("./code.fsm.ts", import.meta.url)');
       expect(content).toContain('checkFsmCoverage(fsm, { sourceText })');
+      expect(content).toContain('}, fsmCoverageTestTimeout(fsm));');
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
@@ -819,11 +1185,13 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
   it('generates the module referencing the sibling artifact', () => {
     const generated = generateFsmCoverageTest({
       basename: 'flow',
-      fsmModule: './flow.fsm.ts',
+      fsmModule: './flow.fsm.js',
+      fsmSourceFile: './flow.fsm.ts',
       verifyModule: '@sublang/slc/verify',
     });
     expect(generated).toContain('new URL("./flow.fsm.ts", import.meta.url)');
     expect(generated).toContain('reaches every declared transition');
+    expect(generated).toContain('}, fsmCoverageTestTimeout(fsm));');
   });
 
   it('quotes generated strings and comments for punctuation-heavy basenames', () => {
@@ -833,6 +1201,7 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
     const generated = generateFsmCoverageTest({
       basename,
       fsmModule,
+      fsmSourceFile: fsmModule,
       verifyModule,
     });
     expect(generated).toContain(`coverage for ${JSON.stringify(basename)}.`);

@@ -97,8 +97,42 @@ interface PlaybookRef {
   ref: StateRef;
 }
 
+interface DynamicPlaybookFields {
+  playbookIdContext: string;
+  textContext: string;
+}
+
+function stateRefKey(ref: StateRef): string {
+  return ref.path.join('\u0000');
+}
+
+function sameStateRef(
+  left: StateRef | undefined,
+  right: StateRef | undefined,
+): boolean {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    stateRefKey(left) === stateRefKey(right)
+  );
+}
+
 function captainPublicStateId(captain: CaptainRef): string {
   return captain.binding.stateId || captain.ref.stableId;
+}
+
+/** The public interrupt id that enters a leaf's complete structured region. */
+function interruptTargetForRef(ref: StateRef, fallback: string): string {
+  let ancestor = ref.parent;
+  while (ancestor !== undefined) {
+    if (ancestor.state.type === 'parallel') return ancestor.stableId;
+    ancestor = ancestor.parent;
+  }
+  return fallback;
+}
+
+function captainInterruptTarget(captain: CaptainRef): string {
+  return interruptTargetForRef(captain.ref, captainPublicStateId(captain));
 }
 
 type GuardArgs = { context: unknown; event: unknown };
@@ -209,11 +243,97 @@ export function findMachine(fsmModule: unknown): MachineLike {
 /** How long a driven actor may take to settle; transitions resolve in microtasks. */
 const SETTLE_MS = 1_000;
 
+/** Bounded structured-machine probes use these shorter settle windows. */
+const PARALLEL_SETTLE_MS = 250;
+const PARALLEL_QUESTION_SETTLE_MS = 500;
+const MAX_PARALLEL_COMBINATIONS = 64;
+
+/** Stable values shared by machine input, result output, and guard probing. */
+const COVERAGE_PLAYBOOK_ID = 'coverage-child-playbook';
+const COVERAGE_PLAYBOOK_INPUT = 'coverage: complete the child request';
+const COVERAGE_FINAL_RESPONSE = 'coverage: completed response';
+const COVERAGE_ENABLED_PLAYBOOKS = [
+  {
+    id: COVERAGE_PLAYBOOK_ID,
+    command: '/coverage-child',
+    intent: 'Exercise a nested playbook transition.',
+  },
+] as const;
+
+/**
+ * Supplies the required Captain-session catalog without assuming that every
+ * artifact consumes these input fields. XState ignores unused machine input.
+ */
+const COVERAGE_MACHINE_INPUT = {
+  stateId: 'coverage-root-playbook',
+  selfPlaybookId: 'coverage-root-playbook',
+  bossIntent: 'Exercise the compiled playbook transitions.',
+  enabledPlaybooks: COVERAGE_ENABLED_PLAYBOOKS,
+};
+
+/**
+ * A valid Captain context for direct guard evaluation. Dynamic call fields use
+ * the same id as the catalog entry, preserving exact catalog-membership guards.
+ */
+function coverageGuardContext(
+  dynamic?: DynamicPlaybookFields,
+): Record<string, unknown> {
+  return {
+    ...COVERAGE_MACHINE_INPUT,
+    remainingPlan: [],
+    completedCallResults: [
+      {
+        playbookId: COVERAGE_PLAYBOOK_ID,
+        status: 'ok',
+        output: { response: 'coverage: prior child result' },
+      },
+    ],
+    completedCallSignatures: [],
+    nextPlaybookId: COVERAGE_PLAYBOOK_ID,
+    nextPlaybookInput: COVERAGE_PLAYBOOK_INPUT,
+    finalResponse: COVERAGE_FINAL_RESPONSE,
+    ...(dynamic === undefined
+      ? {}
+      : {
+          [dynamic.playbookIdContext]: COVERAGE_PLAYBOOK_ID,
+          [dynamic.textContext]: COVERAGE_PLAYBOOK_INPUT,
+        }),
+  };
+}
+
 /** Payload fields a result description requires, per the adjudicator convention. */
 const REQUIRED_FIELD = /Output shall include `([A-Za-z_][A-Za-z0-9_]*):/g;
 
+/** Structured fields named by the generic Captain result contracts. */
+const STRUCTURED_RESULT_FIELD =
+  /\b(response|question|remainingPlan|nextPlaybookId|nextPlaybookInput)\b/g;
+
 function requiredFields(description: string): string[] {
-  return [...description.matchAll(REQUIRED_FIELD)].map((match) => match[1]);
+  return [
+    ...new Set([
+      ...[...description.matchAll(REQUIRED_FIELD)].map((match) => match[1]),
+      ...[...description.matchAll(STRUCTURED_RESULT_FIELD)].map(
+        (match) => match[1],
+      ),
+    ]),
+  ];
+}
+
+function synthesizedFieldValue(field: string): unknown {
+  switch (field) {
+    case 'question':
+      return 'What should happen next?';
+    case 'remainingPlan':
+      return [];
+    case 'nextPlaybookId':
+      return COVERAGE_PLAYBOOK_ID;
+    case 'nextPlaybookInput':
+      return COVERAGE_PLAYBOOK_INPUT;
+    case 'response':
+      return COVERAGE_FINAL_RESPONSE;
+    default:
+      return `coverage:${field}`;
+  }
 }
 
 /** Synthesizes a captain output that selects `key` under the state's contract. */
@@ -223,8 +343,7 @@ function synthOutput(
 ): Record<string, unknown> {
   const output: Record<string, unknown> = { guard: key };
   for (const field of requiredFields(state.result[key] ?? '')) {
-    output[field] =
-      field === 'question' ? 'What should happen next?' : `coverage:${field}`;
+    output[field] = synthesizedFieldValue(field);
   }
   return output;
 }
@@ -298,30 +417,35 @@ function captainRefs(config: MachineConfigLike): CaptainRef[] {
     const invocationIndex = choices.findIndex((invocation) => {
       if (used.has(invocation)) return false;
       const source = invocationSource(invocation.src);
-      const explicitlyCaptain = source === 'captain';
+      const matchingActor =
+        source === binding.actor ||
+        // Playbook 0.9 represented delegated work as a `captain` invoke with
+        // an input.player field. Retain that immutable bundle until the atomic
+        // Playbook 1.0 refresh while driving new `player` invokes distinctly.
+        (binding.actor === 'player' && source === 'captain');
       if (
-        (!explicitlyCaptain && source !== undefined) ||
+        (!matchingActor && source !== undefined) ||
         typeof invocation.input !== 'function'
       ) {
-        return explicitlyCaptain && binding.sourceItem === '';
+        return matchingActor && binding.sourceItem === '';
       }
       try {
-        const input = invocation.input({ context: {} });
+        const input = invocation.input({ context: coverageGuardContext() });
         if (
           typeof input !== 'object' ||
           input === null ||
           Array.isArray(input)
         ) {
-          return explicitlyCaptain && binding.sourceItem === '';
+          return matchingActor && binding.sourceItem === '';
         }
         const sourceItem = (input as { sourceItem?: unknown }).sourceItem;
         if (binding.sourceItem !== '') return sourceItem === binding.sourceItem;
-        return explicitlyCaptain;
+        return matchingActor;
       } catch {
-        return explicitlyCaptain && binding.sourceItem === '';
+        return matchingActor && binding.sourceItem === '';
       }
     });
-    // A malformed explicit captain invoke can lack a distinguishable input;
+    // A malformed explicit work invoke can lack a distinguishable input;
     // retain declaration order rather than silently dropping coverage.
     const selected =
       invocationIndex >= 0
@@ -329,7 +453,9 @@ function captainRefs(config: MachineConfigLike): CaptainRef[] {
         : choices.findIndex(
             (invocation) =>
               !used.has(invocation) &&
-              invocationSource(invocation.src) === 'captain',
+              (invocationSource(invocation.src) === binding.actor ||
+                (binding.actor === 'player' &&
+                  invocationSource(invocation.src) === 'captain')),
           );
     if (selected < 0) continue;
     used.add(choices[selected]);
@@ -351,6 +477,51 @@ function playbookRefs(config: MachineConfigLike): PlaybookRef[] {
         : [],
     ),
   );
+}
+
+function coverageErrorMessage(error: unknown): string {
+  try {
+    return error instanceof Error ? error.message : String(error);
+  } catch {
+    return 'unknown error';
+  }
+}
+
+/** Replays a nested input against the context observed after a failed start. */
+function playbookInputFailure(
+  playbook: PlaybookRef,
+  context: Record<string, unknown>,
+): string | undefined {
+  if (typeof playbook.invocation.input !== 'function') return undefined;
+  try {
+    playbook.invocation.input({ context });
+    return undefined;
+  } catch (error) {
+    return coverageErrorMessage(error);
+  }
+}
+
+/** Dynamic target/text context names declared by a nested playbook input. */
+function dynamicPlaybookFields(
+  playbook: PlaybookRef,
+): DynamicPlaybookFields | undefined {
+  if (typeof playbook.invocation.input !== 'function') return undefined;
+  let input: unknown;
+  try {
+    input = playbook.invocation.input({ context: coverageGuardContext() });
+  } catch {
+    return undefined;
+  }
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return undefined;
+  }
+  const playbookIdContext = (input as { playbookIdContext?: unknown })
+    .playbookIdContext;
+  const textContext = (input as { textContext?: unknown }).textContext;
+  return typeof playbookIdContext === 'string' &&
+    typeof textContext === 'string'
+    ? { playbookIdContext, textContext }
+    : undefined;
 }
 
 function tagsOf(state: StateNodeLike): readonly string[] {
@@ -402,10 +573,15 @@ type Snapshot = {
   value: unknown;
   context: Record<string, unknown>;
   status?: string;
+  error?: unknown;
   getMeta?: () => Record<string, unknown>;
 };
 
 interface DrivenActor {
+  readonly coverageErrors: readonly {
+    eventType: string;
+    error: unknown;
+  }[];
   send(event: Record<string, unknown>): void;
   getSnapshot(): Snapshot;
   start(): unknown;
@@ -429,16 +605,19 @@ function makeActor(
   script: CaptainScript,
   playbookScript: PlaybookScript = () => null,
 ): DrivenActor {
+  const coverageErrors: { eventType: string; error: unknown }[] = [];
+  const workActor = fromPromise(
+    async ({ input }: { input: Record<string, unknown> }) => {
+      const output = script(input ?? {});
+      if (output === null) return new Promise(() => {});
+      if (output instanceof Error) throw output;
+      return output;
+    },
+  );
   const provided = machine.provide({
     actors: {
-      [CAPTAIN_ACTOR]: fromPromise(
-        async ({ input }: { input: Record<string, unknown> }) => {
-          const output = script(input ?? {});
-          if (output === null) return new Promise(() => {});
-          if (output instanceof Error) throw output;
-          return output;
-        },
-      ),
+      [CAPTAIN_ACTOR]: workActor,
+      player: workActor,
       // A child script is opt-in. All unrelated child invocations hang until
       // the driven actor is stopped, preserving Captain and parallel probes.
       playbook: fromPromise(
@@ -460,9 +639,33 @@ function makeActor(
   const actor = createActor(
     provided as never,
     {
-      input: {},
+      input: COVERAGE_MACHINE_INPUT,
+      inspect: (inspection: unknown) => {
+        if (
+          typeof inspection !== 'object' ||
+          inspection === null ||
+          !('event' in inspection)
+        ) {
+          return;
+        }
+        const event = (inspection as { event?: unknown }).event;
+        if (typeof event !== 'object' || event === null) return;
+        const eventType = (event as { type?: unknown }).type;
+        if (
+          typeof eventType === 'string' &&
+          eventType.startsWith('xstate.error.actor.')
+        ) {
+          coverageErrors.push({
+            eventType,
+            error: (event as { error?: unknown }).error,
+          });
+        }
+      },
     } as never,
   ) as unknown as DrivenActor;
+  Object.defineProperty(actor, 'coverageErrors', {
+    value: coverageErrors,
+  });
   actor.subscribe({ error: () => {} });
   actor.start();
   return actor;
@@ -519,6 +722,10 @@ function settle(
       next: (snapshot) => {
         if (predicate(snapshot)) finish(true);
       },
+      // XState reports an actor failure as unhandled when any observer lacks
+      // an error listener. A failed transition is a false settle result; its
+      // owning probe records the actionable coverage finding.
+      error: () => finish(false),
     });
     if (predicate(actor.getSnapshot())) finish(true);
   });
@@ -629,6 +836,7 @@ function directlySelectedEventArm(
   machine: MachineLike,
   arms: readonly unknown[],
   event: Record<string, unknown>,
+  context: Record<string, unknown> = coverageGuardContext(),
 ): number | undefined {
   for (const [index, arm] of arms.entries()) {
     const rawGuard = armGuard(arm);
@@ -636,7 +844,7 @@ function directlySelectedEventArm(
     const guard = resolveGuard(machine, rawGuard);
     if (guard === undefined) return undefined;
     try {
-      if (guard.run({ context: {}, event })) return index;
+      if (guard.run({ context, event })) return index;
     } catch {
       return undefined;
     }
@@ -683,11 +891,12 @@ function orderedArmPredicate(
   return undefined;
 }
 
-/** The arm XState selects for one concrete invocation output and empty context. */
+/** The arm XState selects for one concrete invocation output and context. */
 function directlySelectedArm(
   machine: MachineLike,
   captain: CaptainRef,
   output: Record<string, unknown>,
+  context: Record<string, unknown> = coverageGuardContext(),
 ): number | undefined {
   const event = {
     ...invocationEvent(machine, captain, 'done'),
@@ -697,6 +906,7 @@ function directlySelectedArm(
     machine,
     transitionArms(captain.invocation.onDone),
     event,
+    context,
   );
 }
 
@@ -705,9 +915,10 @@ function directTargetRef(
   refs: readonly StateRef[],
   captain: CaptainRef,
   output: Record<string, unknown>,
+  context: Record<string, unknown> = coverageGuardContext(),
 ): StateRef | undefined {
   const arms = transitionArms(captain.invocation.onDone);
-  const selected = directlySelectedArm(machine, captain, output);
+  const selected = directlySelectedArm(machine, captain, output, context);
   if (selected === undefined) return undefined;
   const target = rawArmTarget(arms[selected]);
   return target === undefined
@@ -724,8 +935,17 @@ function directTargetRef(
  * bounded assignment satisfies it.
  */
 
-const GENERIC_VALUES: unknown[] = ['coverage', true, 1, ['coverage']];
+const GENERIC_VALUES: unknown[] = [
+  'coverage',
+  true,
+  1,
+  ['coverage'],
+  COVERAGE_ENABLED_PLAYBOOKS,
+];
 const MAX_PROBES = 30_000;
+const PROBES_PER_TIMEOUT_MILLISECOND = 50;
+const COVERAGE_TIMEOUT_MARGIN_MS = 5_000;
+const MIN_COVERAGE_TEST_TIMEOUT_MS = 10_000;
 
 function minedLiterals(fn: unknown): string[] {
   let source: string;
@@ -774,52 +994,29 @@ export function guardSatisfiable(
   baseOutput: Record<string, unknown>,
   extraValues: readonly unknown[] = [],
 ): boolean {
-  return probeGuardSatisfiable(
-    guard,
-    {},
-    [{ eventField: 'output', tag: 'o:', base: baseOutput }],
-    extraValues,
+  return (
+    probeGuardAssignment(
+      guard,
+      {},
+      [{ eventField: 'output', tag: 'o:', base: baseOutput }],
+      extraValues,
+    ) !== undefined
   );
 }
 
-interface ProbePayload {
-  eventField: string;
-  /** A two-character assignment/read tag, such as `o:` or `r:`. */
-  tag: string;
-  base: object;
-  /** Error properties are variable inputs even when the seed already has one. */
-  varyExisting?: boolean;
+interface ProbeOptions {
+  initialContext?: Record<string, unknown>;
+  /** Nested-call driving varies actor output, not unreachable context. */
+  assignContext?: boolean;
 }
 
-interface ProbeAssignment {
-  context: Record<string, unknown>;
-  payloads: Record<string, Record<string, unknown>>;
-}
-
-function overlaidObject(
-  base: object,
-  assigned: Record<string, unknown>,
-): Record<string, unknown> {
-  const copy = Object.create(Object.getPrototypeOf(base)) as Record<
-    string,
-    unknown
-  >;
-  Object.defineProperties(copy, Object.getOwnPropertyDescriptors(base));
-  Object.assign(copy, assigned);
-  return copy;
-}
-
-/**
- * Bounded guard probing with a fixed, real event surface. Only context and the
- * named nested payloads are assignable; event-level fields such as `type` and
- * `actorId` remain the values XState actually supplies.
- */
-function probeGuardSatisfiable(
+function probeGuardAssignment(
   guard: (arg: GuardArgs) => unknown,
   fixedEvent: Readonly<Record<string, unknown>>,
   payloads: readonly ProbePayload[],
   extraValues: readonly unknown[],
-): boolean {
+  options: ProbeOptions = {},
+): ProbeAssignment | undefined {
   // Guard-source literals first: the likeliest matches are tried earliest.
   const values = [
     ...new Set([...minedLiterals(guard), ...extraValues, ...GENERIC_VALUES]),
@@ -895,15 +1092,19 @@ function probeGuardSatisfiable(
     return [...reads];
   };
 
-  const search = (assignment: ProbeAssignment, depth: number): boolean => {
-    if (probes > MAX_PROBES) return false;
-    if (passes(assignment)) return true;
-    if (depth >= 4) return false;
+  const search = (
+    assignment: ProbeAssignment,
+    depth: number,
+  ): ProbeAssignment | undefined => {
+    if (probes > MAX_PROBES) return undefined;
+    if (passes(assignment)) return assignment;
+    if (depth >= 4) return undefined;
     for (const key of readsUnder(assignment)) {
       const tag = key.slice(0, 2);
       const field = key.slice(2);
+      if (tag === 'c:' && options.assignContext === false) continue;
       for (const value of values) {
-        if (probes > MAX_PROBES) return false;
+        if (probes > MAX_PROBES) return undefined;
         const next =
           tag === 'c:'
             ? {
@@ -920,15 +1121,65 @@ function probeGuardSatisfiable(
                   },
                 },
               };
-        if (search(next, depth + 1)) return true;
+        const found = search(next, depth + 1);
+        if (found !== undefined) return found;
       }
     }
-    return false;
+    return undefined;
   };
 
-  return search({ context: {}, payloads: {} }, 0);
+  return search(
+    {
+      context: { ...(options.initialContext ?? {}) },
+      payloads: {},
+    },
+    0,
+  );
 }
 
+function probeGuardSatisfiable(
+  guard: (arg: GuardArgs) => unknown,
+  fixedEvent: Readonly<Record<string, unknown>>,
+  payloads: readonly ProbePayload[],
+  extraValues: readonly unknown[],
+): boolean {
+  return (
+    probeGuardAssignment(guard, fixedEvent, payloads, extraValues) !== undefined
+  );
+}
+
+interface ProbePayload {
+  eventField: string;
+  /** A two-character assignment/read tag, such as `o:` or `r:`. */
+  tag: string;
+  base: object;
+  /** Error properties are variable inputs even when the seed already has one. */
+  varyExisting?: boolean;
+}
+
+interface ProbeAssignment {
+  context: Record<string, unknown>;
+  payloads: Record<string, Record<string, unknown>>;
+}
+
+function overlaidObject(
+  base: object,
+  assigned: Record<string, unknown>,
+): Record<string, unknown> {
+  const copy = Object.create(Object.getPrototypeOf(base)) as Record<
+    string,
+    unknown
+  >;
+  Object.defineProperties(copy, Object.getOwnPropertyDescriptors(base));
+  Object.assign(copy, assigned);
+  return copy;
+}
+
+/**
+ * Bounded guard probing with a fixed, real event surface. Only context and the
+ * named nested payloads are assignable; event-level fields such as `type` and
+ * `actorId` remain the values XState actually supplies.
+ */
 function doneGuardSatisfiable(
   guard: ResolvedGuard,
   event: Readonly<Record<string, unknown>>,
@@ -1036,15 +1287,277 @@ function callCount(
 
 type PlaybookOutcome = 'onDone' | 'onError';
 
+interface PlaybookEntryPlan {
+  captain: CaptainRef;
+  output: Record<string, unknown>;
+}
+
+interface CaptainPredecessorPlan {
+  playbook: PlaybookRef;
+  entry?: PlaybookEntryPlan;
+  childOutput: Record<string, unknown>;
+}
+
+function playbookCoverageInput(
+  playbook: PlaybookRef,
+  dynamic: DynamicPlaybookFields | undefined,
+): Record<string, unknown> | undefined {
+  if (typeof playbook.invocation.input !== 'function') return undefined;
+  try {
+    const input = playbook.invocation.input({
+      context: coverageGuardContext(dynamic),
+    });
+    return typeof input === 'object' && input !== null && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function nestedSuccessOutput(): Record<string, unknown> {
+  return {
+    outcome: 'terminal',
+    state: { value: 'done', context: {} },
+    output: { response: 'coverage: nested playbook completed' },
+    response: 'coverage: nested playbook completed',
+  };
+}
+
+function nestedFailure(playbookId: string): Error {
+  const error = new Error('coverage: forced nested playbook failure');
+  Object.defineProperty(error, 'result', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: {
+      status: 'error',
+      playbookId,
+      error: {
+        name: 'Error',
+        message: 'coverage: forced nested playbook failure',
+      },
+    },
+  });
+  return error;
+}
+
+function assignedPayload<T extends object>(
+  base: T,
+  assignment: ProbeAssignment,
+  tag: string,
+): T {
+  return overlaidObject(base, assignment.payloads[tag] ?? {}) as T;
+}
+
 /**
- * Drives one nested invocation outcome through the call state's public id.
- * The one-shot child is selected by both its resolved XState actor id and its
- * `PlaybookInput.stateId`; every other child remains parked until actor stop.
+ * Finds a valid Captain result that populates a dynamic call's target and text
+ * before entering it. This exercises the authored assignment and exact catalog
+ * guard instead of jumping into the call with impossible empty context.
+ */
+function playbookEntryPlan(
+  machine: MachineLike,
+  playbook: PlaybookRef,
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+  dynamic: DynamicPlaybookFields,
+): PlaybookEntryPlan | undefined {
+  const context = coverageGuardContext(dynamic);
+  for (const captain of captains) {
+    const arms = transitionArms(captain.invocation.onDone);
+    for (const [armIndex, arm] of arms.entries()) {
+      const rawTarget = rawArmTarget(arm);
+      if (
+        rawTarget === undefined ||
+        !sameStateRef(
+          stateRefForTarget(refs, rawTarget, captain.ref),
+          playbook.ref,
+        )
+      ) {
+        continue;
+      }
+      for (const key of Object.keys(captain.binding.result)) {
+        const output = {
+          ...synthOutput(captain.binding, key),
+          [dynamic.playbookIdContext]: COVERAGE_PLAYBOOK_ID,
+          [dynamic.textContext]: COVERAGE_PLAYBOOK_INPUT,
+        };
+        if (
+          directlySelectedArm(machine, captain, output, context) === armIndex
+        ) {
+          return { captain, output };
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Finds a child-success path into a Captain state whose public interrupt has
+ * valid accumulated-context preconditions (for example Captain reassessment
+ * after one child call). The checker then drives the authored predecessor
+ * instead of manufacturing context or treating the guarded jump as dead.
+ */
+function captainPredecessorPlan(
+  machine: MachineLike,
+  target: CaptainRef,
+  playbooks: readonly PlaybookRef[],
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+): CaptainPredecessorPlan | undefined {
+  const candidateValues = refs.flatMap((ref) => [
+    ref.key,
+    ref.stableId,
+    ...(ref.configId === undefined ? [] : [ref.configId]),
+  ]);
+  for (const playbook of playbooks) {
+    const dynamic = dynamicPlaybookFields(playbook);
+    const entry =
+      dynamic === undefined
+        ? undefined
+        : playbookEntryPlan(machine, playbook, refs, captains, dynamic);
+    if (dynamic !== undefined && entry === undefined) continue;
+    if (entry !== undefined && sameStateRef(entry.captain.ref, target.ref)) {
+      continue;
+    }
+    const actorId = invocationActorId(machine, playbook);
+    const fixedEvent = {
+      type: `xstate.done.actor.${actorId}`,
+      actorId,
+    };
+    const arms = transitionArms(playbook.invocation.onDone);
+    for (const [armIndex, arm] of arms.entries()) {
+      const rawTarget = rawArmTarget(arm);
+      if (
+        rawTarget === undefined ||
+        !sameStateRef(
+          stateRefForTarget(refs, rawTarget, playbook.ref),
+          target.ref,
+        )
+      ) {
+        continue;
+      }
+      const guard = orderedArmPredicate(machine, arms, armIndex);
+      if (guard === undefined) continue;
+      for (const base of [
+        nestedSuccessOutput(),
+        { invalidCoverageOutput: undefined },
+      ]) {
+        const assignment = probeGuardAssignment(
+          guard.run,
+          fixedEvent,
+          [{ eventField: 'output', tag: 'o:', base }],
+          [...guard.probeValues, ...candidateValues],
+          {
+            initialContext: coverageGuardContext(dynamic),
+            assignContext: false,
+          },
+        );
+        if (assignment !== undefined) {
+          return {
+            playbook,
+            ...(entry === undefined ? {} : { entry }),
+            childOutput: assignedPayload(base, assignment, 'o:'),
+          };
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function captainProbeActor(
+  machine: MachineLike,
+  captain: CaptainRef,
+  result: Record<string, unknown> | Error,
+  gate: ArmingGate,
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+  playbooks: readonly PlaybookRef[],
+): { actor: DrivenActor; targetId: string } {
+  const predecessor = captainPredecessorPlan(
+    machine,
+    captain,
+    playbooks,
+    refs,
+    captains,
+  );
+  if (predecessor === undefined) {
+    return {
+      actor: makeActor(
+        machine,
+        result instanceof Error
+          ? throwingScript(captain.binding.sourceItem, gate)
+          : onceScript(captain.binding.sourceItem, result, gate),
+      ),
+      targetId: captainInterruptTarget(captain),
+    };
+  }
+
+  let entryUsed = false;
+  let targetUsed = false;
+  let childUsed = false;
+  const actorId = invocationActorId(machine, predecessor.playbook);
+  const dynamic = dynamicPlaybookFields(predecessor.playbook);
+  const actor = makeActor(
+    machine,
+    (input) => {
+      if (!gate.armed) return null;
+      if (
+        predecessor.entry !== undefined &&
+        !entryUsed &&
+        input.sourceItem === predecessor.entry.captain.binding.sourceItem
+      ) {
+        entryUsed = true;
+        return predecessor.entry.output;
+      }
+      if (!targetUsed && input.sourceItem === captain.binding.sourceItem) {
+        targetUsed = true;
+        return result;
+      }
+      return null;
+    },
+    (input, invokedActorId) => {
+      if (
+        !gate.armed ||
+        childUsed ||
+        invokedActorId !== actorId ||
+        input.stateId !== predecessor.playbook.ref.stableId ||
+        (dynamic !== undefined &&
+          (input.playbookId !== COVERAGE_PLAYBOOK_ID ||
+            input.text !== COVERAGE_PLAYBOOK_INPUT))
+      ) {
+        return null;
+      }
+      childUsed = true;
+      return predecessor.childOutput;
+    },
+  );
+  return {
+    actor,
+    targetId:
+      predecessor.entry === undefined
+        ? interruptTargetForRef(
+            predecessor.playbook.ref,
+            predecessor.playbook.ref.stableId,
+          )
+        : captainInterruptTarget(predecessor.entry.captain),
+  };
+}
+
+/**
+ * Drives one nested invocation outcome. Literal calls enter through their
+ * public id; dynamic calls first take a valid Captain transition that writes
+ * the target/text context. The one-shot child is selected by both its resolved
+ * XState actor id and its `PlaybookInput.stateId`; every other child remains
+ * parked until actor stop.
  */
 async function probePlaybookOutcome(
   machine: MachineLike,
   playbook: PlaybookRef,
   refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
   outcome: PlaybookOutcome,
 ): Promise<string[]> {
   const rawArms = transitionArms(
@@ -1059,78 +1572,203 @@ async function probePlaybookOutcome(
   }
 
   const actorId = invocationActorId(machine, playbook);
-  const successOutput = { response: 'coverage: nested playbook completed' };
-  const forcedError = new Error('coverage: forced nested playbook failure');
-  const event =
-    outcome === 'onDone'
-      ? { type: `xstate.done.actor.${actorId}`, actorId, output: successOutput }
-      : { type: `xstate.error.actor.${actorId}`, actorId, error: forcedError };
-  const armIndex = directlySelectedEventArm(machine, rawArms, event);
-  if (armIndex === undefined) {
-    return [
-      `state ${playbook.ref.stableId}: nested playbook ${outcome} has no directly selectable transition`,
-    ];
-  }
-
-  const rawTarget = rawArmTarget(rawArms[armIndex]);
-  const target =
-    rawTarget === undefined
+  const dynamic = dynamicPlaybookFields(playbook);
+  const entry =
+    dynamic === undefined
       ? undefined
-      : stateRefForTarget(refs, rawTarget, playbook.ref);
-  if (rawTarget === undefined || target === undefined) {
+      : playbookEntryPlan(machine, playbook, refs, captains, dynamic);
+  if (dynamic !== undefined && entry === undefined) {
     return [
-      `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} has no observable target`,
+      `state ${playbook.ref.stableId}: dynamic nested playbook has no reachable Captain entry transition`,
     ];
   }
-  if (target === playbook.ref) {
-    return [
-      `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} does not leave the call state`,
-    ];
-  }
+  const input = playbookCoverageInput(playbook, dynamic);
+  const expectedPlaybookId =
+    typeof input?.playbookId === 'string'
+      ? input.playbookId
+      : COVERAGE_PLAYBOOK_ID;
+  const fixedEvent = {
+    type: `xstate.${outcome === 'onDone' ? 'done' : 'error'}.actor.${actorId}`,
+    actorId,
+  };
+  const context = coverageGuardContext(dynamic);
+  const candidateValues = refs.flatMap((ref) => [
+    ref.key,
+    ref.stableId,
+    ...(ref.configId === undefined ? [] : [ref.configId]),
+  ]);
+  const findings: string[] = [];
 
-  const gate: ArmingGate = { armed: false };
-  let calls = 0;
-  const actor = makeActor(
-    machine,
-    () => null,
-    (input, invokedActorId) => {
-      if (
-        !gate.armed ||
-        calls > 0 ||
-        invokedActorId !== actorId ||
-        input.stateId !== playbook.ref.stableId
-      ) {
-        return null;
-      }
-      calls++;
-      return outcome === 'onDone' ? successOutput : forcedError;
-    },
-  );
-  gate.armed = true;
-  actor.send({
-    type: INTERRUPT_EVENT,
-    targetId: playbook.ref.stableId,
-  });
-  const landed = await settle(
-    actor,
-    (snapshot) => calls === 1 && atState(target)(snapshot),
-  );
-  actor.stop();
-  return landed
-    ? []
-    : [
-        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} did not reach ${target.stableId}`,
+  for (const [armIndex, arm] of rawArms.entries()) {
+    const rawGuard = armGuard(arm);
+    if (
+      rawGuard !== undefined &&
+      resolveGuard(machine, rawGuard) === undefined
+    ) {
+      findings.push(
+        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} names an unresolvable guard "${guardLabel(rawGuard)}"`,
+      );
+      continue;
+    }
+    const guard = orderedArmPredicate(machine, rawArms, armIndex);
+    if (guard === undefined) continue;
+
+    let scriptedResult: Record<string, unknown> | Error | undefined;
+    if (outcome === 'onDone') {
+      const outputs = [
+        nestedSuccessOutput(),
+        // A resolved promise may still return a value rejected by the linked
+        // runtime's output validator; fallback arms must be independently
+        // selectable and driven as well.
+        { invalidCoverageOutput: undefined },
       ];
+      for (const base of outputs) {
+        const assignment = probeGuardAssignment(
+          guard.run,
+          fixedEvent,
+          [{ eventField: 'output', tag: 'o:', base }],
+          [...guard.probeValues, ...candidateValues],
+          { initialContext: context, assignContext: false },
+        );
+        if (assignment !== undefined) {
+          scriptedResult = assignedPayload(base, assignment, 'o:');
+          break;
+        }
+      }
+    } else {
+      const errors = [
+        nestedFailure(expectedPlaybookId),
+        new Error('coverage: generic nested playbook failure'),
+      ];
+      for (const base of errors) {
+        const assignment = probeGuardAssignment(
+          guard.run,
+          fixedEvent,
+          [{ eventField: 'error', tag: 'r:', base, varyExisting: true }],
+          [...guard.probeValues, ...candidateValues],
+          { initialContext: context, assignContext: false },
+        );
+        if (assignment !== undefined) {
+          scriptedResult = assignedPayload(base, assignment, 'r:');
+          break;
+        }
+      }
+    }
+    if (scriptedResult === undefined) {
+      findings.push(
+        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} is unsatisfiable under probing`,
+      );
+      continue;
+    }
+
+    const rawTarget = rawArmTarget(arm);
+    const target =
+      rawTarget === undefined
+        ? undefined
+        : stateRefForTarget(refs, rawTarget, playbook.ref);
+    if (rawTarget === undefined || target === undefined) {
+      findings.push(
+        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} has no observable target`,
+      );
+      continue;
+    }
+    if (sameStateRef(target, playbook.ref)) {
+      findings.push(
+        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} does not leave the call state`,
+      );
+      continue;
+    }
+
+    const gate: ArmingGate = { armed: false };
+    let calls = 0;
+    const actor = makeActor(
+      machine,
+      entry === undefined
+        ? () => null
+        : onceScript(entry.captain.binding.sourceItem, entry.output, gate),
+      (actorInput, invokedActorId) => {
+        if (
+          !gate.armed ||
+          calls > 0 ||
+          invokedActorId !== actorId ||
+          actorInput.stateId !== playbook.ref.stableId ||
+          (dynamic !== undefined &&
+            (actorInput.playbookId !== COVERAGE_PLAYBOOK_ID ||
+              actorInput.text !== COVERAGE_PLAYBOOK_INPUT))
+        ) {
+          return null;
+        }
+        calls++;
+        return scriptedResult!;
+      },
+    );
+    gate.armed = true;
+    actor.send({
+      type: INTERRUPT_EVENT,
+      targetId:
+        entry === undefined
+          ? interruptTargetForRef(playbook.ref, playbook.ref.stableId)
+          : captainInterruptTarget(entry.captain),
+    });
+    let enteredCall = false;
+    const settled = await settle(actor, (snapshot) => {
+      if (atState(playbook.ref)(snapshot)) enteredCall = true;
+      return (
+        (calls === 1 && atState(target)(snapshot)) ||
+        (calls === 0 && actor.coverageErrors.length > 0) ||
+        (enteredCall && calls === 0 && leftState(playbook.ref)(snapshot))
+      );
+    });
+    const finalSnapshot = actor.getSnapshot();
+    const observedStartFailure = actor.coverageErrors.find(
+      ({ eventType }) =>
+        eventType === `xstate.error.actor.${actorId}` || calls === 0,
+    );
+    const inputFailure =
+      calls === 0
+        ? observedStartFailure === undefined
+          ? finalSnapshot.status === 'error'
+            ? coverageErrorMessage(finalSnapshot.error)
+            : playbookInputFailure(playbook, finalSnapshot.context)
+          : coverageErrorMessage(observedStartFailure.error)
+        : undefined;
+    actor.stop();
+    if (inputFailure !== undefined) {
+      findings.push(
+        `state ${playbook.ref.stableId}: nested playbook actor failed to start during ${outcome} coverage: ${inputFailure}`,
+      );
+      continue;
+    }
+    if (!settled || calls !== 1 || !atState(target)(finalSnapshot)) {
+      findings.push(
+        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} did not reach ${target.stableId}`,
+      );
+    }
+  }
+  return findings;
 }
 
 async function probePlaybookInvocation(
   machine: MachineLike,
   playbook: PlaybookRef,
   refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
 ): Promise<string[]> {
   return [
-    ...(await probePlaybookOutcome(machine, playbook, refs, 'onDone')),
-    ...(await probePlaybookOutcome(machine, playbook, refs, 'onError')),
+    ...(await probePlaybookOutcome(
+      machine,
+      playbook,
+      refs,
+      captains,
+      'onDone',
+    )),
+    ...(await probePlaybookOutcome(
+      machine,
+      playbook,
+      refs,
+      captains,
+      'onError',
+    )),
   ];
 }
 
@@ -1160,12 +1798,12 @@ async function probeParallelQuestions(
   const actor = makeActor(machine, script);
   actor.send({
     type: INTERRUPT_EVENT,
-    targetId: captainPublicStateId(plans[0].captain),
+    targetId: parallel.stableId,
   });
   const parked = await settle(
     actor,
     (snapshot) => plans.every(({ wait }) => atState(wait)(snapshot)),
-    500,
+    PARALLEL_QUESTION_SETTLE_MS,
   );
   if (!parked) {
     actor.stop();
@@ -1186,7 +1824,7 @@ async function probeParallelQuestions(
       callCount(calls, selected.captain) >= 2 &&
       atState(selected.captain.ref)(snapshot) &&
       others.every(({ wait }) => atState(wait)(snapshot)),
-    500,
+    PARALLEL_QUESTION_SETTLE_MS,
   );
   actor.stop();
   return isolated
@@ -1196,7 +1834,10 @@ async function probeParallelQuestions(
       ];
 }
 
-function combinations<T>(lists: readonly (readonly T[])[], limit = 64): T[][] {
+function combinations<T>(
+  lists: readonly (readonly T[])[],
+  limit = MAX_PARALLEL_COMBINATIONS,
+): T[][] {
   let out: T[][] = [[]];
   for (const list of lists) {
     out = out.flatMap((prefix) => list.map((item) => [...prefix, item]));
@@ -1265,16 +1906,16 @@ async function probeParallelJoins(
       const actor = makeActor(machine, script);
       actor.send({
         type: INTERRUPT_EVENT,
-        targetId: captainPublicStateId(branches[0]),
+        targetId: parallel.stableId,
       });
       exercised = await settle(
         actor,
         (snapshot) =>
-          target === parallel
+          sameStateRef(target, parallel)
             ? branches.every((captain) => callCount(calls, captain) >= 2) &&
               branches.every((captain) => atState(captain.ref)(snapshot))
             : atState(target)(snapshot),
-        250,
+        PARALLEL_SETTLE_MS,
       );
       actor.stop();
       if (exercised) break;
@@ -1286,6 +1927,93 @@ async function probeParallelJoins(
     }
   }
   return findings;
+}
+
+/**
+ * Derives a conservative Vitest timeout from the same bounded work performed
+ * by {@link checkFsmCoverage}. It includes every possible async settle window,
+ * the bounded parallel-combination surface, an allowance for each worst-case
+ * guard search, and a final scheduling margin. Generated tests use this instead
+ * of Vitest's five-second default.
+ */
+export function fsmCoverageTestTimeout(fsmModule: unknown): number {
+  const machine = findMachine(fsmModule);
+  const config = machine.config;
+  const states = (config.states ?? {}) as Record<string, StateNodeLike>;
+  const refs = stateRefs(config);
+  const captains = captainRefs(config);
+  const playbooks = playbookRefs(config);
+  const parallels = refs.filter((ref) => ref.state.type === 'parallel');
+
+  const rootSettles =
+    transitionArms((config.on ?? {})[INTERRUPT_EVENT]).length * SETTLE_MS;
+  const initial =
+    typeof config.initial === 'string' ? config.initial : undefined;
+  const entryEvents = new Set([
+    ...Object.keys(initial === undefined ? {} : (states[initial]?.on ?? {})),
+    ...Object.keys(config.on ?? {}),
+  ]);
+  entryEvents.delete(INTERRUPT_EVENT);
+  const entrySettles = entryEvents.size * SETTLE_MS;
+
+  let captainSettles = 0;
+  let guardProbeCalls = 0;
+  for (const captain of captains) {
+    const resultKeys = Object.keys(captain.binding.result);
+    captainSettles +=
+      resultKeys.reduce(
+        (total, key) => total + (key === NEEDS_BOSS_REPLY ? 4 : 1),
+        0,
+      ) * SETTLE_MS;
+    // One directly selectable onError arm is driven.
+    captainSettles += SETTLE_MS;
+
+    const guardedDoneArms = transitionArms(captain.invocation.onDone).filter(
+      (arm) => armGuard(arm) !== undefined,
+    ).length;
+    const errorArms = transitionArms(captain.invocation.onError).length;
+    // Result acceptance probes each guarded arm once, then the arm audit probes
+    // every result's structured and bare output forms.
+    guardProbeCalls += resultKeys.length * guardedDoneArms * 3 + errorArms;
+  }
+  guardProbeCalls += playbooks.reduce(
+    (total, playbook) =>
+      total +
+      transitionArms(playbook.invocation.onDone).length +
+      transitionArms(playbook.invocation.onError).length,
+    0,
+  );
+
+  const playbookSettles = playbooks.reduce(
+    (total, playbook) =>
+      total +
+      (transitionArms(playbook.invocation.onDone).length +
+        transitionArms(playbook.invocation.onError).length) *
+        SETTLE_MS,
+    0,
+  );
+  const parallelSettles = parallels.reduce(
+    (total, parallel) =>
+      total +
+      2 * PARALLEL_QUESTION_SETTLE_MS +
+      transitionArms(parallel.state.onDone).length *
+        MAX_PARALLEL_COMBINATIONS *
+        PARALLEL_SETTLE_MS,
+    0,
+  );
+  const guardAllowance =
+    guardProbeCalls * Math.ceil(MAX_PROBES / PROBES_PER_TIMEOUT_MILLISECOND);
+
+  return Math.max(
+    MIN_COVERAGE_TEST_TIMEOUT_MS,
+    rootSettles +
+      entrySettles +
+      captainSettles +
+      playbookSettles +
+      parallelSettles +
+      guardAllowance +
+      COVERAGE_TIMEOUT_MARGIN_MS,
+  );
 }
 
 /**
@@ -1310,7 +2038,7 @@ export async function checkFsmCoverage(
   const captains = captainRefs(config);
   const playbooks = playbookRefs(config);
   const captainByRef = new Map(
-    captains.map((captain) => [captain.ref, captain]),
+    captains.map((captain) => [stateRefKey(captain.ref), captain]),
   );
   const sourceCandidates = identifierLiterals(opts.sourceText ?? '');
 
@@ -1328,6 +2056,7 @@ export async function checkFsmCoverage(
     findings.push('machine declares no final state');
   }
 
+  const rawRootArms = transitionArms((config.on ?? {})[INTERRUPT_EVENT]);
   const rootArms = normalizeArms((config.on ?? {})[INTERRUPT_EVENT]);
   const canJump = rootArms.length > 0;
   if (!canJump) {
@@ -1336,7 +2065,7 @@ export async function checkFsmCoverage(
   if (canJump) {
     for (const playbook of playbooks) {
       findings.push(
-        ...(await probePlaybookInvocation(machine, playbook, refs)),
+        ...(await probePlaybookInvocation(machine, playbook, refs, captains)),
       );
     }
     for (const parallel of parallelRefs) {
@@ -1361,18 +2090,63 @@ export async function checkFsmCoverage(
   // Every BOSS_INTERRUPT target is enterable (the captain hangs, so entering a
   // captain state parks in it).
   if (canJump) {
-    for (const arm of rootArms) {
+    for (const [armIndex, arm] of rootArms.entries()) {
       if (arm.target === null) continue;
       const target = stateRefForTarget(refs, arm.target);
+      const targetPlaybook = playbooks.find(
+        (playbook) =>
+          target !== undefined && sameStateRef(playbook.ref, target),
+      );
+      const dynamic =
+        targetPlaybook === undefined
+          ? undefined
+          : dynamicPlaybookFields(targetPlaybook);
       const targetCaptain =
-        target === undefined ? undefined : captainByRef.get(target);
+        target === undefined
+          ? undefined
+          : captainByRef.get(stateRefKey(target));
+      const preconditioned =
+        target?.state.type === 'final' ||
+        dynamic !== undefined ||
+        (arm.guarded && targetCaptain !== undefined);
       const targetId =
         targetCaptain === undefined
           ? (target?.stableId ?? arm.target)
           : captainPublicStateId(targetCaptain);
+
+      // A dynamic call and a final state intentionally reject a jump until
+      // prior transitions have populated their required context. Evaluate the
+      // actual ordered interrupt guard with a valid context sentinel instead
+      // of reporting an empty-initial-context jump as unreachable.
+      if (preconditioned) {
+        const guard = orderedArmPredicate(machine, rawRootArms, armIndex);
+        const acceptsValidContext = (() => {
+          try {
+            return Boolean(
+              guard?.run({
+                context: coverageGuardContext(dynamic),
+                event: { type: INTERRUPT_EVENT, targetId },
+              }),
+            );
+          } catch {
+            return false;
+          }
+        })();
+        if (acceptsValidContext) continue;
+        findings.push(
+          `${INTERRUPT_EVENT} target ${arm.target} rejects valid precondition context`,
+        );
+        continue;
+      }
+
       const actor = makeActor(machine, () => null);
       actor.send({ type: INTERRUPT_EVENT, targetId });
-      if (target === undefined || !(await settle(actor, atState(target)))) {
+      const entered =
+        target !== undefined && (await settle(actor, atState(target)));
+      if (
+        !entered &&
+        !(targetPlaybook !== undefined && actor.coverageErrors.length > 0)
+      ) {
         findings.push(
           `${INTERRUPT_EVENT} target ${arm.target} is not enterable`,
         );
@@ -1477,7 +2251,12 @@ export async function checkFsmCoverage(
           break;
         }
         try {
-          if (guard.run({ context: {}, event: { ...doneEvent, output } })) {
+          if (
+            guard.run({
+              context: coverageGuardContext(),
+              event: { ...doneEvent, output },
+            })
+          ) {
             directArm = index;
             break;
           }
@@ -1495,12 +2274,21 @@ export async function checkFsmCoverage(
       }
 
       const gate: ArmingGate = { armed: false };
-      const actor = makeActor(
+      const probe = captainProbeActor(
         machine,
-        onceScript(state.sourceItem, output, gate),
+        captain,
+        output,
+        gate,
+        refs,
+        captains,
+        playbooks,
       );
+      const actor = probe.actor;
       gate.armed = true;
-      actor.send({ type: INTERRUPT_EVENT, targetId: stateId });
+      actor.send({
+        type: INTERRUPT_EVENT,
+        targetId: probe.targetId,
+      });
       const left = await settle(actor, leftState(captain.ref));
       if (!left) {
         findings.push(`state ${stateKey}: result "${key}" fired no transition`);
@@ -1555,16 +2343,21 @@ export async function checkFsmCoverage(
         actor.stop();
 
         const blankGate: ArmingGate = { armed: false };
-        const blank = makeActor(
+        const blankProbe = captainProbeActor(
           machine,
-          onceScript(
-            state.sourceItem,
-            synthOutput(state, NEEDS_BOSS_REPLY),
-            blankGate,
-          ),
+          captain,
+          synthOutput(state, NEEDS_BOSS_REPLY),
+          blankGate,
+          refs,
+          captains,
+          playbooks,
         );
+        const blank = blankProbe.actor;
         blankGate.armed = true;
-        blank.send({ type: INTERRUPT_EVENT, targetId: stateId });
+        blank.send({
+          type: INTERRUPT_EVENT,
+          targetId: blankProbe.targetId,
+        });
         if (await settle(blank, atState(waitRef))) {
           blank.send({
             type: BOSS_REPLY_EVENT,
@@ -1671,7 +2464,7 @@ export async function checkFsmCoverage(
       try {
         if (
           guard.run({
-            context: {},
+            context: coverageGuardContext(),
             event: { ...errorEvent, error: forcedError },
           })
         ) {
@@ -1692,9 +2485,21 @@ export async function checkFsmCoverage(
         ? undefined
         : stateRefForTarget(refs, rawTarget, captain.ref);
     const gate: ArmingGate = { armed: false };
-    const actor = makeActor(machine, throwingScript(state.sourceItem, gate));
+    const probe = captainProbeActor(
+      machine,
+      captain,
+      forcedError,
+      gate,
+      refs,
+      captains,
+      playbooks,
+    );
+    const actor = probe.actor;
     gate.armed = true;
-    actor.send({ type: INTERRUPT_EVENT, targetId: stateId });
+    actor.send({
+      type: INTERRUPT_EVENT,
+      targetId: probe.targetId,
+    });
     const landed = await settle(
       actor,
       target !== null && targetRef !== undefined
@@ -1718,13 +2523,17 @@ export async function checkFsmCoverage(
  */
 export function generateFsmCoverageTest(opts: {
   basename: string;
+  /** NodeNext import specifier for the compiled FSM. */
   fsmModule: string;
+  /** Physical TypeScript source path, relative to the generated test. */
+  fsmSourceFile: string;
   verifyModule: string;
 }): string {
   const commentBasename = JSON.stringify(opts.basename)
     .replaceAll('\u2028', '\\u2028')
     .replaceAll('\u2029', '\\u2029');
   const fsmModule = JSON.stringify(opts.fsmModule);
+  const fsmSourceFile = JSON.stringify(opts.fsmSourceFile);
   const verifyModule = JSON.stringify(opts.verifyModule);
   const suiteName = JSON.stringify(`${opts.basename}: FSM coverage`);
   return `// SPDX-License-Identifier: Apache-2.0
@@ -1736,17 +2545,17 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { checkFsmCoverage } from ${verifyModule};
+import { checkFsmCoverage, fsmCoverageTestTimeout } from ${verifyModule};
 import * as fsm from ${fsmModule};
 
 describe(${suiteName}, () => {
   it('reaches every declared transition', async () => {
     const sourceText = readFileSync(
-      fileURLToPath(new URL(${fsmModule}, import.meta.url)),
+      fileURLToPath(new URL(${fsmSourceFile}, import.meta.url)),
       'utf8',
     );
     expect(await checkFsmCoverage(fsm, { sourceText })).toEqual([]);
-  });
+  }, fsmCoverageTestTimeout(fsm));
 });
 `;
 }
@@ -1771,7 +2580,8 @@ export async function emitFsmCoverageTest(opts: {
   });
   const content = generateFsmCoverageTest({
     basename: opts.basename,
-    fsmModule: `./${opts.basename}.fsm.ts`,
+    fsmModule: `./${opts.basename}.fsm.js`,
+    fsmSourceFile: `./${opts.basename}.fsm.ts`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
   });
   await mkdir(opts.artifactDir, { recursive: true });
