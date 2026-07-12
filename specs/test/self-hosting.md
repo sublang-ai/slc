@@ -11,7 +11,9 @@ running an `slc`-named fixture pipeline, the reserved `slc`, and the `playbook`
 domain pipeline resolved to the definitions `@sublang/playbook` provides, end to
 end with a faked agent transport per
 [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) and
-[DR-009](../decisions/009-slc-playbook-pipeline-compilation.md).
+[DR-009](../decisions/009-slc-playbook-pipeline-compilation.md), including the
+Playbook 1.0 adoption of
+[DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md).
 
 Essential project-specific references: `slc`, this project's compiler CLI; and
 `@sublang/playbook`, whose `slc/` definitions the reserved `slc` consumes.
@@ -42,3 +44,10 @@ Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` pr
 Verifies: [SELFHOST-9](../dev/self-hosting.md#selfhost-9)
 
 Where a pipeline search root holds a `playbook` directory vendoring the shared definitions, when the slc command resolves the reserved `slc` and the `playbook` references, both shall resolve to that vendored directory; whereas where no search root provides one, both shall resolve to the definitions the installed `@sublang/playbook` provides.
+
+## Immutable definition adoption
+
+### SELFHOST-12
+Verifies: [SELFHOST-11](../dev/self-hosting.md#selfhost-11)
+
+Where a clean registry install resolves exact `@sublang/playbook@1.0.0` and the repository vendors the adopted shared definitions, when the adoption acceptance runs, the reserved `slc` and `playbook` references shall both resolve to the vendored `text2gears`, `gears2fsm`, and `link` set corresponding to that installed release with explicit pin inputs retained, all three reviewed artifact bundles shall pass all generated verification, every corresponding pin shall be current with exact 1.0.0 link-target provenance, and changing any dependency, definition, bundle, or pin component back to its 0.9.0 form shall make the set fail acceptance rather than pass as a mixed version.

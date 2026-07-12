@@ -38,6 +38,10 @@ import {
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
 } from './verify.js';
+import {
+  VERIFIER_SUPPORT_MODULE,
+  emitVerifierSupport,
+} from './verify-support.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
 export interface CompiledSelection {
@@ -294,8 +298,9 @@ async function runFullLink(
 /**
  * After a reserved-pipeline full run produces a `gears` intermediate and an `fsm`
  * object at their canonical `<basename>.playbook/` locations, emits the
- * compilation-correctness tests beside them as `slc` output, appending their
- * paths to the outputs (VERIFY-2, VERIFY-4;
+ * artifact-local checker support plus compilation-correctness tests beside
+ * them as `slc` output, appending their paths to the outputs (VERIFY-2,
+ * VERIFY-4;
  * [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
  * Non-reserved pipelines, runs without a gears+fsm pair, and runs whose `fsm` was
  * relocated out of that directory by `-o` (PIPE-8) are left unchanged, so an
@@ -334,10 +339,12 @@ async function emitVerification(
   if (fsm.path !== canonicalFsm) return result;
   const outputs = [...result.outputs];
   const diagnostics = [...result.diagnostics];
+  outputs.push(...(await emitVerifierSupport(ctx.artDir)));
   outputs.push(
     await emitGearsFsmConformanceTest({
       artifactDir: ctx.artDir,
       basename: ctx.basename,
+      verifyModule: VERIFIER_SUPPORT_MODULE,
     }),
   );
   try {
@@ -345,6 +352,7 @@ async function emitVerification(
       await emitFsmIntrospectionTest({
         artifactDir: ctx.artDir,
         basename: ctx.basename,
+        verifyModule: VERIFIER_SUPPORT_MODULE,
       }),
     );
   } catch (error) {
@@ -356,6 +364,7 @@ async function emitVerification(
     const promptContract = await emitPromptContractTest({
       artifactDir: ctx.artDir,
       basename: ctx.basename,
+      verifyModule: VERIFIER_SUPPORT_MODULE,
     });
     outputs.push(promptContract.path);
     diagnostics.push(
@@ -372,6 +381,7 @@ async function emitVerification(
     const coverage = await emitFsmCoverageTest({
       artifactDir: ctx.artDir,
       basename: ctx.basename,
+      verifyModule: VERIFIER_SUPPORT_MODULE,
     });
     outputs.push(coverage.path);
     diagnostics.push(

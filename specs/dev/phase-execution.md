@@ -14,7 +14,9 @@ selection, per [DR-003](../decisions/003-slc-phase-execution.md),
 [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), and
 [DR-007](../decisions/007-slc-phase-artifact-pinning.md), with the evolving
 runtime boundary settled by
-[DR-010](../decisions/010-playbook-runtime-contract-evolution.md).
+[DR-010](../decisions/010-playbook-runtime-contract-evolution.md) and its
+immutable Playbook 1.0 adoption in
+[DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md).
 Generic pipeline mechanics are specified in the `pipeline` package.
 
 Essential project-specific references: `slc`, this project's compiler CLI; and
@@ -103,7 +105,7 @@ When interpreting a phase, the slc command shall permit the agent to invoke the 
 
 ### PHEXEC-23
 
-Where a phase is executed by a compiled `playbook` artifact, the slc command shall drive it host-side through a stable phase-runner facade — construct the `PlaybookRuntime` the artifact's `createPlaybookRuntime` factory builds; for `legacy`, initialize it directly with exactly `callPlayer`, `callJudge`, `emitStatus`, and `emitTelemetry`; for `session-v1`, initialize it with `{ sessionId, playbookId, ports }` carrying a globally unique id, the selected phase id, and exactly those four traced-session ports; for `composed-v2`, initialize it with a causal root `PlaybookSession` whose root id equals its globally unique session id, playbook id names the selected phase, depth is zero, parent identity is absent, and whose exact five ports additionally include `callPlaybook`; drive one non-interactive `handleBossInput` turn seeded from the phase input under an abort signal; then dispose it — without retrying initialization under another profile ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-010](../decisions/010-playbook-runtime-contract-evolution.md#runtime-profiles-and-root-phase-sessions)).
+Where a phase is executed by a compiled `playbook` artifact, the slc command shall drive it host-side through a stable phase-runner facade — construct the `PlaybookRuntime` the artifact's `createPlaybookRuntime` factory builds; for `legacy`, initialize it directly with exactly `callPlayer`, `callJudge`, `emitStatus`, and `emitTelemetry`; for `session-v1`, initialize it with `{ sessionId, playbookId, ports }` carrying a globally unique id, the selected phase id, and exactly those four traced-session ports; for `composed-v2`, initialize it with a causal root `PlaybookSession` whose root id equals its globally unique session id, playbook id names the selected phase, depth is zero, parent identity is absent, and whose exact six ports additionally include `callCaptain` and `callPlaybook`; drive one non-interactive `handleBossInput` turn seeded from the phase input under an abort signal; then dispose it — without retrying initialization under another profile ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-010](../decisions/010-playbook-runtime-contract-evolution.md#runtime-profiles-and-root-phase-sessions), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md#immutable-profile-boundary)).
 
 ### PHEXEC-24
 
@@ -111,7 +113,7 @@ When the slc command derives a compiled phase's terminal status, the slc command
 
 ### PHEXEC-25
 
-Where a compiled phase runs, the slc command shall back the runtime's player and judge ports with coding agents reached through Cligent [[1]] per [DR-004](../decisions/004-slc-interpreted-phase-execution.md), apply per-player model selection as configuration without changing phase semantics, pass each explicit player `resume: false | string` selection and returned resume token unchanged, reject an omitted or invalid selection on `session-v1` and `composed-v2` before invoking the agent while preserving legacy omission, serialize judge calls through one abort-aware FIFO, provide `callPlaybook` only in the `composed-v2` port object and settle each such call with a deterministic unsupported-operation error because the phase host has no child stack, collect human status and non-trace operational telemetry as drainable diagnostics, and exclude every `playbook.trace` payload from ordinary diagnostics ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-010](../decisions/010-playbook-runtime-contract-evolution.md#port-policy-and-diagnostic-privacy)).
+Where a compiled phase runs, the slc command shall back the runtime's player, Captain, and judge ports with coding agents reached through Cligent [[1]] per [DR-004](../decisions/004-slc-interpreted-phase-execution.md), apply per-player model selection as configuration without changing phase semantics, pass each explicit player `resume: false | string` selection and returned resume token unchanged, reject an omitted or invalid selection on `session-v1` and `composed-v2` before invoking the player while preserving legacy omission, accept only the required Captain visibility values and map a direct Captain call to its status, final text, or error without a player id or resume token, serialize Captain and judge calls together through one abort-aware FIFO, provide `callCaptain` and `callPlaybook` only in the `composed-v2` port object and settle each nested call with a deterministic unsupported-operation error because the phase host has no child stack, collect human status and non-trace operational telemetry as drainable diagnostics, and exclude every `playbook.trace` payload from ordinary diagnostics ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-010](../decisions/010-playbook-runtime-contract-evolution.md#port-policy-and-diagnostic-privacy), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md#direct-captain-phase-execution)).
 
 ### PHEXEC-27
 
@@ -119,7 +121,7 @@ When the slc command runs a phase, the slc command shall select its execution fr
 
 ### PHEXEC-30
 
-Where the slc command configures compiled execution from a current pin, when it selects the runtime contract profile, the slc command shall select `legacy` only for absent link-target provenance or exact `@sublang/playbook@0.9.0` provenance, reject every other provenance until an immutable release is mapped explicitly to `session-v1` or `composed-v2`, and neither infer the profile from callable runtime members nor retry a failed initialization under another profile ([DR-010](../decisions/010-playbook-runtime-contract-evolution.md#runtime-profiles-and-root-phase-sessions)).
+Where the slc command configures compiled execution from a current pin, when it selects the runtime contract profile, the slc command shall select `legacy` only for absent link-target provenance or exact `@sublang/playbook@0.9.0` provenance, select the final six-port `composed-v2` profile only for exact `@sublang/playbook@1.0.0` provenance, reject every other provenance until mapped by a later decision, and neither infer the profile from callable runtime members nor retry a failed initialization under another profile ([DR-010](../decisions/010-playbook-runtime-contract-evolution.md#runtime-profiles-and-root-phase-sessions), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md#immutable-profile-boundary)).
 
 ### PHEXEC-29
 

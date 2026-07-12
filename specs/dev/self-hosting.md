@@ -13,7 +13,9 @@ package and produces an artifact that the `phase-execution` package executes and
 the `pinning` package pins; this package fixes only the meta-pipeline's reserved
 identity, its `playbook` output format, its locations, and the `playbook` domain
 pipeline's resolution to those same definitions
-([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)), including
+their atomic Playbook 1.0 adoption under
+[DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md).
 
 Essential project-specific references: `slc`, this project's compiler; the
 reserved `slc` pipeline, the `playbook` linked format, and the host-side phase-runner facade
@@ -39,3 +41,9 @@ When resolving the reserved `slc` or the `playbook` pipeline reference, the slc 
 ### SELFHOST-3
 
 Where the reserved `slc` pipeline links an `fsm` `.ts` object, the slc command shall produce the distinct `playbook` linked format as a `.ts` artifact at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) output location, whose runnable module is a `createPlaybookRuntime` factory the host-side phase-runner facade drives, and so is the artifact a pin selects and the compiled executor runs ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-002](../decisions/002-slc-link-phases.md)).
+
+## Immutable definition adoption
+
+### SELFHOST-11
+
+Where the dependency lock resolves immutable `@sublang/playbook@1.0.0`, when the SLC repository adopts that release's shared definition set, the adopted set shall contain the released `text2gears`, `gears2fsm`, and `link` normative content with SLC's explicit `## Pin Inputs` retained, all three reviewed meta-phase artifact bundles rebuilt and independently verified from those definitions, and every corresponding pin regenerated with exact `@sublang/playbook@1.0.0` link-target provenance; the dependency manifest and lock, all three definitions, all three bundles, and `slc.pins.json` shall be accepted only as one current set produced from a clean registry install without a sibling checkout ([DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md#atomic-reviewed-asset-adoption), [PIN-15](pinning.md#pin-15)).

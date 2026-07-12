@@ -118,6 +118,56 @@ When both proposals complete, Captain shall call playbook \`code-review\`:
 > <changes>
 `;
 
+const dynamicGears = `## Behaviors
+
+### CAPTAIN-2
+
+When Captain selects a next call, Captain shall call playbook selected by \`nextPlaybookId\`:
+> <nextPlaybookInput>
+`;
+
+const dynamicConfig = (): MachineConfigLike => ({
+  states: {
+    callNext: {
+      invoke: {
+        src: 'playbook',
+        input: ({ context }) => ({
+          stateId: 'callNext',
+          sourceItem: 'CAPTAIN-2',
+          playbookId: context.nextPlaybookId,
+          text: context.nextPlaybookInput,
+          playbookIdContext: 'nextPlaybookId',
+          textContext: 'nextPlaybookInput',
+        }),
+      },
+    },
+  },
+});
+
+const directGears = `## Behaviors
+
+### DIRECT-1
+
+When Boss asks for a short answer, Captain shall answer directly:
+> Answer <question> concisely.
+`;
+
+const directConfig = (): MachineConfigLike => ({
+  states: {
+    answer: {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          stateId: 'answer',
+          sourceItem: 'DIRECT-1',
+          prompt: 'Answer <question> concisely.',
+          result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+        }),
+      },
+    },
+  },
+});
+
 const structuredCaptainInput =
   (stateId: string, player: string, sourceItem: string, prompt: string) =>
   ({ context }: { context: Record<string, unknown> }) => ({
@@ -235,11 +285,13 @@ describe('parseGearsItems', () => {
     expect(parseGearsItems(gears)).toEqual([
       {
         id: 'GREETER-1',
+        actor: 'player',
         player: 'Writer',
         prompt: 'Draft a short hello message for <audience>.',
       },
       {
         id: 'GREETER-2',
+        actor: 'player',
         player: 'Reviewer',
         prompt:
           'Check it is friendly and concise.\nApprove it or return concrete edits.',
@@ -260,7 +312,12 @@ When Boss requests a draft, Captain shall prompt "作者":
 > 起草一段简短的问候。
 `;
     expect(parseGearsItems(md)).toEqual([
-      { id: 'DOC-1', player: '作者', prompt: '起草一段简短的问候。' },
+      {
+        id: 'DOC-1',
+        actor: 'player',
+        player: '作者',
+        prompt: '起草一段简短的问候。',
+      },
     ]);
   });
 
@@ -280,6 +337,7 @@ When Boss provides a free-form procedure description as the Source, Captain shal
     expect(parseGearsItems(md)).toEqual([
       {
         id: 'T2G-10',
+        actor: 'captain',
         player: 'Captain',
         prompt: [
           "Recognize Boss (the human user) and Captain (the coordinating agent) as default players, together with any players declared in the Source's opening Players section.",
@@ -299,6 +357,18 @@ When Boss provides a free-form procedure description as the Source, Captain shal
       playbookId: 'code-review',
     });
   });
+
+  it('records dynamic target and text context fields', () => {
+    expect(parseGearsItems(dynamicGears)).toEqual([
+      {
+        id: 'CAPTAIN-2',
+        player: 'Captain',
+        prompt: '<nextPlaybookInput>',
+        playbookIdContext: 'nextPlaybookId',
+        textContext: 'nextPlaybookInput',
+      },
+    ]);
+  });
 });
 
 describe('enumerateCaptainStates', () => {
@@ -308,6 +378,7 @@ describe('enumerateCaptainStates', () => {
     expect(states[0]).toEqual({
       stateId: 'draft',
       sourceItem: 'GREETER-1',
+      actor: 'player',
       player: 'Writer',
       prompt: 'Draft a short hello message for <audience>.',
       result: {
@@ -389,17 +460,40 @@ describe('enumerateCaptainStates', () => {
     ]);
   });
 
-  it('recognizes typed actor descriptors as captain and playbook mappings', () => {
+  it('distinguishes direct, delegated, legacy, and playbook actors', () => {
     const config: MachineConfigLike = {
       states: {
-        captainWork: {
+        legacyWork: {
           invoke: {
             src: { type: 'captain' },
             input: () => ({
-              stateId: 'captainWork',
+              stateId: 'legacyWork',
               sourceItem: 'FLOW-1',
               player: 'Host',
               prompt: 'Propose independently for <topic>.',
+              result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+            }),
+          },
+        },
+        directWork: {
+          invoke: {
+            src: { type: 'captain' },
+            input: () => ({
+              stateId: 'directWork',
+              sourceItem: 'DIRECT-1',
+              prompt: 'Answer <question> concisely.',
+              result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+            }),
+          },
+        },
+        delegatedWork: {
+          invoke: {
+            src: { type: 'player' },
+            input: () => ({
+              stateId: 'delegatedWork',
+              sourceItem: 'FLOW-2',
+              player: 'Participant',
+              prompt: 'Challenge independently for <topic>.',
               result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
             }),
           },
@@ -417,8 +511,51 @@ describe('enumerateCaptainStates', () => {
       },
     };
 
-    expect(enumerateCaptainStates(config)).toHaveLength(1);
+    expect(
+      enumerateCaptainStates(config).map(({ stateId, actor, player }) => ({
+        stateId,
+        actor,
+        player,
+      })),
+    ).toEqual([
+      { stateId: 'legacyWork', actor: 'player', player: 'Host' },
+      { stateId: 'directWork', actor: 'captain', player: '' },
+      {
+        stateId: 'delegatedWork',
+        actor: 'player',
+        player: 'Participant',
+      },
+    ]);
     expect(enumeratePlaybookStates(config)).toHaveLength(1);
+    expect(pinIntrospection(config).captain.map(({ actor }) => actor)).toEqual([
+      undefined,
+      'captain',
+      'player',
+    ]);
+  });
+
+  it('introspects dynamic playbook metadata and pins no runtime value', () => {
+    expect(enumeratePlaybookStates(dynamicConfig())).toEqual([
+      {
+        stateId: 'callNext',
+        sourceItem: 'CAPTAIN-2',
+        playbookId: '',
+        text: '',
+        playbookIdContext: 'nextPlaybookId',
+        textContext: 'nextPlaybookInput',
+      },
+    ]);
+    expect(pinIntrospection(dynamicConfig()).playbook).toEqual([
+      {
+        state: 'callNext',
+        sourceItem: 'CAPTAIN-2',
+        playbookIdContext: 'nextPlaybookId',
+        textContext: 'nextPlaybookInput',
+        onDone: [],
+        onError: [],
+        on: {},
+      },
+    ]);
   });
 });
 
@@ -442,10 +579,151 @@ describe('checkGearsFsmConformance', () => {
     expect(checkGearsFsmConformance(gears, conformantConfig())).toEqual([]);
   });
 
+  it('accepts direct Captain work without a player binding', () => {
+    expect(checkGearsFsmConformance(directGears, directConfig())).toEqual([]);
+  });
+
+  it('accepts new player actors and legacy captain-with-player actors', () => {
+    const config = conformantConfig();
+    const delegated = captain(
+      'Writer',
+      'GREETER-1',
+      'Draft a short hello message for <audience>.',
+    );
+    config.states!.draft = {
+      invoke: { ...delegated.invoke, src: 'player' },
+    };
+
+    expect(checkGearsFsmConformance(gears, config)).toEqual([]);
+  });
+
+  it('detects explicit direct and delegated actor-kind mismatches', () => {
+    const directAsLegacyPlayer = directConfig();
+    directAsLegacyPlayer.states!.answer = {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          stateId: 'answer',
+          sourceItem: 'DIRECT-1',
+          player: 'Captain',
+          prompt: 'Answer <question> concisely.',
+          result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+        }),
+      },
+    };
+    // The published shape is intentionally non-authoritative during migration.
+    expect(checkGearsFsmConformance(directGears, directAsLegacyPlayer)).toEqual(
+      [],
+    );
+
+    const directAsPlayer = directConfig();
+    directAsPlayer.states!.answer = {
+      invoke: {
+        src: 'player',
+        input: () => ({
+          stateId: 'answer',
+          sourceItem: 'DIRECT-1',
+          player: 'Captain',
+          prompt: 'Answer <question> concisely.',
+          result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+        }),
+      },
+    };
+    expect(
+      checkGearsFsmConformance(directGears, directAsPlayer).join('\n'),
+    ).toMatch(/FSM actor "player" is not GEARS actor "captain"/);
+
+    const delegatedAsDirect = conformantConfig();
+    delegatedAsDirect.states!.draft = {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          stateId: 'draft',
+          sourceItem: 'GREETER-1',
+          prompt: 'Draft a short hello message for <audience>.',
+          result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+        }),
+      },
+    };
+    expect(
+      checkGearsFsmConformance(gears, delegatedAsDirect).join('\n'),
+    ).toMatch(/FSM actor "captain" is not GEARS actor "player"/);
+  });
+
+  it('requires a player only for delegated work', () => {
+    const config = conformantConfig();
+    config.states!.draft = {
+      invoke: {
+        src: 'player',
+        input: () => ({
+          stateId: 'draft',
+          sourceItem: 'GREETER-1',
+          prompt: 'Draft a short hello message for <audience>.',
+          result: { needsBossReply: NEEDS_BOSS_REPLY_TEXT },
+        }),
+      },
+    };
+
+    expect(checkGearsFsmConformance(gears, config).join('\n')).toMatch(
+      /invoke\.input\.player is not a string/,
+    );
+    expect(checkGearsFsmConformance(directGears, directConfig())).toEqual([]);
+  });
+
   it('maps nested parallel captain work and a playbook actor', () => {
     expect(
       checkGearsFsmConformance(structuredGears, structuredConfig()),
     ).toEqual([]);
+  });
+
+  it('matches a dynamic GEARS call through metadata and sentinel wiring', () => {
+    expect(checkGearsFsmConformance(dynamicGears, dynamicConfig())).toEqual([]);
+  });
+
+  it('rejects drifted dynamic-call metadata without inspecting source', () => {
+    const config = dynamicConfig();
+    config.states!.callNext.invoke = {
+      src: 'playbook',
+      input: ({ context }) => ({
+        stateId: 'callNext',
+        sourceItem: 'CAPTAIN-2',
+        playbookId: context.otherPlaybookId,
+        text: context.otherInput,
+        playbookIdContext: 'otherPlaybookId',
+        textContext: 'otherInput',
+      }),
+    };
+
+    const findings = checkGearsFsmConformance(dynamicGears, config).join('\n');
+    expect(findings).toMatch(
+      /FSM playbookIdContext "otherPlaybookId" is not GEARS context "nextPlaybookId"/,
+    );
+    expect(findings).toMatch(
+      /FSM textContext "otherInput" is not GEARS context "nextPlaybookInput"/,
+    );
+  });
+
+  it('rejects dynamic runtime values not wired from the named fields', () => {
+    const config = dynamicConfig();
+    config.states!.callNext.invoke = {
+      src: 'playbook',
+      input: () => ({
+        stateId: 'callNext',
+        sourceItem: 'CAPTAIN-2',
+        playbookId: 'hard-coded',
+        text: 'hard-coded',
+        playbookIdContext: 'nextPlaybookId',
+        textContext: 'nextPlaybookInput',
+      }),
+    };
+
+    const findings = checkGearsFsmConformance(dynamicGears, config).join('\n');
+    expect(findings).toMatch(
+      /invoke\.input\.playbookId is not wired from context\.nextPlaybookId/,
+    );
+    expect(findings).toMatch(
+      /invoke\.input\.text is not wired from context\.nextPlaybookInput/,
+    );
   });
 
   it('detects a drifted nested-playbook target and child-input body', () => {

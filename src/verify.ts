@@ -32,14 +32,22 @@ export interface GearsItem {
   id: string;
   player: string;
   prompt: string;
+  /** Direct Captain work or delegated player work; absent for playbook calls. */
+  actor?: 'captain' | 'player';
   /** Target id when this item invokes another playbook rather than a player. */
   playbookId?: string;
+  /** Context field selecting a dynamic nested-playbook target. */
+  playbookIdContext?: string;
+  /** Context field supplying a dynamic nested-playbook input. */
+  textContext?: string;
 }
 
-/** A captain-invoking FSM state's introspected binding (`gears2fsm` `invoke.input`). */
+/** A Captain/player-invoking state's introspected `gears2fsm` binding. */
 export interface CaptainState {
   stateId: string;
   sourceItem: string;
+  /** Semantic actor kind after preserving legacy `captain` + player bindings. */
+  actor: 'captain' | 'player';
   player: string;
   prompt: string;
   /** The state's per-state guard contract: result key to description. */
@@ -53,8 +61,12 @@ export interface CaptainState {
 /** A playbook-actor invocation recovered from an FSM state. */
 export interface PlaybookInvocationState {
   stateId: string;
+  /** Literal values are empty during static introspection of a dynamic call. */
   playbookId: string;
   text: string;
+  /** Explicit dynamic-call metadata naming the runtime context fields. */
+  playbookIdContext?: string;
+  textContext?: string;
   /** Optional source item emitted by linkers that retain the GEARS identity. */
   sourceItem?: string;
   /** Dot-separated config path, present only for a nested state node. */
@@ -116,6 +128,9 @@ const ITEM_PLAYER =
   /Captain shall (?:prompt|relay\b[^.]*?\bto)\s+(?:"([^"]+)"|“([^”]+)”|([A-Z][\w]*))/;
 const ITEM_PLAYBOOK =
   /Captain shall call playbook\s+(?:`([^`]+)`|"([^"]+)"|“([^”]+)”|([A-Za-z0-9][\w.-]*))\s*:/;
+const ITEM_DYNAMIC_PLAYBOOK =
+  /Captain shall call playbook selected by\s+`([^`]+)`\s*:/;
+const DYNAMIC_TEXT = /^<([A-Za-z_$][A-Za-z0-9_$]*)>$/;
 // Some items have Captain act directly ("Captain shall <verb> ...") with no
 // delegated player; their player is Captain itself.
 const CAPTAIN_ACTS = /\bCaptain shall\b/;
@@ -133,6 +148,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
     player: string;
     captainActs: boolean;
     playbookId: string;
+    playbookIdContext: string;
     prompt: string[];
   } | null = null;
   const flush = (): void => {
@@ -143,12 +159,28 @@ export function parseGearsItems(gears: string): GearsItem[] {
           : current.captainActs
             ? 'Captain'
             : '';
+      const prompt = current.prompt.join('\n');
+      const dynamicText = DYNAMIC_TEXT.exec(prompt);
+      const playbookCall =
+        current.playbookId !== '' || current.playbookIdContext !== '';
       items.push({
         id: current.id,
         player,
-        prompt: current.prompt.join('\n'),
+        prompt,
+        ...(!playbookCall && current.player !== ''
+          ? { actor: 'player' as const }
+          : {}),
+        ...(!playbookCall && current.player === '' && current.captainActs
+          ? { actor: 'captain' as const }
+          : {}),
         ...(current.playbookId !== ''
           ? { playbookId: current.playbookId }
+          : {}),
+        ...(current.playbookIdContext !== ''
+          ? {
+              playbookIdContext: current.playbookIdContext,
+              ...(dynamicText === null ? {} : { textContext: dynamicText[1] }),
+            }
           : {}),
       });
     }
@@ -163,6 +195,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
         player: '',
         captainActs: false,
         playbookId: '',
+        playbookIdContext: '',
         prompt: [],
       };
       continue;
@@ -176,8 +209,20 @@ export function parseGearsItems(gears: string): GearsItem[] {
     if (player !== null && current.player === '') {
       current.player = player[1] ?? player[2] ?? player[3];
     }
+    const dynamicPlaybook = ITEM_DYNAMIC_PLAYBOOK.exec(line);
+    if (
+      dynamicPlaybook !== null &&
+      current.playbookIdContext === '' &&
+      current.playbookId === ''
+    ) {
+      current.playbookIdContext = dynamicPlaybook[1];
+    }
     const playbook = ITEM_PLAYBOOK.exec(line);
-    if (playbook !== null && current.playbookId === '') {
+    if (
+      playbook !== null &&
+      current.playbookId === '' &&
+      current.playbookIdContext === ''
+    ) {
       current.playbookId =
         playbook[1] ?? playbook[2] ?? playbook[3] ?? playbook[4];
     }
@@ -201,6 +246,8 @@ interface CaptainBinding {
   node: StateNodeRef;
   invoke: InvokeLike;
   inputFn?: InvokeLike['input'];
+  /** Pins only the new explicit actor model, preserving legacy pin bytes. */
+  pinActor: boolean;
 }
 
 interface PlaybookBinding {
@@ -240,11 +287,12 @@ function normalizeInvokes(invoke: StateLike['invoke']): readonly InvokeLike[] {
 
 function invocationInput(
   invoke: InvokeLike,
+  context: Record<string, unknown> = {},
 ): { value: Record<string, unknown> } | { error: string } | { invalid: true } {
   if (typeof invoke.input !== 'function') return { invalid: true };
   let value: unknown;
   try {
-    value = invoke.input({ context: {} });
+    value = invoke.input({ context });
   } catch (error) {
     return { error: messageOf(error) };
   }
@@ -335,37 +383,43 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
   for (const node of walkStateNodes(config)) {
     for (const invoke of normalizeInvokes(node.state.invoke)) {
       const source = invokeSource(invoke.src);
-      const explicitlyCaptain = source === 'captain';
-      if (!explicitlyCaptain && invoke.src !== undefined) continue;
+      const explicitlyWorkActor = source === 'captain' || source === 'player';
+      if (!explicitlyWorkActor && invoke.src !== undefined) continue;
       const inspected = invocationInput(invoke);
       if ('error' in inspected) {
-        if (explicitlyCaptain) {
+        if (explicitlyWorkActor) {
+          const actor = source === 'player' ? 'player' : 'captain';
           out.push({
             state: malformedCaptainState(
               publicStateId(node, undefined),
               `invoke.input threw during introspection: ${inspected.error}`,
+              actor,
               node,
             ),
             node,
             invoke,
             inputFn: invoke.input,
+            pinActor: true,
           });
         }
         continue;
       }
       if ('invalid' in inspected) {
-        if (explicitlyCaptain) {
+        if (explicitlyWorkActor) {
+          const actor = source === 'player' ? 'player' : 'captain';
           out.push({
             state: malformedCaptainState(
               publicStateId(node, undefined),
               typeof invoke.input === 'function'
                 ? 'invoke.input returned a non-object'
                 : 'invoke.input is not a function',
+              actor,
               node,
             ),
             node,
             invoke,
             inputFn: invoke.input,
+            pinActor: true,
           });
         }
         continue;
@@ -375,11 +429,22 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
       // actor is named. A playbook actor carrying source metadata is not a
       // player invocation.
       if (
-        !explicitlyCaptain &&
+        !explicitlyWorkActor &&
         (invoke.src !== undefined || !isNonEmptyString(fields.sourceItem))
       ) {
         continue;
       }
+
+      // Published artifacts used `captain` for every work call and carried a
+      // player field. Preserve that shape as delegated work until regeneration.
+      // In the new model, direct Captain work omits player and delegated work
+      // names the `player` actor explicitly.
+      const actor =
+        source === 'player' || Object.hasOwn(fields, 'player')
+          ? 'player'
+          : 'captain';
+      const pinActor =
+        source === 'player' || (source === 'captain' && actor === 'captain');
 
       const bindingFindings: string[] = [];
       if (!isNonEmptyString(fields.sourceItem)) {
@@ -387,7 +452,7 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
           'invoke.input.sourceItem is not a non-empty string',
         );
       }
-      if (typeof fields.player !== 'string') {
+      if (actor === 'player' && typeof fields.player !== 'string') {
         bindingFindings.push('invoke.input.player is not a string');
       }
       if (typeof fields.prompt !== 'string') {
@@ -406,7 +471,7 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
       bindingFindings.push(...stateIdConsistencyFindings(node, fields.stateId));
       if (Object.keys(node.state.states ?? {}).length > 0) {
         bindingFindings.push(
-          'captain invocation is declared on a compound state instead of a leaf',
+          `${source === 'player' ? 'player' : 'captain'} invocation is declared on a compound state instead of a leaf`,
         );
       }
       out.push({
@@ -415,6 +480,7 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
           sourceItem: isNonEmptyString(fields.sourceItem)
             ? fields.sourceItem
             : '',
+          actor,
           player: typeof fields.player === 'string' ? fields.player : '',
           prompt: typeof fields.prompt === 'string' ? fields.prompt : '',
           result: resultMap(fields.result),
@@ -424,6 +490,7 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
         node,
         invoke,
         inputFn: invoke.input,
+        pinActor,
       });
     }
   }
@@ -431,9 +498,8 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
 }
 
 /**
- * Enumerates a machine's captain-invoking states from its config, reading each
- * state's `invoke.input` under a stub context to recover the static `sourceItem`,
- * `player`, and `prompt` the `gears2fsm` contract carries.
+ * Enumerates a machine's direct-Captain and delegated-player states, reading
+ * `invoke.input` under a stub context to recover the static source binding.
  */
 export function enumerateCaptainStates(
   config: MachineConfigLike,
@@ -480,13 +546,60 @@ function enumeratePlaybookBindings(
       if (!isNonEmptyString(fields.stateId)) {
         bindingFindings.push('invoke.input.stateId is not a non-empty string');
       }
-      if (!isNonEmptyString(fields.playbookId)) {
-        bindingFindings.push(
-          'invoke.input.playbookId is not a non-empty string',
-        );
-      }
-      if (typeof fields.text !== 'string') {
-        bindingFindings.push('invoke.input.text is not a string');
+      const dynamic =
+        Object.hasOwn(fields, 'playbookIdContext') ||
+        Object.hasOwn(fields, 'textContext');
+      if (dynamic) {
+        if (!isNonEmptyString(fields.playbookIdContext)) {
+          bindingFindings.push(
+            'invoke.input.playbookIdContext is not a non-empty string',
+          );
+        }
+        if (!isNonEmptyString(fields.textContext)) {
+          bindingFindings.push(
+            'invoke.input.textContext is not a non-empty string',
+          );
+        }
+        if (
+          isNonEmptyString(fields.playbookIdContext) &&
+          isNonEmptyString(fields.textContext)
+        ) {
+          const playbookIdSentinel = sentinelFor(fields.playbookIdContext);
+          const textSentinel = sentinelFor(fields.textContext);
+          const wired = invocationInput(invoke, {
+            [fields.playbookIdContext]: playbookIdSentinel,
+            [fields.textContext]: textSentinel,
+          });
+          if ('error' in wired) {
+            bindingFindings.push(
+              `invoke.input threw during dynamic context introspection: ${wired.error}`,
+            );
+          } else if ('invalid' in wired) {
+            bindingFindings.push(
+              'invoke.input returned a non-object during dynamic context introspection',
+            );
+          } else {
+            if (wired.value.playbookId !== playbookIdSentinel) {
+              bindingFindings.push(
+                `invoke.input.playbookId is not wired from context.${fields.playbookIdContext}`,
+              );
+            }
+            if (wired.value.text !== textSentinel) {
+              bindingFindings.push(
+                `invoke.input.text is not wired from context.${fields.textContext}`,
+              );
+            }
+          }
+        }
+      } else {
+        if (!isNonEmptyString(fields.playbookId)) {
+          bindingFindings.push(
+            'invoke.input.playbookId is not a non-empty string',
+          );
+        }
+        if (typeof fields.text !== 'string') {
+          bindingFindings.push('invoke.input.text is not a string');
+        }
       }
       bindingFindings.push(...stateIdConsistencyFindings(node, fields.stateId));
       if (Object.keys(node.state.states ?? {}).length > 0) {
@@ -497,10 +610,17 @@ function enumeratePlaybookBindings(
       out.push({
         state: {
           stateId: publicStateId(node, fields),
-          playbookId: isNonEmptyString(fields.playbookId)
-            ? fields.playbookId
-            : '',
-          text: typeof fields.text === 'string' ? fields.text : '',
+          playbookId:
+            !dynamic && isNonEmptyString(fields.playbookId)
+              ? fields.playbookId
+              : '',
+          text: !dynamic && typeof fields.text === 'string' ? fields.text : '',
+          ...(isNonEmptyString(fields.playbookIdContext)
+            ? { playbookIdContext: fields.playbookIdContext }
+            : {}),
+          ...(isNonEmptyString(fields.textContext)
+            ? { textContext: fields.textContext }
+            : {}),
           ...(isNonEmptyString(fields.sourceItem)
             ? { sourceItem: fields.sourceItem }
             : {}),
@@ -525,11 +645,13 @@ export function enumeratePlaybookStates(
 function malformedCaptainState(
   stateId: string,
   finding: string,
+  actor: 'captain' | 'player',
   node?: StateNodeRef,
 ): CaptainState {
   return {
     stateId,
     sourceItem: '',
+    actor,
     player: '',
     prompt: '',
     result: {},
@@ -575,6 +697,30 @@ function resultMap(value: unknown): Record<string, string> {
   return out;
 }
 
+function isPlaybookItem(item: GearsItem): boolean {
+  return item.playbookId !== undefined || item.playbookIdContext !== undefined;
+}
+
+function gearsPlaybookSignature(item: GearsItem): string {
+  return item.playbookIdContext === undefined
+    ? JSON.stringify(['static', item.playbookId, item.prompt])
+    : JSON.stringify([
+        'dynamic',
+        item.playbookIdContext,
+        item.textContext ?? null,
+      ]);
+}
+
+function statePlaybookSignature(state: PlaybookInvocationState): string {
+  return state.playbookIdContext === undefined
+    ? JSON.stringify(['static', state.playbookId, state.text])
+    : JSON.stringify([
+        'dynamic',
+        state.playbookIdContext,
+        state.textContext ?? null,
+      ]);
+}
+
 /**
  * Checks GEARS↔FSM conformance and returns human-readable findings (empty when
  * conformant): every GEARS item maps to one state with the same player and the
@@ -587,7 +733,13 @@ export function checkGearsFsmConformance(
   config: MachineConfigLike,
 ): string[] {
   const items = parseGearsItems(gears);
-  const states = enumerateCaptainStates(config);
+  const captainBindings = enumerateCaptainBindings(config);
+  const states = captainBindings.map(({ state }) => state);
+  const explicitActorStates = new Set(
+    captainBindings
+      .filter(({ pinActor }) => pinActor)
+      .map(({ state }) => state),
+  );
   const playbookStates = enumeratePlaybookStates(config);
   const findings: string[] = [];
 
@@ -616,10 +768,7 @@ export function checkGearsFsmConformance(
     else matched.push(state);
   }
 
-  const playbookItems = items.filter(
-    (item): item is GearsItem & { playbookId: string } =>
-      item.playbookId !== undefined,
-  );
+  const playbookItems = items.filter(isPlaybookItem);
   const matchedPlaybookStates = new Set<PlaybookInvocationState>();
   const playbookMatchesByItem = new Map<GearsItem, PlaybookInvocationState[]>();
   const playbookItemsByState = new Map<PlaybookInvocationState, string[]>();
@@ -655,15 +804,10 @@ export function checkGearsFsmConformance(
   // indistinguishable calls by signature and declaration order, comparing each
   // signature as a multiset. Equal duplicate cardinalities are conformant;
   // surplus items or states remain unmatched and are reported below.
-  const signature = (playbookId: string, text: string): string =>
-    JSON.stringify([playbookId, text]);
-  const itemsBySignature = new Map<
-    string,
-    Array<GearsItem & { playbookId: string }>
-  >();
+  const itemsBySignature = new Map<string, GearsItem[]>();
   for (const item of playbookItems) {
     if ((playbookMatchesByItem.get(item)?.length ?? 0) > 0) continue;
-    const key = signature(item.playbookId, item.prompt);
+    const key = gearsPlaybookSignature(item);
     const grouped = itemsBySignature.get(key);
     if (grouped === undefined) itemsBySignature.set(key, [item]);
     else grouped.push(item);
@@ -671,7 +815,7 @@ export function checkGearsFsmConformance(
   const statesBySignature = new Map<string, PlaybookInvocationState[]>();
   for (const state of playbookStates) {
     if (state.sourceItem !== undefined) continue;
-    const key = signature(state.playbookId, state.text);
+    const key = statePlaybookSignature(state);
     const grouped = statesBySignature.get(key);
     if (grouped === undefined) statesBySignature.set(key, [state]);
     else grouped.push(state);
@@ -685,7 +829,7 @@ export function checkGearsFsmConformance(
   }
 
   for (const item of items) {
-    if (item.playbookId !== undefined) {
+    if (isPlaybookItem(item)) {
       const matched = playbookMatchesByItem.get(item) ?? [];
       if (matched.length === 0) {
         findings.push(`GEARS item ${item.id} maps to no FSM playbook state`);
@@ -697,15 +841,33 @@ export function checkGearsFsmConformance(
         );
       }
       const state = matched[0];
-      if (state.playbookId !== item.playbookId) {
-        findings.push(
-          `${item.id}: FSM playbook "${state.playbookId}" is not GEARS playbook "${item.playbookId}"`,
-        );
-      }
-      if (state.text !== item.prompt) {
-        findings.push(
-          `${item.id}: FSM playbook text is not the GEARS prompt verbatim`,
-        );
+      if (item.playbookIdContext !== undefined) {
+        if (item.textContext === undefined) {
+          findings.push(
+            `${item.id}: GEARS dynamic playbook text is not a single <contextField> placeholder`,
+          );
+        }
+        if (state.playbookIdContext !== item.playbookIdContext) {
+          findings.push(
+            `${item.id}: FSM playbookIdContext "${state.playbookIdContext ?? ''}" is not GEARS context "${item.playbookIdContext}"`,
+          );
+        }
+        if (state.textContext !== item.textContext) {
+          findings.push(
+            `${item.id}: FSM textContext "${state.textContext ?? ''}" is not GEARS context "${item.textContext ?? ''}"`,
+          );
+        }
+      } else {
+        if (state.playbookId !== item.playbookId) {
+          findings.push(
+            `${item.id}: FSM playbook "${state.playbookId ?? ''}" is not GEARS playbook "${item.playbookId ?? ''}"`,
+          );
+        }
+        if (state.text !== item.prompt) {
+          findings.push(
+            `${item.id}: FSM playbook text is not the GEARS prompt verbatim`,
+          );
+        }
       }
       continue;
     }
@@ -720,7 +882,16 @@ export function checkGearsFsmConformance(
       );
     }
     const state = matched[0];
-    if (state.player !== item.player) {
+    if (
+      item.actor !== undefined &&
+      explicitActorStates.has(state) &&
+      state.actor !== item.actor
+    ) {
+      findings.push(
+        `${item.id}: FSM actor "${state.actor}" is not GEARS actor "${item.actor}"`,
+      );
+    }
+    if (item.actor === 'player' && state.player !== item.player) {
       findings.push(
         `${item.id}: FSM player "${state.player}" is not GEARS player "${item.player}"`,
       );
@@ -824,6 +995,7 @@ export interface IntrospectionPins {
   captain: {
     state: string;
     path?: string;
+    actor?: 'captain' | 'player';
     sourceItem: string;
     player: string;
     resultKeys: string[];
@@ -841,7 +1013,9 @@ export interface IntrospectionPins {
   playbook?: {
     state: string;
     path?: string;
-    playbookId: string;
+    playbookId?: string;
+    playbookIdContext?: string;
+    textContext?: string;
     sourceItem?: string;
     onDone: TransitionArm[];
     onError: TransitionArm[];
@@ -929,6 +1103,7 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
       ...(binding.state.statePath !== undefined
         ? { path: binding.state.statePath }
         : {}),
+      ...(binding.pinActor ? { actor: binding.state.actor } : {}),
       sourceItem: binding.state.sourceItem,
       player: binding.state.player,
       resultKeys: Object.keys(binding.state.result).sort(),
@@ -956,7 +1131,15 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
       ...(binding.state.statePath !== undefined
         ? { path: binding.state.statePath }
         : {}),
-      playbookId: binding.state.playbookId,
+      ...(binding.state.playbookIdContext === undefined
+        ? { playbookId: binding.state.playbookId }
+        : {}),
+      ...(binding.state.playbookIdContext !== undefined
+        ? { playbookIdContext: binding.state.playbookIdContext }
+        : {}),
+      ...(binding.state.textContext !== undefined
+        ? { textContext: binding.state.textContext }
+        : {}),
       ...(binding.state.sourceItem !== undefined
         ? { sourceItem: binding.state.sourceItem }
         : {}),
@@ -1428,7 +1611,10 @@ function sourceString(value: string): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
-/** The default checker import specifier the emitted test uses (package export). */
+/**
+ * Package-export default for direct emitter callers. Full reserved-pipeline
+ * runs override it with the artifact-local verifier support module.
+ */
 export const VERIFY_MODULE = '@sublang/slc/verify';
 
 /**
