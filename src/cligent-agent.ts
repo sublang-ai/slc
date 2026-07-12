@@ -34,7 +34,14 @@ export function createCligentAgent(opts: {
   });
 
   return {
-    async run({ prompt, cwd, model, resume, signal }): Promise<AgentRunResult> {
+    async run({
+      prompt,
+      cwd,
+      model,
+      resume,
+      allowedTools,
+      signal,
+    }): Promise<AgentRunResult> {
       const texts: string[] = [];
       let resultText = '';
       let status: AgentRunResult['status'] = 'incomplete';
@@ -45,6 +52,9 @@ export function createCligentAgent(opts: {
         cwd,
         model,
         ...(resume !== undefined ? { resume } : {}),
+        ...(allowedTools !== undefined
+          ? { allowedTools: [...allowedTools] }
+          : {}),
       })) {
         const event: AgentEvent = raw;
         if (event.type === 'text') {

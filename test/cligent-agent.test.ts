@@ -10,6 +10,7 @@ import { createCligentAgent } from '../src/cligent-agent.js';
 describe('createCligentAgent player continuation', () => {
   it('forwards explicit selection and exposes the returned resume token', async () => {
     const resumes: Array<string | undefined> = [];
+    const allowedTools: Array<string[] | undefined> = [];
     let run = 0;
     const adapter: AgentAdapter = {
       agent: 'fixture',
@@ -18,6 +19,7 @@ describe('createCligentAgent player continuation', () => {
       },
       async *run(_prompt: string, options?: AgentOptions) {
         resumes.push(options?.resume);
+        allowedTools.push(options?.allowedTools);
         run++;
         yield {
           type: 'done',
@@ -40,6 +42,7 @@ describe('createCligentAgent player continuation', () => {
     const fresh = await client.run({
       prompt: 'fresh',
       resume: false,
+      allowedTools: [],
       signal,
     });
     const resumed = await client.run({
@@ -50,6 +53,7 @@ describe('createCligentAgent player continuation', () => {
 
     // Cligent maps false to a fresh adapter run and a string to explicit resume.
     expect(resumes).toEqual([undefined, 'explicit-session']);
+    expect(allowedTools).toEqual([[], undefined]);
     expect(fresh).toMatchObject({
       status: 'success',
       text: 'result-1',

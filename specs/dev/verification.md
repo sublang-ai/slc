@@ -10,6 +10,9 @@ faithfully represents its source, per
 [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md) and the Playbook
 1.0 actor and dynamic-call adoption of
 [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md).
+A compiled routing workflow also separates source-owned result metadata from
+acting prose per
+[DR-012](../decisions/012-playbook-routing-control-separation.md).
 A compiled artifact is judgment-produced, so `slc` re-checks it deterministically
 against the `gears` and `fsm` it was built from and emits that check as a test
 beside the artifacts (under `<basename>.playbook/`) so each build re-verifies
@@ -28,6 +31,10 @@ When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc 
 ### VERIFY-3
 
 When checking a compiled `playbook` artifact's GEARS↔FSM conformance ([VERIFY-1](#verify-1)), the slc command shall report a finding for every direct-Captain or delegated-player FSM state whose `result` map does not declare the Boss-reply suspension key `needsBossReply`, or declares it with a description that lacks the adjudicator contract substring ``Output shall include `question:`` ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md#actor-and-dynamic-call-verification)).
+
+### VERIFY-13
+
+Where a direct-Captain or delegated-player GEARS item declares a canonical `Results:` block, when checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc command shall parse its ordered single-line ``- `<guardName>`: <nonblank description>`` entries separately from the blockquoted acting prompt and report a finding unless the FSM state's ordered `result` entries equal them exactly after removing only compiler-owned `needsBossReply`; it shall also report a misplaced or malformed label, malformed or duplicate entries, an empty declared block, source-owned `needsBossReply`, or result metadata on a nested-playbook call item, while allowing immutable pre-decision GEARS artifacts to omit the block, and `<guardName>` shall match `[A-Za-z_$][A-Za-z0-9_$]*` ([DR-012](../decisions/012-playbook-routing-control-separation.md#source-owned-result-contracts)).
 
 ## Test generation
 

@@ -119,7 +119,11 @@ function unmarkedStrictComposedRuntime(): unknown {
         callCaptain(
           prompt: string,
           signal: AbortSignal,
-          options: { visibility: 'visible' | 'hidden' },
+          options: {
+            visibility: 'visible' | 'hidden';
+            resume: false;
+            allowedTools: readonly [];
+          },
         ): Promise<unknown>;
       };
       return {
@@ -160,6 +164,8 @@ function unmarkedStrictComposedRuntime(): unknown {
         async handleBossInput(turn: { signal: AbortSignal }) {
           await ports.callCaptain('direct probe', turn.signal, {
             visibility: 'hidden',
+            resume: false,
+            allowedTools: [],
           });
           return { outcome: 'no-action', state: profileState };
         },

@@ -17,6 +17,8 @@ runtime boundary settled by
 [DR-010](../decisions/010-playbook-runtime-contract-evolution.md) and its
 immutable Playbook 1.0 adoption in
 [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md).
+Direct Captain control-call isolation is extended by
+[DR-012](../decisions/012-playbook-routing-control-separation.md).
 Generic pipeline mechanics are specified in the `pipeline` package.
 
 Essential project-specific references: `slc`, this project's compiler CLI; and
@@ -114,6 +116,10 @@ When the slc command derives a compiled phase's terminal status, the slc command
 ### PHEXEC-25
 
 Where a compiled phase runs, the slc command shall back the runtime's player, Captain, and judge ports with coding agents reached through Cligent [[1]] per [DR-004](../decisions/004-slc-interpreted-phase-execution.md), apply per-player model selection as configuration without changing phase semantics, pass each explicit player `resume: false | string` selection and returned resume token unchanged, reject an omitted or invalid selection on `session-v1` and `composed-v2` before invoking the player while preserving legacy omission, accept only the required Captain visibility values and map a direct Captain call to its status, final text, or error without a player id or resume token, serialize Captain and judge calls together through one abort-aware FIFO, provide `callCaptain` and `callPlaybook` only in the `composed-v2` port object and settle each nested call with a deterministic unsupported-operation error because the phase host has no child stack, collect human status and non-trace operational telemetry as drainable diagnostics, and exclude every `playbook.trace` payload from ordinary diagnostics ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-010](../decisions/010-playbook-runtime-contract-evolution.md#port-policy-and-diagnostic-privacy), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md#direct-captain-phase-execution)).
+
+### PHEXEC-31
+
+Where a `composed-v2` compiled phase makes a direct Captain control call, the slc command shall require own data properties `visibility: 'visible' | 'hidden'`, `resume: false`, and `allowedTools` equal to an explicitly empty array, reject a missing, accessor-backed, inherited, or different value before transport, and forward the fresh-session and empty-tool selections unchanged to Cligent so an unsupported agent adapter fails closed rather than receives an investigative Captain call; when the same phase makes a hidden judge call, the slc command shall independently supply `resume: false` and `allowedTools: []` to Cligent so adjudication cannot resume the visible Captain conversation or gain tools ([DR-012](../decisions/012-playbook-routing-control-separation.md#routing-authority-and-presentation-ownership)).
 
 ### PHEXEC-27
 

@@ -14,6 +14,8 @@ verification tests beside its artifacts.
 Essential project-specific references: `slc`, this project's compiler CLI; and
 `@sublang/playbook`, whose installed package provides the manual reference
 artifacts, compiler definitions, and linked runtime contract.
+Result-metadata separation follows
+[DR-012](../decisions/012-playbook-routing-control-separation.md).
 
 ## Checks against the reference
 
@@ -40,3 +42,9 @@ Where `slc playbook` output for the reference workflow exists, when the equivale
 Verifies: [VERIFY-1](../dev/verification.md#verify-1), [VERIFY-4](../dev/verification.md#verify-4), [VERIFY-6](../dev/verification.md#verify-6), [VERIFY-10](../dev/verification.md#verify-10)
 
 Where synthetic artifacts contain distinct direct-Captain and delegated-player leaves, a structured prompt value rendered as deterministic JSON, a state-keyed branch continuation mapper, nested parallel regions whose public parent alone is root-jumpable, public metadata ids distinct from config keys while matching explicit state ids, multiple branch-local Boss waits, a guarded parallel join, context-guarded interrupt targets whose initialized fields differ from satisfying accumulated fields, a literal nested-playbook actor, a typed interrupt requiring an additional Boss payload field, and a dynamic nested-playbook actor with named target and text context, when the conformance, introspection, prompt, coverage, and runtime-profile checks run, the checks shall recognize the JSON-rendered prompt sentinel, verify scalar and state-keyed Boss question/reply continuation wiring, traverse every stable nested leaf without a missing-state false finding, retain the existing flat representation for a flat control fixture, reject actor-kind swaps and dynamic metadata or sentinel-wiring drift, leave an unknown question id parked, prevent a blank reply from resuming the acting agent, address only the selected pending question, exercise reachable join arms under bounded probing, restore satisfying context through an XState persisted snapshot and drive each guarded interrupt while rejecting unsatisfiable context guards, synthesize the typed interrupt payload and structured Captain delegation output against an exact enabled catalog, enter a dynamic child through the assigning Captain transition, evaluate nested input against initialized or transition-produced context, drive every satisfiable nested `onDone` and `onError` arm independently, avoid generic interrupt findings for valid dynamic-call and final-state preconditions, distinguish unmarked strict `legacy` and `session-v1` boundaries, recognize matching `legacy`, `session-v1`, and resumable six-port `composed-v2` runtime pairs, reject every mixed pair and inconsistent marker, key literal nested content by target playbook id, and key dynamic nested content by its context metadata.
+
+### VERIFY-14
+
+Verifies: [VERIFY-13](../dev/verification.md#verify-13)
+
+Where synthetic GEARS contains a canonical `Results:` block after an acting blockquote and its FSM state contains the same domain guards plus compiler-owned `needsBossReply`, when the conformance check runs, the check shall preserve the acting prompt without metadata, parse the source guards in declaration order, and report no finding; whereas a misplaced or malformed label, malformed, empty, duplicate, source-owned `needsBossReply`, missing, extra, reordered, or description-drifted result entry, or a result block on a nested-playbook call shall produce a specific finding.
