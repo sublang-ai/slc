@@ -34,6 +34,7 @@ meta.md     The spec of specs
 | DR-008 | [008-slc-file-capability.md](decisions/008-slc-file-capability.md) | File capability (superseded): compiled execution writes through agents and relies on the DR-003 generic checks |
 | DR-009 | [009-slc-playbook-pipeline-compilation.md](decisions/009-slc-playbook-pipeline-compilation.md) | `playbook` pipeline compilation: generic invocation, compile-output scope, compiled performing, link reconciliation, and artifact-derived verification |
 | DR-010 | [010-playbook-runtime-contract-evolution.md](decisions/010-playbook-runtime-contract-evolution.md) | Playbook runtime evolution: exact legacy/session-v1/composed-v2 profiles, fail-closed adoption, structured outcomes, host ports, trace privacy, and CI deferral |
+| DR-011 | [011-playbook-1-0-captain-contract-adoption.md](decisions/011-playbook-1-0-captain-contract-adoption.md) | Playbook 1.0 adoption: final six-port composed profile, distinct Captain/player verification, dynamic child wiring, scripted child coverage, and atomic reviewed assets |
 
 ## Iterations
 
@@ -48,6 +49,7 @@ meta.md     The spec of specs
 | IR-006 | [006-slc-playbook-runtime-reconciliation.md](iterations/006-slc-playbook-runtime-reconciliation.md) | Reconcile compiled execution with Playbook 0.7.0's playbook/PlaybookRuntime contract |
 | IR-007 | [007-slc-playbook-pipeline-compilation.md](iterations/007-slc-playbook-pipeline-compilation.md) | Implement `slc playbook` end to end: resolve the playbook pipeline, complete compiled execution, bootstrap pinned meta-phase artifacts, auto-generate verification tests, and compare to the reference |
 | IR-008 | [008-playbook-runtime-contract-evolution.md](iterations/008-playbook-runtime-contract-evolution.md) | Reconcile three runtime profiles, structured results, composition-aware verification, CI, and the immutable-release boundary |
+| IR-009 | [009-playbook-1-0-captain-adoption.md](iterations/009-playbook-1-0-captain-adoption.md) | Adopt Playbook 1.0's six-port runtime, Captain and dynamic-child compiler primitives, reviewed definitions and artifacts, and pins as one reproducible set |
 
 ## Packages
 
@@ -55,7 +57,7 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [continuous-integration.md](dev/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, and the immutable runtime-transition boundary |
+| dev | [continuous-integration.md](dev/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, the runtime-transition boundary, and atomic Playbook 1.0 adoption |
 
 ### CLI
 
@@ -88,8 +90,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade, Cligent ports adapter, and compiled selection |
-| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked-protocol, compiled-artifact, and pin-selection acceptance |
+| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade, six-port Cligent adapter, and provenance-driven selection |
+| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked protocol, compiled runtime profiles including direct Captain, and pin-selection acceptance |
 
 ### PIN
 
@@ -110,12 +112,12 @@ meta.md     The spec of specs
 | Group | File | Summary |
 | --- | --- | --- |
 | user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `playbook` artifact |
-| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format, the shared-definition resolution with vendored preference, and the `playbook` pipeline sharing one definition set and pin index, realized through generic pipeline/link mechanics |
-| test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name and `playbook`-pipeline resolution, compilation, and `playbook` linking — via a fixture and via Playbook's provided definitions — at DR-001 locations |
+| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format, shared-definition resolution, and atomic Playbook 1.0 definition/artifact/pin adoption |
+| test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name and `playbook`-pipeline resolution, compilation and linking, plus clean-install consistency of the adopted reviewed set |
 
 ### VERIFY
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [verification.md](dev/verification.md) | Compilation-correctness verification: GEARS↔FSM conformance (verbatim prompts, player bindings, Boss-reply coverage), pinned FSM introspection, derived prompt contract, transition coverage, and emitting the tests beside the artifacts |
-| test | [verification.md](test/verification.md) | Acceptance: zero findings on the reference artifacts, injected-drift detection, and emission with degradation on an unimportable fsm |
+| dev | [verification.md](dev/verification.md) | Compilation correctness: distinct Captain/player/child conformance, dynamic context wiring, pinned introspection, prompt contracts, scripted transition coverage, and artifact-local checker support |
+| test | [verification.md](test/verification.md) | Acceptance: reference and synthetic checks, injected actor/dynamic/transition drift, runtime equivalence, and portable emitted verification artifacts |
