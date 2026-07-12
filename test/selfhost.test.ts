@@ -500,6 +500,8 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
     for (const test of testFiles.map((file) => join(artDir, file))) {
       const sourceText = await readFile(test, 'utf8');
       expect(sourceText).toContain('from "./.slc-verify/verify.js"');
+      expect(sourceText).toContain('from "./code.fsm.js"');
+      expect(sourceText).not.toMatch(/from\s+["']\.\/code\.fsm\.ts["']/);
       expect(sourceText).not.toContain('@sublang/slc/verify');
     }
 
