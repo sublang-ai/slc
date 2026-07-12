@@ -9,16 +9,18 @@
  * source-owned ports. This adapter backs those ports with the same
  * {@link AgentClient} transport the interpreter uses (Cligent in production,
  * fakes in tests): `callPlayer` runs a coding agent with Playbook's explicit
- * continuation selection, `callJudge` serializes the single-flight judge,
- * `callPlaybook` fails closed because SLC has no child stack, and status plus
- * non-trace operational telemetry can be drained as diagnostics. Exact
- * `playbook.trace` payloads stay out of ordinary diagnostics (DR-010). The
- * adapter holds no host specifics beyond the injected transports. See
- * specs/dev/phase-execution.md.
+ * continuation selection, `callCaptain` and `callJudge` share the Captain
+ * transport's single-flight queue, `callPlaybook` fails closed because SLC has
+ * no child stack, and status plus non-trace operational telemetry can be
+ * drained as diagnostics. Exact `playbook.trace` payloads stay out of ordinary
+ * diagnostics (DR-010, DR-011). The adapter holds no host specifics beyond the
+ * injected transports. See specs/dev/phase-execution.md.
  */
 
 import type { AgentClient, AgentRunResult } from './interpreter.js';
 import type {
+  CaptainCallOptions,
+  CaptainResult,
   CompatiblePlaybookPorts,
   PlaybookCallRequest,
   PlaybookCallStart,
@@ -43,7 +45,7 @@ export type PlayerTransport = AgentClient | ((playerId: string) => AgentClient);
 export function createPlaybookPorts(opts: {
   /** Transport backing `callPlayer`; a factory yields one client per player id. */
   player: PlayerTransport;
-  /** Transport backing `callJudge`. */
+  /** Shared transport backing `callCaptain` and `callJudge`. */
   judge: AgentClient;
   /** Per-player model binding, applied as configuration (PHEXEC-13). */
   models?: Readonly<Record<string, string>>;
@@ -54,7 +56,7 @@ export function createPlaybookPorts(opts: {
 }): PlaybookPortsAdapter {
   const diagnostics: string[] = [];
   const players = new Map<string, AgentClient>();
-  let judgeGate: Promise<void> = Promise.resolve();
+  let captainGate: Promise<void> = Promise.resolve();
   const playerFor = (playerId: string): AgentClient => {
     if (typeof opts.player !== 'function') return opts.player;
     let client = players.get(playerId);
@@ -82,8 +84,25 @@ export function createPlaybookPorts(opts: {
       return toPlayerResult(result, signal);
     },
 
+    async callCaptain(
+      prompt: string,
+      signal: AbortSignal,
+      options: CaptainCallOptions,
+    ): Promise<CaptainResult> {
+      requireCaptainCallOptions(options);
+      return withSerialCaptain(signal, async () => {
+        const result = await opts.judge.run({
+          prompt,
+          model: opts.defaultModel,
+          cwd: opts.cwd,
+          signal,
+        });
+        return toCaptainResult(result, signal);
+      });
+    },
+
     async callJudge(prompt: string, signal: AbortSignal): Promise<string> {
-      return withSerialJudge(signal, async () => {
+      return withSerialCaptain(signal, async () => {
         const result = await opts.judge.run({
           prompt,
           model: opts.defaultModel,
@@ -124,16 +143,16 @@ export function createPlaybookPorts(opts: {
     },
   };
 
-  async function withSerialJudge<T>(
+  async function withSerialCaptain<T>(
     signal: AbortSignal,
     run: () => Promise<T>,
   ): Promise<T> {
-    const previous = judgeGate;
+    const previous = captainGate;
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    judgeGate = previous.then(() => gate);
+    captainGate = previous.then(() => gate);
 
     try {
       await waitForGate(previous, signal);
@@ -148,6 +167,45 @@ export function createPlaybookPorts(opts: {
     } finally {
       release();
     }
+  }
+}
+
+/** Maps a normalized agent outcome onto Playbook's direct-Captain result. */
+function toCaptainResult(
+  result: AgentRunResult,
+  signal: AbortSignal,
+): CaptainResult {
+  switch (result.status) {
+    case 'success':
+      return { status: 'ok', finalText: result.text };
+    case 'error':
+      return {
+        status: 'error',
+        error: result.text || 'Captain agent reported an error',
+      };
+    case 'incomplete':
+      return signal.aborted
+        ? { status: 'aborted' }
+        : {
+            status: 'error',
+            error: result.text || 'Captain agent did not finish',
+          };
+  }
+}
+
+function requireCaptainCallOptions(options: CaptainCallOptions): void {
+  if (typeof options !== 'object' || options === null) {
+    throw new TypeError('callCaptain requires CaptainCallOptions');
+  }
+  const visibility = Object.getOwnPropertyDescriptor(options, 'visibility');
+  if (
+    visibility === undefined ||
+    !Object.prototype.hasOwnProperty.call(visibility, 'value') ||
+    (visibility.value !== 'visible' && visibility.value !== 'hidden')
+  ) {
+    throw new TypeError(
+      'callCaptain options.visibility must be visible or hidden',
+    );
   }
 }
 

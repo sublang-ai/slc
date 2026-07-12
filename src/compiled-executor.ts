@@ -13,7 +13,7 @@
  * structured result when present or the bounded legacy host-observable outcome
  * otherwise. The pin-selected contract profile chooses the exact legacy,
  * traced-session, or composed-session init shape without a retry heuristic
- * (DR-010). The host-only `drainDiagnostics` stays host-side;
+ * (DR-010, DR-011). The host-only `drainDiagnostics` stays host-side;
  * human status and non-trace operational telemetry become diagnostics. Like
  * interpreted execution, a compiled phase writes through its agents
  * (`callPlayer`) and relies on the DR-003 generic checks, which defend the
@@ -91,7 +91,7 @@ export function createCompiledExecutor(opts: {
   runRoot: string;
   /** Agent transport(s) backing `callPlayer`; a factory yields one client per player id. */
   player: PlayerTransport;
-  /** Agent transport backing `callJudge`. */
+  /** Shared agent transport backing `callCaptain` and `callJudge`. */
   judge: AgentClient;
   /** Per-player model binding, applied as configuration (PHEXEC-13). */
   models?: Readonly<Record<string, string>>;
@@ -129,6 +129,7 @@ export function createCompiledExecutor(opts: {
       // drainDiagnostics, nor a file capability (DR-005, PHEXEC-23).
       const ports: CompatiblePlaybookPorts = {
         callPlayer: adapter.callPlayer,
+        callCaptain: adapter.callCaptain,
         callJudge: adapter.callJudge,
         callPlaybook: adapter.callPlaybook,
         emitStatus: adapter.emitStatus,
@@ -327,6 +328,7 @@ function composedPorts(ports: CompatiblePlaybookPorts): ComposedPlaybookPorts {
         signal,
         requirePlayerCallOptions(options),
       ),
+    callCaptain: ports.callCaptain,
     callJudge: ports.callJudge,
     callPlaybook: ports.callPlaybook,
     emitStatus: ports.emitStatus,

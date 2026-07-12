@@ -35,6 +35,65 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     expect(result).toEqual({ status: 'ok', finalText: 'wrote artifact' });
   });
 
+  it('maps direct Captain results without player continuation data', async () => {
+    const captain = fakeAgent({
+      status: 'success',
+      text: 'Captain handled it',
+      resumeToken: 'private-player-token',
+    });
+    const ports = createPlaybookPorts({ player: captain, judge: captain });
+
+    await expect(
+      ports.callCaptain('handle it', notAborted, { visibility: 'hidden' }),
+    ).resolves.toEqual({ status: 'ok', finalText: 'Captain handled it' });
+    expect(captain.calls[0]).not.toHaveProperty('resume');
+  });
+
+  it('preserves direct Captain error and abort statuses', async () => {
+    const errored = fakeAgent({ status: 'error', text: 'Captain failed' });
+    const errorPorts = createPlaybookPorts({
+      player: errored,
+      judge: errored,
+    });
+    await expect(
+      errorPorts.callCaptain('handle it', notAborted, {
+        visibility: 'visible',
+      }),
+    ).resolves.toEqual({ status: 'error', error: 'Captain failed' });
+
+    const abort = new AbortController();
+    const incomplete = fakeAgent({ status: 'incomplete', text: '' });
+    const aborting: AgentClient = {
+      async run(request) {
+        const result = await incomplete.run(request);
+        abort.abort(new Error('Captain call aborted'));
+        return result;
+      },
+    };
+    const abortedPorts = createPlaybookPorts({
+      player: aborting,
+      judge: aborting,
+    });
+    await expect(
+      abortedPorts.callCaptain('handle it', abort.signal, {
+        visibility: 'hidden',
+      }),
+    ).resolves.toEqual({ status: 'aborted' });
+    expect(incomplete.calls).toHaveLength(1);
+  });
+
+  it('rejects an invalid direct Captain visibility before transport', async () => {
+    const captain = fakeAgent({ status: 'success', text: 'unexpected' });
+    const ports = createPlaybookPorts({ player: captain, judge: captain });
+
+    await expect(
+      ports.callCaptain('handle it', notAborted, {
+        visibility: 'private',
+      } as never),
+    ).rejects.toThrow(/visibility must be visible or hidden/);
+    expect(captain.calls).toEqual([]);
+  });
+
   it('forwards explicit resume selection and returns continuation tokens', async () => {
     const player = fakeAgent({
       status: 'success',
@@ -177,6 +236,48 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     await vi.waitFor(() => expect(calls).toEqual(['first', 'second']));
     releases.shift()?.();
     await expect(second).resolves.toBe('second');
+    expect(maximum).toBe(1);
+  });
+
+  it('serializes Captain and judge calls through one shared FIFO', async () => {
+    let active = 0;
+    let maximum = 0;
+    const releases: Array<() => void> = [];
+    const calls: string[] = [];
+    const captain: AgentClient = {
+      async run(request) {
+        calls.push(request.prompt);
+        active++;
+        maximum = Math.max(maximum, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active--;
+        return { status: 'success', text: request.prompt };
+      },
+    };
+    const ports = createPlaybookPorts({ player: captain, judge: captain });
+
+    const first = ports.callCaptain('first', notAborted, {
+      visibility: 'visible',
+    });
+    const second = ports.callJudge('second', notAborted);
+    const third = ports.callCaptain('third', notAborted, {
+      visibility: 'hidden',
+    });
+    await vi.waitFor(() => expect(calls).toEqual(['first']));
+    releases.shift()?.();
+    await expect(first).resolves.toEqual({
+      status: 'ok',
+      finalText: 'first',
+    });
+    await vi.waitFor(() => expect(calls).toEqual(['first', 'second']));
+    releases.shift()?.();
+    await expect(second).resolves.toBe('second');
+    await vi.waitFor(() => expect(calls).toEqual(['first', 'second', 'third']));
+    releases.shift()?.();
+    await expect(third).resolves.toEqual({
+      status: 'ok',
+      finalText: 'third',
+    });
     expect(maximum).toBe(1);
   });
 

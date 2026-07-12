@@ -45,7 +45,7 @@ Where `--config <path>` names a file that does not exist, or a loaded config fil
 
 ### CLI-8
 
-When the slc executable runs a pipeline, phase, or link, the executable shall inject into `runSlc` an interpreted executor built on the agent transport — the execution for every unpinned phase — and a compiled-execution factory that runs a current pinned phase's compiled `playbook` artifact, resolved against its pipeline directory, with the runtime's player ports backed by one configured agent transport per player id, its judge port by its own transport, and the selected model applied as the default per-player model ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#strategy-selection), [PHEXEC-25](phase-execution.md#phexec-25), [PHEXEC-27](phase-execution.md#phexec-27)).
+When the slc executable runs a pipeline, phase, or link, the executable shall inject into `runSlc` an interpreted executor built on the agent transport — the execution for every unpinned phase — and a compiled-execution factory that runs a current pinned phase's compiled `playbook` artifact, resolved against its pipeline directory, with the runtime's player ports backed by one configured agent transport per player id, its Captain and judge ports backed by one shared configured transport, and the selected model applied as the default per-player model ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#strategy-selection), [PHEXEC-25](phase-execution.md#phexec-25), [PHEXEC-27](phase-execution.md#phexec-27)).
 
 ## Process control
 

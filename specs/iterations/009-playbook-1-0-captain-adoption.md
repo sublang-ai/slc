@@ -11,7 +11,7 @@ Adopt Playbook 1.0's final six-port composed runtime and compiler definitions as
 
 - [x] [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md), `PHEXEC`, `VERIFY`, `SELFHOST`, `CI`, and `map.md` record the immutable boundary and required verification.
 - [ ] Exact `@sublang/playbook@1.0.0` provenance selects the six-port `composed-v2` phase boundary while 0.9.0 remains legacy and other versions fail closed.
-- [ ] The phase adapter implements first-class Captain calls and serializes Captain and judge work without player resume semantics or trace leakage.
+- [x] The phase adapter implements first-class Captain calls and serializes Captain and judge work without player resume semantics or trace leakage.
 - [ ] Conformance distinguishes Captain, player, and playbook actors, validates dynamic context metadata and sentinel wiring, and drives nested success and failure transitions.
 - [ ] The dependency lock, three shared definitions, all three reviewed artifact bundles, and the pin index form one clean-install Playbook 1.0 set.
 - [ ] Full source, acceptance, artifact-review, pin-reproduction, and licensing checks pass.
