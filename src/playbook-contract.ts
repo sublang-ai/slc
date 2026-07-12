@@ -6,9 +6,9 @@
  *
  * The lockfile still supplies the published 0.9 contract. Playbook's accepted
  * session/composition contract adds causal sessions, explicit player resume,
- * structured run results, and nested calls. Keep the additive compatibility
- * shape here until an immutable release lets SLC import the complete contract
- * directly (DR-010).
+ * direct Captain calls, structured run results, and nested calls. Keep the
+ * additive compatibility shape here until an immutable release lets SLC import
+ * the complete contract directly (DR-010, DR-011).
  */
 
 import type {
@@ -23,6 +23,16 @@ export interface PlayerCallOptions {
 
 export interface PlayerResult extends LegacyPlayerResult {
   resumeToken?: string;
+}
+
+export interface CaptainCallOptions {
+  visibility: 'visible' | 'hidden';
+}
+
+export interface CaptainResult {
+  status: 'ok' | 'aborted' | 'error';
+  finalText?: string;
+  error?: string;
 }
 
 export type RuntimeContractProfile = 'legacy' | 'session-v1' | 'composed-v2';
@@ -111,7 +121,7 @@ export type PlaybookRunResult =
       pendingCall: PlaybookPendingCall;
     };
 
-/** The five source-owned ports, additive over the locked four-port contract. */
+/** The six source-owned ports, additive over the locked four-port contract. */
 export interface CompatiblePlaybookPorts extends LegacyPlaybookPorts {
   callPlayer(
     playerId: string,
@@ -119,13 +129,18 @@ export interface CompatiblePlaybookPorts extends LegacyPlaybookPorts {
     signal: AbortSignal,
     options?: PlayerCallOptions,
   ): Promise<PlayerResult>;
+  callCaptain(
+    prompt: string,
+    signal: AbortSignal,
+    options: CaptainCallOptions,
+  ): Promise<CaptainResult>;
   callPlaybook(
     request: PlaybookCallRequest,
     signal: AbortSignal,
   ): Promise<PlaybookCallStart>;
 }
 
-/** The exact five-port composed-session boundary. */
+/** The exact six-port composed-session boundary. */
 export interface ComposedPlaybookPorts {
   callPlayer(
     playerId: string,
@@ -133,6 +148,11 @@ export interface ComposedPlaybookPorts {
     signal: AbortSignal,
     options: PlayerCallOptions,
   ): Promise<PlayerResult>;
+  callCaptain(
+    prompt: string,
+    signal: AbortSignal,
+    options: CaptainCallOptions,
+  ): Promise<CaptainResult>;
   callJudge(prompt: string, signal: AbortSignal): Promise<string>;
   callPlaybook(
     request: PlaybookCallRequest,

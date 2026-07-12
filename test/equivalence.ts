@@ -253,6 +253,10 @@ function probePorts(composed: boolean): Record<string, unknown> {
     callJudge: async () => '{}',
     ...(composed
       ? {
+          callCaptain: async () => ({
+            status: 'error',
+            error: 'profile probe does not invoke Captain',
+          }),
           callPlaybook: async (request: { playbookId?: unknown }) => ({
             state: 'settled',
             result: {

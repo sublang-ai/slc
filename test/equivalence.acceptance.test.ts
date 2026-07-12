@@ -112,6 +112,66 @@ function unmarkedStrictRuntime(profile: 'legacy' | 'session-v1'): unknown {
   };
 }
 
+function unmarkedStrictComposedRuntime(): unknown {
+  return {
+    default: () => {
+      let ports: {
+        callCaptain(
+          prompt: string,
+          signal: AbortSignal,
+          options: { visibility: 'visible' | 'hidden' },
+        ): Promise<unknown>;
+      };
+      return {
+        async init(value: unknown) {
+          if (typeof value !== 'object' || value === null) {
+            throw new Error('invalid init value');
+          }
+          const record = value as Record<string, unknown>;
+          if (
+            record.sessionId !== 'slc-profile-probe' ||
+            record.playbookId !== 'probe' ||
+            record.rootSessionId !== 'slc-profile-probe' ||
+            record.depth !== 0
+          ) {
+            throw new Error('causal root identity is required');
+          }
+          if (typeof record.ports !== 'object' || record.ports === null) {
+            throw new Error('composed ports are required');
+          }
+          const selected = record.ports as Record<string, unknown>;
+          const names = Object.keys(selected).sort();
+          if (
+            JSON.stringify(names) !==
+              JSON.stringify([
+                'callCaptain',
+                'callJudge',
+                'callPlaybook',
+                'callPlayer',
+                'emitStatus',
+                'emitTelemetry',
+              ]) ||
+            names.some((name) => typeof selected[name] !== 'function')
+          ) {
+            throw new Error('exact six-port profile is required');
+          }
+          ports = selected as unknown as typeof ports;
+        },
+        async handleBossInput(turn: { signal: AbortSignal }) {
+          await ports.callCaptain('direct probe', turn.signal, {
+            visibility: 'hidden',
+          });
+          return { outcome: 'no-action', state: profileState };
+        },
+        async resumePlaybookCall() {
+          return { outcome: 'no-action', state: profileState };
+        },
+        async dispose() {},
+      };
+    },
+  };
+}
+
 describe('reference equivalence harness (VERIFY-9)', () => {
   it('accepts the reference compared to itself', async () => {
     const reference = await loadReference();
@@ -164,6 +224,12 @@ describe('reference equivalence harness (VERIFY-9)', () => {
     expect(
       await runtimeCapabilityProfile(unmarkedStrictRuntime('session-v1')),
     ).toBe('session-v1');
+  });
+
+  it('supplies the exact six-port composed-v2 probe boundary', async () => {
+    expect(
+      await runtimeCapabilityProfile(unmarkedStrictComposedRuntime()),
+    ).toBe('composed-v2');
   });
 
   it.each([
