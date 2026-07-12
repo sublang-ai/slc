@@ -1573,7 +1573,12 @@ function matchPromptBody(
 ): PromptBodyMatch | null {
   const sentinels = reads.map(sentinelFor);
   const sentinelPattern =
-    sentinels.length > 0 ? sentinels.map(escapeRegExp).join('|') : '(?!)';
+    sentinels.length > 0
+      ? sentinels
+          .flatMap((sentinel) => [sentinel, JSON.stringify(sentinel)])
+          .map(escapeRegExp)
+          .join('|')
+      : '(?!)';
   const captures: string[] = [];
   let pattern = '';
   let offset = 0;

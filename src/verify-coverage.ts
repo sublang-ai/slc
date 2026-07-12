@@ -301,6 +301,34 @@ function coverageGuardContext(
   };
 }
 
+/** Context produced by the machine's real initializer for the coverage input. */
+function initializedMachineContext(
+  machine: MachineLike,
+): Record<string, unknown> {
+  try {
+    const actor = createActor(
+      machine as never,
+      { input: COVERAGE_MACHINE_INPUT } as never,
+    ) as unknown as DrivenActor;
+    const context = actor.getSnapshot().context;
+    actor.stop();
+    return context;
+  } catch {
+    return {};
+  }
+}
+
+/** Real initialized fields plus deterministic values needed by guard probes. */
+function initializedCoverageContext(
+  machine: MachineLike,
+  dynamic?: DynamicPlaybookFields,
+): Record<string, unknown> {
+  return {
+    ...initializedMachineContext(machine),
+    ...coverageGuardContext(dynamic),
+  };
+}
+
 /** Payload fields a result description requires, per the adjudicator convention. */
 const REQUIRED_FIELD = /Output shall include `([A-Za-z_][A-Za-z0-9_]*):/g;
 
@@ -891,6 +919,50 @@ function orderedArmPredicate(
   return undefined;
 }
 
+/**
+ * Synthesizes optional typed payload fields for the authored interrupt arm
+ * while keeping its event type and public target id fixed.
+ */
+function interruptEventForRef(
+  machine: MachineLike,
+  refs: readonly StateRef[],
+  target: StateRef,
+  targetId: string,
+): Record<string, unknown> {
+  const base = { type: INTERRUPT_EVENT, targetId };
+  const arms = transitionArms((machine.config.on ?? {})[INTERRUPT_EVENT]);
+  const armIndex = arms.findIndex((arm) => {
+    const rawTarget = rawArmTarget(arm);
+    return (
+      rawTarget !== undefined &&
+      sameStateRef(stateRefForTarget(refs, rawTarget), target)
+    );
+  });
+  if (armIndex < 0) return base;
+  const guard = orderedArmPredicate(machine, arms, armIndex);
+  if (guard === undefined) return base;
+  const assignment = probeGuardAssignment(
+    guard.run,
+    {},
+    [{ tag: 'e:', base }],
+    [
+      ...guard.probeValues,
+      ...refs.flatMap((ref) => [
+        ref.key,
+        ref.stableId,
+        ...(ref.configId === undefined ? [] : [ref.configId]),
+      ]),
+    ],
+    {
+      initialContext: initializedMachineContext(machine),
+      assignContext: false,
+    },
+  );
+  return assignment === undefined
+    ? base
+    : assignedPayload(base, assignment, 'e:');
+}
+
 /** The arm XState selects for one concrete invocation output and context. */
 function directlySelectedArm(
   machine: MachineLike,
@@ -1024,12 +1096,16 @@ function probeGuardAssignment(
   let probes = 0;
 
   const eventFor = (assignment: ProbeAssignment): Record<string, unknown> => {
-    const event = { ...fixedEvent };
+    let event = { ...fixedEvent };
     for (const payload of payloads) {
-      event[payload.eventField] = overlaidObject(
-        payload.base,
-        assignment.payloads[payload.tag] ?? {},
-      );
+      if (payload.eventField === undefined) {
+        event = overlaidObject(event, assignment.payloads[payload.tag] ?? {});
+      } else {
+        event[payload.eventField] = overlaidObject(
+          payload.base,
+          assignment.payloads[payload.tag] ?? {},
+        );
+      }
     }
     return event;
   };
@@ -1074,13 +1150,21 @@ function probeGuardAssignment(
         },
       });
     try {
-      const event = { ...fixedEvent };
+      let event = { ...fixedEvent };
       for (const payload of payloads) {
-        event[payload.eventField] = recording(
-          payload.base,
-          assignment.payloads[payload.tag] ?? {},
-          payload.tag,
-        );
+        if (payload.eventField === undefined) {
+          event = recording(
+            event,
+            assignment.payloads[payload.tag] ?? {},
+            payload.tag,
+          ) as Record<string, unknown>;
+        } else {
+          event[payload.eventField] = recording(
+            payload.base,
+            assignment.payloads[payload.tag] ?? {},
+            payload.tag,
+          );
+        }
       }
       guard({
         context: recording({}, assignment.context, 'c:'),
@@ -1149,7 +1233,8 @@ function probeGuardSatisfiable(
 }
 
 interface ProbePayload {
-  eventField: string;
+  /** Omit to vary missing top-level event fields while preserving fixed ones. */
+  eventField?: string;
   /** A two-character assignment/read tag, such as `o:` or `r:`. */
   tag: string;
   base: object;
@@ -1299,13 +1384,14 @@ interface CaptainPredecessorPlan {
 }
 
 function playbookCoverageInput(
+  machine: MachineLike,
   playbook: PlaybookRef,
   dynamic: DynamicPlaybookFields | undefined,
 ): Record<string, unknown> | undefined {
   if (typeof playbook.invocation.input !== 'function') return undefined;
   try {
     const input = playbook.invocation.input({
-      context: coverageGuardContext(dynamic),
+      context: initializedCoverageContext(machine, dynamic),
     });
     return typeof input === 'object' && input !== null && !Array.isArray(input)
       ? (input as Record<string, unknown>)
@@ -1362,7 +1448,7 @@ function playbookEntryPlan(
   captains: readonly CaptainRef[],
   dynamic: DynamicPlaybookFields,
 ): PlaybookEntryPlan | undefined {
-  const context = coverageGuardContext(dynamic);
+  const context = initializedCoverageContext(machine, dynamic);
   for (const captain of captains) {
     const arms = transitionArms(captain.invocation.onDone);
     for (const [armIndex, arm] of arms.entries()) {
@@ -1450,7 +1536,7 @@ function captainPredecessorPlan(
           [{ eventField: 'output', tag: 'o:', base }],
           [...guard.probeValues, ...candidateValues],
           {
-            initialContext: coverageGuardContext(dynamic),
+            initialContext: initializedCoverageContext(machine, dynamic),
             assignContext: false,
           },
         );
@@ -1475,7 +1561,7 @@ function captainProbeActor(
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
   playbooks: readonly PlaybookRef[],
-): { actor: DrivenActor; targetId: string } {
+): { actor: DrivenActor; event: Record<string, unknown> } {
   const predecessor = captainPredecessorPlan(
     machine,
     captain,
@@ -1491,7 +1577,12 @@ function captainProbeActor(
           ? throwingScript(captain.binding.sourceItem, gate)
           : onceScript(captain.binding.sourceItem, result, gate),
       ),
-      targetId: captainInterruptTarget(captain),
+      event: interruptEventForRef(
+        machine,
+        refs,
+        captain.ref,
+        captainInterruptTarget(captain),
+      ),
     };
   }
 
@@ -1536,13 +1627,23 @@ function captainProbeActor(
   );
   return {
     actor,
-    targetId:
+    event:
       predecessor.entry === undefined
-        ? interruptTargetForRef(
+        ? interruptEventForRef(
+            machine,
+            refs,
             predecessor.playbook.ref,
-            predecessor.playbook.ref.stableId,
+            interruptTargetForRef(
+              predecessor.playbook.ref,
+              predecessor.playbook.ref.stableId,
+            ),
           )
-        : captainInterruptTarget(predecessor.entry.captain),
+        : interruptEventForRef(
+            machine,
+            refs,
+            predecessor.entry.captain.ref,
+            captainInterruptTarget(predecessor.entry.captain),
+          ),
   };
 }
 
@@ -1582,7 +1683,7 @@ async function probePlaybookOutcome(
       `state ${playbook.ref.stableId}: dynamic nested playbook has no reachable Captain entry transition`,
     ];
   }
-  const input = playbookCoverageInput(playbook, dynamic);
+  const input = playbookCoverageInput(machine, playbook, dynamic);
   const expectedPlaybookId =
     typeof input?.playbookId === 'string'
       ? input.playbookId
@@ -1591,7 +1692,7 @@ async function probePlaybookOutcome(
     type: `xstate.${outcome === 'onDone' ? 'done' : 'error'}.actor.${actorId}`,
     actorId,
   };
-  const context = coverageGuardContext(dynamic);
+  const context = initializedCoverageContext(machine, dynamic);
   const candidateValues = refs.flatMap((ref) => [
     ref.key,
     ref.stableId,
@@ -1703,13 +1804,21 @@ async function probePlaybookOutcome(
       },
     );
     gate.armed = true;
-    actor.send({
-      type: INTERRUPT_EVENT,
-      targetId:
-        entry === undefined
-          ? interruptTargetForRef(playbook.ref, playbook.ref.stableId)
-          : captainInterruptTarget(entry.captain),
-    });
+    actor.send(
+      entry === undefined
+        ? interruptEventForRef(
+            machine,
+            refs,
+            playbook.ref,
+            interruptTargetForRef(playbook.ref, playbook.ref.stableId),
+          )
+        : interruptEventForRef(
+            machine,
+            refs,
+            entry.captain.ref,
+            captainInterruptTarget(entry.captain),
+          ),
+    );
     let enteredCall = false;
     const settled = await settle(actor, (snapshot) => {
       if (atState(playbook.ref)(snapshot)) enteredCall = true;
@@ -1796,10 +1905,7 @@ async function probeParallelQuestions(
 
   const { script, calls } = scriptedOutputs(plans);
   const actor = makeActor(machine, script);
-  actor.send({
-    type: INTERRUPT_EVENT,
-    targetId: parallel.stableId,
-  });
+  actor.send(interruptEventForRef(machine, refs, parallel, parallel.stableId));
   const parked = await settle(
     actor,
     (snapshot) => plans.every(({ wait }) => atState(wait)(snapshot)),
@@ -1904,10 +2010,9 @@ async function probeParallelJoins(
       }));
       const { script, calls } = scriptedOutputs(entries);
       const actor = makeActor(machine, script);
-      actor.send({
-        type: INTERRUPT_EVENT,
-        targetId: parallel.stableId,
-      });
+      actor.send(
+        interruptEventForRef(machine, refs, parallel, parallel.stableId),
+      );
       exercised = await settle(
         actor,
         (snapshot) =>
@@ -2049,6 +2154,22 @@ export async function checkFsmCoverage(
     }
   }
 
+  for (const ref of refs.filter(
+    (candidate) =>
+      candidate.key === 'failed' ||
+      candidate.configId === 'failed' ||
+      candidate.stableId === 'failed',
+  )) {
+    if (
+      ref.state.meta?.playbook !== undefined &&
+      !tagsOf(ref.state).includes('playbook.parked')
+    ) {
+      findings.push(
+        `recoverable failure state ${ref.stableId} lacks playbook.parked tag`,
+      );
+    }
+  }
+
   const finalStates = Object.entries(states).filter(
     ([, state]) => state.type === 'final',
   );
@@ -2113,19 +2234,23 @@ export async function checkFsmCoverage(
         targetCaptain === undefined
           ? (target?.stableId ?? arm.target)
           : captainPublicStateId(targetCaptain);
+      const interruptEvent =
+        target === undefined
+          ? { type: INTERRUPT_EVENT, targetId }
+          : interruptEventForRef(machine, refs, target, targetId);
 
-      // A dynamic call and a final state intentionally reject a jump until
-      // prior transitions have populated their required context. Evaluate the
-      // actual ordered interrupt guard with a valid context sentinel instead
-      // of reporting an empty-initial-context jump as unreachable.
+      // A context-preconditioned target intentionally rejects a jump until
+      // prior transitions have populated its state. Evaluate the actual
+      // ordered guard with valid context and any typed Boss-supplied payload
+      // instead of reporting an empty-initial-context jump as unreachable.
       if (preconditioned) {
         const guard = orderedArmPredicate(machine, rawRootArms, armIndex);
         const acceptsValidContext = (() => {
           try {
             return Boolean(
               guard?.run({
-                context: coverageGuardContext(dynamic),
-                event: { type: INTERRUPT_EVENT, targetId },
+                context: initializedCoverageContext(machine, dynamic),
+                event: interruptEvent,
               }),
             );
           } catch {
@@ -2140,7 +2265,7 @@ export async function checkFsmCoverage(
       }
 
       const actor = makeActor(machine, () => null);
-      actor.send({ type: INTERRUPT_EVENT, targetId });
+      actor.send(interruptEvent);
       const entered =
         target !== undefined && (await settle(actor, atState(target)));
       if (
@@ -2253,7 +2378,7 @@ export async function checkFsmCoverage(
         try {
           if (
             guard.run({
-              context: coverageGuardContext(),
+              context: initializedCoverageContext(machine),
               event: { ...doneEvent, output },
             })
           ) {
@@ -2285,10 +2410,7 @@ export async function checkFsmCoverage(
       );
       const actor = probe.actor;
       gate.armed = true;
-      actor.send({
-        type: INTERRUPT_EVENT,
-        targetId: probe.targetId,
-      });
+      actor.send(probe.event);
       const left = await settle(actor, leftState(captain.ref));
       if (!left) {
         findings.push(`state ${stateKey}: result "${key}" fired no transition`);
@@ -2354,10 +2476,7 @@ export async function checkFsmCoverage(
         );
         const blank = blankProbe.actor;
         blankGate.armed = true;
-        blank.send({
-          type: INTERRUPT_EVENT,
-          targetId: blankProbe.targetId,
-        });
+        blank.send(blankProbe.event);
         if (await settle(blank, atState(waitRef))) {
           blank.send({
             type: BOSS_REPLY_EVENT,
@@ -2464,7 +2583,7 @@ export async function checkFsmCoverage(
       try {
         if (
           guard.run({
-            context: coverageGuardContext(),
+            context: initializedCoverageContext(machine),
             event: { ...errorEvent, error: forcedError },
           })
         ) {
@@ -2496,10 +2615,7 @@ export async function checkFsmCoverage(
     );
     const actor = probe.actor;
     gate.armed = true;
-    actor.send({
-      type: INTERRUPT_EVENT,
-      targetId: probe.targetId,
-    });
+    actor.send(probe.event);
     const landed = await settle(
       actor,
       target !== null && targetRef !== undefined
