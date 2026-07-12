@@ -329,9 +329,9 @@ async function emitVerification(
     (artifact) => artifact.phase.target.format === 'gears',
   );
   if (fsm === undefined || !hasGears) return result;
-  // The emitted tests import the canonical `./<basename>.fsm.ts` beside them;
-  // skip when `-o` relocated the terminal fsm elsewhere (PIPE-8), so they never
-  // point at a file that was not written under `<basename>.playbook/`.
+  // The emitted tests import the canonical sibling FSM through the NodeNext
+  // `./<basename>.fsm.js` specifier; skip when `-o` relocated the physical FSM
+  // elsewhere (PIPE-8), so that edge never targets a missing sibling artifact.
   const canonicalFsm = join(
     ctx.artDir,
     `${ctx.basename}.fsm${fsm.phase.target.ext}`,

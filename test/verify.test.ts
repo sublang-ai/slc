@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
+import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -32,6 +34,9 @@ import {
   probeContextReads,
   type MachineConfigLike,
 } from '../src/verify.js';
+
+const execFileAsync = promisify(execFile);
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 // A `gears` artifact in the `text2gears` output form (as produced for the real
 // greeter sample): `### <ID>`, a "Captain shall prompt <Player>" line, and a
@@ -1189,7 +1194,7 @@ describe('generateFsmIntrospectionTest / emitFsmIntrospectionTest', () => {
       expect(content).toContain(
         'import { findMachineConfig, pinIntrospection } from "@sublang/slc/verify"',
       );
-      expect(content).toContain('import * as fsm from "./code.fsm.ts"');
+      expect(content).toContain('import * as fsm from "./code.fsm.js"');
       expect(content).toContain('"sourceItem": "X-1"');
       expect(content).toContain('"interruptTargets": [\n    "work"\n  ]');
       expect(content).toContain('pinIntrospection(findMachineConfig(fsm))');
@@ -1217,7 +1222,7 @@ describe('generateFsmIntrospectionTest / emitFsmIntrospectionTest', () => {
     expect(pinIntrospection(drifted)).not.toEqual(pins);
     const generated = generateFsmIntrospectionTest({
       basename: 'greeter',
-      fsmModule: './greeter.fsm.ts',
+      fsmModule: './greeter.fsm.js',
       verifyModule: '@sublang/slc/verify',
       pins,
     });
@@ -1261,6 +1266,27 @@ const contractConfig = (): MachineConfigLike => ({
       'Keep it warm.',
     ]),
     done: { type: 'final' },
+  },
+});
+
+const directCaptainContract = (sourceItem: string, promptLines: string[]) => ({
+  invoke: {
+    src: 'captain',
+    input: ({ context }: { context: Record<string, unknown> }) => ({
+      stateId: 'route',
+      sourceItem,
+      prompt: promptLines.join('\n'),
+      result: {
+        done: 'The Captain finished.',
+        needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+      },
+      ...(context.pendingBossQuestion && context.bossReply
+        ? {
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
+          }
+        : {}),
+    }),
   },
 });
 
@@ -1428,6 +1454,45 @@ describe('checkPromptComposition (VERIFY-5)', () => {
     ).toMatch(/leaks into the player prompt/);
   });
 
+  it('rejects player binding and resume text added to a direct-Captain prompt', () => {
+    const config: MachineConfigLike = {
+      states: {
+        route: directCaptainContract('ROUTE-1', ['Route this intent.']),
+      },
+    };
+    const compose = (raw: unknown): string =>
+      [
+        goodCompose(raw),
+        'Player binding: Writer',
+        'Resume the same player session for this task.',
+      ].join('\n\n');
+    const findings = checkPromptComposition({
+      config,
+      compose,
+      actor: 'captain',
+    }).join('\n');
+    expect(findings).toMatch(/introduces a player binding/);
+    expect(findings).toMatch(/introduces a player resume instruction/);
+  });
+
+  it('allows identical player-control markers already in the Captain body', () => {
+    const config: MachineConfigLike = {
+      states: {
+        route: directCaptainContract('ROUTE-1', [
+          'Quote this header exactly: Player binding: Writer',
+          'Quote this instruction exactly: Resume the same player session for this task.',
+        ]),
+      },
+    };
+    expect(
+      checkPromptComposition({
+        config,
+        compose: goodCompose,
+        actor: 'captain',
+      }),
+    ).toEqual([]);
+  });
+
   it('flags continuation blocks on an ordinary turn', () => {
     const compose = (raw: unknown): string =>
       `${CONTINUATION_PREAMBLE}\n\n${goodCompose(raw)}`;
@@ -1576,6 +1641,31 @@ describe('emitPromptContractTest (VERIFY-5)', () => {
     '',
   ].join('\n');
 
+  const directCaptainFsmFixture = [
+    'export const machine = {',
+    '  config: {',
+    '    states: {',
+    '      route: {',
+    '        invoke: {',
+    "          src: 'captain',",
+    '          input: ({ context }: { context: Record<string, unknown> }) => ({',
+    "            stateId: 'route',",
+    "            sourceItem: 'ROUTE-1',",
+    "            prompt: 'Route <boss-intent>.',",
+    "            result: { done: 'd', needsBossReply: 'Output shall include `question: ...`' },",
+    '            bossIntent: context.bossIntent,',
+    '            ...(context.pendingBossQuestion && context.bossReply',
+    '              ? { pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply }',
+    '              : {}),',
+    '          }),',
+    '        },',
+    '      },',
+    '    },',
+    '  },',
+    '};',
+    '',
+  ].join('\n');
+
   it('emits the FSM-only variant when no linked module sits beside', async () => {
     const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-pc-'));
     try {
@@ -1588,6 +1678,7 @@ describe('emitPromptContractTest (VERIFY-5)', () => {
       expect(diagnostics).toEqual([]);
       const content = await readFile(path, 'utf8');
       expect(content).toContain('capturePromptContract');
+      expect(content).toContain('import * as fsm from "./code.fsm.js"');
       expect(content).toContain('"placeholders": [');
       expect(content).toContain('"<audience>"');
       expect(content).not.toContain('checkPromptComposition');
@@ -1629,10 +1720,84 @@ describe('emitPromptContractTest (VERIFY-5)', () => {
       const content = await readFile(path, 'utf8');
       expect(content).toContain('checkPromptComposition');
       expect(content).toContain(
-        'import * as playbook from "./code.playbook.ts"',
+        'import * as playbook from "./code.playbook.js"',
       );
       expect(content).toContain('"<audience>"');
-      expect(content).toContain('const SUBSTITUTED =');
+      expect(content).toContain('const PLAYER_SUBSTITUTED =');
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it('verifies a direct-Captain composer across a NodeNext .js FSM edge', async () => {
+    const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-pc-captain-'));
+    try {
+      await writeFile(
+        join(artifactDir, 'captain.fsm.ts'),
+        directCaptainFsmFixture,
+      );
+      const linkedPath = join(artifactDir, 'captain.playbook.ts');
+      const linkedSource = [
+        "import { machine } from './captain.fsm.js';",
+        'void machine;',
+        "const CONTINUATION = '" + CONTINUATION_PREAMBLE + "';",
+        'const compose = (input: any): string => {',
+        '  const blocks: string[] = [];',
+        '  if (input.pendingBossQuestion && input.bossReply) {',
+        '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
+        '  }',
+        "  blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+        "  return blocks.join('\\n\\n');",
+        '};',
+        'export const _internal = { composeCaptainPrompt: compose };',
+        '',
+      ].join('\n');
+      await writeFile(linkedPath, linkedSource);
+
+      const { path, diagnostics } = await emitPromptContractTest({
+        artifactDir,
+        basename: 'captain',
+        verifyModule: join(repoRoot, 'dist/verify.js'),
+      });
+
+      expect(diagnostics).toEqual([]);
+      expect(await readFile(linkedPath, 'utf8')).toBe(linkedSource);
+      const content = await readFile(path, 'utf8');
+      expect(content).toContain('_internal.composeCaptainPrompt');
+      expect(content).toContain("actor: 'captain'");
+      expect(content).toContain('CAPTAIN_SUBSTITUTED');
+      expect(content).toContain('"<boss-intent>"');
+
+      const { stdout, stderr } = await execFileAsync(
+        process.execPath,
+        [
+          join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+          'run',
+          '--root',
+          artifactDir,
+          'captain.prompt-contract.test.ts',
+        ],
+        { cwd: artifactDir, timeout: 15_000 },
+      );
+      expect(`${stdout}\n${stderr}`).toMatch(/3 passed/);
+
+      // The emission-time check executes the imported Captain composer, not
+      // merely discovers its export. A body mutation must be diagnosed.
+      await writeFile(
+        linkedPath,
+        linkedSource.replace(
+          "blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+          "blocks.push('mutated ' + input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+        ),
+      );
+      const rerun = await emitPromptContractTest({
+        artifactDir,
+        basename: 'captain',
+        verifyModule: join(repoRoot, 'dist/verify.js'),
+      });
+      expect(rerun.diagnostics.join('\n')).toMatch(
+        /composeCaptainPrompt|does not preserve the body line/,
+      );
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
@@ -1680,7 +1845,7 @@ describe('generateGearsFsmConformanceTest', () => {
 
   it('quotes legal basenames and module specifiers as parseable TypeScript', () => {
     const basename = "boss's flow";
-    const fsmModule = `./${basename}.fsm.ts`;
+    const fsmModule = `./${basename}.fsm.js`;
     const verifyModule = "@sublang/slc/verify's-fixture";
     const generated = [
       generateGearsFsmConformanceTest({
@@ -1701,8 +1866,8 @@ describe('generateGearsFsmConformanceTest', () => {
         verifyModule,
         rows: [],
         composer: {
-          playbookModule: `./${basename}.playbook.ts`,
-          substituted: {},
+          playbookModule: `./${basename}.playbook.js`,
+          player: {},
         },
       }),
     ];
@@ -1741,8 +1906,8 @@ describe('emitGearsFsmConformanceTest', () => {
       expect(path).toBe(join(artifactDir, 'code.gears-fsm.test.ts'));
       const content = await readFile(path, 'utf8');
       expect(content).toContain('from "@sublang/slc/verify"');
-      // The emitted test imports the `.fsm.ts` artifact the run wrote.
-      expect(content).toContain('import * as fsm from "./code.fsm.ts"');
+      // NodeNext imports the emitted TypeScript artifact through `.js`.
+      expect(content).toContain('import * as fsm from "./code.fsm.js"');
       expect(content).toContain('./code.gears.md');
       expect(content).toContain(
         'checkGearsFsmConformance(gears, findMachineConfig(fsm))',

@@ -20,9 +20,10 @@
  * for every compiled `playbook`. See specs/dev/verification.md.
  */
 
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { hashFile } from './hash.js';
@@ -1195,6 +1196,15 @@ export const CONTINUATION_PREAMBLE =
 export const BOSS_QUESTION_LABEL = 'Boss question:';
 export const BOSS_REPLY_LABEL = 'Boss reply:';
 
+// Direct Captain prompts cross the callCaptain boundary and therefore must
+// not acquire player-only routing or session-control text. Match the stable
+// labelled form as well as natural-language variants; occurrence deltas below
+// keep self-hosting prompt bodies free to quote either marker verbatim.
+const PLAYER_BINDING_MARKER =
+  /\bplayer\s+binding\b|(?:^|\n)[ \t]*player[ \t]*:[ \t]*(?=\S)/gi;
+const PLAYER_RESUME_MARKER =
+  /\b(?:resume|resuming)\b[^\n]{0,120}\bplayer(?:'s)?\b|\bplayer(?:'s)?\b[^\n]{0,120}\b(?:resume|resuming)\b/gi;
+
 /** One captain state's derived prompt contract (VERIFY-5). */
 export interface PromptContractRow {
   state: string;
@@ -1316,10 +1326,12 @@ export function capturePromptContract(
 export function deriveSubstitutions(
   config: MachineConfigLike,
   compose: (input: unknown) => string,
+  actor?: CaptainState['actor'],
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const binding of enumerateCaptainBindings(config)) {
     const { state, inputFn } = binding;
+    if (actor !== undefined && state.actor !== actor) continue;
     if (typeof inputFn !== 'function') continue;
     try {
       const reads = probeContextReads(inputFn);
@@ -1361,11 +1373,20 @@ export function deriveSubstitutions(
 export function checkPromptComposition(opts: {
   config: MachineConfigLike;
   compose: (input: unknown) => string;
+  /** Restricts the check to the states served by the matching composer. */
+  actor?: CaptainState['actor'];
 }): string[] {
   const findings: string[] = [];
-  const substitutions = deriveSubstitutions(opts.config, opts.compose);
+  const substitutions = deriveSubstitutions(
+    opts.config,
+    opts.compose,
+    opts.actor,
+  );
+  const composerName =
+    opts.actor === 'captain' ? 'composeCaptainPrompt' : 'composePlayerPrompt';
   for (const binding of enumerateCaptainBindings(opts.config)) {
     const { state, inputFn } = binding;
+    if (opts.actor !== undefined && state.actor !== opts.actor) continue;
     if (typeof inputFn !== 'function') continue;
     const reads = probeContextReads(inputFn);
     const substituted = substitutions[state.stateId] ?? [];
@@ -1374,17 +1395,18 @@ export function checkPromptComposition(opts: {
     try {
       ordinary = opts.compose(inputFn({ context: ordinaryContext(reads) }));
       if (typeof ordinary !== 'string') {
-        throw new Error('composePlayerPrompt returned a non-string value');
+        throw new Error(`${composerName} returned a non-string value`);
       }
     } catch (error) {
       findings.push(
-        `${state.stateId}: composePlayerPrompt threw on an ordinary turn: ${messageOf(error)}`,
+        `${state.stateId}: ${composerName} threw on an ordinary turn: ${messageOf(error)}`,
       );
       continue;
     }
     findings.push(
       ...bodyFindings(state, ordinary, substituted, reads, 'ordinary'),
     );
+    pushUnique(findings, ...directCaptainControlFindings(state, ordinary));
     // A self-hosted playbook's domain body may legitimately quote the
     // adjudicator contract or the continuation texts (it instructs a compiler
     // about them); only occurrences the composer ADDS beyond the body's own
@@ -1430,11 +1452,11 @@ export function checkPromptComposition(opts: {
       });
       continuation = opts.compose(input);
       if (typeof continuation !== 'string') {
-        throw new Error('composePlayerPrompt returned a non-string value');
+        throw new Error(`${composerName} returned a non-string value`);
       }
     } catch (error) {
       findings.push(
-        `${state.stateId}: composePlayerPrompt threw on a continuation turn: ${messageOf(error)}`,
+        `${state.stateId}: ${composerName} threw on a continuation turn: ${messageOf(error)}`,
       );
       continue;
     }
@@ -1481,8 +1503,44 @@ export function checkPromptComposition(opts: {
     findings.push(
       ...bodyFindings(state, continuation, substituted, reads, 'continuation'),
     );
+    pushUnique(findings, ...directCaptainControlFindings(state, continuation));
   }
   return findings;
+}
+
+function directCaptainControlFindings(
+  state: CaptainState,
+  composed: string,
+): string[] {
+  if (state.actor !== 'captain') return [];
+  const findings: string[] = [];
+  if (
+    patternOccurrences(composed, PLAYER_BINDING_MARKER) >
+    patternOccurrences(state.prompt, PLAYER_BINDING_MARKER)
+  ) {
+    findings.push(
+      `${state.stateId}: composeCaptainPrompt introduces a player binding into a direct-Captain prompt`,
+    );
+  }
+  if (
+    patternOccurrences(composed, PLAYER_RESUME_MARKER) >
+    patternOccurrences(state.prompt, PLAYER_RESUME_MARKER)
+  ) {
+    findings.push(
+      `${state.stateId}: composeCaptainPrompt introduces a player resume instruction into a direct-Captain prompt`,
+    );
+  }
+  return findings;
+}
+
+function patternOccurrences(hay: string, pattern: RegExp): number {
+  return [...hay.matchAll(new RegExp(pattern.source, pattern.flags))].length;
+}
+
+function pushUnique(target: string[], ...values: string[]): void {
+  for (const value of values) {
+    if (!target.includes(value)) target.push(value);
+  }
 }
 
 /** Counts non-overlapping occurrences of `needle` in `hay`. */
@@ -1701,9 +1759,9 @@ export async function emitGearsFsmConformanceTest(opts: {
 }): Promise<string> {
   const content = generateGearsFsmConformanceTest({
     basename: opts.basename,
-    // Import the `.fsm.ts` artifact the run wrote; the test runs under a
-    // TypeScript-transforming runner (vitest) or Node's type stripping.
-    fsmModule: `./${opts.basename}.fsm.ts`,
+    // NodeNext source imports the TypeScript artifact through its runtime
+    // `.js` specifier; Vitest resolves that edge to the sibling source.
+    fsmModule: `./${opts.basename}.fsm.js`,
     gearsFile: `./${opts.basename}.gears.md`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
   });
@@ -1726,6 +1784,50 @@ export async function loadFsmModule(fsmPath: string): Promise<unknown> {
   const url = pathToFileURL(resolved);
   url.searchParams.set('v', await hashFile(resolved));
   return import(url.href);
+}
+
+/**
+ * Imports the generated linked TypeScript module before its sibling FSM has
+ * been built to JavaScript. NodeNext source correctly names the runtime-safe
+ * `./<basename>.fsm.js` edge, but emission-time verification runs while only
+ * `./<basename>.fsm.ts` exists. Stage a same-directory copy whose one generated
+ * module specifier points at the hashed TypeScript artifact, import that copy,
+ * and remove it without changing the linked source or its production import.
+ */
+async function loadLinkedModuleForVerification(opts: {
+  linkedPath: string;
+  fsmPath: string;
+}): Promise<unknown> {
+  const linkedSource = await readFile(opts.linkedPath, 'utf8');
+  const fsmStem = basename(opts.fsmPath, '.ts');
+  const runtimeSpecifier = `./${fsmStem}.js`;
+  const verificationSpecifier = `./${fsmStem}.ts?v=${await hashFile(
+    opts.fsmPath,
+  )}`;
+  const stagedSource = linkedSource
+    .replaceAll(
+      sourceString(runtimeSpecifier),
+      sourceString(verificationSpecifier),
+    )
+    .replaceAll(`'${runtimeSpecifier}'`, `'${verificationSpecifier}'`);
+
+  // Linked fixtures that do not import their FSM need no staging and retain
+  // the established direct-loading behavior.
+  if (stagedSource === linkedSource) {
+    return loadFsmModule(opts.linkedPath);
+  }
+
+  const linkedStem = basename(opts.linkedPath, '.ts');
+  const stagedPath = join(
+    dirname(opts.linkedPath),
+    `.${linkedStem}.slc-verify-${randomUUID()}.ts`,
+  );
+  await writeFile(stagedPath, stagedSource, { flag: 'wx' });
+  try {
+    return await loadFsmModule(stagedPath);
+  } finally {
+    await unlink(stagedPath);
+  }
 }
 
 /**
@@ -1763,8 +1865,8 @@ describe(${sourceString(`${opts.basename}: FSM introspection`)}, () => {
  * Builds a per-artifact vitest module pinning the prompt contract derived from
  * the artifacts at build time (VERIFY-5): the per-state context reads, input
  * wiring, and placeholders always; and, when the linked module exposes its
- * composer under `_internal.composePlayerPrompt`, the composition checks and
- * the pinned substitution map.
+ * matching Captain/player composers, the composition checks and pinned
+ * substitution maps.
  */
 export function generatePromptContractTest(opts: {
   basename: string;
@@ -1774,35 +1876,57 @@ export function generatePromptContractTest(opts: {
   /** Present when the linked module beside the artifacts exposes its composer. */
   composer?: {
     playbookModule: string;
-    substituted: Record<string, string[]>;
+    captain?: Record<string, string[]>;
+    player?: Record<string, string[]>;
   };
 }): string {
   const composerImports = opts.composer
     ? `import * as playbook from ${sourceString(opts.composer.playbookModule)};\n`
     : '';
-  const composerBlock = opts.composer
-    ? `
-const SUBSTITUTED = ${JSON.stringify(opts.composer.substituted, null, 2)};
+  const composerBlock = (
+    [
+      ['captain', 'Captain', 'composeCaptainPrompt'],
+      ['player', 'player', 'composePlayerPrompt'],
+    ] as const
+  )
+    .flatMap(([actor, label, exportName]) => {
+      const substituted = opts.composer?.[actor];
+      if (substituted === undefined) return [];
+      const constant = `${actor.toUpperCase()}_SUBSTITUTED`;
+      const compose = `compose${label === 'Captain' ? 'Captain' : 'Player'}`;
+      return [
+        `
+const ${constant} = ${JSON.stringify(substituted, null, 2)};
 
-const compose = (
+const ${compose} = (
   playbook as unknown as {
-    _internal: { composePlayerPrompt: (input: unknown) => string };
+    _internal: { ${exportName}: (input: unknown) => string };
   }
-)._internal.composePlayerPrompt;
+)._internal.${exportName};
 
-  it('composes player prompts per the link contract', () => {
+  it('composes ${label} prompts per the link contract', () => {
     expect(
-      checkPromptComposition({ config: findMachineConfig(fsm), compose }),
+      checkPromptComposition({
+        config: findMachineConfig(fsm),
+        compose: ${compose},
+        actor: '${actor}',
+      }),
     ).toEqual([]);
   });
 
-  it('substitutes the placeholders pinned at build time', () => {
-    expect(deriveSubstitutions(findMachineConfig(fsm), compose)).toEqual(
-      SUBSTITUTED,
-    );
+  it('substitutes the ${label} placeholders pinned at build time', () => {
+    expect(
+      deriveSubstitutions(
+        findMachineConfig(fsm),
+        ${compose},
+        '${actor}',
+      ),
+    ).toEqual(${constant});
   });
-`
-    : '';
+`,
+      ];
+    })
+    .join('');
   const checkerImports = opts.composer
     ? 'capturePromptContract,\n  checkPromptComposition,\n  deriveSubstitutions,\n  findMachineConfig,'
     : 'capturePromptContract,\n  findMachineConfig,';
@@ -1831,12 +1955,15 @@ ${composerBlock}});
 
 /**
  * Emits the prompt-contract test beside a compiled `playbook` artifact
- * (VERIFY-5): imports `<basename>.fsm.ts`, derives and pins the per-state
- * contract, and — when a linked `<basename>.playbook.ts` sits beside the
- * artifacts and exposes `_internal.composePlayerPrompt` — pins the substitution
- * map and wires the composition checks. Returns the written path and any
- * diagnostics (a linked module that cannot be imported or exposes no composer
- * degrades to the FSM-only test).
+ * (VERIFY-5): derives and pins the per-state contract from the physical
+ * `<basename>.fsm.ts` artifact, then emits NodeNext `.js` imports for that FSM
+ * and any linked `<basename>.playbook.ts` module. When the linked module
+ * exposes the `_internal` composer matching each state actor —
+ * `composeCaptainPrompt` for direct Captain work and `composePlayerPrompt` for
+ * delegated work — the test pins substitution maps and composition checks.
+ * Returns the written path and any diagnostics (a linked module that cannot be
+ * imported or exposes no matching composer degrades independently to the
+ * artifact-only checks).
  *
  * @throws when the `fsm` artifact cannot be imported or exports no machine.
  */
@@ -1851,34 +1978,61 @@ export async function emitPromptContractTest(opts: {
   const rows = capturePromptContract(config);
 
   let composer:
-    | { playbookModule: string; substituted: Record<string, string[]> }
+    | {
+        playbookModule: string;
+        captain?: Record<string, string[]>;
+        player?: Record<string, string[]>;
+      }
     | undefined;
   const linkedPath = join(opts.artifactDir, `${opts.basename}.playbook.ts`);
   if (existsSync(linkedPath)) {
     try {
-      const linked = (await loadFsmModule(linkedPath)) as {
-        _internal?: { composePlayerPrompt?: unknown };
-      };
-      const compose = linked._internal?.composePlayerPrompt;
-      if (typeof compose === 'function') {
-        composer = {
-          playbookModule: `./${opts.basename}.playbook.ts`,
-          substituted: deriveSubstitutions(
-            config,
-            compose as (input: unknown) => string,
-          ),
+      const linked = (await loadLinkedModuleForVerification({
+        linkedPath,
+        fsmPath,
+      })) as {
+        _internal?: {
+          composeCaptainPrompt?: unknown;
+          composePlayerPrompt?: unknown;
         };
+      };
+      const actors = new Set(
+        enumerateCaptainStates(config).map(({ actor }) => actor),
+      );
+      const substitutions: {
+        captain?: Record<string, string[]>;
+        player?: Record<string, string[]>;
+      } = {};
+      for (const actor of ['captain', 'player'] as const) {
+        if (!actors.has(actor)) continue;
+        const exportName =
+          actor === 'captain' ? 'composeCaptainPrompt' : 'composePlayerPrompt';
+        const compose = linked._internal?.[exportName];
+        if (typeof compose !== 'function') {
+          diagnostics.push(
+            `prompt contract: linked module exposes no _internal.${exportName}; ${actor} composition checks not emitted`,
+          );
+          continue;
+        }
+        const typedCompose = compose as (input: unknown) => string;
+        substitutions[actor] = deriveSubstitutions(config, typedCompose, actor);
         const findings = checkPromptComposition({
           config,
-          compose: compose as (input: unknown) => string,
+          compose: typedCompose,
+          actor,
         });
         diagnostics.push(
           ...findings.map((finding) => `prompt contract: ${finding}`),
         );
-      } else {
-        diagnostics.push(
-          `prompt contract: linked module exposes no _internal.composePlayerPrompt; composition checks not emitted`,
-        );
+      }
+      if (
+        substitutions.captain !== undefined ||
+        substitutions.player !== undefined
+      ) {
+        composer = {
+          playbookModule: `./${opts.basename}.playbook.js`,
+          ...substitutions,
+        };
       }
     } catch (error) {
       diagnostics.push(
@@ -1889,7 +2043,7 @@ export async function emitPromptContractTest(opts: {
 
   const content = generatePromptContractTest({
     basename: opts.basename,
-    fsmModule: `./${opts.basename}.fsm.ts`,
+    fsmModule: `./${opts.basename}.fsm.js`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
     rows,
     composer,
@@ -1905,8 +2059,9 @@ export async function emitPromptContractTest(opts: {
 
 /**
  * Emits the introspection test beside a compiled `playbook` artifact
- * (VERIFY-4): imports `<basename>.fsm.ts`, derives its topology pins, and
- * writes `<basename>.fsm.introspect.test.ts` into the artifact directory.
+ * (VERIFY-4): derives topology pins from the physical `<basename>.fsm.ts`,
+ * emits a NodeNext `.js` import for that sibling source, and writes
+ * `<basename>.fsm.introspect.test.ts` into the artifact directory.
  *
  * @throws when the `fsm` artifact cannot be imported or exports no machine.
  */
@@ -1921,7 +2076,7 @@ export async function emitFsmIntrospectionTest(opts: {
   );
   const content = generateFsmIntrospectionTest({
     basename: opts.basename,
-    fsmModule: `./${opts.basename}.fsm.ts`,
+    fsmModule: `./${opts.basename}.fsm.js`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
     pins,
   });
