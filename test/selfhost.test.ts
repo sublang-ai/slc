@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
+import { execFile } from 'node:child_process';
 import {
   access,
   mkdir,
   mkdtemp,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -27,6 +30,9 @@ import {
   withReservedPipelines,
 } from '../src/resolver.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
+
+const execFileAsync = promisify(execFile);
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 /** A compiled artifact that resolves to the `playbook` format (DR-005). */
 const PLAYBOOK_MODULE =
@@ -456,6 +462,57 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
       expect(await exists(join(artDir, test))).toBe(true);
       expect(result.outputs).toContain(join(artDir, test));
     }
+    for (const support of [
+      'hash.js',
+      'hash.d.ts',
+      'verify.js',
+      'verify.d.ts',
+      'verify-coverage.js',
+      'verify-coverage.d.ts',
+    ]) {
+      const path = join(artDir, '.slc-verify', support);
+      expect(await exists(path)).toBe(true);
+      expect(result.outputs).toContain(path);
+    }
+    expect(
+      await readFile(join(artDir, 'code.gears-fsm.test.ts'), 'utf8'),
+    ).toContain('from "./.slc-verify/verify.js"');
+  });
+
+  it('runs generated verification in a project with no SLC installation', async () => {
+    const result = await runSlc(['playbook', source], deps());
+    expect(result.ok).toBe(true);
+    await writeFile(
+      join(root, 'package.json'),
+      '{"private":true,"type":"module"}\n',
+    );
+    await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
+    expect(await exists(join(root, 'node_modules', '@sublang', 'slc'))).toBe(
+      false,
+    );
+
+    const testFiles = [
+      'code.gears-fsm.test.ts',
+      'code.fsm.introspect.test.ts',
+      'code.prompt-contract.test.ts',
+      'code.fsm.coverage.test.ts',
+    ];
+    for (const test of testFiles.map((file) => join(artDir, file))) {
+      const sourceText = await readFile(test, 'utf8');
+      expect(sourceText).toContain('from "./.slc-verify/verify.js"');
+      expect(sourceText).not.toContain('@sublang/slc/verify');
+    }
+
+    const { stdout, stderr } = await execFileAsync(
+      process.execPath,
+      [
+        join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+        'run',
+        ...testFiles.map((file) => join('work/code.playbook', file)),
+      ],
+      { cwd: root, timeout: 15_000 },
+    );
+    expect(`${stdout}\n${stderr}`).toMatch(/4 passed/);
   });
 
   it('degrades fsm-derived emissions to diagnostics when the produced fsm cannot be imported (VERIFY-8)', async () => {
@@ -479,7 +536,10 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
       executor: createInterpretedExecutor({ agent: junkAgent }),
     });
     expect(result.ok).toBe(true);
-    // The conformance test needs no emission-time import; the others degrade.
+    // Portable checker support and the conformance test need no FSM import;
+    // the other generated tests degrade independently.
+    expect(await exists(join(artDir, '.slc-verify', 'verify.js'))).toBe(true);
+    expect(result.outputs).toContain(join(artDir, '.slc-verify', 'verify.js'));
     expect(await exists(join(artDir, 'code.gears-fsm.test.ts'))).toBe(true);
     expect(await exists(join(artDir, 'code.fsm.introspect.test.ts'))).toBe(
       false,

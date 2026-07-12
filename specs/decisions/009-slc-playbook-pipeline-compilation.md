@@ -70,6 +70,9 @@ An optional immutable named export `runtimeContractProfile` may disambiguate a r
 This artifact probe or marker does not replace the pin-provenance execution selection settled by [DR-010](010-playbook-runtime-contract-evolution.md).
 
 The tests verify structural faithfulness of artifacts to source, not domain behavior, and live beside the artifacts under `<basename>.playbook/`.
+A full reserved-pipeline run shall also emit the exact compiled SLC checker module closure under that artifact directory and make every generated test import it relatively, so the tests remain bound to the checker that produced them and run in a destination project without installing SLC.
+The closure shall leave `xstate` external because the compiled FSM already requires that runtime from its destination project.
+The pre-adoption Playbook 0.9 reviewed bundles may retain their existing package import and bundle layout until [DR-011](011-playbook-1-0-captain-contract-adoption.md)'s atomic refresh; adding portable support to new output shall not make those immutable legacy pins stale early.
 The verification contract is realized as a new spec package whose items are authored when the generator lands.
 
 ## Consequences

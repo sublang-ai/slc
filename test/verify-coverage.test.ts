@@ -163,6 +163,9 @@ const parallelMachine = (
     acceptUnknownQuestionId?: boolean;
     crossResume?: boolean;
     unreachableJoin?: boolean;
+    nestedPublicStateId?: string;
+    dropNestedOnDone?: boolean;
+    dropNestedOnError?: boolean;
   } = {},
 ) => {
   const meta = (stateId: string) => ({
@@ -269,28 +272,40 @@ const parallelMachine = (
     done: { id: 'done', type: 'final', ...meta('done') },
   };
   if (opts.nestedPlaybook === true) {
+    const publicStateId = opts.nestedPublicStateId ?? 'callChild';
     states.callChild = {
       id: 'callChild',
       tags: 'playbook.suspended',
-      ...meta('callChild'),
+      ...meta(publicStateId),
       invoke: {
         id: 'childPlaybook',
         src: 'playbook',
         input: () => ({
-          stateId: 'callChild',
+          stateId: publicStateId,
           playbookId: 'child',
           text: '{"request":"review"}',
         }),
-        onDone: { target: '#done' },
-        onError: { target: '#failed' },
+        ...(opts.dropNestedOnDone === true
+          ? {}
+          : { onDone: { target: '#done' } }),
+        ...(opts.dropNestedOnError === true
+          ? {}
+          : { onError: { target: '#failed' } }),
       },
     };
   }
 
   const targets = [
-    'leftWork',
-    'rightWork',
-    ...(opts.nestedPlaybook === true ? ['callChild'] : []),
+    { publicId: 'leftWork', configId: 'leftWork' },
+    { publicId: 'rightWork', configId: 'rightWork' },
+    ...(opts.nestedPlaybook === true
+      ? [
+          {
+            publicId: opts.nestedPublicStateId ?? 'callChild',
+            configId: 'callChild',
+          },
+        ]
+      : []),
   ];
   return setup({
     actors: {
@@ -306,10 +321,10 @@ const parallelMachine = (
     initial: 'ready',
     context: {} as any,
     on: {
-      BOSS_INTERRUPT: targets.map((targetId) => ({
-        target: `#${targetId}`,
+      BOSS_INTERRUPT: targets.map(({ publicId, configId }) => ({
+        target: `#${configId}`,
         reenter: true,
-        guard: ({ event }: any) => event.targetId === targetId,
+        guard: ({ event }: any) => event.targetId === publicId,
       })),
     },
     states: states as any,
@@ -385,13 +400,40 @@ describe('checkFsmCoverage (VERIFY-6)', () => {
     expect(await checkFsmCoverage({ machine: parallelMachine() })).toEqual([]);
   });
 
-  it('reports nested playbook invocation coverage as explicitly unsupported', async () => {
+  it('drives nested playbook success and failure through its public state id', async () => {
     expect(
       await checkFsmCoverage({
-        machine: parallelMachine({ nestedPlaybook: true }),
+        machine: parallelMachine({
+          nestedPlaybook: true,
+          nestedPublicStateId: 'publicChildCall',
+        }),
+      }),
+    ).toEqual([]);
+  });
+
+  it('detects a nested playbook without an onDone transition', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({
+          nestedPlaybook: true,
+          dropNestedOnDone: true,
+        }),
       }),
     ).toContain(
-      'state callChild: nested playbook invocation coverage is unsupported',
+      'state callChild declares no nested playbook onDone transition',
+    );
+  });
+
+  it('detects a nested playbook without an onError transition', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({
+          nestedPlaybook: true,
+          dropNestedOnError: true,
+        }),
+      }),
+    ).toContain(
+      'state callChild declares no nested playbook onError transition',
     );
   });
 
