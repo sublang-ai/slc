@@ -2314,13 +2314,12 @@ export async function checkFsmCoverage(
   const canJump = rootArms.length > 0;
   // A workflow without pre-emption declares no interrupt surface at all
   // (gears2fsm.md "Boss entry events vs. BOSS_INTERRUPT"); only a machine
-  // that names the event somewhere but leaves it unhandled at the root is
-  // malformed.
-  const declaresInterrupt =
-    canJump ||
-    (opts.sourceText !== undefined &&
-      new RegExp(`['"\`]${INTERRUPT_EVENT}['"\`]`).test(opts.sourceText));
-  if (!canJump && declaresInterrupt) {
+  // that handles the event somewhere but not at the root is malformed.
+  // Prompt text merely mentioning the event name does not count.
+  const handlesInterruptSomewhere = refs.some((ref) =>
+    Object.hasOwn(ref.state.on ?? {}, INTERRUPT_EVENT),
+  );
+  if (!canJump && handlesInterruptSomewhere) {
     findings.push(`machine declares no root ${INTERRUPT_EVENT} event`);
   }
   if (canJump) {
