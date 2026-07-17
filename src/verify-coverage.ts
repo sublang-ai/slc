@@ -2257,9 +2257,9 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
 /**
  * Checks transition coverage over a compiled `playbook` artifact's machine
  * (VERIFY-6) and returns findings (empty when every declared transition is
- * reachable). Requires the machine to declare the `gears2fsm` surfaces it
- * drives through: the `BOSS_INTERRUPT` root event and the Boss-reply wait
- * state.
+ * reachable). Drives the machine through the `gears2fsm` surfaces it
+ * declares; a workflow without pre-emption may omit the `BOSS_INTERRUPT`
+ * surface entirely, in which case interrupt coverage is skipped.
  */
 export async function checkFsmCoverage(
   fsmModule: unknown,
@@ -2312,7 +2312,15 @@ export async function checkFsmCoverage(
 
   const rootArms = normalizeArms((config.on ?? {})[INTERRUPT_EVENT]);
   const canJump = rootArms.length > 0;
-  if (!canJump) {
+  // A workflow without pre-emption declares no interrupt surface at all
+  // (gears2fsm.md "Boss entry events vs. BOSS_INTERRUPT"); only a machine
+  // that names the event somewhere but leaves it unhandled at the root is
+  // malformed.
+  const declaresInterrupt =
+    canJump ||
+    (opts.sourceText !== undefined &&
+      new RegExp(`['"\`]${INTERRUPT_EVENT}['"\`]`).test(opts.sourceText));
+  if (!canJump && declaresInterrupt) {
     findings.push(`machine declares no root ${INTERRUPT_EVENT} event`);
   }
   if (canJump) {
