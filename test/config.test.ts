@@ -144,7 +144,11 @@ describe('createConfiguredExecutor (CLI-7, CLI-8)', () => {
       'function',
     );
     expect(typeof compiled(choice()).run).toBe('function');
-    expect(() => compiled(choice('@sublang/playbook@0.10.0'))).toThrow(
+    // Playbook 0.10 pins select the composed six-port profile (DR-011).
+    expect(typeof compiled(choice('@sublang/playbook@0.10.0')).run).toBe(
+      'function',
+    );
+    expect(() => compiled(choice('@sublang/playbook@0.11.0'))).toThrow(
       /unsupported pinned Playbook runtime contract/,
     );
   });

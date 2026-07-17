@@ -37,3 +37,11 @@ The slc command shall carry out each phase with a coding agent that follows the 
 ### COMPILE-6
 
 Where a pipeline pins a phase to a reviewed compiled artifact, when the user runs the pipeline, the slc command shall run that artifact for a current pin and shall stop the run with a diagnostic — rather than silently interpreting the phase — when the pin is stale or malformed or the pin file is unreadable ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md)).
+
+### COMPILE-7
+
+When the user runs a full pipeline with `--normalize`, the slc command shall first rewrite the raw source into a document satisfying the entry phase's stated source requirements — preserving the input's meaning, order, and language, surfacing only implicit structure and implicit executability preconditions — and compile from that normalized source, leaving the user's raw input unchanged ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+
+### COMPILE-8
+
+When the user runs a full pipeline with `-O`/`--optimize`, the slc command shall run the pipeline's optimization pass phases between the ordinary phases, producing the same canonical artifact names as an unoptimized run plus the inspectable pre-pass intermediates ([DR-013](../decisions/013-normalize-and-pass-phases.md)).

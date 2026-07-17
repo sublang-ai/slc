@@ -69,7 +69,12 @@ export function buildPhasePrompt(opts: {
   const target = request.kind === 'compile' ? request.target : request.linked;
   const inputs =
     request.kind === 'compile'
-      ? [`source to read: ${request.source}`]
+      ? [
+          `source to read: ${request.source}`,
+          ...(request.references ?? []).map(
+            (path) => `reference to consult (read-only): ${path}`,
+          ),
+        ]
       : [
           `object artifacts to read, in order: ${request.objects.join(', ')}`,
           `link target module: ${request.linkTarget}`,

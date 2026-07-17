@@ -305,6 +305,78 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
   });
 });
 
+describe('pass phases and normalization (DR-013; PIPE-35, PIPE-36)', () => {
+  const addOptimizePass = async (): Promise<void> => {
+    await writeFile(
+      join(pipelineDir, 'optimize.md'),
+      formats('gears', '.md', 'gears', '.md'),
+    );
+  };
+
+  it('schedules a pass between phases with -O: raw intermediate, canonical pass output (PIPE-32)', async () => {
+    await addOptimizePass();
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', source, '-O'], deps(agent));
+    expect(result.ok).toBe(true);
+    expect(await exists(join(artDir, 'onboarding.gears.raw.md'))).toBe(true);
+    expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(true);
+    expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(true);
+    expect(calls).toHaveLength(3);
+    // The pass reads the raw intermediate and writes the canonical path.
+    expect(calls[1]).toContain(
+      `source to read: ${join(artDir, 'onboarding.gears.raw.md')}`,
+    );
+    expect(calls[1]).toContain(
+      `artifact to write: ${join(artDir, 'onboarding.gears.md')}`,
+    );
+    // The downstream phase consumes the canonical (optimized) intermediate.
+    expect(calls[2]).toContain(
+      `source to read: ${join(artDir, 'onboarding.gears.md')}`,
+    );
+  });
+
+  it('ignores discovered passes without -O', async () => {
+    await addOptimizePass();
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(agent));
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(await exists(join(artDir, 'onboarding.gears.raw.md'))).toBe(false);
+  });
+
+  it('runs a pass standalone, writing the .opt sibling (PIPE-33)', async () => {
+    await addOptimizePass();
+    await mkdir(artDir, { recursive: true });
+    const intermediate = join(artDir, 'onboarding.gears.md');
+    await writeFile(intermediate, 'gears');
+    const { agent } = makeAgent();
+    const result = await runSlc(['flow.optimize', intermediate], deps(agent));
+    expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([join(artDir, 'onboarding.gears.opt.md')]);
+    expect(await exists(join(artDir, 'onboarding.gears.opt.md'))).toBe(true);
+  });
+
+  it('schedules the generic normalize step ahead of the entry phase (PIPE-34, PHEXEC-33)', async () => {
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', source, '--normalize'], deps(agent));
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(3);
+    // The built-in pipeline-agnostic definition drives the step, with the
+    // entry-phase definition as a protected read-only reference.
+    expect(calls[0]).toContain('# Input Normalization');
+    expect(calls[0]).toContain(
+      `reference to consult (read-only): ${join(pipelineDir, 'text2gears.md')}`,
+    );
+    expect(calls[0]).toContain(
+      `artifact to write: ${join(artDir, 'onboarding.text.md')}`,
+    );
+    // The entry phase consumes the normalized source.
+    expect(calls[1]).toContain(
+      `source to read: ${join(artDir, 'onboarding.text.md')}`,
+    );
+  });
+});
+
 describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', () => {
   it('fails when the agent does not write the target (PHEXEC-17)', async () => {
     const { agent } = makeAgent({ skip: true });

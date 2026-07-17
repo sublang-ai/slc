@@ -36,6 +36,7 @@ meta.md     The spec of specs
 | DR-010 | [010-playbook-runtime-contract-evolution.md](decisions/010-playbook-runtime-contract-evolution.md) | Playbook runtime evolution: exact legacy/session-v1/composed-v2 profiles, fail-closed adoption, structured outcomes, host ports, trace privacy, and CI deferral |
 | DR-011 | [011-playbook-1-0-captain-contract-adoption.md](decisions/011-playbook-1-0-captain-contract-adoption.md) | Playbook 1.0 adoption: final six-port composed profile, distinct Captain/player verification, dynamic child wiring, scripted child coverage, and atomic reviewed assets |
 | DR-012 | [012-playbook-routing-control-separation.md](decisions/012-playbook-routing-control-separation.md) | Playbook routing/control separation: source-owned result metadata, exact Boss text, isolated Captain calls, and visible-prose ownership |
+| DR-013 | [013-normalize-and-pass-phases.md](decisions/013-normalize-and-pass-phases.md) | Generic input normalization (`--normalize` over a pipeline-agnostic built-in definition) and LLVM-style format-preserving pass phases scheduled with `-O` |
 
 ## Iterations
 
@@ -52,6 +53,8 @@ meta.md     The spec of specs
 | IR-008 | [008-playbook-runtime-contract-evolution.md](iterations/008-playbook-runtime-contract-evolution.md) | Reconcile three runtime profiles, structured results, composition-aware verification, CI, and the immutable-release boundary |
 | IR-009 | [009-playbook-1-0-captain-adoption.md](iterations/009-playbook-1-0-captain-adoption.md) | Adopt Playbook 1.0's six-port runtime, Captain and dynamic-child compiler primitives, reviewed definitions and artifacts, and pins as one reproducible set |
 | IR-010 | [010-playbook-routing-control-separation.md](iterations/010-playbook-routing-control-separation.md) | Separate routing prose from control metadata, preserve exact Boss text, isolate Captain calls, and verify explicit result contracts |
+| IR-011 | [011-playbook-0-10-adoption.md](iterations/011-playbook-0-10-adoption.md) | Adopt the Playbook 0.10 generation: frozen local legacy contract, composed-v2 pin mapping, re-synced definitions, rebuilt meta artifacts, and refreshed pins |
+| IR-012 | [012-normalize-optimize-demo.md](iterations/012-normalize-optimize-demo.md) | Implement DR-013 (--normalize, -O pass phases, script-actor verification) and land the end-to-end demo/ acceptance workflow |
 
 ## Packages
 
@@ -73,7 +76,7 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, and compiled-pin selection |
+| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, compiled-pin selection, raw-input normalization, and optimization passes |
 
 ### GIT
 
@@ -106,8 +109,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link |
-| test | [pipeline.md](test/pipeline.md) | End-to-end pipeline run, chain, naming, path, and link acceptance |
+| dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link, pass phases, and the generic normalization step |
+| test | [pipeline.md](test/pipeline.md) | End-to-end pipeline run, chain, naming, path, link, pass-scheduling, and normalization acceptance |
 
 ### SELFHOST
 
@@ -121,5 +124,5 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [verification.md](dev/verification.md) | Compilation correctness: distinct Captain/player/child conformance, dynamic context wiring, pinned introspection, prompt contracts, scripted transition coverage, and artifact-local checker support |
+| dev | [verification.md](dev/verification.md) | Compilation correctness: distinct Captain/player/child/script conformance, dynamic context wiring, pinned introspection, prompt contracts, scripted transition coverage, and artifact-local checker support |
 | test | [verification.md](test/verification.md) | Acceptance: reference and synthetic checks, injected actor/dynamic/transition drift, runtime equivalence, and portable emitted verification artifacts |

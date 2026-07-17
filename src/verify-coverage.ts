@@ -31,6 +31,7 @@ import {
   NEEDS_BOSS_REPLY,
   VERIFY_MODULE,
   enumerateCaptainStates,
+  enumerateScriptStates,
   loadFsmModule,
   normalizeArms,
   type CaptainState,
@@ -429,7 +430,21 @@ function captainRefs(config: MachineConfigLike): CaptainRef[] {
   const out: CaptainRef[] = [];
   const refs = stateRefs(config);
   const used = new Set<InvokeLike>();
-  for (const binding of enumerateCaptainStates(config)) {
+  // Script states drive like other work states: the scripted actor resolves
+  // one of the two declared exit-status guards (DR-013).
+  const workBindings = [
+    ...enumerateCaptainStates(config),
+    ...enumerateScriptStates(config).map((state) => ({
+      stateId: state.stateId,
+      sourceItem: state.sourceItem,
+      actor: 'script' as const,
+      player: '',
+      prompt: state.command,
+      result: state.result,
+      ...(state.statePath === undefined ? {} : { statePath: state.statePath }),
+    })),
+  ];
+  for (const binding of workBindings) {
     const statePath = binding.statePath;
     const ref =
       (statePath === undefined
@@ -669,6 +684,7 @@ function makeActor(
     actors: {
       [CAPTAIN_ACTOR]: workActor,
       player: workActor,
+      script: workActor,
       // A child script is opt-in. All unrelated child invocations hang until
       // the driven actor is stopped, preserving Captain and parallel probes.
       playbook: fromPromise(
