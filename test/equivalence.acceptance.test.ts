@@ -218,9 +218,11 @@ describe('reference equivalence harness (VERIFY-9)', () => {
     },
   );
 
-  it('treats an unmarked released three-method runtime as legacy', async () => {
+  it('detects the composed profile on the released reference runtime', async () => {
     const reference = await loadReference();
-    expect(await runtimeCapabilityProfile(reference.playbook)).toBe('legacy');
+    expect(await runtimeCapabilityProfile(reference.playbook)).toBe(
+      'composed-v2',
+    );
   });
 
   it('distinguishes unmarked legacy and session-v1 init boundaries', async () => {
