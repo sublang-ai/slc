@@ -96,7 +96,9 @@ playbook run /path/to/slc/demo/registry.ts \
   --json --verbose
 ```
 
-Watch the `◇` status lines on stderr:
+Evidence is captured beside the work directory (`…/slc-demo-run.evidence/`);
+watch it live with `tail -f "${TMPDIR:-/tmp}/slc-demo-run.evidence/run.log"`.
+The `◇` status lines tell the story:
 
 - the scripted step reports `Executed script for <state> (exit 0)` — and
   `.git/` appears without any agent having run;

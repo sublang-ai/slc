@@ -152,15 +152,22 @@ console.log('5. emitted verification tests');
 const runDirFlag = process.argv.indexOf('--run-dir');
 if (runDirFlag !== -1) {
   const runDir = resolve(process.argv[runDirFlag + 1]);
+  // Run evidence lives beside the work repository (demo/run.sh), falling back
+  // to the repository itself for hand-collected evidence.
+  const evidenceDir = existsSync(`${runDir}.evidence`)
+    ? `${runDir}.evidence`
+    : runDir;
 
   console.log('6. one-shot run outcome');
-  const exitCode = readFileSync(join(runDir, 'run.exit'), 'utf8').trim();
+  const exitCode = readFileSync(join(evidenceDir, 'run.exit'), 'utf8').trim();
   check(
     'playbook run exited 0 (terminal)',
     exitCode === '0',
     `exit=${exitCode}`,
   );
-  const envelope = JSON.parse(readFileSync(join(runDir, 'run.json'), 'utf8'));
+  const envelope = JSON.parse(
+    readFileSync(join(evidenceDir, 'run.json'), 'utf8'),
+  );
   check(
     "JSON envelope outcome is 'terminal'",
     envelope.outcome === 'terminal',
@@ -168,7 +175,7 @@ if (runDirFlag !== -1) {
   );
 
   console.log('7. run traversal: scripted Git step and the review loop');
-  const log = readFileSync(join(runDir, 'run.log'), 'utf8');
+  const log = readFileSync(join(evidenceDir, 'run.log'), 'utf8');
   check(
     'scripted step executed agent-free during the run',
     new RegExp(`Executed script for ${scriptState.stateId} \\(exit 0\\)`).test(
