@@ -45,6 +45,26 @@ describe('resolveAgentSelection (CLI-7, CLI-12)', () => {
     ).toEqual({ agent: 'gemini', model: 'g-2' });
   });
 
+  it('resolves a supported adapter-scoped effort (CLI-12)', () => {
+    expect(
+      resolveAgentSelection({ SLC_AGENT: 'claude-code', SLC_EFFORT: 'xhigh' })
+        .effort,
+    ).toBe('xhigh');
+    expect(
+      resolveAgentSelection({ SLC_AGENT: 'codex', SLC_EFFORT: ' xhigh ' })
+        .effort,
+    ).toBe('xhigh');
+    expect(
+      resolveAgentSelection({ SLC_AGENT: 'codex' }).effort,
+    ).toBeUndefined();
+  });
+
+  it('refuses an effort the selected agent does not support (CLI-12)', () => {
+    expect(() =>
+      resolveAgentSelection({ SLC_AGENT: 'claude-code', SLC_EFFORT: 'ultra' }),
+    ).toThrow(expect.objectContaining({ code: 'effort-unsupported' }));
+  });
+
   it('refuses an unset or blank SLC_AGENT with no implicit default', () => {
     for (const env of [{}, { SLC_AGENT: '' }, { SLC_AGENT: '   ' }]) {
       let caught: unknown;

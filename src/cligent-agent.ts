@@ -17,6 +17,7 @@ import { Cligent } from '@sublang/cligent';
 import type {
   AgentAdapter,
   AgentEvent,
+  Effort,
   PermissionPolicy,
 } from '@sublang/cligent';
 
@@ -27,10 +28,14 @@ export function createCligentAgent(opts: {
   adapter: AgentAdapter;
   maxTurns?: number;
   permissions?: PermissionPolicy;
+  /** Adapter-scoped reasoning effort, validated by the configuration layer. */
+  effort?: string;
 }): AgentClient {
   const cligent = new Cligent(opts.adapter, {
     maxTurns: opts.maxTurns,
     permissions: opts.permissions,
+    // Validated adapter-scoped by the configuration layer (CLI-12).
+    ...(opts.effort !== undefined ? { effort: opts.effort as Effort } : {}),
   });
 
   return {

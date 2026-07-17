@@ -31,6 +31,7 @@ This DR settles the sources and their precedence, discovery, the schema (includi
 | --- | --- | --- | --- |
 | `agent` | string | supported agent CLI id | `SLC_AGENT` |
 | `model` | string (optional) | model for the agent CLI | `SLC_MODEL` |
+| `effort` | string (optional) | adapter-scoped reasoning effort (added by [IR-012](../iterations/012-normalize-optimize-demo.md)) | `SLC_EFFORT` |
 | `pipelinePath` | sequence of strings | pipeline search roots | `SLC_PIPELINE_PATH` |
 
 ### File format and discovery

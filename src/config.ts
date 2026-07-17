@@ -22,6 +22,10 @@ import { ClaudeCodeAdapter } from '@sublang/cligent/adapters/claude-code';
 import { CodexAdapter } from '@sublang/cligent/adapters/codex';
 import { GeminiAdapter } from '@sublang/cligent/adapters/gemini';
 import { OpenCodeAdapter } from '@sublang/cligent/adapters/opencode';
+import {
+  isEffortSupported,
+  supportedEffortValues,
+} from '@sublang/cligent';
 import type { AgentAdapter, PermissionPolicy } from '@sublang/cligent';
 
 import { createCligentAgent } from './cligent-agent.js';
@@ -59,15 +63,20 @@ export const defaultAdapterFactory: AdapterFactory = (agent) => {
   }
 };
 
-/** A resolved agent/model selection (CLI-7). */
+/** A resolved agent/model/effort selection (CLI-7). */
 export interface AgentSelection {
   agent: SupportedAgent;
   /** Optional model; omitted so the agent CLI uses its own default. */
   model?: string;
+  /** Optional adapter-scoped reasoning effort; omitted for the default. */
+  effort?: string;
 }
 
 /** Machine-readable reason agent configuration was refused (CLI-12). */
-export type ConfigErrorCode = 'agent-unset' | 'agent-unsupported';
+export type ConfigErrorCode =
+  | 'agent-unset'
+  | 'agent-unsupported'
+  | 'effort-unsupported';
 
 /** Raised when `SLC_AGENT` is unset or names an unsupported agent CLI (CLI-12). */
 export class ConfigError extends Error {
@@ -86,13 +95,16 @@ export function isSupportedAgent(agent: string): agent is SupportedAgent {
 }
 
 /**
- * Resolves the agent/model selection from environment configuration (CLI-7,
- * CLI-12): `SLC_AGENT` names a registered agent CLI and `SLC_MODEL` optionally
- * names a model.
+ * Resolves the agent/model/effort selection from environment configuration
+ * (CLI-7, CLI-12): `SLC_AGENT` names a registered agent CLI, `SLC_MODEL`
+ * optionally names a model, and `SLC_EFFORT` optionally selects an
+ * adapter-scoped reasoning effort validated against Cligent's support
+ * metadata.
  *
  * @throws {ConfigError} when `SLC_AGENT` is unset/blank (`agent-unset`) or
- *   outside the registered set (`agent-unsupported`); no implicit default agent
- *   is applied.
+ *   outside the registered set (`agent-unsupported`), or when `SLC_EFFORT`
+ *   names a value the selected agent does not support
+ *   (`effort-unsupported`); no implicit default agent is applied.
  */
 export function resolveAgentSelection(
   env: Record<string, string | undefined>,
@@ -111,7 +123,18 @@ export function resolveAgentSelection(
     );
   }
   const model = (env.SLC_MODEL ?? '').trim();
-  return { agent, model: model === '' ? undefined : model };
+  const effort = (env.SLC_EFFORT ?? '').trim();
+  if (effort !== '' && !isEffortSupported(agent, effort)) {
+    throw new ConfigError(
+      'effort-unsupported',
+      `SLC_EFFORT "${effort}" is not supported by ${agent}; choose one of: ${(supportedEffortValues(agent) ?? []).join(', ')}`,
+    );
+  }
+  return {
+    agent,
+    model: model === '' ? undefined : model,
+    effort: effort === '' ? undefined : effort,
+  };
 }
 
 /**
@@ -159,6 +182,7 @@ export function createConfiguredAgentClient(
     adapter,
     maxTurns: opts.maxTurns,
     permissions: opts.permissions,
+    effort: selection.effort,
   });
 }
 
