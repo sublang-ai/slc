@@ -12,8 +12,9 @@ Implement [DR-013](../decisions/013-normalize-and-pass-phases.md) — the generi
 - [x] Pass-phase loading and chain exclusion (`PIPE-30`, `PIPE-31`), `-O` scheduling with `.raw`/canonical naming (`PIPE-32`), standalone pass runs (`PIPE-33`), and flag validation (`PIPE-37`).
 - [x] The built-in pipeline-agnostic `normalize.md` definition, `--normalize` scheduling (`PIPE-34`), and protected read-only references (`PHEXEC-33`).
 - [x] Script-item parsing, script-state conformance, and script coverage driving (`VERIFY-15`, `VERIFY-16`, `VERIFY-17`).
-- [ ] `demo/`: the raw workflow source, a seeded buggy fixture repo, a registry wrapper, setup and check scripts, and a README walking an end user through compile → run → verify.
-- [ ] The demo acceptance checker observes the compiled playbook's behavior, including the agent-free scripted Git setup.
+- [x] `demo/`: the raw workflow source, a seeded buggy fixture repo, a registry wrapper, setup and check scripts, and a README walking an end user through compile → run → verify.
+- [x] The demo acceptance checker observes the compiled playbook's behavior, including the agent-free scripted Git setup.
+- [ ] The two-agent acceptance run (Claude Code coder, Codex reviewer) reaches a terminal outcome and passes the full checker.
 
 ## Tasks
 
