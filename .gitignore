@@ -140,3 +140,6 @@ vite.config.ts.timestamp-*
 
 # slc real-agent build scratch (uncommitted evidence)
 .scratch/
+
+# demo working repository (created by demo/setup.sh, never committed)
+demo/run/
