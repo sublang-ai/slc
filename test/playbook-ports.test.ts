@@ -129,14 +129,6 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
       'resuming',
       { visibility: 'hidden', resume: 'prior-session', allowedTools: [] },
     ],
-    ['missing tools', { visibility: 'hidden', resume: false }],
-    [
-      'inherited tools',
-      Object.assign(Object.create({ allowedTools: [] }), {
-        visibility: 'hidden',
-        resume: false,
-      }),
-    ],
     [
       'accessor tools',
       Object.defineProperty(
@@ -168,6 +160,28 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     expect(captain.calls).toEqual([
       expect.objectContaining({ resume: false, allowedTools: [] }),
     ]);
+  });
+
+  // The tool restriction is source-owned (link.md, PHEXEC-32): an absent own
+  // `allowedTools` — including one only inherited from a prototype — forwards
+  // no restriction, so a transformation-performing Captain keeps its tools.
+  it.each([
+    ['absent tools', { visibility: 'visible', resume: false }],
+    [
+      'inherited tools',
+      Object.assign(Object.create({ allowedTools: [] }), {
+        visibility: 'visible',
+        resume: false,
+      }),
+    ],
+  ])('forwards no tool restriction for %s', async (_label, options) => {
+    const captain = fakeAgent({ status: 'success', text: 'artifact written' });
+    const ports = createPlaybookPorts({ player: captain, judge: captain });
+
+    await ports.callCaptain('compile it', notAborted, options as never);
+
+    expect(captain.calls).toHaveLength(1);
+    expect(captain.calls[0].allowedTools).toBeUndefined();
   });
 
   it('snapshots Captain isolation before queued transport work', async () => {

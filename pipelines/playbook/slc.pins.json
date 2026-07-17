@@ -1,0 +1,166 @@
+{
+  "schema": "sublang.slc.pins.v2",
+  "hashAlgorithm": "sha256",
+  "pathBoundary": {
+    "path": "../.."
+  },
+  "pins": {
+    "text2gears": {
+      "definition": {
+        "path": "text2gears.md",
+        "hash": "sha256:0b8903c9a4f0b865fd8fcbf2b5148b868f23b3809eff944a8ecd3a89cc4e3c9f"
+      },
+      "artifact": {
+        "path": "text2gears.slc/text2gears.playbook.ts",
+        "hash": "sha256:40e00636e8242cb868a2b104a94645b5e6b750db4b25b3fc7f51d8dc0125e981"
+      },
+      "artifactBundle": {
+        "path": "text2gears.slc",
+        "hash": "sha256:4b2a027a4510cbb6ce7220b268c81b23319650855679e22cffdc9f466ecaf53b"
+      },
+      "semanticInputs": [
+        {
+          "path": "../../package-lock.json",
+          "hash": "sha256:130b1b373403a9d5dd58b8f98126e4b723d4720435a75bc7d81e74329d9df925"
+        },
+        {
+          "path": "../../specs/decisions/000-spec-structure-format.md",
+          "hash": "sha256:a22d0b27060cfc58cbf567e08435c2d3ee34548075bdadef77254ed669cbcd19"
+        },
+        {
+          "path": "../../specs/meta.md",
+          "hash": "sha256:3310732f0cf15fc0b3332edb9e02e96349be1801ef8a08446e01c77de6ff533e"
+        }
+      ],
+      "externalInputs": [],
+      "runtimeDependencies": [
+        {
+          "kind": "package",
+          "locator": "../../node_modules/xstate",
+          "provenance": "xstate@5.32.4",
+          "specifier": "xstate",
+          "identity": "sha256:d1b4f39024b803f4d611f351abaf1628e49f707daefe90021d233eb78613b566"
+        }
+      ],
+      "linkTarget": {
+        "kind": "file",
+        "locator": "../../node_modules/@sublang/playbook/src/runtime.ts",
+        "identity": "sha256:e374650e1bf4361543a654de183a6b4e678d25988126e56a74055bc678c023b6",
+        "provenance": "@sublang/playbook@0.10.0"
+      },
+      "producer": {
+        "pipeline": "slc"
+      }
+    },
+    "gears2fsm": {
+      "definition": {
+        "path": "gears2fsm.md",
+        "hash": "sha256:df030fa2b98166569ce5b3161467d60af3933c76b3b1e52f746882b0b5a75e68"
+      },
+      "artifact": {
+        "path": "gears2fsm.slc/gears2fsm.playbook.ts",
+        "hash": "sha256:91cbe23d0450dbc790851682cfd75412f966694007bfc47cce57b1cd20005a6b"
+      },
+      "artifactBundle": {
+        "path": "gears2fsm.slc",
+        "hash": "sha256:f1f17cdfb24757d505862974fbbf17b69f0731a735542eb2a453c0d4e077f9b4"
+      },
+      "semanticInputs": [
+        {
+          "path": "../../package-lock.json",
+          "hash": "sha256:130b1b373403a9d5dd58b8f98126e4b723d4720435a75bc7d81e74329d9df925"
+        },
+        {
+          "path": "link.md",
+          "hash": "sha256:c5c3552ba64f917f49658853f529e7af0fec55c8dc77f91a8ab690cfb8a4a075"
+        },
+        {
+          "path": "text2gears.md",
+          "hash": "sha256:0b8903c9a4f0b865fd8fcbf2b5148b868f23b3809eff944a8ecd3a89cc4e3c9f"
+        },
+        {
+          "path": "../../specs/decisions/000-spec-structure-format.md",
+          "hash": "sha256:a22d0b27060cfc58cbf567e08435c2d3ee34548075bdadef77254ed669cbcd19"
+        },
+        {
+          "path": "../../specs/meta.md",
+          "hash": "sha256:3310732f0cf15fc0b3332edb9e02e96349be1801ef8a08446e01c77de6ff533e"
+        }
+      ],
+      "externalInputs": [],
+      "runtimeDependencies": [
+        {
+          "kind": "package",
+          "locator": "../../node_modules/xstate",
+          "provenance": "xstate@5.32.4",
+          "specifier": "xstate",
+          "identity": "sha256:d1b4f39024b803f4d611f351abaf1628e49f707daefe90021d233eb78613b566"
+        }
+      ],
+      "linkTarget": {
+        "kind": "file",
+        "locator": "../../node_modules/@sublang/playbook/src/runtime.ts",
+        "identity": "sha256:e374650e1bf4361543a654de183a6b4e678d25988126e56a74055bc678c023b6",
+        "provenance": "@sublang/playbook@0.10.0"
+      },
+      "producer": {
+        "pipeline": "slc"
+      }
+    },
+    "link": {
+      "definition": {
+        "path": "link.md",
+        "hash": "sha256:c5c3552ba64f917f49658853f529e7af0fec55c8dc77f91a8ab690cfb8a4a075"
+      },
+      "artifact": {
+        "path": "link.slc/link.playbook.ts",
+        "hash": "sha256:58d96ca12dad7cfcbed2f23fddace54d07b4ca9b6ceac0d44fe5069e59e6fa87"
+      },
+      "artifactBundle": {
+        "path": "link.slc",
+        "hash": "sha256:209459e46c15ddfe3bc7d62ad70f619f5892fbbeeaa629aa687042d67d34fc4a"
+      },
+      "semanticInputs": [
+        {
+          "path": "../../package-lock.json",
+          "hash": "sha256:130b1b373403a9d5dd58b8f98126e4b723d4720435a75bc7d81e74329d9df925"
+        },
+        {
+          "path": "gears2fsm.md",
+          "hash": "sha256:df030fa2b98166569ce5b3161467d60af3933c76b3b1e52f746882b0b5a75e68"
+        },
+        {
+          "path": "text2gears.md",
+          "hash": "sha256:0b8903c9a4f0b865fd8fcbf2b5148b868f23b3809eff944a8ecd3a89cc4e3c9f"
+        },
+        {
+          "path": "../../specs/decisions/000-spec-structure-format.md",
+          "hash": "sha256:a22d0b27060cfc58cbf567e08435c2d3ee34548075bdadef77254ed669cbcd19"
+        },
+        {
+          "path": "../../specs/meta.md",
+          "hash": "sha256:3310732f0cf15fc0b3332edb9e02e96349be1801ef8a08446e01c77de6ff533e"
+        }
+      ],
+      "externalInputs": [],
+      "runtimeDependencies": [
+        {
+          "kind": "package",
+          "locator": "../../node_modules/xstate",
+          "provenance": "xstate@5.32.4",
+          "specifier": "xstate",
+          "identity": "sha256:d1b4f39024b803f4d611f351abaf1628e49f707daefe90021d233eb78613b566"
+        }
+      ],
+      "linkTarget": {
+        "kind": "file",
+        "locator": "../../node_modules/@sublang/playbook/src/runtime.ts",
+        "identity": "sha256:e374650e1bf4361543a654de183a6b4e678d25988126e56a74055bc678c023b6",
+        "provenance": "@sublang/playbook@0.10.0"
+      },
+      "producer": {
+        "pipeline": "slc"
+      }
+    }
+  }
+}

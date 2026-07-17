@@ -14,4 +14,17 @@ export default tseslint.config(
       globals: { ...globals.node },
     },
   },
+  {
+    // Compiled playbook artifacts (agent-emitted, reviewed via the DR-009
+    // checks and pins, not hand-maintained). link.md prescribes patterns the
+    // style rules flag — e.g. re-throwing the latched control error from the
+    // public boundary's `finally` — so style-only rules relax here while
+    // correctness rules stay on.
+    files: ['pipelines/playbook/*.slc/**', 'demo/workflow.playbook/**'],
+    rules: {
+      'no-unsafe-finally': 'off',
+      'prefer-const': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
 );

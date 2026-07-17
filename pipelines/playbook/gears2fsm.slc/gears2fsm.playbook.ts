@@ -1,660 +1,1309 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 //
-// PlaybookRuntime for the gears2fsm playbook — a host-agnostic runner linked
-// from the FSM artifact by the slc FSM-to-Runtime linking phase (link.md).
-//
-// Linker inputs (this module is reproducible from these):
-//   FSM artifact:       ./gears2fsm.fsm.ts
-//   Player binding:     Captain -> captain
-//                       (default binding — no binding supplied; each GEARS
-//                        player mapped to its lowercased name)
-//   Composite players:  none — the GEARS source (text2gears) declares only
-//                       Boss and Captain, with no aliases, so player
-//                       resolution is the direct name -> playerId lookup
-//                       below (no per-item alias resolution is needed).
-//   Adjudication:       LLM-judge per state (default) — one callJudge per
-//                       player result, keyed to the state's own result map.
-//   Boss-event mapping: free-text judge classification (default) — each
-//                       non-empty turn is classified via callJudge into one
-//                       of the FSM's Boss events or no action.
-//   Abort strategy:     natural rejection — the Captain fromPromise actor
-//                       rejects on abort/player-failure and the FSM routes it
-//                       through transform.onError to the quiescent `failed`
-//                       state (every captain-invoking state's onError lands
-//                       quiescent, so the FSM's own error wiring is the abort
-//                       path).
-//
-// The module speaks only PlaybookPorts; it holds no host types and never
-// talks to LLMs directly. It does not modify the FSM or re-derive Captain
-// prompts, result keys, or guard semantics — those are fixed by the FSM.
+// slc link artifact
+// FSM path: ./gears2fsm.fsm.ts
+// Player binding: none (no delegated-player states)
+// Adjudication strategy: LLM-judge per Captain state
+// Boss-event mapping: deterministic COMPILE entry from ready/failed/terminal;
+//   LLM-judge classification from awaitBossReply
+// Abort strategy: natural rejection (the captain invoke's onError lands the
+//   machine quiescent in `failed`; the runtime latches control-plane failures
+//   out of the machine and rethrows them at the boundary)
 
-import { createActor, fromPromise } from 'xstate';
-import type { Actor, InspectionEvent, SnapshotFrom } from 'xstate';
+import PQueue from 'p-queue';
+import { createActor, fromPromise, type ActorRefFrom } from 'xstate';
 
-import gears2fsmMachine, {
+import {
+  gears2fsmMachine,
   type CaptainInput,
   type CaptainOutput,
-  type TransformInput,
-  type TransformEvent,
-  type TransformRequest,
+  type Gears2fsmEvent,
 } from './gears2fsm.fsm.ts';
 
 import type {
-  PlayerResult,
+  CaptainCallOptions,
+  CaptainResult,
+  JsonValue,
+  PlaybookCallResult,
   PlaybookPorts,
   PlaybookRuntime,
   PlaybookRuntimeFactory,
+  PlaybookRunResult,
+  PlaybookSession,
+  PlaybookState,
+  PlaybookTraceEvent,
 } from '@sublang/playbook/runtime';
 
-// Single shared contract: re-export the names consumers import rather than
-// redefining them, so every linked playbook shares one contract definition.
+import {
+  assertJsonSafe,
+  combineAbortSignals,
+  normalizeError,
+  normalizePlaybookSnapshot,
+  snapshotJsonValue,
+  snapshotPlaybookSession,
+  validateCaptainResult,
+  waitForPlaybookQuiescence,
+} from '@sublang/playbook/xstate-runtime';
+
 export type {
-  PlayerResult,
+  CaptainCallOptions,
+  CaptainResult,
+  JsonValue,
+  NormalizedError,
+  PlaybookCallRequest,
+  PlaybookCallResult,
+  PlaybookCallStart,
   PlaybookPorts,
+  PlaybookRunResult,
   PlaybookRuntime,
   PlaybookRuntimeFactory,
+  PlaybookSession,
+  PlaybookState,
+  PlaybookStateValue,
+  PlaybookTraceEvent,
+  PlayerCallOptions,
+  PlayerResult,
+} from '@sublang/playbook/runtime';
+
+// The single G2F-1 prompt establishes no runtime-value placeholders, declares
+// no players, and the machine makes no dynamic playbook call, so the linked
+// runtime needs no per-session options.
+export type PlaybookRuntimeOptions = Record<string, never>;
+
+type RootActor = ActorRefFrom<typeof gears2fsmMachine>;
+
+type BossMapping = Gears2fsmEvent | { type: 'NO_ACTION' } | undefined;
+
+type RuntimeSession = Omit<PlaybookSession, 'ports'> & {
+  readonly ports: PlaybookPorts;
 };
 
-// ---------------------------------------------------------------------------
-// Per-playbook options (based on the FSM's `TransformInput`)
-// ---------------------------------------------------------------------------
-
-/**
- * Host-agnostic, per-run knobs for this playbook.
- * Player binding is baked in by default (see DEFAULT_PLAYER_BINDING); it is
- * additionally exposed here for optional per-run remapping.
- */
-export interface PlaybookRuntimeOptions {
-  /** Optional per-run remapping of the linker-time player binding (GEARS player name -> opaque playerId). */
-  playerBinding?: Record<string, string>;
-  /** Optional per-run transformation request seeded into the FSM input; Boss may also supply it via a START directive. */
-  request?: TransformRequest;
-}
-
-// ---------------------------------------------------------------------------
-// Linker-time constants derived from the FSM
-// ---------------------------------------------------------------------------
-
-/** Deterministic, recorded player binding applied at every callPlayer site. */
-const DEFAULT_PLAYER_BINDING: Readonly<Record<string, string>> = {
-  Captain: 'captain',
+// The tool restriction is source-owned (link.md §PlaybookPorts contract):
+// this transformation-performing Captain works through the host Captain's
+// tools, so its calls carry no allowedTools restriction.
+const CAPTAIN_OPTIONS: CaptainCallOptions = {
+  visibility: 'visible',
+  resume: false,
 };
 
-/** States that invoke the Captain actor (non-quiescent — the drive loop keeps going while here). */
-const CAPTAIN_STATES: readonly string[] = ['transform'];
-
-/** Non-final states that accept a Boss event (quiescent — the drive loop stops here). */
-const QUIESCENT_STATES: readonly string[] = [
-  'ready',
-  'awaitBossReply',
-  'failed',
-];
-
-/** The FSM's Boss-originated events and their payload contracts (from the FSM `events` union). */
-const BOSS_EVENTS: ReadonlyArray<{
-  type: TransformEvent['type'];
-  description: string;
-  payload: Record<string, string>;
-}> = [
-  {
-    type: 'START',
-    description:
-      'Begin, restart, or re-target the transformation from an idle or failed state (also resumes a fresh turn while waiting for a reply).',
-    payload: {
-      request:
-        'optional { "source": string, "target": string } — the GEARS source and the FSM target the Boss names',
-    },
-  },
-  {
-    type: 'BOSS_INTERRUPT',
-    description:
-      'Pre-empt the active state and jump to a stable state id, restarting that state. Not an abort surface.',
-    payload: { targetId: "required string — one of: 'ready', 'transform'" },
-  },
-  {
-    type: 'BOSS_REPLY',
-    description:
-      'Answer the pending player question while the FSM waits in awaitBossReply.',
-    payload: {
-      answer: 'required string — the Boss answer to the pending question',
-    },
-  },
-];
-
-/** Telemetry topic for FSM transitions (observers consume it; the runtime never interprets it). */
-const TELEMETRY_TOPIC = 'playbook.fsm.state';
-
-/**
- * Continuation preamble prepended when a resumed state carries both a pending
- * Boss question and a Boss reply. Framework text supplied by the runtime — it
- * is not part of the GEARS blockquote and never appears in `invoke.input.prompt`.
- */
 const CONTINUATION_PREAMBLE =
   'You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.';
 
-// ---------------------------------------------------------------------------
-// Pure helpers (exposed under `_internal` for compilation-correctness tests)
-// ---------------------------------------------------------------------------
+/** Stable ids the FSM accepts as `BOSS_INTERRUPT` targets. */
+const INTERRUPT_IDS = ['ready', 'compile', 'failed'] as const;
 
-/**
- * Compose the actual player prompt from a state's CaptainInput.
- * `input.prompt` is the GEARS-derived domain body and is never mutated or
- * re-flowed; structured labelled blocks and (when resuming) the continuation
- * Q&A are prepended before it. No player-visible Boss-question instruction is
- * injected — Boss-question detection is adjudicator-facing.
- */
-function composePlayerPrompt(input: CaptainInput): string {
-  const blocks: string[] = [];
-
-  // Continuation Q&A first, before ordinary structured blocks and the body.
-  if (input.pendingBossQuestion && input.bossReply !== undefined) {
-    blocks.push(
-      [
-        CONTINUATION_PREAMBLE,
-        '',
-        'Boss question:',
-        input.pendingBossQuestion.question,
-        '',
-        'Boss reply:',
-        input.bossReply,
-      ].join('\n'),
-    );
+function assertNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
   }
-
-  // Ordinary structured blocks from the typed CaptainInput fields the FSM exposes.
-  if (input.source !== undefined) blocks.push(`Source:\n${input.source}`);
-  if (input.target !== undefined) blocks.push(`Target:\n${input.target}`);
-
-  // The GEARS-derived domain prompt body, verbatim and last.
-  blocks.push(input.prompt);
-
-  return blocks.join('\n\n');
+  return value;
 }
 
-/**
- * Resolve the opaque playerId for a state from its `invoke.input.player`.
- * The GEARS source declares no composite players, so this is the direct
- * binding lookup, falling back to the recorded default (lowercased name).
- */
-function resolvePlayerId(
-  input: CaptainInput,
-  binding: Record<string, string>,
-): string {
-  return binding[input.player] ?? input.player.toLowerCase();
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
-/**
- * Extract the payload field names a result description marks as required via
- * the load-bearing pattern ``Output shall include `<field>:` `` (e.g. the
- * `needsBossReply` description requires `question`).
- */
-function requiredFieldsFor(description: string): string[] {
+function omitUndefined<T extends Record<string, unknown>>(value: T): JsonValue {
+  const copy: Record<string, JsonValue> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) {
+      assertJsonSafe(entry, key);
+      copy[key] = snapshotJsonValue(entry, key);
+    }
+  }
+  return snapshotJsonValue(copy);
+}
+
+function stableJson(value: unknown): string {
+  const json = snapshotJsonValue(value);
+  return JSON.stringify(sortJson(json));
+}
+
+function sortJson(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map((entry) => sortJson(entry)));
+  }
+  if (value && typeof value === 'object') {
+    const record = value as { readonly [key: string]: JsonValue };
+    const sorted: Record<string, JsonValue> = {};
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = sortJson(record[key]);
+    }
+    return Object.freeze(sorted);
+  }
+  return value;
+}
+
+function continuationPrefix(input: {
+  readonly pendingBossQuestion?: { readonly question: string };
+  readonly bossReply?: string;
+}): string {
+  if (!input.pendingBossQuestion || !input.bossReply) return '';
+  return [
+    CONTINUATION_PREAMBLE,
+    '',
+    'Boss question:',
+    input.pendingBossQuestion.question,
+    '',
+    'Boss reply:',
+    input.bossReply,
+    '',
+    '',
+  ].join('\n');
+}
+
+// The GEARS-derived `prompt` body carries no runtime-value placeholders for this
+// playbook (Gears2fsmInput = Record<string, never>), so composition is the
+// continuation preamble — present only on resume — followed by the verbatim
+// prompt. Angle-bracketed metavariables inside the domain instructions are
+// ordinary prompt text and are never substituted.
+export function composeCaptainPrompt(input: CaptainInput): string {
+  return `${continuationPrefix(input)}${input.prompt}`;
+}
+
+export function composePlayerPrompt(input: {
+  readonly prompt: string;
+  readonly pendingBossQuestion?: { readonly question: string };
+  readonly bossReply?: string;
+}): string {
+  return `${continuationPrefix(input)}${input.prompt}`;
+}
+
+function parseJsonObjectLoose(
+  text: string,
+): Record<string, unknown> | undefined {
+  const source = text;
+  for (let start = 0; start < source.length; start += 1) {
+    if (source[start] !== '{') continue;
+    const bounded = boundedJsonCandidate(source, start);
+    const candidates = bounded
+      ? [bounded, bounded.replace(/,\s*([}\]])/g, '$1')]
+      : [repairJsonSuffix(source.slice(start))];
+    for (const candidate of candidates) {
+      try {
+        const parsed: unknown = JSON.parse(candidate);
+        if (isRecord(parsed)) return parsed;
+      } catch {
+        // Try the next candidate at the same object boundary.
+      }
+    }
+  }
+  return undefined;
+}
+
+function boundedJsonCandidate(
+  source: string,
+  start: number,
+): string | undefined {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === '{' || char === '[') depth += 1;
+    else if (char === '}' || char === ']') {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, index + 1);
+    }
+  }
+  return undefined;
+}
+
+function repairJsonSuffix(source: string): string {
+  let repaired = source.replace(/,\s*$/g, '');
+  let inString = false;
+  let escaped = false;
+  const stack: string[] = [];
+  for (const char of repaired) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === '{') stack.push('}');
+    else if (char === '[') stack.push(']');
+    else if (char === '}' || char === ']') stack.pop();
+  }
+  if (inString) repaired += '"';
+  while (stack.length > 0) repaired += stack.pop();
+  return repaired.replace(/,\s*([}\]])/g, '$1');
+}
+
+function requiredOutputFields(description: string): readonly string[] {
+  const marker = description.match(/Output shall include\s+(.+)$/);
+  if (!marker) return [];
   const fields: string[] = [];
-  const re = /Output shall include `([A-Za-z_][A-Za-z0-9_]*)\s*:/g;
+  const seen = new Set<string>();
+  const regex = /`([^`]+)`/g;
   let match: RegExpExecArray | null;
-  while ((match = re.exec(description)) !== null) fields.push(match[1]);
+  while ((match = regex.exec(marker[1])) !== null) {
+    const name = match[1].split(':', 1)[0]?.trim();
+    if (name && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) && !seen.has(name)) {
+      seen.add(name);
+      fields.push(name);
+    }
+  }
   return fields;
 }
 
-/** Best-effort JSON extraction from free-form judge text (direct, fenced, or first object). */
-function extractJson(raw: string): Record<string, unknown> | null {
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  const tryParse = (s: string): Record<string, unknown> | null => {
-    try {
-      const v = JSON.parse(s);
-      return v && typeof v === 'object' && !Array.isArray(v)
-        ? (v as Record<string, unknown>)
-        : null;
-    } catch {
-      return null;
-    }
-  };
-  const direct = tryParse(trimmed);
-  if (direct) return direct;
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced) {
-    const v = tryParse(fenced[1].trim());
-    if (v) return v;
-  }
-  const first = trimmed.indexOf('{');
-  const last = trimmed.lastIndexOf('}');
-  if (first >= 0 && last > first) {
-    const v = tryParse(trimmed.slice(first, last + 1));
-    if (v) return v;
-  }
-  return null;
+function makeJudgePrompt(input: CaptainInput, visibleText: string): string {
+  return [
+    'Adjudicate the direct Captain output for this FSM state.',
+    `State id: ${input.stateId}`,
+    `Source item: ${input.sourceItem}`,
+    '',
+    'Visible Captain output:',
+    visibleText,
+    '',
+    'Result keys and descriptions:',
+    ...Object.entries(input.result).map(
+      ([key, description]) => `- ${key}: ${description}`,
+    ),
+    '',
+    'Reply with one JSON object of the exact form {"guard": "<name>"} — a top-level "guard" property naming exactly one declared result key, plus any output fields that key requires.',
+    'For the needsBossReply guard, do not include question; the runtime injects the visible text.',
+  ].join('\n');
 }
 
-/** Build the Boss-input classifier prompt (per-turn, host-agnostic). */
-function buildClassifierPrompt(
+function adjudicateCaptainOutput(
+  input: CaptainInput,
+  visibleText: string,
+  judgeText: string,
+): CaptainOutput {
+  const parsed = parseJsonObjectLoose(judgeText);
+  if (!parsed)
+    throw new Error('adjudicator reply did not contain a JSON object');
+  const guard = parsed.guard;
+  if (typeof guard !== 'string' || !(guard in input.result)) {
+    throw new Error(`adjudicator selected undeclared guard ${String(guard)}`);
+  }
+  const allowed = new Set(['guard']);
+  for (const field of requiredOutputFields(input.result[guard] ?? '')) {
+    if (field !== 'question' && field !== 'response') allowed.add(field);
+  }
+  for (const key of Object.keys(parsed)) {
+    if (!allowed.has(key)) {
+      throw new Error(`adjudicator supplied undeclared field ${key}`);
+    }
+  }
+  if (guard === 'needsBossReply') {
+    return { guard: 'needsBossReply', question: visibleText };
+  }
+  if (guard === 'compiled') {
+    return { guard: 'compiled' };
+  }
+  if (guard === 'rejected') {
+    return { guard: 'rejected' };
+  }
+  throw new Error(`adjudicator selected unsupported guard ${guard}`);
+}
+
+function validateClassifier(
   text: string,
-  ctx: { state: string; pendingQuestion?: string },
-): string {
-  const lines: string[] = [];
-  lines.push('You are the Boss-input classifier for a playbook state machine.');
-  lines.push(
-    "Classify the Boss message below into exactly one of the machine's Boss events, or into no event.",
-  );
-  lines.push('');
-  lines.push(`Current FSM state: ${ctx.state}`);
-  if (ctx.pendingQuestion) {
-    lines.push(
-      'A player has paused and is waiting for Boss to answer this question:',
-    );
-    lines.push(ctx.pendingQuestion);
-    lines.push(
-      'If the Boss message answers that question, classify it as BOSS_REPLY; if it is a fresh directive, classify it accordingly.',
-    );
+  bossText: string,
+  pendingQuestionId: string | undefined,
+): BossMapping {
+  const parsed = parseJsonObjectLoose(text);
+  if (!parsed) return undefined;
+  const type = parsed.type;
+  if (type === 'NO_ACTION') {
+    if (Object.keys(parsed).length !== 1) return undefined;
+    return { type: 'NO_ACTION' };
   }
-  lines.push('');
-  lines.push('Events and their payload fields:');
-  for (const event of BOSS_EVENTS) {
-    lines.push(`- ${event.type}: ${event.description}`);
-    for (const [field, spec] of Object.entries(event.payload)) {
-      lines.push(`    ${field}: ${spec}`);
-    }
-  }
-  lines.push('');
-  lines.push('Boss message:');
-  lines.push(text);
-  lines.push('');
-  lines.push(
-    'Reply with a single JSON object: { "event": "<EVENT_TYPE or null>", ...payload fields }.',
-  );
-  lines.push(
-    'Use null (or omit "event") when no machine event applies. Include every required payload field for the chosen event.',
-  );
-  return lines.join('\n');
-}
-
-/** Parse the classifier reply into an FSM event, or null for no action. */
-function parseClassification(raw: string): TransformEvent | null {
-  const obj = extractJson(raw);
-  if (!obj) return null;
-  const type = (obj.event ?? obj.type) as unknown;
-  if (type === 'START') {
-    const req = obj.request as
-      | { source?: unknown; target?: unknown }
-      | undefined;
-    if (
-      req &&
-      typeof req.source === 'string' &&
-      typeof req.target === 'string'
-    ) {
-      return {
-        type: 'START',
-        request: { source: req.source, target: req.target },
-      };
-    }
-    return { type: 'START' };
+  if (type === 'COMPILE') {
+    if (Object.keys(parsed).length !== 1) return undefined;
+    return { type: 'COMPILE' };
   }
   if (type === 'BOSS_INTERRUPT') {
-    return typeof obj.targetId === 'string'
-      ? { type: 'BOSS_INTERRUPT', targetId: obj.targetId }
-      : null;
+    if (
+      Object.keys(parsed).sort().join('\0') !== ['targetId', 'type'].join('\0')
+    ) {
+      return undefined;
+    }
+    const targetId = parsed.targetId;
+    if (
+      typeof targetId !== 'string' ||
+      !(INTERRUPT_IDS as readonly string[]).includes(targetId)
+    ) {
+      return undefined;
+    }
+    return { type: 'BOSS_INTERRUPT', targetId };
   }
   if (type === 'BOSS_REPLY') {
-    return typeof obj.answer === 'string'
-      ? { type: 'BOSS_REPLY', answer: obj.answer }
-      : null;
-  }
-  return null;
-}
-
-/**
- * Build the LLM-judge adjudicator prompt for a player result. It names the
- * source item's player, carries the player's verbatim output, and lists the
- * state's result keys with their descriptions verbatim — it does not interpret,
- * paraphrase, or alter the FSM's result text.
- */
-function buildAdjudicatorPrompt(
-  input: CaptainInput,
-  playerOutput: string,
-): string {
-  const lines: string[] = [];
-  lines.push('You are the guard adjudicator for a playbook state machine.');
-  lines.push(
-    `The player "${input.player}" produced the output below for source item ${input.sourceItem}.`,
-  );
-  lines.push('Choose exactly one guard whose description matches that output.');
-  lines.push('');
-  lines.push('Player output (verbatim):');
-  lines.push('"""');
-  lines.push(playerOutput);
-  lines.push('"""');
-  lines.push('');
-  lines.push(
-    'Guards (choose exactly one; the descriptions are authoritative and must be applied as written):',
-  );
-  for (const [guard, description] of Object.entries(input.result)) {
-    lines.push(`- ${guard}: ${description}`);
-  }
-  lines.push('');
-  lines.push(
-    'Reply with a single JSON object: { "guard": "<one of the guard names above>", ...any payload fields the chosen guard\'s description requires }.',
-  );
-  return lines.join('\n');
-}
-
-/**
- * Coerce the adjudicator reply into one of the state's declared guards plus any
- * required payload fields. Fails loudly on an undeclared guard, a missing
- * required field, or an empty/malformed response (control-plane errors).
- */
-function parseAdjudication(raw: string, input: CaptainInput): CaptainOutput {
-  const obj = extractJson(raw);
-  if (!obj || typeof obj.guard !== 'string' || obj.guard.trim() === '') {
-    throw new Error(
-      `adjudicator returned an empty or malformed response (no "guard"): ${JSON.stringify(raw).slice(0, 200)}`,
-    );
-  }
-  const guard = obj.guard;
-  if (!Object.prototype.hasOwnProperty.call(input.result, guard)) {
-    throw new Error(
-      `adjudicator returned guard '${guard}' not declared by this state (declared: ${Object.keys(input.result).join(', ')})`,
-    );
-  }
-  const output: CaptainOutput = { guard };
-  for (const field of requiredFieldsFor(input.result[guard])) {
-    const value = obj[field];
+    const keys = Object.keys(parsed).sort();
     if (
-      value === undefined ||
-      value === null ||
-      (typeof value === 'string' && value.trim() === '')
+      keys.join('\0') !== ['questionId', 'type'].join('\0') &&
+      keys.join('\0') !== 'type'
     ) {
-      throw new Error(
-        `adjudicator response for guard '${guard}' is missing required field '${field}'`,
+      return undefined;
+    }
+    const questionId =
+      parsed.questionId === undefined ? pendingQuestionId : parsed.questionId;
+    if (questionId !== pendingQuestionId || typeof questionId !== 'string') {
+      return undefined;
+    }
+    return { type: 'BOSS_REPLY', answer: bossText, questionId };
+  }
+  return undefined;
+}
+
+function classifierPrompt(
+  text: string,
+  state: PlaybookState,
+  pending: unknown,
+): string {
+  return [
+    'Classify this Boss message for the gears2fsm playbook FSM.',
+    '',
+    'Boss message:',
+    text,
+    '',
+    'Current state:',
+    stableJson(state),
+    '',
+    'Pending Boss question:',
+    stableJson(pending ?? null),
+    '',
+    'Return JSON only. Allowed objects are {"type":"BOSS_REPLY","questionId":"compile"}, {"type":"COMPILE"}, {"type":"BOSS_INTERRUPT","targetId":"ready|compile|failed"}, or {"type":"NO_ACTION"}.',
+  ].join('\n');
+}
+
+function stateFromSnapshot(actor: RootActor): PlaybookState {
+  return normalizePlaybookSnapshot(actor.getSnapshot());
+}
+
+function resultFromState(
+  state: PlaybookState,
+  output: JsonValue | undefined,
+  error?: unknown,
+): PlaybookRunResult {
+  if (state.status === 'done') {
+    return output === undefined
+      ? { outcome: 'terminal', state }
+      : { outcome: 'terminal', state, output };
+  }
+  if (state.stateId === 'failed') {
+    return error === undefined
+      ? { outcome: 'failed', state }
+      : { outcome: 'failed', state, error: normalizeError(error) };
+  }
+  return { outcome: 'quiescent', state };
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  return normalizeError(error).name === 'AbortError';
+}
+
+function isSignalAbort(error: unknown, signal: AbortSignal): boolean {
+  return signal.aborted && error === signal.reason;
+}
+
+class Gears2fsmPlaybookRuntime implements PlaybookRuntime {
+  private readonly emissionQueue = new PQueue({ concurrency: 1 });
+  private readonly captainLane = new PQueue({ concurrency: 1 });
+  private session: RuntimeSession | undefined;
+  private actor: RootActor | undefined;
+  private sequence = 0;
+  private turnId = 0;
+  private callId = 0;
+  private boundaryTurnId: number | undefined;
+  private activeBoundarySignal: AbortSignal | undefined;
+  private activeTurn: Promise<PlaybookRunResult> | undefined;
+  private disposing: Promise<void> | undefined;
+  private disposed = false;
+  private terminallyDisposedBeforeInit = false;
+  private disposalTraceEmitted = false;
+  private initializing = false;
+  private initializationDone: Promise<void> | undefined;
+  private resolveInitializationDone: (() => void) | undefined;
+  private latchedControlError: unknown;
+  private suppressInspection = false;
+  private previousState: PlaybookState | undefined;
+
+  constructor(_options: PlaybookRuntimeOptions) {}
+
+  async init(session: PlaybookSession): Promise<void> {
+    if (this.session || this.actor) {
+      throw new Error('playbook runtime is already initialized');
+    }
+    if (this.disposed || this.terminallyDisposedBeforeInit || this.disposing) {
+      throw new Error('playbook runtime is disposed');
+    }
+    this.initializing = true;
+    this.initializationDone = new Promise((resolve) => {
+      this.resolveInitializationDone = resolve;
+    });
+    this.disposalTraceEmitted = false;
+    let actor: RootActor | undefined;
+    let initialState: PlaybookState | undefined;
+    try {
+      const captured = snapshotPlaybookSession(session);
+      this.session = captured;
+      actor = this.createActor(captured);
+      this.actor = actor;
+      initialState = stateFromSnapshot(actor);
+      this.previousState = initialState;
+      await this.trace(
+        'session.started',
+        omitUndefined({ state: initialState, stateId: initialState.stateId }),
+      );
+      await this.drain();
+      actor.start();
+      await this.drain();
+    } catch (error) {
+      this.suppressInspection = true;
+      actor?.stop();
+      if (initialState && !this.disposalTraceEmitted) {
+        await this.bestEffortDisposeTrace(initialState);
+      }
+      this.session = undefined;
+      this.actor = undefined;
+      this.sequence = 0;
+      this.turnId = 0;
+      this.callId = 0;
+      this.latchedControlError = undefined;
+      this.previousState = undefined;
+      this.suppressInspection = false;
+      throw error;
+    } finally {
+      this.initializing = false;
+      this.resolveInitializationDone?.();
+      this.resolveInitializationDone = undefined;
+    }
+  }
+
+  async handleBossInput(turn: {
+    text: string;
+    signal: AbortSignal;
+  }): Promise<PlaybookRunResult> {
+    if (this.activeTurn) {
+      throw new Error('playbook runtime already has an active boundary');
+    }
+    if (this.disposing || this.disposed) {
+      throw new Error('playbook runtime is disposing');
+    }
+    const run = this.handleBossInputInner(turn);
+    this.activeTurn = run;
+    try {
+      return await run;
+    } catch (error) {
+      if (isSignalAbort(error, turn.signal)) {
+        const actor = this.actor;
+        const snapshot = actor
+          ? await waitForPlaybookQuiescence(actor)
+          : undefined;
+        const state = snapshot
+          ? normalizePlaybookSnapshot(snapshot)
+          : ({
+              value: 'failed',
+              activeStateIds: ['failed'],
+              tags: ['playbook.parked'],
+              status: 'active',
+              quiescent: true,
+              stateId: 'failed',
+            } satisfies PlaybookState);
+        try {
+          await this.drain();
+        } catch {
+          // The signal-driven abort remains the public outcome.
+        }
+        return { outcome: 'aborted', state, error: normalizeError(error) };
+      }
+      throw error;
+    } finally {
+      this.activeTurn = undefined;
+      const error = this.latchedControlError;
+      this.latchedControlError = undefined;
+      const aborted = this.activeBoundarySignal?.aborted === true;
+      this.activeBoundarySignal = undefined;
+      this.boundaryTurnId = undefined;
+      if (error && (!aborted || !isAbortLikeError(error))) throw error;
+    }
+  }
+
+  async resumePlaybookCall(input: {
+    callId: string;
+    result: PlaybookCallResult;
+    signal: AbortSignal;
+  }): Promise<PlaybookRunResult> {
+    if (this.activeTurn) {
+      throw new Error('playbook runtime already has an active boundary');
+    }
+    if (this.disposing || this.disposed) {
+      throw new Error('playbook runtime is disposing');
+    }
+    const run = this.resumePlaybookCallInner(input);
+    this.activeTurn = run;
+    try {
+      return await run;
+    } finally {
+      this.activeTurn = undefined;
+      const error = this.latchedControlError;
+      this.latchedControlError = undefined;
+      const aborted = this.activeBoundarySignal?.aborted === true;
+      this.activeBoundarySignal = undefined;
+      this.boundaryTurnId = undefined;
+      if (error && (!aborted || !isAbortLikeError(error))) throw error;
+    }
+  }
+
+  dispose(): Promise<void> {
+    if (this.activeTurn) {
+      return Promise.reject(
+        new Error('cannot dispose during an active boundary'),
       );
     }
-    output[field] = value;
+    if (this.disposing) return this.disposing;
+    if (!this.initializing && !this.session && !this.actor && !this.disposed) {
+      this.terminallyDisposedBeforeInit = true;
+      this.disposed = true;
+      this.disposing = Promise.resolve();
+      return this.disposing;
+    }
+    this.disposing = this.disposeInner();
+    return this.disposing;
   }
-  return output;
-}
 
-// ---------------------------------------------------------------------------
-// Runtime factory
-// ---------------------------------------------------------------------------
-
-function combineSignals(
-  a: AbortSignal | undefined,
-  b: AbortSignal | undefined,
-): AbortSignal {
-  const signals = [a, b].filter(
-    (s): s is AbortSignal => s instanceof AbortSignal,
-  );
-  if (signals.length === 0) return new AbortController().signal;
-  if (signals.length === 1) return signals[0];
-  return AbortSignal.any(signals);
-}
-
-/**
- * Factory for the gears2fsm PlaybookRuntime. The default export; conforms to
- * `PlaybookRuntimeFactory<PlaybookRuntimeOptions>`.
- */
-export default function createPlaybookRuntime(
-  options: PlaybookRuntimeOptions,
-): PlaybookRuntime {
-  const binding: Record<string, string> = {
-    ...DEFAULT_PLAYER_BINDING,
-    ...(options.playerBinding ?? {}),
-  };
-  const fsmInput: TransformInput = {
-    players: binding,
-    request: options.request,
-  };
-
-  let ports: PlaybookPorts | null = null;
-  let actor: Actor<typeof gears2fsmMachine> | null = null;
-  let currentSignal: AbortSignal | undefined;
-  let adjudicatorError: unknown;
-  let hasAdjudicatorError = false;
-  let previousValue: string | undefined;
-
-  // Ordered, awaited, never-dropped emissions: a serial promise chain.
-  let emissionChain: Promise<void> = Promise.resolve();
-  let emissionError: unknown;
-  let hasEmissionError = false;
-  const enqueue = (fn: () => Promise<void>): void => {
-    emissionChain = emissionChain.then(async () => {
+  private async handleBossInputInner(turn: {
+    text: string;
+    signal: AbortSignal;
+  }): Promise<PlaybookRunResult> {
+    const actor = this.requireActor();
+    const currentTurnId = this.nextTurnId();
+    this.boundaryTurnId = currentTurnId;
+    this.activeBoundarySignal = turn.signal;
+    await this.trace('boss.input.received', { text: turn.text }, currentTurnId);
+    const state = stateFromSnapshot(actor);
+    let event: BossMapping;
+    if (turn.text.trim().length === 0) {
+      const result: PlaybookRunResult = { outcome: 'no-action', state };
+      await this.traceSettled(result, currentTurnId);
+      await this.drain();
+      return result;
+    }
+    // A terminal machine, the idle hub, or the recoverable `failed` state all
+    // accept exactly one ordinary entry event (COMPILE), which carries no
+    // textual payload, so the entry is deterministic and needs no classifier.
+    if (
+      state.status === 'done' ||
+      state.stateId === 'ready' ||
+      state.stateId === 'failed'
+    ) {
+      event = { type: 'COMPILE' };
+    } else {
       try {
-        await fn();
+        event = await this.classifyBossInput(turn.text, state, turn.signal);
       } catch (error) {
-        if (!hasEmissionError) emissionError = error;
-        hasEmissionError = true;
+        if (isSignalAbort(error, turn.signal)) {
+          const result: PlaybookRunResult = {
+            outcome: 'aborted',
+            state,
+            error: normalizeError(error),
+          };
+          await this.traceSettled(result, currentTurnId);
+          await this.drain();
+          return result;
+        }
+        await this.trace(
+          'boss.input.settled',
+          omitUndefined({
+            outcome: 'no-action',
+            state,
+            stateId: state.stateId,
+            error: normalizeError(error),
+          }),
+          currentTurnId,
+        );
+        await this.drain();
+        throw error;
       }
+      if (!event) {
+        await this.emitStatus(
+          'classification was invalid; Boss input was not actionable.',
+          { state },
+        );
+        const result: PlaybookRunResult = { outcome: 'no-action', state };
+        await this.traceSettled(result, currentTurnId);
+        await this.drain();
+        return result;
+      }
+    }
+    if (event?.type === 'NO_ACTION') {
+      const result: PlaybookRunResult = { outcome: 'no-action', state };
+      await this.traceSettled(result, currentTurnId);
+      await this.drain();
+      return result;
+    }
+    if (turn.signal.aborted) {
+      const result: PlaybookRunResult = {
+        outcome: 'aborted',
+        state,
+        error: normalizeError(turn.signal.reason),
+      };
+      await this.traceSettled(result, currentTurnId);
+      await this.drain();
+      return result;
+    }
+    if (actor.getSnapshot().status === 'done') {
+      this.reconstructActor();
+    }
+    this.requireActor().send(event);
+    const snapshot = await waitForPlaybookQuiescence(this.requireActor());
+    const settledState = normalizePlaybookSnapshot(snapshot);
+    const result = turn.signal.aborted
+      ? ({
+          outcome: 'aborted',
+          state: settledState,
+          error: normalizeError(turn.signal.reason),
+        } satisfies PlaybookRunResult)
+      : resultFromState(
+          settledState,
+          this.machineOutput(),
+          this.latchedControlError,
+        );
+    await this.traceSettled(result, currentTurnId);
+    await this.drain();
+    return result;
+  }
+
+  private async resumePlaybookCallInner(input: {
+    callId: string;
+    result: PlaybookCallResult;
+    signal: AbortSignal;
+  }): Promise<PlaybookRunResult> {
+    // This playbook invokes no nested `playbook` actor, so it never suspends on
+    // a child call and never has a pending call to resume; any callId is stale.
+    this.requireActor();
+    this.activeBoundarySignal = input.signal;
+    this.boundaryTurnId = undefined;
+    throw new Error(
+      `playbook runtime has no pending call to resume (callId: ${input.callId})`,
+    );
+  }
+
+  private async disposeInner(): Promise<void> {
+    if (this.disposed) return;
+    if (this.initializing) {
+      await this.initializationDone;
+    }
+    const actor = this.actor;
+    const finalState = actor ? stateFromSnapshot(actor) : undefined;
+    let cleanupError: unknown;
+    this.suppressInspection = true;
+    actor?.stop();
+    try {
+      await this.drain();
+    } catch (error) {
+      if (cleanupError === undefined) cleanupError = error;
+    }
+    this.latchedControlError = undefined;
+    if (finalState && !this.disposalTraceEmitted) {
+      this.disposalTraceEmitted = true;
+      try {
+        await this.trace(
+          'session.disposed',
+          omitUndefined({ state: finalState, stateId: finalState.stateId }),
+        );
+      } catch (error) {
+        if (cleanupError === undefined) cleanupError = error;
+      }
+    }
+    try {
+      await this.drain();
+    } catch (error) {
+      if (cleanupError === undefined) cleanupError = error;
+    }
+    this.session = undefined;
+    this.actor = undefined;
+    this.disposed = true;
+    if (cleanupError !== undefined) throw cleanupError;
+  }
+
+  private createActor(session: RuntimeSession): RootActor {
+    const provided = gears2fsmMachine.provide({
+      actors: {
+        captain: fromPromise<CaptainOutput, CaptainInput>(
+          async ({ input, signal }) => {
+            await this.drain();
+            const combined = combineAbortSignals(
+              signal,
+              this.activeBoundarySignal,
+            );
+            return await this.runCaptainActor(input, combined);
+          },
+        ),
+      },
     });
-  };
-  const flush = async (): Promise<void> => {
-    await emissionChain;
-    if (hasEmissionError) {
-      const error = emissionError;
-      emissionError = undefined;
-      hasEmissionError = false;
+    let rootActor: RootActor;
+    rootActor = createActor(provided, {
+      input: {},
+      inspect: (inspectionEvent) => {
+        if (this.suppressInspection) return;
+        if (inspectionEvent.type !== '@xstate.snapshot') return;
+        if (inspectionEvent.actorRef !== rootActor) return;
+        try {
+          this.enqueueTransition(inspectionEvent.event, rootActor);
+        } catch (error) {
+          this.latchControlError(error);
+        }
+      },
+    });
+    // The session is retained for trace identity; the machine itself takes no
+    // per-session input (Gears2fsmInput = Record<string, never>).
+    void session;
+    return rootActor;
+  }
+
+  private async runCaptainActor(
+    input: CaptainInput,
+    signal: AbortSignal,
+  ): Promise<CaptainOutput> {
+    try {
+      const prompt = composeCaptainPrompt(input);
+      const result = await this.callCaptain(input, prompt, signal);
+      if (signal.aborted) throw signal.reason;
+      if (result.status !== 'ok') {
+        throw new Error(result.error ?? `Captain returned ${result.status}`);
+      }
+      if (!result.finalText) {
+        throw new Error('Captain returned ok without finalText');
+      }
+      const judgePrompt = makeJudgePrompt(input, result.finalText);
+      const judgeText = await this.callJudge(
+        'captain-output-adjudication',
+        judgePrompt,
+        signal,
+        input.stateId,
+      );
+      return adjudicateCaptainOutput(input, result.finalText, judgeText);
+    } catch (error) {
+      if (!signal.aborted) this.latchControlError(error);
       throw error;
     }
-  };
+  }
 
-  const requirePorts = (): PlaybookPorts => {
-    if (!ports)
-      throw new Error(
-        'gears2fsm runtime: init(ports) must be called before use',
-      );
-    return ports;
-  };
-
-  // The runtime-owned Captain actor: composes the prompt, calls the player,
-  // and adjudicates the result into an FSM guard.
-  const captain = fromPromise<CaptainOutput, CaptainInput>(
-    async ({ input, signal }) => {
-      const p = requirePorts();
-      const combined = combineSignals(signal, currentSignal);
-      combined.throwIfAborted();
-
-      const playerId = resolvePlayerId(input, binding);
-      const prompt = composePlayerPrompt(input);
-
-      const result = await p.callPlayer(playerId, prompt, combined);
-      // Player failure (including a cancelled call that resolves 'aborted'/'error'):
-      // convert to a Captain-actor rejection so the FSM's onError path handles it.
-      if (result.status !== 'ok') {
-        throw new Error(
-          `player '${playerId}' returned status '${result.status}'${result.error ? `: ${result.error}` : ''}`,
-        );
-      }
-      combined.throwIfAborted();
-
-      try {
-        const raw = await p.callJudge(
-          buildAdjudicatorPrompt(input, result.finalText ?? ''),
-          combined,
-        );
-        combined.throwIfAborted();
-        return parseAdjudication(raw, input);
-      } catch (err) {
-        // Abort during adjudication is a natural rejection (routes to `failed`),
-        // not a control-plane adjudicator failure.
-        if (!combined.aborted) {
-          if (!hasAdjudicatorError) adjudicatorError = err;
-          hasAdjudicatorError = true;
-        }
-        throw err;
-      }
-    },
-  );
-
-  const providedMachine = gears2fsmMachine.provide({ actors: { captain } });
-
-  // Surface each root transition via status + telemetry, ordered before the
-  // next event, using XState's inspection stream.
-  const inspect = (event: InspectionEvent): void => {
-    if (event.type !== '@xstate.snapshot') return;
-    if (actor === null || event.actorRef !== actor) return;
-    const snapshot = event.snapshot as SnapshotFrom<typeof gears2fsmMachine>;
-    const to = String(snapshot.value);
-    const from = previousValue;
-    if (to === from) return;
-    previousValue = to;
-    const eventType = event.event?.type ?? 'unknown';
-    const p = ports;
-    if (!p) return;
-    enqueue(() =>
-      p.emitTelemetry({
-        topic: TELEMETRY_TOPIC,
-        payload: { from: from ?? null, to, event: eventType },
-      }),
-    );
-    enqueue(() =>
-      p.emitStatus(`FSM ${from ?? '(init)'} -> ${to} [${eventType}]`),
-    );
-    if (to === 'failed') {
-      const lastError = snapshot.context.lastError;
-      enqueue(() => p.emitStatus('Entered failed state', lastError));
-    }
-  };
-
-  const startActor = (): void => {
-    previousValue = undefined;
-    actor = createActor(providedMachine, { input: fsmInput, inspect });
-    actor.start();
-  };
-
-  const isQuiescent = (
-    snapshot: SnapshotFrom<typeof gears2fsmMachine>,
-  ): boolean =>
-    snapshot.status === 'done' ||
-    !CAPTAIN_STATES.includes(String(snapshot.value));
-
-  // Drive the actor until it settles into a Boss-accepting or final state,
-  // letting the runtime-owned Captain actor run each captain invocation.
-  const driveToQuiescence = (): Promise<void> =>
-    new Promise<void>((resolve) => {
-      const live = actor;
-      if (!live) {
-        resolve();
-        return;
-      }
-      let settled = false;
-      const subscription: {
-        current?: { unsubscribe(): void };
-      } = {};
-      const finish = (): void => {
-        if (settled) return;
-        settled = true;
-        subscription.current?.unsubscribe();
-        resolve();
-      };
-      const check = (snapshot: SnapshotFrom<typeof gears2fsmMachine>): void => {
-        if (isQuiescent(snapshot)) finish();
-      };
-      subscription.current = live.subscribe(check);
-      check(live.getSnapshot());
-      if (settled) subscription.current.unsubscribe();
-    });
-
-  const classify = async (
-    text: string,
+  private async callCaptain(
+    input: CaptainInput,
+    prompt: string,
     signal: AbortSignal,
-  ): Promise<TransformEvent | null> => {
-    const snapshot = actor!.getSnapshot();
-    const prompt = buildClassifierPrompt(text, {
-      state: String(snapshot.value),
-      pendingQuestion: snapshot.context.pendingBossQuestion?.question,
-    });
-    let raw: string;
+  ): Promise<CaptainResult> {
+    const callId = `captain-${this.nextCallId()}`;
+    const startPayload = {
+      stateId: input.stateId,
+      sourceItem: input.sourceItem,
+      prompt,
+      visibility: 'visible',
+      resume: false,
+    };
     try {
-      if (signal.aborted) return null;
-      raw = await requirePorts().callJudge(prompt, signal);
-      if (signal.aborted) return null;
-    } catch (err) {
-      if (signal.aborted) return null;
-      throw err;
+      await this.trace(
+        'captain.call.started',
+        startPayload,
+        this.currentTraceTurnId(),
+        callId,
+      );
+    } catch (error) {
+      await this.tracePreservingError(
+        'captain.call.finished',
+        {
+          ...startPayload,
+          status: 'error',
+          error: normalizeError(error),
+        },
+        error,
+        this.currentTraceTurnId(),
+        callId,
+      );
+      throw error;
     }
-    return parseClassification(raw);
-  };
-
-  return {
-    async init(hostPorts: PlaybookPorts): Promise<void> {
-      ports = hostPorts;
-      startActor();
-      await flush();
-    },
-
-    async handleBossInput(turn: {
-      text: string;
-      signal: AbortSignal;
-    }): Promise<void> {
-      requirePorts();
-      if (!actor)
-        throw new Error(
-          'gears2fsm runtime: init(ports) must be called before handleBossInput',
+    let result: CaptainResult | undefined;
+    let failure: unknown;
+    try {
+      result = await this.captainLane.add(async () => {
+        if (signal.aborted) throw signal.reason;
+        const raw = await this.requireSession().ports.callCaptain(
+          prompt,
+          signal,
+          CAPTAIN_OPTIONS,
         );
-
-      currentSignal = turn.signal;
-      adjudicatorError = undefined;
-      hasAdjudicatorError = false;
-
-      // Empty / whitespace-only text: no event and no port call.
-      if (!turn.text || turn.text.trim().length === 0) {
-        await flush();
-        return;
+        if (signal.aborted) throw signal.reason;
+        return validateCaptainResult(raw);
+      });
+      if (result.status !== 'ok') {
+        failure = new Error(
+          result.error ?? `Captain returned ${result.status}`,
+        );
+      } else if (!result.finalText) {
+        failure = new Error('Captain returned ok without finalText');
       }
-
-      // 1. Classify the turn into an FSM event (or no action).
-      const event = await classify(turn.text, turn.signal);
-      if (turn.signal.aborted || !event) {
-        await flush();
-        return;
+    } catch (error) {
+      failure = error;
+    }
+    const normalized =
+      failure === undefined ? undefined : normalizeError(failure);
+    const abortedFailure =
+      failure !== undefined && isSignalAbort(failure, signal);
+    const finishPayload = {
+      stateId: input.stateId,
+      sourceItem: input.sourceItem,
+      prompt,
+      visibility: 'visible',
+      resume: false,
+      allowedTools: [],
+      status: result?.status ?? (abortedFailure ? 'aborted' : 'error'),
+      ...(result?.finalText === undefined
+        ? {}
+        : { finalText: result.finalText }),
+      ...(result?.error === undefined ? {} : { error: result.error }),
+      ...(normalized === undefined ? {} : { error: normalized }),
+    };
+    if (failure !== undefined) {
+      if (isSignalAbort(failure, signal)) {
+        await this.trace(
+          'captain.call.finished',
+          finishPayload,
+          this.currentTraceTurnId(),
+          callId,
+        );
+        throw failure;
       }
+      await this.tracePreservingError(
+        'captain.call.finished',
+        finishPayload,
+        failure,
+        this.currentTraceTurnId(),
+        callId,
+      );
+      throw failure;
+    }
+    await this.trace(
+      'captain.call.finished',
+      finishPayload,
+      this.currentTraceTurnId(),
+      callId,
+    );
+    if (!result) throw new Error('Captain returned no result');
+    return result;
+  }
 
-      // 2. A `final` state cannot accept events: dispose and reconstruct.
-      if (actor.getSnapshot().status === 'done') {
-        actor.stop();
-        startActor();
+  private async callJudge(
+    purpose: string,
+    prompt: string,
+    signal: AbortSignal,
+    stateId?: string,
+  ): Promise<string> {
+    const callId = `judge-${this.nextCallId()}`;
+    const startPayload = omitUndefined({ purpose, prompt, stateId });
+    try {
+      await this.trace(
+        'judge.call.started',
+        startPayload,
+        this.currentTraceTurnId(),
+        callId,
+      );
+    } catch (error) {
+      await this.tracePreservingError(
+        'judge.call.finished',
+        omitUndefined({
+          purpose,
+          prompt,
+          stateId,
+          status: 'error',
+          error: normalizeError(error),
+        }),
+        error,
+        this.currentTraceTurnId(),
+        callId,
+      );
+      throw error;
+    }
+    let reply: string | undefined;
+    let failure: unknown;
+    try {
+      reply = await this.captainLane.add(async () => {
+        if (signal.aborted) throw signal.reason;
+        const text = await this.requireSession().ports.callJudge(
+          prompt,
+          signal,
+        );
+        if (signal.aborted) throw signal.reason;
+        if (typeof text !== 'string') {
+          throw new TypeError('judge reply must be a string');
+        }
+        return text;
+      });
+    } catch (error) {
+      failure = error;
+    }
+    if (failure !== undefined) {
+      const aborted = isSignalAbort(failure, signal);
+      const finishPayload = omitUndefined({
+        purpose,
+        prompt,
+        stateId,
+        status: aborted ? 'aborted' : 'error',
+        error: normalizeError(failure),
+      });
+      if (aborted) {
+        await this.trace(
+          'judge.call.finished',
+          finishPayload,
+          this.currentTraceTurnId(),
+          callId,
+        );
+      } else {
+        await this.tracePreservingError(
+          'judge.call.finished',
+          finishPayload,
+          failure,
+          this.currentTraceTurnId(),
+          callId,
+        );
       }
+      throw failure;
+    }
+    await this.trace(
+      'judge.call.finished',
+      omitUndefined({ purpose, prompt, stateId, status: 'ok', reply }),
+      this.currentTraceTurnId(),
+      callId,
+    );
+    if (reply === undefined) throw new Error('judge returned no reply');
+    return reply;
+  }
 
-      // 3. Send the classified event, then 4. drive to quiescence.
-      actor.send(event);
-      await driveToQuiescence();
-      await flush();
+  private async classifyBossInput(
+    text: string,
+    state: PlaybookState,
+    signal: AbortSignal,
+  ): Promise<BossMapping> {
+    const pending = this.pendingQuestion();
+    const prompt = classifierPrompt(
+      text,
+      state,
+      pending
+        ? {
+            questionId: pending.questionId,
+            player: pending.player,
+            question: pending.question,
+          }
+        : undefined,
+    );
+    const reply = await this.callJudge(
+      'boss-input-classification',
+      prompt,
+      signal,
+      state.stateId,
+    );
+    const event = validateClassifier(reply, text, pending?.questionId);
+    if (!event) return undefined;
+    return event;
+  }
 
-      // Adjudicator failures are control-plane errors: rethrow after cleanup.
-      if (hasAdjudicatorError) {
-        const err = adjudicatorError;
-        adjudicatorError = undefined;
-        hasAdjudicatorError = false;
-        throw err;
+  private pendingQuestion():
+    | {
+        readonly questionId: string;
+        readonly player: string;
+        readonly question: string;
       }
-    },
+    | undefined {
+    const snapshot = this.actor?.getSnapshot();
+    const context = snapshot?.context as unknown;
+    if (!isRecord(context) || !isRecord(context.pendingBossQuestion)) {
+      return undefined;
+    }
+    return {
+      questionId: assertNonEmptyString(
+        context.pendingBossQuestion.questionId,
+        'pending question id',
+      ),
+      player: assertNonEmptyString(
+        context.pendingBossQuestion.player,
+        'pending question player',
+      ),
+      question: assertNonEmptyString(
+        context.pendingBossQuestion.question,
+        'pending question text',
+      ),
+    };
+  }
 
-    async dispose(): Promise<void> {
-      if (actor) {
-        actor.stop();
-        actor = null;
+  private enqueueTransition(event: unknown, actor: RootActor): void {
+    const state = stateFromSnapshot(actor);
+    const previousState = this.previousState ?? state;
+    this.previousState = state;
+    const transition = omitUndefined({
+      event: this.describeEvent(event),
+      from: previousState,
+      to: state,
+      previousState,
+      state,
+      stateId: state.stateId,
+      pendingBossQuestion: this.pendingQuestion(),
+      lastError: this.lastError(),
+    });
+    this.enqueue(async () => {
+      await this.traceNow(
+        'fsm.transition',
+        transition,
+        this.currentTraceTurnId(),
+      );
+      await this.requireSession().ports.emitTelemetry({
+        topic: 'playbook.fsm.state',
+        payload: transition,
+      });
+      if (state.stateId !== 'ready' && state.stateId !== 'done') {
+        await this.traceNow(
+          'status.emitted',
+          omitUndefined({
+            message: `Entered ${state.stateId ?? 'state'}`,
+            state,
+            stateId: state.stateId,
+          }),
+          this.currentTraceTurnId(),
+        );
+        await this.requireSession().ports.emitStatus(
+          `Entered ${state.stateId ?? 'state'}`,
+          transition,
+        );
       }
-      await flush();
-    },
-  };
+    });
+  }
+
+  private describeEvent(event: unknown): JsonValue {
+    if (!isRecord(event)) return { type: 'unknown' };
+    const type = typeof event.type === 'string' ? event.type : 'unknown';
+    const copy: Record<string, JsonValue> = { type };
+    for (const key of ['targetId', 'answer', 'questionId', 'output']) {
+      if (key in event && event[key] === undefined) continue;
+      if (key in event)
+        copy[key] = snapshotJsonValue(event[key], `event.${key}`);
+    }
+    if ('error' in event)
+      copy.error = snapshotJsonValue(normalizeError(event.error));
+    return snapshotJsonValue(copy);
+  }
+
+  private lastError(): JsonValue | undefined {
+    const context = this.actor?.getSnapshot().context as unknown;
+    if (!isRecord(context) || !('lastError' in context)) return undefined;
+    const value = context.lastError;
+    if (value === undefined) return undefined;
+    try {
+      return snapshotJsonValue(value, 'lastError');
+    } catch {
+      // The FSM keeps `lastError` as an inspection-only Error instance, which is
+      // not JSON-safe; normalize it for the trace payload.
+      return snapshotJsonValue(normalizeError(value));
+    }
+  }
+
+  private machineOutput(): JsonValue | undefined {
+    const snapshot = this.actor?.getSnapshot();
+    if (!snapshot || snapshot.status !== 'done') return undefined;
+    const output = snapshot.output as unknown;
+    return output === undefined
+      ? undefined
+      : snapshotJsonValue(output, 'machine output');
+  }
+
+  private async emitStatus(message: string, data?: unknown): Promise<void> {
+    const state = stateFromSnapshot(this.requireActor());
+    const payload = omitUndefined({
+      message,
+      data,
+      state,
+      stateId: state.stateId,
+    });
+    await this.trace('status.emitted', payload, this.currentTraceTurnId());
+    await this.requireSession().ports.emitStatus(message, data);
+  }
+
+  private async traceSettled(
+    result: PlaybookRunResult,
+    turnId: number,
+  ): Promise<void> {
+    await this.trace(
+      'boss.input.settled',
+      this.runResultPayload(result),
+      turnId,
+    );
+  }
+
+  private runResultPayload(result: PlaybookRunResult): JsonValue {
+    return omitUndefined({
+      outcome: result.outcome,
+      state: result.state,
+      stateId: result.state.stateId,
+      pendingCall: 'pendingCall' in result ? result.pendingCall : undefined,
+      output: 'output' in result ? result.output : undefined,
+      error: 'error' in result ? result.error : undefined,
+    });
+  }
+
+  private async trace(
+    type: PlaybookTraceEvent['type'],
+    payload: unknown,
+    turnId?: number,
+    callId?: string,
+  ): Promise<void> {
+    this.enqueue(async () => {
+      await this.traceNow(type, payload, turnId, callId);
+    });
+    await this.drain();
+  }
+
+  private async tracePreservingError(
+    type: PlaybookTraceEvent['type'],
+    payload: unknown,
+    preservedError: unknown,
+    turnId?: number,
+    callId?: string,
+  ): Promise<void> {
+    const previous = this.latchedControlError;
+    this.latchedControlError = undefined;
+    try {
+      await this.trace(type, payload, turnId, callId);
+    } catch {
+      // Preserve the earlier boundary/control failure.
+    } finally {
+      this.latchedControlError = previous ?? preservedError;
+    }
+  }
+
+  private async traceNow(
+    type: PlaybookTraceEvent['type'],
+    payload: unknown,
+    turnId?: number,
+    callId?: string,
+  ): Promise<void> {
+    const session = this.requireSession();
+    const event: PlaybookTraceEvent = {
+      schemaVersion: 2,
+      sessionId: session.sessionId,
+      playbookId: session.playbookId,
+      rootSessionId: session.rootSessionId,
+      ...(session.parentSessionId === undefined
+        ? {}
+        : { parentSessionId: session.parentSessionId }),
+      ...(session.parentCallId === undefined
+        ? {}
+        : { parentCallId: session.parentCallId }),
+      depth: session.depth,
+      sequence: this.nextSequence(),
+      timestamp: Date.now(),
+      type,
+      ...(turnId === undefined ? {} : { turnId }),
+      ...(callId === undefined ? {} : { callId }),
+      payload: snapshotJsonValue(payload, `trace ${type}`),
+    };
+    await session.ports.emitTelemetry({
+      topic: 'playbook.trace',
+      payload: event,
+    });
+  }
+
+  private enqueue(task: () => Promise<void>): void {
+    void this.emissionQueue
+      .add(async () => {
+        try {
+          await task();
+        } catch (error) {
+          this.latchControlError(error);
+          throw error;
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  private drain(): Promise<void> {
+    return this.emissionQueue.onIdle().then(() => {
+      if (this.latchedControlError) throw this.latchedControlError;
+    });
+  }
+
+  private async bestEffortDisposeTrace(state: PlaybookState): Promise<void> {
+    try {
+      this.disposalTraceEmitted = true;
+      await this.trace(
+        'session.disposed',
+        omitUndefined({ state, stateId: state.stateId }),
+      );
+      await this.drain();
+    } catch {
+      // Preserve the original initialization error.
+    }
+  }
+
+  private reconstructActor(): void {
+    this.actor?.stop();
+    const session = this.requireSession();
+    this.actor = this.createActor(session);
+    this.actor.start();
+  }
+
+  private requireSession(): RuntimeSession {
+    if (!this.session) throw new Error('playbook runtime is not initialized');
+    return this.session;
+  }
+
+  private requireActor(): RootActor {
+    if (!this.actor)
+      throw new Error('playbook runtime actor is not initialized');
+    return this.actor;
+  }
+
+  private nextSequence(): number {
+    this.sequence += 1;
+    return this.sequence;
+  }
+
+  private nextTurnId(): number {
+    this.turnId += 1;
+    return this.turnId;
+  }
+
+  private currentTraceTurnId(): number | undefined {
+    return this.boundaryTurnId;
+  }
+
+  private nextCallId(): number {
+    this.callId += 1;
+    return this.callId;
+  }
+
+  private latchControlError(error: unknown): void {
+    if (!this.latchedControlError) this.latchedControlError = error;
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Pure helpers for compilation-correctness verification (no host required)
-// ---------------------------------------------------------------------------
-
 export const _internal = {
+  composeCaptainPrompt,
   composePlayerPrompt,
-  resolvePlayerId,
-  requiredFieldsFor,
-  extractJson,
-  buildClassifierPrompt,
-  parseClassification,
-  buildAdjudicatorPrompt,
-  parseAdjudication,
-  DEFAULT_PLAYER_BINDING,
-  CAPTAIN_STATES,
-  QUIESCENT_STATES,
-  BOSS_EVENTS,
-  CONTINUATION_PREAMBLE,
-  TELEMETRY_TOPIC,
+  parseJsonObjectLoose,
 };
+
+export function createPlaybookRuntime(
+  options: PlaybookRuntimeOptions,
+): PlaybookRuntime {
+  return new Gears2fsmPlaybookRuntime(options);
+}
+
+const factory: PlaybookRuntimeFactory<PlaybookRuntimeOptions> =
+  createPlaybookRuntime;
+
+export default factory;
