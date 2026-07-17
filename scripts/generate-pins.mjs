@@ -9,7 +9,7 @@
 //
 //   node scripts/generate-pins.mjs
 
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, relative, sep } from 'node:path';
 
@@ -24,7 +24,7 @@ const pipelineDir = join(repoRoot, 'pipelines', 'playbook');
 // root so its identity can be pinned (PIN-15).
 const boundary = { boundary: '../..' };
 
-const expectedPlaybookVersion = '0.9.0';
+const expectedPlaybookVersion = '0.10.0';
 const expectedXstateVersion = '5.32.4';
 const rootPackage = JSON.parse(
   readFileSync(join(repoRoot, 'package.json'), 'utf8'),
@@ -33,10 +33,30 @@ const lock = JSON.parse(
   readFileSync(join(repoRoot, 'package-lock.json'), 'utf8'),
 );
 const declaredPlaybook = rootPackage.dependencies?.['@sublang/playbook'];
-const lockedPlaybook =
-  lock.packages?.['node_modules/@sublang/playbook']?.version;
+let lockedPlaybook = lock.packages?.['node_modules/@sublang/playbook']?.version;
 const declaredXstate = rootPackage.dependencies?.xstate;
 const lockedXstate = lock.packages?.['node_modules/xstate']?.version;
+// Until the 0.10.0 release lands on npm, development runs against a symlinked
+// sibling checkout whose package.json already carries the expected version;
+// the lockfile refresh is the release step (IR-011). Accept that state loudly,
+// keeping the strict lock agreement for real installs (CI).
+if (
+  lockedPlaybook !== expectedPlaybookVersion &&
+  lstatSync(join(repoRoot, 'node_modules', '@sublang', 'playbook')).isSymbolicLink()
+) {
+  const linked = JSON.parse(
+    readFileSync(
+      join(repoRoot, 'node_modules', '@sublang', 'playbook', 'package.json'),
+      'utf8',
+    ),
+  ).version;
+  if (linked === expectedPlaybookVersion) {
+    console.warn(
+      `generate-pins: using symlinked @sublang/playbook ${linked} (lockfile still ${String(lockedPlaybook)}; refresh at release)`,
+    );
+    lockedPlaybook = linked;
+  }
+}
 if (
   declaredPlaybook !== `^${expectedPlaybookVersion}` ||
   lockedPlaybook !== expectedPlaybookVersion

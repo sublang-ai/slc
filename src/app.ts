@@ -124,6 +124,7 @@ export function resolveRunConfig(
   const selection = resolveAgentSelection({
     SLC_AGENT: nonBlank(env.SLC_AGENT) ?? file.agent,
     SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.model,
+    SLC_EFFORT: nonBlank(env.SLC_EFFORT) ?? file.effort,
   });
   const pipelinePath = nonBlank(env.SLC_PIPELINE_PATH) ?? file.pipelinePath;
   return { selection, pipelinePath };
@@ -157,10 +158,11 @@ export function usageText(): string {
     '  environment variable below:',
     '    ./slc.config.yaml',
     '    ${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml',
-    '  Keys: agent, model, pipelinePath.',
+    '  Keys: agent, model, effort, pipelinePath.',
     '',
     '  SLC_AGENT          agent CLI: claude-code | codex | gemini | opencode',
     '  SLC_MODEL          optional model for the agent CLI',
+    '  SLC_EFFORT         optional adapter-scoped reasoning effort (e.g. xhigh)',
     '  SLC_PIPELINE_PATH  search roots for <pipeline> references (default: cwd)',
     '',
   ].join('\n');
