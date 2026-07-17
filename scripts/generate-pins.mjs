@@ -9,7 +9,7 @@
 //
 //   node scripts/generate-pins.mjs
 
-import { lstatSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, relative, sep } from 'node:path';
 
@@ -36,25 +36,22 @@ const declaredPlaybook = rootPackage.dependencies?.['@sublang/playbook'];
 let lockedPlaybook = lock.packages?.['node_modules/@sublang/playbook']?.version;
 const declaredXstate = rootPackage.dependencies?.xstate;
 const lockedXstate = lock.packages?.['node_modules/xstate']?.version;
-// Until the 0.10.0 release lands on npm, development runs against a symlinked
-// sibling checkout whose package.json already carries the expected version;
-// the lockfile refresh is the release step (IR-011). Accept that state loudly,
-// keeping the strict lock agreement for real installs (CI).
-if (
-  lockedPlaybook !== expectedPlaybookVersion &&
-  lstatSync(join(repoRoot, 'node_modules', '@sublang', 'playbook')).isSymbolicLink()
-) {
-  const linked = JSON.parse(
+// Until the 0.10.0 release lands on npm, development installs the packed
+// sibling checkout; the lockfile refresh is the release step (IR-011). Accept
+// an installed copy that already carries the expected version loudly, keeping
+// the strict lock agreement for clean installs (CI's `npm ci` guarantees it).
+if (lockedPlaybook !== expectedPlaybookVersion) {
+  const installed = JSON.parse(
     readFileSync(
       join(repoRoot, 'node_modules', '@sublang', 'playbook', 'package.json'),
       'utf8',
     ),
   ).version;
-  if (linked === expectedPlaybookVersion) {
+  if (installed === expectedPlaybookVersion) {
     console.warn(
-      `generate-pins: using symlinked @sublang/playbook ${linked} (lockfile still ${String(lockedPlaybook)}; refresh at release)`,
+      `generate-pins: using installed @sublang/playbook ${installed} (lockfile still ${String(lockedPlaybook)}; refresh at release)`,
     );
-    lockedPlaybook = linked;
+    lockedPlaybook = installed;
   }
 }
 if (
