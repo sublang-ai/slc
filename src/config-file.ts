@@ -5,7 +5,7 @@
  * Config-file loader for the `slc` bin (DR-006, CLI-20, CLI-21).
  *
  * Discovers and parses the optional YAML config file that supplies the
- * cligent-invocation defaults — `agent`, `model`, and `pipelinePath` — which the
+ * cligent-invocation defaults — `agent`, `model`, `effort`, and `pipelinePath` — which the
  * environment then overrides (DR-006). Discovery reads `slc.config.yaml` in the
  * working directory, then `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`; an
  * explicit `--config` path disables discovery and is an error when absent, while
@@ -33,6 +33,7 @@ export const HOME_CONFIG = join('slc', 'config.yaml');
 export interface FileConfig {
   agent?: string;
   model?: string;
+  effort?: string;
   pipelinePath?: string[];
 }
 
@@ -160,7 +161,7 @@ async function readConfigFile(path: string): Promise<FileConfig> {
   return normalizeFileConfig(raw, path);
 }
 
-const ALLOWED_KEYS = new Set(['agent', 'model', 'pipelinePath']);
+const ALLOWED_KEYS = new Set(['agent', 'model', 'effort', 'pipelinePath']);
 
 function normalizeFileConfig(value: unknown, path: string): FileConfig {
   if (value === null || value === undefined) {
@@ -178,7 +179,7 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
     if (!ALLOWED_KEYS.has(key)) {
       throw new ConfigFileError(
         'config-invalid',
-        `Unknown config key "${key}" in ${path}; allowed keys: agent, model, pipelinePath`,
+        `Unknown config key "${key}" in ${path}; allowed keys: agent, model, effort, pipelinePath`,
       );
     }
   }
@@ -189,6 +190,9 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
   }
   if (input.model !== undefined) {
     config.model = requireString(input.model, 'model', path);
+  }
+  if (input.effort !== undefined) {
+    config.effort = requireString(input.effort, 'effort', path);
   }
   if (input.pipelinePath !== undefined) {
     config.pipelinePath = requireStringArray(
