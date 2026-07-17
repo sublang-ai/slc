@@ -40,6 +40,12 @@ export type ExecuteRequest =
       definitionPath: string;
       source: string;
       target: string;
+      /**
+       * Read-only reference documents the definition tells the executor to
+       * consult — e.g. the entry-phase definition a generic normalize step
+       * rewrites the source toward (DR-013). Protected like definitions.
+       */
+      references?: readonly string[];
     }
   | {
       kind: 'link';
@@ -97,7 +103,7 @@ export async function runPhase(opts: {
   const target = request.kind === 'compile' ? request.target : request.linked;
   const inputs =
     request.kind === 'compile'
-      ? [request.source]
+      ? [request.source, ...(request.references ?? [])]
       : [...request.objects, request.linkTarget];
   const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
   const protectedPaths = [...new Set([...inputs, ...definitions])];

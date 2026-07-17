@@ -33,8 +33,11 @@ export interface GearsItem {
   id: string;
   player: string;
   prompt: string;
-  /** Direct Captain work or delegated player work; absent for playbook calls. */
-  actor?: 'captain' | 'player';
+  /**
+   * Direct Captain work, delegated player work, or an optimizer-introduced
+   * script item (`Captain shall run:`); absent for playbook calls.
+   */
+  actor?: 'captain' | 'player' | 'script';
   /** Target id when this item invokes another playbook rather than a player. */
   playbookId?: string;
   /** Context field selecting a dynamic nested-playbook target. */
@@ -51,11 +54,29 @@ export interface GearsItem {
 export interface CaptainState {
   stateId: string;
   sourceItem: string;
-  /** Semantic actor kind after preserving legacy `captain` + player bindings. */
-  actor: 'captain' | 'player';
+  /**
+   * Semantic actor kind after preserving legacy `captain` + player bindings.
+   * `script` appears only in coverage-driving views built from script states,
+   * never in captain-binding enumeration or pins.
+   */
+  actor: 'captain' | 'player' | 'script';
   player: string;
   prompt: string;
   /** The state's per-state guard contract: result key to description. */
+  result: Record<string, string>;
+  /** Dot-separated config path, present only for a nested state node. */
+  statePath?: string;
+  /** Malformed binding details retained for fail-closed conformance reporting. */
+  bindingFindings?: string[];
+}
+
+/** A script-actor invocation recovered from an FSM state (DR-013). */
+export interface ScriptInvocationState {
+  stateId: string;
+  sourceItem: string;
+  /** The item's blockquoted shell script, verbatim. */
+  command: string;
+  /** The two declared exit-status guards, zero-exit first. */
   result: Record<string, string>;
   /** Dot-separated config path, present only for a nested state node. */
   statePath?: string;
@@ -136,6 +157,10 @@ const ITEM_PLAYBOOK =
 const ITEM_DYNAMIC_PLAYBOOK =
   /Captain shall call playbook selected by\s+`([^`]+)`\s*:/;
 const DYNAMIC_TEXT = /^<([A-Za-z_$][A-Za-z0-9_$]*)>$/;
+// An optimizer-introduced script item runs a shell command without any agent
+// (text2gears.md "Script behaviors"; DR-013). The clause is fixed machine
+// syntax, so it is matched literally ahead of the generic Captain form.
+const SCRIPT_CLAUSE = /\bCaptain shall run\s*:/;
 // Some items have Captain act directly ("Captain shall <verb> ...") with no
 // delegated player; their player is Captain itself.
 const CAPTAIN_ACTS = /\bCaptain shall\b/;
@@ -155,6 +180,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
     id: string;
     player: string;
     captainActs: boolean;
+    script: boolean;
     playbookId: string;
     playbookIdContext: string;
     prompt: string[];
@@ -184,14 +210,33 @@ export function parseGearsItems(gears: string): GearsItem[] {
           'nested-playbook call item shall not declare Results metadata',
         );
       }
+      if (current.script && !playbookCall) {
+        // A script item carries exactly two exit-status guards, zero-exit
+        // first (text2gears.md "Script behaviors").
+        if (!current.resultDeclared) {
+          current.resultFindings.push(
+            'script item shall declare a two-guard Results contract',
+          );
+        } else if (current.results.length !== 2) {
+          current.resultFindings.push(
+            `script item declares ${current.results.length} Results guards (expected exactly 2)`,
+          );
+        }
+      }
       items.push({
         id: current.id,
-        player,
+        player: current.script && !playbookCall ? '' : player,
         prompt,
-        ...(!playbookCall && current.player !== ''
+        ...(!playbookCall && current.script
+          ? { actor: 'script' as const }
+          : {}),
+        ...(!playbookCall && !current.script && current.player !== ''
           ? { actor: 'player' as const }
           : {}),
-        ...(!playbookCall && current.player === '' && current.captainActs
+        ...(!playbookCall &&
+        !current.script &&
+        current.player === '' &&
+        current.captainActs
           ? { actor: 'captain' as const }
           : {}),
         ...(current.playbookId !== ''
@@ -221,6 +266,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
         id: heading[1],
         player: '',
         captainActs: false,
+        script: false,
         playbookId: '',
         playbookIdContext: '',
         prompt: [],
@@ -312,6 +358,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
       current.playbookId =
         playbook[1] ?? playbook[2] ?? playbook[3] ?? playbook[4];
     }
+    if (SCRIPT_CLAUSE.test(line)) current.script = true;
     if (CAPTAIN_ACTS.test(line)) current.captainActs = true;
   }
   flush();
@@ -726,6 +773,97 @@ export function enumeratePlaybookStates(
   return enumeratePlaybookBindings(config).map(({ state }) => state);
 }
 
+/**
+ * Enumerates typed `script` actor calls across the complete state tree
+ * (gears2fsm.md "Setup"; DR-013). A script state carries `stateId`,
+ * `sourceItem`, the verbatim `command`, and exactly two exit-status guards; it
+ * is not agent-invoking, so `needsBossReply` in its result map is malformed.
+ */
+export function enumerateScriptStates(
+  config: MachineConfigLike,
+): ScriptInvocationState[] {
+  const out: ScriptInvocationState[] = [];
+  for (const node of walkStateNodes(config)) {
+    for (const invoke of normalizeInvokes(node.state.invoke)) {
+      if (invokeSource(invoke.src) !== 'script') continue;
+      const malformed = (finding: string): ScriptInvocationState => ({
+        stateId: publicStateId(node, undefined),
+        sourceItem: '',
+        command: '',
+        result: {},
+        ...nestedStatePath(node),
+        bindingFindings: [finding],
+      });
+      const inspected = invocationInput(invoke);
+      if ('error' in inspected) {
+        out.push(
+          malformed(
+            `invoke.input threw during introspection: ${inspected.error}`,
+          ),
+        );
+        continue;
+      }
+      if ('invalid' in inspected) {
+        out.push(
+          malformed(
+            typeof invoke.input === 'function'
+              ? 'invoke.input returned a non-object'
+              : 'invoke.input is not a function',
+          ),
+        );
+        continue;
+      }
+      const fields = inspected.value;
+      const bindingFindings: string[] = [];
+      if (!isNonEmptyString(fields.stateId)) {
+        bindingFindings.push('invoke.input.stateId is not a non-empty string');
+      }
+      if (!isNonEmptyString(fields.sourceItem)) {
+        bindingFindings.push(
+          'invoke.input.sourceItem is not a non-empty string',
+        );
+      }
+      if (!isNonEmptyString(fields.command)) {
+        bindingFindings.push('invoke.input.command is not a non-empty string');
+      }
+      if (!isStringMap(fields.result)) {
+        bindingFindings.push(
+          'invoke.input.result is not a string-valued object',
+        );
+      } else {
+        const guards = Object.keys(fields.result);
+        if (guards.length !== 2) {
+          bindingFindings.push(
+            `script invoke.input.result declares ${guards.length} guards (expected exactly 2)`,
+          );
+        }
+        if (guards.includes(NEEDS_BOSS_REPLY)) {
+          bindingFindings.push(
+            `script state shall not declare ${NEEDS_BOSS_REPLY}`,
+          );
+        }
+      }
+      bindingFindings.push(...stateIdConsistencyFindings(node, fields.stateId));
+      if (Object.keys(node.state.states ?? {}).length > 0) {
+        bindingFindings.push(
+          'script invocation is declared on a compound state instead of a leaf',
+        );
+      }
+      out.push({
+        stateId: publicStateId(node, fields),
+        sourceItem: isNonEmptyString(fields.sourceItem)
+          ? fields.sourceItem
+          : '',
+        command: isNonEmptyString(fields.command) ? fields.command : '',
+        result: resultMap(fields.result),
+        ...nestedStatePath(node),
+        ...(bindingFindings.length > 0 ? { bindingFindings } : {}),
+      });
+    }
+  }
+  return out;
+}
+
 function malformedCaptainState(
   stateId: string,
   finding: string,
@@ -825,6 +963,7 @@ export function checkGearsFsmConformance(
       .map(({ state }) => state),
   );
   const playbookStates = enumeratePlaybookStates(config);
+  const scriptStates = enumerateScriptStates(config);
   const findings: string[] = [];
 
   findings.push(...structuredStateIdentityFindings(walkStateNodes(config)));
@@ -850,6 +989,22 @@ export function checkGearsFsmConformance(
         (finding) => `FSM playbook state ${state.stateId}: ${finding}`,
       ),
     );
+  }
+  for (const state of scriptStates) {
+    findings.push(
+      ...(state.bindingFindings ?? []).map(
+        (finding) => `FSM script state ${state.stateId}: ${finding}`,
+      ),
+    );
+  }
+
+  const scriptStatesByItem = new Map<string, ScriptInvocationState[]>();
+  for (const state of scriptStates) {
+    if (state.sourceItem === '') continue;
+    const matched = scriptStatesByItem.get(state.sourceItem);
+    if (matched === undefined)
+      scriptStatesByItem.set(state.sourceItem, [state]);
+    else matched.push(state);
   }
 
   const statesByItem = new Map<string, CaptainState[]>();
@@ -963,6 +1118,39 @@ export function checkGearsFsmConformance(
       }
       continue;
     }
+    if (item.actor === 'script') {
+      const matchedScripts = scriptStatesByItem.get(item.id) ?? [];
+      if (matchedScripts.length === 0) {
+        const drifted = statesByItem.get(item.id) ?? [];
+        findings.push(
+          drifted.length > 0
+            ? `${item.id}: FSM actor "${drifted[0].actor}" is not GEARS actor "script"`
+            : `GEARS item ${item.id} maps to no FSM script state`,
+        );
+        continue;
+      }
+      if (matchedScripts.length > 1) {
+        findings.push(
+          `GEARS item ${item.id} maps to ${matchedScripts.length} FSM script states (expected exactly one: ${matchedScripts.map((s) => s.stateId).join(', ')})`,
+        );
+      }
+      const scriptState = matchedScripts[0];
+      if (scriptState.command !== item.prompt) {
+        findings.push(
+          `${item.id}: FSM script command is not the GEARS blockquote verbatim`,
+        );
+      }
+      if (item.result !== undefined) {
+        const expected = Object.entries(item.result);
+        const actual = Object.entries(scriptState.result);
+        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+          findings.push(
+            `${item.id}: FSM script result contract ${JSON.stringify(actual)} is not GEARS Results ${JSON.stringify(expected)}`,
+          );
+        }
+      }
+      continue;
+    }
     const matched = statesByItem.get(item.id) ?? [];
     if (matched.length === 0) {
       findings.push(`GEARS item ${item.id} maps to no FSM state`);
@@ -1005,6 +1193,21 @@ export function checkGearsFsmConformance(
   }
   const itemIds = new Set(items.map((item) => item.id));
   const playbookItemIds = new Set(playbookItems.map((item) => item.id));
+  const scriptItemIds = new Set(
+    items.filter((item) => item.actor === 'script').map((item) => item.id),
+  );
+  for (const state of scriptStates) {
+    if (state.sourceItem === '') continue;
+    if (!itemIds.has(state.sourceItem)) {
+      findings.push(
+        `FSM script state ${state.stateId} references unknown GEARS item ${state.sourceItem}`,
+      );
+    } else if (!scriptItemIds.has(state.sourceItem)) {
+      findings.push(
+        `FSM script state ${state.stateId} realizes non-script GEARS item ${state.sourceItem}`,
+      );
+    }
+  }
   for (const state of states) {
     if (state.sourceItem !== '' && !itemIds.has(state.sourceItem)) {
       findings.push(
@@ -1206,7 +1409,11 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
       ...(binding.state.statePath !== undefined
         ? { path: binding.state.statePath }
         : {}),
-      ...(binding.pinActor ? { actor: binding.state.actor } : {}),
+      // Captain-binding enumeration never yields `script`; the widened
+      // CaptainState union exists only for coverage-driving views.
+      ...(binding.pinActor && binding.state.actor !== 'script'
+        ? { actor: binding.state.actor }
+        : {}),
       sourceItem: binding.state.sourceItem,
       player: binding.state.player,
       resultKeys: Object.keys(binding.state.result).sort(),

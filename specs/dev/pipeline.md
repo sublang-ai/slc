@@ -34,7 +34,11 @@ When loading a phase file, the slc command shall read its `## Formats` table to 
 
 ### PIPE-2
 
-When loading a phase file, the slc command shall refuse it unless its `<source-format>2<target-format>.md` filename tokens match its `## Formats` table ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#phase-filename-convention)).
+When loading a phase file, the slc command shall refuse it unless its `<source-format>2<target-format>.md` filename tokens match its `## Formats` table ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#phase-filename-convention)); a [pass phase](#pipe-30) is exempt from this rule.
+
+### PIPE-30
+
+Where a phase file's `## Formats` table declares equal source and target formats, the slc command shall load it as a pass phase named by its filename without `.md` ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
 
 ### PIPE-3
 
@@ -49,6 +53,10 @@ When running a full pipeline, the slc command shall infer a single linear phase 
 ### PIPE-5
 
 While inferring phase order, the slc command shall refuse a pipeline whose chain is incomplete, branches, or contains a cycle ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#full-pipeline-ordering)).
+
+### PIPE-31
+
+While inferring phase order, the slc command shall exclude pass phases from chain inference — entry/exit selection and the incomplete/branch/cycle refusals consider only format-changing phases ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
 
 ## Sources and artifact paths
 
@@ -103,3 +111,21 @@ When a link phase runs in a full-pipeline invocation, the slc command shall trea
 ### PIPE-18
 
 When invoked as `slc <pipeline>.link` with exactly one object, the slc command shall place the linked artifact by DR-001's source-adjacent directory and basename rules unless `-o <linked-target>` overrides the linked-artifact path; with more than one object, the slc command shall require `-o <linked-target>`, refuse the invocation when it is absent, and write the linked artifact to that path ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [DR-002](../decisions/002-slc-link-phases.md#output-locations)).
+
+## Passes and normalization
+
+### PIPE-32
+
+When a full or full-link invocation carries `-O`/`--optimize`, the slc command shall schedule every discovered pass phase after the chain phase producing its format, in pass-name order: the producing phase shall write `<art-dir>/<basename>.<format>.raw<ext>`, each non-final pass `<art-dir>/<basename>.<format>.opt<k><ext>`, and the final pass the format's canonical artifact path, so downstream phases and verification consume identical paths with or without optimization ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+
+### PIPE-33
+
+When invoked as `slc <pipeline>.<pass> <source>`, the slc command shall run the named pass alone and write `<art-dir>/<basename>.<format>.opt<ext>` unless `-o <target>` overrides the output path, and shall not overwrite the pass's own source ([DR-003](../decisions/003-slc-phase-execution.md), [DR-013](../decisions/013-normalize-and-pass-phases.md)).
+
+### PIPE-34
+
+When a full or full-link invocation carries `--normalize`, the slc command shall schedule one generic normalization step ahead of the entry phase, driven by the pipeline-agnostic definition shipped with slc, writing `<art-dir>/<basename>.<entry-source-format><entry-source-ext>` as the entry phase's source and supplying the entry-phase definition as a protected read-only reference input ([DR-013](../decisions/013-normalize-and-pass-phases.md), [PHEXEC-33](phase-execution.md#phexec-33)).
+
+### PIPE-37
+
+When `-O`/`--optimize` or `--normalize` accompanies a single-phase or `.link` invocation, the slc command shall refuse the invocation ([DR-013](../decisions/013-normalize-and-pass-phases.md)).

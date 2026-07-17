@@ -31,7 +31,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { PlaybookPorts as LegacyPlaybookPorts } from '@sublang/playbook/runtime';
+import type { LegacyPlaybookPorts } from './playbook-contract.js';
 
 import type {
   ExecuteRequest,

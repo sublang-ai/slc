@@ -127,11 +127,15 @@ When the slc command runs a phase, the slc command shall select its execution fr
 
 ### PHEXEC-30
 
-Where the slc command configures compiled execution from a current pin, when it selects the runtime contract profile, the slc command shall select `legacy` only for absent link-target provenance or exact `@sublang/playbook@0.9.0` provenance, select the final six-port `composed-v2` profile only for exact `@sublang/playbook@1.0.0` provenance, reject every other provenance until mapped by a later decision, and neither infer the profile from callable runtime members nor retry a failed initialization under another profile ([DR-010](../decisions/010-playbook-runtime-contract-evolution.md#runtime-profiles-and-root-phase-sessions), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md#immutable-profile-boundary)).
+Where the slc command configures compiled execution from a current pin, when it selects the runtime contract profile, the slc command shall select `legacy` only for absent link-target provenance or exact `@sublang/playbook@0.9.0` provenance, select the final six-port `composed-v2` profile only for exact `@sublang/playbook@0.10.0` provenance — the release that carries the final six-port contract — reject every other provenance until mapped by a later decision, and neither infer the profile from callable runtime members nor retry a failed initialization under another profile ([DR-010](../decisions/010-playbook-runtime-contract-evolution.md#runtime-profiles-and-root-phase-sessions), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md#immutable-profile-boundary)).
 
 ### PHEXEC-29
 
 When the slc command seeds a compiled phase's non-interactive turn ([PHEXEC-23](#phexec-23)), the slc command shall pass one Boss turn whose text states the request kind — compile or link — in prose and carries the full request as a single JSON line introduced by `Request: `, with the request's workspace paths resolved to absolute host paths, so any compiled `playbook` artifact's classifier — or a deterministic consumer — recovers the exact phase input without host-specific parsing ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)).
+
+### PHEXEC-33
+
+Where a compile execution request carries read-only reference documents — e.g. the entry-phase definition a generic normalization step rewrites toward ([PIPE-34](pipeline.md#pipe-34)) — the slc command shall present each reference beside the source in the interpreted agent contract and protect it like a definition, failing the run when a reference changed during execution ([DR-003](../decisions/003-slc-phase-execution.md), [DR-013](../decisions/013-normalize-and-pass-phases.md)).
 
 ## References
 

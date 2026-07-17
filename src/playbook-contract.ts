@@ -4,18 +4,38 @@
 /**
  * Compatibility types for Playbook's evolving pre-1.0 runtime contract.
  *
- * The lockfile still supplies the published 0.9 contract. Playbook's accepted
- * session/composition contract adds causal sessions, explicit player resume,
- * direct Captain calls, structured run results, and nested calls. Keep the
- * additive compatibility shape here until an immutable release lets SLC import
- * the complete contract directly (DR-010, DR-011).
+ * The installed `@sublang/playbook` now supplies the composed six-port
+ * contract, so the retired 0.9 profile is frozen here as local structural
+ * types: legacy artifacts keep executing against the exact shapes they were
+ * compiled for, independent of how the shared contract module evolves
+ * (DR-010, DR-011).
  */
 
-import type {
-  PlaybookPorts as LegacyPlaybookPorts,
-  PlaybookRuntime as LegacyPlaybookRuntime,
-  PlayerResult as LegacyPlayerResult,
-} from '@sublang/playbook/runtime';
+/** The frozen 0.9 player result (DR-010 legacy profile). */
+export interface LegacyPlayerResult {
+  status: 'ok' | 'aborted' | 'error';
+  finalText?: string;
+  error?: string;
+}
+
+/** The frozen 0.9 four-port boundary (DR-010 legacy profile). */
+export interface LegacyPlaybookPorts {
+  callPlayer(
+    playerId: string,
+    prompt: string,
+    signal: AbortSignal,
+  ): Promise<LegacyPlayerResult>;
+  callJudge(prompt: string, signal: AbortSignal): Promise<string>;
+  emitStatus(message: string, data?: unknown): Promise<void>;
+  emitTelemetry(event: { topic: string; payload: unknown }): Promise<void>;
+}
+
+/** The frozen 0.9 runtime surface (DR-010 legacy profile). */
+export interface LegacyPlaybookRuntime {
+  init(ports: LegacyPlaybookPorts): Promise<void>;
+  handleBossInput(turn: { text: string; signal: AbortSignal }): Promise<void>;
+  dispose(): Promise<void>;
+}
 
 export interface PlayerCallOptions {
   resume: string | false;

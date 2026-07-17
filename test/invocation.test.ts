@@ -12,7 +12,27 @@ describe('parseInvocation full pipeline (PIPE-9)', () => {
       pipeline: 'playbook',
       source: 'flows/onboarding.md',
       output: null,
+      optimize: false,
+      normalize: false,
     });
+  });
+
+  it('captures --normalize and -O on a full run (DR-013)', () => {
+    expect(
+      parseInvocation(['playbook', 'src.md', '--normalize', '-O']),
+    ).toMatchObject({ kind: 'full', optimize: true, normalize: true });
+    expect(parseInvocation(['playbook', 'src.md', '--optimize'])).toMatchObject(
+      { kind: 'full', optimize: true, normalize: false },
+    );
+  });
+
+  it('rejects --normalize and -O on a single-phase run (DR-013)', () => {
+    expect(() =>
+      parseInvocation(['playbook.text2gears', 'src.md', '-O']),
+    ).toThrow(expect.objectContaining({ code: 'unexpected-flag' }));
+    expect(() =>
+      parseInvocation(['playbook.link', 'a.ts', 'r.ts', '--normalize']),
+    ).toThrow(expect.objectContaining({ code: 'unexpected-flag' }));
   });
 
   it('captures -o, wherever it appears', () => {
@@ -64,6 +84,8 @@ describe('parseInvocation full-pipeline link (PIPE-13, PIPE-14)', () => {
       linkTarget: 'runner.ts',
       output: 'app.ts',
       options: [{ name: 'seed', value: '42' }],
+      optimize: false,
+      normalize: false,
     });
   });
 

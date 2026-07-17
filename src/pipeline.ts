@@ -28,12 +28,17 @@ export type PipelineResolver = (
   reference: string,
 ) => string[] | Promise<string[]>;
 
-/** A resolved pipeline: its directory, ordered phases, and optional link phase. */
+/** A resolved pipeline: its directory, ordered phases, passes, and optional link phase. */
 export interface Pipeline {
   /** The resolved pipeline directory. */
   dir: string;
   /** Ordinary compile phases in entry-to-exit order. */
   phases: Phase[];
+  /**
+   * Format-preserving pass phases, sorted by name. Passes sit outside the
+   * linear chain; a compile schedules them only on request (DR-013).
+   */
+  passes: Phase[];
   /** Path to the reserved `link.md`, or `null` when absent. */
   linkFile: string | null;
 }
@@ -170,6 +175,9 @@ export function inferChain(phases: readonly Phase[]): Phase[] {
 /**
  * Discovers, loads, and orders the ordinary phases of a pipeline directory,
  * validating extension consistency (PIPE-3) and chain shape (PIPE-4, PIPE-5).
+ * Format-preserving pass phases are split out of chain inference (DR-013) and
+ * returned sorted by name. Names cannot collide: every phase — chain or pass —
+ * is named by its unique filename, and `link.md` is reserved before loading.
  */
 export async function loadPipeline(dir: string): Promise<Pipeline> {
   const { phaseFiles, linkFile } = await discoverPhaseFiles(dir);
@@ -177,7 +185,17 @@ export async function loadPipeline(dir: string): Promise<Pipeline> {
     phaseFiles.map((file) => loadPhaseFile(file)),
   );
   checkExtensionConsistency(loaded);
-  return { dir, phases: inferChain(loaded), linkFile };
+  const passes = loaded
+    .filter((phase) => phase.pass)
+    .sort((left, right) =>
+      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+    );
+  return {
+    dir,
+    phases: inferChain(loaded.filter((phase) => !phase.pass)),
+    passes,
+    linkFile,
+  };
 }
 
 function branchGuard(
