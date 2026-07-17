@@ -1249,8 +1249,10 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
       });
       expect(path).toBe(join(artifactDir, 'code.fsm.coverage.test.ts'));
       // The tiny machine lacks the gears2fsm Boss surfaces; the emitter
-      // surfaces the checker's findings as diagnostics.
-      expect(diagnostics.join('\n')).toMatch(/BOSS_INTERRUPT/);
+      // surfaces the checker's findings as diagnostics. (A machine that never
+      // names BOSS_INTERRUPT legitimately has no interrupt surface, so the
+      // finding here is the missing Boss-reply wait state.)
+      expect(diagnostics.join('\n')).toMatch(/awaitBossReply/);
       const content = await readFile(path, 'utf8');
       expect(content).toContain(
         'import { checkFsmCoverage, fsmCoverageTestTimeout } from "@sublang/slc/verify"',
