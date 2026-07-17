@@ -149,9 +149,10 @@ interface StateLike {
 const ITEM_HEADING = /^###\s+([A-Za-z][\w-]*)\s*$/;
 // The `text2gears` item form names a delegated player as "Captain shall prompt
 // <Player>" (or a "relay ... to <Player>" variant); English players are
-// capitalized, non-English names may be quoted (text2gears.md).
+// capitalized, non-English names may be quoted — text2gears.md's own example
+// backtick-quotes them (`作者`), and straight/CJK quotes are accepted too.
 const ITEM_PLAYER =
-  /Captain shall (?:prompt|relay\b[^.]*?\bto)\s+(?:"([^"]+)"|“([^”]+)”|([A-Z][\w]*))/;
+  /Captain shall (?:prompt|relay\b[^.]*?\bto)\s+(?:`([^`]+)`|"([^"]+)"|“([^”]+)”|([A-Z][\w]*))/;
 const ITEM_PLAYBOOK =
   /Captain shall call playbook\s+(?:`([^`]+)`|"([^"]+)"|“([^”]+)”|([A-Za-z0-9][\w.-]*))\s*:/;
 const ITEM_DYNAMIC_PLAYBOOK =
@@ -339,7 +340,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
     if (line.trim() !== '') current.resultsEligible = false;
     const player = ITEM_PLAYER.exec(line);
     if (player !== null && current.player === '') {
-      current.player = player[1] ?? player[2] ?? player[3];
+      current.player = player[1] ?? player[2] ?? player[3] ?? player[4];
     }
     const dynamicPlaybook = ITEM_DYNAMIC_PLAYBOOK.exec(line);
     if (
