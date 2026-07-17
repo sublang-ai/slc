@@ -173,6 +173,52 @@ const directConfig = (): MachineConfigLike => ({
   },
 });
 
+const scriptGears = `## Behaviors
+
+### SETUP-1
+
+当工作流启动时，Captain shall run:
+> git rev-parse --is-inside-work-tree 2>/dev/null || git init
+
+Results:
+- \`ok\`: The command exited with status zero.
+- \`failed\`: The command exited with a nonzero status.
+`;
+
+const scriptConfig = (
+  overrides: Partial<{
+    command: string;
+    result: Record<string, string>;
+    src: string;
+  }> = {},
+): MachineConfigLike => ({
+  states: {
+    setupRepo: {
+      invoke: {
+        src: overrides.src ?? 'script',
+        input: () => ({
+          stateId: 'setupRepo',
+          sourceItem: 'SETUP-1',
+          ...(overrides.src === undefined || overrides.src === 'script'
+            ? {
+                command:
+                  overrides.command ??
+                  'git rev-parse --is-inside-work-tree 2>/dev/null || git init',
+              }
+            : {
+                prompt:
+                  'git rev-parse --is-inside-work-tree 2>/dev/null || git init',
+              }),
+          result: overrides.result ?? {
+            ok: 'The command exited with status zero.',
+            failed: 'The command exited with a nonzero status.',
+          },
+        }),
+      },
+    },
+  },
+});
+
 const resultGears = `## Behaviors
 
 ### ROUTE-1
@@ -640,6 +686,54 @@ describe('checkGearsFsmConformance', () => {
 
   it('accepts direct Captain work without a player binding', () => {
     expect(checkGearsFsmConformance(directGears, directConfig())).toEqual([]);
+  });
+
+  it('accepts a script item realized by a matching script state (VERIFY-15, VERIFY-17)', () => {
+    expect(checkGearsFsmConformance(scriptGears, scriptConfig())).toEqual([]);
+  });
+
+  it('reports a drifted script command (VERIFY-17)', () => {
+    expect(
+      checkGearsFsmConformance(
+        scriptGears,
+        scriptConfig({ command: 'git init' }),
+      ).join('\n'),
+    ).toMatch(/FSM script command is not the GEARS blockquote verbatim/);
+  });
+
+  it('reports reordered script guards and a needsBossReply on a script state (VERIFY-17)', () => {
+    expect(
+      checkGearsFsmConformance(
+        scriptGears,
+        scriptConfig({
+          result: {
+            failed: 'The command exited with a nonzero status.',
+            ok: 'The command exited with status zero.',
+          },
+        }),
+      ).join('\n'),
+    ).toMatch(/FSM script result contract .* is not GEARS Results/);
+    expect(
+      checkGearsFsmConformance(
+        scriptGears,
+        scriptConfig({
+          result: {
+            ok: 'The command exited with status zero.',
+            failed: 'The command exited with a nonzero status.',
+            needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+          },
+        }),
+      ).join('\n'),
+    ).toMatch(/script/);
+  });
+
+  it('reports a script item realized by a captain state (VERIFY-17)', () => {
+    expect(
+      checkGearsFsmConformance(
+        scriptGears,
+        scriptConfig({ src: 'captain' }),
+      ).join('\n'),
+    ).toMatch(/is not GEARS actor "script"|maps to no FSM script state/);
   });
 
   it('matches explicit ordered domain results apart from needsBossReply', () => {

@@ -19,7 +19,14 @@ export interface LinkOption {
 
 /** A parsed `slc` invocation, routed to one of the four run forms. */
 export type Invocation =
-  | { kind: 'full'; pipeline: string; source: string; output: string | null }
+  | {
+      kind: 'full';
+      pipeline: string;
+      source: string;
+      output: string | null;
+      optimize: boolean;
+      normalize: boolean;
+    }
   | {
       kind: 'phase';
       pipeline: string;
@@ -34,6 +41,8 @@ export type Invocation =
       linkTarget: string;
       output: string | null;
       options: LinkOption[];
+      optimize: boolean;
+      normalize: boolean;
     }
   | {
       kind: 'link';
@@ -50,6 +59,7 @@ export type CliErrorCode =
   | 'operands'
   | 'unexpected-link'
   | 'unexpected-link-option'
+  | 'unexpected-flag'
   | 'option-value'
   | 'invalid-link-option'
   | 'unknown-option'
@@ -78,6 +88,8 @@ export function parseInvocation(argv: readonly string[]): Invocation {
   const positionals: string[] = [];
   let output: string | null = null;
   let link: string | null = null;
+  let optimize = false;
+  let normalize = false;
   const options: LinkOption[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -92,6 +104,10 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       link = takeValue(argv, ++i, '--link');
     } else if (arg === '--link-option') {
       options.push(parseLinkOption(takeValue(argv, ++i, '--link-option')));
+    } else if (arg === '-O' || arg === '--optimize') {
+      optimize = true;
+    } else if (arg === '--normalize') {
+      normalize = true;
     } else if (arg.startsWith('-') && arg !== '-') {
       throw new CliError('unknown-option', `unknown option "${arg}"`);
     } else {
@@ -111,6 +127,13 @@ export function parseInvocation(argv: readonly string[]): Invocation {
     throw new CliError('no-pipeline', `invalid pipeline reference "${head}"`);
   }
   const rest = positionals.slice(1);
+
+  if (phase !== null && (optimize || normalize)) {
+    throw new CliError(
+      'unexpected-flag',
+      `${optimize ? '-O' : '--normalize'} is only valid for a full-pipeline invocation`,
+    );
+  }
 
   if (phase === 'link') {
     if (link !== null) {
@@ -162,6 +185,8 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       linkTarget: link,
       output,
       options,
+      optimize,
+      normalize,
     };
   }
   if (options.length > 0) {
@@ -170,7 +195,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       '--link-option requires --link',
     );
   }
-  return { kind: 'full', pipeline, source, output };
+  return { kind: 'full', pipeline, source, output, optimize, normalize };
 }
 
 function takeValue(

@@ -13,6 +13,7 @@
 
 import { mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
 import {
@@ -25,6 +26,7 @@ import { type Invocation, parseInvocation } from './invocation.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
 import { evaluatePin, evaluatePinFile } from './pin-currency.js';
 import { PinError, loadPinFile, type PinFile, type PinRecord } from './pins.js';
+import type { Phase } from './phase.js';
 import {
   type Pipeline,
   type PipelineResolver,
@@ -132,16 +134,15 @@ async function runFull(
     artDir,
     output: invocation.output ?? undefined,
   });
-  const steps: PhaseStep[] = plan.map((artifact, index) => ({
-    request: {
-      kind: 'compile',
-      definitionPath: phaseDefinition(pipeline, artifact.phase.name),
-      source: index === 0 ? invocation.source : plan[index - 1].path,
-      target: artifact.path,
-    },
-    phase: artifact.phase.name,
-    targetExt: artifact.phase.target.ext,
-  }));
+  const steps = buildCompileSteps({
+    pipeline,
+    plan,
+    source: invocation.source,
+    artDir,
+    basename,
+    optimize: invocation.optimize,
+    normalize: invocation.normalize,
+  });
   const result = await executeSteps(steps, pipeline, deps);
   return emitVerification(result, {
     pipeline: invocation.pipeline,
@@ -158,7 +159,7 @@ async function runSinglePhase(
   const pipeline = await loadPipeline(
     await resolvePipeline(invocation.pipeline, deps.resolver),
   );
-  const phase = pipeline.phases.find(
+  const phase = [...pipeline.phases, ...pipeline.passes].find(
     (candidate) => candidate.name === invocation.phase,
   );
   if (phase === undefined) {
@@ -176,6 +177,16 @@ async function runSinglePhase(
   const artDir = artifactDir(srcDir, basename, invocation.pipeline);
   await mkdir(artDir, { recursive: true });
 
+  if (phase.pass) {
+    // A standalone pass run cannot overwrite its own source: it writes the
+    // `.opt` sibling unless `-o` relocates it (DR-013).
+    const target =
+      invocation.output ??
+      join(artDir, `${basename}.${phase.target.format}.opt${phase.target.ext}`);
+    const step = compileStep(pipeline, phase, invocation.source, target);
+    return executeSteps([step], pipeline, deps);
+  }
+
   // Plan over the whole chain so the named phase keeps its pipeline role: a
   // non-terminal phase writes its canonical intermediate and ignores `-o`
   // (DR-001 -- artifact location depends on role, not invocation mode).
@@ -186,16 +197,7 @@ async function runSinglePhase(
     output: invocation.output ?? undefined,
   });
   const artifact = plan[pipeline.phases.indexOf(phase)];
-  const step: PhaseStep = {
-    request: {
-      kind: 'compile',
-      definitionPath: phaseDefinition(pipeline, phase.name),
-      source: invocation.source,
-      target: artifact.path,
-    },
-    phase: phase.name,
-    targetExt: phase.target.ext,
-  };
+  const step = compileStep(pipeline, phase, invocation.source, artifact.path);
   return executeSteps([step], pipeline, deps);
 }
 
@@ -252,16 +254,15 @@ async function runFullLink(
 
   // Compile chain: the exit artifact becomes the object artifact (PIPE-15).
   const plan = planArtifacts({ phases: pipeline.phases, basename, artDir });
-  const compileSteps: PhaseStep[] = plan.map((artifact, index) => ({
-    request: {
-      kind: 'compile',
-      definitionPath: phaseDefinition(pipeline, artifact.phase.name),
-      source: index === 0 ? invocation.source : plan[index - 1].path,
-      target: artifact.path,
-    },
-    phase: artifact.phase.name,
-    targetExt: artifact.phase.target.ext,
-  }));
+  const compileSteps = buildCompileSteps({
+    pipeline,
+    plan,
+    source: invocation.source,
+    artDir,
+    basename,
+    optimize: invocation.optimize,
+    normalize: invocation.normalize,
+  });
 
   const linked = linkedArtifactPath({
     kind: 'full',
@@ -404,6 +405,104 @@ interface PhaseStep {
   targetExt: string;
 }
 
+/** Resolves the built-in pipeline-agnostic normalize definition (DR-013). */
+export function normalizeDefinitionPath(): string {
+  return fileURLToPath(new URL('./normalize.md', import.meta.url));
+}
+
+/**
+ * Builds the ordered compile steps for a full run: an optional generic
+ * normalize step ahead of the entry phase (`--normalize`), each chain phase,
+ * and — with `-O` — the pipeline's pass phases spliced in after the phase
+ * producing their format (DR-013). With passes active on a format, the
+ * producing phase writes the `.raw` intermediate and the final pass lands on
+ * the planned path, so downstream phases and verification see the canonical
+ * artifact regardless of optimization.
+ */
+function buildCompileSteps(opts: {
+  pipeline: Pipeline;
+  plan: readonly { phase: Phase; path: string }[];
+  source: string;
+  artDir: string;
+  basename: string;
+  optimize: boolean;
+  normalize: boolean;
+}): PhaseStep[] {
+  const { pipeline, plan, artDir, basename } = opts;
+  const steps: PhaseStep[] = [];
+  let previous = opts.source;
+
+  if (opts.normalize) {
+    const entry = pipeline.phases[0];
+    const normalized = join(
+      artDir,
+      `${basename}.${entry.source.format}${entry.source.ext}`,
+    );
+    steps.push({
+      request: {
+        kind: 'compile',
+        definitionPath: normalizeDefinitionPath(),
+        source: previous,
+        target: normalized,
+        references: [phaseDefinition(pipeline, entry.name)],
+      },
+      phase: 'normalize',
+      targetExt: entry.source.ext,
+    });
+    previous = normalized;
+  }
+
+  for (const artifact of plan) {
+    const phase = artifact.phase;
+    const passes = opts.optimize
+      ? pipeline.passes.filter(
+          (pass) => pass.source.format === phase.target.format,
+        )
+      : [];
+    if (passes.length === 0) {
+      steps.push(compileStep(pipeline, phase, previous, artifact.path));
+      previous = artifact.path;
+      continue;
+    }
+    const raw = join(
+      artDir,
+      `${basename}.${phase.target.format}.raw${phase.target.ext}`,
+    );
+    steps.push(compileStep(pipeline, phase, previous, raw));
+    previous = raw;
+    passes.forEach((pass, index) => {
+      const target =
+        index === passes.length - 1
+          ? artifact.path
+          : join(
+              artDir,
+              `${basename}.${phase.target.format}.opt${index + 1}${phase.target.ext}`,
+            );
+      steps.push(compileStep(pipeline, pass, previous, target));
+      previous = target;
+    });
+  }
+  return steps;
+}
+
+function compileStep(
+  pipeline: Pipeline,
+  phase: Phase,
+  source: string,
+  target: string,
+): PhaseStep {
+  return {
+    request: {
+      kind: 'compile',
+      definitionPath: phaseDefinition(pipeline, phase.name),
+      source,
+      target,
+    },
+    phase: phase.name,
+    targetExt: phase.target.ext,
+  };
+}
+
 /**
  * Runs steps in order, selecting interpreted or compiled execution per phase from
  * the pin index and stopping at the first failure with its report (PHEXEC-9,
@@ -537,7 +636,7 @@ function phaseDefinition(pipeline: Pipeline, name: string): string {
 }
 
 function chainDefinitions(pipeline: Pipeline): string[] {
-  const definitions = pipeline.phases.map((phase) =>
+  const definitions = [...pipeline.phases, ...pipeline.passes].map((phase) =>
     phaseDefinition(pipeline, phase.name),
   );
   if (pipeline.linkFile !== null) {

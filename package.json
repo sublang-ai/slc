@@ -26,7 +26,7 @@
     "node": ">=23.6"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/normalize.md dist/normalize.md",
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write .",

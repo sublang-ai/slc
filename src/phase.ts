@@ -24,14 +24,20 @@ export interface FormatDecl {
   ext: string;
 }
 
-/** A loaded ordinary compile phase. */
+/** A loaded ordinary compile phase or format-preserving pass phase. */
 export interface Phase {
-  /** Phase basename without the `.md` suffix, e.g. `text2gears`. */
+  /** Phase basename without the `.md` suffix, e.g. `text2gears` or `optimize`. */
   name: string;
   /** Declared source role. */
   source: FormatDecl;
   /** Declared target role. */
   target: FormatDecl;
+  /**
+   * True for a format-preserving pass phase (source format equals target
+   * format), which sits outside the linear chain and runs only when a compile
+   * opts in (DR-013).
+   */
+  pass: boolean;
 }
 
 /** Machine-readable reason a `## Formats` table was refused. */
@@ -123,15 +129,20 @@ export function parsePhase(file: { name: string; content: string }): Phase {
     throw new PhaseError(code, message);
   });
 
-  const expected = `${source.format}2${target.format}.md`;
-  if (file.name !== expected) {
-    throw new PhaseError(
-      'filename-mismatch',
-      `phase filename "${file.name}" does not match its ## Formats tokens (expected "${expected}")`,
-    );
+  // A format-preserving pass phase is named freely — its filename is the pass
+  // name (DR-013); the `<source>2<target>.md` rule identifies transform phases.
+  const pass = source.format === target.format;
+  if (!pass) {
+    const expected = `${source.format}2${target.format}.md`;
+    if (file.name !== expected) {
+      throw new PhaseError(
+        'filename-mismatch',
+        `phase filename "${file.name}" does not match its ## Formats tokens (expected "${expected}")`,
+      );
+    }
   }
 
-  return { name: file.name.slice(0, -'.md'.length), source, target };
+  return { name: file.name.slice(0, -'.md'.length), source, target, pass };
 }
 
 /** Reads a phase definition file from disk and parses it (PIPE-1, PIPE-2). */

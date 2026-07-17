@@ -39,6 +39,25 @@ describe('parsePhase (PIPE-1, PIPE-2)', () => {
       name: 'text2gears',
       source: { format: 'text', ext: '.md' },
       target: { format: 'gears', ext: '.md' },
+      pass: false,
+    });
+  });
+
+  it('accepts a freely named format-preserving pass phase (DR-013)', () => {
+    const optimize = `## Formats
+
+| Role | Format | Extension |
+| --- | --- | --- |
+| source | gears | .md |
+| target | gears | .md |
+`;
+    expect(
+      parsePhase({ name: 'optimize.md', content: optimize }),
+    ).toEqual<Phase>({
+      name: 'optimize',
+      source: { format: 'gears', ext: '.md' },
+      target: { format: 'gears', ext: '.md' },
+      pass: true,
     });
   });
 
@@ -127,6 +146,7 @@ describe('checkExtensionConsistency (PIPE-3)', () => {
     name,
     source,
     target,
+    pass: source.format === target.format,
   });
 
   it('accepts phases that agree on each format token', () => {

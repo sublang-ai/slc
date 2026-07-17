@@ -194,10 +194,17 @@ export function createConfiguredCompiledFactory(
     });
 }
 
-function runtimeContractForPin(choice: CompiledSelection): 'legacy' {
+function runtimeContractForPin(
+  choice: CompiledSelection,
+): 'legacy' | 'composed-v2' {
   const provenance = choice.record.linkTarget.provenance;
   if (provenance === undefined || provenance === '@sublang/playbook@0.9.0') {
     return 'legacy';
+  }
+  // Playbook 0.10 ships the composed six-port contract (DR-011); artifacts
+  // linked against it run through the composed session profile.
+  if (provenance === '@sublang/playbook@0.10.0') {
+    return 'composed-v2';
   }
   throw new Error(
     `unsupported pinned Playbook runtime contract: ${provenance}`,

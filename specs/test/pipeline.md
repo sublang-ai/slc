@@ -63,3 +63,13 @@ When the slc command is run with `-o <target>`, the slc command shall write the 
 Verifies: [PIPE-14](../dev/pipeline.md#pipe-14)
 
 When the slc command is run with `--link-option <name>=<value>` pairs, the slc command shall convey them unaltered to the link phase.
+
+### PIPE-35
+Verifies: [PIPE-30](../dev/pipeline.md#pipe-30), [PIPE-31](../dev/pipeline.md#pipe-31), [PIPE-32](../dev/pipeline.md#pipe-32), [PIPE-33](../dev/pipeline.md#pipe-33), [COMPILE-8](../user/compiler.md#compile-8)
+
+When a pipeline directory contains a format-preserving pass phase, the slc command shall run the chain unchanged without `-O`; with `-O` it shall run the pass between the producing and consuming phases — the producing phase writing the `.raw` intermediate and the pass the canonical path — and as `slc <pipeline>.<pass>` it shall write the `.opt` sibling.
+
+### PIPE-36
+Verifies: [PIPE-34](../dev/pipeline.md#pipe-34), [PHEXEC-33](../dev/phase-execution.md#phexec-33), [COMPILE-7](../user/compiler.md#compile-7)
+
+When the slc command is run with `--normalize`, the slc command shall execute the built-in normalization definition first — receiving the raw source and the entry-phase definition as a read-only reference — write the normalized source into the artifact directory under the entry phase's source name, and run the entry phase from that file.

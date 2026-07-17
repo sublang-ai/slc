@@ -48,3 +48,8 @@ Where synthetic artifacts contain distinct direct-Captain and delegated-player l
 Verifies: [VERIFY-13](../dev/verification.md#verify-13)
 
 Where synthetic GEARS contains a canonical `Results:` block after an acting blockquote and its FSM state contains the same domain guards plus compiler-owned `needsBossReply`, when the conformance check runs, the check shall preserve the acting prompt without metadata, parse the source guards in declaration order, and report no finding; whereas a misplaced or malformed label, malformed, empty, duplicate, source-owned `needsBossReply`, missing, extra, reordered, or description-drifted result entry, or a result block on a nested-playbook call shall produce a specific finding.
+
+### VERIFY-17
+Verifies: [VERIFY-15](../dev/verification.md#verify-15), [VERIFY-16](../dev/verification.md#verify-16)
+
+When a GEARS package contains a script item realized by a matching `script` actor state, the conformance and coverage checks shall pass; when the command drifts, a guard is renamed or reordered, `needsBossReply` is added, or the item is realized by a captain or player state, the conformance check shall report the drift.
