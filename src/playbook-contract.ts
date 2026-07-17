@@ -48,7 +48,12 @@ export interface PlayerResult extends LegacyPlayerResult {
 export interface CaptainCallOptions {
   visibility: 'visible' | 'hidden';
   resume: false;
-  allowedTools: readonly [];
+  /**
+   * Source-owned tool restriction: an explicitly empty allowlist for
+   * routing-only Captains; absent for transformation-performing Captains,
+   * which work through the host Captain's tools (link.md §PlaybookPorts).
+   */
+  allowedTools?: readonly [];
 }
 
 export interface CaptainResult {

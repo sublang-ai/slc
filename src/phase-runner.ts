@@ -101,8 +101,16 @@ export function resolvesToPlaybook(source: string): boolean {
       ts.isExportAssignment(statement) &&
       !statement.isExportEquals &&
       ts.isIdentifier(unwrapExpression(statement.expression)) &&
-      (unwrapExpression(statement.expression) as ts.Identifier).text ===
-        PLAYBOOK_FACTORY &&
+      ((unwrapExpression(statement.expression) as ts.Identifier).text ===
+        PLAYBOOK_FACTORY ||
+        // `const factory: PlaybookRuntimeFactory<…> = createPlaybookRuntime;
+        // export default factory;` — a typed alias of the factory is the
+        // factory; linkers use it to state contract conformance in erasable
+        // TypeScript.
+        aliasesFactory(
+          file,
+          (unwrapExpression(statement.expression) as ts.Identifier).text,
+        )) &&
       hasFactoryBinding
     ) {
       return true;
@@ -123,6 +131,32 @@ export function resolvesToPlaybook(source: string): boolean {
         ) &&
         statement.moduleSpecifier === undefined &&
         hasFactoryBinding
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** True when `name` is a top-level `const <name> = createPlaybookRuntime;`. */
+function aliasesFactory(file: ts.SourceFile, name: string): boolean {
+  for (const statement of file.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    if (
+      (statement.declarationList.flags & ts.NodeFlags.Const) === 0 ||
+      hasModifier(statement, ts.SyntaxKind.DeclareKeyword)
+    ) {
+      continue;
+    }
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        ts.isIdentifier(declaration.name) &&
+        declaration.name.text === name &&
+        declaration.initializer !== undefined &&
+        ts.isIdentifier(unwrapExpression(declaration.initializer)) &&
+        (unwrapExpression(declaration.initializer) as ts.Identifier).text ===
+          PLAYBOOK_FACTORY
       ) {
         return true;
       }

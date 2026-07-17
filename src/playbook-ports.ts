@@ -199,7 +199,7 @@ function toCaptainResult(
 
 function requireCaptainCallOptions(options: CaptainCallOptions): {
   resume: false;
-  allowedTools: readonly [];
+  allowedTools?: readonly [];
 } {
   if (typeof options !== 'object' || options === null) {
     throw new TypeError('callCaptain requires CaptainCallOptions');
@@ -222,15 +222,21 @@ function requireCaptainCallOptions(options: CaptainCallOptions): {
   ) {
     throw new TypeError('callCaptain options.resume must be false');
   }
+  // The tool restriction is source-owned (link.md §PlaybookPorts contract):
+  // a routing-only Captain passes an explicitly empty allowlist; a
+  // transformation-performing Captain omits the property so the host
+  // Captain works with its tools.
   const allowedTools = Object.getOwnPropertyDescriptor(options, 'allowedTools');
+  if (allowedTools === undefined) {
+    return { resume: false };
+  }
   if (
-    allowedTools === undefined ||
     !Object.prototype.hasOwnProperty.call(allowedTools, 'value') ||
     !Array.isArray(allowedTools.value) ||
     allowedTools.value.length !== 0
   ) {
     throw new TypeError(
-      'callCaptain options.allowedTools must be an explicitly empty array',
+      'callCaptain options.allowedTools must be absent or an explicitly empty array',
     );
   }
   return { resume: false, allowedTools: [] };

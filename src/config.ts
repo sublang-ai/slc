@@ -22,10 +22,7 @@ import { ClaudeCodeAdapter } from '@sublang/cligent/adapters/claude-code';
 import { CodexAdapter } from '@sublang/cligent/adapters/codex';
 import { GeminiAdapter } from '@sublang/cligent/adapters/gemini';
 import { OpenCodeAdapter } from '@sublang/cligent/adapters/opencode';
-import {
-  isEffortSupported,
-  supportedEffortValues,
-} from '@sublang/cligent';
+import { isEffortSupported, supportedEffortValues } from '@sublang/cligent';
 import type { AgentAdapter, PermissionPolicy } from '@sublang/cligent';
 
 import { createCligentAgent } from './cligent-agent.js';

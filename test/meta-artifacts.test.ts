@@ -1,78 +1,261 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
+// Behavior pins for the reviewed compiled meta-phase artifacts under
+// pipelines/playbook/{text2gears,gears2fsm,link}.slc, rebuilt against the
+// composed six-port Playbook 0.10 profile: `init` takes a root
+// `PlaybookSession`, `handleBossInput` returns a structured
+// `PlaybookRunResult`, and every working state performs direct Captain work
+// (`callCaptain`, visible) adjudicated through `callJudge` — these machines
+// declare no delegated player, so no turn ever crosses `callPlayer`.
+
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
-import { createActor } from 'xstate';
 
-import type { PlaybookPorts } from '@sublang/playbook/runtime';
+import type {
+  CaptainCallOptions,
+  PlaybookPorts,
+  PlaybookRuntime,
+  PlaybookSession,
+} from '@sublang/playbook/runtime';
 
 import createGears2Fsm from '../pipelines/playbook/gears2fsm.slc/gears2fsm.playbook.js';
-import createLink, {
-  _internal as linkInternal,
-} from '../pipelines/playbook/link.slc/link.playbook.js';
+import createLink from '../pipelines/playbook/link.slc/link.playbook.js';
 import createText2Gears from '../pipelines/playbook/text2gears.slc/text2gears.playbook.js';
 
 const pipelineDir = fileURLToPath(
   new URL('../pipelines/playbook/', import.meta.url),
 );
 
+// The link classifier supplies LINK_REQUEST's two structured routing fields;
+// the runtime substitutes `<fsm-artifact>` in the Captain prompt from context
+// seeded by them (link.playbook.ts §Boss-event mapping).
+const LINK_CLASSIFICATION =
+  '{"type":"LINK_REQUEST","fsmArtifact":"/tmp/machine.fsm.ts","target":"/tmp/machine.playbook.ts"}';
+
 const quietPorts = (overrides: Partial<PlaybookPorts> = {}): PlaybookPorts => ({
   callPlayer: async () => ({ status: 'ok', finalText: 'done' }),
-  callJudge: async () => '{"guard":"completed"}',
+  callCaptain: async () => ({
+    status: 'ok',
+    finalText: 'The work is complete.',
+  }),
+  callJudge: async () => '{"guard":"done"}',
+  callPlaybook: async () => {
+    throw new Error('the meta playbooks make no nested playbook calls');
+  },
   emitStatus: async () => {},
   emitTelemetry: async () => {},
   ...overrides,
 });
 
+let sessionCounter = 0;
+
+// Root session shape per the composed contract (src/compiled-executor.ts
+// rootSession/composedPorts): depth 0, rootSessionId === sessionId, no parent
+// identity, and all six composed ports.
+const rootSession = (
+  overrides: Partial<PlaybookPorts> = {},
+): PlaybookSession => {
+  sessionCounter += 1;
+  const sessionId = `meta-artifacts-session-${sessionCounter}`;
+  return {
+    sessionId,
+    playbookId: 'meta-artifact-under-test',
+    rootSessionId: sessionId,
+    depth: 0,
+    ports: quietPorts(overrides),
+  };
+};
+
+/** stateId carried by the `to` descriptor of `playbook.fsm.state` telemetry. */
+function transitionTarget(event: {
+  topic: string;
+  payload: unknown;
+}): string | undefined {
+  if (event.topic !== 'playbook.fsm.state') return undefined;
+  const payload = event.payload;
+  if (typeof payload !== 'object' || payload === null || !('to' in payload)) {
+    return undefined;
+  }
+  const to = (payload as { to: unknown }).to;
+  if (typeof to !== 'object' || to === null || !('stateId' in to)) {
+    return undefined;
+  }
+  const stateId = (to as { stateId: unknown }).stateId;
+  return typeof stateId === 'string' ? stateId : undefined;
+}
+
+function onceAborted(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
+}
+
+interface ArtifactCase {
+  readonly name: string;
+  readonly create: () => PlaybookRuntime;
+  readonly bossText: string;
+  /**
+   * Judge replies in call order. text2gears and gears2fsm enter from `ready`
+   * through their deterministic COMPILE event, so their sole judge call is the
+   * Captain-output adjudication; link classifies first, then adjudicates.
+   */
+  readonly judgeReplies: readonly string[];
+  /** Substring the first judge prompt must carry. */
+  readonly firstJudgeAnchor: string;
+  /** Substring the composed direct-Captain prompt must carry. */
+  readonly promptAnchor: string;
+}
+
+const ADJUDICATION_ANCHOR = 'Adjudicate the direct Captain output';
+
+const artifacts: readonly ArtifactCase[] = [
+  {
+    name: 'text2gears',
+    create: () => createText2Gears({}),
+    bossText: 'Compile the requested source into GEARS.',
+    judgeReplies: ['{"guard":"compiled"}'],
+    firstJudgeAnchor: ADJUDICATION_ANCHOR,
+    promptAnchor: 'free-form natural-language procedure description',
+  },
+  {
+    name: 'gears2fsm',
+    create: () => createGears2Fsm({}),
+    bossText: 'Compile the GEARS package into an FSM.',
+    judgeReplies: ['{"guard":"compiled"}'],
+    firstJudgeAnchor: ADJUDICATION_ANCHOR,
+    promptAnchor: 'XState v5 finite state machine',
+  },
+  {
+    name: 'link',
+    create: () => createLink({}),
+    bossText: 'Link /tmp/machine.fsm.ts into /tmp/machine.playbook.ts.',
+    judgeReplies: [LINK_CLASSIFICATION, '{"guard":"done"}'],
+    firstJudgeAnchor: 'Classify this Boss message for the link playbook FSM.',
+    promptAnchor: '/tmp/machine.fsm.ts',
+  },
+];
+
 describe('reviewed compiled meta-phase artifacts', () => {
   it('carries post-build definition amendments into the compiled prompts', async () => {
+    // gears2fsm: the round-2 default single-outcome contract and the universal
+    // busy-tag rule, alongside the erasable-syntax rule the artifacts rely on.
     const gears2fsm = await readFile(
       `${pipelineDir}/gears2fsm.slc/gears2fsm.gears.md`,
       'utf8',
     );
+    expect(gears2fsm).toContain('default single-outcome contract');
+    expect(gears2fsm).toContain('The acting agent completed the behavior.');
+    expect(gears2fsm).toContain('Tag every invoking working leaf');
+    expect(gears2fsm).toContain('playbook.busy');
     expect(gears2fsm).toContain('erasable TypeScript syntax');
-    expect(gears2fsm).toContain('preserve an existing input-seeded');
 
+    // link: DR-016 script execution and the composed six-port contract.
     const link = await readFile(
       `${pipelineDir}/link.slc/link.gears.md`,
       'utf8',
     );
+    expect(link).toContain('Executed script for');
+    expect(link).toContain('sh -c');
     expect(link).toContain(
-      'optional as optional in both the classifier contract',
+      'implements the six ports once and inherits every playbook',
     );
     expect(link).toContain('erasable TypeScript syntax');
+
+    // text2gears: the produced-value rule backing placeholders with typed
+    // Results properties.
+    const text2gears = await readFile(
+      `${pipelineDir}/text2gears.slc/text2gears.gears.md`,
+      'utf8',
+    );
+    expect(text2gears).toContain("using the placeholder's exact identifier");
   });
 
-  it('passes the active turn abort signal to text2gears player work', async () => {
+  it.each(artifacts)(
+    '$name drives one Boss turn through visible direct Captain work to terminal',
+    async ({
+      create,
+      bossText,
+      judgeReplies,
+      firstJudgeAnchor,
+      promptAnchor,
+    }) => {
+      const runtime = create();
+      const replies = [...judgeReplies];
+      const judgePrompts: string[] = [];
+      const captainPrompts: string[] = [];
+      const captainOptions: CaptainCallOptions[] = [];
+      let playerCalls = 0;
+      await runtime.init(
+        rootSession({
+          callPlayer: async () => {
+            playerCalls += 1;
+            return { status: 'ok', finalText: 'done' };
+          },
+          callCaptain: async (prompt, _signal, options) => {
+            captainPrompts.push(prompt);
+            captainOptions.push(options);
+            return { status: 'ok', finalText: 'The work is complete.' };
+          },
+          callJudge: async (prompt) => {
+            judgePrompts.push(prompt);
+            const reply = replies.shift();
+            if (reply === undefined) throw new Error('unexpected judge call');
+            return reply;
+          },
+        }),
+      );
+
+      const result = await runtime.handleBossInput({
+        text: bossText,
+        signal: new AbortController().signal,
+      });
+
+      expect(result.outcome).toBe('terminal');
+      // Direct Captain work: exactly one visible, non-resuming call carrying
+      // the GEARS-derived prompt body. These transformation-performing
+      // Captains carry no source-owned tool restriction (link.md
+      // §PlaybookPorts contract), so the host Captain works with its tools.
+      expect(captainPrompts).toHaveLength(1);
+      expect(captainPrompts[0]).toContain(promptAnchor);
+      expect(captainOptions).toEqual([
+        { visibility: 'visible', resume: false },
+      ]);
+      // Adjudication goes through callJudge; no callPlayer in these machines.
+      expect(judgePrompts).toHaveLength(judgeReplies.length);
+      expect(judgePrompts[0]).toContain(firstJudgeAnchor);
+      expect(judgePrompts.at(-1)).toContain(ADJUDICATION_ANCHOR);
+      expect(playerCalls).toBe(0);
+      await runtime.dispose();
+    },
+  );
+
+  it('passes the active turn abort signal into text2gears direct Captain work', async () => {
     const runtime = createText2Gears({});
     const controller = new AbortController();
     let started!: () => void;
-    const playerStarted = new Promise<void>((resolve) => {
+    const captainStarted = new Promise<void>((resolve) => {
       started = resolve;
     });
     let observedSignal: AbortSignal | undefined;
+    let judgeCalls = 0;
     await runtime.init(
-      quietPorts({
-        callJudge: async (prompt) => {
-          if (prompt.includes('Classify the Boss input')) {
-            return JSON.stringify({
-              type: 'START_TEXT_TO_GEARS',
-              source: '/tmp/source.md',
-              target: '/tmp/target.md',
-            });
-          }
-          return '{"guard":"completed"}';
-        },
-        callPlayer: async (_player, _prompt, signal) => {
+      rootSession({
+        callCaptain: async (_prompt, signal) => {
           observedSignal = signal;
           started();
-          await new Promise<void>((resolve) => {
-            signal.addEventListener('abort', () => resolve(), { once: true });
-          });
+          await onceAborted(signal);
           return { status: 'aborted' };
+        },
+        callJudge: async () => {
+          judgeCalls += 1;
+          return '{"guard":"compiled"}';
         },
       }),
     );
@@ -81,303 +264,246 @@ describe('reviewed compiled meta-phase artifacts', () => {
       text: 'Compile the requested source.',
       signal: controller.signal,
     });
-    await playerStarted;
+    await captainStarted;
     controller.abort();
-    await expect(turn).resolves.toBeUndefined();
+    const result = await turn;
+    expect(result.outcome).toBe('aborted');
     expect(observedSignal?.aborted).toBe(true);
-    await runtime.dispose();
-  });
-
-  it('aborts link player work when XState stops its invocation', async () => {
-    const outer = new AbortController();
-    let started!: () => void;
-    const playerStarted = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    let observedSignal: AbortSignal | undefined;
-    const logic = linkInternal.captainBridge(
-      quietPorts({
-        callPlayer: async (_player, _prompt, signal) => {
-          observedSignal = signal;
-          started();
-          await new Promise<void>((resolve) => {
-            signal.addEventListener('abort', () => resolve(), { once: true });
-          });
-          return { status: 'aborted' };
-        },
-      }),
-      linkInternal.DEFAULT_PLAYER_BINDING,
-      () => outer.signal,
-      () => {},
-    );
-    const actor = createActor(logic, {
-      input: {
-        player: 'Captain',
-        sourceItem: 'LINK-10',
-        prompt: 'Link the input.',
-        result: { completed: 'The link is complete.' },
-      },
-    });
-
-    actor.start();
-    await playerStarted;
-    actor.stop();
-
-    expect(outer.signal.aborted).toBe(false);
-    expect(observedSignal?.aborted).toBe(true);
-  });
-
-  it('rejects link player work that resolves successfully after abort', async () => {
-    const outer = new AbortController();
-    let started!: () => void;
-    const playerStarted = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const logic = linkInternal.captainBridge(
-      quietPorts({
-        callPlayer: async () => {
-          started();
-          await new Promise<void>((resolve) => {
-            outer.signal.addEventListener('abort', () => resolve(), {
-              once: true,
-            });
-          });
-          return { status: 'ok', finalText: 'completed' };
-        },
-        callJudge: async () => '{"guard":"completed"}',
-      }),
-      linkInternal.DEFAULT_PLAYER_BINDING,
-      () => outer.signal,
-      () => {},
-    );
-    const actor = createActor(logic, {
-      input: {
-        player: 'Captain',
-        sourceItem: 'LINK-10',
-        prompt: 'Link the input.',
-        result: { completed: 'The link is complete.' },
-      },
-    });
-    const settled = new Promise<string>((resolve) => {
-      actor.subscribe({
-        next: (snapshot) => {
-          if (snapshot.status === 'done' || snapshot.status === 'error') {
-            resolve(snapshot.status);
-          }
-        },
-        error: () => resolve('error'),
-      });
-    });
-
-    actor.start();
-    await playerStarted;
-    outer.abort();
-
-    expect(await settled).toBe('error');
-    actor.stop();
-  });
-
-  it('returns cleanly from a pre-aborted text2gears turn', async () => {
-    const runtime = createText2Gears({});
-    let judgeCalls = 0;
-    await runtime.init(
-      quietPorts({
-        callJudge: async () => {
-          judgeCalls++;
-          return '{"type":"NO_EVENT"}';
-        },
-      }),
-    );
-    const controller = new AbortController();
-    controller.abort();
-
-    await expect(
-      runtime.handleBossInput({ text: 'Compile.', signal: controller.signal }),
-    ).resolves.toBeUndefined();
+    // Entry from `ready` is deterministic (no classifier call) and an aborted
+    // Captain call is never adjudicated, so the judge port is never crossed.
     expect(judgeCalls).toBe(0);
     await runtime.dispose();
   });
 
-  it('returns cleanly when text2gears classification resolves after abort', async () => {
-    const runtime = createText2Gears({});
+  it('pairs a gears2fsm Captain result that resolves ok after abort as aborted', async () => {
+    const runtime = createGears2Fsm({});
     const controller = new AbortController();
-    let playerCalls = 0;
+    let started!: () => void;
+    const captainStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let judgeCalls = 0;
     await runtime.init(
-      quietPorts({
+      rootSession({
+        callJudge: async () => {
+          judgeCalls += 1;
+          return '{"guard":"compiled"}';
+        },
+        callCaptain: async () => {
+          started();
+          await onceAborted(controller.signal);
+          return { status: 'ok', finalText: 'Compiled the machine.' };
+        },
+      }),
+    );
+
+    const turn = runtime.handleBossInput({
+      text: 'Compile the GEARS package.',
+      signal: controller.signal,
+    });
+    await captainStarted;
+    controller.abort();
+    const result = await turn;
+    // A host promise that ignores cancellation and resolves late is paired as
+    // aborted; the late ok result is never adjudicated and does not masquerade
+    // as success.
+    expect(result.outcome).toBe('aborted');
+    expect(judgeCalls).toBe(0);
+    await runtime.dispose();
+  });
+
+  // CONTRACT VIOLATION (reported, not pinned): link.playbook.ts `lastError()`
+  // snapshots the raw Error the FSM stores in `context.lastError` without the
+  // The link artifact now applies the same normalizeError fallback as its
+  // siblings, so an abort routed through link's `failed` state settles as
+  // `{ outcome: 'aborted' }` (LINK-1 §Status and telemetry).
+  it('pairs a link Captain result that resolves ok after abort as aborted', async () => {
+    const runtime = createLink({});
+    const controller = new AbortController();
+    let started!: () => void;
+    const captainStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let judgeCalls = 0;
+    await runtime.init(
+      rootSession({
+        callJudge: async () => {
+          judgeCalls += 1;
+          return LINK_CLASSIFICATION;
+        },
+        callCaptain: async () => {
+          started();
+          await onceAborted(controller.signal);
+          return { status: 'ok', finalText: 'Linked the runtime module.' };
+        },
+      }),
+    );
+
+    const turn = runtime.handleBossInput({
+      text: 'Link the FSM artifact.',
+      signal: controller.signal,
+    });
+    await captainStarted;
+    controller.abort();
+    const result = await turn;
+    // Late ok result paired as aborted; only the classification judge call ran.
+    expect(result.outcome).toBe('aborted');
+    expect(judgeCalls).toBe(1);
+    await runtime.dispose();
+  });
+
+  it.each(artifacts)(
+    '$name returns an aborted result from a pre-aborted turn without crossing any agent port',
+    async ({ create, bossText }) => {
+      const runtime = create();
+      let judgeCalls = 0;
+      let captainCalls = 0;
+      await runtime.init(
+        rootSession({
+          callJudge: async () => {
+            judgeCalls += 1;
+            return '{"type":"NO_ACTION"}';
+          },
+          callCaptain: async () => {
+            captainCalls += 1;
+            return { status: 'ok', finalText: 'done' };
+          },
+        }),
+      );
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = await runtime.handleBossInput({
+        text: bossText,
+        signal: controller.signal,
+      });
+      expect(result.outcome).toBe('aborted');
+      expect(judgeCalls).toBe(0);
+      expect(captainCalls).toBe(0);
+      await runtime.dispose();
+    },
+  );
+
+  it('ignores a link classifier result that resolves after abort', async () => {
+    const runtime = createLink({});
+    const controller = new AbortController();
+    let captainCalls = 0;
+    await runtime.init(
+      rootSession({
         callJudge: async () => {
           controller.abort();
-          return JSON.stringify({
-            type: 'START_TEXT_TO_GEARS',
-            source: '/tmp/source.md',
-            target: '/tmp/target.md',
-          });
+          return LINK_CLASSIFICATION;
         },
-        callPlayer: async () => {
-          playerCalls++;
+        callCaptain: async () => {
+          captainCalls += 1;
           return { status: 'ok', finalText: 'done' };
         },
       }),
     );
 
-    await expect(
-      runtime.handleBossInput({
-        text: 'Compile.',
-        signal: controller.signal,
-      }),
-    ).resolves.toBeUndefined();
-    expect(playerCalls).toBe(0);
+    const result = await runtime.handleBossInput({
+      text: 'Link the artifact.',
+      signal: controller.signal,
+    });
+    expect(result.outcome).toBe('aborted');
+    expect(captainCalls).toBe(0);
     await runtime.dispose();
   });
 
-  it.each([
-    ['gears2fsm', () => createGears2Fsm({}), '{"event":"START"}'],
-    [
-      'link',
-      () => createLink({}),
-      '{"event":"START_LINK","payload":{"request":"Link the artifact."}}',
-    ],
-  ])(
-    '%s ignores a classifier result that resolves after abort',
-    async (_name, create, classification) => {
-      const runtime = create();
-      const controller = new AbortController();
-      let playerCalls = 0;
-      await runtime.init(
-        quietPorts({
-          callJudge: async () => {
-            controller.abort();
-            return classification;
-          },
-          callPlayer: async () => {
-            playerCalls++;
-            return { status: 'ok', finalText: 'done' };
-          },
-        }),
-      );
-
-      await expect(
-        runtime.handleBossInput({
-          text: 'Start the phase.',
-          signal: controller.signal,
-        }),
-      ).resolves.toBeUndefined();
-      expect(playerCalls).toBe(0);
-      await runtime.dispose();
-    },
-  );
-
-  it('does not complete gears2fsm from adjudication returned after abort', async () => {
+  it('does not complete gears2fsm from an adjudication returned after abort', async () => {
     const runtime = createGears2Fsm({});
     const controller = new AbortController();
-    let judgeCalls = 0;
     const states: string[] = [];
     await runtime.init(
-      quietPorts({
+      rootSession({
+        callCaptain: async () => ({
+          status: 'ok',
+          finalText: 'Compiled the machine.',
+        }),
         callJudge: async () => {
-          judgeCalls++;
-          if (judgeCalls === 1) return '{"event":"START"}';
           controller.abort();
-          return '{"guard":"transformed"}';
+          return '{"guard":"compiled"}';
         },
         emitTelemetry: async (event) => {
-          if (
-            event.topic === 'playbook.fsm.state' &&
-            typeof event.payload === 'object' &&
-            event.payload !== null &&
-            'to' in event.payload &&
-            typeof event.payload.to === 'string'
-          ) {
-            states.push(event.payload.to);
-          }
+          const target = transitionTarget(event);
+          if (target !== undefined) states.push(target);
         },
       }),
     );
 
-    await expect(
-      runtime.handleBossInput({
-        text: 'Start the phase.',
-        signal: controller.signal,
-      }),
-    ).resolves.toBeUndefined();
+    const result = await runtime.handleBossInput({
+      text: 'Compile the GEARS package.',
+      signal: controller.signal,
+    });
+    expect(result.outcome).toBe('aborted');
     expect(states).toContain('failed');
     expect(states).not.toContain('done');
     await runtime.dispose();
   });
 
   it.each([
-    ['gears2fsm', () => createGears2Fsm({}), '{"event":"START"}'],
-    [
-      'link',
-      () => createLink({}),
-      '{"event":"START_LINK","payload":{"request":"Link the artifact."}}',
-    ],
+    {
+      name: 'gears2fsm',
+      create: (): PlaybookRuntime => createGears2Fsm({}),
+      priorReplies: [] as readonly string[],
+      bossText: 'Compile the GEARS package.',
+    },
+    {
+      name: 'link',
+      create: (): PlaybookRuntime => createLink({}),
+      priorReplies: [LINK_CLASSIFICATION] as readonly string[],
+      bossText: 'Link the artifact.',
+    },
   ])(
-    '%s surfaces an undefined adjudicator rejection',
-    async (_name, create, classification) => {
+    '$name surfaces an adjudicator fault as a turn rejection, not a failed outcome',
+    async ({ create, priorReplies, bossText }) => {
       const runtime = create();
-      let judgeCalls = 0;
+      const fault = new Error('adjudicator-fault');
+      const replies = [...priorReplies];
       await runtime.init(
-        quietPorts({
+        rootSession({
           callJudge: async () => {
-            judgeCalls++;
-            if (judgeCalls === 1) return classification;
-            return Promise.reject(undefined);
+            const reply = replies.shift();
+            if (reply === undefined) throw fault;
+            return reply;
           },
         }),
       );
-      let rejected = false;
-      try {
-        await runtime.handleBossInput({
-          text: 'Start the phase.',
+
+      // Control-plane exceptions reject the runtime method with the original
+      // failure rather than settling into a recoverable `failed` result.
+      await expect(
+        runtime.handleBossInput({
+          text: bossText,
           signal: new AbortController().signal,
-        });
-      } catch (error) {
-        rejected = true;
-        expect(error).toBeUndefined();
-      }
-      expect(rejected).toBe(true);
-      await runtime.dispose().catch(() => undefined);
+        }),
+      ).rejects.toBe(fault);
+      await runtime.dispose();
     },
   );
 
-  it.each([
-    ['text2gears', () => createText2Gears({})],
-    ['gears2fsm', () => createGears2Fsm({})],
-    ['link', () => createLink({})],
-  ])('%s surfaces host emission failures', async (_name, create) => {
-    const runtime = create();
-    let statusCalls = 0;
-    await expect(
-      runtime.init(
-        quietPorts({
-          emitTelemetry: async () => {
-            throw new Error('telemetry sink failed');
-          },
-          emitStatus: async () => {
-            statusCalls++;
-          },
-        }),
-      ),
-    ).rejects.toThrow(/telemetry sink failed/);
-    expect(statusCalls).toBeGreaterThan(0);
-    await runtime.dispose().catch(() => undefined);
-  });
+  it('normalizes an undefined adjudicator rejection into a control-plane error', async () => {
+    const runtime = createText2Gears({});
+    await runtime.init(
+      rootSession({
+        callJudge: () => Promise.reject(undefined),
+      }),
+    );
 
-  it('surfaces an undefined host emission rejection', async () => {
-    const runtime = createLink({});
-    let rejected = false;
+    // A degenerate `undefined` judge rejection still rejects the turn; the
+    // runtime surfaces it as its normalized missing-reply control error.
+    let caught: unknown = 'turn resolved';
     try {
-      await runtime.init(
-        quietPorts({
-          emitTelemetry: () => Promise.reject(undefined),
-        }),
-      );
+      await runtime.handleBossInput({
+        text: 'Compile.',
+        signal: new AbortController().signal,
+      });
     } catch (error) {
-      rejected = true;
-      expect(error).toBeUndefined();
+      caught = error;
     }
-    expect(rejected).toBe(true);
-    await runtime.dispose().catch(() => undefined);
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe('judge returned no reply');
+    await runtime.dispose();
   });
 
   it('does not leak a masked text2gears adjudicator fault into a later turn', async () => {
@@ -385,27 +511,18 @@ describe('reviewed compiled meta-phase artifacts', () => {
     let judgeCalls = 0;
     let failEmission = true;
     await runtime.init(
-      quietPorts({
+      rootSession({
+        callCaptain: async () => ({
+          status: 'ok',
+          finalText: 'A GEARS package.',
+        }),
         callJudge: async () => {
-          judgeCalls++;
-          if (judgeCalls === 1 || judgeCalls === 3) {
-            return JSON.stringify({
-              type: 'START_TEXT_TO_GEARS',
-              source: '/tmp/source.md',
-              target: '/tmp/target.md',
-            });
-          }
-          if (judgeCalls === 2) throw new Error('judge-fail');
-          return '{"guard":"completed"}';
+          judgeCalls += 1;
+          if (judgeCalls === 1) throw new Error('judge-fail');
+          return '{"guard":"compiled"}';
         },
         emitTelemetry: async (event) => {
-          if (
-            failEmission &&
-            typeof event.payload === 'object' &&
-            event.payload !== null &&
-            'to' in event.payload &&
-            event.payload.to === 'failed'
-          ) {
+          if (failEmission && transitionTarget(event) === 'failed') {
             failEmission = false;
             throw new Error('emit-fail');
           }
@@ -413,18 +530,38 @@ describe('reviewed compiled meta-phase artifacts', () => {
       }),
     );
 
+    // The first latched control error (the adjudicator fault) takes precedence
+    // over the telemetry sink failure raised while settling into `failed`.
     await expect(
       runtime.handleBossInput({
         text: 'First attempt.',
         signal: new AbortController().signal,
       }),
-    ).rejects.toThrow('emit-fail');
-    await expect(
-      runtime.handleBossInput({
-        text: 'Recovery attempt.',
-        signal: new AbortController().signal,
-      }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow('judge-fail');
+    // Neither error leaks into the recovery turn, which runs to terminal.
+    const recovery = await runtime.handleBossInput({
+      text: 'Recovery attempt.',
+      signal: new AbortController().signal,
+    });
+    expect(recovery.outcome).toBe('terminal');
     await runtime.dispose();
   });
+
+  it.each(artifacts)(
+    '$name surfaces a host telemetry emission failure from init',
+    async ({ create }) => {
+      const runtime = create();
+      await expect(
+        runtime.init(
+          rootSession({
+            emitTelemetry: async () => {
+              throw new Error('telemetry sink failed');
+            },
+          }),
+        ),
+      ).rejects.toThrow(/telemetry sink failed/);
+      // Failed initialization leaves the runtime terminally disposable.
+      await expect(runtime.dispose()).resolves.toBeUndefined();
+    },
+  );
 });
