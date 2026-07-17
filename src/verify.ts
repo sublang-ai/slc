@@ -1868,11 +1868,6 @@ function occurrences(hay: string, needle: string): number {
   return needle === '' ? 0 : hay.split(needle).length - 1;
 }
 
-/** Escapes a literal for use inside a regular expression. */
-function escapeRegExp(literal: string): string {
-  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 interface PromptBodyMatch {
   index: number;
   substitutions: string[];
@@ -1891,56 +1886,77 @@ function matchPromptBody(
   reads: readonly string[],
   expectedSubstitutions?: readonly string[],
 ): PromptBodyMatch | null {
+  const placeholderMatches = [...prompt.matchAll(PLACEHOLDER)];
   const sentinels = reads.map(sentinelFor);
-  const sentinelPattern =
-    sentinels.length > 0
-      ? sentinels
-          .flatMap((sentinel) => [sentinel, JSON.stringify(sentinel)])
-          .map(escapeRegExp)
-          .join('|')
-      : '(?!)';
-  const captures: string[] = [];
-  let pattern = '';
+  const sentinelForms = sentinels.flatMap((sentinel) => [
+    sentinel,
+    JSON.stringify(sentinel),
+  ]);
+
+  // Decompose the prompt into literal segments separated by placeholders, then
+  // scan the composed text segment by segment. A monolithic escaped regex over
+  // a meta-scale prompt exceeds the engine's pattern-size limit, so matching
+  // is plain string comparison over a finite candidate set at each gap.
+  const segments: string[] = [];
+  const tokens: string[] = [];
   let offset = 0;
-  for (const match of prompt.matchAll(PLACEHOLDER)) {
-    const index = match.index;
-    const token = match[0];
-    pattern += escapeRegExp(prompt.slice(offset, index));
-    if (expectedSubstitutions === undefined) {
-      pattern += `(${escapeRegExp(token)}|${sentinelPattern})`;
-      captures.push(token);
-    } else if (expectedSubstitutions.includes(token)) {
-      pattern += `(?:${sentinelPattern})`;
-    } else {
-      pattern += escapeRegExp(token);
+  for (const match of placeholderMatches) {
+    segments.push(prompt.slice(offset, match.index));
+    tokens.push(match[0]);
+    offset = match.index + match[0].length;
+  }
+  segments.push(prompt.slice(offset));
+
+  const tryFrom = (start: number): { end: number; values: string[] } | null => {
+    if (!composed.startsWith(segments[0], start)) return null;
+    let pos = start + segments[0].length;
+    const values: string[] = [];
+    for (let gap = 0; gap < tokens.length; gap++) {
+      const token = tokens[gap];
+      const candidates =
+        expectedSubstitutions === undefined
+          ? [token, ...sentinelForms]
+          : expectedSubstitutions.includes(token)
+            ? sentinelForms
+            : [token];
+      const next = segments[gap + 1];
+      const chosen = candidates.find(
+        (candidate) =>
+          composed.startsWith(candidate, pos) &&
+          composed.startsWith(next, pos + candidate.length),
+      );
+      if (chosen === undefined) return null;
+      values.push(chosen);
+      pos += chosen.length + next.length;
     }
-    offset = index + token.length;
-  }
-  pattern += escapeRegExp(prompt.slice(offset));
+    if (pos !== composed.length && composed[pos] !== '\n') return null;
+    return { end: pos, values };
+  };
 
-  const matched = new RegExp(`(?:^|\\n)${pattern}(?=\\n|$)`).exec(composed);
-  if (matched === null) return null;
+  for (let start = 0; start <= composed.length; start++) {
+    if (start !== 0 && composed[start - 1] !== '\n') continue;
+    const attempt = tryFrom(start);
+    if (attempt === null) continue;
 
-  const index = matched.index + (matched[0].startsWith('\n') ? 1 : 0);
-  if (expectedSubstitutions !== undefined) {
-    return { index, substitutions: [...expectedSubstitutions] };
+    if (expectedSubstitutions !== undefined) {
+      return { index: start, substitutions: [...expectedSubstitutions] };
+    }
+    const modes = new Map<string, Set<'literal' | 'sentinel'>>();
+    for (let gap = 0; gap < tokens.length; gap++) {
+      const token = tokens[gap];
+      const tokenModes = modes.get(token) ?? new Set();
+      tokenModes.add(attempt.values[gap] === token ? 'literal' : 'sentinel');
+      modes.set(token, tokenModes);
+    }
+    if ([...modes.values()].some((tokenModes) => tokenModes.size > 1)) {
+      continue;
+    }
+    const substitutions = placeholdersIn(prompt).filter(
+      (token) => modes.get(token)?.has('sentinel') === true,
+    );
+    return { index: start, substitutions };
   }
-
-  const modes = new Map<string, Set<'literal' | 'sentinel'>>();
-  for (let capture = 0; capture < captures.length; capture++) {
-    const token = captures[capture];
-    const value = matched[capture + 1];
-    const tokenModes = modes.get(token) ?? new Set();
-    tokenModes.add(value === token ? 'literal' : 'sentinel');
-    modes.set(token, tokenModes);
-  }
-  if ([...modes.values()].some((tokenModes) => tokenModes.size > 1)) {
-    return null;
-  }
-  const substitutions = placeholdersIn(prompt).filter(
-    (token) => modes.get(token)?.has('sentinel') === true,
-  );
-  return { index, substitutions };
+  return null;
 }
 
 /** Findings when a composed prompt does not preserve the domain body (VERIFY-5). */
