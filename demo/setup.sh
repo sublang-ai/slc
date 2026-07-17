@@ -6,7 +6,9 @@
 #
 # Usage: demo/setup.sh [<work-dir>] [--init]
 #
-#   <work-dir>  target directory (default: demo/run). Recreated from scratch.
+#   <work-dir>  target directory (default: ${TMPDIR:-/tmp}/slc-demo-run —
+#               outside this repository, so the agents see only the demo
+#               project, not slc's own instructions). Recreated from scratch.
 #   --init      also `git init` and commit the seed state. Without it the
 #               directory is deliberately NOT a Git repository, so the
 #               compiled playbook's agent-free setup step initializes it.
@@ -14,10 +16,10 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-work="${1:-$here/run}"
+work="${1:-${TMPDIR:-/tmp}/slc-demo-run}"
 init=0
 for arg in "$@"; do [ "$arg" = "--init" ] && init=1; done
-case "$work" in --init) work="$here/run" ;; esac
+case "$work" in --init) work="${TMPDIR:-/tmp}/slc-demo-run" ;; esac
 
 rm -rf "$work"
 mkdir -p "$work"

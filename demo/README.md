@@ -71,10 +71,12 @@ committed, so you can skip this step and read the artifacts instead:
 demo/setup.sh
 ```
 
-This creates `demo/run/` with a tiny project: `stats.js` has a real
-`median` bug (order-dependent, wrong for even lengths) and `test.js`
-fails while it is present. The directory is deliberately **not** a Git
-repository — the compiled workflow's scripted step will initialize it.
+This creates a work directory (default `${TMPDIR:-/tmp}/slc-demo-run`,
+deliberately outside this repository so the agents see only the demo
+project) with a tiny program: `stats.js` has a real `median` bug
+(order-dependent, wrong for even lengths) and `test.js` fails while it
+is present. The directory is deliberately **not** a Git repository —
+the compiled workflow's scripted step will initialize it.
 
 ## 3. Run the workflow with two real agents
 
@@ -85,8 +87,8 @@ demo/run.sh
 which is essentially:
 
 ```sh
-cd demo/run
-playbook run ../registry.ts \
+cd "${TMPDIR:-/tmp}/slc-demo-run"
+playbook run /path/to/slc/demo/registry.ts \
   "stats.js 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它，使 node test.js 通过。" \
   --player 编码者=claude:claude-sonnet-5 \
   --player 审查者=codex:gpt-5.6-terra \
@@ -110,7 +112,7 @@ the specs (`<adapter>[:<model>][@<effort>]`).
 ## 4. Validate everything
 
 ```sh
-node demo/check.mjs --run-dir demo/run
+node demo/check.mjs --run-dir "${TMPDIR:-/tmp}/slc-demo-run"
 ```
 
 The checker validates the artifacts (script item, script state,

@@ -7,7 +7,8 @@
 #
 # Usage: demo/run.sh [<work-dir>]
 #
-#   <work-dir>     target repository (default: demo/run; recreated by setup.sh)
+#   <work-dir>     target repository (default: ${TMPDIR:-/tmp}/slc-demo-run,
+#                  outside this repository; recreated by setup.sh)
 #
 # Environment:
 #   PLAYBOOK_BIN   playbook launcher (default: playbook; use playbook-dev
@@ -20,7 +21,7 @@
 set -uo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-work="${1:-$here/run}"
+work="${1:-${TMPDIR:-/tmp}/slc-demo-run}"
 
 PLAYBOOK_BIN="${PLAYBOOK_BIN:-playbook}"
 CODER_AGENT="${CODER_AGENT:-claude:claude-sonnet-5}"
