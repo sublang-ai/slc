@@ -193,7 +193,7 @@ describe('linkedArtifactPath (PIPE-15, PIPE-18)', () => {
     ).toBe('out/app.ts');
   });
 
-  it('places a single-object .link artifact source-adjacent', () => {
+  it('anchors a single-object .link artifact to the invocation CWD (DR-014)', () => {
     expect(
       linkedArtifactPath({
         kind: 'link',
@@ -202,6 +202,37 @@ describe('linkedArtifactPath (PIPE-15, PIPE-18)', () => {
         source: fsm,
         linked: playbook,
         output: null,
+        cwd: 'flows',
+      }),
+    ).toBe(join('flows', 'onboarding.playbook', 'onboarding.playbook.ts'));
+  });
+
+  it('places the single-object artifact under the CWD when the object lives elsewhere (DR-014, PIPE-38)', () => {
+    expect(
+      linkedArtifactPath({
+        kind: 'link',
+        pipeline: 'playbook',
+        objects: [join('elsewhere', 'src', 'onboarding.fsm.ts')],
+        source: fsm,
+        linked: playbook,
+        output: null,
+        cwd: join('build', 'out'),
+      }),
+    ).toBe(
+      join('build', 'out', 'onboarding.playbook', 'onboarding.playbook.ts'),
+    );
+  });
+
+  it('reuses the CWD when its leaf is already <basename>.<pipeline> (DR-014, PIPE-38)', () => {
+    expect(
+      linkedArtifactPath({
+        kind: 'link',
+        pipeline: 'playbook',
+        objects: ['onboarding.fsm.ts'],
+        source: fsm,
+        linked: playbook,
+        output: null,
+        cwd: join('flows', 'onboarding.playbook'),
       }),
     ).toBe(join('flows', 'onboarding.playbook', 'onboarding.playbook.ts'));
   });
@@ -215,6 +246,7 @@ describe('linkedArtifactPath (PIPE-15, PIPE-18)', () => {
         source: fsm,
         linked: playbook,
         output: null,
+        cwd: '.',
       }),
     ).toThrow(expect.objectContaining({ code: 'output-required' }));
   });
@@ -228,6 +260,7 @@ describe('linkedArtifactPath (PIPE-15, PIPE-18)', () => {
         source: fsm,
         linked: playbook,
         output: 'app.run.ts',
+        cwd: '.',
       }),
     ).toBe('app.run.ts');
   });
@@ -241,6 +274,7 @@ describe('linkedArtifactPath (PIPE-15, PIPE-18)', () => {
         source: fsm,
         linked: playbook,
         output: null,
+        cwd: '.',
       });
       expect.unreachable();
     } catch (error) {

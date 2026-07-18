@@ -33,7 +33,7 @@ describe('parseSource (PIPE-6)', () => {
         ext: '.md',
         entry: true,
       }),
-    ).toEqual({ basename: 'onboarding', dir: 'flows' });
+    ).toEqual({ basename: 'onboarding', raw: false });
   });
 
   it('accepts the qualified entry form and strips the source format', () => {
@@ -44,7 +44,7 @@ describe('parseSource (PIPE-6)', () => {
         ext: '.md',
         entry: true,
       }),
-    ).toEqual({ basename: 'onboarding', dir: 'flows' });
+    ).toEqual({ basename: 'onboarding', raw: false });
   });
 
   it('accepts the qualified non-entry form', () => {
@@ -55,10 +55,7 @@ describe('parseSource (PIPE-6)', () => {
         ext: '.md',
         entry: false,
       }),
-    ).toEqual({
-      basename: 'onboarding',
-      dir: join('flows', 'onboarding.playbook'),
-    });
+    ).toEqual({ basename: 'onboarding', raw: false });
   });
 
   it('preserves dots within the basename', () => {
@@ -91,28 +88,86 @@ describe('parseSource (PIPE-6)', () => {
     ).toThrow(expect.objectContaining({ code: 'invalid-source-name' }));
   });
 
-  it('refuses a wrong extension', () => {
-    expect(() =>
+  it('accepts an entry source with a foreign extension as a raw input (DR-014)', () => {
+    expect(
       parseSource({
         path: 'onboarding.txt',
         sourceFormat: 'text',
         ext: '.md',
         entry: true,
       }),
-    ).toThrow(SourceError);
+    ).toEqual({ basename: 'onboarding', raw: true });
+  });
+
+  it('derives the raw basename as the name minus its actual extension', () => {
+    expect(
+      parseSource({
+        path: 'flows/workflow.zh.txt',
+        sourceFormat: 'text',
+        ext: '.md',
+        entry: true,
+      }),
+    ).toEqual({ basename: 'workflow.zh', raw: true });
+  });
+
+  it('uses the whole name as the raw basename when it has no extension', () => {
+    expect(
+      parseSource({
+        path: 'flows/workflow',
+        sourceFormat: 'text',
+        ext: '.md',
+        entry: true,
+      }),
+    ).toEqual({ basename: 'workflow', raw: true });
+  });
+
+  it('refuses a wrong extension for a non-entry phase', () => {
+    const parse = () =>
+      parseSource({
+        path: 'onboarding.txt',
+        sourceFormat: 'gears',
+        ext: '.md',
+        entry: false,
+      });
+    expect(parse).toThrow(SourceError);
+    expect(parse).toThrow(
+      expect.objectContaining({ code: 'invalid-source-name' }),
+    );
+  });
+
+  it('refuses an empty basename', () => {
+    expect(() =>
+      parseSource({
+        path: 'flows/.md',
+        sourceFormat: 'text',
+        ext: '.md',
+        entry: true,
+      }),
+    ).toThrow(expect.objectContaining({ code: 'invalid-source-name' }));
   });
 });
 
 describe('artifactDir (PIPE-7)', () => {
-  it('places artifacts in a canonical sibling directory', () => {
+  it('places artifacts in a canonical directory under the invocation cwd (DR-014)', () => {
     expect(artifactDir('flows', 'onboarding', 'playbook')).toBe(
       join('flows', 'onboarding.playbook'),
     );
   });
 
-  it('reuses the canonical directory without nesting', () => {
-    const inside = join('flows', 'onboarding.playbook');
-    expect(artifactDir(inside, 'onboarding', 'playbook')).toBe(inside);
+  it('reuses the cwd without nesting when its leaf is <basename>.<pipeline>', () => {
+    const cwd = join('flows', 'onboarding.playbook');
+    expect(artifactDir(cwd, 'onboarding', 'playbook')).toBe(cwd);
+  });
+
+  it('nests under a cwd whose leaf names a different basename or pipeline', () => {
+    const otherBase = join('flows', 'other.playbook');
+    expect(artifactDir(otherBase, 'onboarding', 'playbook')).toBe(
+      join(otherBase, 'onboarding.playbook'),
+    );
+    const otherPipeline = join('flows', 'onboarding.gears');
+    expect(artifactDir(otherPipeline, 'onboarding', 'playbook')).toBe(
+      join(otherPipeline, 'onboarding.playbook'),
+    );
   });
 });
 

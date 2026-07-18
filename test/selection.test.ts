@@ -3,7 +3,7 @@
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -88,6 +88,8 @@ describe('compiled selection (PHEXEC-28)', () => {
           return compiled;
         }
       : undefined,
+    // DR-014: anchor artifact placement to the fixture, not the process cwd.
+    cwd: dirname(source),
   });
 
   /** Writes a current pin for `text2gears` over committed artifact and link files. */

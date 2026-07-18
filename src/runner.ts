@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
+import { emitEntryModule } from './entry-module.js';
 import {
   type ExecuteRequest,
   type PhaseExecutor,
@@ -33,7 +34,7 @@ import {
   loadPipeline,
   resolvePipeline,
 } from './pipeline.js';
-import { isReservedPipeline } from './resolver.js';
+import { defaultPlaybookLinkTarget, isReservedPipeline } from './resolver.js';
 import {
   emitFsmCoverageTest,
   emitFsmIntrospectionTest,
@@ -67,6 +68,8 @@ export interface SlcDeps {
    * silently interpreting a phase the pipeline pinned to a compiled artifact.
    */
   compiled?: (selection: CompiledSelection) => PhaseExecutor;
+  /** Invocation working directory anchoring artifact placement (DR-014); defaults to the process cwd. */
+  cwd?: string;
   signal?: AbortSignal;
 }
 
@@ -98,6 +101,20 @@ export async function runSlc(
   try {
     switch (invocation.kind) {
       case 'full':
+        // The reserved playbook pipeline supplies a default link target
+        // (SELFHOST-13): a bare full run becomes a full-link against the
+        // installed @sublang/playbook runtime contract module (DR-014).
+        if (invocation.pipeline === 'playbook') {
+          return await runFullLink(
+            {
+              ...invocation,
+              kind: 'full-link',
+              linkTarget: defaultPlaybookLinkTarget(),
+              options: [],
+            },
+            deps,
+          );
+        }
         return await runFull(invocation, deps);
       case 'phase':
         return await runSinglePhase(invocation, deps);
@@ -119,13 +136,13 @@ async function runFull(
     await resolvePipeline(invocation.pipeline, deps.resolver),
   );
   const entry = pipeline.phases[0];
-  const { basename, dir: srcDir } = parseSource({
+  const { basename, raw } = parseSource({
     path: invocation.source,
     sourceFormat: entry.source.format,
     ext: entry.source.ext,
     entry: true,
   });
-  const artDir = artifactDir(srcDir, basename, invocation.pipeline);
+  const artDir = artifactDir(runCwd(deps), basename, invocation.pipeline);
   await mkdir(artDir, { recursive: true });
 
   const plan = planArtifacts({
@@ -140,8 +157,8 @@ async function runFull(
     source: invocation.source,
     artDir,
     basename,
-    optimize: invocation.optimize,
-    normalize: invocation.normalize,
+    optimize: !invocation.noOptimize,
+    normalize: invocation.normalize || raw,
   });
   const result = await executeSteps(steps, pipeline, deps);
   return emitVerification(result, {
@@ -168,13 +185,20 @@ async function runSinglePhase(
     );
   }
 
-  const { basename, dir: srcDir } = parseSource({
+  const { basename, raw } = parseSource({
     path: invocation.source,
     sourceFormat: phase.source.format,
     ext: phase.source.ext,
     entry: pipeline.phases[0] === phase,
   });
-  const artDir = artifactDir(srcDir, basename, invocation.pipeline);
+  if (raw) {
+    // A named phase cannot normalize (PIPE-37), so a raw entry source has no
+    // path into the phase's declared source format here.
+    return failure(
+      `source "${invocation.source}" is a raw input; run the full pipeline to normalize it`,
+    );
+  }
+  const artDir = artifactDir(runCwd(deps), basename, invocation.pipeline);
   await mkdir(artDir, { recursive: true });
 
   if (phase.pass) {
@@ -216,6 +240,7 @@ async function runDirectLink(
     source: link.source,
     linked: link.target,
     output: invocation.output,
+    cwd: runCwd(deps),
   });
   await mkdir(dirname(linked), { recursive: true });
 
@@ -243,13 +268,14 @@ async function runFullLink(
   );
   const link = await requireLink(pipeline, invocation.pipeline);
   const entry = pipeline.phases[0];
-  const { basename, dir: srcDir } = parseSource({
+  const { basename, raw } = parseSource({
     path: invocation.source,
     sourceFormat: entry.source.format,
     ext: entry.source.ext,
     entry: true,
   });
-  const artDir = artifactDir(srcDir, basename, invocation.pipeline);
+  const normalize = invocation.normalize || raw;
+  const artDir = artifactDir(runCwd(deps), basename, invocation.pipeline);
   await mkdir(artDir, { recursive: true });
 
   // Compile chain: the exit artifact becomes the object artifact (PIPE-15).
@@ -260,8 +286,8 @@ async function runFullLink(
     source: invocation.source,
     artDir,
     basename,
-    optimize: invocation.optimize,
-    normalize: invocation.normalize,
+    optimize: !invocation.noOptimize,
+    normalize,
   });
 
   const linked = linkedArtifactPath({
@@ -288,12 +314,43 @@ async function runFullLink(
     pipeline,
     deps,
   );
-  return emitVerification(result, {
+  const verified = await emitVerification(result, {
     pipeline: invocation.pipeline,
     plan,
     artDir,
     basename,
   });
+
+  // Entry-module emission (DR-014, SELFHOST-15): only the playbook pipeline,
+  // only with the linked artifact at its canonical path.
+  if (
+    verified.ok &&
+    invocation.pipeline === 'playbook' &&
+    invocation.output === null
+  ) {
+    const gearsPlan = plan.find(
+      (artifact) => artifact.phase.target.format === 'gears',
+    );
+    if (gearsPlan !== undefined) {
+      const textPath = normalize
+        ? join(artDir, `${basename}.${entry.source.format}${entry.source.ext}`)
+        : invocation.source;
+      const entryPath = await emitEntryModule({
+        cwd: runCwd(deps),
+        basename,
+        pipeline: invocation.pipeline,
+        gearsPath: gearsPlan.path,
+        textPath,
+      });
+      return { ...verified, outputs: [...verified.outputs, entryPath] };
+    }
+  }
+  return verified;
+}
+
+/** The invocation working directory anchoring artifact placement (DR-014). */
+function runCwd(deps: SlcDeps): string {
+  return deps.cwd ?? process.cwd();
 }
 
 /**

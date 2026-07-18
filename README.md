@@ -66,16 +66,20 @@ prose workflow:
 slc playbook my-workflow.md
 ```
 
-This writes `my-workflow.playbook/my-workflow.gears.md` and
-`my-workflow.playbook/my-workflow.fsm.ts` (the XState machine) beside
-the source. For what a prose workflow looks like, see playbook's
-canonical worked example,
+This writes `my-workflow.playbook/` — the intermediates
+(`my-workflow.gears.md`, the XState machine `my-workflow.fsm.ts`), the
+runnable runtime module, and its verification tests — plus the
+`my-workflow.ts` entry that `playbook run` consumes, all in your
+working directory. A raw input (any extension the entry phase doesn't
+declare, e.g. `.txt`) is normalized first, and the pipeline's
+optimization pass runs by default (`--no-optimize` skips it). For what
+a prose workflow looks like, see playbook's canonical worked example,
 [`code.md`](https://github.com/sublang-ai/playbook/blob/main/reference/sdlc/code.md).
 Intermediates are first-class: edit one and re-run a single
-phase (`slc playbook.gears2fsm …`) and it lands in the same place. Add
-`--link <target>` to also emit the runnable runtime module; `slc --help`
-shows all invocation forms. The repo config pins `agent: claude-code` —
-set `SLC_AGENT` (or edit the config) to compile with another agent CLI.
+phase (`slc playbook.gears2fsm …`) and it lands in the same place.
+`slc --help` shows all invocation forms. The repo config pins
+`agent: claude-code` — set `SLC_AGENT` (or edit the config) to compile
+with another agent CLI.
 
 Success prints the written artifact paths and exits 0; a failure prints
 diagnostics to stderr — naming the failing phase when one is at fault —
