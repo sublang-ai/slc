@@ -16,7 +16,7 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 
 ### COMPILE-1
 
-When the user runs a pipeline on a source, the slc command shall transform the source through the pipeline's ordered phases and produce the pipeline output, leaving each non-final phase's result as an inspectable intermediate beside the source ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md)).
+When the user runs a pipeline on a source, the slc command shall transform the source through the pipeline's ordered phases and produce the pipeline output, leaving each non-final phase's result as an inspectable intermediate in the invocation working directory's artifact directory, so compiling from another directory never rewrites artifacts committed beside the source ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### COMPILE-2
 
@@ -40,8 +40,8 @@ Where a pipeline pins a phase to a reviewed compiled artifact, when the user run
 
 ### COMPILE-7
 
-When the user runs a full pipeline with `--normalize`, the slc command shall first rewrite the raw source into a document satisfying the entry phase's stated source requirements — preserving the input's meaning, order, and language, surfacing only implicit structure and implicit executability preconditions — and compile from that normalized source, leaving the user's raw input unchanged ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+When the user runs a full pipeline with `--normalize` or on a raw source whose extension is not the entry phase's, the slc command shall first rewrite the raw source into a document satisfying the entry phase's stated source requirements — preserving the input's meaning, order, and language, surfacing only implicit structure and implicit executability preconditions — and compile from that normalized source, leaving the user's raw input unchanged ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### COMPILE-8
 
-When the user runs a full pipeline with `-O`/`--optimize`, the slc command shall run the pipeline's optimization pass phases between the ordinary phases, producing the same canonical artifact names as an unoptimized run plus the inspectable pre-pass intermediates ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+When the user runs a full pipeline, the slc command shall run the pipeline's optimization pass phases between the ordinary phases by default — producing the same canonical artifact names as an unoptimized run plus the inspectable pre-pass intermediates — and shall run the chain without passes when the user gives `--no-optimize` ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).

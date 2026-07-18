@@ -37,6 +37,7 @@ meta.md     The spec of specs
 | DR-011 | [011-playbook-1-0-captain-contract-adoption.md](decisions/011-playbook-1-0-captain-contract-adoption.md) | Playbook 1.0 adoption: final six-port composed profile, distinct Captain/player verification, dynamic child wiring, scripted child coverage, and atomic reviewed assets |
 | DR-012 | [012-playbook-routing-control-separation.md](decisions/012-playbook-routing-control-separation.md) | Playbook routing/control separation: source-owned result metadata, exact Boss text, isolated Captain calls, and visible-prose ownership |
 | DR-013 | [013-normalize-and-pass-phases.md](decisions/013-normalize-and-pass-phases.md) | Generic input normalization (`--normalize` over a pipeline-agnostic built-in definition) and LLVM-style format-preserving pass phases scheduled with `-O` |
+| DR-014 | [014-cwd-output-invocation-defaults-entry-emission.md](decisions/014-cwd-output-invocation-defaults-entry-emission.md) | Artifacts in the invocation CWD, raw-entry auto-normalization, default-on passes, a default playbook link target, and deterministic entry-module emission |
 
 ## Iterations
 
@@ -55,6 +56,7 @@ meta.md     The spec of specs
 | IR-010 | [010-playbook-routing-control-separation.md](iterations/010-playbook-routing-control-separation.md) | Separate routing prose from control metadata, preserve exact Boss text, isolate Captain calls, and verify explicit result contracts |
 | IR-011 | [011-playbook-0-10-adoption.md](iterations/011-playbook-0-10-adoption.md) | Adopt the Playbook 0.10 generation: frozen local legacy contract, composed-v2 pin mapping, re-synced definitions, rebuilt meta artifacts, and refreshed pins |
 | IR-012 | [012-normalize-optimize-demo.md](iterations/012-normalize-optimize-demo.md) | Implement DR-013 (--normalize, -O pass phases, script-actor verification) and land the end-to-end demo/ acceptance workflow |
+| IR-013 | [013-cwd-output-entry-emission-demo.md](iterations/013-cwd-output-entry-emission-demo.md) | Implement DR-014 (CWD output, raw-entry normalization, default passes, default link target, entry emission) and rebase demo/ on the three-line flow |
 
 ## Packages
 
