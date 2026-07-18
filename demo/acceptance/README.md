@@ -41,9 +41,9 @@ demo/acceptance/run.sh [<work-dir>]
 Calls `setup.sh` itself, so the work directory is always freshly seeded —
 running `setup.sh` beforehand is redundant, and anything added between the
 two is discarded. It then `cd`s into the work directory (this matters:
-`registry.ts` hands the process working directory to the compiled
-workflow as the tree its scripted step and its agents operate on) and
-invokes `playbook run` with `--json --verbose`.
+the emitted entry `workflow.zh.ts` hands the process working directory to
+the compiled workflow as the tree its scripted step and its agents
+operate on) and invokes `playbook run` with `--json --verbose`.
 
 Evidence is captured **beside** the work repository, in
 `<work-dir>.evidence/` — a growing log inside the worktree would be a

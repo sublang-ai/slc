@@ -41,7 +41,7 @@ mkdir -p "$evidence"
 echo "launching: coder=$CODER_AGENT reviewer=$REVIEWER_AGENT captain=$CAPTAIN_AGENT"
 (
   cd "$work"
-  "$PLAYBOOK_BIN" run "$here/../registry.ts" "$DEMO_TASK" \
+  "$PLAYBOOK_BIN" run "$here/../workflow.zh.ts" "$DEMO_TASK" \
     --player "编码者=$CODER_AGENT" \
     --player "审查者=$REVIEWER_AGENT" \
     --captain "$CAPTAIN_AGENT" \
