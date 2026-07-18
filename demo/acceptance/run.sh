@@ -27,7 +27,7 @@ PLAYBOOK_BIN="${PLAYBOOK_BIN:-playbook}"
 CODER_AGENT="${CODER_AGENT:-claude:claude-sonnet-5}"
 REVIEWER_AGENT="${REVIEWER_AGENT:-codex:gpt-5.6-terra}"
 CAPTAIN_AGENT="${CAPTAIN_AGENT:-claude:claude-sonnet-5}"
-DEMO_TASK="${DEMO_TASK:-stats.js 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它，使 node test.js 通过。}"
+DEMO_TASK="${DEMO_TASK:-sample.c 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它。}"
 
 "$here/setup.sh" "$work"
 
