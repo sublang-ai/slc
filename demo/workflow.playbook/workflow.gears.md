@@ -1,6 +1,8 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
+# 工作流
+
 Players:
 
 - `编码者`
@@ -8,59 +10,63 @@ Players:
 
 ### CODE-1
 
-When 工作流启动, Captain shall run:
+当工作流开始时，Captain shall run:
 
 > git rev-parse --is-inside-work-tree 2>/dev/null || git init
 
 Results:
-- `ok`: 命令以零状态码退出。
-- `failed`: 命令以非零状态码退出。
+- `ok`: 命令以状态码 0 退出。
+- `failed`: 命令以非 0 状态码退出。
 
 ### CODE-2
 
-When 仓库准备就绪, Captain shall prompt `编码者`:
+当 Boss 给出待完成的任务、且当前目录已是 Git 仓库时，Captain shall prompt 编码者:
 
-> 按任务要求对当前目录的代码进行修改。
-> 提交Git。
+> 你要完成的任务是：<task>。
+> 按任务要求，对当前目录的代码进行修改。
+> 将修改提交到 Git。
 
 ### CODE-3
 
-When 编码者提交了改动, Captain shall prompt `审查者`:
+当编码者完成一次提交、有改动待审查，且审查-修改循环至多进行 2 次时，Captain shall prompt 审查者:
 
-> 对提交的commit进行review。
-> 提出合理问题。
+> 对最新提交的 commit 进行 review。
+> 提出合理的问题；若没有任何问题，请明确说明通过。
 
 Results:
-- `issues`: 审查者提出了合理问题，交回给编码者判断。输出应包含 `reviewComments`：审查者提出的问题。
-- `clean`: 审查者对提交的commit未发现任何问题。
+- `issues`: 审查者提出了需要处理的问题；输出应包含 `reviewFindings: <审查者提出的问题>`。
+- `clean`: 审查者认为没有任何问题，流程结束。
 
 ### CODE-4
 
-When 审查者提出问题待编码者判断, Captain shall prompt `编码者`:
+当审查者提出问题、交回给编码者判断，且编码者的判断不超过 3 次（争论不超过 2 轮）时，Captain shall prompt 编码者:
 
-> 对审查者提出的问题做出判断：<reviewComments>
-> 可以接受或拒绝，但要讲清楚原因。
+> 审查者提出的问题：<reviewFindings>。
+> 审查者对你上一次判断的回应（如有）：<reviewerRebuttal>。
+> 针对每个问题，决定接受还是拒绝，并讲清楚原因。
+> 与审查者讨论，争取达成一致；若无法达成一致，则由你自行定夺，给出最终结论。
 
 Results:
-- `responded`: 编码者对每个问题做出接受或拒绝的判断并讲清原因。输出应包含 `coderResponse`：编码者的判断与理由。
+- `agreed`: 编码者与审查者达成一致，或已到第 3 次判断由编码者自行定夺；输出应包含 `conclusion: <最终结论>`。
+- `dispute`: 尚未达成一致，仍需继续争论；输出应包含 `coderRuling: <编码者对各问题的接受或拒绝判断及原因>`。
 
 ### CODE-5
 
-When 编码者给出判断与理由, Captain shall prompt `审查者`:
+当编码者作出判断、双方尚未达成一致，且争论不超过 2 轮时，Captain shall prompt 审查者:
 
-> 阅读编码者的判断与理由：<coderResponse>
-> 与编码者争论，直至达成一致。
+> 编码者对你所提问题的判断与原因：<coderRuling>。
+> 针对编码者的判断进行回应，说明你是否接受其理由。
+> 若仍有异议，请进一步说明，争取与编码者达成一致。
 
 Results:
-- `agreed`: 审查者与编码者达成一致。输出应包含 `agreedConclusion`：双方一致的修改结论。
-- `disputed`: 尚未达成一致，审查者继续争论。输出应包含 `reviewComments`：审查者进一步的问题或理由。
+- `responded`: 审查者对编码者的判断作出了回应；输出应包含 `reviewerRebuttal: <审查者的回应>`。
 
 ### CODE-6
 
-When 双方达成一致, Captain shall prompt `编码者`:
+当编码者与审查者就问题达成结论后，Captain shall prompt 编码者:
 
-> 按结论修改代码：<agreedConclusion>
-> 再次提交。
+> 按以下结论修改代码：<conclusion>。
+> 将修改再次提交到 Git。
 
 ## Optimizations
 

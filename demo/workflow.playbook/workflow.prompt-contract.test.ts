@@ -20,12 +20,13 @@ const CONTRACT = [
     state: 'implement',
     sourceItem: 'CODE-2',
     player: '编码者',
-    reads: ['bossReply', 'pendingBossQuestion'],
+    reads: ['bossReply', 'pendingBossQuestion', 'task'],
     wires: {
+      task: ['task'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
-    placeholders: [],
+    placeholders: ['<task>'],
   },
   {
     state: 'review',
@@ -39,40 +40,46 @@ const CONTRACT = [
     placeholders: [],
   },
   {
-    state: 'judge',
+    state: 'adjudicate',
     sourceItem: 'CODE-4',
     player: '编码者',
-    reads: ['bossReply', 'pendingBossQuestion', 'reviewComments'],
+    reads: [
+      'bossReply',
+      'pendingBossQuestion',
+      'reviewFindings',
+      'reviewerRebuttal',
+    ],
     wires: {
-      reviewComments: ['reviewComments'],
+      reviewFindings: ['reviewFindings'],
+      reviewerRebuttal: ['reviewerRebuttal'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
-    placeholders: ['<reviewComments>'],
+    placeholders: ['<reviewFindings>', '<reviewerRebuttal>'],
   },
   {
-    state: 'debate',
+    state: 'rebut',
     sourceItem: 'CODE-5',
     player: '审查者',
-    reads: ['bossReply', 'coderResponse', 'pendingBossQuestion'],
+    reads: ['bossReply', 'coderRuling', 'pendingBossQuestion'],
     wires: {
-      coderResponse: ['coderResponse'],
+      coderRuling: ['coderRuling'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
-    placeholders: ['<coderResponse>'],
+    placeholders: ['<coderRuling>'],
   },
   {
-    state: 'revise',
+    state: 'applyConclusion',
     sourceItem: 'CODE-6',
     player: '编码者',
-    reads: ['agreedConclusion', 'bossReply', 'pendingBossQuestion'],
+    reads: ['bossReply', 'conclusion', 'pendingBossQuestion'],
     wires: {
-      agreedConclusion: ['agreedConclusion'],
+      conclusion: ['conclusion'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
-    placeholders: ['<agreedConclusion>'],
+    placeholders: ['<conclusion>'],
   },
 ];
 
@@ -82,11 +89,11 @@ describe('workflow: prompt contract', () => {
   });
 
   const PLAYER_SUBSTITUTED = {
-    implement: [],
+    implement: ['<task>'],
     review: [],
-    judge: ['<reviewComments>'],
-    debate: ['<coderResponse>'],
-    revise: ['<agreedConclusion>'],
+    adjudicate: ['<reviewFindings>', '<reviewerRebuttal>'],
+    rebut: ['<coderRuling>'],
+    applyConclusion: ['<conclusion>'],
   };
 
   const composePlayer = (
