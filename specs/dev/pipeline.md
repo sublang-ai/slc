@@ -62,11 +62,11 @@ While inferring phase order, the slc command shall exclude pass phases from chai
 
 ### PIPE-6
 
-When given a source path, the slc command shall accept it only if it matches `<basename>.<source-format>.<ext>` or, for the entry phase, the plain form `<basename>[.<source-format>].<ext>`, and shall refuse any name matching no applicable form ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#source-filename-convention)).
+When given a non-entry source path, the slc command shall accept it only if it matches `<basename>.<source-format>.<ext>` and shall refuse any other name; when given an entry source path, the slc command shall accept `<basename>[.<source-format>].<ext>` as before and shall treat a name with any other extension as a raw input whose `<basename>` is the name minus its actual extension ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#source-filename-convention), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### PIPE-7
 
-Where the source directory's leaf name is not `<basename>.<pipeline>`, the slc command shall use `<src-dir>/<basename>.<pipeline>/` as the artifact directory; where the leaf name is already `<basename>.<pipeline>`, the slc command shall reuse that directory without nesting another inside it ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations)).
+Where the invocation working directory's leaf name is not `<basename>.<pipeline>`, the slc command shall use `<cwd>/<basename>.<pipeline>/` as the artifact directory; where the leaf name is already `<basename>.<pipeline>`, the slc command shall reuse the working directory without nesting another inside it ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### PIPE-8
 
@@ -98,7 +98,7 @@ When invoked as `slc <pipeline>.link <object>... <target> [-o <linked-target>]`,
 
 ### PIPE-13
 
-When invoked as `slc <pipeline> <source> --link <target>`, the slc command shall run the compile chain to its exit artifact and then the link phase; when invoked without `--link`, the slc command shall stop at the compile-chain output ([DR-002](../decisions/002-slc-link-phases.md#cli)).
+When invoked as `slc <pipeline> <source> --link <target>`, the slc command shall run the compile chain to its exit artifact and then the link phase; when invoked without `--link`, the slc command shall stop at the compile-chain output, except where the resolved pipeline supplies a default link target ([SELFHOST-13](self-hosting.md#selfhost-13)), in which case the slc command shall run the full-link form against that default ([DR-002](../decisions/002-slc-link-phases.md#cli), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### PIPE-14
 
@@ -116,7 +116,7 @@ When invoked as `slc <pipeline>.link` with exactly one object, the slc command s
 
 ### PIPE-32
 
-When a full or full-link invocation carries `-O`/`--optimize`, the slc command shall schedule every discovered pass phase after the chain phase producing its format, in pass-name order: the producing phase shall write `<art-dir>/<basename>.<format>.raw<ext>`, each non-final pass `<art-dir>/<basename>.<format>.opt<k><ext>`, and the final pass the format's canonical artifact path, so downstream phases and verification consume identical paths with or without optimization ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+On a full or full-link invocation without `--no-optimize`, the slc command shall schedule every discovered pass phase after the chain phase producing its format, in pass-name order: the producing phase shall write `<art-dir>/<basename>.<format>.raw<ext>`, each non-final pass `<art-dir>/<basename>.<format>.opt<k><ext>`, and the final pass the format's canonical artifact path, so downstream phases and verification consume identical paths with or without optimization; when the invocation carries `--no-optimize`, the slc command shall run the chain with no passes, and `-O`/`--optimize` shall remain accepted as an explicit statement of the default ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### PIPE-33
 
@@ -124,8 +124,8 @@ When invoked as `slc <pipeline>.<pass> <source>`, the slc command shall run the 
 
 ### PIPE-34
 
-When a full or full-link invocation carries `--normalize`, the slc command shall schedule one generic normalization step ahead of the entry phase, driven by the pipeline-agnostic definition shipped with slc, writing `<art-dir>/<basename>.<entry-source-format><entry-source-ext>` as the entry phase's source and supplying the entry-phase definition as a protected read-only reference input ([DR-013](../decisions/013-normalize-and-pass-phases.md), [PHEXEC-33](phase-execution.md#phexec-33)).
+When a full or full-link invocation carries `--normalize` or its entry source is a raw input ([PIPE-6](#pipe-6)), the slc command shall schedule one generic normalization step ahead of the entry phase, driven by the pipeline-agnostic definition shipped with slc, writing `<art-dir>/<basename>.<entry-source-format><entry-source-ext>` as the entry phase's source and supplying the entry-phase definition as a protected read-only reference input ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [PHEXEC-33](phase-execution.md#phexec-33)).
 
 ### PIPE-37
 
-When `-O`/`--optimize` or `--normalize` accompanies a single-phase or `.link` invocation, the slc command shall refuse the invocation ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+When `-O`/`--optimize`, `--no-optimize`, or `--normalize` accompanies a single-phase or `.link` invocation, the slc command shall refuse the invocation ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).

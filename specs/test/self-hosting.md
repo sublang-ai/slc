@@ -23,22 +23,27 @@ Essential project-specific references: `slc`, this project's compiler CLI; and
 ### SELFHOST-4
 Verifies: [SELFHOST-1](../user/self-hosting.md#selfhost-1), [SELFHOST-2](../dev/self-hosting.md#selfhost-2), [SELFHOST-3](../dev/self-hosting.md#selfhost-3)
 
-Where a fixture reserves an `slc` pipeline that chains `text2gears` and `gears2fsm` and a `link.md` emitting `playbook`, when the user runs `slc slc <definition>` and then the same run with an explicit `--link <target>`, the slc command shall write the `fsm` object and a `playbook` artifact that resolves to a `createPlaybookRuntime` factory at their [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) locations, and shall still fail the run when the `slc` reference itself does not resolve.
+Where a fixture reserves an `slc` pipeline that chains `text2gears` and `gears2fsm` and a `link.md` emitting `playbook`, when the user runs `slc slc <definition>` and then the same run with an explicit `--link <target>`, the slc command shall write the `fsm` object and a `playbook` artifact that resolves to a `createPlaybookRuntime` factory at their canonical locations under the working directory ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)), and shall still fail the run when the `slc` reference itself does not resolve.
 
 ### SELFHOST-5
 Verifies: [SELFHOST-2](../dev/self-hosting.md#selfhost-2), [SELFHOST-3](../dev/self-hosting.md#selfhost-3), [PIPE-11](../dev/pipeline.md#pipe-11)
 
-Where the reserved `slc` resolves to the meta-pipeline definitions `@sublang/playbook` provides — whose `link.md` declares no `## Link Targets` — when the user runs `slc slc <definition> --link <target>`, the slc command shall chain those definitions and link the result to a `playbook` artifact at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) location.
+Where the reserved `slc` resolves to the meta-pipeline definitions `@sublang/playbook` provides — whose `link.md` declares no `## Link Targets` — when the user runs `slc slc <definition> --link <target>`, the slc command shall chain those definitions and link the result to a `playbook` artifact at its canonical location under the working directory ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### SELFHOST-7
 Verifies: [SELFHOST-6](../dev/self-hosting.md#selfhost-6), [PIPE-11](../dev/pipeline.md#pipe-11)
 
-Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` provides — whose `link.md` declares no `## Link Targets` — when the user runs `slc playbook <source> --link <target>`, the slc command shall resolve the `playbook` reference to those shared definitions, load that target-less link, and write the `playbook` artifact at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) location under `<basename>.playbook/`.
+Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` provides — whose `link.md` declares no `## Link Targets` — when the user runs `slc playbook <source> --link <target>`, the slc command shall resolve the `playbook` reference to those shared definitions, load that target-less link, and write the `playbook` artifact into the working directory's `<basename>.playbook/` at its canonical name ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### SELFHOST-8
-Verifies: [COMPILE-1](../user/compiler.md#compile-1), [COMPILE-2](../user/compiler.md#compile-2), [SELFHOST-6](../dev/self-hosting.md#selfhost-6)
+Verifies: [COMPILE-1](../user/compiler.md#compile-1), [COMPILE-2](../user/compiler.md#compile-2), [SELFHOST-6](../dev/self-hosting.md#selfhost-6), [SELFHOST-13](../dev/self-hosting.md#selfhost-13)
 
-Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` provides, when the user runs `slc playbook code.md` and then `slc playbook code.md --link <target>` through interpreted execution, the slc command shall write the `code.gears.md` intermediate and the `code.fsm.ts` object — stopping at the `fsm` object for the bare run — and, with `--link`, the `code.playbook.ts` runtime, each at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) location under `code.playbook/`.
+Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` provides, when the user runs `slc playbook code.md --link <target>` through interpreted execution, the slc command shall write the `code.gears.md` intermediate, the `code.fsm.ts` object, and the `code.playbook.ts` runtime, each at its canonical location under the working directory's `code.playbook/`; when the user runs the bare `slc playbook code.md`, the slc command shall run the same full-link form against the installed `@sublang/playbook` runtime as the default target.
+
+### SELFHOST-16
+Verifies: [SELFHOST-14](../user/self-hosting.md#selfhost-14), [SELFHOST-15](../dev/self-hosting.md#selfhost-15)
+
+When a full-link run of the `playbook` pipeline succeeds with the linked artifact at its canonical path, the slc command shall write `<cwd>/<basename>.ts` default-exporting a registry entry whose `id` is `<basename>` and whose `requiredRoleIds` equal the source-declared players, importing the linked module by its source-only relative specifier; when `-o` relocates the linked artifact, the slc command shall write no entry module.
 
 ### SELFHOST-10
 Verifies: [SELFHOST-9](../dev/self-hosting.md#selfhost-9)
