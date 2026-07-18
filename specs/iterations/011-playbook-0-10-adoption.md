@@ -14,7 +14,7 @@ Move the release-vendored definitions, reviewed artifacts, and pins from the ret
 - [x] `pipelines/playbook/` re-synced with Playbook's maintained definitions (0.10 generation, script actors, single-outcome default contract), keeping the local `## Pin Inputs` sections.
 - [x] `text2gears.slc/`, `gears2fsm.slc/`, and `link.slc/` rebuilt from the synced definitions via interpreted `slc slc` runs, reviewed with `scripts/verify-artifacts.mjs` (no findings).
 - [x] `pipelines/playbook/slc.pins.json` regenerated over the rebuilt set and validated current; CI's clean-install gates go green at the 0.10.0 npm release, which refreshes the lockfile (the local install uses the packed sibling checkout).
-- [x] Reference-equivalence acceptance updated: the released reference detects as `composed-v2`, with fresh produced evidence regenerated under the new definitions.
+- [x] Reference-equivalence acceptance updated: the released reference detects as `composed-v2`, and fresh produced evidence was regenerated under the new definitions (interpreted claude-opus-4-8 xhigh). The gated comparison reports three residual deltas against the hand-maintained reference — the produced runtime requires `coderLlm` where the reference defaults it, and the produced Reviewer gears carry `<coding-intent>`/`<ir-task-description>` placeholder lines the reference omits — recorded here as follow-up compile-fidelity work.
 
 ## Tasks
 
