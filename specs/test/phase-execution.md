@@ -76,3 +76,8 @@ When the slc command runs a fixture phase, a phase with no pin file or absent fr
 Verifies: [PHEXEC-31](../dev/phase-execution.md#phexec-31)
 
 Where a `composed-v2` fixture calls Captain with visible or hidden control work and then calls its hidden judge, when the SLC phase adapter runs it, each Cligent call shall receive `resume: false` and an explicitly empty allowed-tool list without sharing an agent conversation; whereas any missing, inherited, accessor-backed, non-false resume, or nonempty allowed-tool option on the direct Captain call shall reject before the agent transport runs.
+
+### PHEXEC-35
+Verifies: [PHEXEC-34](../dev/phase-execution.md#phexec-34)
+
+Where a pinned `composed-v2` meta-phase artifact is driven through the compiled executor over a fake agent transport that captures transported prompts, when the seeded compile or link turn reaches the artifact's transformation-performing direct Captain call, the transported prompt shall carry the artifact's composed GEARS-derived body plus the host workspace contract naming the request's absolute workspace inputs and the absolute artifact-to-write path, and a captain that writes exactly that artifact shall map the run to `ok`; whereas a routing-only Captain call carrying an explicitly empty `allowedTools` and every hidden judge call shall receive its composed prompt unchanged.

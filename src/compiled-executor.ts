@@ -20,7 +20,10 @@
  * protected inputs (not the full write scope); `slc` adds no host-side
  * write-scope enforcement.
  *
- * The turn is seeded per the PHEXEC-29 contract ({@link seedPhaseTurn}); the
+ * The turn is seeded per the PHEXEC-29 contract ({@link seedPhaseTurn}), and a
+ * transformation-performing direct Captain call additionally carries the host
+ * workspace contract ({@link composeWorkspaceContract}; PHEXEC-34) so the
+ * host-agnostic artifact's Captain learns the request's absolute paths; the
  * result is derived in {@link drivePhase} from the structured runtime boundary
  * or, for a void-result legacy runtime, the host-observable output delta.
  * See specs/dev/phase-execution.md.
@@ -40,7 +43,11 @@ import type {
   PhaseExecutor,
 } from './execution.js';
 import type { AgentClient } from './interpreter.js';
-import { mapPhaseResult, seedPhaseTurn } from './phase-runner.js';
+import {
+  composeWorkspaceContract,
+  mapPhaseResult,
+  seedPhaseTurn,
+} from './phase-runner.js';
 import type { PhaseInput, PhaseResult } from './phase-runner.js';
 import {
   isPlaybookRunResult,
@@ -118,12 +125,17 @@ export function createCompiledExecutor(opts: {
       signal: AbortSignal,
     ): Promise<ExecutorResult> {
       let lastFsmState: string | undefined;
+      const input = phaseInput(request, opts.runRoot);
       const adapter = createPlaybookPorts({
         player: opts.player,
         judge: opts.judge,
         models: opts.models,
         defaultModel: opts.defaultModel,
         cwd: opts.cwd,
+        // The host owns the workspace: a transformation-performing Captain's
+        // transported prompt carries the request's absolute paths and
+        // write-scope rules (PHEXEC-34).
+        captainWorkspace: composeWorkspaceContract(input),
       });
       // Hand the runtime only Playbook's ports — never the host-only
       // drainDiagnostics, nor a file capability (DR-005, PHEXEC-23).
@@ -150,7 +162,7 @@ export function createCompiledExecutor(opts: {
         load,
         opts.artifactPath,
         ports,
-        phaseInput(request, opts.runRoot),
+        input,
         signal,
         identity,
         runtimeContract,

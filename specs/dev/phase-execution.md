@@ -137,6 +137,10 @@ When the slc command seeds a compiled phase's non-interactive turn ([PHEXEC-23](
 
 Where a compile execution request carries read-only reference documents — e.g. the entry-phase definition a generic normalization step rewrites toward ([PIPE-34](pipeline.md#pipe-34)) — the slc command shall present each reference beside the source in the interpreted agent contract and protect it like a definition, failing the run when a reference changed during execution ([DR-003](../decisions/003-slc-phase-execution.md), [DR-013](../decisions/013-normalize-and-pass-phases.md)).
 
+### PHEXEC-34
+
+Where a `composed-v2` compiled phase makes a transformation-performing direct Captain call — one whose source-owned options carry no `allowedTools` property ([PHEXEC-31](#phexec-31)) — the slc command shall append the host workspace contract to the prompt it transports: the request's workspace inputs and artifact-to-write path resolved to absolute host paths ([PHEXEC-29](#phexec-29)) and the interpreted contract's write-scope rules ([PHEXEC-14](#phexec-14)), because the linked artifact composes only host-agnostic prompts while the host alone owns workspace specifics; the appended contract shall carry no guard names, result-property schema, or adjudicator instructions, and a routing-only Captain call (explicitly empty `allowedTools`) and every hidden judge call shall cross with their composed prompts unchanged ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-012](../decisions/012-playbook-routing-control-separation.md#routing-authority-and-presentation-ownership)).
+
 ## References
 
 [1]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"
