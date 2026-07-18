@@ -21,7 +21,7 @@
       "semanticInputs": [
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:130b1b373403a9d5dd58b8f98126e4b723d4720435a75bc7d81e74329d9df925"
+          "hash": "sha256:cf64ed3c9e6654d355adb76272a840fa44253eb5877664af86f527dcfe123f0c"
         },
         {
           "path": "../../specs/decisions/000-spec-structure-format.md",
@@ -45,8 +45,8 @@
       "linkTarget": {
         "kind": "file",
         "locator": "../../node_modules/@sublang/playbook/src/runtime.ts",
-        "identity": "sha256:e374650e1bf4361543a654de183a6b4e678d25988126e56a74055bc678c023b6",
-        "provenance": "@sublang/playbook@0.10.0"
+        "identity": "sha256:dfc8ef041ddd4a83cfb5d7b855b07a54524da0d7e1102c203804163fe3469406",
+        "provenance": "@sublang/playbook@1.0.0"
       },
       "producer": {
         "pipeline": "slc"
@@ -68,7 +68,7 @@
       "semanticInputs": [
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:130b1b373403a9d5dd58b8f98126e4b723d4720435a75bc7d81e74329d9df925"
+          "hash": "sha256:cf64ed3c9e6654d355adb76272a840fa44253eb5877664af86f527dcfe123f0c"
         },
         {
           "path": "link.md",
@@ -100,8 +100,8 @@
       "linkTarget": {
         "kind": "file",
         "locator": "../../node_modules/@sublang/playbook/src/runtime.ts",
-        "identity": "sha256:e374650e1bf4361543a654de183a6b4e678d25988126e56a74055bc678c023b6",
-        "provenance": "@sublang/playbook@0.10.0"
+        "identity": "sha256:dfc8ef041ddd4a83cfb5d7b855b07a54524da0d7e1102c203804163fe3469406",
+        "provenance": "@sublang/playbook@1.0.0"
       },
       "producer": {
         "pipeline": "slc"
@@ -123,7 +123,7 @@
       "semanticInputs": [
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:130b1b373403a9d5dd58b8f98126e4b723d4720435a75bc7d81e74329d9df925"
+          "hash": "sha256:cf64ed3c9e6654d355adb76272a840fa44253eb5877664af86f527dcfe123f0c"
         },
         {
           "path": "gears2fsm.md",
@@ -155,8 +155,8 @@
       "linkTarget": {
         "kind": "file",
         "locator": "../../node_modules/@sublang/playbook/src/runtime.ts",
-        "identity": "sha256:e374650e1bf4361543a654de183a6b4e678d25988126e56a74055bc678c023b6",
-        "provenance": "@sublang/playbook@0.10.0"
+        "identity": "sha256:dfc8ef041ddd4a83cfb5d7b855b07a54524da0d7e1102c203804163fe3469406",
+        "provenance": "@sublang/playbook@1.0.0"
       },
       "producer": {
         "pipeline": "slc"

@@ -223,8 +223,14 @@ function runtimeContractForPin(
     return 'legacy';
   }
   // Playbook 0.10 ships the composed six-port contract (DR-011); artifacts
-  // linked against it run through the composed session profile.
-  if (provenance === '@sublang/playbook@0.10.0') {
+  // linked against it run through the composed session profile. 1.0.0 is the
+  // published release of that same contract generation — 0.10.0 was cut
+  // locally and superseded before it ever reached the registry — so both
+  // provenances select the composed profile.
+  if (
+    provenance === '@sublang/playbook@0.10.0' ||
+    provenance === '@sublang/playbook@1.0.0'
+  ) {
     return 'composed-v2';
   }
   throw new Error(
