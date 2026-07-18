@@ -40,17 +40,15 @@ git log --oneline
 slc playbook workflow.zh.txt
 ```
 
-无需任何参数：`.txt` 输入即原始散文，`slc` 会先将其归一化；pipeline 的优化 pass 默认运行；未给 `--link` 时，`playbook` pipeline 会链接到已安装的 `@sublang/playbook` 运行时，并一并产出可运行的入口模块。编译由真实的编码 agent 执行（在 [`slc.config.yaml`](slc.config.yaml) 中配置；可用 `SLC_AGENT`／`SLC_MODEL`／`SLC_EFFORT` 覆盖），耗时可能达到数十分钟。
+无需任何参数：`.txt` 输入即原始散文，`slc` 会先将其归一化；pipeline 的优化 pass 默认运行；未给 `--link` 时，`playbook` pipeline 会链接到已安装的 `@sublang/playbook` 运行时，并一并产出可运行的入口模块。编译由真实的编码 agent 执行——在 `~/.config/slc/config.yaml` 中配置一次（键：`agent`、`model`、`effort`），或用 `SLC_AGENT`／`SLC_MODEL`／`SLC_EFFORT` 按次覆盖。耗时可能达到数十分钟。
 
 ### 产物落在哪里
 
-产物落在你的**当前目录**，绝不会写到别人的源文件旁边：`./workflow.zh.playbook/`（编译出的产物包）与 `./workflow.zh.ts`（可运行的入口）。在本目录下编译会就地重写已提交的产物包——由于产物由真实的编码 agent 生成，结果不会与已提交内容逐字节相同，`git diff` 正是值得一看的视图，而在 `demo/` 下执行 `git checkout -- .` 即可还原。想在不弄脏仓库的前提下试用编译器，换个目录运行即可：`cd /tmp && slc playbook /path/to/slc/demo/workflow.zh.txt` 会写出 `/tmp/workflow.zh.playbook/` 与 `/tmp/workflow.zh.ts`。
+产物落在你的**当前目录**，绝不会写到别人的源文件旁边：`./workflow.zh.playbook/`（编译出的产物包）与 `./workflow.zh.ts`（可运行的入口）。二者在这里都已被 gitignore，你的编译不会弄脏 checkout——已提交的参考产物集原封不动地放在 [`acceptance/`](acceptance/) 下，由维护者在那个目录里用仓库已 pin 的 pipeline 定义编译得到。
 
-在本目录下编译还会发现演示自带的 [`slc.config.yaml`](slc.config.yaml)，其 `pipelinePath: [../pipelines]` 选中仓库已提交、已 pin 的 pipeline 定义；在别处编译则需自行配置 agent（`SLC_AGENT`），且定义来自已安装的 `@sublang/playbook`。
+### 编译产出什么
 
-### 编译产出了什么
-
-这套产物已经提交，因此你可以跳过编译，直接阅读：
+参考编译的产物已提交在 [`acceptance/workflow.zh.playbook/`](acceptance/workflow.zh.playbook/) 下，因此你可以跳过编译，直接阅读：
 
 | 产物 | 值得关注之处 |
 | --- | --- |
@@ -59,8 +57,8 @@ slc playbook workflow.zh.txt
 | `workflow.zh.gears.md` | 优化 pass 之后：Git 步骤被改写为 `Captain shall run:` **脚本 item**——`[ -e .git ] \|\| git init`，一条带两个退出码守卫的固定 shell 命令，不用 LLM——并在 `## Optimizations` 下记录了来龙去脉（`CODE-1: direct Captain work → script`）。 |
 | `workflow.zh.fsm.ts` | XState 状态机：每个 GEARS item 对应一个*发起调用*的状态——Git 步骤调用 `script` actor，其余五个调用 `player` actor——此外还有一个空闲枢纽状态、一个等待 Boss 回复的挂起状态，以及两个终止状态。 |
 | `workflow.zh.playbook.ts` | 链接后的运行时：驱动 FSM，通过宿主的四端口契约（`callPlayer`、`callJudge`、`emitStatus`、`emitTelemetry`）调用 agent，并在本地用 `sh -c` 执行脚本状态——无 LLM、无 token、毫秒级。 |
-| `workflow.zh.*.test.ts` | 编译器随产物一同产出的验证：GEARS↔FSM 一致性、FSM 内省 pin、prompt 契约、转移覆盖。`npx vitest run demo/workflow.zh.playbook` 可运行它们，仓库的 `npm test` 同样会收集。 |
-| [`workflow.zh.ts`](workflow.zh.ts) | 产出的入口模块，`playbook run` 直接消费：player、intent 与选项全部派生自编译产物。本演示不含任何手写的接线代码。 |
+| `workflow.zh.*.test.ts` | 编译器随产物一同产出的验证：GEARS↔FSM 一致性、FSM 内省 pin、prompt 契约、转移覆盖。`npx vitest run demo/acceptance/workflow.zh.playbook` 可运行它们，仓库的 `npm test` 同样会收集。 |
+| [`workflow.zh.ts`](acceptance/workflow.zh.ts) | 产出的入口模块，`playbook run` 直接消费：player、intent 与选项全部派生自编译产物。本演示不含任何手写的接线代码。 |
 
 ## 2. 在示例文件上运行它
 
@@ -70,6 +68,8 @@ slc playbook workflow.zh.txt
 playbook run ./workflow.zh.ts \
   "sample.c 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它。"
 ```
+
+（跳过了编译？直接运行已提交的参考入口：`playbook run ./acceptance/workflow.zh.ts "<task>"`——其相对导入随文件一起生效，工作流仍作用于**本**目录。）
 
 每个角色都默认使用 `claude`；想指定阵容，可加 `--player 编码者=claude:claude-sonnet-5 --player 审查者=codex:gpt-5.6-terra --captain claude:claude-sonnet-5`（`<adapter>[:<model>][@<effort>]`）。两个 player 的 ID 是 `编码者` 与 `审查者`——它们来自那段中文源文，所以是中文；产出的入口模块把它们声明为必需角色。任务文本是自由文本，在运行时传入，因此可以用任何语言书写，与工作流编译自哪种语言无关。
 
@@ -84,7 +84,7 @@ git log --oneline   # 只有经过评审的那些 commit——嵌套仓库自己
 git show            # 对 sample.c 的那次经过评审的修复
 ```
 
-撤销这次运行：`rm -rf .git && git -C .. checkout -- demo/`。
+撤销这次运行：`rm -rf .git workflow.zh.playbook workflow.zh.ts && git -C .. checkout -- demo/`。
 
 真正投入使用时，就在你自己项目的根目录里、用你自己的任务运行同一条命令——在那里，脚本步骤会发现 `.git` 并直接通过。
 

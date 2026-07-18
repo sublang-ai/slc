@@ -57,31 +57,24 @@ No flags: a `.txt` input is raw prose, so `slc` normalizes it first; the
 pipeline's optimization pass runs by default; and the `playbook` pipeline
 links against the installed `@sublang/playbook` runtime when no `--link`
 is given, also emitting the runnable entry module. Compilation is
-performed by a real coding agent (configured in
-[`slc.config.yaml`](slc.config.yaml); override with
-`SLC_AGENT`/`SLC_MODEL`/`SLC_EFFORT`). Expect tens of minutes.
+performed by a real coding agent — configure it once in
+`~/.config/slc/config.yaml` (keys: `agent`, `model`, `effort`), or per
+run with `SLC_AGENT`/`SLC_MODEL`/`SLC_EFFORT`. Expect tens of minutes.
 
 ### Where the output lands
 
 Artifacts land in your **working directory**, never beside someone
 else's source: `./workflow.zh.playbook/` (the compiled bundle) and
-`./workflow.zh.ts` (the runnable entry). Compiling from here regenerates
-the committed bundle in place — because a real coding agent produces it,
-the result will not be byte-identical, so `git diff` is the interesting
-view and `git checkout -- .` (in `demo/`) the undo. To try the compiler
-without touching the repo, run from anywhere else:
-`cd /tmp && slc playbook /path/to/slc/demo/workflow.zh.txt` writes
-`/tmp/workflow.zh.playbook/` and `/tmp/workflow.zh.ts`.
+`./workflow.zh.ts` (the runnable entry). Both are gitignored here, so
+your compile leaves the checkout clean — the committed reference set
+lives untouched under [`acceptance/`](acceptance/), compiled from that
+directory with the repository's pinned pipeline definitions.
 
-Compiling from this directory also discovers the demo's
-[`slc.config.yaml`](slc.config.yaml), whose `pipelinePath: [../pipelines]`
-selects the repository's committed, pinned pipeline definitions. From
-elsewhere, configure the agent yourself (`SLC_AGENT`), and the
-definitions come from the installed `@sublang/playbook`.
+### What it produces
 
-### What it produced
-
-The bundle is committed, so you can skip the compile and just read it:
+The reference compile is committed under
+[`acceptance/workflow.zh.playbook/`](acceptance/workflow.zh.playbook/),
+so you can skip the compile and just read it:
 
 | Artifact | What to look at |
 | --- | --- |
@@ -90,8 +83,8 @@ The bundle is committed, so you can skip the compile and just read it:
 | `workflow.zh.gears.md` | After the optimize pass: the Git step is rewritten to a `Captain shall run:` **script item** — `[ -e .git ] \|\| git init`, a fixed shell command with two exit-status guards, no LLM — with provenance recorded under `## Optimizations` (`CODE-1: direct Captain work → script`). |
 | `workflow.zh.fsm.ts` | The XState machine: one *invoking* state per GEARS item — the Git step invokes the `script` actor, the other five a `player` actor — plus an idle hub, a Boss-reply suspension state, and two terminal states. |
 | `workflow.zh.playbook.ts` | The linked runtime: drives the FSM, calls the agents through the host's four-port contract (`callPlayer`, `callJudge`, `emitStatus`, `emitTelemetry`), and executes the script state locally via `sh -c` — no LLM, no token, milliseconds. |
-| [`workflow.zh.ts`](workflow.zh.ts) | The emitted entry module `playbook run` consumes directly: players, intent, and options all derived from the compiled bundle. Nothing in this demo is hand-written wiring. |
-| `workflow.zh.*.test.ts` | Verification emitted by the compiler beside its output: GEARS↔FSM conformance, FSM introspection pins, prompt contracts, transition coverage. `npx vitest run demo/workflow.zh.playbook` runs them, and so does the repo's `npm test`. |
+| [`workflow.zh.ts`](acceptance/workflow.zh.ts) | The emitted entry module `playbook run` consumes directly: players, intent, and options all derived from the compiled bundle. Nothing in this demo is hand-written wiring. |
+| `workflow.zh.*.test.ts` | Verification emitted by the compiler beside its output: GEARS↔FSM conformance, FSM introspection pins, prompt contracts, transition coverage. `npx vitest run demo/acceptance/workflow.zh.playbook` runs them, and so does the repo's `npm test`. |
 
 ## 2. Run it on the sample
 
@@ -103,6 +96,11 @@ Hand it to the two agents, from this directory:
 playbook run ./workflow.zh.ts \
   "There is a bug in the median function in sample.c: the result depends on element order, and even-length arrays are wrong too. Fix it."
 ```
+
+(Skipped the compile? Run the committed reference instead:
+`playbook run ./acceptance/workflow.zh.ts "<task>"` — its relative
+import travels with it, and the workflow still operates on *this*
+directory.)
 
 Every role defaults to `claude`; pick your own lineup with
 `--player 编码者=claude:claude-sonnet-5 --player 审查者=codex:gpt-5.6-terra
@@ -131,7 +129,8 @@ git log --oneline   # just the reviewed commits — the nested repo's history
 git show            # the reviewed fix to sample.c
 ```
 
-Undo the run with `rm -rf .git && git -C .. checkout -- demo/`.
+Undo the run with
+`rm -rf .git workflow.zh.playbook workflow.zh.ts && git -C .. checkout -- demo/`.
 
 To use it for real, run the same command in your own project's root with
 your own task — there the scripted step finds `.git` and passes through.
