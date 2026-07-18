@@ -36,7 +36,7 @@ import {
   type ScriptOutput,
   type WorkflowEvent,
   type WorkflowInput,
-} from './workflow.fsm.js';
+} from './workflow.fsm.ts';
 import type {
   CaptainCallOptions,
   CaptainResult,
