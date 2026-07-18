@@ -1,4 +1,0 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
-
-Use two agents to carry out the input task. One agent modifies the code in the current directory as the task requires and commits it to Git; the other agent reviews the resulting commit and raises reasonable questions, handing them back to the first agent to judge — it may accept or reject them, but must explain why. The two agents argue until they reach agreement (arguing no more than 2 rounds, i.e. after the 3rd judgment in total they stop arguing and the first agent decides for itself), and the first agent is responsible for changing the code according to the conclusion and committing again. Loop like this until the review raises no questions at all, then finish. No more than 2 loops.

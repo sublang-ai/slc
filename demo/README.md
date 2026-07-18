@@ -1,11 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# Demo: from one Chinese paragraph to a running two-agent code-review loop
+# Demo: from one paragraph to a running two-agent code-review loop
 
 *[中文版](README.zh.md)*
 
-One raw paragraph of Chinese prose is compiled into a deterministic
+One raw paragraph is compiled into a deterministic
 state-machine workflow, and that workflow then drives two real coding
 agents — a coder and a reviewer — through a commit/review/debate loop
 over a real Git repository until the review comes back clean.
@@ -14,53 +14,38 @@ Two commands: `slc` compiles the paragraph, `playbook` runs the result.
 
 ## The input
 
-[`workflow.zh.md`](workflow.zh.md) — verbatim, never edited by the tools:
+[`workflow.txt`](workflow.txt):
 
-> 用两个agent来完成输入的任务，一个agent按任务要求对当前目录的代码进行修改并提交Git，另一个agent对提交的commit进行review并提出合理问题，交回给第一个agent做判断，它可以接受或拒绝但要讲清楚原因，两个agent争论直至达成一致（争论不超过2轮，即至多到总计第3次判断后不再争论，自己定夺），由第一个agent负责按结论修改代码，再次提交。依此循环，直到review没有任何问题后结束。循环次数不超过2次。
-
-[`workflow.md`](workflow.md) is an English rendering of the same
-paragraph, for readers who don't read Chinese. It is a translation, not
-the compiled source — the committed artifacts come from the Chinese
-file. (You can compile the English one too; because artifacts are named
-after the input, it lands in its own `workflow.playbook/` and leaves the
-committed set alone.)
+> Use two agents to carry out the input task.
+> One agent modifies the code in the current directory as the task requires and commits it to Git; the other agent reviews the resulting commit and raises reasonable findings, handing them back to the first agent to judge — it may accept or reject them, but must explain why.
+> The two agents argue until they reach agreement (arguing no more than 2 rounds, i.e. after the 3rd judgment in total they stop arguing), and the first agent is responsible for changing the code according to the conclusion and committing again.
+> Loop like this until the review raises no findings, then finish.
+> No more than 2 loops.
 
 Note what the paragraph does *not* say: it never names the two agents,
 never spells out who speaks when inside a debate round, and silently
-assumes the working directory is a Git repository. The compiler handles
-all three — and the two explicit bounds (at most 2 debate rounds, at
-most 2 review cycles) become typed loop counters in the state machine.
+assumes the working directory is a Git repository. The compiler makes
+all three explicit in the state machine — and the two explicit bounds (at most 2 debate rounds, at
+most 2 review cycles) become loop counters there.
 
 ## Prerequisites
 
-- Node.js ≥ 23.6 (the compiled artifacts are erasable TypeScript, loaded
-  through Node's built-in type stripping)
+- Node.js ≥ 23.6
 - `npm install -g @sublang/slc @sublang/playbook` — the `slc` compiler and
-  the `playbook` host. `playbook run` requires **playbook ≥ 0.10**
+  the `playbook` host
 - [Claude Code](https://www.anthropic.com/claude-code) (`claude`) and
   [Codex](https://openai.com/codex) (`codex`) CLIs installed and signed in —
   they play the coder and the reviewer. A third agent session, the
   Captain, adjudicates each state's result
 - `git`
-- To compile rather than just read: a clone of this repository with
-  `npm install` run in it (step 1's `--link` target lives under
-  `node_modules/`)
 
 ## 1. Compile the paragraph
 
 From the repository root:
 
 ```sh
-slc playbook demo/workflow.zh.md --normalize -O \
-  --link node_modules/@sublang/playbook/src/runtime.ts
+slc playbook demo/workflow.zh.txt
 ```
-
-- `--normalize` first rewrites the raw prose into a pipeline-ready source
-  (a generic, pipeline-agnostic step: it reads the entry phase's own
-  definition and restructures the input toward it).
-- `-O` runs the pipeline's optimization pass between phases.
-- `--link` produces the runnable playbook module against the shared
-  runtime contract.
 
 Compilation is performed by a real coding agent (configured in
 `slc.config.yaml`; override with `SLC_AGENT`/`SLC_MODEL`/`SLC_EFFORT`).
@@ -71,7 +56,7 @@ Expect tens of minutes.
 Artifacts go **beside the input file**, never in your current directory:
 `slc` derives the output directory from the source path as
 `<input-dir>/<stem>.<pipeline>/`. So even
-`cd /tmp && slc playbook /path/to/slc/demo/workflow.zh.md` writes into
+`cd /tmp && slc playbook /path/to/slc/demo/workflow.zh.txt` writes into
 `/path/to/slc/demo/workflow.zh.playbook/`. (`-o <path>` is the only flag
 that moves output, and it moves only the terminal artifact.)
 
@@ -149,7 +134,7 @@ compiled workflow's scripted step initializes one if needed, without any
 agent running. Then:
 
 - the coder makes the change and commits;
-- the reviewer reviews that commit and raises questions; the coder
+- the reviewer reviews that commit and raises findings; the coder
   accepts or rebuts with reasons; they iterate, bounded by the paragraph's
   own limits;
 - when a review comes back clean, the machine reaches its final state and
