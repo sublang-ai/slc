@@ -3,9 +3,9 @@
 # SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 #
 # Run the compiled demo workflow over the seeded repository with real agents,
-# capturing the evidence demo/check.mjs validates.
+# capturing the evidence demo/acceptance/check.mjs validates.
 #
-# Usage: demo/run.sh [<work-dir>]
+# Usage: demo/acceptance/run.sh [<work-dir>]
 #
 #   <work-dir>     target repository (default: ${TMPDIR:-/tmp}/slc-demo-run,
 #                  outside this repository; recreated by setup.sh)
@@ -41,7 +41,7 @@ mkdir -p "$evidence"
 echo "launching: coder=$CODER_AGENT reviewer=$REVIEWER_AGENT captain=$CAPTAIN_AGENT"
 (
   cd "$work"
-  "$PLAYBOOK_BIN" run "$here/registry.ts" "$DEMO_TASK" \
+  "$PLAYBOOK_BIN" run "$here/../registry.ts" "$DEMO_TASK" \
     --player "编码者=$CODER_AGENT" \
     --player "审查者=$REVIEWER_AGENT" \
     --captain "$CAPTAIN_AGENT" \

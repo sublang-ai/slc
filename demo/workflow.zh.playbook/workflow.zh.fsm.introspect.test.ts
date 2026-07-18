@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { findMachineConfig, pinIntrospection } from './.slc-verify/verify.js';
-import * as fsm from './workflow.fsm.js';
+import * as fsm from './workflow.zh.fsm.js';
 
 const PINNED = {
   initial: 'ready',
@@ -273,7 +273,7 @@ const PINNED = {
   interruptTargets: [],
 };
 
-describe('workflow: FSM introspection', () => {
+describe('workflow.zh: FSM introspection', () => {
   it('matches the machine topology pinned at build time', () => {
     expect(pinIntrospection(findMachineConfig(fsm))).toEqual(PINNED);
   });
