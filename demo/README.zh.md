@@ -1,50 +1,44 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# 演示：从一段中文散文到可运行的双 agent 代码评审循环
+# 演示：从一段文本描述到可运行的双 agent 代码评审循环
 
 *[English](README.md)*
 
-一段未经加工的中文散文被编译成确定性的状态机工作流，该工作流再驱动两个真实的编码 agent——一个编码者、一个审查者——在一个真实的 Git 仓库上完成提交／评审／争论的循环，直到评审不再提出任何问题。
+一段未经加工的文本描述被编译成确定性的状态机工作流，该工作流驱动两个 agent——一个编码者、一个审查者——在一个真实的 Git 仓库上完成提交／评审／争论的循环，直到评审不再提出任何问题。
 
 两条命令：`slc` 编译这段话，`playbook` 运行编译结果。
 
 ## 输入
 
-[`workflow.zh.md`](workflow.zh.md)——原文照录，工具从不修改它：
+[`workflow.zh.txt`](workflow.zh.txt)：
 
-> 用两个agent来完成输入的任务，一个agent按任务要求对当前目录的代码进行修改并提交Git，另一个agent对提交的commit进行review并提出合理问题，交回给第一个agent做判断，它可以接受或拒绝但要讲清楚原因，两个agent争论直至达成一致（争论不超过2轮，即至多到总计第3次判断后不再争论，自己定夺），由第一个agent负责按结论修改代码，再次提交。依此循环，直到review没有任何问题后结束。循环次数不超过2次。
+> 用两个agent来完成输入的任务，一个agent按任务要求对当前目录的代码进行修改并提交Git，另一个agent对提交的commit进行review并提出合理问题，交回给第一个agent做判断。
+> 它可以接受或拒绝但要讲清楚原因，两个agent争论直至达成一致（争论不超过2轮，即至多到总计第3次判断后不再争论，自己定夺），由第一个agent负责按结论修改代码，再次提交。
+> 依此循环，直到review没有任何问题后结束。循环次数不超过2次。
 
-[`workflow.md`](workflow.md) 是同一段话的英文译文，供不读中文的读者参考。它只是翻译，并非被编译的源文件——已提交的产物来自中文文件。（英文版同样可以编译；由于产物以输入文件命名，它会落到自己的 `workflow.playbook/` 目录，不会影响已提交的那一套。）
-
-留意这段话**没有**说什么：它从未给两个 agent 命名，没有交代一轮争论中谁先谁后，还默认当前目录已是 Git 仓库。编译器把这三点都补上了——而文中两处明确的上界（争论至多 2 轮、循环至多 2 次）则成为状态机里带类型的循环计数器。
+留意这段话**未明确**的部分：没有给两个 agent 命名，没有交代一轮争论中如何交互，还默认当前目录已是 Git 仓库。编译器在状态机中把这三点都明确了下来，而文中两处明确的上界（争论至多 2 轮、循环至多 2 次）则成为状态机里的循环计数器。
 
 ## 前置条件
 
-- Node.js ≥ 23.6（编译产物是可擦除的 TypeScript，依赖 Node 内置的类型剥离加载）
-- `npm install -g @sublang/slc @sublang/playbook`——`slc` 编译器与 `playbook` 宿主。`playbook run` 需要 **playbook ≥ 0.10**
+- Node.js ≥ 23.6
+- `npm install -g @sublang/slc @sublang/playbook`——`slc` 编译器与 `playbook` 执行环境
 - 已安装并登录的 [Claude Code](https://www.anthropic.com/claude-code)（`claude`）与 [Codex](https://openai.com/codex)（`codex`）CLI——它们分别扮演编码者与审查者。此外还有第三个 agent 会话，即 Captain，负责裁决每个状态的结果
 - `git`
-- 若要亲自编译（而非只阅读产物）：本仓库的一份 clone，并在其中执行 `npm install`（第 1 步的 `--link` 目标位于 `node_modules/` 下）
 
-## 1. 编译这段散文
+## 1. 编译文本描述
 
 在仓库根目录下：
 
 ```sh
-slc playbook demo/workflow.zh.md --normalize -O \
-  --link node_modules/@sublang/playbook/src/runtime.ts
+slc playbook demo/workflow.zh.txt
 ```
 
-- `--normalize` 先把原始散文改写为适合进入 pipeline 的源文件（这是一个与具体 pipeline 无关的通用步骤：它读取入口 phase 自身的定义，并据此重整输入）。
-- `-O` 在各 phase 之间运行本 pipeline 的优化 pass。
-- `--link` 依据共享的运行时契约产出可运行的 playbook 模块。
-
-编译由真实的编码 agent 执行（在 `slc.config.yaml` 中配置；可用 `SLC_AGENT`／`SLC_MODEL`／`SLC_EFFORT` 覆盖），耗时以数十分钟计。
+编译由真实的编码 agent 执行（在 `slc.config.yaml` 中配置；可用 `SLC_AGENT`／`SLC_MODEL`／`SLC_EFFORT` 覆盖），耗时可能达到数十分钟。
 
 ### 产物落在哪里
 
-产物落在**输入文件旁边**，而不是你的当前目录：`slc` 由源文件路径推导输出目录，形如 `<输入目录>/<主名>.<pipeline>/`。所以即便 `cd /tmp && slc playbook /path/to/slc/demo/workflow.zh.md`，产物仍会写入 `/path/to/slc/demo/workflow.zh.playbook/`。（`-o <path>` 是唯一能改变输出位置的开关，而且只移动末端产物。）
+产物落在**输入文件旁边**，而不是你的当前目录：`slc` 由源文件路径推导输出目录，形如 `<输入目录>/<主名>.<pipeline>/`。所以即便 `cd /tmp && slc playbook /path/to/slc/demo/workflow.zh.txt`，产物仍会写入 `/path/to/slc/demo/workflow.zh.playbook/`。（`-o <path>` 是唯一能改变输出位置的开关，而且只移动末端产物。）
 
 尽管如此，仍请在仓库根目录下运行，理由与产物位置无关，共两条：`slc.config.yaml` 是在**当前目录**中被发现的，而其中的 `pipelinePath: [pipelines]` 同样相对当前目录解析——只有在根目录下，你用的才是本仓库已提交、已 pin 的 pipeline 定义；在别处也能跑通，只是会回退到已安装的 `@sublang/playbook` 所附带的定义。另外，`--link node_modules/…` 是一个相对路径。
 
