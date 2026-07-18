@@ -26,5 +26,5 @@ Implement [DR-013](../decisions/013-normalize-and-pass-phases.md) — the generi
 ## Acceptance criteria
 
 - `npm test` covers pass scheduling, normalization scheduling, and script conformance/coverage (PIPE-35, PIPE-36, VERIFY-17).
-- `slc playbook demo/workflow.md --normalize -O --link <runtime>` produces a playbook whose Git setup is a `script` state, verified by the emitted tests.
+- `slc playbook demo/workflow.zh.md --normalize -O --link <runtime>` produces a playbook whose Git setup is a `script` state, verified by the emitted tests.
 - `playbook run` executes the compiled workflow over the demo repository with a Claude Code coder and a Codex reviewer to a terminal outcome, and the demo checker validates the run evidence.

@@ -15,7 +15,7 @@
 import createPlaybookRuntime, {
   type PlaybookRuntime,
   type WorkflowPlaybookOptions,
-} from './workflow.playbook/workflow.playbook.ts';
+} from './workflow.zh.playbook/workflow.zh.playbook.ts';
 
 interface RegistryPlayer {
   id: string;

@@ -20,7 +20,7 @@ export default tseslint.config(
     // style rules flag — e.g. re-throwing the latched control error from the
     // public boundary's `finally` — so style-only rules relax here while
     // correctness rules stay on.
-    files: ['pipelines/playbook/*.slc/**', 'demo/workflow.playbook/**'],
+    files: ['pipelines/playbook/*.slc/**', 'demo/workflow.zh.playbook/**'],
     rules: {
       'no-unsafe-finally': 'off',
       'prefer-const': 'off',

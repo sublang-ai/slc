@@ -11,12 +11,12 @@ import {
   checkGearsFsmConformance,
   findMachineConfig,
 } from './.slc-verify/verify.js';
-import * as fsm from './workflow.fsm.js';
+import * as fsm from './workflow.zh.fsm.js';
 
-describe('workflow: GEARS↔FSM conformance', () => {
+describe('workflow.zh: GEARS↔FSM conformance', () => {
   it('maps every GEARS item to a state with its player and verbatim prompt', () => {
     const gears = readFileSync(
-      fileURLToPath(new URL('./workflow.gears.md', import.meta.url)),
+      fileURLToPath(new URL('./workflow.zh.gears.md', import.meta.url)),
       'utf8',
     );
     expect(checkGearsFsmConformance(gears, findMachineConfig(fsm))).toEqual([]);

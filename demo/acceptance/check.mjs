@@ -16,7 +16,7 @@
  *      initializes a bare directory, passes through an existing repository;
  *   5. the emitted verification tests pass.
  *
- * Run-evidence stages (with --run-dir <dir>, produced by demo/run.sh)
+ * Run-evidence stages (with --run-dir <dir>, produced by demo/acceptance/run.sh)
  * validate a real two-agent run:
  *   6. the one-shot run reached a terminal outcome (exit code + JSON
  *      envelope);
@@ -25,7 +25,7 @@
  *   8. the demo repository ends fixed: commits exist and `node test.js`
  *      passes.
  *
- * Usage: node demo/check.mjs [--run-dir <dir>]
+ * Usage: node demo/acceptance/check.mjs [--run-dir <dir>]
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -34,9 +34,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const demoDir = dirname(fileURLToPath(import.meta.url));
+const here = dirname(fileURLToPath(import.meta.url));
+const demoDir = resolve(here, '..');
 const repoRoot = resolve(demoDir, '..');
-const artDir = join(demoDir, 'workflow.playbook');
+const artDir = join(demoDir, 'workflow.zh.playbook');
 
 const failures = [];
 let checks = 0;
@@ -56,28 +57,28 @@ function readArtifact(name) {
 // ---------------------------------------------------------------- stage 1
 console.log('1. compiled artifact set');
 const expected = [
-  'workflow.text.md',
-  'workflow.gears.raw.md',
-  'workflow.gears.md',
-  'workflow.fsm.ts',
-  'workflow.playbook.ts',
-  'workflow.gears-fsm.test.ts',
-  'workflow.fsm.introspect.test.ts',
-  'workflow.prompt-contract.test.ts',
-  'workflow.fsm.coverage.test.ts',
+  'workflow.zh.text.md',
+  'workflow.zh.gears.raw.md',
+  'workflow.zh.gears.md',
+  'workflow.zh.fsm.ts',
+  'workflow.zh.playbook.ts',
+  'workflow.zh.gears-fsm.test.ts',
+  'workflow.zh.fsm.introspect.test.ts',
+  'workflow.zh.prompt-contract.test.ts',
+  'workflow.zh.fsm.coverage.test.ts',
 ];
 for (const name of expected) {
   check(`artifact ${name}`, existsSync(join(artDir, name)));
 }
 check(
   'normalized source surfaces the Git precondition',
-  /git/i.test(readArtifact('workflow.text.md')),
+  /git/i.test(readArtifact('workflow.zh.text.md')),
 );
 
 // ---------------------------------------------------------------- stage 2
 console.log('2. optimized GEARS');
-const gears = readArtifact('workflow.gears.md');
-const rawGears = readArtifact('workflow.gears.raw.md');
+const gears = readArtifact('workflow.zh.gears.md');
+const rawGears = readArtifact('workflow.zh.gears.raw.md');
 check('script item present', /Captain shall run\s*:/.test(gears));
 check(
   'script item is optimizer-introduced (absent from raw GEARS)',
@@ -88,7 +89,7 @@ check('optimization provenance recorded', /## Optimizations/.test(gears));
 // ---------------------------------------------------------------- stage 3
 console.log('3. FSM script state and agent-free linkage');
 const verify = await import(join(repoRoot, 'dist', 'verify.js'));
-const fsm = await verify.loadFsmModule(join(artDir, 'workflow.fsm.ts'));
+const fsm = await verify.loadFsmModule(join(artDir, 'workflow.zh.fsm.ts'));
 const machine =
   fsm.default ?? fsm.machine ?? fsm.workflowMachine ?? Object.values(fsm)[0];
 const scriptStates = verify.enumerateScriptStates(machine.config);
@@ -135,7 +136,7 @@ console.log('5. emitted verification tests');
 {
   const vitest = spawnSync(
     'npx',
-    ['vitest', 'run', '--root', repoRoot, 'demo/workflow.playbook'],
+    ['vitest', 'run', '--root', repoRoot, 'demo/workflow.zh.playbook'],
     { cwd: repoRoot, encoding: 'utf8' },
   );
   check(
@@ -152,7 +153,7 @@ console.log('5. emitted verification tests');
 const runDirFlag = process.argv.indexOf('--run-dir');
 if (runDirFlag !== -1) {
   const runDir = resolve(process.argv[runDirFlag + 1]);
-  // Run evidence lives beside the work repository (demo/run.sh), falling back
+  // Run evidence lives beside the work repository (demo/acceptance/run.sh), falling back
   // to the repository itself for hand-collected evidence.
   const evidenceDir = existsSync(`${runDir}.evidence`)
     ? `${runDir}.evidence`

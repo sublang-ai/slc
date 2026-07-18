@@ -12,8 +12,8 @@ import {
   deriveSubstitutions,
   findMachineConfig,
 } from './.slc-verify/verify.js';
-import * as fsm from './workflow.fsm.js';
-import * as playbook from './workflow.playbook.js';
+import * as fsm from './workflow.zh.fsm.js';
+import * as playbook from './workflow.zh.playbook.js';
 
 const CONTRACT = [
   {
@@ -83,7 +83,7 @@ const CONTRACT = [
   },
 ];
 
-describe('workflow: prompt contract', () => {
+describe('workflow.zh: prompt contract', () => {
   it('matches the prompt contract pinned at build time', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
