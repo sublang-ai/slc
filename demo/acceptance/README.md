@@ -5,11 +5,28 @@
 
 Maintainer-side only. Nothing here is needed to *use* the demo — see
 [`../README.md`](../README.md) for that. This directory exists to make
-the demo's claims reproducible: a seeded repository with a known bug, a
-scripted two-agent run over it, and a checker that validates both the
-compiled artifacts and the live run evidence.
+the demo's claims reproducible: it is the **CWD of the reference
+compile**, so the committed reference set lives here — the compiled
+bundle [`workflow.zh.playbook/`](workflow.zh.playbook/), the emitted
+entry [`workflow.zh.ts`](workflow.zh.ts), and the compile's
+[`slc.config.yaml`](slc.config.yaml) — beside a seeded-repository
+harness, a scripted two-agent run, and a checker that validates both
+the artifacts and the live run evidence.
 
 All three scripts locate themselves, so they work from any directory.
+
+## Regenerate the reference
+
+```sh
+cd demo/acceptance && slc playbook ../workflow.zh.txt
+```
+
+Discovery picks this directory's `slc.config.yaml` — the pinned vendored
+pipeline definitions under `pipelines/`, compiled by `claude-code` with
+`claude-opus-4-8` at `high` effort — and DR-014 places the bundle and
+entry right here, overwriting the committed reference in place. A real
+coding agent produces them, so the result is not byte-identical to what
+was committed: review with `git diff`, keep or `git checkout -- .`.
 
 ## Seed the target repository
 

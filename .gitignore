@@ -141,5 +141,9 @@ vite.config.ts.timestamp-*
 # slc real-agent build scratch (uncommitted evidence)
 .scratch/
 
-# demo working repository (created by demo/acceptance/setup.sh, never committed)
-demo/run/
+# end-user compiles from demo/ (DR-014: outputs land in the invocation cwd);
+# the committed reference set lives under demo/acceptance/
+/demo/workflow.playbook/
+/demo/workflow.zh.playbook/
+/demo/workflow.ts
+/demo/workflow.zh.ts

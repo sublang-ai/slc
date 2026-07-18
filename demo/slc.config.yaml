@@ -1,9 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
-#
-# Demo-local configuration (DR-006): compiling from demo/ discovers this file,
-# so the three-line flow keeps using the repository's committed, pinned
-# pipeline definitions instead of falling back to the installed package's.
-agent: claude-code
-pipelinePath:
-  - ../pipelines

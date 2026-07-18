@@ -43,7 +43,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const demoDir = resolve(here, '..');
 const repoRoot = resolve(demoDir, '..');
-const artDir = join(demoDir, 'workflow.zh.playbook');
+const artDir = join(here, 'workflow.zh.playbook');
 
 const failures = [];
 let checks = 0;
@@ -78,7 +78,7 @@ for (const name of expected) {
 }
 check(
   'emitted entry module beside the bundle (DR-014)',
-  existsSync(join(demoDir, 'workflow.zh.ts')),
+  existsSync(join(here, 'workflow.zh.ts')),
 );
 check(
   'normalized source surfaces the Git precondition',
@@ -158,7 +158,13 @@ console.log('5. emitted verification tests');
 {
   const vitest = spawnSync(
     'npx',
-    ['vitest', 'run', '--root', repoRoot, 'demo/workflow.zh.playbook'],
+    [
+      'vitest',
+      'run',
+      '--root',
+      repoRoot,
+      'demo/acceptance/workflow.zh.playbook',
+    ],
     { cwd: repoRoot, encoding: 'utf8' },
   );
   check(
