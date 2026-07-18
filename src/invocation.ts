@@ -25,6 +25,7 @@ export type Invocation =
       source: string;
       output: string | null;
       optimize: boolean;
+      noOptimize: boolean;
       normalize: boolean;
     }
   | {
@@ -42,6 +43,7 @@ export type Invocation =
       output: string | null;
       options: LinkOption[];
       optimize: boolean;
+      noOptimize: boolean;
       normalize: boolean;
     }
   | {
@@ -89,6 +91,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
   let output: string | null = null;
   let link: string | null = null;
   let optimize = false;
+  let noOptimize = false;
   let normalize = false;
   const options: LinkOption[] = [];
 
@@ -106,6 +109,8 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       options.push(parseLinkOption(takeValue(argv, ++i, '--link-option')));
     } else if (arg === '-O' || arg === '--optimize') {
       optimize = true;
+    } else if (arg === '--no-optimize') {
+      noOptimize = true;
     } else if (arg === '--normalize') {
       normalize = true;
     } else if (arg.startsWith('-') && arg !== '-') {
@@ -128,10 +133,16 @@ export function parseInvocation(argv: readonly string[]): Invocation {
   }
   const rest = positionals.slice(1);
 
-  if (phase !== null && (optimize || normalize)) {
+  if (optimize && noOptimize) {
+    throw new CliError(
+      'duplicate-option',
+      '-O/--optimize conflicts with --no-optimize',
+    );
+  }
+  if (phase !== null && (optimize || noOptimize || normalize)) {
     throw new CliError(
       'unexpected-flag',
-      `${optimize ? '-O' : '--normalize'} is only valid for a full-pipeline invocation`,
+      `${optimize ? '-O' : noOptimize ? '--no-optimize' : '--normalize'} is only valid for a full-pipeline invocation`,
     );
   }
 
@@ -186,6 +197,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       output,
       options,
       optimize,
+      noOptimize,
       normalize,
     };
   }
@@ -195,7 +207,15 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       '--link-option requires --link',
     );
   }
-  return { kind: 'full', pipeline, source, output, optimize, normalize };
+  return {
+    kind: 'full',
+    pipeline,
+    source,
+    output,
+    optimize,
+    noOptimize,
+    normalize,
+  };
 }
 
 function takeValue(

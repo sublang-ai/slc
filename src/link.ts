@@ -148,6 +148,8 @@ export function linkedArtifactPath(
         source: FormatDecl;
         linked: FormatDecl;
         output: string | null;
+        /** Invocation working directory anchoring placement (DR-014). */
+        cwd: string;
       },
 ): string {
   if (spec.kind === 'full') {
@@ -163,11 +165,8 @@ export function linkedArtifactPath(
   }
 
   if (spec.objects.length === 1) {
-    const { basename, dir } = deriveObjectBasename(
-      spec.objects[0],
-      spec.source,
-    );
-    const artDir = artifactDir(dir, basename, spec.pipeline);
+    const { basename } = deriveObjectBasename(spec.objects[0], spec.source);
+    const artDir = artifactDir(spec.cwd, basename, spec.pipeline);
     return (
       spec.output ??
       artifactPath(artDir, basename, spec.linked.format, spec.linked.ext)

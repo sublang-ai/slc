@@ -100,7 +100,7 @@ export async function buildSlcDeps(
   const agentOpts = { cwd, permissions: { mode: 'auto' as const } };
   const executor = createExecutor(selection, agentOpts);
   const compiled = createCompiled(selection, agentOpts);
-  return { resolver, executor, compiled, signal };
+  return { resolver, executor, compiled, cwd, signal };
 }
 
 /** The cligent-invocation selection after merging environment over file (DR-006). */
@@ -140,15 +140,21 @@ export function usageText(): string {
   return [
     'Usage:',
     '  slc <pipeline>[.<phase>] <source> [-o <target>]',
-    '  slc <pipeline> <source> [--normalize] [-O] --link <target> [--link-option name=value]...',
+    '  slc <pipeline> <source> [--normalize] [--no-optimize] [--link <target>] [--link-option name=value]...',
     '  slc <pipeline>.link <object>... <target> [-o <linked>] [--link-option name=value]...',
+    '',
+    'Artifacts land in the working directory (<cwd>/<basename>.<pipeline>/);',
+    'an entry source with a foreign extension is normalized first, and the',
+    'playbook pipeline links against the installed @sublang/playbook runtime',
+    'when --link is omitted, also emitting the runnable <basename>.ts entry.',
     '',
     'Options:',
     '  -o <path>                 final output path override',
     '  --link <target>           link the full-pipeline output to <target>',
     '  --link-option name=value  pass an opaque option to the link phase',
     "  --normalize               rewrite raw input to the entry phase's source form first",
-    "  -O, --optimize            run the pipeline's pass phases (e.g. optimize)",
+    "  -O, --optimize            run the pipeline's pass phases (the default)",
+    '  --no-optimize             run the chain without pass phases',
     '  --config <path>           load configuration from <path> (disables discovery)',
     '  -v, --version             print version and exit',
     '  -h, --help                print this help and exit',

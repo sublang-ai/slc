@@ -108,6 +108,22 @@ export function reservedSlcPipelineDir(): string {
 }
 
 /**
+ * The default link target for the `playbook` pipeline (DR-014, SELFHOST-13):
+ * the installed `@sublang/playbook` runtime contract module's TypeScript
+ * source, the same file the pin generator records as the link target.
+ *
+ * @throws when `@sublang/playbook` is not installed.
+ */
+export function defaultPlaybookLinkTarget(): string {
+  // `./runtime` resolves to `src/runtime.js`; the convention (and the pinned
+  // identity) targets its TypeScript sibling in the same directory.
+  return join(
+    dirname(requireFrom.resolve('@sublang/playbook/runtime')),
+    'runtime.ts',
+  );
+}
+
+/**
  * Wraps a resolver so a Playbook-owned reference — the reserved `slc`
  * meta-pipeline or the `playbook` domain pipeline — resolves to the shared
  * definition set, leaving every other reference to `inner`. Both names share one

@@ -18,6 +18,7 @@ import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { declaredPlayers } from '../src/entry-module.js';
 import {
   createInterpretedExecutor,
   type AgentClient,
@@ -46,8 +47,14 @@ const playbookLink = `## Formats\n\n| Role | Format | Extension |\n| --- | --- |
 
 // A conformant gears+fsm artifact pair in the meta-pipeline output shapes, so
 // a faked full run exercises every verification emission (VERIFY-8): the fsm
-// carries the FLOW-1 binding verbatim plus the gears2fsm Boss surfaces.
+// carries the FLOW-1 binding verbatim plus the gears2fsm Boss surfaces. The
+// `Players:` block feeds entry-module `requiredRoleIds` derivation
+// (SELFHOST-16).
 const GEARS_ARTIFACT = `# Flow
+
+Players:
+
+- Writer
 
 ## Behaviors
 
@@ -172,6 +179,7 @@ const exists = (path: string): Promise<boolean> =>
 describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
   let root: string;
   let slcDir: string;
+  let work: string;
   let source: string;
   let artDir: string;
 
@@ -190,7 +198,7 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
     );
     await writeFile(join(slcDir, 'link.md'), playbookLink);
 
-    const work = join(root, 'work');
+    work = join(root, 'work');
     await mkdir(work);
     // A domain phase definition is the meta-pipeline's source.
     source = join(work, 'text2gears.md');
@@ -206,15 +214,30 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
   const deps = (): SlcDeps => ({
     resolver: (reference) => (reference === 'slc' ? [slcDir] : []),
     executor: createInterpretedExecutor({ agent: writingAgent() }),
+    cwd: work,
   });
 
-  it('compiles a definition to the fsm object at its DR-001 location', async () => {
+  it('compiles a definition to the fsm object under the invocation cwd (DR-014); `slc` supplies no default link target', async () => {
     const result = await runSlc(['slc', source], deps());
     expect(result.ok).toBe(true);
-    // text -> gears -> fsm; the full run stops at the fsm object (no --link).
+    // text -> gears -> fsm; the reserved `slc` full run stops at the fsm
+    // object: only the `playbook` pipeline defaults a link target
+    // (SELFHOST-13).
     expect(await exists(join(artDir, 'text2gears.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'text2gears.fsm.ts'))).toBe(true);
     expect(await exists(join(artDir, 'text2gears.playbook.ts'))).toBe(false);
+  });
+
+  it('places the artifact directory under a cwd that differs from the source directory (DR-014, PIPE-38)', async () => {
+    const out = join(root, 'out');
+    await mkdir(out);
+    const result = await runSlc(['slc', source], { ...deps(), cwd: out });
+    expect(result.ok).toBe(true);
+    // Outputs follow the invocation cwd; the source's directory stays clean.
+    expect(await exists(join(out, 'text2gears.slc', 'text2gears.fsm.ts'))).toBe(
+      true,
+    );
+    expect(await exists(artDir)).toBe(false);
   });
 
   it('links the fsm object to a playbook artifact that resolves to a createPlaybookRuntime factory', async () => {
@@ -280,6 +303,7 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
           resolver: (reference) =>
             reference === 'slc' ? [reservedSlcPipelineDir()] : [],
           executor: createInterpretedExecutor({ agent: writingAgent() }),
+          cwd: work,
         },
       );
 
@@ -351,6 +375,7 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
         {
           resolver: withReservedPipelines(() => []),
           executor: createInterpretedExecutor({ agent: writingAgent() }),
+          cwd: work,
         },
       );
 
@@ -399,6 +424,7 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
         {
           resolver: (reference) => (reference === 'playbook' ? [dir] : []),
           executor: createInterpretedExecutor({ agent: writingAgent() }),
+          cwd: work,
         },
       );
 
@@ -411,19 +437,22 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
 });
 
 // `slc playbook code.md` compiles a domain workflow through the playbook pipeline
-// (text2gears -> gears2fsm) to the fsm object, and `--link` adds the playbook
-// runtime, each at its DR-001 location under `code.playbook/` (COMPILE-1,
-// COMPILE-2, SELFHOST-8). The agent is faked, so this exercises the pipeline
-// mechanics, not compilation quality.
-describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
+// (text2gears -> optimize -> gears2fsm) and, with no `--link`, defaults the
+// link target to the installed `@sublang/playbook` runtime and emits the entry
+// module, each artifact at its canonical location under the invocation cwd
+// (COMPILE-1, COMPILE-2, SELFHOST-8, SELFHOST-13, SELFHOST-16; DR-014). The
+// agent is faked, so this exercises the pipeline mechanics, not compilation
+// quality.
+describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', () => {
   let root: string;
+  let work: string;
   let source: string;
   let runtime: string;
   let artDir: string;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'slc-playbook-e2e-'));
-    const work = join(root, 'work');
+    work = join(root, 'work');
     await mkdir(work, { recursive: true });
     source = join(work, 'code.md');
     await writeFile(
@@ -442,14 +471,26 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
   const deps = (): SlcDeps => ({
     resolver: withReservedPipelines(() => []),
     executor: createInterpretedExecutor({ agent: writingAgent() }),
+    cwd: work,
   });
 
-  it('compiles code.md to the gears intermediate and fsm object, stopping at the fsm', async () => {
+  it('runs the bare playbook invocation as a full-link against the default runtime target (SELFHOST-13)', async () => {
     const result = await runSlc(['playbook', source], deps());
     expect(result.ok).toBe(true);
+    // The discovered optimize pass runs by default: the producing phase writes
+    // the `.raw` intermediate and the pass the canonical gears (DR-014,
+    // PIPE-35).
+    expect(await exists(join(artDir, 'code.gears.raw.md'))).toBe(true);
     expect(await exists(join(artDir, 'code.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'code.fsm.ts'))).toBe(true);
-    expect(await exists(join(artDir, 'code.playbook.ts'))).toBe(false);
+    // No `--link`: the run continues into the link phase against the installed
+    // @sublang/playbook runtime and emits the entry module beside the bundle.
+    const playbookArtifact = join(artDir, 'code.playbook.ts');
+    expect(result.outputs).toContain(playbookArtifact);
+    expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
+      true,
+    );
+    expect(await exists(join(work, 'code.ts'))).toBe(true);
     // Every verification test is emitted beside the artifacts (VERIFY-8): the
     // faked agents produced a conformant gears+fsm pair, so conformance,
     // introspection, prompt-contract, and coverage all derive and emit.
@@ -536,6 +577,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
     const result = await runSlc(['playbook', source], {
       resolver: withReservedPipelines(() => []),
       executor: createInterpretedExecutor({ agent: junkAgent }),
+      cwd: work,
     });
     expect(result.ok).toBe(true);
     // Portable checker support and the conformance test need no FSM import;
@@ -557,19 +599,24 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
   });
 
   it('emits no verification when -o relocates the fsm out of the artifact dir (VERIFY-2, PIPE-8)', async () => {
-    const out = join(root, 'work', 'custom.fsm.ts');
-    const result = await runSlc(['playbook', source, '-o', out], deps());
+    // Only the `playbook` pipeline defaults a link target (SELFHOST-13), so
+    // `-o` on a bare `playbook` run names the linked artifact; the reserved
+    // `slc` run of the same shared definitions keeps the full form where `-o`
+    // relocates the fsm object.
+    const out = join(work, 'custom.fsm.ts');
+    const slcArtDir = join(work, 'code.slc');
+    const result = await runSlc(['slc', source, '-o', out], deps());
     expect(result.ok).toBe(true);
     expect(await exists(out)).toBe(true);
-    // The fsm left `<basename>.playbook/`, so no test is emitted there (it would
+    // The fsm left `<basename>.slc/`, so no test is emitted there (it would
     // otherwise import a `./code.fsm.js` that was not written beside it).
-    expect(await exists(join(artDir, 'code.gears-fsm.test.ts'))).toBe(false);
+    expect(await exists(join(slcArtDir, 'code.gears-fsm.test.ts'))).toBe(false);
     expect(result.outputs).not.toContain(
-      join(artDir, 'code.gears-fsm.test.ts'),
+      join(slcArtDir, 'code.gears-fsm.test.ts'),
     );
   });
 
-  it('links code.md to the playbook runtime at its DR-001 location', async () => {
+  it('links code.md to the playbook runtime at its canonical location under the invocation cwd (DR-014)', async () => {
     const result = await runSlc(
       ['playbook', source, '--link', runtime],
       deps(),
@@ -580,5 +627,44 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8)', () => {
     expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
       true,
     );
+  });
+
+  it('emits <cwd>/<basename>.ts default-exporting the registry entry after a playbook full-link (SELFHOST-16)', async () => {
+    const result = await runSlc(['playbook', source], deps());
+    expect(result.ok).toBe(true);
+    const entry = join(work, 'code.ts');
+    expect(result.outputs).toContain(entry);
+    const module = await readFile(entry, 'utf8');
+    // id/command are the basename; requiredRoleIds come from the gears
+    // `Players:` block the faked agent wrote, not the raw text.
+    expect(module).toContain('export default entry');
+    expect(module).toContain("id: 'code'");
+    expect(module).toContain("command: 'code'");
+    expect(module).toContain("requiredRoleIds: ['Writer']");
+    expect(module).toContain(
+      "intent: 'Code — When Boss gives a coding intent, Captain shall relay it to Coder.'",
+    );
+    // The linked module is imported by its source-only relative specifier, so
+    // the entry and the bundle relocate together.
+    expect(module).toContain(
+      "import createPlaybookRuntime from './code.playbook/code.playbook.ts'",
+    );
+  });
+
+  it('writes no entry module when -o relocates the linked artifact (SELFHOST-16)', async () => {
+    const out = join(work, 'custom.playbook.ts');
+    const result = await runSlc(['playbook', source, '-o', out], deps());
+    expect(result.ok).toBe(true);
+    expect(await exists(out)).toBe(true);
+    expect(await exists(join(work, 'code.ts'))).toBe(false);
+    expect(result.outputs).not.toContain(join(work, 'code.ts'));
+  });
+
+  it('derives requiredRoleIds from the gears Players block, excluding alias declarations (SELFHOST-16)', () => {
+    expect(
+      declaredPlayers(
+        'Players:\n\n- Writer\n- `Reviewer`\n- `Editor` = `Writer` | `Reviewer`\n\n## Behaviors\n',
+      ),
+    ).toEqual(['Writer', 'Reviewer']);
   });
 });

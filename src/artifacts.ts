@@ -2,15 +2,16 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Source-name validation and artifact-path computation (DR-001).
+ * Source-name validation and artifact-path computation (DR-001, DR-014).
  *
- * Implements PIPE-6 (accept only the entry/non-entry source filename forms),
- * PIPE-7 (compute the artifact directory, reusing it without nesting), and
- * PIPE-8 (place intermediates and the output, honoring `-o`). See
+ * Implements PIPE-6 (the entry/non-entry source filename forms, with a
+ * foreign-extension entry source accepted as a raw input), PIPE-7 (compute the
+ * artifact directory under the invocation working directory, reusing it without
+ * nesting), and PIPE-8 (place intermediates and the output, honoring `-o`). See
  * specs/dev/pipeline.md.
  */
 
-import { basename as pathBasename, dirname, join } from 'node:path';
+import { basename as pathBasename, extname, join } from 'node:path';
 
 import type { Phase } from './phase.js';
 
@@ -28,20 +29,25 @@ export class SourceError extends Error {
   }
 }
 
-/** A source filename decomposed into its basename and containing directory. */
+/** A source filename decomposed into its basename, plus the raw-input marker. */
 export interface ParsedSource {
   /** Basename with any trailing `.<source-format>` and extension stripped. */
   basename: string;
-  /** Directory containing the source file. */
-  dir: string;
+  /**
+   * True when an entry source carries a foreign extension: a raw input whose
+   * compilation auto-schedules normalization (DR-014, PIPE-6, PIPE-34).
+   */
+  raw: boolean;
 }
 
 /**
  * Validates a source path against the consuming phase's source format and
- * extension, returning its `<basename>` and directory (PIPE-6).
+ * extension, returning its `<basename>` (PIPE-6).
  *
  * The non-entry form requires `<basename>.<source-format>.<ext>`; the entry form
- * also accepts the plain `<basename>.<ext>`.
+ * also accepts the plain `<basename>.<ext>`, and an entry source with any other
+ * extension is a raw input whose `<basename>` is the name minus its actual
+ * extension (DR-014).
  *
  * @throws {SourceError} when the name matches no applicable form.
  */
@@ -53,9 +59,20 @@ export function parseSource(opts: {
 }): ParsedSource {
   const { path, sourceFormat, ext, entry } = opts;
   const name = pathBasename(path);
-  const dir = dirname(path);
 
   if (!name.endsWith(ext)) {
+    if (entry) {
+      const actualExt = extname(name);
+      const basename =
+        actualExt === '' ? name : name.slice(0, -actualExt.length);
+      if (basename.length === 0) {
+        throw new SourceError(
+          'invalid-source-name',
+          `source "${name}" has an empty basename`,
+        );
+      }
+      return { basename, raw: true };
+    }
     throw new SourceError(
       'invalid-source-name',
       `source "${name}" must end with "${ext}"`,
@@ -82,23 +99,24 @@ export function parseSource(opts: {
       `source "${name}" has an empty basename`,
     );
   }
-  return { basename, dir };
+  return { basename, raw: false };
 }
 
 /**
- * Computes the artifact directory for a source, reusing the canonical directory
- * without nesting when the source already lives inside it (PIPE-7).
+ * Computes the artifact directory under the invocation working directory,
+ * reusing the working directory itself without nesting when its leaf is
+ * already the canonical `<basename>.<pipeline>` (PIPE-7, DR-014).
  */
 export function artifactDir(
-  srcDir: string,
+  cwd: string,
   basename: string,
   pipeline: string,
 ): string {
   const canonicalLeaf = `${basename}.${pipeline}`;
-  if (pathBasename(srcDir) === canonicalLeaf) {
-    return srcDir;
+  if (pathBasename(cwd) === canonicalLeaf) {
+    return cwd;
   }
-  return join(srcDir, canonicalLeaf);
+  return join(cwd, canonicalLeaf);
 }
 
 /** Computes the canonical path of a `<basename>.<format>.<ext>` artifact (PIPE-8). */

@@ -107,17 +107,19 @@ let srcDir: string;
 let source: string;
 let artDir: string;
 
-/** SlcDeps with a fake resolver and an interpreted executor over a fake agent. */
+/**
+ * SlcDeps with a fake resolver and an interpreted executor over a fake agent.
+ * Anchors artifact placement at the fixture source directory by default so the
+ * DR-014 CWD rule lands artifacts in `artDir` (`cwd` overridable per test).
+ */
 const interpretedDeps = (
   agent: AgentClient,
   signal: AbortSignal,
-  model?: string,
+  cwd?: string,
 ): SlcDeps => ({
   resolver: (reference) => (reference === 'flow' ? [pipelineDir] : []),
-  executor: createInterpretedExecutor({
-    agent,
-    config: model ? { model } : {},
-  }),
+  executor: createInterpretedExecutor({ agent, config: {} }),
+  cwd: cwd ?? srcDir,
   signal,
 });
 
@@ -188,6 +190,21 @@ describe('conveniences (CLI-13, CLI-14)', () => {
       // Reworded CLI-2: help names --config and the config file, not just env.
       expect(help).toContain('--config');
       expect(help).toContain('slc.config.yaml');
+      // DR-014: the full-run synopsis carries --no-optimize, the placement
+      // paragraph anchors artifacts at the working directory, and -O states
+      // that passes are the default.
+      expect(help).toContain(
+        'slc <pipeline> <source> [--normalize] [--no-optimize] [--link <target>] [--link-option name=value]...',
+      );
+      expect(help).toContain(
+        'Artifacts land in the working directory (<cwd>/<basename>.<pipeline>/);',
+      );
+      expect(help).toContain(
+        "-O, --optimize            run the pipeline's pass phases (the default)",
+      );
+      expect(help).toContain(
+        '--no-optimize             run the chain without pass phases',
+      );
     }
   });
 });
@@ -208,6 +225,26 @@ describe('reporting (CLI-15, CLI-16)', () => {
     expect(stdout).toContain(join(artDir, 'onboarding.gears.md'));
     expect(stdout).toContain(outPath);
     expect(await exists(outPath)).toBe(true);
+  });
+
+  it('places artifacts under the invocation cwd, not the source directory (PIPE-38)', async () => {
+    const { agent } = makeAgent();
+    const out: string[] = [];
+    // Invoke from `root` while the source lives in `srcDir`: DR-014 anchors
+    // the artifact directory at the working directory the bin passes down.
+    const code = await run(['flow', source], {
+      cwd: root,
+      env: {},
+      stdout: (t) => out.push(t),
+      buildDeps: ({ cwd, signal }) => interpretedDeps(agent, signal, cwd),
+    });
+
+    expect(code).toBe(0);
+    const cwdArtDir = join(root, 'onboarding.flow');
+    expect(out.join('')).toContain(join(cwdArtDir, 'onboarding.fsm.ts'));
+    expect(await exists(join(cwdArtDir, 'onboarding.fsm.ts'))).toBe(true);
+    // The source's own directory stays unwritten — the out-of-tree property.
+    expect(await exists(artDir)).toBe(false);
   });
 
   it('reports a rejected run to stderr, nothing to stdout, non-zero (CLI-16)', async () => {
@@ -319,7 +356,10 @@ describe('configuration (CLI-18, CLI-19)', () => {
     expect(code).toBe(1);
     expect(out.join('')).toBe('');
     expect(err.join('')).toContain('SLC_AGENT');
-    expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(false);
+    // DR-014: with cwd at `root`, artifacts would land under it — none may.
+    expect(
+      await exists(join(root, 'onboarding.flow', 'onboarding.gears.md')),
+    ).toBe(false);
   });
 
   it('refuses an unsupported SLC_AGENT (CLI-18)', async () => {
@@ -345,14 +385,16 @@ describe('configuration (CLI-18, CLI-19)', () => {
     let chosenAgent: string | undefined;
     const out: string[] = [];
     const code = await run(['flow', source], {
+      cwd: srcDir,
       env: {
         SLC_PIPELINE_PATH: pipelinesRoot,
         SLC_AGENT: 'claude-code',
         SLC_MODEL: 'opus-x',
       },
       stdout: (t) => out.push(t),
-      // Mirror production wiring (real resolver + real config selection),
-      // choosing the transport by the selected agent so SLC_AGENT is exercised.
+      // Mirror production wiring (real resolver + real config selection +
+      // the DR-014 cwd anchor), choosing the transport by the selected agent
+      // so SLC_AGENT is exercised.
       buildDeps: ({ env, cwd, signal }) => {
         const selection = resolveAgentSelection(env);
         chosenAgent = selection.agent;
@@ -364,6 +406,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
             agent: transports[selection.agent],
             config: { model: selection.model, cwd },
           }),
+          cwd,
           signal,
         };
       },
@@ -450,6 +493,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
           agent: transport,
           config: { model: cfg.selection.model, cwd },
         }),
+        cwd,
         signal,
       };
     };
@@ -781,7 +825,9 @@ describe('compiled execution through the bin (CLI-28)', () => {
 
     expect(err.join('')).toBe('');
     expect(code).toBe(0);
-    const target = join(artDir, 'onboarding.gears.md');
+    // DR-014: the run's cwd is `root`, not the source's directory, so the
+    // artifact lands under `<root>/onboarding.flow/` (out-of-tree, PIPE-38).
+    const target = join(root, 'onboarding.flow', 'onboarding.gears.md');
     expect(out.join('')).toContain(target);
     expect(interpretedRuns).toEqual([]);
     const { readFile } = await import('node:fs/promises');
