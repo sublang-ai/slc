@@ -4,65 +4,27 @@
 import { setup, fromPromise, assign } from 'xstate';
 
 // ---------------------------------------------------------------------------
-// Fixed framework descriptions mandated verbatim by the GEARS-to-FSM definition.
+// Players declared by the GEARS source.
 // ---------------------------------------------------------------------------
 
-// Default single-outcome contract description for acting items that declare no
-// `Results:` label (CODE-2, CODE-6).
-const DONE_DESCRIPTION = 'The acting agent completed the behavior.';
-
-// Universal Boss-reply result description added to every agent-invoking state.
-const NEEDS_BOSS_REPLY_DESCRIPTION =
-  "The acting agent's prose surfaces a clarifying question for Boss that the agent cannot answer alone. Output shall include `question: <verbatim question text from the acting agent's prose>`.";
+export type PlayerName = '编码者' | '审查者';
 
 // ---------------------------------------------------------------------------
-// Actor input/output contracts (exported for the linker to implement).
-// This GEARS artifact uses only the `player` and `script` actor kinds, so no
-// `captain` or `playbook` contract is declared, registered, or exported.
+// Boss-reply suspension contract.
 // ---------------------------------------------------------------------------
 
-// A clarifying question a player surfaced for Boss, parked until BOSS_REPLY.
 export interface PendingBossQuestion {
   questionId: string;
   resumeStateId: string;
   sourceItem: string;
-  player: string;
+  player: PlayerName;
   question: string;
 }
 
-// Delegated-player actor input. Placeholder-backed fields (reviewComments,
-// coderResponse, agreedConclusion) carry the runtime values the linker
-// substitutes for the corresponding `<...>` prompt placeholders. The singular
-// pendingBossQuestion/bossReply fields give prompt composition one stable
-// continuation contract regardless of the scalar context representation.
-export interface PlayerInput {
-  stateId: string;
-  player: string;
-  sourceItem: string;
-  prompt: string;
-  result: Record<string, string>;
-  reviewComments?: string;
-  coderResponse?: string;
-  agreedConclusion?: string;
-  pendingBossQuestion?: PendingBossQuestion;
-  bossReply?: string;
-}
+// ---------------------------------------------------------------------------
+// Script actor contract (optimizer-introduced CODE-1).
+// ---------------------------------------------------------------------------
 
-// Delegated-player actor output: a discriminated union with one literal `guard`
-// member per authored result key across the player states, each carrying every
-// payload field its accepting guard requires, plus the universal needsBossReply.
-export type PlayerOutput =
-  | { guard: 'done' }
-  | { guard: 'issues'; reviewComments: string }
-  | { guard: 'clean' }
-  | { guard: 'responded'; coderResponse: string }
-  | { guard: 'agreed'; agreedConclusion: string }
-  | { guard: 'disputed'; reviewComments: string }
-  | { guard: 'needsBossReply'; question: string };
-
-// Optimizer-introduced script actor input (CODE-1). No prompt, no player.
-// The result keys preserve the item's two guards in declared order: first the
-// zero-exit guard, then the nonzero-exit guard.
 export interface ScriptInput {
   stateId: string;
   sourceItem: string;
@@ -70,176 +32,170 @@ export interface ScriptInput {
   result: { ok: string; failed: string };
 }
 
-// Script actor output: one literal `guard` member per declared result key plus
-// the required exitStatus. The script contract carries no prose output.
 export type ScriptOutput =
   | { guard: 'ok'; exitStatus: number }
   | { guard: 'failed'; exitStatus: number };
 
-// This playbook takes no per-run parameters from Source, and it has no dynamic
-// nested call, so it declares neither runtime knobs nor a selfPlaybookId. The
-// GEARS-declared player identities are carried on each invocation directly.
-export type WorkflowInput = Record<string, never>;
+// ---------------------------------------------------------------------------
+// Player actor contract. One typed input/output shared by the delegated
+// states; each state's invoke.input.result is the authoritative local
+// contract for the guards that state may return.
+// ---------------------------------------------------------------------------
 
-// Boss-originated events: the entry event that starts/recovers the workflow and
-// the scalar Boss-reply event. This fixed pipeline consumes no Boss routing
-// directive, so no BOSS_INTERRUPT surface is generated.
-export type WorkflowEvent =
-  | { type: 'START' }
-  | { type: 'BOSS_REPLY'; answer: string; questionId?: string };
+export interface PlayerInput {
+  stateId: string;
+  player: PlayerName;
+  sourceItem: string;
+  prompt: string;
+  result: Record<string, string>;
+  // Runtime-value placeholders established by Source, backed by typed context.
+  task?: string;
+  reviewFindings?: string;
+  reviewerRebuttal?: string;
+  coderRuling?: string;
+  conclusion?: string;
+  // Boss-reply continuation (singular contract for prompt composition).
+  pendingBossQuestion?: PendingBossQuestion;
+  bossReply?: string;
+}
 
-interface SerializedError {
-  name: string;
-  message: string;
-  stack?: string;
+export type PlayerOutput =
+  | { guard: 'done' }
+  | { guard: 'issues'; reviewFindings: string }
+  | { guard: 'clean' }
+  | { guard: 'agreed'; conclusion: string }
+  | { guard: 'dispute'; coderRuling: string }
+  | { guard: 'responded'; reviewerRebuttal: string }
+  | { guard: 'needsBossReply'; question: string };
+
+// ---------------------------------------------------------------------------
+// Machine input, context, events.
+// ---------------------------------------------------------------------------
+
+export interface WorkflowInput {
+  task?: string;
 }
 
 interface WorkflowContext {
-  // Placeholder-backed routing values; each is populated by its producing
-  // transition before the consuming state can run.
-  reviewComments: string;
-  coderResponse: string;
-  agreedConclusion: string;
-  // Scalar Boss-reply suspension state (at most one active player task).
+  task?: string;
+  reviewFindings?: string;
+  reviewerRebuttal?: string;
+  coderRuling?: string;
+  conclusion?: string;
+  reviewCount: number;
+  judgmentCount: number;
   pendingBossQuestion?: PendingBossQuestion;
   bossReply?: string;
-  // Inspection-only capture of the most recent failure.
-  lastError?: SerializedError;
+  lastError?: { name: string; message: string; stack?: string };
 }
 
-interface PendingLeafMeta {
-  stateId: string;
-  sourceItem: string;
-  player: string;
-}
+export type WorkflowEvent =
+  | { type: 'START'; task: string }
+  | { type: 'BOSS_REPLY'; answer: string; questionId?: string };
 
-// Player-invoking working leaves eligible for Boss-reply resume. The script
-// leaf (ensureRepo) is not agent-invoking and is intentionally excluded.
-const RESUMABLE_IDS = [
+// ---------------------------------------------------------------------------
+// Fixed compiler-owned descriptions.
+// ---------------------------------------------------------------------------
+
+const DONE_DESCRIPTION = 'The acting agent completed the behavior.';
+
+const NEEDS_BOSS_REPLY_DESCRIPTION =
+  "The acting agent's prose surfaces a clarifying question for Boss that the agent cannot answer alone. Output shall include `question: <verbatim question text from the acting agent's prose>`.";
+
+// ---------------------------------------------------------------------------
+// Resume routing (scalar Boss-reply form).
+// ---------------------------------------------------------------------------
+
+const RESUMABLE_STATE_IDS = [
   'implement',
   'review',
-  'judge',
-  'debate',
-  'revise',
+  'adjudicate',
+  'rebut',
+  'applyConclusion',
 ] as const;
 
+type ResumableStateId = (typeof RESUMABLE_STATE_IDS)[number];
+
 // ---------------------------------------------------------------------------
-// Structural narrowing helpers: XState may surface heterogeneous actor output
-// as `unknown` in shared guards/actions, so narrow before reading fields rather
-// than relying on unchecked event.output inference.
+// Helpers.
 // ---------------------------------------------------------------------------
 
-function readPlayerOutput(event: unknown): PlayerOutput | undefined {
-  if (typeof event === 'object' && event !== null && 'output' in event) {
-    const output = (event as { output: unknown }).output;
-    if (typeof output === 'object' && output !== null && 'guard' in output) {
-      return output as PlayerOutput;
-    }
+function compact<T extends object>(object: T): T {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(object)) {
+    const value = (object as Record<string, unknown>)[key];
+    if (value !== undefined) result[key] = value;
   }
-  return undefined;
+  return result as T;
 }
 
-function readScriptOutput(event: unknown): ScriptOutput | undefined {
-  if (typeof event === 'object' && event !== null && 'output' in event) {
-    const output = (event as { output: unknown }).output;
-    if (typeof output === 'object' && output !== null && 'guard' in output) {
-      return output as ScriptOutput;
-    }
-  }
-  return undefined;
-}
-
-function isBossReplyEvent(
-  event: unknown,
-): event is { type: 'BOSS_REPLY'; answer: string; questionId?: string } {
-  return (
-    typeof event === 'object' &&
-    event !== null &&
-    (event as { type?: unknown }).type === 'BOSS_REPLY'
-  );
-}
-
-function normalizeError(error: unknown): SerializedError {
+function normalizeError(error: unknown): {
+  name: string;
+  message: string;
+  stack?: string;
+} {
   if (error instanceof Error) {
-    const normalized: SerializedError = {
+    const normalized: { name: string; message: string; stack?: string } = {
       name: error.name,
       message: error.message,
     };
-    if (typeof error.stack === 'string') {
-      normalized.stack = error.stack;
-    }
+    if (typeof error.stack === 'string') normalized.stack = error.stack;
     return normalized;
   }
   return { name: 'Error', message: String(error) };
 }
 
-// BOSS_REPLY transition arms for the scalar awaitBossReply state: one guarded
-// reentry per resumable working leaf targeting its stable id, plus a fallback to
-// `failed` for a reply that matches no pending question or has an empty answer.
-// Registered guard/action names stay literal so they type-check.
-function resumableStates(ids: readonly string[]) {
+function playerQuestion(event: unknown): string {
+  if (typeof event !== 'object' || event === null) return '';
+  const output = (event as { output?: unknown }).output;
+  if (typeof output !== 'object' || output === null) return '';
+  const question = (output as { question?: unknown }).question;
+  return typeof question === 'string' ? question : '';
+}
+
+function resumableStates(ids: readonly ResumableStateId[]) {
+  const arms = ids.map((id) => ({
+    guard: { type: 'canResume' as const, params: { stateId: id } },
+    target: `#${id}` as const,
+    reenter: true,
+    actions: [{ type: 'storeBossReply' as const }],
+  }));
   return [
-    ...ids.map((id) => ({
-      guard: { type: 'canResume' as const, params: { stateId: id } },
-      target: `#${id}`,
-      reenter: true as const,
-      actions: 'setBossReply' as const,
-    })),
+    ...arms,
     {
       target: '#failed' as const,
-      actions: 'rememberBossReplyRejection' as const,
+      actions: [{ type: 'rememberBadBossReply' as const }],
     },
   ];
 }
 
 // ---------------------------------------------------------------------------
-// Machine: an XState v5 object artifact. Actor placeholders fail explicitly; the
-// runner binds concrete implementations. No runner is imported here.
+// Machine.
 // ---------------------------------------------------------------------------
 
 export const workflowMachine = setup({
-  types: {} as {
-    context: WorkflowContext;
-    events: WorkflowEvent;
-    input: WorkflowInput;
+  types: {
+    context: {} as WorkflowContext,
+    events: {} as WorkflowEvent,
+    input: {} as WorkflowInput,
   },
   actors: {
-    player: fromPromise<PlayerOutput, PlayerInput>(async () => {
-      throw new Error('player actor must be provided by the runner');
-    }),
     script: fromPromise<ScriptOutput, ScriptInput>(async () => {
       throw new Error('script actor must be provided by the runner');
     }),
+    player: fromPromise<PlayerOutput, PlayerInput>(async () => {
+      throw new Error('player actor must be provided by the runner');
+    }),
   },
   guards: {
-    isOk: ({ event }) => readScriptOutput(event)?.guard === 'ok',
-    isFailed: ({ event }) => readScriptOutput(event)?.guard === 'failed',
-    isDone: ({ event }) => readPlayerOutput(event)?.guard === 'done',
-    isIssues: ({ event }) => readPlayerOutput(event)?.guard === 'issues',
-    isClean: ({ event }) => readPlayerOutput(event)?.guard === 'clean',
-    isResponded: ({ event }) => readPlayerOutput(event)?.guard === 'responded',
-    isAgreed: ({ event }) => readPlayerOutput(event)?.guard === 'agreed',
-    isDisputed: ({ event }) => readPlayerOutput(event)?.guard === 'disputed',
-    isNeedsBossReply: ({ event }) => {
-      const out = readPlayerOutput(event);
-      return (
-        out?.guard === 'needsBossReply' &&
-        typeof out.question === 'string' &&
-        out.question.trim().length > 0
-      );
-    },
-    isNeedsBossReplyMalformed: ({ event }) => {
-      const out = readPlayerOutput(event);
-      return (
-        out?.guard === 'needsBossReply' &&
-        !(typeof out.question === 'string' && out.question.trim().length > 0)
-      );
-    },
-    canResume: ({ context, event }, params: { stateId: string }) => {
-      if (!isBossReplyEvent(event)) return false;
-      if (event.answer.trim().length === 0) return false;
+    canResume: ({ context, event }, params: { stateId: ResumableStateId }) => {
+      if (event.type !== 'BOSS_REPLY') return false;
+      const answer = event.answer;
+      if (typeof answer !== 'string' || answer.trim().length === 0)
+        return false;
       const pending = context.pendingBossQuestion;
-      if (!pending || pending.resumeStateId !== params.stateId) return false;
+      if (pending === undefined) return false;
+      if (pending.resumeStateId !== params.stateId) return false;
       if (
         event.questionId !== undefined &&
         event.questionId !== pending.questionId
@@ -250,432 +206,509 @@ export const workflowMachine = setup({
     },
   },
   actions: {
-    setReviewComments: assign({
-      reviewComments: ({ event }) => {
-        const out = readPlayerOutput(event);
-        return out && 'reviewComments' in out ? out.reviewComments : '';
-      },
-    }),
-    setCoderResponse: assign({
-      coderResponse: ({ event }) => {
-        const out = readPlayerOutput(event);
-        return out && 'coderResponse' in out ? out.coderResponse : '';
-      },
-    }),
-    setAgreedConclusion: assign({
-      agreedConclusion: ({ event }) => {
-        const out = readPlayerOutput(event);
-        return out && 'agreedConclusion' in out ? out.agreedConclusion : '';
-      },
-    }),
-    setPendingBossQuestion: assign(({ event }, params: PendingLeafMeta) => {
-      const out = readPlayerOutput(event);
-      const question =
-        out && out.guard === 'needsBossReply' ? out.question : '';
-      return {
+    seedTask: assign(({ context, event }) => ({
+      task: event.type === 'START' ? event.task : context.task,
+    })),
+    restart: assign(({ context, event }) => ({
+      task: event.type === 'START' ? event.task : context.task,
+      reviewFindings: undefined,
+      reviewerRebuttal: undefined,
+      coderRuling: undefined,
+      conclusion: undefined,
+      reviewCount: 0,
+      judgmentCount: 0,
+      pendingBossQuestion: undefined,
+      bossReply: undefined,
+      lastError: undefined,
+    })),
+    storeBossReply: assign(({ context, event }) => ({
+      bossReply: event.type === 'BOSS_REPLY' ? event.answer : context.bossReply,
+    })),
+    clearBossReplyContext: assign(() => ({
+      pendingBossQuestion: undefined,
+      bossReply: undefined,
+    })),
+    setPendingBossQuestion: assign(
+      (
+        { event },
+        params: {
+          stateId: ResumableStateId;
+          sourceItem: string;
+          player: PlayerName;
+        },
+      ) => ({
         pendingBossQuestion: {
           questionId: params.stateId,
           resumeStateId: params.stateId,
           sourceItem: params.sourceItem,
           player: params.player,
-          question,
-        },
-      };
-    }),
-    clearBossReplyContext: assign({
-      pendingBossQuestion: () => undefined,
-      bossReply: () => undefined,
-    }),
-    setBossReply: assign({
-      bossReply: ({ event }) => (isBossReplyEvent(event) ? event.answer : ''),
-    }),
-    rememberError: assign({
-      lastError: ({ event }) =>
-        normalizeError((event as { error?: unknown }).error),
-    }),
-    rememberBossReplyRejection: assign({
-      lastError: () => ({
+          question: playerQuestion(event),
+        } satisfies PendingBossQuestion,
+      }),
+    ),
+    rememberInvokeError: assign(({ event }) => ({
+      lastError: normalizeError((event as { error?: unknown }).error),
+    })),
+    rememberScriptFailure: assign(() => ({
+      lastError: {
+        name: 'ScriptFailed',
+        message: 'CODE-1 script exited with a nonzero status.',
+      },
+    })),
+    rememberMalformedOutput: assign(() => ({
+      lastError: {
+        name: 'MalformedOutput',
+        message: 'Actor output did not satisfy the state result contract.',
+      },
+    })),
+    rememberStalemate: assign(() => ({
+      lastError: {
+        name: 'ArgumentExhausted',
+        message:
+          '编码者 disputed after the 3rd judgment without deciding a conclusion.',
+      },
+    })),
+    rememberBadBossReply: assign(() => ({
+      lastError: {
         name: 'BossReplyError',
-        message:
-          'BOSS_REPLY did not match a pending question or had an empty answer.',
-      }),
-    }),
-    rememberMalformedQuestion: assign({
-      lastError: () => ({
-        name: 'BossQuestionError',
-        message:
-          'Acting agent returned needsBossReply without a question field.',
-      }),
-    }),
+        message: 'BOSS_REPLY had an empty answer or an unknown question id.',
+      },
+    })),
   },
 }).createMachine({
   id: 'workflow',
   initial: 'ready',
-  context: () => ({
-    reviewComments: '',
-    coderResponse: '',
-    agreedConclusion: '',
+  context: ({ input }) => ({
+    task: input.task,
+    reviewCount: 0,
+    judgmentCount: 0,
   }),
   states: {
-    // Quiescent idle hub: no invoke, accepts the Boss entry event.
     ready: {
       id: 'ready',
-      description: '空闲集散状态：等待 Boss 启动工作流。',
+      description: 'Idle hub awaiting the Boss task that starts the workflow.',
       tags: ['playbook.parked'],
       meta: {
         playbook: {
           stateId: 'ready',
-          description: '空闲集散状态：等待 Boss 启动工作流。',
+          description:
+            'Idle hub awaiting the Boss task that starts the workflow.',
         },
       },
       on: {
-        START: { target: 'ensureRepo' },
+        START: { target: 'setup', actions: ['seedTask'] },
       },
     },
 
-    // CODE-1: optimizer-introduced script actor. Success advances to the next
-    // workflow step; nonzero exit routes to `failed`.
-    ensureRepo: {
-      id: 'ensureRepo',
-      description: '确保当前目录是一个 Git 仓库。',
+    setup: {
+      id: 'setup',
+      description: 'Ensure the working directory is a Git repository (CODE-1).',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
-          stateId: 'ensureRepo',
-          description: '确保当前目录是一个 Git 仓库。',
+          stateId: 'setup',
+          description:
+            'Ensure the working directory is a Git repository (CODE-1).',
         },
       },
       invoke: {
         src: 'script',
         input: (): ScriptInput => ({
-          stateId: 'ensureRepo',
+          stateId: 'setup',
           sourceItem: 'CODE-1',
           command:
             'git rev-parse --is-inside-work-tree 2>/dev/null || git init',
           result: {
-            ok: '命令以零状态码退出。',
-            failed: '命令以非零状态码退出。',
+            ok: '命令以状态码 0 退出。',
+            failed: '命令以非 0 状态码退出。',
           },
         }),
         onDone: [
-          { guard: 'isOk', target: 'implement' },
-          { guard: 'isFailed', target: 'failed' },
+          {
+            guard: ({ event }) => event.output.guard === 'ok',
+            target: 'implement',
+          },
+          { target: 'failed', actions: ['rememberScriptFailure'] },
         ],
-        onError: { target: 'failed', actions: 'rememberError' },
+        onError: { target: 'failed', actions: ['rememberInvokeError'] },
       },
     },
 
-    // CODE-2: delegated player, default single-outcome contract.
     implement: {
       id: 'implement',
-      description: '编码者按任务要求修改代码并提交。',
+      description: 'Coder implements the Boss task and commits (CODE-2).',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
           stateId: 'implement',
-          description: '编码者按任务要求修改代码并提交。',
+          description: 'Coder implements the Boss task and commits (CODE-2).',
         },
       },
       invoke: {
         src: 'player',
-        input: ({ context }): PlayerInput => ({
-          stateId: 'implement',
-          player: '编码者',
-          sourceItem: 'CODE-2',
-          prompt: '按任务要求对当前目录的代码进行修改。\n提交Git。',
-          result: {
-            done: DONE_DESCRIPTION,
-            needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
-          },
-          ...(context.pendingBossQuestion
-            ? { pendingBossQuestion: context.pendingBossQuestion }
-            : {}),
-          ...(context.bossReply !== undefined
-            ? { bossReply: context.bossReply }
-            : {}),
-        }),
+        input: ({ context }): PlayerInput =>
+          compact({
+            stateId: 'implement',
+            player: '编码者',
+            sourceItem: 'CODE-2',
+            prompt: [
+              '你要完成的任务是：<task>。',
+              '按任务要求，对当前目录的代码进行修改。',
+              '将修改提交到 Git。',
+            ].join('\n'),
+            result: {
+              done: DONE_DESCRIPTION,
+              needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
+            },
+            task: context.task,
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
+          }),
         onDone: [
           {
-            guard: 'isNeedsBossReply',
+            guard: ({ event }) =>
+              event.output.guard === 'needsBossReply' &&
+              playerQuestion(event).trim().length > 0,
             target: 'awaitBossReply',
-            actions: {
-              type: 'setPendingBossQuestion',
-              params: {
-                stateId: 'implement',
-                sourceItem: 'CODE-2',
-                player: '编码者',
+            actions: [
+              {
+                type: 'setPendingBossQuestion',
+                params: {
+                  stateId: 'implement',
+                  sourceItem: 'CODE-2',
+                  player: '编码者',
+                },
               },
-            },
+            ],
           },
           {
-            guard: 'isNeedsBossReplyMalformed',
-            target: 'failed',
-            actions: 'rememberMalformedQuestion',
-          },
-          {
-            guard: 'isDone',
+            guard: ({ event }) => event.output.guard === 'done',
             target: 'review',
-            actions: 'clearBossReplyContext',
+            actions: [
+              assign(({ context }) => ({
+                reviewCount: context.reviewCount + 1,
+              })),
+              'clearBossReplyContext',
+            ],
           },
+          { target: 'failed', actions: ['rememberMalformedOutput'] },
         ],
-        onError: { target: 'failed', actions: 'rememberError' },
+        onError: { target: 'failed', actions: ['rememberInvokeError'] },
       },
     },
 
-    // CODE-3: delegated player. `issues` feeds the judge; `clean` completes.
     review: {
       id: 'review',
-      description: '审查者对提交的 commit 进行 review 并提出问题。',
+      description: 'Reviewer reviews the latest commit (CODE-3).',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
           stateId: 'review',
-          description: '审查者对提交的 commit 进行 review 并提出问题。',
+          description: 'Reviewer reviews the latest commit (CODE-3).',
         },
       },
       invoke: {
         src: 'player',
-        input: ({ context }): PlayerInput => ({
-          stateId: 'review',
-          player: '审查者',
-          sourceItem: 'CODE-3',
-          prompt: '对提交的commit进行review。\n提出合理问题。',
-          result: {
-            issues:
-              '审查者提出了合理问题，交回给编码者判断。输出应包含 `reviewComments`：审查者提出的问题。',
-            clean: '审查者对提交的commit未发现任何问题。',
-            needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
-          },
-          ...(context.pendingBossQuestion
-            ? { pendingBossQuestion: context.pendingBossQuestion }
-            : {}),
-          ...(context.bossReply !== undefined
-            ? { bossReply: context.bossReply }
-            : {}),
-        }),
+        input: ({ context }): PlayerInput =>
+          compact({
+            stateId: 'review',
+            player: '审查者',
+            sourceItem: 'CODE-3',
+            prompt: [
+              '对最新提交的 commit 进行 review。',
+              '提出合理的问题；若没有任何问题，请明确说明通过。',
+            ].join('\n'),
+            result: {
+              issues:
+                '审查者提出了需要处理的问题；输出应包含 `reviewFindings: <审查者提出的问题>`。',
+              clean: '审查者认为没有任何问题，流程结束。',
+              needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
+            },
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
+          }),
         onDone: [
           {
-            guard: 'isNeedsBossReply',
+            guard: ({ event }) =>
+              event.output.guard === 'needsBossReply' &&
+              playerQuestion(event).trim().length > 0,
             target: 'awaitBossReply',
-            actions: {
-              type: 'setPendingBossQuestion',
-              params: {
-                stateId: 'review',
-                sourceItem: 'CODE-3',
-                player: '审查者',
+            actions: [
+              {
+                type: 'setPendingBossQuestion',
+                params: {
+                  stateId: 'review',
+                  sourceItem: 'CODE-3',
+                  player: '审查者',
+                },
               },
-            },
+            ],
           },
           {
-            guard: 'isNeedsBossReplyMalformed',
-            target: 'failed',
-            actions: 'rememberMalformedQuestion',
+            guard: ({ event }) =>
+              event.output.guard === 'issues' &&
+              typeof (event.output as { reviewFindings?: unknown })
+                .reviewFindings === 'string',
+            target: 'adjudicate',
+            actions: [
+              assign(({ context, event }) => ({
+                reviewFindings:
+                  event.output.guard === 'issues'
+                    ? event.output.reviewFindings
+                    : context.reviewFindings,
+                judgmentCount: context.judgmentCount + 1,
+              })),
+              'clearBossReplyContext',
+            ],
           },
           {
-            guard: 'isIssues',
-            target: 'judge',
-            actions: ['setReviewComments', 'clearBossReplyContext'],
-          },
-          {
-            guard: 'isClean',
+            guard: ({ event }) => event.output.guard === 'clean',
             target: 'done',
-            actions: 'clearBossReplyContext',
+            actions: ['clearBossReplyContext'],
           },
+          { target: 'failed', actions: ['rememberMalformedOutput'] },
         ],
-        onError: { target: 'failed', actions: 'rememberError' },
+        onError: { target: 'failed', actions: ['rememberInvokeError'] },
       },
     },
 
-    // CODE-4: delegated player. Produces coderResponse for the debate.
-    judge: {
-      id: 'judge',
-      description: '编码者对审查者的问题做出判断。',
+    adjudicate: {
+      id: 'adjudicate',
+      description: 'Coder adjudicates the review findings (CODE-4).',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
-          stateId: 'judge',
-          description: '编码者对审查者的问题做出判断。',
+          stateId: 'adjudicate',
+          description: 'Coder adjudicates the review findings (CODE-4).',
         },
       },
       invoke: {
         src: 'player',
-        input: ({ context }): PlayerInput => ({
-          stateId: 'judge',
-          player: '编码者',
-          sourceItem: 'CODE-4',
-          prompt:
-            '对审查者提出的问题做出判断：<reviewComments>\n可以接受或拒绝，但要讲清楚原因。',
-          result: {
-            responded:
-              '编码者对每个问题做出接受或拒绝的判断并讲清原因。输出应包含 `coderResponse`：编码者的判断与理由。',
-            needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
-          },
-          reviewComments: context.reviewComments,
-          ...(context.pendingBossQuestion
-            ? { pendingBossQuestion: context.pendingBossQuestion }
-            : {}),
-          ...(context.bossReply !== undefined
-            ? { bossReply: context.bossReply }
-            : {}),
-        }),
+        input: ({ context }): PlayerInput =>
+          compact({
+            stateId: 'adjudicate',
+            player: '编码者',
+            sourceItem: 'CODE-4',
+            prompt: [
+              '审查者提出的问题：<reviewFindings>。',
+              '审查者对你上一次判断的回应（如有）：<reviewerRebuttal>。',
+              '针对每个问题，决定接受还是拒绝，并讲清楚原因。',
+              '与审查者讨论，争取达成一致；若无法达成一致，则由你自行定夺，给出最终结论。',
+            ].join('\n'),
+            result: {
+              agreed:
+                '编码者与审查者达成一致，或已到第 3 次判断由编码者自行定夺；输出应包含 `conclusion: <最终结论>`。',
+              dispute:
+                '尚未达成一致，仍需继续争论；输出应包含 `coderRuling: <编码者对各问题的接受或拒绝判断及原因>`。',
+              needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
+            },
+            reviewFindings: context.reviewFindings,
+            reviewerRebuttal: context.reviewerRebuttal,
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
+          }),
         onDone: [
           {
-            guard: 'isNeedsBossReply',
+            guard: ({ event }) =>
+              event.output.guard === 'needsBossReply' &&
+              playerQuestion(event).trim().length > 0,
             target: 'awaitBossReply',
-            actions: {
-              type: 'setPendingBossQuestion',
-              params: {
-                stateId: 'judge',
-                sourceItem: 'CODE-4',
-                player: '编码者',
+            actions: [
+              {
+                type: 'setPendingBossQuestion',
+                params: {
+                  stateId: 'adjudicate',
+                  sourceItem: 'CODE-4',
+                  player: '编码者',
+                },
               },
-            },
+            ],
           },
           {
-            guard: 'isNeedsBossReplyMalformed',
+            guard: ({ event }) =>
+              event.output.guard === 'agreed' &&
+              typeof (event.output as { conclusion?: unknown }).conclusion ===
+                'string',
+            target: 'applyConclusion',
+            actions: [
+              assign(({ context, event }) => ({
+                conclusion:
+                  event.output.guard === 'agreed'
+                    ? event.output.conclusion
+                    : context.conclusion,
+              })),
+              'clearBossReplyContext',
+            ],
+          },
+          {
+            guard: ({ context, event }) =>
+              event.output.guard === 'dispute' &&
+              typeof (event.output as { coderRuling?: unknown }).coderRuling ===
+                'string' &&
+              context.judgmentCount < 3,
+            target: 'rebut',
+            actions: [
+              assign(({ context, event }) => ({
+                coderRuling:
+                  event.output.guard === 'dispute'
+                    ? event.output.coderRuling
+                    : context.coderRuling,
+              })),
+              'clearBossReplyContext',
+            ],
+          },
+          {
+            guard: ({ event }) => event.output.guard === 'dispute',
             target: 'failed',
-            actions: 'rememberMalformedQuestion',
+            actions: ['rememberStalemate'],
           },
-          {
-            guard: 'isResponded',
-            target: 'debate',
-            actions: ['setCoderResponse', 'clearBossReplyContext'],
-          },
+          { target: 'failed', actions: ['rememberMalformedOutput'] },
         ],
-        onError: { target: 'failed', actions: 'rememberError' },
+        onError: { target: 'failed', actions: ['rememberInvokeError'] },
       },
     },
 
-    // CODE-5: delegated player. `agreed` advances; `disputed` reuses the one
-    // feedback cycle by routing back to the judge with fresh reviewComments.
-    debate: {
-      id: 'debate',
-      description: '审查者与编码者争论直至达成一致。',
+    rebut: {
+      id: 'rebut',
+      description: 'Reviewer responds to the Coder ruling (CODE-5).',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
-          stateId: 'debate',
-          description: '审查者与编码者争论直至达成一致。',
+          stateId: 'rebut',
+          description: 'Reviewer responds to the Coder ruling (CODE-5).',
         },
       },
       invoke: {
         src: 'player',
-        input: ({ context }): PlayerInput => ({
-          stateId: 'debate',
-          player: '审查者',
-          sourceItem: 'CODE-5',
-          prompt:
-            '阅读编码者的判断与理由：<coderResponse>\n与编码者争论，直至达成一致。',
-          result: {
-            agreed:
-              '审查者与编码者达成一致。输出应包含 `agreedConclusion`：双方一致的修改结论。',
-            disputed:
-              '尚未达成一致，审查者继续争论。输出应包含 `reviewComments`：审查者进一步的问题或理由。',
-            needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
-          },
-          coderResponse: context.coderResponse,
-          ...(context.pendingBossQuestion
-            ? { pendingBossQuestion: context.pendingBossQuestion }
-            : {}),
-          ...(context.bossReply !== undefined
-            ? { bossReply: context.bossReply }
-            : {}),
-        }),
+        input: ({ context }): PlayerInput =>
+          compact({
+            stateId: 'rebut',
+            player: '审查者',
+            sourceItem: 'CODE-5',
+            prompt: [
+              '编码者对你所提问题的判断与原因：<coderRuling>。',
+              '针对编码者的判断进行回应，说明你是否接受其理由。',
+              '若仍有异议，请进一步说明，争取与编码者达成一致。',
+            ].join('\n'),
+            result: {
+              responded:
+                '审查者对编码者的判断作出了回应；输出应包含 `reviewerRebuttal: <审查者的回应>`。',
+              needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
+            },
+            coderRuling: context.coderRuling,
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
+          }),
         onDone: [
           {
-            guard: 'isNeedsBossReply',
+            guard: ({ event }) =>
+              event.output.guard === 'needsBossReply' &&
+              playerQuestion(event).trim().length > 0,
             target: 'awaitBossReply',
-            actions: {
-              type: 'setPendingBossQuestion',
-              params: {
-                stateId: 'debate',
-                sourceItem: 'CODE-5',
-                player: '审查者',
+            actions: [
+              {
+                type: 'setPendingBossQuestion',
+                params: {
+                  stateId: 'rebut',
+                  sourceItem: 'CODE-5',
+                  player: '审查者',
+                },
               },
-            },
+            ],
           },
           {
-            guard: 'isNeedsBossReplyMalformed',
-            target: 'failed',
-            actions: 'rememberMalformedQuestion',
+            guard: ({ event }) =>
+              event.output.guard === 'responded' &&
+              typeof (event.output as { reviewerRebuttal?: unknown })
+                .reviewerRebuttal === 'string',
+            target: 'adjudicate',
+            actions: [
+              assign(({ context, event }) => ({
+                reviewerRebuttal:
+                  event.output.guard === 'responded'
+                    ? event.output.reviewerRebuttal
+                    : context.reviewerRebuttal,
+                judgmentCount: context.judgmentCount + 1,
+              })),
+              'clearBossReplyContext',
+            ],
           },
-          {
-            guard: 'isAgreed',
-            target: 'revise',
-            actions: ['setAgreedConclusion', 'clearBossReplyContext'],
-          },
-          {
-            guard: 'isDisputed',
-            target: 'judge',
-            actions: ['setReviewComments', 'clearBossReplyContext'],
-          },
+          { target: 'failed', actions: ['rememberMalformedOutput'] },
         ],
-        onError: { target: 'failed', actions: 'rememberError' },
+        onError: { target: 'failed', actions: ['rememberInvokeError'] },
       },
     },
 
-    // CODE-6: delegated player, default single-outcome. Re-submitting satisfies
-    // review's trigger ("编码者提交了改动"), so `done` loops back to review; the
-    // loop terminates via review's `clean` outcome.
-    revise: {
-      id: 'revise',
-      description: '编码者按结论修改代码并再次提交。',
+    applyConclusion: {
+      id: 'applyConclusion',
+      description:
+        'Coder applies the agreed conclusion and recommits (CODE-6).',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
-          stateId: 'revise',
-          description: '编码者按结论修改代码并再次提交。',
+          stateId: 'applyConclusion',
+          description:
+            'Coder applies the agreed conclusion and recommits (CODE-6).',
         },
       },
       invoke: {
         src: 'player',
-        input: ({ context }): PlayerInput => ({
-          stateId: 'revise',
-          player: '编码者',
-          sourceItem: 'CODE-6',
-          prompt: '按结论修改代码：<agreedConclusion>\n再次提交。',
-          result: {
-            done: DONE_DESCRIPTION,
-            needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
-          },
-          agreedConclusion: context.agreedConclusion,
-          ...(context.pendingBossQuestion
-            ? { pendingBossQuestion: context.pendingBossQuestion }
-            : {}),
-          ...(context.bossReply !== undefined
-            ? { bossReply: context.bossReply }
-            : {}),
-        }),
+        input: ({ context }): PlayerInput =>
+          compact({
+            stateId: 'applyConclusion',
+            player: '编码者',
+            sourceItem: 'CODE-6',
+            prompt: [
+              '按以下结论修改代码：<conclusion>。',
+              '将修改再次提交到 Git。',
+            ].join('\n'),
+            result: {
+              done: DONE_DESCRIPTION,
+              needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
+            },
+            conclusion: context.conclusion,
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
+          }),
         onDone: [
           {
-            guard: 'isNeedsBossReply',
+            guard: ({ event }) =>
+              event.output.guard === 'needsBossReply' &&
+              playerQuestion(event).trim().length > 0,
             target: 'awaitBossReply',
-            actions: {
-              type: 'setPendingBossQuestion',
-              params: {
-                stateId: 'revise',
-                sourceItem: 'CODE-6',
-                player: '编码者',
+            actions: [
+              {
+                type: 'setPendingBossQuestion',
+                params: {
+                  stateId: 'applyConclusion',
+                  sourceItem: 'CODE-6',
+                  player: '编码者',
+                },
               },
-            },
+            ],
           },
           {
-            guard: 'isNeedsBossReplyMalformed',
-            target: 'failed',
-            actions: 'rememberMalformedQuestion',
-          },
-          {
-            guard: 'isDone',
+            guard: ({ context, event }) =>
+              event.output.guard === 'done' && context.reviewCount < 2,
             target: 'review',
-            actions: 'clearBossReplyContext',
+            actions: [
+              assign(({ context }) => ({
+                reviewCount: context.reviewCount + 1,
+              })),
+              'clearBossReplyContext',
+            ],
           },
+          {
+            guard: ({ event }) => event.output.guard === 'done',
+            target: 'done',
+            actions: ['clearBossReplyContext'],
+          },
+          { target: 'failed', actions: ['rememberMalformedOutput'] },
         ],
-        onError: { target: 'failed', actions: 'rememberError' },
+        onError: { target: 'failed', actions: ['rememberInvokeError'] },
       },
     },
 
-    // Scalar Boss-reply wait. Quiescent and parked; not an interrupt target.
-    // Each resumable working leaf is the sole BOSS_REPLY resume destination.
     awaitBossReply: {
       id: 'awaitBossReply',
       description: "Waiting for Boss to answer the acting agent's question.",
@@ -688,37 +721,34 @@ export const workflowMachine = setup({
         },
       },
       on: {
-        BOSS_REPLY: resumableStates(RESUMABLE_IDS),
+        BOSS_REPLY: resumableStates(RESUMABLE_STATE_IDS),
       },
     },
 
-    // Recoverable failure sink: parked, retains typed context, accepts the
-    // recovery entry event. Not final.
     failed: {
       id: 'failed',
-      description: '工作流失败：保留上下文，等待 Boss 恢复。',
+      description: 'A step failed; awaiting Boss recovery.',
       tags: ['playbook.parked'],
       meta: {
         playbook: {
           stateId: 'failed',
-          description: '工作流失败：保留上下文，等待 Boss 恢复。',
+          description: 'A step failed; awaiting Boss recovery.',
         },
       },
       on: {
-        START: { target: 'ensureRepo' },
+        START: { target: 'setup', actions: ['restart'] },
       },
     },
 
-    // Terminal completion. Source declares no JSON-safe terminal result, so the
-    // machine derives no `output`.
     done: {
-      id: 'done',
       type: 'final',
-      description: '工作流完成。',
+      description:
+        'Workflow complete: review found no issues, or the review-fix cycle bound was reached.',
       meta: {
         playbook: {
           stateId: 'done',
-          description: '工作流完成。',
+          description:
+            'Workflow complete: review found no issues, or the review-fix cycle bound was reached.',
         },
       },
     },

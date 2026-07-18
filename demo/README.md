@@ -17,11 +17,13 @@ every artifact and the live run, including the workflow step that runs
 
 [`workflow.md`](workflow.md) — verbatim, never edited by the tools:
 
-> 用两个agent来完成输入的任务，一个agent按任务要求对当前目录的代码进行修改并提交Git，另一个agent对提交的commit进行review并提出合理问题，交回给第一个agent做判断，它可以接受或拒绝但要讲清楚原因，两个agent争论直至达成一致，由第一个agent负责按结论修改代码，再次提交。依此循环，直到review没有任何问题后结束。
+> 用两个agent来完成输入的任务，一个agent按任务要求对当前目录的代码进行修改并提交Git，另一个agent对提交的commit进行review并提出合理问题，交回给第一个agent做判断，它可以接受或拒绝但要讲清楚原因，两个agent争论直至达成一致（争论不超过2轮，即至多到总计第3次判断后不再争论，自己定夺），由第一个agent负责按结论修改代码，再次提交。依此循环，直到review没有任何问题后结束。循环次数不超过2次。
 
 Note what it does *not* say: it never names the two agents, never spells
-out the debate turns, and silently assumes the working directory is a
-Git repository. The compiler handles all three.
+out who speaks when inside a debate round, and silently assumes the
+working directory is a Git repository. The compiler handles all three —
+and the two explicit bounds (at most 2 debate rounds, at most 2 review
+cycles) become typed loop counters in the state machine.
 
 ## Prerequisites
 

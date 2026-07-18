@@ -26,13 +26,13 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'review',
           guarded: true,
         },
         {
           index: 2,
-          target: 'review',
-          guarded: true,
+          target: 'failed',
+          guarded: false,
         },
       ],
       onError: [
@@ -58,18 +58,18 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'adjudicate',
           guarded: true,
         },
         {
           index: 2,
-          target: 'judge',
+          target: 'done',
           guarded: true,
         },
         {
           index: 3,
-          target: 'done',
-          guarded: true,
+          target: 'failed',
+          guarded: false,
         },
       ],
       onError: [
@@ -82,10 +82,52 @@ const PINNED = {
       on: {},
     },
     {
-      state: 'judge',
+      state: 'adjudicate',
       actor: 'player',
       sourceItem: 'CODE-4',
       player: '编码者',
+      resultKeys: ['agreed', 'dispute', 'needsBossReply'],
+      onDone: [
+        {
+          index: 0,
+          target: 'awaitBossReply',
+          guarded: true,
+        },
+        {
+          index: 1,
+          target: 'applyConclusion',
+          guarded: true,
+        },
+        {
+          index: 2,
+          target: 'rebut',
+          guarded: true,
+        },
+        {
+          index: 3,
+          target: 'failed',
+          guarded: true,
+        },
+        {
+          index: 4,
+          target: 'failed',
+          guarded: false,
+        },
+      ],
+      onError: [
+        {
+          index: 0,
+          target: 'failed',
+          guarded: false,
+        },
+      ],
+      on: {},
+    },
+    {
+      state: 'rebut',
+      actor: 'player',
+      sourceItem: 'CODE-5',
+      player: '审查者',
       resultKeys: ['needsBossReply', 'responded'],
       onDone: [
         {
@@ -95,13 +137,13 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'adjudicate',
           guarded: true,
         },
         {
           index: 2,
-          target: 'debate',
-          guarded: true,
+          target: 'failed',
+          guarded: false,
         },
       ],
       onError: [
@@ -114,44 +156,7 @@ const PINNED = {
       on: {},
     },
     {
-      state: 'debate',
-      actor: 'player',
-      sourceItem: 'CODE-5',
-      player: '审查者',
-      resultKeys: ['agreed', 'disputed', 'needsBossReply'],
-      onDone: [
-        {
-          index: 0,
-          target: 'awaitBossReply',
-          guarded: true,
-        },
-        {
-          index: 1,
-          target: 'failed',
-          guarded: true,
-        },
-        {
-          index: 2,
-          target: 'revise',
-          guarded: true,
-        },
-        {
-          index: 3,
-          target: 'judge',
-          guarded: true,
-        },
-      ],
-      onError: [
-        {
-          index: 0,
-          target: 'failed',
-          guarded: false,
-        },
-      ],
-      on: {},
-    },
-    {
-      state: 'revise',
+      state: 'applyConclusion',
       actor: 'player',
       sourceItem: 'CODE-6',
       player: '编码者',
@@ -164,13 +169,18 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'review',
           guarded: true,
         },
         {
           index: 2,
-          target: 'review',
+          target: 'done',
           guarded: true,
+        },
+        {
+          index: 3,
+          target: 'failed',
+          guarded: false,
         },
       ],
       onError: [
@@ -191,14 +201,14 @@ const PINNED = {
         START: [
           {
             index: 0,
-            target: 'ensureRepo',
+            target: 'setup',
             guarded: false,
           },
         ],
       },
     },
     {
-      state: 'ensureRepo',
+      state: 'setup',
       final: false,
       on: {},
     },
@@ -219,17 +229,17 @@ const PINNED = {
           },
           {
             index: 2,
-            target: 'judge',
+            target: 'adjudicate',
             guarded: true,
           },
           {
             index: 3,
-            target: 'debate',
+            target: 'rebut',
             guarded: true,
           },
           {
             index: 4,
-            target: 'revise',
+            target: 'applyConclusion',
             guarded: true,
           },
           {
@@ -247,7 +257,7 @@ const PINNED = {
         START: [
           {
             index: 0,
-            target: 'ensureRepo',
+            target: 'setup',
             guarded: false,
           },
         ],
