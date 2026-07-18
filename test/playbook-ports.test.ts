@@ -184,6 +184,45 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     expect(captain.calls[0].allowedTools).toBeUndefined();
   });
 
+  // PHEXEC-34: the host workspace contract rides only on the
+  // transformation-performing Captain transport (absent source-owned tool
+  // restriction); routing-only Captain and judge prompts cross unchanged.
+  it('appends the workspace contract only to transformation-performing Captain calls', async () => {
+    const agent = fakeAgent({ status: 'success', text: 'ok' });
+    const contract =
+      'Host workspace (SubLang Compiler):\n- artifact to write: /abs/out.md';
+    const ports = createPlaybookPorts({
+      player: agent,
+      judge: agent,
+      captainWorkspace: contract,
+    });
+
+    await ports.callCaptain('compile it', notAborted, {
+      visibility: 'visible',
+      resume: false,
+    });
+    await ports.callCaptain('route it', notAborted, captainOptions('visible'));
+    await ports.callJudge('grade it', notAborted);
+
+    expect(agent.calls.map((call) => call.prompt)).toEqual([
+      `compile it\n\n${contract}`,
+      'route it',
+      'grade it',
+    ]);
+  });
+
+  it('transports the composed prompt unchanged without a workspace contract', async () => {
+    const agent = fakeAgent({ status: 'success', text: 'ok' });
+    const ports = createPlaybookPorts({ player: agent, judge: agent });
+
+    await ports.callCaptain('compile it', notAborted, {
+      visibility: 'visible',
+      resume: false,
+    });
+
+    expect(agent.calls[0].prompt).toBe('compile it');
+  });
+
   it('snapshots Captain isolation before queued transport work', async () => {
     const captain = fakeAgent({ status: 'success', text: 'route selected' });
     const ports = createPlaybookPorts({ player: captain, judge: captain });

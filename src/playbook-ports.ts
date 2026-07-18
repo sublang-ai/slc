@@ -12,7 +12,11 @@
  * continuation selection, `callCaptain` and `callJudge` share the Captain
  * transport's single-flight queue, `callPlaybook` fails closed because SLC has
  * no child stack, and status plus non-trace operational telemetry can be
- * drained as diagnostics. Exact `playbook.trace` payloads stay out of ordinary
+ * drained as diagnostics. A transformation-performing direct Captain call —
+ * one whose source-owned options carry no tool restriction — additionally
+ * carries the host workspace contract appended to its composed prompt, because
+ * the linked artifact is host-agnostic and only the host owns the request's
+ * workspace paths (PHEXEC-34). Exact `playbook.trace` payloads stay out of ordinary
  * diagnostics (DR-010, DR-011). The adapter holds no host specifics beyond the
  * injected transports. See specs/dev/phase-execution.md.
  */
@@ -53,6 +57,13 @@ export function createPlaybookPorts(opts: {
   defaultModel?: string;
   /** Working directory handed to the transports. */
   cwd?: string;
+  /**
+   * Host workspace contract appended to transformation-performing direct
+   * Captain prompts — those whose source-owned options carry no `allowedTools`
+   * restriction (PHEXEC-34). Routing-only Captain and judge calls never
+   * carry it.
+   */
+  captainWorkspace?: string;
 }): PlaybookPortsAdapter {
   const diagnostics: string[] = [];
   const players = new Map<string, AgentClient>();
@@ -90,9 +101,18 @@ export function createPlaybookPorts(opts: {
       options: CaptainCallOptions,
     ): Promise<CaptainResult> {
       const isolation = requireCaptainCallOptions(options);
+      // A transformation-performing Captain (absent source-owned tool
+      // restriction) gets the host workspace contract appended: the artifact
+      // composes host-agnostic prompts, and only the host knows the request's
+      // absolute source/target paths (PHEXEC-34).
+      const transported =
+        isolation.allowedTools === undefined &&
+        opts.captainWorkspace !== undefined
+          ? `${prompt}\n\n${opts.captainWorkspace}`
+          : prompt;
       return withSerialCaptain(signal, async () => {
         const result = await opts.judge.run({
-          prompt,
+          prompt: transported,
           model: opts.defaultModel,
           cwd: opts.cwd,
           resume: isolation.resume,
