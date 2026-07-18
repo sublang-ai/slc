@@ -27,7 +27,17 @@ Where a pipeline directory's phase files form a branching, cyclic, or incomplete
 ### PIPE-22
 Verifies: [PIPE-6](../dev/pipeline.md#pipe-6), [COMPILE-4](../user/compiler.md#compile-4)
 
-When the slc command is given a source whose filename matches no applicable form, the slc command shall exit non-zero with a diagnostic and write no artifacts.
+When the slc command is given a non-entry source whose filename matches no applicable form, the slc command shall exit non-zero with a diagnostic and write no artifacts.
+
+### PIPE-38
+Verifies: [PIPE-6](../dev/pipeline.md#pipe-6), [PIPE-7](../dev/pipeline.md#pipe-7), [COMPILE-1](../user/compiler.md#compile-1)
+
+When the slc command runs a full pipeline from a working directory other than the source's, the slc command shall create the artifact directory under the working directory — leaving the source's own directory unwritten — and reuse the working directory itself when its leaf name is already `<basename>.<pipeline>`.
+
+### PIPE-39
+Verifies: [PIPE-6](../dev/pipeline.md#pipe-6), [PIPE-34](../dev/pipeline.md#pipe-34), [COMPILE-7](../user/compiler.md#compile-7)
+
+When the slc command runs a full pipeline on an entry source whose extension is not the entry phase's, the slc command shall schedule normalization without `--normalize`, derive `<basename>` from the name minus its actual extension, and leave the raw source unchanged.
 
 ### PIPE-23
 Verifies: [PIPE-2](../dev/pipeline.md#pipe-2), [COMPILE-4](../user/compiler.md#compile-4)
@@ -67,7 +77,7 @@ When the slc command is run with `--link-option <name>=<value>` pairs, the slc c
 ### PIPE-35
 Verifies: [PIPE-30](../dev/pipeline.md#pipe-30), [PIPE-31](../dev/pipeline.md#pipe-31), [PIPE-32](../dev/pipeline.md#pipe-32), [PIPE-33](../dev/pipeline.md#pipe-33), [COMPILE-8](../user/compiler.md#compile-8)
 
-When a pipeline directory contains a format-preserving pass phase, the slc command shall run the chain unchanged without `-O`; with `-O` it shall run the pass between the producing and consuming phases — the producing phase writing the `.raw` intermediate and the pass the canonical path — and as `slc <pipeline>.<pass>` it shall write the `.opt` sibling.
+When a pipeline directory contains a format-preserving pass phase, the slc command shall run the pass by default between the producing and consuming phases — the producing phase writing the `.raw` intermediate and the pass the canonical path; with `--no-optimize` it shall run the chain with no passes, and as `slc <pipeline>.<pass>` it shall write the `.opt` sibling.
 
 ### PIPE-36
 Verifies: [PIPE-34](../dev/pipeline.md#pipe-34), [PHEXEC-33](../dev/phase-execution.md#phexec-33), [COMPILE-7](../user/compiler.md#compile-7)

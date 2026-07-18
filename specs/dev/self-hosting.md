@@ -36,11 +36,21 @@ When resolving a `playbook` pipeline reference, the slc command shall resolve it
 
 When resolving the reserved `slc` or the `playbook` pipeline reference, the slc command shall resolve to the pipeline-search-root directories named `playbook` when at least one exists — a committed vendor of Playbook's definitions, whose pin index can select compiled execution — and otherwise to the meta-pipeline definitions the installed `@sublang/playbook` provides ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#reserved-slc-pipeline), [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
 
+### SELFHOST-13
+
+When a full invocation of the `playbook` pipeline carries no `--link`, the slc command shall supply the installed `@sublang/playbook` package's `src/runtime.ts` — located by the same package resolution the pin generator uses — as the default link target and run the full-link form against it; the reserved `slc` pipeline and every other pipeline shall keep requiring an explicit `--link` ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [PIPE-13](pipeline.md#pipe-13)).
+
 ## Playbook format
 
 ### SELFHOST-3
 
 Where the reserved `slc` pipeline links an `fsm` `.ts` object, the slc command shall produce the distinct `playbook` linked format as a `.ts` artifact at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) output location, whose runnable module is a `createPlaybookRuntime` factory the host-side phase-runner facade drives, and so is the artifact a pin selects and the compiled executor runs ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-002](../decisions/002-slc-link-phases.md)).
+
+## Entry-module emission
+
+### SELFHOST-15
+
+When a full-link run of the `playbook` pipeline succeeds with the linked artifact at its canonical path, the slc command shall deterministically emit `<cwd>/<basename>.ts` — an erasable-TypeScript module importing the linked module via `./<basename>.<pipeline>/<basename>.playbook.ts` and default-exporting a Playbook registry entry with `id` and `command` set to `<basename>`, `requiredRoleIds` set to the source-declared players in source order, `intent` derived from the normalized source's title and lead line, `validateOptions` a fail-closed allowlist of the linked options not supplied by the Boss turn, and `createRuntime` calling the linked default factory with `cwd ?? process.cwd()` — and shall skip the emission when `-o` relocates the linked artifact ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ## Immutable definition adoption
 
