@@ -19,10 +19,9 @@ demo/acceptance/setup.sh [<work-dir>] [--init]
 
 Creates `<work-dir>` (default `${TMPDIR:-/tmp}/slc-demo-run`, deliberately
 outside this repository so the agents see only the demo project, not
-slc's own `CLAUDE.md`/`specs/`) holding a copy of the user-facing sample
-project, [`../sample/`](../sample): `stats.js` has a real `median` bug —
-order-dependent, wrong for even lengths, and it mutates its input — and
-`test.js` fails while it is present.
+slc's own `CLAUDE.md`/`specs/`) holding a copy of the user-facing sample,
+[`../sample.c`](../sample.c): its `median()` has a real bug —
+order-dependent and wrong for even lengths.
 
 The directory is deliberately **not** a Git repository, so the compiled
 workflow's scripted step is the thing that initializes it. Pass `--init`
@@ -80,7 +79,8 @@ emitted verification suite passes.
 
 With `--run-dir`, it additionally audits the evidence: terminal outcome,
 the agent-free script execution in the live log, state traversal, commits
-in the repository, and `node test.js` finally passing.
+in the repository, and the repaired `sample.c` passing a scratch
+compile-and-run median check (requires a C compiler, `cc`).
 
 Requires `npm install && npm run build` at the repository root —
 `check.mjs` imports `dist/verify.js` and shells out to `npx vitest`. It

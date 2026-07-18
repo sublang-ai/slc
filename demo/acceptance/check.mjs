@@ -22,14 +22,20 @@
  *      envelope);
  *   7. the scripted Git step executed agent-free during the run (status
  *      line), and the loop's states were traversed to `done`;
- *   8. the demo repository ends fixed: commits exist and `node test.js`
- *      passes.
+ *   8. the demo repository ends fixed: commits exist and the repaired
+ *      `sample.c` passes a scratch compile-and-run median check (needs `cc`).
  *
  * Usage: node demo/acceptance/check.mjs [--run-dir <dir>]
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -219,11 +225,44 @@ if (runDirFlag !== -1) {
     Number(commits) >= 1,
     `commits=${commits}`,
   );
-  const fixed = spawnSync(process.execPath, ['test.js'], { cwd: runDir });
+  // No test ships with the sample: verify the repaired median behaviorally
+  // by compiling it against a scratch driver (order-independence and the
+  // even-length mean of the two middle values).
+  const scratch = mkdtempSync(join(tmpdir(), 'slc-demo-median-'));
+  const driver = join(scratch, 'driver.c');
+  writeFileSync(
+    driver,
+    [
+      '#include <stddef.h>',
+      'double median(const double values[], size_t count);',
+      'int main(void) {',
+      '  const double odd[] = {3, 1, 2};',
+      '  const double even[] = {4, 1, 3, 2};',
+      '  if (median(odd, 3) != 2.0) return 1;',
+      '  if (median(even, 4) != 2.5) return 1;',
+      '  return 0;',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  const binary = join(scratch, 'median-check');
+  const compiled = spawnSync('cc', [
+    '-o',
+    binary,
+    driver,
+    join(runDir, 'sample.c'),
+  ]);
   check(
-    'the median bug is actually fixed (node test.js passes)',
+    'the repaired sample.c compiles against the median driver (cc)',
+    compiled.status === 0,
+    compiled.stderr?.toString().split('\n')[0] ?? '',
+  );
+  const fixed = spawnSync(binary, []);
+  check(
+    'the median bug is actually fixed (driver exits 0)',
     fixed.status === 0,
   );
+  rmSync(scratch, { recursive: true, force: true });
 }
 
 console.log(
