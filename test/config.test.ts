@@ -164,11 +164,15 @@ describe('createConfiguredExecutor (CLI-7, CLI-8)', () => {
       'function',
     );
     expect(typeof compiled(choice()).run).toBe('function');
-    // Playbook 0.10 pins select the composed six-port profile (DR-011).
+    // Playbook 0.10 pins select the composed six-port profile (DR-011), and so
+    // do 1.0.0 pins — the published release of that same contract generation.
     expect(typeof compiled(choice('@sublang/playbook@0.10.0')).run).toBe(
       'function',
     );
-    expect(() => compiled(choice('@sublang/playbook@0.11.0'))).toThrow(
+    expect(typeof compiled(choice('@sublang/playbook@1.0.0')).run).toBe(
+      'function',
+    );
+    expect(() => compiled(choice('@sublang/playbook@1.1.0'))).toThrow(
       /unsupported pinned Playbook runtime contract/,
     );
   });
