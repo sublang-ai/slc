@@ -16,8 +16,10 @@
  *
  * The non-interactive driving lives in the compiled executor; this module owns
  * the shared facade types, the static `playbook`-format recognition the
- * pin-currency validator uses, and the seeding of a phase request into the
- * runtime's single Boss turn (PHEXEC-29). See specs/dev/phase-execution.md.
+ * pin-currency validator uses, the seeding of a phase request into the
+ * runtime's single Boss turn (PHEXEC-29), and the host workspace contract a
+ * transformation-performing direct Captain call carries (PHEXEC-34). See
+ * specs/dev/phase-execution.md.
  */
 
 import ts from 'typescript';
@@ -331,4 +333,49 @@ export function seedPhaseTurn(input: PhaseInput): string {
       ? 'Perform this compile phase non-interactively: transform the source into the target artifact, then stop.'
       : 'Perform this link phase non-interactively: link the object artifacts against the link target into the linked artifact, then stop.';
   return `${directive}\nRequest: ${JSON.stringify(input)}`;
+}
+
+/**
+ * Composes the host workspace contract a transformation-performing direct
+ * Captain call carries (PHEXEC-34; DR-005, DR-012).
+ *
+ * A linked `playbook` artifact composes host-agnostic Captain prompts — the
+ * GEARS-derived domain body plus typed runtime evidence — and is forbidden from
+ * appending workspace specifics, which only the host owns. Mirroring the
+ * interpreted agent contract (PHEXEC-14), the host therefore supplies the
+ * request's absolute workspace paths and write-scope rules at its transport
+ * boundary, so the acting Captain writes exactly the declared target instead
+ * of merely emitting the artifact in its reply. Routing-only Captain calls
+ * (explicitly empty `allowedTools`) and hidden judge calls never carry it.
+ */
+export function composeWorkspaceContract(input: PhaseInput): string {
+  const target = input.kind === 'compile' ? input.target : input.linked;
+  const inputs =
+    input.kind === 'compile'
+      ? [`source to read: ${input.source}`]
+      : [
+          `object artifacts to read, in order: ${input.objects.join(', ')}`,
+          `link target module: ${input.linkTarget}`,
+          `options: ${formatWorkspaceOptions(input.options)}`,
+        ];
+
+  return [
+    'Host workspace (SubLang Compiler):',
+    'You are performing the work above non-interactively as one compiled phase of the SubLang Compiler (slc), against these workspace files:',
+    ...inputs.map((line) => `- ${line}`),
+    `- artifact to write: ${target}`,
+    '',
+    'Workspace contract — you must:',
+    `- write only ${target}, creating or overwriting exactly that file; emitting the artifact solely in your reply does not produce it;`,
+    '- not edit the sources, the phase or link definition, specs, link targets, object artifacts, or any other file;',
+    '- not commit or otherwise touch version control;',
+    '- produce a complete artifact, not a sketch or placeholder;',
+    '- verify the produced artifact before finishing, then reply with a concise summary of what you produced and any ambiguity you resolved.',
+  ].join('\n');
+}
+
+function formatWorkspaceOptions(options: Record<string, string>): string {
+  const entries = Object.entries(options);
+  if (entries.length === 0) return '(none)';
+  return entries.map(([name, value]) => `${name}=${value}`).join(', ');
 }

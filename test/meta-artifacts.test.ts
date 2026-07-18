@@ -9,10 +9,12 @@
 // (`callCaptain`, visible) adjudicated through `callJudge` — these machines
 // declare no delegated player, so no turn ever crosses `callPlayer`.
 
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
   CaptainCallOptions,
@@ -24,6 +26,11 @@ import type {
 import createGears2Fsm from '../pipelines/playbook/gears2fsm.slc/gears2fsm.playbook.js';
 import createLink from '../pipelines/playbook/link.slc/link.playbook.js';
 import createText2Gears from '../pipelines/playbook/text2gears.slc/text2gears.playbook.js';
+
+import { createCompiledExecutor } from '../src/compiled-executor.js';
+import type { ExecuteRequest } from '../src/execution.js';
+import type { AgentClient } from '../src/interpreter.js';
+import type { CompatiblePlaybookRuntimeFactory } from '../src/playbook-contract.js';
 
 const pipelineDir = fileURLToPath(
   new URL('../pipelines/playbook/', import.meta.url),
@@ -562,6 +569,172 @@ describe('reviewed compiled meta-phase artifacts', () => {
       ).rejects.toThrow(/telemetry sink failed/);
       // Failed initialization leaves the runtime terminally disposable.
       await expect(runtime.dispose()).resolves.toBeUndefined();
+    },
+  );
+});
+
+// Regression for compiled meta-phase runs reporting an adjudicated success
+// without writing the target: the artifacts compose host-agnostic Captain
+// prompts, so unless the host transport appends its workspace contract
+// (PHEXEC-34) the Captain never learns the absolute source/target paths and
+// "emits" the artifact only in its reply.
+describe('compiled meta phases carry the host workspace contract (PHEXEC-35)', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'slc-meta-workspace-'));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  // The meta machines delegate to no player; the port only satisfies wiring.
+  const idlePlayer: AgentClient = {
+    async run() {
+      return { status: 'success', text: '' };
+    },
+  };
+
+  interface WorkspaceCase {
+    readonly name: string;
+    readonly factory: CompatiblePlaybookRuntimeFactory;
+    /** Phase request with workspace-relative paths, resolved by the executor. */
+    readonly request: (dir: string) => ExecuteRequest;
+    /** Workspace-relative target the fake Captain writes. */
+    readonly target: string;
+    /** GEARS-derived body substring the composed prompt must retain. */
+    readonly promptAnchor: string;
+    /** Host-contract substrings the transported prompt must carry. */
+    readonly workspaceAnchors: (dir: string) => string[];
+    /** Judge replies: link classifies first, all three adjudicate last. */
+    readonly judgeReply: (prompt: string, dir: string) => string;
+  }
+
+  const cases: readonly WorkspaceCase[] = [
+    {
+      name: 'text2gears',
+      factory: createText2Gears as CompatiblePlaybookRuntimeFactory,
+      request: (dir) => ({
+        kind: 'compile',
+        definitionPath: join(dir, 'text2gears.md'),
+        source: 'workflow.text.md',
+        target: 'workflow.gears.raw.md',
+      }),
+      target: 'workflow.gears.raw.md',
+      promptAnchor: 'free-form natural-language procedure description',
+      workspaceAnchors: (dir) => [
+        `source to read: ${join(dir, 'workflow.text.md')}`,
+        `artifact to write: ${join(dir, 'workflow.gears.raw.md')}`,
+        `write only ${join(dir, 'workflow.gears.raw.md')}`,
+      ],
+      judgeReply: () => '{"guard":"compiled"}',
+    },
+    {
+      name: 'gears2fsm',
+      factory: createGears2Fsm as CompatiblePlaybookRuntimeFactory,
+      request: (dir) => ({
+        kind: 'compile',
+        definitionPath: join(dir, 'gears2fsm.md'),
+        source: 'workflow.gears.md',
+        target: 'workflow.fsm.ts',
+      }),
+      target: 'workflow.fsm.ts',
+      promptAnchor: 'XState v5 finite state machine',
+      workspaceAnchors: (dir) => [
+        `source to read: ${join(dir, 'workflow.gears.md')}`,
+        `artifact to write: ${join(dir, 'workflow.fsm.ts')}`,
+        `write only ${join(dir, 'workflow.fsm.ts')}`,
+      ],
+      judgeReply: () => '{"guard":"compiled"}',
+    },
+    {
+      name: 'link',
+      factory: createLink as CompatiblePlaybookRuntimeFactory,
+      request: (dir) => ({
+        kind: 'link',
+        definitionPath: join(dir, 'link.md'),
+        objects: ['workflow.fsm.ts'],
+        linkTarget: 'runtime.ts',
+        options: [],
+        linked: 'workflow.playbook.ts',
+      }),
+      target: 'workflow.playbook.ts',
+      promptAnchor: 'into a `PlaybookRuntime`',
+      workspaceAnchors: (dir) => [
+        // The runtime substitutes `<fsm-artifact>` from the classified event.
+        join(dir, 'workflow.fsm.ts'),
+        `object artifacts to read, in order: ${join(dir, 'workflow.fsm.ts')}`,
+        `link target module: ${join(dir, 'runtime.ts')}`,
+        `artifact to write: ${join(dir, 'workflow.playbook.ts')}`,
+        `write only ${join(dir, 'workflow.playbook.ts')}`,
+      ],
+      judgeReply: (prompt, dir) =>
+        prompt.includes('Classify this Boss message')
+          ? JSON.stringify({
+              type: 'LINK_REQUEST',
+              fsmArtifact: join(dir, 'workflow.fsm.ts'),
+              target: join(dir, 'runtime.ts'),
+            })
+          : '{"guard":"done"}',
+    },
+  ];
+
+  it.each(cases)(
+    '$name Captain transport names the absolute paths and a writing Captain maps to ok',
+    async ({
+      factory,
+      request,
+      target,
+      promptAnchor,
+      workspaceAnchors,
+      judgeReply,
+    }) => {
+      const captainPrompts: string[] = [];
+      const judgePrompts: string[] = [];
+      // One shared Captain/judge transport, as in production (PHEXEC-25):
+      // the transformation-performing Captain call is the one without an
+      // allowed-tool restriction; hidden judge calls carry the empty list.
+      const judge: AgentClient = {
+        async run(call) {
+          if (call.allowedTools === undefined) {
+            captainPrompts.push(call.prompt);
+            await writeFile(join(root, target), 'produced artifact\n');
+            return {
+              status: 'success',
+              text: 'Wrote and verified the target artifact.',
+            };
+          }
+          judgePrompts.push(call.prompt);
+          return { status: 'success', text: judgeReply(call.prompt, root) };
+        },
+      };
+      const executor = createCompiledExecutor({
+        artifactPath: 'pinned-meta-artifact',
+        runRoot: root,
+        player: idlePlayer,
+        judge,
+        runtimeContract: 'composed-v2',
+        loadFactory: async () => factory,
+      });
+
+      const result = await executor.run(
+        request(root),
+        new AbortController().signal,
+      );
+
+      expect(result.status).toBe('ok');
+      expect(captainPrompts).toHaveLength(1);
+      // The GEARS-derived composed body survives unchanged ahead of the
+      // appended host workspace contract.
+      expect(captainPrompts[0]).toContain(promptAnchor);
+      for (const anchor of workspaceAnchors(root)) {
+        expect(captainPrompts[0]).toContain(anchor);
+      }
+      // Hidden judge prompts cross without the workspace contract.
+      for (const prompt of judgePrompts) {
+        expect(prompt).not.toContain('Workspace contract');
+      }
     },
   );
 });
