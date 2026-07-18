@@ -93,17 +93,15 @@ The bundle is committed, so you can skip the compile and just read it:
 | [`workflow.zh.ts`](workflow.zh.ts) | The emitted entry module `playbook run` consumes directly: players, intent, and options all derived from the compiled bundle. Nothing in this demo is hand-written wiring. |
 | `workflow.zh.*.test.ts` | Verification emitted by the compiler beside its output: GEARS↔FSM conformance, FSM introspection pins, prompt contracts, transition coverage. `npx vitest run demo/workflow.zh.playbook` runs them, and so does the repo's `npm test`. |
 
-## 2. Run it on the sample project
+## 2. Run it on the sample
 
-[`sample/`](sample) is a tiny project with a real bug to fix:
-`stats.js` has a `median` that depends on element order, gets even-length
-arrays wrong, and mutates its input; `test.js` fails while any of that is
-true (`node sample/test.js`). Hand it to the two agents, from this
-directory:
+[`sample.c`](sample.c) is a tiny C file with a real bug to fix: its
+`median()` depends on element order and gets even-length arrays wrong.
+Hand it to the two agents, from this directory:
 
 ```sh
 playbook run ./workflow.zh.ts \
-  "There is a bug in the median function in sample/stats.js: the result depends on element order, and even-length arrays are wrong too. Fix it so that node sample/test.js passes."
+  "There is a bug in the median function in sample.c: the result depends on element order, and even-length arrays are wrong too. Fix it."
 ```
 
 Every role defaults to `claude`; pick your own lineup with
@@ -129,8 +127,8 @@ commits into that fresh nested repository. Then:
   the run exits `0`.
 
 ```sh
-git log --oneline     # just the reviewed commits — the nested repo's history
-node sample/test.js   # stats.js: all checks passed
+git log --oneline   # just the reviewed commits — the nested repo's history
+git show            # the reviewed fix to sample.c
 ```
 
 Undo the run with `rm -rf .git && git -C .. checkout -- demo/`.
@@ -161,7 +159,7 @@ per-state status lines on stderr — the scripted step reports
 ## Reproducing the acceptance run
 
 [`acceptance/`](acceptance/) holds the maintainer-side harness: it seeds
-a scratch copy of `sample/`, scripts the two-agent run over it, and
+a scratch copy of `sample.c`, scripts the two-agent run over it, and
 validates every artifact plus the live run evidence. See
 [`acceptance/README.md`](acceptance/README.md). You don't need any of it
 to use the demo — step 2 above is the same run, by hand.

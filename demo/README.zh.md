@@ -62,13 +62,13 @@ slc playbook workflow.zh.txt
 | `workflow.zh.*.test.ts` | 编译器随产物一同产出的验证：GEARS↔FSM 一致性、FSM 内省 pin、prompt 契约、转移覆盖。`npx vitest run demo/workflow.zh.playbook` 可运行它们，仓库的 `npm test` 同样会收集。 |
 | [`workflow.zh.ts`](workflow.zh.ts) | 产出的入口模块，`playbook run` 直接消费：player、intent 与选项全部派生自编译产物。本演示不含任何手写的接线代码。 |
 
-## 2. 在示例项目上运行它
+## 2. 在示例文件上运行它
 
-[`sample/`](sample) 是一个待修 bug 的极小项目：`stats.js` 中的 `median` 结果依赖元素顺序、对偶数长度数组算错，还会修改传入的数组；只要其中任何一条成立，`test.js` 就不通过（`node sample/test.js`）。在本目录下，把它交给两个 agent：
+[`sample.c`](sample.c) 是一个带真实 bug 的极小 C 文件：其 `median()` 结果依赖元素顺序，对偶数长度数组也算错。在本目录下，把它交给两个 agent：
 
 ```sh
 playbook run ./workflow.zh.ts \
-  "sample/stats.js 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它，使 node sample/test.js 通过。"
+  "sample.c 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它。"
 ```
 
 每个角色都默认使用 `claude`；想指定阵容，可加 `--player 编码者=claude:claude-sonnet-5 --player 审查者=codex:gpt-5.6-terra --captain claude:claude-sonnet-5`（`<adapter>[:<model>][@<effort>]`）。两个 player 的 ID 是 `编码者` 与 `审查者`——它们来自那段中文源文，所以是中文；产出的入口模块把它们声明为必需角色。任务文本是自由文本，在运行时传入，因此可以用任何语言书写，与工作流编译自哪种语言无关。
@@ -80,8 +80,8 @@ playbook run ./workflow.zh.ts \
 - 当某轮评审不再有问题时，状态机到达终态，运行以 `0` 退出。
 
 ```sh
-git log --oneline     # 只有经过评审的那些 commit——嵌套仓库自己的历史
-node sample/test.js   # stats.js: all checks passed
+git log --oneline   # 只有经过评审的那些 commit——嵌套仓库自己的历史
+git show            # 对 sample.c 的那次经过评审的修复
 ```
 
 撤销这次运行：`rm -rf .git && git -C .. checkout -- demo/`。
@@ -101,4 +101,4 @@ node sample/test.js   # stats.js: all checks passed
 
 ## 复现验收运行
 
-[`acceptance/`](acceptance/) 存放维护者侧的测试装置：它把 `sample/` 复制到一个临时目录作为种子，脚本化地跑完那次双 agent 运行，并校验全部产物与实际运行证据。详见 [`acceptance/README.md`](acceptance/README.md)。使用本演示完全不需要其中任何内容——上面的第 2 步就是同一次运行的手工版本。
+[`acceptance/`](acceptance/) 存放维护者侧的测试装置：它把 `sample.c` 复制到一个临时目录作为种子，脚本化地跑完那次双 agent 运行，并校验全部产物与实际运行证据。详见 [`acceptance/README.md`](acceptance/README.md)。使用本演示完全不需要其中任何内容——上面的第 2 步就是同一次运行的手工版本。
