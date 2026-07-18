@@ -82,6 +82,9 @@ const deps = (agent: AgentClient, model?: string): SlcDeps => ({
     agent,
     config: model ? { model } : undefined,
   }),
+  // Artifact placement anchors to the invocation working directory (DR-014);
+  // tests anchor to the fixture source directory unless they override it.
+  cwd: srcDir,
 });
 
 const exists = async (path: string): Promise<boolean> =>
@@ -114,7 +117,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-describe('full pipeline run (PIPE-20, PHEXEC-16)', () => {
+describe('full pipeline run (PIPE-20, PIPE-38, PHEXEC-16)', () => {
   it('writes the canonical intermediate and output with one agent call per phase', async () => {
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow', source], deps(agent));
@@ -138,6 +141,24 @@ describe('full pipeline run (PIPE-20, PHEXEC-16)', () => {
     expect(await exists(out)).toBe(true);
     expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(false);
+  });
+
+  it('creates the artifact directory under a cwd other than the source directory (PIPE-38)', async () => {
+    const outDir = join(root, 'elsewhere');
+    await mkdir(outDir);
+    const { agent } = makeAgent();
+
+    const result = await runSlc(['flow', source], {
+      ...deps(agent),
+      cwd: outDir,
+    });
+
+    expect(result.ok).toBe(true);
+    const cwdArtDir = join(outDir, 'onboarding.flow');
+    expect(await exists(join(cwdArtDir, 'onboarding.gears.md'))).toBe(true);
+    expect(await exists(join(cwdArtDir, 'onboarding.fsm.ts'))).toBe(true);
+    // The source's own directory stays unwritten (DR-014's out-of-tree rule).
+    expect(await exists(artDir)).toBe(false);
   });
 
   it('passes the configured model to every interpreted phase (PHEXEC-21)', async () => {
@@ -195,16 +216,22 @@ describe('single-phase run (PIPE-24)', () => {
     expect(await exists(out)).toBe(false);
   });
 
-  it('reuses the artifact directory without nesting on a rerun (PIPE-24)', async () => {
+  it('reuses the artifact directory without nesting when invoked inside it (PIPE-24, PIPE-38)', async () => {
     await mkdir(artDir, { recursive: true });
     const intermediate = join(artDir, 'onboarding.gears.md');
     await writeFile(intermediate, 'gears');
     const { agent } = makeAgent();
 
-    const result = await runSlc(['flow.gears2fsm', intermediate], deps(agent));
+    // Invoked from inside the artifact directory: the cwd leaf is already
+    // <basename>.<pipeline>, so the run lands in place (PIPE-7, DR-014).
+    const result = await runSlc(['flow.gears2fsm', intermediate], {
+      ...deps(agent),
+      cwd: artDir,
+    });
 
     expect(result.ok).toBe(true);
     expect(result.outputs).toEqual([join(artDir, 'onboarding.fsm.ts')]);
+    expect(await exists(join(artDir, 'onboarding.flow'))).toBe(false);
   });
 
   it('honors -o for the terminal phase', async () => {
@@ -226,20 +253,29 @@ describe('single-phase run (PIPE-24)', () => {
 });
 
 describe('link runs (PIPE-25, PIPE-26)', () => {
-  it('runs a single-object .link, placing the artifact source-adjacent', async () => {
+  it('runs a single-object .link, placing the artifact under the invocation cwd (PIPE-38, DR-014)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
     await writeFile(join(srcDir, 'runner.ts'), 'runner');
+    const outDir = join(root, 'link-out');
+    await mkdir(outDir);
     const { agent } = makeAgent();
 
     const result = await runSlc(
       ['flow.link', object, join(srcDir, 'runner.ts')],
-      deps(agent),
+      {
+        ...deps(agent),
+        cwd: outDir,
+      },
     );
 
     expect(result.ok).toBe(true);
-    expect(await exists(join(artDir, 'onboarding.run.ts'))).toBe(true);
+    expect(
+      await exists(join(outDir, 'onboarding.flow', 'onboarding.run.ts')),
+    ).toBe(true);
+    // The object's own directory stays unwritten.
+    expect(await exists(join(artDir, 'onboarding.run.ts'))).toBe(false);
   });
 
   it('refuses a multi-object .link without -o (PIPE-25)', async () => {
@@ -305,7 +341,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
   });
 });
 
-describe('pass phases and normalization (DR-013; PIPE-35, PIPE-36)', () => {
+describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-39)', () => {
   const addOptimizePass = async (): Promise<void> => {
     await writeFile(
       join(pipelineDir, 'optimize.md'),
@@ -313,10 +349,10 @@ describe('pass phases and normalization (DR-013; PIPE-35, PIPE-36)', () => {
     );
   };
 
-  it('schedules a pass between phases with -O: raw intermediate, canonical pass output (PIPE-32)', async () => {
+  it('schedules a discovered pass by default: raw intermediate, canonical pass output (PIPE-32, PIPE-35)', async () => {
     await addOptimizePass();
     const { agent, calls } = makeAgent();
-    const result = await runSlc(['flow', source, '-O'], deps(agent));
+    const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(true);
     expect(await exists(join(artDir, 'onboarding.gears.raw.md'))).toBe(true);
     expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(true);
@@ -335,10 +371,20 @@ describe('pass phases and normalization (DR-013; PIPE-35, PIPE-36)', () => {
     );
   });
 
-  it('ignores discovered passes without -O', async () => {
+  it('-O states the default, scheduling the same pass (PIPE-32)', async () => {
     await addOptimizePass();
     const { agent, calls } = makeAgent();
-    const result = await runSlc(['flow', source], deps(agent));
+    const result = await runSlc(['flow', source, '-O'], deps(agent));
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(3);
+    expect(await exists(join(artDir, 'onboarding.gears.raw.md'))).toBe(true);
+    expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(true);
+  });
+
+  it('--no-optimize runs the chain bare, skipping discovered passes (PIPE-35)', async () => {
+    await addOptimizePass();
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', source, '--no-optimize'], deps(agent));
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(2);
     expect(await exists(join(artDir, 'onboarding.gears.raw.md'))).toBe(false);
@@ -374,6 +420,31 @@ describe('pass phases and normalization (DR-013; PIPE-35, PIPE-36)', () => {
     expect(calls[1]).toContain(
       `source to read: ${join(artDir, 'onboarding.text.md')}`,
     );
+  });
+
+  it('auto-schedules normalization for a raw entry source without --normalize (PIPE-39)', async () => {
+    const rawSource = join(srcDir, 'onboarding.txt'); // entry declares .md
+    await writeFile(rawSource, 'raw prose');
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', rawSource], deps(agent));
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(3);
+    // The generic normalize step runs first; <basename> derives from the
+    // name minus its actual extension, so artifacts land in onboarding.flow/.
+    expect(calls[0]).toContain('# Input Normalization');
+    expect(calls[0]).toContain(
+      `artifact to write: ${join(artDir, 'onboarding.text.md')}`,
+    );
+    expect(calls[1]).toContain(
+      `source to read: ${join(artDir, 'onboarding.text.md')}`,
+    );
+    expect(result.outputs).toEqual([
+      join(artDir, 'onboarding.text.md'),
+      join(artDir, 'onboarding.gears.md'),
+      join(artDir, 'onboarding.fsm.ts'),
+    ]);
+    // The raw source is read in place and left unchanged.
+    expect(await readFile(rawSource, 'utf8')).toBe('raw prose');
   });
 });
 
@@ -485,11 +556,13 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     expect(result.outputs).toEqual([]);
   });
 
-  it('fails on a source whose name matches no form (PIPE-22)', async () => {
+  it('fails on a non-entry source whose name matches no form (PIPE-22)', async () => {
+    // An entry source with a foreign extension is a raw input now (PIPE-39);
+    // only non-entry sources keep the strict refusal (DR-014).
     const badSource = join(srcDir, 'onboarding.txt');
     await writeFile(badSource, 'prose');
     const { agent } = makeAgent();
-    const result = await runSlc(['flow', badSource], deps(agent));
+    const result = await runSlc(['flow.gears2fsm', badSource], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.length).toBeGreaterThan(0);
     expect(result.outputs).toEqual([]);

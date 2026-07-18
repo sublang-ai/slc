@@ -13,6 +13,7 @@ describe('parseInvocation full pipeline (PIPE-9)', () => {
       source: 'flows/onboarding.md',
       output: null,
       optimize: false,
+      noOptimize: false,
       normalize: false,
     });
   });
@@ -26,6 +27,27 @@ describe('parseInvocation full pipeline (PIPE-9)', () => {
     );
   });
 
+  it('captures --no-optimize on full and full-link runs (DR-014)', () => {
+    expect(
+      parseInvocation(['playbook', 'src.md', '--no-optimize']),
+    ).toMatchObject({ kind: 'full', optimize: false, noOptimize: true });
+    expect(
+      parseInvocation([
+        'playbook',
+        'src.md',
+        '--link',
+        'r.ts',
+        '--no-optimize',
+      ]),
+    ).toMatchObject({ kind: 'full-link', optimize: false, noOptimize: true });
+  });
+
+  it('rejects -O combined with --no-optimize (DR-014)', () => {
+    expect(() =>
+      parseInvocation(['playbook', 'src.md', '-O', '--no-optimize']),
+    ).toThrow(expect.objectContaining({ code: 'duplicate-option' }));
+  });
+
   it('rejects --normalize and -O on a single-phase run (DR-013)', () => {
     expect(() =>
       parseInvocation(['playbook.text2gears', 'src.md', '-O']),
@@ -33,6 +55,17 @@ describe('parseInvocation full pipeline (PIPE-9)', () => {
     expect(() =>
       parseInvocation(['playbook.link', 'a.ts', 'r.ts', '--normalize']),
     ).toThrow(expect.objectContaining({ code: 'unexpected-flag' }));
+  });
+
+  it('rejects --no-optimize on a single-phase run (DR-014)', () => {
+    expect(() =>
+      parseInvocation(['playbook.text2gears', 'src.md', '--no-optimize']),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'unexpected-flag',
+        message: expect.stringContaining('--no-optimize'),
+      }),
+    );
   });
 
   it('captures -o, wherever it appears', () => {
@@ -85,6 +118,7 @@ describe('parseInvocation full-pipeline link (PIPE-13, PIPE-14)', () => {
       output: 'app.ts',
       options: [{ name: 'seed', value: '42' }],
       optimize: false,
+      noOptimize: false,
       normalize: false,
     });
   });
