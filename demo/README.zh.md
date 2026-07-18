@@ -7,7 +7,13 @@
 
 一段未经加工的文本描述被编译成确定性的状态机工作流，该工作流驱动两个 agent——一个编码者、一个审查者——在一个真实的 Git 仓库上完成提交／评审／争论的循环，直到评审不再提出任何问题。
 
-两条命令：`slc` 编译这段话，`playbook` 运行编译结果。
+三行命令，在本目录下运行：
+
+```sh
+slc playbook workflow.zh.txt
+playbook run ./workflow.zh.ts "<task>"
+git log --oneline
+```
 
 ## 输入
 
@@ -28,21 +34,19 @@
 
 ## 1. 编译文本描述
 
-在仓库根目录下：
+在本目录下：
 
 ```sh
-slc playbook demo/workflow.zh.txt
+slc playbook workflow.zh.txt
 ```
 
-编译由真实的编码 agent 执行（在 `slc.config.yaml` 中配置；可用 `SLC_AGENT`／`SLC_MODEL`／`SLC_EFFORT` 覆盖），耗时可能达到数十分钟。
+无需任何参数：`.txt` 输入即原始散文，`slc` 会先将其归一化；pipeline 的优化 pass 默认运行；未给 `--link` 时，`playbook` pipeline 会链接到已安装的 `@sublang/playbook` 运行时，并一并产出可运行的入口模块。编译由真实的编码 agent 执行（在 [`slc.config.yaml`](slc.config.yaml) 中配置；可用 `SLC_AGENT`／`SLC_MODEL`／`SLC_EFFORT` 覆盖），耗时可能达到数十分钟。
 
 ### 产物落在哪里
 
-产物落在**输入文件旁边**，而不是你的当前目录：`slc` 由源文件路径推导输出目录，形如 `<输入目录>/<主名>.<pipeline>/`。所以即便 `cd /tmp && slc playbook /path/to/slc/demo/workflow.zh.txt`，产物仍会写入 `/path/to/slc/demo/workflow.zh.playbook/`。（`-o <path>` 是唯一能改变输出位置的开关，而且只移动末端产物。）
+产物落在你的**当前目录**，绝不会写到别人的源文件旁边：`./workflow.zh.playbook/`（编译出的产物包）与 `./workflow.zh.ts`（可运行的入口）。在本目录下编译会就地重写已提交的产物包——由于产物由真实的编码 agent 生成，结果不会与已提交内容逐字节相同，`git diff` 正是值得一看的视图，而在 `demo/` 下执行 `git checkout -- .` 即可还原。想在不弄脏仓库的前提下试用编译器，换个目录运行即可：`cd /tmp && slc playbook /path/to/slc/demo/workflow.zh.txt` 会写出 `/tmp/workflow.zh.playbook/` 与 `/tmp/workflow.zh.ts`。
 
-尽管如此，仍请在仓库根目录下运行，理由与产物位置无关，共两条：`slc.config.yaml` 是在**当前目录**中被发现的，而其中的 `pipelinePath: [pipelines]` 同样相对当前目录解析——只有在根目录下，你用的才是本仓库已提交、已 pin 的 pipeline 定义；在别处也能跑通，只是会回退到已安装的 `@sublang/playbook` 所附带的定义。另外，`--link node_modules/…` 是一个相对路径。
-
-> **重新编译会覆盖已提交的产物。** `slc` 以 `mkdir -p` 的语义创建输出目录——没有存在性检查，不会询问，也不做备份。执行上面的命令会就地重写 `demo/workflow.zh.playbook/` 中的每个文件。由于产物由真实的编码 agent 生成，结果不会与已提交内容逐字节相同，因此工作区必然变脏——`git diff` 正是值得一看的视图，而 `git checkout -- demo/workflow.zh.playbook` 是撤销手段。
+在本目录下编译还会发现演示自带的 [`slc.config.yaml`](slc.config.yaml)，其 `pipelinePath: [../pipelines]` 选中仓库已提交、已 pin 的 pipeline 定义；在别处编译则需自行配置 agent（`SLC_AGENT`），且定义来自已安装的 `@sublang/playbook`。
 
 ### 编译产出了什么
 
@@ -50,50 +54,41 @@ slc playbook demo/workflow.zh.txt
 
 | 产物 | 值得关注之处 |
 | --- | --- |
-| `workflow.zh.text.md` | 归一化后的源文件：两个未具名的 agent 成为声明出来的 player `编码者` 与 `审查者`，未言明的假设成为步骤 1——“开始前，确认当前目录是一个Git仓库；若不是，则先将其初始化为Git仓库。” 原文的含义、顺序与语言都被保留；归一化添加的是结构——一个标题、一个 `Players:` 块，以及七个编号步骤。 |
-| `workflow.zh.gears.raw.md` | 前端直接产出的 GEARS spec item：Git 检查是 `Captain shall 确保当前目录是一个 Git 仓库`——以散文表述的 Captain 直接工作，仍需 LLM 去理解。其余五项是 `Captain shall prompt <player>` 行为。 |
-| `workflow.zh.gears.md` | 优化 pass 之后：Git 步骤被改写为 `Captain shall run:` **脚本 item**——一条带两个退出码守卫的固定 shell 命令，不用 LLM——并在 `## Optimizations` 下记录了来龙去脉（`CODE-1: direct Captain work → script`）。 |
+| `workflow.zh.text.md` | 归一化后的源文件：两个未具名的 agent 成为声明出来的 player `编码者` 与 `审查者`，未言明的假设成为步骤 1——“开始前，确认当前目录是一个Git仓库的根目录；若不是，则先在此初始化一个Git仓库。” 原文的含义、顺序与语言都被保留；归一化添加的是结构——一个标题、一个 `Players:` 块，以及七个编号步骤。 |
+| `workflow.zh.gears.raw.md` | 前端直接产出的 GEARS spec item：Git 检查是 `Captain shall 确保当前目录是一个 Git 仓库的根目录`——以散文表述的 Captain 直接工作，仍需 LLM 去理解。其余五项是 `Captain shall prompt <player>` 行为。 |
+| `workflow.zh.gears.md` | 优化 pass 之后：Git 步骤被改写为 `Captain shall run:` **脚本 item**——`[ -e .git ] \|\| git init`，一条带两个退出码守卫的固定 shell 命令，不用 LLM——并在 `## Optimizations` 下记录了来龙去脉（`CODE-1: direct Captain work → script`）。 |
 | `workflow.zh.fsm.ts` | XState 状态机：每个 GEARS item 对应一个*发起调用*的状态——Git 步骤调用 `script` actor，其余五个调用 `player` actor——此外还有一个空闲枢纽状态、一个等待 Boss 回复的挂起状态，以及两个终止状态。 |
 | `workflow.zh.playbook.ts` | 链接后的运行时：驱动 FSM，通过宿主的四端口契约（`callPlayer`、`callJudge`、`emitStatus`、`emitTelemetry`）调用 agent，并在本地用 `sh -c` 执行脚本状态——无 LLM、无 token、毫秒级。 |
 | `workflow.zh.*.test.ts` | 编译器随产物一同产出的验证：GEARS↔FSM 一致性、FSM 内省 pin、prompt 契约、转移覆盖。`npx vitest run demo/workflow.zh.playbook` 可运行它们，仓库的 `npm test` 同样会收集。 |
-| [`registry.ts`](registry.ts) | 一个手写的小适配器（slc 唯一不产出的部分），把编译出的运行时暴露给 `playbook run`。 |
+| [`workflow.zh.ts`](workflow.zh.ts) | 产出的入口模块，`playbook run` 直接消费：player、intent 与选项全部派生自编译产物。本演示不含任何手写的接线代码。 |
 
 ## 2. 在示例项目上运行它
 
-[`sample/`](sample) 是一个待修 bug 的极小项目：`stats.js` 中的 `median` 结果依赖元素顺序、对偶数长度数组算错，还会修改传入的数组；只要其中任何一条成立，`test.js` 就不通过。把它复制到别处，先看它失败：
+[`sample/`](sample) 是一个待修 bug 的极小项目：`stats.js` 中的 `median` 结果依赖元素顺序、对偶数长度数组算错，还会修改传入的数组；只要其中任何一条成立，`test.js` 就不通过（`node sample/test.js`）。在本目录下，把它交给两个 agent：
 
 ```sh
-cp -R /path/to/slc/demo/sample /tmp/median-demo
-cd /tmp/median-demo
-node test.js        # AssertionError: median must not depend on element order
+playbook run ./workflow.zh.ts \
+  "sample/stats.js 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它，使 node sample/test.js 通过。"
 ```
 
-然后把它交给两个 agent：
+每个角色都默认使用 `claude`；想指定阵容，可加 `--player 编码者=claude:claude-sonnet-5 --player 审查者=codex:gpt-5.6-terra --captain claude:claude-sonnet-5`（`<adapter>[:<model>][@<effort>]`）。两个 player 的 ID 是 `编码者` 与 `审查者`——它们来自那段中文源文，所以是中文；产出的入口模块把它们声明为必需角色。任务文本是自由文本，在运行时传入，因此可以用任何语言书写，与工作流编译自哪种语言无关。
 
-```sh
-playbook run /path/to/slc/demo/registry.ts \
-  "stats.js 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它，使 node test.js 通过。" \
-  --player 编码者=claude:claude-sonnet-5 \
-  --player 审查者=codex:gpt-5.6-terra \
-  --captain claude:claude-sonnet-5
-```
-
-当它以 `0` 退出后：
-
-```sh
-node test.js        # stats.js: all checks passed
-git log --oneline   # 经过评审的若干 commit，位于工作流自己创建的仓库中
-```
-
-两个 player 的 ID 是 `编码者` 与 `审查者`——它们来自那段中文源文，所以是中文；`registry.ts` 把它们声明为必需角色。任意 adapter／model 组合皆可（`<adapter>[:<model>][@<effort>]`）。任务文本是自由文本，在运行时传入，因此可以用任何语言书写，与工作流编译自哪种语言无关。
-
-真正投入使用时，就在你自己的项目里、用你自己的任务运行同一条命令。工作流作用于**当前目录**，该目录不必是 Git 仓库——上面的 `/tmp/median-demo` 就不是。编译出的工作流会用脚本化步骤在需要时初始化它，全程没有 agent 参与。随后：
+工作流作用于**当前目录**，其脚本化的第一步会检查该目录是否为 Git 仓库的**根目录**。本目录不是——它位于 slc checkout 内部——于是这一步就地执行 `git init`，全程没有 agent 参与，后续循环提交到这个新建的嵌套仓库中。随后：
 
 - 编码者做出修改并提交；
 - 审查者评审该 commit 并提出问题；编码者说明理由地接受或反驳；两者往复，受源文自身设定的上界约束；
 - 当某轮评审不再有问题时，状态机到达终态，运行以 `0` 退出。
 
-> 两个 agent 会向你所在的那个目录提交。请指向一个你愿意让它被修改的工作区——上面的流程之所以先把示例复制到 `/tmp`，正是这个原因。
+```sh
+git log --oneline     # 只有经过评审的那些 commit——嵌套仓库自己的历史
+node sample/test.js   # stats.js: all checks passed
+```
+
+撤销这次运行：`rm -rf .git && git -C .. checkout -- demo/`。
+
+真正投入使用时，就在你自己项目的根目录里、用你自己的任务运行同一条命令——在那里，脚本步骤会发现 `.git` 并直接通过。
+
+> 两个 agent 会向你所在的那个目录提交。这正是它的用途——但请指向一个你愿意让它被修改的工作区。
 
 加上 `--json --verbose` 可在 stdout 得到机器可读的摘要、在 stderr 得到逐状态的状态行——脚本步骤会在任何 agent 运行之前报告 `Executed script for <state> (exit 0).`。
 

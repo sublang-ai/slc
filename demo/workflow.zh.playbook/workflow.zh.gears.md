@@ -12,7 +12,7 @@ Players:
 
 当工作流开始时，Captain shall run:
 
-> git rev-parse --is-inside-work-tree 2>/dev/null || git init
+> [ -e .git ] || git init
 
 Results:
 - `ok`: 命令以状态码 0 退出。

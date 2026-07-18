@@ -71,6 +71,10 @@ for (const name of expected) {
   check(`artifact ${name}`, existsSync(join(artDir, name)));
 }
 check(
+  'emitted entry module beside the bundle (DR-014)',
+  existsSync(join(demoDir, 'workflow.zh.ts')),
+);
+check(
   'normalized source surfaces the Git precondition',
   /git/i.test(readArtifact('workflow.zh.text.md')),
 );
@@ -128,6 +132,18 @@ console.log('4. the non-LLM Git operation, standalone');
   execFileSync('git', ['init', '-q'], { cwd: repo });
   const ranRepo = spawnSync('sh', ['-c', scriptState.command], { cwd: repo });
   check('passes through an existing repository (exit 0)', ranRepo.status === 0);
+
+  // Root detection (IR-013): a subdirectory inside a larger checkout is NOT
+  // its root, so the step initializes a fresh nested repository there — the
+  // behavior the three-line flow relies on when run from demo/.
+  const sub = join(repo, 'nested');
+  execFileSync('mkdir', ['-p', sub]);
+  const ranSub = spawnSync('sh', ['-c', scriptState.command], { cwd: sub });
+  check(
+    'initializes a nested repository in a checkout subdirectory (exit 0)',
+    ranSub.status === 0,
+  );
+  check('nested .git created', existsSync(join(sub, '.git')));
   rmSync(repo, { recursive: true, force: true });
 }
 

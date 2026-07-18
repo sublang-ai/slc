@@ -316,8 +316,7 @@ export const workflowMachine = setup({
         input: (): ScriptInput => ({
           stateId: 'setup',
           sourceItem: 'CODE-1',
-          command:
-            'git rev-parse --is-inside-work-tree 2>/dev/null || git init',
+          command: '[ -e .git ] || git init',
           result: {
             ok: '命令以状态码 0 退出。',
             failed: '命令以非 0 状态码退出。',

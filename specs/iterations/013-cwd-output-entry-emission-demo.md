@@ -9,12 +9,12 @@ Implement [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emissio
 
 ## Deliverables
 
-- [ ] Artifact directories derive from the invocation working directory across full, single-phase, pass, and `.link` runs (`PIPE-7`, `PIPE-38`), with the no-nesting reuse when the working directory is already `<basename>.<pipeline>`.
-- [ ] Entry sources with a foreign extension compile as raw inputs through auto-scheduled normalization (`PIPE-6`, `PIPE-34`, `PIPE-39`, `COMPILE-7`).
-- [ ] Discovered passes run by default with `--no-optimize` as the escape (`PIPE-32`, `PIPE-35`, `PIPE-37`, `COMPILE-8`).
-- [ ] Bare `slc playbook <source>` links against the installed `@sublang/playbook` runtime (`SELFHOST-13`, `PIPE-13`, `SELFHOST-8`).
-- [ ] Full-link playbook runs emit the `<basename>.ts` entry module; `playbook run` performs it unmodified (`SELFHOST-14`, `SELFHOST-15`, `SELFHOST-16`).
-- [ ] `demo/` carries no hand-written registry: `workflow.zh.ts` is the committed emitter output, the scripted Git step detects the repository **root** (`[ -e .git ] || git init`, initializing a nested repository when run inside a larger checkout), and the READMEs document the three-line flow.
+- [x] Artifact directories derive from the invocation working directory across full, single-phase, pass, and `.link` runs (`PIPE-7`, `PIPE-38`), with the no-nesting reuse when the working directory is already `<basename>.<pipeline>`.
+- [x] Entry sources with a foreign extension compile as raw inputs through auto-scheduled normalization (`PIPE-6`, `PIPE-34`, `PIPE-39`, `COMPILE-7`).
+- [x] Discovered passes run by default with `--no-optimize` as the escape (`PIPE-32`, `PIPE-35`, `PIPE-37`, `COMPILE-8`).
+- [x] Bare `slc playbook <source>` links against the installed `@sublang/playbook` runtime (`SELFHOST-13`, `PIPE-13`, `SELFHOST-8`).
+- [x] Full-link playbook runs emit the `<basename>.ts` entry module; `playbook run` performs it unmodified (`SELFHOST-14`, `SELFHOST-15`, `SELFHOST-16`).
+- [x] `demo/` carries no hand-written registry: `workflow.zh.ts` is the committed emitter output, the scripted Git step detects the repository **root** (`[ -e .git ] || git init`, initializing a nested repository when run inside a larger checkout), and the READMEs document the three-line flow.
 
 ## Tasks
 
