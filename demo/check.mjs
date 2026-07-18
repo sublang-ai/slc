@@ -165,8 +165,11 @@ if (runDirFlag !== -1) {
     exitCode === '0',
     `exit=${exitCode}`,
   );
+  // A dev launcher may print build output ahead of the one JSON envelope;
+  // parse from the last top-level object start.
+  const rawEnvelope = readFileSync(join(evidenceDir, 'run.json'), 'utf8');
   const envelope = JSON.parse(
-    readFileSync(join(evidenceDir, 'run.json'), 'utf8'),
+    rawEnvelope.slice(rawEnvelope.lastIndexOf('\n{') + 1),
   );
   check(
     "JSON envelope outcome is 'terminal'",
