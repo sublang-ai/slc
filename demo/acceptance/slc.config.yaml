@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
+#
+# Reference-run configuration (DR-006): this directory is the CWD of the
+# reference compile, so discovery picks this file — selecting the repository's
+# committed, pinned pipeline definitions and pinning the compiling agent to
+# the lineup the reference artifacts were produced with.
+agent: claude-code
+model: claude-opus-4-8
+effort: high
+pipelinePath:
+  - ../../pipelines
