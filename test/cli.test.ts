@@ -2,7 +2,14 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import { EventEmitter } from 'node:events';
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -341,17 +348,46 @@ describe('process control (CLI-17)', () => {
 });
 
 describe('configuration (CLI-18, CLI-19)', () => {
-  it('refuses an unset SLC_AGENT to stderr, runs no phase, non-zero (CLI-18)', async () => {
+  it('seeds the user config on a discovery miss and proceeds (CLI-29, CLI-30)', async () => {
+    // Isolate discovery (DR-006): no config under cwd or this config home, so
+    // the first run seeds `<home>/slc/config.yaml` (DR-015) and carries on
+    // with the seeded claude-code selection.
+    const seen: string[] = [];
+    let selected = '';
+    const deps = await buildSlcDeps(
+      {
+        env: { SLC_PIPELINE_PATH: pipelinesRoot, XDG_CONFIG_HOME: root },
+        cwd: root,
+        signal: new AbortController().signal,
+        note: (t) => seen.push(t),
+      },
+      (selection) => {
+        selected = selection.agent;
+        return { run: async () => ({ status: 'ok', diagnostics: [] }) };
+      },
+    );
+
+    expect(deps.cwd).toBe(root);
+    expect(selected).toBe('claude-code');
+    const seeded = join(root, 'slc', 'config.yaml');
+    expect(await exists(seeded)).toBe(true);
+    expect(await readFile(seeded, 'utf8')).toContain('agent: claude-code');
+    expect(seen.join('')).toContain(seeded);
+  });
+
+  it('refuses an agent-less explicit --config to stderr, runs no phase (CLI-18)', async () => {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await run(['flow', source], {
-      // Isolate config-file discovery (DR-006): no config under cwd or this
-      // config home, so the run falls through to the (unset) environment.
-      cwd: root,
-      env: { SLC_PIPELINE_PATH: pipelinesRoot, XDG_CONFIG_HOME: root },
-      stdout: (t) => out.push(t),
-      stderr: (t) => err.push(t),
-    });
+    await writeFile(join(root, 'agentless.yaml'), 'model: m1\n');
+    const code = await run(
+      ['--config', join(root, 'agentless.yaml'), 'flow', source],
+      {
+        cwd: root,
+        env: { SLC_PIPELINE_PATH: pipelinesRoot, XDG_CONFIG_HOME: root },
+        stdout: (t) => out.push(t),
+        stderr: (t) => err.push(t),
+      },
+    );
 
     expect(code).toBe(1);
     expect(out.join('')).toBe('');
@@ -794,6 +830,10 @@ describe('compiled execution through the bin (CLI-28)', () => {
     const interpretedRuns: string[] = [];
     const out: string[] = [];
     const err: string[] = [];
+    // Pre-create the user config so first-run seeding (DR-015) stays out of
+    // this test's stderr expectations.
+    await mkdir(join(root, 'slc'), { recursive: true });
+    await writeFile(join(root, 'slc', 'config.yaml'), 'agent: claude-code\n');
     const code = await run(['flow.text2gears', source], {
       env: {
         SLC_AGENT: 'claude-code',
