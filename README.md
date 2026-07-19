@@ -89,9 +89,10 @@ and exits non-zero.
 
 `slc` reads its agent and pipeline settings from an optional YAML config file,
 overridden per key by environment variables. A blank or unset environment value
-falls through to the file. `agent` is the one required setting — it has no
-built-in default; `model` falls through to the agent CLI's own default and
-`pipelinePath` to the working directory.
+falls through to the file. When no config file exists anywhere, the first run
+seeds `~/.config/slc/config.yaml` with `agent: claude-code`, so a fresh
+machine needs no setup; `model` falls through to the agent CLI's own default
+and `pipelinePath` to the working directory.
 
 ```yaml
 # slc.config.yaml

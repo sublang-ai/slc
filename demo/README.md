@@ -57,9 +57,10 @@ No flags: a `.txt` input is raw prose, so `slc` normalizes it first; the
 pipeline's optimization pass runs by default; and the `playbook` pipeline
 links against the installed `@sublang/playbook` runtime when no `--link`
 is given, also emitting the runnable entry module. Compilation is
-performed by a real coding agent — configure it once in
-`~/.config/slc/config.yaml` (keys: `agent`, `model`, `effort`), or per
-run with `SLC_AGENT`/`SLC_MODEL`/`SLC_EFFORT`. Expect tens of minutes.
+performed by a real coding agent — the first run seeds
+`~/.config/slc/config.yaml` with `agent: claude-code`; edit it (keys:
+`agent`, `model`, `effort`) or override per run with
+`SLC_AGENT`/`SLC_MODEL`/`SLC_EFFORT`. Expect tens of minutes.
 
 ### Where the output lands
 

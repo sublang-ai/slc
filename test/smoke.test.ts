@@ -39,9 +39,10 @@ describe('slc bin entry', () => {
     expect(out.join('')).toContain('SLC_AGENT');
   });
 
-  it('exits non-zero naming SLC_AGENT when the agent is unset (CLI-12)', async () => {
+  it('seeds the user config on a bare first run (CLI-29, DR-015)', async () => {
     // Pin cwd (and the XDG root) to an empty temp dir so this repo's committed
-    // slc.config.yaml is not discovered: configuration must fall to the env.
+    // slc.config.yaml is not discovered: the first run seeds the user config,
+    // then still refuses the empty invocation.
     const cwd = await mkdtemp(join(tmpdir(), 'slc-smoke-'));
     try {
       const err: string[] = [];
@@ -51,7 +52,8 @@ describe('slc bin entry', () => {
         stderr: (text) => err.push(text),
       });
       expect(code).toBe(1);
-      expect(err.join('')).toContain('SLC_AGENT');
+      expect(err.join('')).toContain('seeded');
+      expect(err.join('')).toContain(join(cwd, 'slc', 'config.yaml'));
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

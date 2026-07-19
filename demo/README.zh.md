@@ -29,7 +29,7 @@ git log --oneline
 
 - Node.js ≥ 23.6
 - `npm install -g @sublang/slc @sublang/playbook`——`slc` 编译器与 `playbook` 执行环境
-- 已安装并登录的 [Claude Code](https://www.anthropic.com/claude-code)（`claude`）与 [Codex](https://openai.com/codex)（`codex`）CLI——它们分别扮演编码者与审查者。此外还有第三个 agent 会话，即 Captain，负责裁决每个状态的结果
+- 默认配置：已安装并登录的 [Claude Code CLI](https://www.anthropic.com/claude-code)（即 `claude` 命令行可用，含默认模型 Claude Opus 4.8）。可配置其他模型以及其他角色的 agent，分别扮演编码者、审查者或 Captain（队长，负责协调），参见[角色设置](...).
 - `git`
 
 ## 1. 编译文本描述
@@ -40,7 +40,7 @@ git log --oneline
 slc playbook workflow.zh.txt
 ```
 
-无需任何参数：`.txt` 输入即原始散文，`slc` 会先将其归一化；pipeline 的优化 pass 默认运行；未给 `--link` 时，`playbook` pipeline 会链接到已安装的 `@sublang/playbook` 运行时，并一并产出可运行的入口模块。编译由真实的编码 agent 执行——在 `~/.config/slc/config.yaml` 中配置一次（键：`agent`、`model`、`effort`），或用 `SLC_AGENT`／`SLC_MODEL`／`SLC_EFFORT` 按次覆盖。耗时可能达到数十分钟。
+无需任何参数：`.txt` 输入即原始文本，`slc` 会先将其归一化；pipeline 的优化 pass 默认运行；未给 `--link` 时，`playbook` pipeline 会链接到已安装的 `@sublang/playbook` 运行时，并一并产出可运行的入口模块。编译由真实的编码 agent 执行——在 `~/.config/slc/config.yaml` 中配置一次（键：`agent`、`model`、`effort`），或用 `SLC_AGENT`／`SLC_MODEL`／`SLC_EFFORT` 按次覆盖。耗时可能达到数十分钟。
 
 ### 产物落在哪里
 

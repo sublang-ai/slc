@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -87,11 +88,32 @@ describe('loadConfigFile (CLI-20, CLI-21)', () => {
     expect(loaded.config.agent).toBe('opencode');
   });
 
-  it('returns an empty result on a discovery miss', async () => {
-    const loaded = await loadConfigFile({ cwd, configHome: home });
+  it('seeds and loads the user config on a discovery miss (CLI-30)', async () => {
+    const seeded: string[] = [];
+    const loaded = await loadConfigFile({
+      cwd,
+      configHome: home,
+      onSeed: (path) => seeded.push(path),
+    });
 
-    expect(loaded.path).toBeUndefined();
-    expect(loaded.config).toEqual({});
+    const expected = join(home, 'slc', 'config.yaml');
+    expect(loaded.path).toBe(expected);
+    expect(loaded.config).toEqual({ agent: 'claude-code' });
+    expect(seeded).toEqual([expected]);
+  });
+
+  it('does not seed when the working-directory file exists (CLI-30)', async () => {
+    await write(cwd, CONFIG_FILE, 'agent: codex\n');
+    const seeded: string[] = [];
+    const loaded = await loadConfigFile({
+      cwd,
+      configHome: home,
+      onSeed: (path) => seeded.push(path),
+    });
+
+    expect(loaded.config).toEqual({ agent: 'codex' });
+    expect(seeded).toEqual([]);
+    expect(existsSync(join(home, 'slc', 'config.yaml'))).toBe(false);
   });
 
   it('loads an explicit --config file and disables discovery', async () => {
