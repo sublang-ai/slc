@@ -20,8 +20,8 @@ The second phase (spec items → state machine) is out of scope.
 
 ## Pin Inputs
 
-- `../../specs/meta.md`
-- `../../specs/decisions/000-spec-structure-format.md`
+- `../../node_modules/@sublang/spex/scaffold/specs/meta.md`
+- `../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md`
 - `../../package-lock.json`
 
 ## Players
@@ -293,7 +293,13 @@ Results:
 - `failed`: The command exited with a nonzero status.
 ```
 
-Target should be written in the same language as Source.
+Target shall be written in the same language as Source: an item's condition
+prose, acting prompts, and result descriptions follow the Source language,
+read per the matching localization of the GEARS definition [[1]].
+The four `Captain shall` acting-clause forms defined above (direct,
+delegated, nested playbook call, and script), guard names, and the
+`Players:` and `Results:` labels are fixed machine syntax and stay in this
+exact English form regardless of Source language.
 
 ## Transformation-spec sources
 
@@ -330,4 +336,4 @@ Dead branches mislead readers and downstream phases.
 
 ## References
 
-[1]: [GEARS syntax](/specs/meta.md#item-syntax)
+[1]: GEARS definition shipped by the installed `@sublang/spex` package: `@sublang/spex/scaffold/specs/meta.md` (English) and `@sublang/spex/scaffold/i18n/zh/specs/meta.md` (Chinese); canonical renditions [GEARS: AI-Ready Spec Syntax](https://sublang.ai/ref/gears-ai-ready-spec-syntax) (en) and [GEARS：面向 AI 的规约语法](https://sublang.ai/zh/ref/gears-ai-ready-spec-syntax) (zh)

@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# Demo: from one paragraph to a running two-agent code-review loop
+# Demo: from one paragraph to a reliable two-agent code-review loop
 
 *[中文版](README.zh.md)*
 
