@@ -36,6 +36,8 @@ most 2 review cycles) become loop counters there.
 
 ## Prerequisites
 
+- macOS or Linux (on Windows: WSL or Git Bash — the workflow's scripted
+  step runs through `sh`)
 - Node.js ≥ 23.6
 - `npm install -g @sublang/slc @sublang/playbook` — the `slc` compiler and
   the `playbook` host

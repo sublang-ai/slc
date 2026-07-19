@@ -48,6 +48,9 @@ npm link   # puts `slc` on PATH
 
 Requirements:
 
+- A POSIX platform — macOS or Linux; on Windows, use WSL (or Git
+  Bash). Compiled script steps execute through `sh`, so native Windows
+  is not supported.
 - Node.js >= 23.6 (compiled phase artifacts are imported as native
   TypeScript at runtime).
 - One supported coding-agent CLI, installed and authenticated:
