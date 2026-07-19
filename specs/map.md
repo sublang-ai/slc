@@ -39,6 +39,7 @@ meta.md     The spec of specs
 | DR-013 | [013-normalize-and-pass-phases.md](decisions/013-normalize-and-pass-phases.md) | Generic input normalization (`--normalize` over a pipeline-agnostic built-in definition) and LLVM-style format-preserving pass phases scheduled with `-O` |
 | DR-014 | [014-cwd-output-invocation-defaults-entry-emission.md](decisions/014-cwd-output-invocation-defaults-entry-emission.md) | Artifacts in the invocation CWD, raw-entry auto-normalization, default-on passes, a default playbook link target, and deterministic entry-module emission |
 | DR-015 | [015-first-run-config-seeding.md](decisions/015-first-run-config-seeding.md) | First-run seeding of `~/.config/slc/config.yaml` from a bundled starter template (`agent: claude-code`), superseding DR-006's never-written consequence |
+| DR-016 | [016-gears-grammar-provenance.md](decisions/016-gears-grammar-provenance.md) | The pinned GEARS grammar comes from the published `@sublang/spex` package (en + zh), replacing this repo's drifted local copies in the compile-pin closure |
 
 ## Iterations
 
@@ -58,6 +59,7 @@ meta.md     The spec of specs
 | IR-011 | [011-playbook-0-10-adoption.md](iterations/011-playbook-0-10-adoption.md) | Adopt the Playbook 0.10 generation: frozen local legacy contract, composed-v2 pin mapping, re-synced definitions, rebuilt meta artifacts, and refreshed pins |
 | IR-012 | [012-normalize-optimize-demo.md](iterations/012-normalize-optimize-demo.md) | Implement DR-013 (--normalize, -O pass phases, script-actor verification) and land the end-to-end demo/ acceptance workflow |
 | IR-013 | [013-cwd-output-entry-emission-demo.md](iterations/013-cwd-output-entry-emission-demo.md) | Implement DR-014 (CWD output, raw-entry normalization, default passes, default link target, entry emission) and rebase demo/ on the three-line flow |
+| IR-014 | [014-gears-provenance-adoption.md](iterations/014-gears-provenance-adoption.md) | Adopt DR-016: spex dependency, vendored definition sync, grammar Pin Inputs swap, pin regeneration (meta-artifact recompile deferred) |
 
 ## Packages
 
