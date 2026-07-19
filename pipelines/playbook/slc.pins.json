@@ -8,7 +8,7 @@
     "text2gears": {
       "definition": {
         "path": "text2gears.md",
-        "hash": "sha256:0b8903c9a4f0b865fd8fcbf2b5148b868f23b3809eff944a8ecd3a89cc4e3c9f"
+        "hash": "sha256:81a4af978bb6adc35dbce8ecfe33c3ee1119102f5c23fde611d07c2106e8d847"
       },
       "artifact": {
         "path": "text2gears.slc/text2gears.playbook.ts",
@@ -20,16 +20,16 @@
       },
       "semanticInputs": [
         {
+          "path": "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
+          "hash": "sha256:1d8a2507d30ef54b5d935a53b448ec74ea8a8556df5cae24e81dcfbd94f9b648"
+        },
+        {
+          "path": "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
+          "hash": "sha256:6a23f014ccbbe871e811f2ef9bd39119b50f0ce65a10bd75045d5735cf5b70b3"
+        },
+        {
           "path": "../../package-lock.json",
-          "hash": "sha256:cf64ed3c9e6654d355adb76272a840fa44253eb5877664af86f527dcfe123f0c"
-        },
-        {
-          "path": "../../specs/decisions/000-spec-structure-format.md",
-          "hash": "sha256:a22d0b27060cfc58cbf567e08435c2d3ee34548075bdadef77254ed669cbcd19"
-        },
-        {
-          "path": "../../specs/meta.md",
-          "hash": "sha256:3310732f0cf15fc0b3332edb9e02e96349be1801ef8a08446e01c77de6ff533e"
+          "hash": "sha256:f809a265cd69cb5f986840dd38bfbf904541d9a381c14bfbea4dcedaac21ff2b"
         }
       ],
       "externalInputs": [],
@@ -67,8 +67,16 @@
       },
       "semanticInputs": [
         {
+          "path": "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
+          "hash": "sha256:1d8a2507d30ef54b5d935a53b448ec74ea8a8556df5cae24e81dcfbd94f9b648"
+        },
+        {
+          "path": "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
+          "hash": "sha256:6a23f014ccbbe871e811f2ef9bd39119b50f0ce65a10bd75045d5735cf5b70b3"
+        },
+        {
           "path": "../../package-lock.json",
-          "hash": "sha256:cf64ed3c9e6654d355adb76272a840fa44253eb5877664af86f527dcfe123f0c"
+          "hash": "sha256:f809a265cd69cb5f986840dd38bfbf904541d9a381c14bfbea4dcedaac21ff2b"
         },
         {
           "path": "link.md",
@@ -76,15 +84,7 @@
         },
         {
           "path": "text2gears.md",
-          "hash": "sha256:0b8903c9a4f0b865fd8fcbf2b5148b868f23b3809eff944a8ecd3a89cc4e3c9f"
-        },
-        {
-          "path": "../../specs/decisions/000-spec-structure-format.md",
-          "hash": "sha256:a22d0b27060cfc58cbf567e08435c2d3ee34548075bdadef77254ed669cbcd19"
-        },
-        {
-          "path": "../../specs/meta.md",
-          "hash": "sha256:3310732f0cf15fc0b3332edb9e02e96349be1801ef8a08446e01c77de6ff533e"
+          "hash": "sha256:81a4af978bb6adc35dbce8ecfe33c3ee1119102f5c23fde611d07c2106e8d847"
         }
       ],
       "externalInputs": [],
@@ -122,8 +122,16 @@
       },
       "semanticInputs": [
         {
+          "path": "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
+          "hash": "sha256:1d8a2507d30ef54b5d935a53b448ec74ea8a8556df5cae24e81dcfbd94f9b648"
+        },
+        {
+          "path": "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
+          "hash": "sha256:6a23f014ccbbe871e811f2ef9bd39119b50f0ce65a10bd75045d5735cf5b70b3"
+        },
+        {
           "path": "../../package-lock.json",
-          "hash": "sha256:cf64ed3c9e6654d355adb76272a840fa44253eb5877664af86f527dcfe123f0c"
+          "hash": "sha256:f809a265cd69cb5f986840dd38bfbf904541d9a381c14bfbea4dcedaac21ff2b"
         },
         {
           "path": "gears2fsm.md",
@@ -131,15 +139,7 @@
         },
         {
           "path": "text2gears.md",
-          "hash": "sha256:0b8903c9a4f0b865fd8fcbf2b5148b868f23b3809eff944a8ecd3a89cc4e3c9f"
-        },
-        {
-          "path": "../../specs/decisions/000-spec-structure-format.md",
-          "hash": "sha256:a22d0b27060cfc58cbf567e08435c2d3ee34548075bdadef77254ed669cbcd19"
-        },
-        {
-          "path": "../../specs/meta.md",
-          "hash": "sha256:3310732f0cf15fc0b3332edb9e02e96349be1801ef8a08446e01c77de6ff533e"
+          "hash": "sha256:81a4af978bb6adc35dbce8ecfe33c3ee1119102f5c23fde611d07c2106e8d847"
         }
       ],
       "externalInputs": [],

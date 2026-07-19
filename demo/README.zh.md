@@ -1,11 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# 演示：从一段文本描述到可运行的双 agent 代码评审循环
+# 演示：从一段文本描述到可靠的双 agent 代码评审循环
 
 *[English](README.md)*
 
-一段未经加工的文本描述被编译成确定性的状态机工作流，该工作流驱动两个 agent——一个编码者、一个审查者——在一个真实的 Git 仓库上完成提交／评审／争论的循环，直到评审不再提出任何问题。
+一段未经加工的文本描述被编译成确定性的状态机工作流，该工作流驱动两个 agent——一个编码者、一个审查者——在真实的 Git 仓库上完成提交／评审／争论的循环，直到评审不再提出任何问题。
 
 三行命令，在本目录下运行：
 
@@ -41,17 +41,18 @@ git log --oneline
 slc playbook workflow.zh.txt
 ```
 
-无需任何参数：`.txt` 输入即原始文本，`slc` 会先将其归一化；pipeline 的优化 pass 默认运行；未给 `--link` 时，`playbook` pipeline 会链接到已安装的 `@sublang/playbook` 运行时，并一并产出可运行的入口模块。编译由真实的编码 agent 执行——在 `~/.config/slc/config.yaml` 中配置一次（键：`agent`、`model`、`effort`），或用 `SLC_AGENT`／`SLC_MODEL`／`SLC_EFFORT` 按次覆盖。耗时可能达到数十分钟。
+`slc` 会先将输入文本按 playbook 要求规范化，最终链接到已安装的 `@sublang/playbook` 运行时，并默认执行减少 LLM 调用的编译优化。
+编译自身使用的 agent 可在 `~/.config/slc/config.yaml` 中配置。
+编译耗时可能超过十分钟。
 
-### 产物落在哪里
-
-产物落在你的**当前目录**，绝不会写到别人的源文件旁边：`./workflow.zh.playbook/`（编译出的产物包）与 `./workflow.zh.ts`（可运行的入口）。二者在这里都已被 gitignore，你的编译不会弄脏 checkout——已提交的参考产物集原封不动地放在 [`acceptance/`](acceptance/) 下，由维护者在那个目录里用仓库已 pin 的 pipeline 定义编译得到。
+制品输出在当前目录下，包括：`./workflow.zh.playbook/`（编译中间产物）与 `./workflow.zh.ts`（可运行的入口）。
+我们提供参考制品，置于 [`reference/`](reference/) 下，供预览或对比校验。
 
 ### 编译产出什么
 
-参考编译的产物已提交在 [`acceptance/workflow.zh.playbook/`](acceptance/workflow.zh.playbook/) 下，因此你可以跳过编译，直接阅读：
+参考编译的产物已提交在 [`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/) 下，因此你可以跳过编译，直接阅读：
 
-| 产物 | 值得关注之处 |
+| 产物 | 说明 |
 | --- | --- |
 | `workflow.zh.text.md` | 归一化后的源文件：两个未具名的 agent 成为声明出来的 player `编码者` 与 `审查者`，未言明的假设成为步骤 1——“开始前，确认当前目录是一个Git仓库的根目录；若不是，则先在此初始化一个Git仓库。” 原文的含义、顺序与语言都被保留；归一化添加的是结构——一个标题、一个 `Players:` 块，以及七个编号步骤。 |
 | `workflow.zh.gears.raw.md` | 前端直接产出的 GEARS spec item：Git 检查是 `Captain shall 确保当前目录是一个 Git 仓库的根目录`——以散文表述的 Captain 直接工作，仍需 LLM 去理解。其余五项是 `Captain shall prompt <player>` 行为。 |
