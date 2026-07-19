@@ -27,6 +27,7 @@ git log --oneline
 
 ## 前置条件
 
+- macOS 或 Linux（Windows 请使用 WSL 或 Git Bash——工作流的脚本化步骤经由 `sh` 执行）
 - Node.js ≥ 23.6
 - `npm install -g @sublang/slc @sublang/playbook`——`slc` 编译器与 `playbook` 执行环境
 - 默认配置：已安装并登录的 [Claude Code CLI](https://www.anthropic.com/claude-code)（即 `claude` 命令行可用，含默认模型 Claude Opus 4.8）。可配置其他模型以及其他角色的 agent，分别扮演编码者、审查者或 Captain（队长，负责协调），参见[角色设置](...).
