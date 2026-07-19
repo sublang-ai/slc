@@ -17,10 +17,11 @@
  * (CLI-6). See specs/dev/cli.md.
  */
 
-import { existsSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { parse } from 'yaml';
 
@@ -28,6 +29,11 @@ import { parse } from 'yaml';
 export const CONFIG_FILE = 'slc.config.yaml';
 /** Config-file path under the user config home (DR-006). */
 export const HOME_CONFIG = join('slc', 'config.yaml');
+
+/** Bundled starter template seeded into the user config home on a discovery miss (DR-015). */
+const TEMPLATE_PATH = fileURLToPath(
+  new URL('./slc.config.template.yaml', import.meta.url),
+);
 
 /** Partial cligent-invocation selection loaded from a config file (DR-006). */
 export interface FileConfig {
@@ -55,6 +61,8 @@ export interface LoadConfigFileOptions {
   configHome?: string;
   /** Environment for resolving `XDG_CONFIG_HOME`; defaults to `process.env`. */
   env?: Record<string, string | undefined>;
+  /** Called with the created path when a discovery miss seeds the user config (DR-015, CLI-30). */
+  onSeed?: (path: string) => void;
 }
 
 /** Machine-readable reason a config file was rejected (CLI-21). */
@@ -125,7 +133,12 @@ function resolveConfigPath(
     return homeConfig;
   }
 
-  return undefined;
+  // First run: neither discovered file exists, so seed the user config from
+  // the bundled starter and load it (DR-015, CLI-30).
+  mkdirSync(dirname(homeConfig), { recursive: true });
+  copyFileSync(TEMPLATE_PATH, homeConfig);
+  options.onSeed?.(homeConfig);
+  return homeConfig;
 }
 
 function configHome(options: LoadConfigFileOptions): string {

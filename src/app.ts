@@ -44,6 +44,8 @@ export type DepsBuilder = (io: {
   signal: AbortSignal;
   /** Explicit `--config <path>`, when given (CLI-20). */
   configPath?: string;
+  /** Sink for host notes such as first-run config seeding (DR-015, CLI-30). */
+  note?: (text: string) => void;
 }) => SlcDeps | Promise<SlcDeps>;
 
 /** Injectable IO and configuration for {@link run}; all fields default to the process. */
@@ -81,7 +83,7 @@ export type CompiledFactoryBuilder = typeof createConfiguredCompiledFactory;
  *   agent, or the resolved agent is unsupported (CLI-12).
  */
 export async function buildSlcDeps(
-  { env, cwd, signal, configPath }: Parameters<DepsBuilder>[0],
+  { env, cwd, signal, configPath, note }: Parameters<DepsBuilder>[0],
   // Injectable so a test can capture the executor options — notably the
   // non-interactive write permission below — without constructing a real
   // adapter, the same seam pattern as `createConfiguredExecutor`'s
@@ -89,7 +91,13 @@ export async function buildSlcDeps(
   createExecutor: ExecutorFactory = createConfiguredExecutor,
   createCompiled: CompiledFactoryBuilder = createConfiguredCompiledFactory,
 ): Promise<SlcDeps> {
-  const file = await loadConfigFile({ cwd, configPath, env });
+  const file = await loadConfigFile({
+    cwd,
+    configPath,
+    env,
+    // First-run seeding (DR-015): name the created user config on stderr.
+    onSeed: (path) => note?.(`slc: seeded ${path} (agent: claude-code)\n`),
+  });
   const { selection, pipelinePath } = resolveRunConfig(env, file.config);
   const resolver = withReservedPipelines(
     createPipelineResolver(pipelineSearchRoots(pipelinePath, cwd)),
@@ -239,6 +247,7 @@ export async function run(
       cwd,
       signal,
       configPath: extracted.configPath,
+      note: stderr,
     });
   } catch (error) {
     // Configuration refusals — a bad `--config`, an invalid config file

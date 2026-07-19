@@ -1,0 +1,5 @@
+# slc configuration, seeded on first run (DR-015). Environment variables
+# SLC_AGENT / SLC_MODEL / SLC_EFFORT override these per key (DR-006).
+agent: claude-code
+# model: claude-opus-4-8
+# effort: high
