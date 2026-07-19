@@ -38,6 +38,7 @@ meta.md     The spec of specs
 | DR-012 | [012-playbook-routing-control-separation.md](decisions/012-playbook-routing-control-separation.md) | Playbook routing/control separation: source-owned result metadata, exact Boss text, isolated Captain calls, and visible-prose ownership |
 | DR-013 | [013-normalize-and-pass-phases.md](decisions/013-normalize-and-pass-phases.md) | Generic input normalization (`--normalize` over a pipeline-agnostic built-in definition) and LLVM-style format-preserving pass phases scheduled with `-O` |
 | DR-014 | [014-cwd-output-invocation-defaults-entry-emission.md](decisions/014-cwd-output-invocation-defaults-entry-emission.md) | Artifacts in the invocation CWD, raw-entry auto-normalization, default-on passes, a default playbook link target, and deterministic entry-module emission |
+| DR-015 | [015-first-run-config-seeding.md](decisions/015-first-run-config-seeding.md) | First-run seeding of `~/.config/slc/config.yaml` from a bundled starter template (`agent: claude-code`), superseding DR-006's never-written consequence |
 
 ## Iterations
 

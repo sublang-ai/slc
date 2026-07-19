@@ -41,7 +41,11 @@ When the slc executable builds run dependencies, the executable shall load confi
 
 ### CLI-21
 
-Where `--config <path>` names a file that does not exist, or a loaded config file is malformed, declares an unknown key, or holds a wrong-typed value, the executable shall refuse the run with a diagnostic and execute no phase, while a discovery miss instead leaves configuration to the environment and built-in defaults ([DR-006](../decisions/006-slc-configuration-sources.md#validation), [CLI-4](../user/cli.md#cli-4)).
+Where `--config <path>` names a file that does not exist, or a loaded config file is malformed, declares an unknown key, or holds a wrong-typed value, the executable shall refuse the run with a diagnostic and execute no phase, while a discovery miss instead seeds the user config file ([CLI-30](#cli-30)) and proceeds from it ([DR-006](../decisions/006-slc-configuration-sources.md#validation), [DR-015](../decisions/015-first-run-config-seeding.md), [CLI-4](../user/cli.md#cli-4)).
+
+### CLI-30
+
+When discovery finds neither the working-directory `slc.config.yaml` nor the user config file, the executable shall create `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from the starter template bundled with the host — `agent: claude-code` set, `model` and `effort` as commented examples — report the created path on stderr, load the seeded file, and shall not seed when `--config` is given or when either discovered file exists ([DR-015](../decisions/015-first-run-config-seeding.md)).
 
 ### CLI-8
 
