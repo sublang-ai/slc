@@ -4,7 +4,7 @@
 #
 # Seed the demo target repository: a tiny project with a known median bug.
 #
-# Usage: demo/acceptance/setup.sh [<work-dir>] [--init]
+# Usage: demo/reference/setup.sh [<work-dir>] [--init]
 #
 #   <work-dir>  target directory (default: ${TMPDIR:-/tmp}/slc-demo-run —
 #               outside this repository, so the agents see only the demo

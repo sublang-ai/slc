@@ -70,13 +70,13 @@ Artifacts land in your **working directory**, never beside someone
 else's source: `./workflow.zh.playbook/` (the compiled bundle) and
 `./workflow.zh.ts` (the runnable entry). Both are gitignored here, so
 your compile leaves the checkout clean — the committed reference set
-lives untouched under [`acceptance/`](acceptance/), compiled from that
+lives untouched under [`reference/`](reference/), compiled from that
 directory with the repository's pinned pipeline definitions.
 
 ### What it produces
 
 The reference compile is committed under
-[`acceptance/workflow.zh.playbook/`](acceptance/workflow.zh.playbook/),
+[`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/),
 so you can skip the compile and just read it:
 
 | Artifact | What to look at |
@@ -86,8 +86,8 @@ so you can skip the compile and just read it:
 | `workflow.zh.gears.md` | After the optimize pass: the Git step is rewritten to a `Captain shall run:` **script item** — `[ -e .git ] \|\| git init`, a fixed shell command with two exit-status guards, no LLM — with provenance recorded under `## Optimizations` (`CODE-1: direct Captain work → script`). |
 | `workflow.zh.fsm.ts` | The XState machine: one *invoking* state per GEARS item — the Git step invokes the `script` actor, the other five a `player` actor — plus an idle hub, a Boss-reply suspension state, and two terminal states. |
 | `workflow.zh.playbook.ts` | The linked runtime: drives the FSM, calls the agents through the host's four-port contract (`callPlayer`, `callJudge`, `emitStatus`, `emitTelemetry`), and executes the script state locally via `sh -c` — no LLM, no token, milliseconds. |
-| [`workflow.zh.ts`](acceptance/workflow.zh.ts) | The emitted entry module `playbook run` consumes directly: players, intent, and options all derived from the compiled bundle. Nothing in this demo is hand-written wiring. |
-| `workflow.zh.*.test.ts` | Verification emitted by the compiler beside its output: GEARS↔FSM conformance, FSM introspection pins, prompt contracts, transition coverage. `npx vitest run demo/acceptance/workflow.zh.playbook` runs them, and so does the repo's `npm test`. |
+| [`workflow.zh.ts`](reference/workflow.zh.ts) | The emitted entry module `playbook run` consumes directly: players, intent, and options all derived from the compiled bundle. Nothing in this demo is hand-written wiring. |
+| `workflow.zh.*.test.ts` | Verification emitted by the compiler beside its output: GEARS↔FSM conformance, FSM introspection pins, prompt contracts, transition coverage. `npx vitest run demo/reference/workflow.zh.playbook` runs them, and so does the repo's `npm test`. |
 
 ## 2. Run it on the sample
 
@@ -101,7 +101,7 @@ playbook run ./workflow.zh.ts \
 ```
 
 (Skipped the compile? Run the committed reference instead:
-`playbook run ./acceptance/workflow.zh.ts "<task>"` — its relative
+`playbook run ./reference/workflow.zh.ts "<task>"` — its relative
 import travels with it, and the workflow still operates on *this*
 directory.)
 
@@ -160,8 +160,8 @@ per-state status lines on stderr — the scripted step reports
 
 ## Reproducing the acceptance run
 
-[`acceptance/`](acceptance/) holds the maintainer-side harness: it seeds
+[`reference/`](reference/) holds the maintainer-side harness: it seeds
 a scratch copy of `sample.c`, scripts the two-agent run over it, and
 validates every artifact plus the live run evidence. See
-[`acceptance/README.md`](acceptance/README.md). You don't need any of it
+[`reference/README.md`](reference/README.md). You don't need any of it
 to use the demo — step 2 above is the same run, by hand.
