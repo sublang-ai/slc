@@ -3,9 +3,9 @@
 # SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 #
 # Run the compiled demo workflow over the seeded repository with real agents,
-# capturing the evidence demo/acceptance/check.mjs validates.
+# capturing the evidence demo/reference/check.mjs validates.
 #
-# Usage: demo/acceptance/run.sh [<work-dir>]
+# Usage: demo/reference/run.sh [<work-dir>]
 #
 #   <work-dir>     target repository (default: ${TMPDIR:-/tmp}/slc-demo-run,
 #                  outside this repository; recreated by setup.sh)

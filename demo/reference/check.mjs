@@ -16,7 +16,7 @@
  *      initializes a bare directory, passes through an existing repository;
  *   5. the emitted verification tests pass.
  *
- * Run-evidence stages (with --run-dir <dir>, produced by demo/acceptance/run.sh)
+ * Run-evidence stages (with --run-dir <dir>, produced by demo/reference/run.sh)
  * validate a real two-agent run:
  *   6. the one-shot run reached a terminal outcome (exit code + JSON
  *      envelope);
@@ -25,7 +25,7 @@
  *   8. the demo repository ends fixed: commits exist and the repaired
  *      `sample.c` passes a scratch compile-and-run median check (needs `cc`).
  *
- * Usage: node demo/acceptance/check.mjs [--run-dir <dir>]
+ * Usage: node demo/reference/check.mjs [--run-dir <dir>]
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -163,7 +163,7 @@ console.log('5. emitted verification tests');
       'run',
       '--root',
       repoRoot,
-      'demo/acceptance/workflow.zh.playbook',
+      'demo/reference/workflow.zh.playbook',
     ],
     { cwd: repoRoot, encoding: 'utf8' },
   );
@@ -181,7 +181,7 @@ console.log('5. emitted verification tests');
 const runDirFlag = process.argv.indexOf('--run-dir');
 if (runDirFlag !== -1) {
   const runDir = resolve(process.argv[runDirFlag + 1]);
-  // Run evidence lives beside the work repository (demo/acceptance/run.sh), falling back
+  // Run evidence lives beside the work repository (demo/reference/run.sh), falling back
   // to the repository itself for hand-collected evidence.
   const evidenceDir = existsSync(`${runDir}.evidence`)
     ? `${runDir}.evidence`

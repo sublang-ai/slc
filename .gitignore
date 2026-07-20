@@ -142,7 +142,7 @@ vite.config.ts.timestamp-*
 .scratch/
 
 # end-user compiles from demo/ (DR-014: outputs land in the invocation cwd);
-# the committed reference set lives under demo/acceptance/
+# the committed reference set lives under demo/reference/
 /demo/workflow.playbook/
 /demo/workflow.zh.playbook/
 /demo/workflow.ts

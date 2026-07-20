@@ -22,7 +22,7 @@ export default tseslint.config(
     // correctness rules stay on.
     files: [
       'pipelines/playbook/*.slc/**',
-      'demo/acceptance/workflow.zh.playbook/**',
+      'demo/reference/workflow.zh.playbook/**',
     ],
     rules: {
       'no-unsafe-finally': 'off',

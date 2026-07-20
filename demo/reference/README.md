@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# Acceptance harness for the demo (IR-012)
+# Reference compile and acceptance harness (IR-012)
 
 Maintainer-side only. Nothing here is needed to *use* the demo — see
 [`../README.md`](../README.md) for that. This directory exists to make
@@ -18,7 +18,7 @@ All three scripts locate themselves, so they work from any directory.
 ## Regenerate the reference
 
 ```sh
-cd demo/acceptance && slc playbook ../workflow.zh.txt
+cd demo/reference && slc playbook ../workflow.zh.txt
 ```
 
 Discovery picks this directory's `slc.config.yaml` — the pinned vendored
@@ -31,7 +31,7 @@ was committed: review with `git diff`, keep or `git checkout -- .`.
 ## Seed the target repository
 
 ```sh
-demo/acceptance/setup.sh [<work-dir>] [--init]
+demo/reference/setup.sh [<work-dir>] [--init]
 ```
 
 Creates `<work-dir>` (default `${TMPDIR:-/tmp}/slc-demo-run`, deliberately
@@ -51,7 +51,7 @@ of the same command.
 ## Run it with two real agents
 
 ```sh
-demo/acceptance/run.sh [<work-dir>]
+demo/reference/run.sh [<work-dir>]
 ```
 
 Calls `setup.sh` itself, so the work directory is always freshly seeded —
@@ -84,7 +84,7 @@ copy).
 ## Validate
 
 ```sh
-node demo/acceptance/check.mjs [--run-dir <work-dir>]
+node demo/reference/check.mjs [--run-dir <work-dir>]
 ```
 
 Static stages (always): the artifact set exists; the optimized GEARS
