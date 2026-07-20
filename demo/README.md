@@ -120,6 +120,21 @@ git log --oneline   # just the reviewed commits — the nested repo's own histor
 git show            # the reviewed fix to sample.c
 ```
 
+To reset before running again, from the repository root:
+
+```sh
+rm -rf demo/.git demo/workflow.zh.playbook demo/workflow.zh.ts
+git checkout -- demo/
+```
+
+To use it for real, run the same command from your own project's **root**
+with your own task — there the scripted step finds `.git` and passes
+through.
+
+> The agents commit into whatever directory you run the command in. That
+> is the point — but point it at a working tree you are willing to have
+> modified.
+
 ## What this demo shows
 
 - **Natural language is the source.** The input prose was never edited;
