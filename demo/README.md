@@ -5,10 +5,12 @@
 
 *[中文版](README.zh.md)*
 
-One raw paragraph is compiled into a deterministic
-state-machine workflow, and that workflow then drives two real coding
-agents — a coder and a reviewer — through a commit/review/debate loop
-over a real Git repository until the review comes back clean.
+A plain text description is compiled into a deterministic state-machine
+workflow, and that workflow drives two agents — a coder and a reviewer —
+through a commit/review/debate loop over a real Git repository, until the
+review raises no further findings.
+
+## Quick start
 
 Three lines, run from this directory:
 
@@ -18,9 +20,26 @@ playbook run ./workflow.zh.ts "<task>"
 git log --oneline
 ```
 
-## The input
+Prerequisites:
 
-[`workflow.txt`](workflow.txt):
+- macOS or Linux (on Windows, use WSL or Git Bash — the workflow's
+  scripted step runs through `sh`)
+- Node.js ≥ 23.6
+- `npm install -g @sublang/slc @sublang/playbook` — the `slc` compiler and
+  the `playbook` runtime host
+- Default setup: [Claude Code CLI](https://www.anthropic.com/claude-code)
+  installed and signed in, so the `claude` command is available. Other
+  agents and models can be configured, including per role (coder,
+  reviewer, Captain) — see [role setup](#role-setup).
+- `git`
+
+## In detail
+
+### Input
+
+[`workflow.zh.txt`](workflow.zh.txt) — the Chinese original the commands
+compile; [`workflow.txt`](workflow.txt) is an English rendering of the
+same paragraph:
 
 > Use two agents to carry out the input task.
 > One agent modifies the code in the current directory as the task requires and commits it to Git; the other agent reviews the resulting commit and raises reasonable findings, handing them back to the first agent to judge — it may accept or reject them, but must explain why.
@@ -28,140 +47,88 @@ git log --oneline
 > Loop like this until the review raises no findings, then finish.
 > No more than 2 loops.
 
-Note what the paragraph does *not* say: it never names the two agents,
-never spells out who speaks when inside a debate round, and silently
-assumes the working directory is a Git repository. The compiler makes
-all three explicit in the state machine — and the two explicit bounds (at most 2 debate rounds, at
-most 2 review cycles) become loop counters there.
+Note what the paragraph leaves **unstated**: it never names the two
+agents, never says how a round of debate is exchanged, and assumes the
+current directory is already a Git repository. The compiler makes all
+three explicit in the state machine, while the two stated bounds — at
+most 2 debate rounds, at most 2 loops — become loop counters there.
 
-## Prerequisites
-
-- macOS or Linux (on Windows: WSL or Git Bash — the workflow's scripted
-  step runs through `sh`)
-- Node.js ≥ 23.6
-- `npm install -g @sublang/slc @sublang/playbook` — the `slc` compiler and
-  the `playbook` host
-- [Claude Code](https://www.anthropic.com/claude-code) (`claude`) and
-  [Codex](https://openai.com/codex) (`codex`) CLIs installed and signed in —
-  they play the coder and the reviewer. A third agent session, the
-  Captain, adjudicates each state's result
-- `git`
-
-## 1. Compile the paragraph
-
-From this directory:
+### Compile
 
 ```sh
 slc playbook workflow.zh.txt
 ```
 
-No flags: a `.txt` input is raw prose, so `slc` normalizes it first; the
-pipeline's optimization pass runs by default; and the `playbook` pipeline
-links against the installed `@sublang/playbook` runtime when no `--link`
-is given, also emitting the runnable entry module. Compilation is
-performed by a real coding agent — the first run seeds
-`~/.config/slc/config.yaml` with `agent: claude-code`; edit it (keys:
-`agent`, `model`, `effort`) or override per run with
-`SLC_AGENT`/`SLC_MODEL`/`SLC_EFFORT`. Expect tens of minutes.
+`slc` first normalizes the input text into the form the playbook pipeline
+expects, links the result against the installed `@sublang/playbook`
+runtime, and by default runs the compile optimization that removes LLM
+calls.
+The agent used by the compilation itself is configured in
+`~/.config/slc/config.yaml`.
+Compiling may take more than ten minutes.
 
-### Where the output lands
+Artifacts land in the current directory: `./workflow.zh.playbook/` (the
+compile intermediates) and `./workflow.zh.ts` (the runnable entry).
+Reference artifacts are provided under
+[`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/), for
+preview or comparison.
+You can also skip compiling and just read them.
 
-Artifacts land in your **working directory**, never beside someone
-else's source: `./workflow.zh.playbook/` (the compiled bundle) and
-`./workflow.zh.ts` (the runnable entry). Both are gitignored here, so
-your compile leaves the checkout clean — the committed reference set
-lives untouched under [`reference/`](reference/), compiled from that
-directory with the repository's pinned pipeline definitions.
-
-### What it produces
-
-The reference compile is committed under
-[`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/),
-so you can skip the compile and just read it:
-
-| Artifact | What to look at |
+| Intermediate | What it is |
 | --- | --- |
-| `workflow.zh.text.md` | The normalized source: the two unnamed agents became declared players `编码者` and `审查者`, and the unstated assumption became step 1 — “开始前，确认当前目录是一个Git仓库的根目录；若不是，则先在此初始化一个Git仓库。” The meaning, order, and language of the original are preserved; what normalization adds is structure — a title, a `Players:` block, and seven numbered steps. |
-| `workflow.zh.gears.raw.md` | The GEARS spec items straight out of the front-end: the Git check is `Captain shall 确保当前目录是一个 Git 仓库的根目录` — direct Captain work in prose, still needing an LLM to interpret it. The other five items are `Captain shall prompt <player>` behaviors. |
-| `workflow.zh.gears.md` | After the optimize pass: the Git step is rewritten to a `Captain shall run:` **script item** — `[ -e .git ] \|\| git init`, a fixed shell command with two exit-status guards, no LLM — with provenance recorded under `## Optimizations` (`CODE-1: direct Captain work → script`). |
-| `workflow.zh.fsm.ts` | The XState machine: one *invoking* state per GEARS item — the Git step invokes the `script` actor, the other five a `player` actor — plus an idle hub, a Boss-reply suspension state, and two terminal states. |
-| `workflow.zh.playbook.ts` | The linked runtime: drives the FSM, calls the agents through the host's four-port contract (`callPlayer`, `callJudge`, `emitStatus`, `emitTelemetry`), and executes the script state locally via `sh -c` — no LLM, no token, milliseconds. |
-| [`workflow.zh.ts`](reference/workflow.zh.ts) | The emitted entry module `playbook run` consumes directly: players, intent, and options all derived from the compiled bundle. Nothing in this demo is hand-written wiring. |
-| `workflow.zh.*.test.ts` | Verification emitted by the compiler beside its output: GEARS↔FSM conformance, FSM introspection pins, prompt contracts, transition coverage. `npx vitest run demo/reference/workflow.zh.playbook` runs them, and so does the repo's `npm test`. |
+| `workflow.zh.text.md` | The normalized source text: declares the players `编码者` and `审查者` and arranges the original into numbered steps; meaning and language unchanged. |
+| `workflow.zh.gears.raw.md` | The GEARS spec items generated from the source text (before optimization). |
+| `workflow.zh.gears.md` | The optimized GEARS spec items: the Git check is rewritten into a fixed shell command that needs no LLM. |
+| `workflow.zh.fsm.ts` | The XState machine generated from the GEARS items. |
+| `workflow.zh.playbook.ts` | The linked runtime module: drives the machine and calls each agent. |
+| `workflow.zh.*.test.ts` | Verification tests emitted alongside the artifacts, pinning the compiler's output to the source spec. |
 
-## 2. Run it on the sample
+### Use
 
-[`sample.c`](sample.c) is a tiny C file with a real bug to fix: its
-`median()` depends on element order and gets even-length arrays wrong.
-Hand it to the two agents, from this directory:
+[`sample.c`](sample.c) is a tiny C file with a real bug: its `median()`
+depends on element order and gets even-length arrays wrong. From this
+directory, hand it to the two agents:
 
 ```sh
 playbook run ./workflow.zh.ts \
   "There is a bug in the median function in sample.c: the result depends on element order, and even-length arrays are wrong too. Fix it."
 ```
 
-(Skipped the compile? Run the committed reference instead:
-`playbook run ./reference/workflow.zh.ts "<task>"` — its relative
-import travels with it, and the workflow still operates on *this*
-directory.)
+(Skipped the compile? Run the reference entry directly:
+`playbook run ./reference/workflow.zh.ts "<task>"`)
 
-Every role defaults to `claude`; pick your own lineup with
-`--player 编码者=claude:claude-sonnet-5 --player 审查者=codex:gpt-5.6-terra
---captain claude:claude-sonnet-5` (`<adapter>[:<model>][@<effort>]`).
-The player IDs are `编码者` (coder) and `审查者` (reviewer) — they come
-from the source paragraph, which is why they're Chinese; the emitted
-entry declares them as the required roles. The task text is free-form
-and passed through at runtime, so it can be in any language,
-independent of the language the workflow was compiled from.
+<a id="role-setup"></a>
+
+Every role defaults to `claude`; to choose an agent, model, or other
+parameters, add `--player 编码者=claude:claude-sonnet-5 --player
+审查者=codex:gpt-5.6-terra --captain claude:claude-sonnet-5`
+(`<adapter>[:<model>][@<effort>]`).
 
 The workflow operates on the **current directory**, and its scripted
 first step checks whether that directory is the **root** of a Git
-repository. This one isn't — it sits inside the slc checkout — so the
-step runs `git init` right here, without any agent, and the loop
-commits into that fresh nested repository. Then:
+repository. This one is not, so the step runs `git init` first. Then:
 
 - the coder makes the change and commits;
-- the reviewer reviews that commit and raises findings; the coder
-  accepts or rebuts with reasons; they iterate, bounded by the paragraph's
-  own limits;
+- the reviewer reviews that commit and raises findings; the coder accepts
+  or rebuts with reasons; they go back and forth, bounded by the limits
+  the source paragraph set;
 - when a review comes back clean, the machine reaches its final state and
   the run exits `0`.
 
 ```sh
-git log --oneline   # just the reviewed commits — the nested repo's history
+git log --oneline   # just the reviewed commits — the nested repo's own history
 git show            # the reviewed fix to sample.c
 ```
 
-Undo the run with
-`rm -rf .git workflow.zh.playbook workflow.zh.ts && git -C .. checkout -- demo/`.
+## What this demo shows
 
-To use it for real, run the same command in your own project's root with
-your own task — there the scripted step finds `.git` and passes through.
-
-> The agents commit into whatever directory you run this in. Point it at
-> a working tree you're willing to have modified.
-
-Add `--json --verbose` for a machine-readable summary on stdout and
-per-state status lines on stderr — the scripted step reports
-`Executed script for <state> (exit 0).` before any agent has run.
-
-## What this demonstrates
-
-- **Natural language is the source.** The paragraph was never edited;
-  normalization made its implicit structure explicit instead.
-- **Deterministic orchestration, agent-performed work.** The loop —
-  who acts, when to stop — is a compiled state machine, not prompt
-  improvisation; only the work inside each state uses an LLM.
-- **Optimization is real.** A step that needs no judgment became a
-  compile-time-verified shell command: cheaper, faster, and immune to
-  hallucination.
-- **Verification is emitted with the artifact.** The compiler ships the
-  tests that pin its own output to the source specification.
-
-## Reproducing the acceptance run
-
-[`reference/`](reference/) holds the maintainer-side harness: it seeds
-a scratch copy of `sample.c`, scripts the two-agent run over it, and
-validates every artifact plus the live run evidence. See
-[`reference/README.md`](reference/README.md). You don't need any of it
-to use the demo — step 2 above is the same run, by hand.
+- **Natural language is the source.** The input prose was never edited;
+  normalization only makes its implicit structure explicit.
+- **Deterministic orchestration.** The loop — who acts, when to stop — is
+  a compiled state machine rather than prompt improvisation; only the
+  work **inside** each state uses an LLM.
+- **Compile-time optimization.** A step needing no judgment became a
+  shell command verifiable at compile time: cheaper, faster, and immune
+  to hallucination.
+- **Verification ships with the artifacts.** The compiler also publishes
+  the tests that check its own output against the source spec.
