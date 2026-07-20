@@ -22,5 +22,5 @@ Implement [DR-016](../decisions/016-gears-grammar-provenance.md): source the pin
 
 ## Acceptance criteria
 
-- `npm test`, the pin reproducibility gate, `scripts/verify-artifacts.mjs` on all three bundles, and `node demo/acceptance/check.mjs` all pass.
+- `npm test`, the pin reproducibility gate, `scripts/verify-artifacts.mjs` on all three bundles, and `node demo/reference/check.mjs` all pass.
 - `pipelines/playbook/slc.pins.json` records the spex-shipped grammar files among `text2gears`'s semantic inputs and no longer references `../../specs/meta.md`.

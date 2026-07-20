@@ -15,7 +15,7 @@ Implement [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emissio
 - [x] Bare `slc playbook <source>` links against the installed `@sublang/playbook` runtime (`SELFHOST-13`, `PIPE-13`, `SELFHOST-8`).
 - [x] Full-link playbook runs emit the `<basename>.ts` entry module; `playbook run` performs it unmodified (`SELFHOST-14`, `SELFHOST-15`, `SELFHOST-16`).
 - [x] `demo/` carries no hand-written registry: `workflow.zh.ts` is the committed emitter output, the scripted Git step detects the repository **root** (`[ -e .git ] || git init`, initializing a nested repository when run inside a larger checkout), and the READMEs document the three-line flow.
-- [x] The reference recompile from `demo/acceptance/` (claude-code, claude-opus-4-8 at high effort, over the pinned vendored pipeline) reproduced the committed reference set byte-for-byte after formatting — including the entry module — and the optimizer independently derived the root-detecting command from the normalized 根目录 wording, retiring the hand-adjustment note of Task 6.
+- [x] The reference recompile from `demo/reference/` (claude-code, claude-opus-4-8 at high effort, over the pinned vendored pipeline) reproduced the committed reference set byte-for-byte after formatting — including the entry module — and the optimizer independently derived the root-detecting command from the normalized 根目录 wording, retiring the hand-adjustment note of Task 6.
 
 ## Tasks
 
@@ -32,4 +32,4 @@ Implement [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emissio
 
 - `npm test` covers CWD placement, raw-entry normalization, default passes, the default link target, and entry emission (PIPE-38, PIPE-39, PIPE-35, SELFHOST-8, SELFHOST-16).
 - From `demo/`, `slc playbook workflow.zh.txt` reproduces the committed bundle layout plus `workflow.zh.ts` with no flags.
-- `playbook run ./workflow.zh.ts "<task>"` reaches a terminal outcome over the demo sample, and `node demo/acceptance/check.mjs` passes, including the scripted step's nested initialization inside a larger checkout.
+- `playbook run ./workflow.zh.ts "<task>"` reaches a terminal outcome over the demo sample, and `node demo/reference/check.mjs` passes, including the scripted step's nested initialization inside a larger checkout.
