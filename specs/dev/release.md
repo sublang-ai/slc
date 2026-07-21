@@ -73,7 +73,8 @@ first publication shall be performed by a maintainer from an interactive
 After the first publication and before the next release tag, the maintainer
 shall configure `sublang-ai/slc` with `release.yml` as the package's trusted
 GitHub Actions publisher (e.g. `npm trust github @sublang/slc
---repo sublang-ai/slc --file .github/workflows/release.yml`).
+--repo sublang-ai/slc --file release.yml` — npm expects the bare workflow
+file name, not its repository path).
 
 ### RELEASE-9
 
