@@ -12,8 +12,8 @@
 三行命令，在本目录下运行：
 
 ```sh
-slc playbook workflow.zh.txt  # 将输入的工作流描述编译成 playbook
-playbook run ./workflow.zh.ts "<task>"  # 你指定任务，执行工作流
+npx slc playbook workflow.zh.txt  # 将输入的工作流描述编译成 playbook
+npx playbook run ./workflow.zh.ts "<task>"  # 你指定任务，执行工作流
 git log --oneline  # 查看工作流的提交记录
 ```
 
@@ -21,7 +21,7 @@ git log --oneline  # 查看工作流的提交记录
 
 - macOS 或 Linux（Windows 请使用 WSL 或 Git Bash——工作流的脚本化步骤经由 `sh` 执行）
 - Node.js ≥ 23.6
-- `npm install -g @sublang/slc @sublang/playbook`——`slc` 编译器与 `playbook` 执行环境
+- 在项目中执行 `npm install --save-dev @sublang/slc @sublang/playbook`——安装编译器、执行环境，以及生成文件所导入的项目本地运行时
 - 默认配置：已安装并登录 [Claude Code CLI](https://www.anthropic.com/claude-code)，`claude` 命令行可用。可配置为其他 agent／模型，以及为各角色（编码者、审查者、Captain 等）设置 agent／模型等，参见[角色设置](#角色设置)。
 - `git`
 
@@ -41,7 +41,7 @@ git log --oneline  # 查看工作流的提交记录
 ### 编译
 
 ```sh
-slc playbook workflow.zh.txt
+npx slc playbook workflow.zh.txt
 ```
 
 `slc` 会先将输入文本按 playbook 要求规范化，最终链接到已安装的 `@sublang/playbook` 运行时，并默认执行减少 LLM 调用的编译优化。
@@ -66,11 +66,11 @@ slc playbook workflow.zh.txt
 [`sample.c`](sample.c) 是一个带真实 bug 的极小 C 文件：其 `median()` 结果依赖元素顺序，对偶数长度数组也算错。在本目录下，把它交给两个 agent 处理：
 
 ```sh
-playbook run ./workflow.zh.ts \
+npx playbook run ./workflow.zh.ts \
   "sample.c 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它。"
 ```
 
-（跳过了编译？直接运行我们提供的参考入口：`playbook run ./reference/workflow.zh.ts "<task>"`）
+（跳过了编译？直接运行我们提供的参考入口：`npx playbook run ./reference/workflow.zh.ts "<task>"`）
 
 <a id="角色设置"></a>
 
@@ -94,7 +94,7 @@ rm -rf demo/.git demo/workflow.zh.playbook demo/workflow.zh.ts
 git checkout -- demo/
 ```
 
-真正投入使用时，在你自己项目的**根目录**下运行 `playbook run` 命令，指定 playbook 路径，换成你自己的任务——在那里脚本步骤会发现 `.git` 并跳过初始化。
+真正投入使用时，在你自己项目的**根目录**下运行 `npx playbook run` 命令，指定 playbook 路径，换成你自己的任务——在那里脚本步骤会发现 `.git` 并跳过初始化。
 两个 agent 会向你运行命令的那个目录提交。
 
 ## 这个演示说明了什么

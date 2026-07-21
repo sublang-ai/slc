@@ -62,6 +62,7 @@ meta.md     The spec of specs
 | IR-013 | [013-cwd-output-entry-emission-demo.md](iterations/013-cwd-output-entry-emission-demo.md) | Implement DR-014 (CWD output, raw-entry normalization, default passes, default link target, entry emission) and rebase demo/ on the three-line flow |
 | IR-014 | [014-gears-provenance-adoption.md](iterations/014-gears-provenance-adoption.md) | Adopt DR-016: spex dependency, vendored definition sync, grammar Pin Inputs swap, pin regeneration (meta-artifact recompile deferred) |
 | IR-015 | [015-playbook-2-0-adoption.md](iterations/015-playbook-2-0-adoption.md) | Adopt DR-017: dependency bumps, 2.0.0 provenance mapping, definition re-sync, meta-artifact rebuild, pin regeneration, entry role binding, and the English demo reference |
+| IR-016 | [016-first-release.md](iterations/016-first-release.md) | Prepare the first npm release: 0.1.0 metadata and changelog, project-local thin-runtime install, package smoke, CI-green OIDC publish workflow |
 
 ## Packages
 
@@ -69,7 +70,7 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [continuous-integration.md](dev/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, the runtime-transition boundary, and atomic Playbook 1.0 adoption |
+| dev | [continuous-integration.md](dev/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, the runtime-transition boundary, and atomic Playbook 2.0 adoption |
 
 ### CLI
 
@@ -119,12 +120,19 @@ meta.md     The spec of specs
 | dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link, pass phases, and the generic normalization step |
 | test | [pipeline.md](test/pipeline.md) | End-to-end pipeline run, chain, naming, path, link, pass-scheduling, and normalization acceptance |
 
+### RELEASE
+
+| Group | File | Summary |
+| --- | --- | --- |
+| dev | [release.md](dev/release.md) | SemVer, changelog, package contract, CI-green OIDC publication, GitHub release, and pre-release checks |
+| test | [release.md](test/release.md) | Tarball hygiene, installed executable and exports, and external thin-artifact resolution |
+
 ### SELFHOST
 
 | Group | File | Summary |
 | --- | --- | --- |
 | user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `playbook` artifact |
-| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format, shared-definition resolution, and atomic Playbook 1.0 definition/artifact/pin adoption |
+| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format, shared-definition resolution, and atomic Playbook 2.0 definition/artifact/pin adoption |
 | test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name and `playbook`-pipeline resolution, compilation and linking, plus clean-install consistency of the adopted reviewed set |
 
 ### VERIFY
