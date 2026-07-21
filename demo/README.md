@@ -72,8 +72,8 @@ Artifacts land in the current directory: `./workflow.playbook/` (the
 compile intermediates) and `./workflow.ts` (the runnable entry).
 Reference artifacts are provided under
 [`reference/workflow.playbook/`](reference/workflow.playbook/), for
-preview or comparison; the Chinese flow's reference set sits alongside
-it.
+preview or comparison; the Chinese flow's set is being regenerated with
+the released packages and will land alongside it.
 You can also skip compiling and just read them.
 
 | Intermediate | What it is |
