@@ -49,7 +49,7 @@ npx slc playbook workflow.zh.txt
 编译耗时可能超过十分钟。
 
 制品输出在当前目录下，包括：`./workflow.zh.playbook/`（编译中间产物）与 `./workflow.zh.ts`（可运行的入口）。
-我们提供参考制品，置于 [`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/) 下，供预览或对比校验；英文流程的参考制品与之并列。
+我们提供参考制品供预览或对比校验：英文流程的参考制品位于 [`reference/workflow.playbook/`](reference/workflow.playbook/)；中文参考制品正基于已发布的软件包重新生成，完成后置于 `reference/workflow.zh.playbook/`。
 你也可以跳过实际编译，直接阅读。
 
 | 中间制品 | 说明 |
@@ -70,7 +70,7 @@ npx playbook run ./workflow.zh.ts \
   "sample.c 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它。"
 ```
 
-（跳过了编译？直接运行我们提供的参考入口：`npx playbook run ./reference/workflow.zh.ts "<task>"`）
+（跳过了编译？中文参考入口重新生成后即可直接运行：`npx playbook run ./reference/workflow.zh.ts "<task>"`）
 
 <a id="角色设置"></a>
 
