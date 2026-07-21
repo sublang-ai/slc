@@ -15,8 +15,8 @@ review raises no further findings.
 Three lines, run from this directory:
 
 ```sh
-slc playbook workflow.txt  # compile the input workflow description to a playbook
-playbook run ./workflow.ts "<task>"  # run the workflow playbook with a task you specify
+npx slc playbook workflow.txt  # compile the input workflow description to a playbook
+npx playbook run ./workflow.ts "<task>"  # run the workflow playbook with a task you specify
 git log --oneline  # view what the run produced
 ```
 
@@ -25,8 +25,8 @@ Prerequisites:
 - macOS or Linux (on Windows, use WSL or Git Bash — the workflow's
   scripted step runs through `sh`)
 - Node.js ≥ 23.6
-- `npm install -g @sublang/slc @sublang/playbook` — the `slc` compiler and
-  the `playbook` runtime host
+- `npm install --save-dev @sublang/slc @sublang/playbook` in the project — the
+  compiler, runtime host, and project-local engine imported by generated files
 - Default setup: [Claude Code CLI](https://www.anthropic.com/claude-code)
   installed and signed in, so the `claude` command is available. Other
   agents and models can be configured, including per role (coder,
@@ -57,7 +57,7 @@ most 2 debate rounds, at most 2 loops — become loop counters there.
 ### Compile
 
 ```sh
-slc playbook workflow.txt
+npx slc playbook workflow.txt
 ```
 
 `slc` first normalizes the input text into the form the playbook pipeline
@@ -92,12 +92,12 @@ depends on element order and gets even-length arrays wrong. From this
 directory, hand it to the two agents:
 
 ```sh
-playbook run ./workflow.ts \
+npx playbook run ./workflow.ts \
   "There is a bug in the median function in sample.c: the result depends on element order, and even-length arrays are wrong too. Fix it."
 ```
 
 (Skipped the compile? Run the reference entry directly:
-`playbook run ./reference/workflow.ts "<task>"`)
+`npx playbook run ./reference/workflow.ts "<task>"`)
 
 <a id="role-setup"></a>
 
@@ -129,7 +129,7 @@ rm -rf demo/.git demo/workflow.playbook demo/workflow.ts
 git checkout -- demo/
 ```
 
-To use it for real, run the `playbook run` command from your own project's **root**
+To use it for real, run the `npx playbook run` command from your own project's **root**
 with the path to the playbook and your own task — there the scripted step finds `.git` and passes
 through.
 The agents commit into whatever directory you run the command in.

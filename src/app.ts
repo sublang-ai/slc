@@ -15,6 +15,8 @@
  * and signal wiring. See specs/dev/cli.md and specs/user/cli.md.
  */
 
+import { createRequire } from 'node:module';
+
 import {
   createConfiguredCompiledFactory,
   createConfiguredExecutor,
@@ -29,12 +31,20 @@ import {
 } from './resolver.js';
 import { runSlc, type SlcDeps } from './runner.js';
 
+const manifest = createRequire(import.meta.url)('../package.json') as {
+  version?: unknown;
+};
+if (typeof manifest.version !== 'string') {
+  throw new TypeError('package.json version must be a string');
+}
+const packageVersion = manifest.version;
+
 /** The program name. */
 export const name = 'slc';
 
 /** Returns the slc version string. */
 export function version(): string {
-  return '0.0.0';
+  return packageVersion;
 }
 
 /** Builds run dependencies for a run; injected by tests to supply fakes. */

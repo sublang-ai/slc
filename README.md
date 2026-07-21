@@ -36,15 +36,18 @@ unpinned phases fall back to the agent reading the definition directly.
 
 ## Install
 
-Not yet published to npm — install from source:
+Install the compiler and Playbook runtime in the project that will contain the
+generated artifacts:
 
 ```bash
-git clone https://github.com/sublang-ai/slc.git
-cd slc
-npm ci
-npm run build
-npm link   # puts `slc` on PATH
+npm install --save-dev @sublang/slc @sublang/playbook
+npx slc --version
 ```
+
+The project-local Playbook install is required: generated thin runtime modules
+import `@sublang/playbook/xstate-runtime` and their FSMs import `xstate` from
+the artifact's project. A global-only install does not provide Node module
+resolution for artifacts written elsewhere.
 
 Requirements:
 
@@ -66,7 +69,7 @@ From the repo root — its [`slc.config.yaml`](slc.config.yaml) routes the
 prose workflow:
 
 ```bash
-slc playbook my-workflow.md
+npx slc playbook my-workflow.md
 ```
 
 This writes `my-workflow.playbook/` — the intermediates
@@ -79,8 +82,8 @@ optimization pass runs by default (`--no-optimize` skips it). For what
 a prose workflow looks like, see playbook's canonical worked example,
 [`code.md`](https://github.com/sublang-ai/playbook/blob/main/reference/sdlc/code.md).
 Intermediates are first-class: edit one and re-run a single
-phase (`slc playbook.gears2fsm …`) and it lands in the same place.
-`slc --help` shows all invocation forms. The repo config pins
+phase (`npx slc playbook.gears2fsm …`) and it lands in the same place.
+`npx slc --help` shows all invocation forms. The repo config pins
 `agent: claude-code` — set `SLC_AGENT` (or edit the config) to compile
 with another agent CLI.
 

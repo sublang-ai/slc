@@ -1,8 +1,23 @@
 {
   "name": "@sublang/slc",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "SubLang Compiler (slc): runs phase pipelines.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sublang-ai/slc.git"
+  },
+  "homepage": "https://github.com/sublang-ai/slc#readme",
+  "bugs": {
+    "url": "https://github.com/sublang-ai/slc/issues"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "compiler",
+    "playbook",
+    "state-machine"
+  ],
   "type": "module",
   "bin": {
     "slc": "dist/cli.js"
@@ -28,10 +43,16 @@
   "scripts": {
     "build": "tsc && cp src/normalize.md src/slc.config.template.yaml dist/",
     "test": "vitest run",
+    "test:package": "node scripts/test-package.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify:definitions": "node scripts/verify-playbook-definitions.mjs"
+    "verify:definitions": "node scripts/verify-playbook-definitions.mjs",
+    "verify:artifacts": "node scripts/verify-artifacts.mjs pipelines/playbook/text2gears.slc text2gears && node scripts/verify-artifacts.mjs pipelines/playbook/gears2fsm.slc gears2fsm && node scripts/verify-artifacts.mjs pipelines/playbook/link.slc link",
+    "verify:pins": "node scripts/generate-pins.mjs && git diff --exit-code -- pipelines/playbook/slc.pins.json",
+    "verify:demo": "node demo/reference/check.mjs en",
+    "release:check": "npm run format:check && npm run lint && npm run build && npm test && npm run verify:definitions && npm run verify:artifacts && npm run verify:pins && npm run verify:demo && npm run test:package",
+    "prepublishOnly": "npm run release:check"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
