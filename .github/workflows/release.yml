@@ -86,36 +86,39 @@ jobs:
             exit 1
           fi
 
-      - name: Detect first npm publication
-        id: npm_package
+      - name: Detect an already published version
+        id: npm_version
         run: |
           PACKAGE_NAME=$(node -p "require('./package.json').name")
-          if output=$(npm view "$PACKAGE_NAME" name --json 2>&1); then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
+          VERSION="${GITHUB_REF_NAME#v}"
+          if output=$(npm view "${PACKAGE_NAME}@${VERSION}" version --json 2>&1); then
+            if printf '%s' "$output" | grep -q '[^[:space:]]'; then
+              echo "published=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "published=false" >> "$GITHUB_OUTPUT"
+            fi
           elif printf '%s' "$output" | grep -q 'E404'; then
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "published=false" >> "$GITHUB_OUTPUT"
           else
             printf '%s\n' "$output"
-            echo "::error::Could not determine whether $PACKAGE_NAME exists on npm"
+            echo "::error::Could not determine whether ${PACKAGE_NAME}@${VERSION} is published"
             exit 1
           fi
 
       - name: Publish to npm with trusted OIDC
-        if: steps.npm_package.outputs.exists == 'true'
+        if: steps.npm_version.outputs.published == 'false'
         run: npm publish --ignore-scripts --provenance --access public
 
-      - name: Bootstrap the first npm publication
-        if: steps.npm_package.outputs.exists == 'false'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::The first publication requires a short-lived, read/write @sublang NPM_BOOTSTRAP_TOKEN with bypass 2FA"
-            exit 1
-          fi
-          npm publish --ignore-scripts --provenance --access public
+      - name: Skip the already published version
+        if: steps.npm_version.outputs.published == 'true'
+        run: echo "The tagged version is already on the registry (maintainer-published first version or a re-run tag); skipping publish and continuing to the GitHub release."
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file /tmp/release-notes.md
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; leaving it unchanged."
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file /tmp/release-notes.md
+          fi
