@@ -7,14 +7,14 @@ Players:
 
 ### REPO-1
 
-When the workflow starts, Captain shall ensure the working directory is a Git repository:
+When the workflow starts, Captain shall ensure the working directory is the root of its own Git repository:
 
-> Check whether the current directory is a Git repository.
-> If it is not, initialize a Git repository there.
+> Check whether `.git` exists in the current directory.
+> If it does not, initialize a Git repository in the current directory.
 
 ### IMPL-1
 
-When Boss gives the input task and the working directory is a Git repository, Captain shall prompt Coder:
+When Boss gives the input task and the working directory is a Git repository root, Captain shall prompt Coder:
 
 > Modify the code in the current directory to carry out the input task: <task>.
 > Commit the change to Git.

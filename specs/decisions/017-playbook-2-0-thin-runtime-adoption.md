@@ -34,6 +34,7 @@ PHEXEC-30 shall be corrected to state this complete mapped set, closing its curr
 A 2.0.0 runtime delivers a failing host Captain reply as the structured `failed` outcome, which [DR-010](010-playbook-runtime-contract-evolution.md#phase-result-mapping)'s existing mapping already turns into the phase `error` result; no new mapping row is added.
 The host's thrown-turn error path remains reserved for what PBRT-47 keeps as control-plane rejections: non-abort thrown ports, malformed host results, and rejecting trace sinks.
 SLC's `callCaptain` port shall keep returning Playbook's Captain status, final text, and error shape as a resolved host result rather than throwing, so the runtime — not the host — decides failure routing.
+Because immutable 2.0.0 cannot retain `null` or `undefined` in its nullish-coalescing control-error latch, SLC's `composed-v2` port boundary shall replace any non-abort nullish host-port rejection with a deterministic `Error` before it reaches the runtime; every non-nullish rejection and any rejection causally identical to the active abort reason cross unchanged.
 
 ### Thin linked artifacts and pin closure
 
@@ -60,6 +61,7 @@ The demo reference sets shall be recompiled against the adopted set: the English
 
 - SLC executes 2.0.0 thin artifacts through the existing `composed-v2` host without a new profile, and a Playbook runtime fix reaches compiled phases through an ordinary atomic version bump instead of a re-link.
 - A host Captain failure surfaces through the structured `failed` mapping (`compiled runtime failed: …`) instead of the thrown-turn diagnostic (`compiled run failed: …`), while control-plane rejection diagnostics keep their meaning.
+- Even a host port that rejects without an error value remains a thrown control-plane failure at the SLC boundary instead of being misreported as an authored `failed` outcome.
 - Pins bind the shared engine's identity, so shared-machinery changes stale pins the way link-target changes always have.
 - Cased English sources run end to end under Playbook's published `playbook run` host, with `--player` flags matching the names the README documents; caseless sources keep their exact prior behavior.
 - 1.3.0 and every other unadopted provenance stay fail-closed, keeping the profile map a record of reviewed adoptions rather than of releases.

@@ -306,13 +306,13 @@ export const workflowMachine = setup({
     repoSetup: {
       id: 'repoSetup',
       description:
-        'Ensure the working directory is a Git repository before committing.',
+        'Ensure the working directory is a Git repository root before committing.',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
           stateId: 'repoSetup',
           description:
-            'Ensure the working directory is a Git repository before committing.',
+            'Ensure the working directory is a Git repository root before committing.',
         },
       },
       invoke: {

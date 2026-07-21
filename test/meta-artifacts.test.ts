@@ -8,9 +8,9 @@
 // a structured `PlaybookRunResult`, and every working state performs direct
 // Captain work (`callCaptain`, visible) adjudicated through `callJudge` —
 // these machines declare no delegated player, so no turn ever crosses
-// `callPlayer`. Deterministic entry is scoped to ready and reconstructed
-// terminal states; a turn arriving at `failed` re-enters through the
-// interrupt classifier.
+// `callPlayer`. Their payload-free entry event is classified at ready and
+// reconstructed terminal states; a turn arriving at `failed` re-enters through
+// the interrupt classifier.
 
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -39,7 +39,7 @@ const pipelineDir = fileURLToPath(
   new URL('../pipelines/playbook/', import.meta.url),
 );
 
-// gears2fsm and link enter through a payload-free classified `COMPILE`
+// All three meta phases enter through a payload-free classified `COMPILE`
 // (their thin specs declare it under `bossEvents`); the workspace request
 // reaches the Captain through the host transport's appended workspace
 // contract (PHEXEC-34), not through classified routing fields.
@@ -121,10 +121,8 @@ interface ArtifactCase {
   readonly create: () => PlaybookRuntime;
   readonly bossText: string;
   /**
-   * Judge replies in call order. text2gears enters from `ready` through its
-   * deterministic COMPILE event, so its sole judge call is the Captain-output
-   * adjudication; gears2fsm and link classify their payload-free COMPILE
-   * first, then adjudicate.
+   * Judge replies in call order. All three artifacts classify their
+   * payload-free COMPILE first, then adjudicate the Captain output.
    */
   readonly judgeReplies: readonly string[];
   /** Substring the first judge prompt must carry. */
@@ -140,8 +138,8 @@ const artifacts: readonly ArtifactCase[] = [
     name: 'text2gears',
     create: () => createText2Gears({}),
     bossText: 'Compile the requested source into GEARS.',
-    judgeReplies: ['{"guard":"compiled"}'],
-    firstJudgeAnchor: ADJUDICATION_ANCHOR,
+    judgeReplies: [COMPILE_CLASSIFICATION, '{"guard":"compiled"}'],
+    firstJudgeAnchor: CLASSIFICATION_ANCHOR,
     promptAnchor: 'free-form natural-language procedure description',
   },
   {
@@ -275,7 +273,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
         },
         callJudge: async () => {
           judgeCalls += 1;
-          return '{"guard":"compiled"}';
+          return COMPILE_CLASSIFICATION;
         },
       }),
     );
@@ -289,9 +287,9 @@ describe('reviewed compiled meta-phase artifacts', () => {
     const result = await turn;
     expect(result.outcome).toBe('aborted');
     expect(observedSignal?.aborted).toBe(true);
-    // Entry from `ready` is deterministic (no classifier call) and an aborted
-    // Captain call is never adjudicated, so the judge port is never crossed.
-    expect(judgeCalls).toBe(0);
+    // The payload-free COMPILE is classified once, and an aborted Captain call
+    // is never adjudicated, so no second judge call occurs.
+    expect(judgeCalls).toBe(1);
     await runtime.dispose();
   });
 
@@ -507,25 +505,6 @@ describe('reviewed compiled meta-phase artifacts', () => {
     },
   );
 
-  it('resolves an undefined adjudicator rejection as the failed outcome', async () => {
-    const runtime = createText2Gears({});
-    await runtime.init(
-      rootSession({
-        callJudge: () => Promise.reject(undefined),
-      }),
-    );
-
-    // The shared 2.0.0 judge boundary has no error to latch from a
-    // degenerate `undefined` rejection, so the turn settles into the
-    // recoverable failed state instead of rejecting the public boundary.
-    const result = await runtime.handleBossInput({
-      text: 'Compile.',
-      signal: new AbortController().signal,
-    });
-    expect(result.outcome).toBe('failed');
-    await runtime.dispose();
-  });
-
   it('does not leak a masked text2gears adjudicator fault into a later turn', async () => {
     const runtime = createText2Gears({});
     let judgeCalls = 0;
@@ -538,11 +517,12 @@ describe('reviewed compiled meta-phase artifacts', () => {
         }),
         callJudge: async () => {
           judgeCalls += 1;
-          if (judgeCalls === 1) throw new Error('judge-fail');
+          if (judgeCalls === 1) return COMPILE_CLASSIFICATION;
+          if (judgeCalls === 2) throw new Error('judge-fail');
           // Entry from `failed` is classified rather than deterministic
           // under the 2.0.0 engine, so the recovery turn first routes
           // through the interrupt classifier.
-          if (judgeCalls === 2) {
+          if (judgeCalls === 3) {
             return '{"type":"BOSS_INTERRUPT","targetId":"compile"}';
           }
           return '{"guard":"compiled"}';
@@ -592,12 +572,11 @@ describe('reviewed compiled meta-phase artifacts', () => {
   );
 });
 
-// Regression for compiled meta-phase runs reporting an adjudicated success
-// without writing the target: the artifacts compose host-agnostic Captain
-// prompts, so unless the host transport appends its workspace contract
-// (PHEXEC-34) the Captain never learns the absolute source/target paths and
-// "emits" the artifact only in its reply.
-describe('compiled meta phases carry the host workspace contract (PHEXEC-35)', () => {
+// Regressions at the compiled meta-phase SLC boundary: nullish host-port
+// rejections must remain control-plane failures (PHEXEC-26), and the artifacts
+// compose host-agnostic Captain prompts, so the host appends its workspace
+// contract (PHEXEC-35) before the Captain transport runs.
+describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
   let root: string;
 
   beforeEach(async () => {
@@ -626,7 +605,7 @@ describe('compiled meta phases carry the host workspace contract (PHEXEC-35)', (
     readonly promptAnchor: string;
     /** Host-contract substrings the transported prompt must carry. */
     readonly workspaceAnchors: (dir: string) => string[];
-    /** Judge replies: link classifies first, all three adjudicate last. */
+    /** Judge replies: all three classify first and adjudicate last. */
     readonly judgeReply: (prompt: string, dir: string) => string;
   }
 
@@ -647,7 +626,10 @@ describe('compiled meta phases carry the host workspace contract (PHEXEC-35)', (
         `artifact to write: ${join(dir, 'workflow.gears.raw.md')}`,
         `write only ${join(dir, 'workflow.gears.raw.md')}`,
       ],
-      judgeReply: () => '{"guard":"compiled"}',
+      judgeReply: (prompt) =>
+        prompt.startsWith(CLASSIFICATION_ANCHOR)
+          ? COMPILE_CLASSIFICATION
+          : '{"guard":"compiled"}',
     },
     {
       name: 'gears2fsm',
@@ -699,6 +681,44 @@ describe('compiled meta phases carry the host workspace contract (PHEXEC-35)', (
           : '{"guard":"linked"}',
     },
   ];
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+  ] as const)(
+    'normalizes a %s classifier-port rejection before the Playbook 2.0 boundary',
+    async (_label, rejection) => {
+      const rejectingJudge: AgentClient = {
+        async run() {
+          throw rejection;
+        },
+      };
+      const executor = createCompiledExecutor({
+        artifactPath: 'pinned-text2gears-artifact',
+        runRoot: root,
+        player: idlePlayer,
+        judge: rejectingJudge,
+        runtimeContract: 'composed-v2',
+        loadFactory: async () =>
+          createText2Gears as CompatiblePlaybookRuntimeFactory,
+      });
+
+      const result = await executor.run(
+        {
+          kind: 'compile',
+          definitionPath: join(root, 'text2gears.md'),
+          source: 'workflow.text.md',
+          target: 'workflow.gears.raw.md',
+        },
+        new AbortController().signal,
+      );
+
+      expect(result.status).toBe('error');
+      expect(result.diagnostics).toContain(
+        'compiled run failed: compiled composed-v2 callJudge port rejected without an error',
+      );
+    },
+  );
 
   it.each(cases)(
     '$name Captain transport names the absolute paths and a writing Captain maps to ok',

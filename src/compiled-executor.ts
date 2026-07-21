@@ -334,18 +334,63 @@ function sessionV1Ports(
 function composedPorts(ports: CompatiblePlaybookPorts): ComposedPlaybookPorts {
   return {
     callPlayer: (playerId, prompt, signal, options) =>
-      ports.callPlayer(
-        playerId,
-        prompt,
-        signal,
-        requirePlayerCallOptions(options),
+      preserveControlPlaneRejection('callPlayer', signal, () =>
+        ports.callPlayer(
+          playerId,
+          prompt,
+          signal,
+          requirePlayerCallOptions(options),
+        ),
       ),
-    callCaptain: ports.callCaptain,
-    callJudge: ports.callJudge,
-    callPlaybook: ports.callPlaybook,
-    emitStatus: ports.emitStatus,
-    emitTelemetry: ports.emitTelemetry,
+    callCaptain: (prompt, signal, options) =>
+      preserveControlPlaneRejection('callCaptain', signal, () =>
+        ports.callCaptain(prompt, signal, options),
+      ),
+    callJudge: (prompt, signal) =>
+      preserveControlPlaneRejection('callJudge', signal, () =>
+        ports.callJudge(prompt, signal),
+      ),
+    callPlaybook: (request, signal) =>
+      preserveControlPlaneRejection('callPlaybook', signal, () =>
+        ports.callPlaybook(request, signal),
+      ),
+    emitStatus: (message, data) =>
+      preserveControlPlaneRejection('emitStatus', undefined, () =>
+        ports.emitStatus(message, data),
+      ),
+    emitTelemetry: (event) =>
+      preserveControlPlaneRejection('emitTelemetry', undefined, () =>
+        ports.emitTelemetry(event),
+      ),
   };
+}
+
+/**
+ * Keeps nullish host-port rejections visible to immutable composed runtimes.
+ * Playbook 2.0.0 latches control-plane failures with nullish coalescing, so a
+ * rejection without a value could otherwise be mistaken for an authored FSM
+ * failure. Preserve a causally identical abort reason, but give every other
+ * nullish rejection a stable Error identity before it crosses the boundary.
+ */
+async function preserveControlPlaneRejection<T>(
+  port: keyof ComposedPlaybookPorts,
+  signal: AbortSignal | undefined,
+  call: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (error !== undefined && error !== null) {
+      throw error;
+    }
+    if (signal?.aborted === true && error === signal.reason) {
+      throw error;
+    }
+    throw new Error(
+      `compiled composed-v2 ${port} port rejected without an error`,
+      { cause: error },
+    );
+  }
 }
 
 function requirePlayerCallOptions(value: unknown): PlayerCallOptions {

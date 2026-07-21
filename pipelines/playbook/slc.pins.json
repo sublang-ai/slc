@@ -12,11 +12,11 @@
       },
       "artifact": {
         "path": "text2gears.slc/text2gears.playbook.ts",
-        "hash": "sha256:0b761242dfc509e53637dd011599c922bcf56b866b974bda96c331fb9d516913"
+        "hash": "sha256:9eaf52cbb74d1290b9ec7970cbb5b1f2b515d311b8869d960abacb7467e99dfe"
       },
       "artifactBundle": {
         "path": "text2gears.slc",
-        "hash": "sha256:74ccaf9beb1fc15eace2c4e86b2cd432fc85e243f3faf85dfa293979acfa7188"
+        "hash": "sha256:9dff7908b4b0b5a5366e6041b5ed378cebcc29178313191a4c1ee4c17ce0ddf4"
       },
       "semanticInputs": [
         {

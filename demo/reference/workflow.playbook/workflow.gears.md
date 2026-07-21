@@ -17,7 +17,7 @@ Results:
 
 ### IMPL-1
 
-When Boss gives the input task and the working directory is a Git repository, Captain shall prompt Coder:
+When Boss gives the input task and the working directory is a Git repository root, Captain shall prompt Coder:
 
 > Modify the code in the current directory to carry out the input task: <task>.
 > Commit the change to Git.
