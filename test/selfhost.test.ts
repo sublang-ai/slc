@@ -18,7 +18,7 @@ import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { declaredPlayers } from '../src/entry-module.js';
+import { declaredPlayers, emitEntryModule } from '../src/entry-module.js';
 import {
   createInterpretedExecutor,
   type AgentClient,
@@ -640,7 +640,13 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     expect(module).toContain('export default entry');
     expect(module).toContain("id: 'code'");
     expect(module).toContain("command: 'code'");
-    expect(module).toContain("requiredRoleIds: ['Writer']");
+    // The declared ids stay verbatim while the DR-017 role-binding boundary
+    // maps runtime-resolved (lowercased) ids back to them at callPlayer.
+    expect(module).toContain(
+      "const REQUIRED_ROLE_IDS: readonly string[] = ['Writer']",
+    );
+    expect(module).toContain('requiredRoleIds: [...REQUIRED_ROLE_IDS]');
+    expect(module).toContain('withRoleBinding(createPlaybookRuntime(');
     expect(module).toContain(
       "intent: 'Code — When Boss gives a coding intent, Captain shall relay it to Coder.'",
     );
@@ -666,5 +672,101 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
         'Players:\n\n- Writer\n- `Reviewer`\n- `Editor` = `Writer` | `Reviewer`\n\n## Behaviors\n',
       ),
     ).toEqual(['Writer', 'Reviewer']);
+  });
+
+  it('binds runtime-resolved player ids back to declared role ids at callPlayer (SELFHOST-16, DR-017)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-entry-binding-'));
+    try {
+      const bundle = join(dir, 'flow.playbook');
+      await mkdir(bundle, { recursive: true });
+      // A stand-in linked runtime resolving players the link.md default way:
+      // lowercased for cased names, identity for caseless ones. It offers no
+      // restore, so the boundary must not invent the capability.
+      await writeFile(
+        join(bundle, 'flow.playbook.ts'),
+        [
+          'interface Ports {',
+          '  callPlayer(playerId: string, prompt: string): Promise<unknown>;',
+          '}',
+          '',
+          'export default function createPlaybookRuntime() {',
+          '  let ports: Ports | undefined;',
+          '  return {',
+          '    async init(session: { ports: Ports }) {',
+          '      ports = session.ports;',
+          '    },',
+          '    async handleBossInput() {',
+          "      await ports?.callPlayer('writer', 'p');",
+          "      await ports?.callPlayer('审查者', 'p');",
+          "      await ports?.callPlayer('stray', 'p');",
+          "      return { outcome: 'quiescent' };",
+          '    },',
+          '    async dispose() {},',
+          '  };',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      await writeFile(
+        join(dir, 'flow.gears.md'),
+        'Players:\n\n- Writer\n- `审查者`\n\n## Behaviors\n',
+      );
+      await writeFile(join(dir, 'flow.text.md'), '# Flow\n\nLead line.\n');
+      const entryPath = await emitEntryModule({
+        cwd: dir,
+        basename: 'flow',
+        pipeline: 'playbook',
+        gearsPath: join(dir, 'flow.gears.md'),
+        textPath: join(dir, 'flow.text.md'),
+      });
+      const entry = (await import(entryPath)).default as {
+        requiredRoleIds: string[];
+        createRuntime(options: { captainOptions?: unknown }): {
+          init(session: unknown): Promise<void>;
+          handleBossInput(): Promise<unknown>;
+        };
+      };
+      expect(entry.requiredRoleIds).toEqual(['Writer', '审查者']);
+      const runtime = entry.createRuntime({});
+      expect('restore' in runtime).toBe(false);
+      const seen: string[] = [];
+      await runtime.init({
+        sessionId: 's',
+        playbookId: 'flow',
+        ports: {
+          callPlayer: async (playerId: string) => {
+            seen.push(playerId);
+          },
+        },
+      });
+      await runtime.handleBossInput();
+      // Lowercased declared id maps back to its declared form, a caseless
+      // declared id is identity, and an unknown id passes through.
+      expect(seen).toEqual(['Writer', '审查者', 'stray']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails entry emission when declared players collide case-insensitively (SELFHOST-16, DR-017)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-entry-collision-'));
+    try {
+      await writeFile(
+        join(dir, 'flow.gears.md'),
+        'Players:\n\n- Writer\n- `writer`\n\n## Behaviors\n',
+      );
+      await writeFile(join(dir, 'flow.text.md'), '# Flow\n\nLead line.\n');
+      await expect(
+        emitEntryModule({
+          cwd: dir,
+          basename: 'flow',
+          pipeline: 'playbook',
+          gearsPath: join(dir, 'flow.gears.md'),
+          textPath: join(dir, 'flow.text.md'),
+        }),
+      ).rejects.toThrow(/collide case-insensitively/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
