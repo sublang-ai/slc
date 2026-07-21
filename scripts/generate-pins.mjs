@@ -24,7 +24,7 @@ const pipelineDir = join(repoRoot, 'pipelines', 'playbook');
 // root so its identity can be pinned (PIN-15).
 const boundary = { boundary: '../..' };
 
-const expectedPlaybookVersion = '1.0.0';
+const expectedPlaybookVersion = '2.0.0';
 const expectedXstateVersion = '5.32.4';
 const rootPackage = JSON.parse(
   readFileSync(join(repoRoot, 'package.json'), 'utf8'),
@@ -33,27 +33,12 @@ const lock = JSON.parse(
   readFileSync(join(repoRoot, 'package-lock.json'), 'utf8'),
 );
 const declaredPlaybook = rootPackage.dependencies?.['@sublang/playbook'];
-let lockedPlaybook = lock.packages?.['node_modules/@sublang/playbook']?.version;
+const lockedPlaybook =
+  lock.packages?.['node_modules/@sublang/playbook']?.version;
 const declaredXstate = rootPackage.dependencies?.xstate;
 const lockedXstate = lock.packages?.['node_modules/xstate']?.version;
-// Until the 0.10.0 release lands on npm, development installs the packed
-// sibling checkout; the lockfile refresh is the release step (IR-011). Accept
-// an installed copy that already carries the expected version loudly, keeping
-// the strict lock agreement for clean installs (CI's `npm ci` guarantees it).
-if (lockedPlaybook !== expectedPlaybookVersion) {
-  const installed = JSON.parse(
-    readFileSync(
-      join(repoRoot, 'node_modules', '@sublang', 'playbook', 'package.json'),
-      'utf8',
-    ),
-  ).version;
-  if (installed === expectedPlaybookVersion) {
-    console.warn(
-      `generate-pins: using installed @sublang/playbook ${installed} (lockfile still ${String(lockedPlaybook)}; refresh at release)`,
-    );
-    lockedPlaybook = installed;
-  }
-}
+// The adoption runs from a clean registry install (DR-017, SELFHOST-11); the
+// IR-011-era packed-sibling fallback is retired with the published release.
 if (
   declaredPlaybook !== `^${expectedPlaybookVersion}` ||
   lockedPlaybook !== expectedPlaybookVersion
@@ -103,6 +88,14 @@ for (const phase of ['text2gears', 'gears2fsm', 'link']) {
         provenance: `@sublang/playbook@${playbookPackage.version}`,
       },
       runtimeDependencies: [
+        // The thin linked artifact executes through the shared engine, so the
+        // pinned identity covers it beside xstate (DR-017).
+        {
+          kind: 'package',
+          locator: toPosix(relative(pipelineDir, playbookPackage.root)),
+          provenance: `@sublang/playbook@${playbookPackage.version}`,
+          specifier: '@sublang/playbook',
+        },
         {
           kind: 'package',
           locator: toPosix(relative(pipelineDir, xstatePackage.root)),
