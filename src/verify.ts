@@ -153,7 +153,7 @@ const ITEM_HEADING = /^###\s+([A-Za-z][\w-]*)\s*$/;
 // from prose" (text2gears.md), so backtick/straight/CJK-quoted forms and bare
 // non-ASCII names are all accepted.
 const ITEM_PLAYER =
-  /Captain shall (?:prompt|relay\b[^.]*?\bto)\s+(?:`([^`]+)`|"([^"]+)"|“([^”]+)”|([A-Z][\w]*)|([^\x00-\x7F][^\s:：，,。;；]*))/;
+  /Captain shall (?:prompt|relay\b[^.]*?\bto)\s+(?:`([^`]+)`|"([^"]+)"|“([^”]+)”|([A-Z][\w]*)|([^\p{ASCII}][^\s:：，,。;；]*))/u;
 const ITEM_PLAYBOOK =
   /Captain shall call playbook\s+(?:`([^`]+)`|"([^"]+)"|“([^”]+)”|([A-Za-z0-9][\w.-]*))\s*:/;
 const ITEM_DYNAMIC_PLAYBOOK =
