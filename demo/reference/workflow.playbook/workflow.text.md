@@ -12,9 +12,8 @@ that reviews the resulting commit.
 
 ## Procedure
 
-1. Ensure the current directory is a Git repository; if it is not, initialize
-   one. (The procedure commits to Git, which assumes the working directory is
-   a Git repository.)
+1. Ensure the current directory is the root of its own Git repository; if
+   `.git` is absent there, initialize a repository there.
 
 2. Coder modifies the code in the current directory as the input task requires
    and commits it to Git.

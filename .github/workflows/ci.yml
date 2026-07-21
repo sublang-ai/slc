@@ -29,6 +29,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Verify vendored Playbook definitions
+        run: npm run verify:definitions
+
       - name: Check formatting
         run: npm run format:check
 
@@ -40,6 +43,9 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Verify English demo reference
+        run: node demo/reference/check.mjs en
 
       - name: Review compiled meta-phase artifacts
         run: |

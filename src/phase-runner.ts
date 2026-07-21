@@ -306,7 +306,7 @@ function callableExpression(
 
 const SHARED_ENGINE_MODULE = '@sublang/playbook/xstate-runtime';
 
-/** True when `name` is a non-type named import from the shared engine. */
+/** True when `name` locally binds the shared engine's runtime factory export. */
 function importedFromSharedEngine(file: ts.SourceFile, name: string): boolean {
   for (const statement of file.statements) {
     if (!ts.isImportDeclaration(statement)) continue;
@@ -321,7 +321,14 @@ function importedFromSharedEngine(file: ts.SourceFile, name: string): boolean {
     const bindings = clause.namedBindings;
     if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
     for (const element of bindings.elements) {
-      if (!element.isTypeOnly && element.name.text === name) return true;
+      if (
+        !element.isTypeOnly &&
+        element.name.text === name &&
+        (element.propertyName?.text ?? element.name.text) ===
+          'createXStatePlaybookRuntime'
+      ) {
+        return true;
+      }
     }
   }
   return false;
