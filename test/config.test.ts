@@ -172,6 +172,15 @@ describe('createConfiguredExecutor (CLI-7, CLI-8)', () => {
     expect(typeof compiled(choice('@sublang/playbook@1.0.0')).run).toBe(
       'function',
     );
+    // 2.0.0 keeps the six-port contract and joins the composed profile
+    // (DR-017); the never-installed 1.3.0 stays fail-closed like any other
+    // unmapped provenance.
+    expect(typeof compiled(choice('@sublang/playbook@2.0.0')).run).toBe(
+      'function',
+    );
+    expect(() => compiled(choice('@sublang/playbook@1.3.0'))).toThrow(
+      /unsupported pinned Playbook runtime contract/,
+    );
     expect(() => compiled(choice('@sublang/playbook@1.1.0'))).toThrow(
       /unsupported pinned Playbook runtime contract/,
     );

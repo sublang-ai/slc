@@ -781,6 +781,47 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     },
   );
 
+  it('carries the Captain host-failure message in the failed diagnostic (DR-017)', async () => {
+    // Under playbook 2.0.0 a failing host Captain reply resolves the turn as
+    // the structured `failed` outcome (PBRT-47) instead of rejecting; the
+    // host maps it to `error` with the runtime-failed diagnostic.
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'composed-v2',
+      player: idleAgent,
+      judge: idleAgent,
+      loadFactory: async () => () => ({
+        async init() {},
+        async handleBossInput() {
+          return {
+            outcome: 'failed',
+            state: structuredState,
+            error: { name: 'Error', message: 'captain reply unavailable' },
+          };
+        },
+        async resumePlaybookCall() {
+          return { outcome: 'no-action', state: structuredState };
+        },
+        async dispose() {},
+      }),
+    });
+
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: join(root, 'src.md'),
+        target: join(root, 'out.ts'),
+      },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe('error');
+    expect(result.diagnostics).toContain(
+      'compiled runtime failed: captain reply unavailable',
+    );
+  });
+
   it('reports disposal failure instead of returning success', async () => {
     const target = join(root, 'out.ts');
     const executor = createCompiledExecutor({
