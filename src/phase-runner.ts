@@ -290,6 +290,40 @@ function callableExpression(
   if (ts.isIdentifier(value)) {
     return factoryBindingIsCallable(file, value.text, seen);
   }
+  // A DR-019 thin module binds the factory to a shared-engine factory call —
+  // `createXStatePlaybookRuntime(machine, spec)`. Static recognition accepts
+  // the call exactly when its callee is a non-type named import from the
+  // shared engine module; the loader confirms the returned factory's
+  // callability at run time (DR-017).
+  if (ts.isCallExpression(value)) {
+    const callee = unwrapExpression(value.expression);
+    if (ts.isIdentifier(callee)) {
+      return importedFromSharedEngine(file, callee.text);
+    }
+  }
+  return false;
+}
+
+const SHARED_ENGINE_MODULE = '@sublang/playbook/xstate-runtime';
+
+/** True when `name` is a non-type named import from the shared engine. */
+function importedFromSharedEngine(file: ts.SourceFile, name: string): boolean {
+  for (const statement of file.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    if (
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== SHARED_ENGINE_MODULE
+    ) {
+      continue;
+    }
+    const clause = statement.importClause;
+    if (clause === undefined || clause.phaseModifier !== undefined) continue;
+    const bindings = clause.namedBindings;
+    if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      if (!element.isTypeOnly && element.name.text === name) return true;
+    }
+  }
   return false;
 }
 
