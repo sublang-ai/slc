@@ -88,6 +88,41 @@ describe('resolvesToPlaybook (PIN-13)', () => {
     ).toBe(true);
   });
 
+  it('recognizes the DR-019 thin shared-engine factory call (DR-017)', () => {
+    expect(
+      resolvesToPlaybook(
+        [
+          "import { createXStatePlaybookRuntime } from '@sublang/playbook/xstate-runtime';",
+          "import { machine } from './flow.fsm.ts';",
+          'const createPlaybookRuntime = createXStatePlaybookRuntime(machine, {});',
+          'export default createPlaybookRuntime;',
+        ].join('\n'),
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects a factory call whose callee is not the shared engine import', () => {
+    expect(
+      resolvesToPlaybook(
+        [
+          "import { somethingElse } from 'another-package';",
+          'const createPlaybookRuntime = somethingElse();',
+          'export default createPlaybookRuntime;',
+        ].join('\n'),
+      ),
+    ).toBe(false);
+    // A type-only import of the engine cannot carry the runtime callee.
+    expect(
+      resolvesToPlaybook(
+        [
+          "import type { createXStatePlaybookRuntime } from '@sublang/playbook/xstate-runtime';",
+          'const createPlaybookRuntime = createXStatePlaybookRuntime({}, {});',
+          'export default createPlaybookRuntime;',
+        ].join('\n'),
+      ),
+    ).toBe(false);
+  });
+
   it('rejects a module that does not expose the factory', () => {
     expect(resolvesToPlaybook('export const value = 42;\n')).toBe(false);
     expect(resolvesToPlaybook('export default () => ({});\n')).toBe(false);
