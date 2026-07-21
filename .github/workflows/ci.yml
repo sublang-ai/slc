@@ -32,6 +32,9 @@ jobs:
       - name: Verify vendored Playbook definitions
         run: npm run verify:definitions
 
+      - name: Verify release workflow
+        run: npm run verify:release
+
       - name: Check formatting
         run: npm run format:check
 

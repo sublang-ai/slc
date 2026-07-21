@@ -62,7 +62,7 @@ meta.md     The spec of specs
 | IR-013 | [013-cwd-output-entry-emission-demo.md](iterations/013-cwd-output-entry-emission-demo.md) | Implement DR-014 (CWD output, raw-entry normalization, default passes, default link target, entry emission) and rebase demo/ on the three-line flow |
 | IR-014 | [014-gears-provenance-adoption.md](iterations/014-gears-provenance-adoption.md) | Adopt DR-016: spex dependency, vendored definition sync, grammar Pin Inputs swap, pin regeneration (meta-artifact recompile deferred) |
 | IR-015 | [015-playbook-2-0-adoption.md](iterations/015-playbook-2-0-adoption.md) | Adopt DR-017: dependency bumps, 2.0.0 provenance mapping, definition re-sync, meta-artifact rebuild, pin regeneration, entry role binding, and the English demo reference |
-| IR-016 | [016-first-release.md](iterations/016-first-release.md) | Prepare the first npm release: 0.1.0 metadata and changelog, project-local thin-runtime install, package smoke, CI-green OIDC publish workflow |
+| IR-016 | [016-first-release.md](iterations/016-first-release.md) | Prepare the first npm release: 0.1.0 metadata and changelog, project-local thin-runtime install, package smoke, and CI-green bootstrap/OIDC publication |
 
 ## Packages
 
@@ -124,8 +124,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [release.md](dev/release.md) | SemVer, changelog, package contract, CI-green OIDC publication, GitHub release, and pre-release checks |
-| test | [release.md](test/release.md) | Tarball hygiene, installed executable and exports, and external thin-artifact resolution |
+| dev | [release.md](dev/release.md) | SemVer, changelog, package contract, first-publication bootstrap, CI-green OIDC publication, GitHub release, and pre-release checks |
+| test | [release.md](test/release.md) | Tarball hygiene, installed executable and exports, external thin-artifact resolution, and bootstrap/OIDC isolation |
 
 ### SELFHOST
 

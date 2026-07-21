@@ -27,3 +27,15 @@ English thin demo entry is copied outside the repository and imported from
 that project, the entry shall resolve the shared Playbook engine and XState FSM
 dependency from the consumer install without relying on this checkout or a
 global module path.
+
+### RELEASE-16
+Verifies: [RELEASE-8](../dev/release.md#release-8)
+
+Where the release workflow is publishing a package version, when the npm
+package already exists, the publish step shall use trusted OIDC without a
+static token. When the package does not exist, only the first-publication step
+shall receive `NPM_BOOTSTRAP_TOKEN`, and it shall fail with an explicit error
+when that secret is absent. A deterministic workflow check shall enforce this
+separation, reject every additional static-secret or publication path, and
+require lifecycle scripts to remain disabled for both publication commands in
+CI and the prepublish release gate.
