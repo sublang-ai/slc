@@ -1,27 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-//
-// XState v5 finite state machine compiled from the GEARS package
-// `link.gears.md` (single Captain-acting item LINK-1).
-//
-// Object artifact only: it defines the machine, the typed `captain` actor
+// GEARS-to-FSM artifact for the `link` playbook.
+// Compiled from link.gears.md (LINK-1).
+// Object artifact only: it defines the machine, the typed Captain actor
 // contract, and typed inputs. It binds no runner and supplies no concrete
-// Captain implementation — the runner must provide the `captain` actor.
-//
-// LINK-1 declares no `Results:` label, so it carries the default
-// single-outcome contract: one result `done` plus the universal
-// `needsBossReply`. `done` is the workflow's last obligation, so it targets a
-// `type: 'final'` state.
-//
+// Captain implementation; the runner provides `captain` via `.provide(...)`.
 
-import { setup, assign, fromPromise, type DoneActorEvent } from 'xstate';
+import { assign, fromPromise, setup } from 'xstate';
 
 // ---------------------------------------------------------------------------
 // Actor contract
 // ---------------------------------------------------------------------------
 
-/** A clarifying question the acting agent raised that only Boss can answer. */
+/**
+ * A clarifying question the acting agent raised that only Boss can answer.
+ * `questionId` and `resumeStateId` both equal the suspended working leaf's
+ * stable `stateId`; `player` is the literal `Captain` for a direct-Captain
+ * state.
+ */
 export interface PendingBossQuestion {
   questionId: string;
   resumeStateId: string;
@@ -31,511 +28,605 @@ export interface PendingBossQuestion {
 }
 
 /**
- * Input handed to the direct `captain` actor for a captain-invoking state.
- * Guard names are specified and interpreted per state via `result`; they are
- * not a global union. A direct Captain state carries no `player` binding.
+ * Input handed to the Captain actor for one invocation.
+ * `result` keys are the valid guard names this invocation may return; they are
+ * authoritative *per state*, not a global union. There is no `player` field: a
+ * direct-Captain state never carries an invented `Captain` player binding.
  */
 export interface CaptainInput {
-  /** Stable id of the invoking working leaf. */
   stateId: string;
-  /** The GEARS item ID this state realizes. */
   sourceItem: string;
-  /** The source item's full final prompt, verbatim. */
   prompt: string;
-  /** A record whose keys are the valid guard names this invocation may return. */
   result: Record<string, string>;
-  /** Backs the `<fsm-artifact>` prompt placeholder with its exact runtime value. */
-  fsmArtifact: string;
-  /** Present only when resuming after a Boss reply, for continuation-prompt composition. */
+  /** Present on resume so the runtime can compose the continuation prompt. */
   pendingBossQuestion?: PendingBossQuestion;
   bossReply?: string;
 }
 
 /**
- * Discriminated result Captain returns; `guard` is one of the state's `result`
- * keys. `needsBossReply` additionally carries the extracted `question`.
+ * Discriminated Captain result: one literal `guard` member per authored result
+ * key plus the universal `needsBossReply`, each carrying exactly the payload its
+ * guard requires. A catch-all `guard: string` shape would be malformed.
  */
 export type CaptainOutput =
-  | { guard: 'done' }
+  | { guard: 'linked' }
+  | { guard: 'unrepresentable' }
   | { guard: 'needsBossReply'; question: string };
 
 // ---------------------------------------------------------------------------
-// Machine types
+// Machine context / events / input
 // ---------------------------------------------------------------------------
 
 export interface LinkContext {
-  /** FSM artifact path (the transformation source); backs `<fsm-artifact>`. */
-  fsmArtifact: string;
-  /** PlaybookRuntime module path (the transformation target). */
-  target: string;
-  /** Last Captain result — inspection only; never branched on for routing. */
+  /** Inspection-only snapshot of the last Captain result. Never branched on. */
   lastResult?: CaptainOutput;
-  /** Last Captain error — inspection only (the runtime normalizes it). */
+  /** Inspection-only capture of the last error that routed to `failed`. */
   lastError?: unknown;
   /** Set while suspended in `awaitBossReply`. */
   pendingBossQuestion?: PendingBossQuestion;
-  /** Boss's answer, set on the resume arm and read by the resumed state's input. */
+  /** Boss's answer, carried into the resumed state's continuation prompt. */
   bossReply?: string;
 }
 
+/**
+ * Boss surfaces:
+ * - `COMPILE` — typed entry event on idle/recoverable states that starts a
+ *   fresh transformation; the source declares no per-run parameters, so it
+ *   carries no payload.
+ * - `BOSS_INTERRUPT` — pre-emptive jump into an active state by stable id.
+ * - `BOSS_REPLY` — Boss's answer to a suspended acting-agent question; the
+ *   scalar form fills the sole pending id when `questionId` is omitted.
+ */
 export type LinkEvent =
-  | { type: 'LINK_REQUEST'; fsmArtifact: string; target: string }
+  | { type: 'COMPILE' }
+  | { type: 'BOSS_INTERRUPT'; targetId: string }
   | { type: 'BOSS_REPLY'; answer: string; questionId?: string };
 
-export interface LinkInput {
-  fsmArtifact?: string;
-  target?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Verbatim prompt for LINK-1 (the item's full final prompt; no duplicate lines)
-// ---------------------------------------------------------------------------
-
-const LINK_1_PROMPT: string = [
-  'Compile the source FSM artifact <fsm-artifact> into a `PlaybookRuntime`: a host-agnostic runner module in TypeScript that drives the FSM, classifies Boss input into typed events, runs direct-Captain / delegated-player / nested-playbook actors, executes deterministic script actors locally without any agent, adjudicates Captain and player output into FSM guards, and surfaces transitions as status/telemetry.',
-  'Accept as linker inputs: the FSM artifact path; a player binding mapping GEARS players to opaque `playerId` strings (default: each player to its lowercased name, e.g. `Coder` \u2192 `coder`, recorded in the emitted header); an adjudication strategy (default: LLM-judge per state) and a Boss-event mapping (default: free-text judge classification); both strategies are host-agnostic.',
-  "The host's identity does not enter compilation; the emitted module runs unchanged under any host that implements `PlaybookPorts`.",
-  'The runtime is invoked only through the stable `PlaybookPorts` contract; a presentation layer implements the six ports once and inherits every playbook.',
-  "Hosts are out of scope: each host has an adapter that loads a `PlaybookRuntime` module and supplies the host's primitives as `PlaybookPorts`; the adapter speaks only `PlaybookPorts` and shall not leak host types back into the runtime.",
-  'Do not modify the FSM artifact and do not re-derive Captain prompts, result keys, or guard semantics \u2014 those are fixed by the FSM.',
-  'Emit exactly one TypeScript module.',
-  '',
-  'PlaybookRuntime contract:',
-  'Default-export `createPlaybookRuntime(options: PlaybookRuntimeOptions): PlaybookRuntime`, conforming to `PlaybookRuntimeFactory<PlaybookRuntimeOptions>`.',
-  '`PlaybookRuntime` exposes `init(session: PlaybookSession): Promise<void>`, `handleBossInput({ text, signal }): Promise<PlaybookRunResult>`, `resumePlaybookCall({ callId, result, signal }): Promise<PlaybookRunResult>`, and `dispose(): Promise<void>`.',
-  '`init` receives the host-owned playbook session identity and ports, constructs the XState actor with FSM `input` derived from `options`, and starts the actor.',
-  'The runtime owns the actor for its lifetime; `handleBossInput` runs one turn; `dispose` stops the actor and drains pending port emissions.',
-  'Validate non-empty session, playbook, and root ids; a safe non-negative integer `depth`; root identity (`depth === 0` and `rootSessionId === sessionId` with no parent fields); and child identity (`depth > 0` with non-empty `parentSessionId` and `parentCallId`); a child `sessionId` shall differ from both its `rootSessionId` and `parentSessionId`.',
-  "Copy the identity scalars and port references into the runtime's own immutable record rather than retaining the caller's mutable session object.",
-  'Run outcomes are exact: `no-action` means no FSM event was sent; `quiescent` means a non-failure parked/idle state; `failed` means a recoverable FSM failure state; `terminal` means top-level final with optional JSON `output`; `aborted` means the turn signal ended work; `suspended` means exactly one `pendingCall` is active.',
-  'Control-plane exceptions reject the runtime method rather than masquerade as a recoverable workflow `failed` result.',
-  'Emit a typed `PlaybookRuntimeOptions` interface per playbook, derived from every required FSM input field (e.g. `CodingInput`) not supplied by `PlaybookSession` or another linker-owned source; carry only per-run knobs such as identity strings (e.g. model names substituted into prompt placeholders) and strategy overrides.',
-  'A required immutable `enabledPlaybooks` catalog stays a required readonly runtime option passed through to machine input; do not invent an empty catalog and do not require it baked into a CLI link option (CLI link options are compile-time inputs; the runtime options interface is derived independently).',
-  'Bake the player binding into the emitted runtime by default; a linker may also expose it via `PlaybookRuntimeOptions` for per-run remapping; the runtime ships with a deterministic binding it applies at every `callPlayer` site.',
-  '',
-  'PlaybookPorts contract:',
-  'The runtime speaks only `PlaybookPorts`: `callPlayer(playerId, prompt, signal, options)`, `callCaptain(prompt, signal, options)`, `callJudge(prompt, signal)`, `callPlaybook(request, signal)`, `emitStatus(message, data?)`, and `emitTelemetry({ topic, payload })`; it never speaks to LLMs directly and never touches host types beyond `PlaybookPorts`.',
-  "`PlayerResult` mirrors cligent's status, resume token, final text, and error fields; treat `status !== 'ok'` as a player failure and route it through the FSM error path.",
-  "For authored workflow direct-Captain calls, pass `{ visibility: 'visible', resume: false, allowedTools: [] }` so XState context (not an agent conversation) owns workflow continuity and the acting Captain cannot investigate through tools.",
-  '`CaptainResult` carries no resume token or player-continuation selection; a non-`ok` result, or an `ok` result without `finalText`, rejects the actor through the FSM error path.',
-  "Outside a signal-driven abort, invalid direct-Captain results are latched control-plane failures: let the actor take `onError`, drive it to quiescence, drain ordered emissions, then reject the public method with the original failure; never translate either case into a recoverable `{ outcome: 'failed' }` result; if the combined signal has aborted, an aborted host result follows the ordinary abort settlement instead.",
-  'Own a map from resolved player id to its latest non-empty `resumeToken`; before reading a resolved direct-Captain or delegated-player result, validate, detach, and freeze it through `validateCaptainResult` or `validatePlayerResult` (exact shape: only the declared status and optional string fields; JSON-unsafe members reject); validation happens before adopting a resume token or reading final text.',
-  'The first call to each player in a session passes `{ resume: false }`; later calls pass the exact stored token; after a resolved call, replace the token when the result carries one or clear it when absent before interpreting `status`; a rejected call with no result leaves the prior token unchanged.',
-  'After awaiting a host Captain or player promise, re-check the combined invocation/public-boundary signal before validating the result, adopting a resume token, or emitting a successful finish; a host promise that ignores cancellation and resolves late is paired as aborted and shall not mutate continuity or masquerade as success.',
-  'The resume-token map survives actor reconstruction within one runtime and is discarded at `dispose`.',
-  'Keep an in-flight set keyed by resolved player id and reject a second concurrent call to the same id before crossing the host port; calls to distinct resolved player ids may overlap.',
-  "`callJudge` returns free-form text parsed per the state's adjudication strategy; one port serves both classifier and adjudicator, varying only in prompt.",
-  'Route concurrent `callJudge` attempts through one abort-aware local FIFO; after the host promise resolves, require a string reply and re-check the combined signal before tracing or parsing success.',
-  "Serialize `callCaptain` and `callJudge` together through one shared abort-aware concurrency-one FIFO (the single-flight Captain lane), even when distinct player ports overlap; a direct Captain call's subsequent adjudication enters that same queue only after the visible call has settled; do not hold one queue lease while requesting the other port.",
-  'Use one shared `PQueue({ concurrency: 1 })` for the individual host `callCaptain` and `callJudge` promises; do not pass an invocation or public-boundary signal as `PQueue.add(..., { signal })`; instead check the combined signal inside the queued task before crossing the host port, await the host promise without releasing the queue lease, and check the signal again afterward.',
-  "`callPlaybook` starts a function-style child call: supply the caller's stable call id and the XState invocation's lifetime signal; the host drives the child's initial text and resolves the port with either an immediate settled result or a suspended child session; suspension is resumed later through `resumePlaybookCall`; the port promise shall not remain pending across Boss turns.",
-  '`emitStatus` is human-readable and `emitTelemetry` is structured; both are async, ordered, awaited, and never dropped; await each emission before issuing the next.',
-  '',
-  'Playbook trace:',
-  'Emit a boundary-complete, ordered trace through `emitTelemetry` topic `playbook.trace`; each payload carries `schemaVersion: 2`, the immutable session identity and causality, a contiguous one-based `sequence`, a Unix-millisecond `timestamp`, a trace `type`, event `payload`, and the runtime-local `turnId` / paired `callId` where applicable.',
-  'Trace types: `session.started`, `boss.input.received`, `judge.call.started`, `judge.call.finished`, `player.call.started`, `player.call.finished`, `captain.call.started`, `captain.call.finished`, `playbook.call.started`, `playbook.call.finished`, `fsm.transition`, `status.emitted`, `boss.input.settled`, `session.disposed`.',
-  'Call pairs carry exact prompts and replies, normalized failures, actor and state identity, and their boundary-specific options.',
-  '`session.started` and `session.disposed` carry their descriptor as top-level `state` and its singular `stateId` when present.',
-  "Every judge start and finish carries the working snapshot's singular `stateId` when one exists (classification uses the current descriptor, adjudication uses the invoking actor input; the default Captain always has a singular id, a parallel snapshot may omit it); every judge finish also carries `status: 'ok' | 'aborted' | 'error'`.",
-  'Every `status.emitted` carries the described top-level `state` and its singular `stateId` when present, plus its message and optional data; consumers shall not have to recover state identity from a nested ad hoc object.',
-  "Judge results use `reply`; player start and finish payloads both carry the selected `resume`; Captain start and finish payloads both carry the exact composed prompt, `visibility: 'visible'`, the direct invocation's `stateId` and `sourceItem`, and no player resume selection or resume token; judge `purpose` is `boss-input-classification`, `player-output-adjudication`, or `captain-output-adjudication`; every error uses `{ name, message, stack? }` rather than a raw string or `Error` instance.",
-  "The Captain finish payload preserves the exact `CaptainResult` status and final text when present, carrying any failure in normalized form; an `ok` result without `finalText` retains status `ok` but also carries the normalized missing-text failure that makes the actor reject; if the Captain port rejects before returning a result, the finish carries explicit `status: 'aborted'` when the combined signal has aborted or `status: 'error'` otherwise; a finish boundary never omits status merely because there was no structured host result.",
-  'The pair obligation applies when a port promise rejects or throws: emit and drain one normalized finish boundary before propagating the failure; no started call boundary is left without its matching finished boundary.',
-  'If a started-boundary sink records the event and then rejects, make one best-effort normalized error-finish attempt with the same call id and then reject the original start error; do not retry either event or let a failure of that finish attempt replace the start error.',
-  'When a call boundary carries `callId`, that id is unique within the runtime session; a stable FSM `stateId` is identity metadata in the payload, not a call id, and shall not be reused as one across repeated invocations.',
-  'Omit optional trace and run-result members when absent; do not create own `turnId`, `callId`, parent identity, output, or error properties with value `undefined` and then rely on JSON serialization to drop them.',
-  'A `boss.input.settled` payload projects the complete structured run result: its outcome is one of the `PlaybookRunResult` discriminants (never an invented `error` outcome) and it includes `state`, singular `stateId`, `pendingCall`, `output`, and normalized `error` whenever the matching result arm carries them.',
-  "One runtime-owned concurrency-one emission queue serializes every trace, human status, and state telemetry call; sequence allocation and enqueueing occur atomically; every public method drains that queue before resolving or rejecting; a state-transition emission queued on entry is observed before the invoked boundary's `*.started` event even when a host delays `emitTelemetry`.",
-  'Use `PQueue({ concurrency: 1 })` from `p-queue` for this ordering and drain it with `onIdle()` rather than recreating a promise-queue implementation per artifact.',
-  "An XState inspection callback synchronously enqueues the transition trace, state telemetry, status trace, and human status in that order before it returns; `emitStatus` likewise enqueues its trace and port emission in the same synchronous call; do not enqueue state telemetry or the status port from a `trace(...).then(...)` continuation, because the queue can become momentarily idle and let an invoked actor's `await drain()` overtake those dependent enqueues.",
-  'All validation happens before these synchronous enqueues; later sink failures are caught into the appropriate latch without changing their queue position.',
-  'FSM trace events carry the same transition, pending-question, and normalized-error fields as state telemetry.',
-  'Trace emissions are awaited and sequenced before the boundary operation or human status / state telemetry they describe.',
-  'Every event in one session carries the same root/parent/depth identity.',
-  "A parent call start precedes its child `session.started`; the child's `session.disposed` precedes the parent call finish; parallel call finishes may occur in either order, so consumers pair by call id and order by sequence.",
-  'This trace covers everything observable through `PlaybookRuntime`; host-specific adapter streaming remains in the host record stream; trace payloads never become Boss-visible status or prompt text.',
-  '',
-  'Player binding:',
-  'Each delegated GEARS state names exactly one player (`player` actor `invoke.input.player`); map every named player to a `playerId` string used in `callPlayer(playerId, \u2026)`; the host adapter routes that opaque string to its concrete primitive.',
-  "Every direct-Captain and delegated-player invocation carries its working leaf's explicit `stateId`; use that field for call identity and do not infer one leaf from a structured root snapshot.",
-  'Direct `captain` actor states bypass player binding and call `callCaptain`; do not synthesize a player id named `captain` for them.',
-  "Resolve composite/alias players (e.g. `Committer = Coder | Reviewer`) per source item by inspecting the `PlayerInput` fields populated at that state: if only one `<playerName>Player` field is present, bind that player; if multiple, prefer the first-listed alternative in alias declaration order; if none, fall back to the alias's first alternative; resolution is deterministic and recorded in the emitted module.",
-  "Do not invent player identifiers beyond the recorded default binding and do not collapse aliases at the FSM level: composite players keep their `player: 'Committer'` value on `PlayerInput`; resolution decides only the `callPlayer` invocation.",
-  '',
-  'Player prompt composition:',
-  "Compose the actual player prompt from the state's `PlayerInput`; `input.prompt` is the GEARS-derived domain prompt body and shall not be mutated, re-flowed, or used to store framework control instructions.",
-  'May prepend structured labelled blocks from typed `PlayerInput` fields (e.g. `Boss intent:`, `Review items:`, `Rebuttals:`, `Task description:`) outside the domain prompt body.',
-  "Do not inject a player-visible Boss-question instruction; Boss-question detection is adjudicator-facing, from the state's `needsBossReply` result description, not from extra prompt text.",
-  'When `PlayerInput` carries both `pendingBossQuestion` and `bossReply`, prepend the continuation preamble and labelled Q&A blocks before ordinary structured blocks and before the domain prompt body, using exactly this framework text: `You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.`, a blank line, `Boss question:` then `<pendingBossQuestion.question>`, a blank line, `Boss reply:` then `<bossReply>`, then a blank line.',
-  'The continuation preamble is framework text supplied by the runtime; it is not part of the GEARS blockquote and shall not appear in `invoke.input.prompt`.',
-  'Retain the blank line after the Boss reply before the next structured block or domain prompt, producing exactly two newline characters at that boundary (when joining an array with `"\\n"`, use two trailing empty strings after `bossReply`; equivalently append `"\\n\\n"` exactly once).',
-  '',
-  'Captain prompt composition:',
-  "Compose a direct Captain prompt from the state's `CaptainInput` under the same prompt-integrity rules: `input.prompt` remains the verbatim GEARS domain body while specific typed fields may be supplied as labelled blocks substituted for their declared placeholders; do not introduce a player binding or player resume instruction.",
-  'String fields substitute verbatim; arrays and objects (the sanitized enabled-playbook catalog, remaining plan, completed child results) are validated JSON-safe and rendered as deterministic JSON, never coerced through default string conversion or exposing untyped context.',
-  'Deterministic rendering sorts object keys lexicographically at every depth while preserving array order, so equivalent JSON values produce the same prompt independent of host property insertion order.',
-  'At construction, validate a structured host-owned catalog against its declared exact entry shape, copy it, and freeze it recursively so later caller mutation or extra properties cannot alter a prompt or machine decision; for the default Captain catalog, every entry has exactly the own enumerable data keys `id`, `command`, and `intent`, all three non-empty strings, with unique `id` values; empty values, duplicate ids, extra keys, accessors, non-plain objects, and non-JSON data reject runtime construction rather than being silently repaired or discarded.',
-  "When a direct Captain task resumes from its own Boss question, prepend the same continuation preamble and labelled Q&A blocks; pass the complete composed prompt once to `callCaptain` with `{ visibility: 'visible', resume: false, allowedTools: [] }`; do not expose the subsequent adjudicator prompt or structured judge reply through that visible call.",
-  "The composed prompt contains only the GEARS blockquote, typed runtime evidence blocks, and the continuation preamble; do not append the state's result map, guard names, result-property schema, adjudication request, workspace context, or tool instructions.",
-  "Replace every known placeholder whose matching typed field is present in the supplied input; do not choose one exclusive replacement set from `stateId`, source-item identity, or another variant discriminator; construct the replacement table from field presence alone (populate `<remaining-plan>` when `remainingPlan` is supplied and `<completed-call-results>` when `completedCallResults` is supplied, regardless of the input's `stateId` or `sourceItem`); a branch such as `if (input.stateId === 'reassessment')` around either replacement is nonconformant.",
-  '',
-  'Boss-event mapping:',
-  "The FSM's `events` union enumerates every Boss-originated event; the runtime receives Boss input as a free-form string (`handleBossInput.text`).",
-  "Where the current ready or reconstructed-terminal machine accepts exactly one ordinary textual entry event and no Boss question is pending, send that event deterministically and attach the exact original text to its declared textual payload field without invoking `callJudge`; the default Captain's ready entry is `{ type: 'BOSS_INTENT', bossIntent: turn.text }`.",
-  "All other non-empty turns use `callJudge` only to choose one of the FSM's event kinds and non-text routing fields, or no FSM action; the classifier prompt includes the exact, unmodified `turn.text` in a clearly labelled Boss-message block so the judge can distinguish an answer, a fresh directive, and no action; including it does not authorize rewriting the runtime-owned textual payload fields.",
-  'For `BOSS_INTENT` and `BOSS_INTERRUPT`, attach the exact original text as `bossIntent`; for `BOSS_REPLY`, attach the exact original text as `answer`; the classifier prompt neither requests nor accepts a copy of those fields, and classifier-authored paraphrases never become machine context.',
-  'Empty or whitespace-only text produces no event, judge call, Captain call, player call, status emission, or FSM transition; its received and settled session-trace events are still emitted.',
-  "The classifier prompt demands JSON against the FSM's typed event union and any state-specific Boss input contract, including non-text routing payload fields required for each event but excluding the runtime-owned textual fields; fields the event union declares optional stay optional in the classifier contract and parser (do not promote them to required).",
-  'Parse the judge reply tolerantly before validating the event: recover the intended JSON object from surrounding prose or a Markdown fence, ignore earlier non-JSON bracketed prose, remove a trailing comma before a closing brace or bracket, and complete a truncated unterminated string or unclosed object/array; when several values are recoverable, choose the first object in document order, preferring a strict parse at each candidate position before repairing that same candidate.',
-  "For each opening-brace position, first scan strings and nesting to find that candidate's earliest balanced closing boundary; both the strict parse and the trailing-comma repair operate on only that bounded substring; if no closing boundary exists, repair may complete the unterminated suffix; never repair the entire remaining document after a balanced candidate; advance to the next opening brace only after strict and repaired parsing of the current bounded candidate both fail, so an earlier repairable object wins over every later strict object.",
-  'When no object is recoverable or the recovered event/payload is invalid, emit exactly one status and send no FSM event; a malformed classification is recoverable control input, not a public boundary rejection.',
-  'If a recovered `BOSS_REPLY` names no currently-pending question, treat it as a malformed classification: emit the one recovery status, send no event, leave the actor unchanged, and return `no-action` after emissions drain.',
-  'Host-owned runtime options, player bindings, and enabled-playbook catalogs are not Boss-event payload; the classifier schema and parser shall not invite or accept them, and classified prose never overwrites their machine context.',
-  'Every recovered classifier object has exactly `type` plus the declared non-text routing keys for its selected event arm; extra own keys (including a classifier-authored `bossIntent` or `answer`) reject the classification; the parser shall not accept and discard injected catalog, option, state, or routing fields.',
-  "`NO_ACTION` is exactly `{ type: 'NO_ACTION' }`; a valid `NO_ACTION` returns `no-action` without an invalid-classification status and leaves the actor untouched (a successful classifier choice, not the same result as malformed or unrecoverable output).",
-  'After any successful classifier call drains, re-check the active Boss signal before reconstructing a terminal actor or sending the selected event; if it aborted while the classifier finish emission was pending, return and trace the same structured `aborted` result against the unchanged actor.',
-  'When the FSM supports a Boss-reply suspension state, the prompt inspects the actor snapshot context and includes each exact pending Boss question, question id, and asking player so the judge can distinguish a reply from a fresh directive; with one pending question, a classified `BOSS_REPLY` that omits its optional id is filled with that sole id; with several pending questions, the classifier requires a known id; a reply re-enters only its recorded resume state and preserves the original intent, plan, prior child results, and Q+A continuation context.',
-  'The classifier-facing pending-question block contains only `questionId`, `player`, and `question`; internal `resumeStateId`, source-item identity, and other machine-routing fields remain authoritative in snapshot context and are not serialized into the judge prompt.',
-  'Allowed fresh directives while parked include every applicable root entry event and `BOSS_INTERRUPT`; accepting one abandons and clears the pending question and reply context before new work begins.',
-  'The runtime shall not define slash-prefix commands for states or features inside the playbook; the `/command` namespace is reserved for host-level or playbook-selection UX before a turn reaches `handleBossInput`; text beginning with `/` forwarded to `handleBossInput` is treated as ordinary Boss text and mapped through the same deterministic-or-classified rules.',
-  'Hosts resolve host-level concerns before choosing a runtime; once they call `handleBossInput`, they pass Boss content as text and do not pre-classify in-playbook FSM events or rely on slash forms as a runtime protocol.',
-  "`BOSS_INTERRUPT` (or the FSM's equivalent explicit-state-jump event) is reached only by the judge choosing it and supplying its required target payload; it is not an abort surface (aborts go through the abort signal and the abort strategies); hosts where the abort signal is terminal shall not route abort to `BOSS_INTERRUPT`.",
-  '',
-  'Captain adjudication:',
-  "After a direct Captain or delegated player call returns, coerce `result.finalText` into one of the per-state `invoke.input.result` keys and extract any payload fields the state's `result` description names as required.",
-  "Required-field extraction recognizes both an exact backticked property name such as `question` and the standard annotated form `question: <verbatim question text>`; in either form only `question` is the JSON property name; extraction is limited to the description's explicit `Output shall include` clause (or equivalent typed output metadata); backticked prose before that clause names statuses, guards, or concepts such as `ok`, `aborted`, and `error` that are not output properties and never become required judge fields.",
-  "For a direct Captain result, `question` and `response` are human-presentation fields owned by the visible call, not authored by the hidden judge; the adjudicator selects the guard and supplies only other structural fields required by that guard; after validating the selection, inject the exact non-empty `CaptainResult.finalText` as the selected output's `question` or `response`; reject a judge reply that supplies either presentation field as an undeclared extra key.",
-  'Delegated-player adjudication retains extraction of every required field from the judge reply, including a player-authored Boss question.',
-  'The adjudicator uses the same document-order tolerant JSON recovery as the Boss classifier; unlike invalid classification, a reply from which no object can be recovered, an undeclared guard, or a missing required field is a control-plane error and shall throw after the invocation reaches its FSM error path and ordered emissions drain.',
-  "LLM-judge (default strategy): construct a fresh `callJudge` prompt that names the source item's actor (and delegated player where applicable), includes the actor's verbatim output, lists the `result` keys with their descriptions, and demands a JSON `{ guard, \u2026structuralPayloadFields }` answer keyed to exactly one declared guard, excluding the runtime-owned direct-Captain `question` and `response` fields; the judge prompt does not interpret, paraphrase, or alter the FSM's `result` text \u2014 it carries the description verbatim.",
-  'Marker-parse (delegated-player alternative strategy): a deterministic parser that scans the player output for a terminal control line such as `FSM-RESULT: { "guard": "...", ... }`, useful when player adapters emit structured trailers and the operator wants to avoid the extra LLM call.',
-  'A linker may select different strategies per delegated-player state; the default is LLM-judge for every state; direct-Captain states use the LLM judge so their visible prose stays human-readable and carries no marker or control JSON, and their adjudicator call uses purpose `captain-output-adjudication` and remains hidden at the host adapter.',
-  'When the direct Captain result selects a terminal `response`, the exact already-visible `CaptainResult.finalText` is the machine response and Boss presentation; do not make a second visible Captain call or expose the hidden structured adjudication merely to present the same response.',
-  'The adjudicator fails loudly on a guard the state does not declare, a missing required payload field, and an empty/malformed response; keep the three distinguishable in the thrown error (malformed JSON recovery identifies the missing JSON object, an unknown selection identifies an undeclared guard, an incomplete selection identifies the missing required field); a generic "no declared guard selected" error for all three is nonconformant.',
-  "Adjudicator failures are control-plane errors: propagate them by throwing out of `handleBossInput` after attempting cleanup; the host surfaces the throw on its control-plane channel; the host's player-result channels are reserved for failures the player itself produced (emitted when `callPlayer` resolves with `status !== 'ok'`); Captain call failures stay on the Captain/control boundary and are not reported as player failures.",
-  "Because XState still needs the invoked promise to settle, latch an adjudicator, actor-output JSON-validation, or nested-boundary control error outside machine context, allow the invocation's `onError` path to reach quiescence, drain all emissions, and then reject the public runtime method with that original error; never return such a failure as a recoverable `{ outcome: 'failed' }` result.",
-  "The first latched non-abort control error takes precedence over a coincident boundary-signal abort; read and clear the latch only in the public boundary's `finally` cleanup after XState and emissions have settled, so it cannot leak into a later turn or be erased before rejection.",
-  'An `AbortError`-named transport, validation, or trace-sink failure is still a non-abort control error unless it is causally identical to the applicable signal reason; error names never change original-error or first-latch precedence.',
-  'When a host port or structured-result validator fails after a call-start boundary, latch the original error before attempting the required finish trace; if the finish sink records the event and then rejects, do not emit a second finish and do not let the sink failure replace the earlier control error; retain the sink failure only as independent cleanup evidence.',
-  '',
-  'Script execution:',
-  'Where the FSM declares the typed `script` actor, provide its implementation inside the module; a script invocation runs without any agent \u2014 no `callPlayer`, `callCaptain`, or `callJudge` call and no adjudication.',
-  "The provided script actor executes `input.command` verbatim through the platform's POSIX shell (`sh -c`), with the working directory from `PlaybookRuntimeOptions.cwd` when the caller supplies it else the process working directory; declare the optional `cwd` option whenever the FSM contains a script state.",
-  "Resolve deterministically from the child's exit status: status zero resolves `{ guard: <first declared guard>, exitStatus: 0 }`; any nonzero status resolves the second declared guard with that status; guard selection is mechanical and never routed through the judge.",
-  "Reject only when the command cannot be spawned at all, routing through the state's ordinary `onError` path.",
-  "Honor the active turn's abort signal by terminating the child process and rejecting per the abort strategies.",
-  'After the child settles and before the invocation resolves, emit one status line `Executed script for <stateId> (exit <status>).` and one telemetry event under topic `playbook.script` with payload `{ stateId, sourceItem, exitStatus }`, through the ordinary serialized emission channel.',
-  'Script execution emits no `*.call.*` trace pair (the surrounding FSM transition trace and the `playbook.script` telemetry are its record); script stdout and stderr are not workflow data and shall not enter machine context, prompts, or trace payloads.',
-  '',
-  'Nested playbook bridge:',
-  'Where the FSM declares the typed `playbook` actor, provide it with the shared `createNestedPlaybookBridge(...).actorLogic`; do not regenerate a second pending-call, identity-validation, or abort-cleanup substrate inside each linked artifact.',
-  'Instantiate the generic bridge with the FSM-exported `PlaybookInput` type so `.provide(...)` receives the exact declared actor input; construct one bridge per runtime and wire every integration hook: `nextCallId` (allocate ids), `getBoundarySignal` (return the currently active public-boundary signal), `bindResumeSignal` (bind `resumePlaybookCall.signal` before settling the deferred actor), `emitStarted` / `emitFinished` (enqueue the exact start/finish trace), `drain` (drain the global emission queue), `onControlPlaneError` (latch the original control error), and `onBackgroundError` (retain a cleanup/observer failure for the next public boundary or disposal rejection); do not leave these optional hooks unwired merely because their properties are optional.',
-  "On invocation the bridge allocates a runtime-local call id, traces the start, and calls `callPlaybook` with the composed target/text and the bridge signal combined from the XState invocation lifetime, the active public boundary, and the bridge's own disposal controller.",
-  "For a literal invocation, target and text retain their existing static/composed values; for a dynamic invocation, use the evaluated `PlaybookInput.playbookId` and `PlaybookInput.text`, require both to be strings with non-empty target and text, and preserve the exact resolved values in the request and trace; preserve the FSM's static `playbookIdContext` and `textContext` metadata for conformance; do not parse function source, treat either metadata name as the runtime value, or freeze a dynamic call to the value observed during artifact inspection.",
-  "If the port returns `state: 'settled'`, validate the result, emit and drain `playbook.call.finished`, then resolve successful output or reject an aborted/error result; if it returns `state: 'suspended'`, record one pending call and await a runtime-owned deferred result; only after that pending record exists may the drive boundary treat the call state's `playbook.suspended` tag as quiescent; one runtime supports at most one pending child call, and a second shall reject.",
-  'The pending record retains the call-start `turnId`; a resumed finish and every parent transition, Captain reassessment, and status caused by that return use this retained id, not an absent or newly allocated current-turn value; the finish callback receives or closes over that stored id rather than read a mutable global turn id at resume time.',
-  'Strictly validate the start discriminant, non-empty suspended child session id, settled target identity, optional state descriptor, normalized error, and JSON-safe output; a malformed start, malformed result, identity mismatch, or non-JSON value is a control-plane error; once a start trace exists, every thrown port, validation failure, immediate result, suspension resume, invocation abort, and disposal path emits and drains exactly one matching finish trace; malformed data neither creates a pending identity nor is reassessed as ordinary child evidence.',
-  'Detach and recursively freeze a validated start/result before tracing it or delivering it to the FSM, so caller mutation after port resolution cannot alter identity, evidence, or trace payloads; a non-abort `callPlaybook` throw/rejection is a control-plane failure (pair its finish, latch and rethrow the original error, take the FSM fallback error path); a rejection caused by the combined abort signal remains an authored `aborted` child result.',
-  'The optional output field may be absent from an otherwise valid successful child result; omit an absent or `undefined` output instead of attempting to snapshot it.',
-  "When cancellation wins while the host's opening promise is still pending, retain and drain that exact promise before emitting the matching finish boundary; ignore an abort-reason rejection from it, surface any other late rejection as a control-plane cleanup failure, and recover a child session identity from a late resolved start when available; pass the host port directly to the shared bridge rather than recreate this opening-promise drainage locally.",
-  'Aborting a public turn during that opening promise aborts the combined bridge signal, waits for opening cleanup and the paired finish, lets the promise actor reach its `onError` quiescent state, and only then returns an aborted run result; do not hang waiting for a child-resume path that was never registered nor return while the opening promise or finish emission remains live.',
-  'The pending record retains a one-shot invocation-signal listener; if the call state is stopped, that listener settles and clears the deferred call as an aborted `NestedPlaybookCallError`, drains the matching finish boundary after host abort cleanup, and makes a later nested invocation possible; do not leave a permanently pending record merely because XState stopped observing the promise actor.',
-  '`resumePlaybookCall` accepts only the matching pending call id, target playbook id, and child session id; binds its new turn signal for work resumed in the parent; emits and drains the call-finish trace; settles the bridge deferred; and uses XState `waitFor` to drive the parent to its next quiescent, suspended, failed, aborted, or terminal result.',
-  'An `ok` result resolves the actor and reaches `invoke.onDone`; `aborted` and `error` results reject it and reach `invoke.onError`; the rejection is an `Error` whose public readonly `result` property is the exact normalized `PlaybookCallResult` (do not throw the result object directly or discard its status); unknown, duplicate, or stale call ids reject without changing actor state; the finish trace precedes any parent FSM transition caused by the child return.',
-  'The host independently validates every evaluated target against its enabled registry; linker-time metadata is not authorization to call a target.',
-  'Disposal settles an outstanding call as aborted and drains its finish trace before `session.disposed`; if registered child abort cleanup rejects, emit the paired finish with an error result and reject `abortPending` or disposal with that original cleanup error, and do not swallow the failure merely because the promise actor also observes a `NestedPlaybookCallError`; parent disposal still drains, emits its one `session.disposed` boundary, and clears the bound session before rejecting with the preserved cleanup error; child output and errors must be JSON-safe (a non-JSON-safe result is a control-plane error).',
-  '',
-  'Session lifecycle:',
-  'Reject use before `init`, a second active turn or resume, and re-initializing a live session; `handleBossInput` and `resumePlaybookCall` share one active-turn sentinel (neither overlaps the other, disposal shall not race a live boundary, and a dispose requested during an active public boundary rejects without beginning teardown); idle concurrent dispose requests share one disposal promise, later calls after disposal return that settled outcome without emitting another boundary, and once disposal begins no new turn or resume may start.',
-  "Disposal requested during initialization retains one teardown promise, waits for initialization's success or failure cleanup, and emits at most one `session.disposed` boundary; disposal before initialization is terminal and coalesced (later initialization rejects and every later disposal call returns the first retained promise).",
-  "Represent in-flight initialization with a cleanup-complete latch resolved by `init`'s outer `finally` (after successful startup or the complete failed-start cleanup); do not expose the fallible inner startup promise as that latch; put session validation and snapshotting, bridge/actor construction, initial state reads, and startup emissions inside that guarded outer `try` so none throws before the latch's `finally` can resolve; a rejected session identity must not leave later disposal waiting forever.",
-  'The generated `dispose` method shall not be declared `async` (an async wrapper returns a distinct promise and breaks identity coalescing); return the retained teardown promise directly and use `Promise.reject(...)` for precondition failures.',
-  "In `init`, bind the immutable `PlaybookSession`, emit `session.started` with the initial normalized state descriptor, and construct the XState actor with FSM `input` derived from `options`; the actor is session-scoped, not turn-scoped; use XState v5's public actor inspection `@xstate.snapshot` for the root actor so each transition's triggering event and snapshot surface via `emitStatus`/`emitTelemetry` before the next event fires (do not consult private actor nodes or infer the event later); filter inspection events by `inspectionEvent.actorRef === rootActor`, not merely the actor-system root id, so promise-child snapshots are not emitted as root FSM transitions.",
-  'The inspection callback only validates and synchronously enqueues emission work, catching validation/enqueue failures into the control/background-error latch; it lets no exception escape and calls no async port directly; its transition `event` field is a detached JSON-safe descriptor (never the raw XState inspection event) that preserves the string `type` (or `unknown` when absent), copies only declared Boss-union payload fields and a validated actor `output`, and normalizes an `error` member; omit `input`, `actorId`, system/ref data, and every other XState-internal field even when JSON-safe (so `xstate.init.input` cannot leak the host catalog); do not call `snapshotJsonValue(event)` on an `xstate.error.actor.*` event that contains a raw `Error`.',
-  'Construct the actor without starting it, read its public initial snapshot, emit and drain `session.started`, and only then call `actor.start()`; the initial inspection-driven transition/status emissions shall not precede the session-start trace; have any actor-construction helper return the actor and assign it at the call site (TypeScript does not narrow a captured optional actor variable from assignment hidden inside a helper); retain a non-optional local actor reference across terminal reconstruction and event sending.',
-  'An actor-construction helper may read the already-bound immutable session directly for machine input such as `session.playbookId`, but it shall not call a lifecycle assertion that also requires the actor to exist (the actor does not exist until that helper returns).',
-  "Generated code shall pass the repository's full strict `tsc` build with no unused helper or destructured parameter, not only a transpile-only or target-local syntax check.",
-  'For the default Captain runtime, the initial quiescent `ready` snapshot may emit the ordinary structured transition trace and telemetry but is not a Boss-relevant transition and emits no human status; any initial transition-trace or telemetry sink failure is part of `init` (initialization rejects, stops the actor, and performs the failed-start cleanup rather than swallowing it as a later background error).',
-  "Where the FSM input declares `selfPlaybookId`, seed it from the immutable `session.playbookId`; do not expose a caller option or reuse a working leaf's `stateId` as the self-call identity.",
-  'If initialization fails after attempting `session.started`, stop the actor, abort/drain nested and host work, make one best-effort `session.disposed` attempt before clearing the bound session, and preserve the original initialization error if cleanup or disposal emission also fails; suppress root inspection emissions before stopping the failed actor (XState emits a stop snapshot that shall not retry a transition/status sink that already failed initialization); reset the inspection gate, queues, error latches, prior state, and all per-session sequence counters so a permitted retry starts with trace sequence `1`.',
-  'Per `handleBossInput`: (1) allocate a runtime-local turn id and trace the exact Boss text; (2) map `turn.text` through the Boss-event mapping (deterministic exact entry where applicable, classification otherwise) \u2014 if mapping produces no event, return after draining port emissions; if the classifier port rejects, emit and drain the Boss-settled error boundary, send no event, leave the actor unchanged (including a terminal actor), and reject the original error, but if that rejection is caused by the active Boss abort signal return and trace the same structured `aborted` result instead of `no-action`; if the port resolves but its reply cannot be recovered or validated, emit the one recovery status, send no event, leave the actor unchanged, and return `no-action` after the ordinary settled boundary drains; (3) only after classification produces a real event, if the actor is in a `final` state dispose and reconstruct it (final is terminal; `NO_ACTION`, classifier rejection, and malformed classification leave a terminal actor untouched); (4) bind the active public-boundary signal and send the classified event; (5) drive to quiescence, providing each invoked actor by kind \u2014 for `player` build a player prompt, call `callPlayer`, adjudicate, and resolve; for `captain` build a direct Captain prompt, call `callCaptain` visibly, adjudicate through the shared hidden judge path, and resolve; for `playbook` use the nested playbook bridge; for `script` use script execution with no port call and no adjudication \u2014 with parallel regions running distinct resolved players independently while Captain and judge work stay serialized by the shared host queue, using XState `waitFor` over public tags/status until no `playbook.busy` state is active, a registered child call is suspended, or the actor is terminal/error, passing `pendingCalls: nestedBridge` so a suspended tag is quiescent only after its child identity exists, and under natural rejection not passing the already-aborted public turn signal as wait cancellation; (6) return a structured `PlaybookRunResult` after all in-flight calls and ordered emissions caused by the turn drain.',
-  "Per `resumePlaybookCall`, follow the nested playbook bridge and return the same structured run-result boundary without classifying new Boss text; drain the transition/status/telemetry queue before returning; do not allocate a new Boss-input `turnId` (retain the original call-start turn id for its matching finish and the parent continuation caused by that return); every success and exceptional path drains ordered emissions, selects the first latched non-abort control error before considering abort, and clears its boundary latches in `finally`; a resume is not a Boss-input turn and emits neither `boss.input.received` nor `boss.input.settled` (the structured result is the method return, and reusing the originating turn id on the child finish and continuation emissions does not create a second Boss trace pair); this quiescence-and-drain path is mandatory even when `nestedBridge.resume(...)` rejects (capture that operation error, let the promise actor's `onError` transition settle, and select the first latched control error only after all ordered emissions have drained).",
-  'In `dispose`, capture the final public state and stop the root actor before settling or aborting a suspended nested bridge (so the bridge rejection cannot reenter the FSM and start new actor work during disposal); then drain pending port emissions and every in-flight Captain/player/judge/child opening, emit `session.disposed` with the final descriptor, and discard player resume tokens; host child abort cleanup and child `session.disposed` drain before the parent call finish, which drains before parent `session.disposed`; use cleanup/finally structure so a bridge or emission failure cannot skip the parent disposal boundary or leave the runtime bound.',
-  'Surface the actor\'s `lastError` via `emitStatus` when the machine enters its `failed` state; for the default Captain runtime an initial `ready` state and a terminal `done` state emit no human status (the terminal response is already visible Captain prose and a synthetic "entered done" message would present it twice), while structured transition trace and telemetry still apply to both.',
-  "Every provided actor boundary first drains the queued state-entry transition/status/telemetry caused by entering its working leaf (so a call's `*.started` trace cannot overtake the transition that explains it); every public runtime method drains that queue before it resolves or rejects; this initial `await drain()` is required inside each provided `fromPromise` body, because XState may begin that body before publishing the root snapshot and the await yields so the synchronous inspection callback can enqueue the entering transition first.",
-  "If a `*.call.started` trace records and then its sink rejects, no host call may begin; still enqueue exactly one synthetic paired `*.call.finished` trace with `status: 'error'` preserving the original call id, turn id, actor visibility, state/source identity, and prompt or request metadata from the start boundary; then follow the same latched control-error, FSM settlement, and ordered-drain path as any other call-start failure, and do not let the synthetic finish replace the original sink error.",
-  '',
-  'Parked-session snapshot (optional):',
-  'A linked runtime may implement the optional durable-session capability of `@sublang/playbook/runtime` \u2014 `exportSnapshot()` and `restore(session, snapshot)` (DR-014); a runtime that implements either member shall implement both.',
-  "`exportSnapshot()` returns `undefined` unless at a safe capture point (initialized, not disposing or disposed, no active `handleBossInput`/`resumePlaybookCall` boundary, no pending nested playbook call, and the root actor at a quiescent state with actor status `active`); at a safe point it returns a JSON-safe `PlaybookRuntimeSnapshot` carrying `schemaVersion` literal `1`, `playbookId` (the bound session's), `machine` (the root actor's `getPersistedSnapshot()` passed through the shared JSON detachment with any raw `Error` context such as `lastError` normalized to `{ name, message, stack? }`; opaque to hosts), `playerResumeTokens` (the resume-token map as a plain object), `sequences` (the live `trace`, `turn`, `judgeCall`, `playerCall`, and `playbookCall` counters), `state` (the current normalized descriptor), and `pendingBossQuestions` (a list of `{ questionId, player, question, sourceItem? }`, empty when the parked state awaits no reply).",
-  "`restore(session, snapshot)` is an alternative to `init` under the same lifecycle guards: reject when already initialized, disposing, or disposed, and validate `snapshot.schemaVersion` and that `snapshot.playbookId` equals `session.playbookId` before touching state; the host supplies the same immutable `PlaybookSession` identity the snapshot was exported under and recreates the runtime through the same factory with equivalent options (the runtime does not diff options; module identity is the host's check); bind the session, restore the resume-token map, sequence counters, and prior-state descriptor from the snapshot, construct the actor with the persisted `machine` snapshot, and start it with root inspection emissions suppressed so rehydration emits no `session.started` trace, no transition trace, and no human status (the session already started, and the next public boundary continues the contiguous sequence); after start, a restored actor whose status is not `active` or whose state descriptor cannot be normalized fails `restore` through the same failed-start cleanup path as `init`; a restore failure leaves the runtime unbound so `dispose` remains callable and terminal.",
-  '',
-  'Abort:',
-  '`handleBossInput.signal` is the abort surface; honor it at every `callPlayer`/`callCaptain`/`callJudge` and at every poll between transitions.',
-  'Each provided Captain, player, judge, or nested-playbook boundary receives a signal combined from its XState invocation-lifetime signal and the currently active `handleBossInput` or `resumePlaybookCall` signal (e.g. with `combineAbortSignals`); classify a rejection as cancellation by causal identity with the applicable signal reason, not by an `AbortError` name or by observing only that the signal is also aborted; a distinct transport or sink failure that occurs after abort remains a non-abort control error and takes precedence.',
-  'On abort, do not merely race the imperative wait and return while an invocation remains live: let the selected rejection path settle and drive the actor to a quiescent state before returning from the turn; no trace, status, state, or call completion caused by that turn may appear after the public method returns.',
-  "Three strategies are permitted, selected per FSM: Natural rejection \u2014 the Captain or player actor ends the invocation by rejecting and the FSM routes it through `onError` to a quiescent sink (the cancelled port call may itself reject or resolve with `{ status: 'aborted' | 'error' }` that the runtime converts into an actor rejection; the contract is on the actor boundary, not the port promise; preferred when every invoking state's `onError` lands somewhere quiescent).",
-  "Synthetic pre-emption to a quiescent target \u2014 send the FSM's pre-emption event (e.g. `BOSS_INTERRUPT { targetId: <state> }`) with a target that is itself quiescent (typically `ready` or `failed`); do not pick the active state, because gears2fsm prescribes `reenter: true` for `bossInterrupts`, so re-entering the active state restarts its `invoke` and spawns a fresh agent call.",
-  'Programmatic stop \u2014 `actor.stop()` and report the turn as aborted via `emitStatus`, reserved for FSMs with neither `onError` wiring nor a pre-emption event.',
-  "Whether the host's outer abort is recoverable or terminal is the host's concern; the runtime exits `handleBossInput` cleanly either way and the host decides whether to call `dispose` afterward.",
-  '',
-  'Status and telemetry:',
-  'Emit at minimum one `emitStatus` per Boss-relevant transition (default: emit on every transition and let the host filter; hosts may bind a stricter rule) and one `emitTelemetry` per state transition under a namespaced topic (recommended `playbook.fsm.state`) with structured `from`, `to`, `event`, `previousState`, and `state` fields; descriptors carry the JSON-safe XState value, active stable ids from public state metadata, tags, status, and quiescence, and do not inspect private XState nodes.',
-  "The telemetry payload additionally carries the exact pending Boss question or keyed questions selected from public snapshot context and normalizes any transition error without retaining a raw `Error` instance; do not reduce the payload to the current state (`from` and `previousState` are the authoritative prior descriptor while `to` and `state` are the new descriptor; on the first observed transition use the initialized state as both when no earlier transition exists); snapshot and recursively freeze the complete described payload independently from the state retained as `previousState` so an observer cannot mutate a later transition's authoritative `from` state; observers consume telemetry and the runtime never interprets the topic.",
-  "Player prompts and adjudicator JSON may additionally ride the host's own record channels when present; the `playbook.trace` copies are the host-agnostic runtime-boundary record required above.",
-  '',
-  'Output module requirements:',
-  "Emit one TypeScript module that imports the FSM artifact by relative path with an extension-bearing runtime specifier \u2014 the NodeNext-compatible `.js` specifier (e.g. `./code.fsm.js`) when the linked TypeScript ships JavaScript siblings, never a `.ts` specifier the package's Node versions cannot load; an explicitly source-only host may retain `.ts` only when it supports direct TypeScript loading and ships no JavaScript build.",
-  'Restrict the module to erasable TypeScript syntax (type annotations that strip cleanly, no constructor parameter properties, `enum`s, or namespaces) so a host under type stripping loads it directly.',
-  "Import XState's actor primitives (`createActor`, `fromPromise`, `setup`'s `.provide`).",
-  'Import `PQueue` from `p-queue` for the single serialized emission channel.',
-  "Import the FSM's exported machine/actor input and output types and use those exact types in `.provide(...)`; do not redeclare look-alike Captain, player, playbook, question, or output contracts beside the linked runtime.",
-  'Import the applicable shared helpers from the extension-bearing `xstate-runtime.js` sibling of the resolved shared `--link` contract module, relativized from the emitted artifact exactly as the contract import is; every runtime uses `assertJsonSafe`, `snapshotJsonValue`, `snapshotPlaybookSession`, `normalizeError`, `normalizePlaybookSnapshot`, and `waitForPlaybookQuiescence`, and additionally imports `combineAbortSignals`, result validators, and `createNestedPlaybookBridge` only when its actor and composition paths need them; use those helpers instead of weaker local JSON, error, snapshot, nested-call, or imperative-wait implementations.',
-  'Export `createPlaybookRuntime` and the typed `PlaybookRuntimeOptions` interface for that playbook.',
-  'Expose, under an `_internal` export, the pure helpers verification needs \u2014 at least the player-prompt and Captain-prompt composers (`composePlayerPrompt` and `composeCaptainPrompt`) \u2014 so compilation-correctness tests can exercise composition without a host.',
-  'Hold no host-specific types and no host primitive calls: speak only `PlaybookPorts` for every agent and host concern; the sole exception is `node:child_process`, imported only when the FSM declares a `script` actor.',
-  'Record the linker inputs (FSM path, player binding, strategies) in a top-of-file header comment so the file is reproducible from the same inputs.',
-  'Source the contract types (`PlayerResult`, `PlayerCallOptions`, `CaptainResult`, `CaptainCallOptions`, `PlaybookPorts`, `PlaybookSession`, `PlaybookTraceEvent`, `PlaybookCallRequest`, `PlaybookCallResult`, `PlaybookCallStart`, `PlaybookStateValue`, `PlaybookState`, `PlaybookRunResult`, `PlaybookRuntime`, `PlaybookRuntimeFactory`) from a single shared type-only module instead of redefining them, and re-export the names its consumers import, so every linked playbook shares one contract definition and the dependency runs one way from each linked module to the shared contract.',
-  'When a co-located integration test for the linked runtime already exists, run it before reporting success and treat any failure as a generation failure; do not delete, skip, or weaken that suite to make a new artifact pass.',
-  'Internal trace/status helpers may accept `unknown`, validate it with the same JSON-safety rules as the public boundary, and only then emit a `JsonValue`; they shall not require nominally typed public interfaces (`NormalizedError`, `PlaybookState`, `PlaybookCallRequest`, `PlaybookCallResult`) to satisfy a `JsonValue` index signature at compile time, nor silence that mismatch with an unchecked cast.',
-  "Prompt placeholder substitution makes one callback-based pass over the original template; replacement strings are literal, so placeholder-looking text inside Boss/catalog/plan/result values and JavaScript replacement tokens such as `$&`, `$$`, dollar-backtick, and `$'` are not interpreted or substituted again.",
-  '',
-  'Out of scope:',
-  'Do not define player prompts, result keys, or guard semantics \u2014 those belong in the GEARS source and the FSM artifact.',
-  'Do not implement host adapters, host configuration, or presentation layouts \u2014 only constrain the `PlaybookPorts` contract they satisfy.',
-  'Do not add trace persistence, multiple Boss-selected root engagements, recursive playbook calls, multi-Boss orchestration, or visualizer rendering; a host may persist the emitted trace but the runtime does not rehydrate a disposed actor from it; parked-session durability is in scope only through the optional snapshot surface above; new behavior in any of these areas requires a separate slc spec.',
-].join('\n');
-
 /**
- * Standard adjudicator-facing description for the `needsBossReply` guard.
- * Carries the load-bearing substring ``Output shall include `question:`` so the
- * runtime's adjudicator requires `question` in the JSON reply.
+ * Per-run parameters copied into context at start-up. The single LINK-1 prompt
+ * establishes no runtime-value placeholders, declares no players, and the
+ * machine makes no dynamic playbook call, so no fields are required here.
  */
-const NEEDS_BOSS_REPLY_DESCRIPTION: string =
+export type LinkInput = Record<string, never>;
+
+// ---------------------------------------------------------------------------
+// Standard adjudicator-facing description for the Boss-reply suspension path.
+// Carries the load-bearing substring `Output shall include \`question:` so the
+// runtime's adjudicator requires `question` in the JSON reply.
+// ---------------------------------------------------------------------------
+
+const NEEDS_BOSS_REPLY_DESCRIPTION =
   "The acting agent's prose surfaces a clarifying question for Boss that the agent cannot answer alone. Output shall include `question: <verbatim question text from the acting agent's prose>`.";
 
 // ---------------------------------------------------------------------------
-// Small typed accessors for actor-lifecycle events (kept local to this file)
+// State-id registries for the Boss-control helpers.
 // ---------------------------------------------------------------------------
 
-function outputOf(event: unknown): CaptainOutput {
-  return (event as DoneActorEvent<CaptainOutput>).output;
-}
+/** Jumpable targets for `BOSS_INTERRUPT` (active work + quiescent sinks). */
+const INTERRUPT_IDS = ['ready', 'compile', 'failed'] as const;
 
-function errorOf(event: unknown): unknown {
-  return (event as { error?: unknown }).error;
-}
+/** Every captain-invoking state can suspend for a Boss reply and resume. */
+const RESUMABLE_IDS = ['compile'] as const;
 
 // ---------------------------------------------------------------------------
-// Boss-surface helper (emitted once, reused per registered id)
+// Boss-control transition helpers (emitted, not hand-written per state).
 // ---------------------------------------------------------------------------
-
-/** Every captain-invoking state id registered for Boss-reply resume. */
-const RESUMABLE_STATE_IDS = ['linking'] as const;
 
 /**
- * One BOSS_REPLY resume arm per registered captain-invoking state, guarded on
- * `context.pendingBossQuestion?.resumeStateId === '<id>'` and targeting `#<id>`
- * with `reenter: true`. Captures the Boss answer into `bossReply` and keeps
- * `pendingBossQuestion` so the resumed state can compose its continuation.
+ * Parameterless registered action names, usable as bare-string references; kept
+ * as literals so helpers never widen to `string`. (`setPendingBossQuestion`
+ * takes params and is referenced only via the `{ type, params }` object form.)
+ */
+type SimpleActionName =
+  | 'startTransform'
+  | 'captureBossReply'
+  | 'clearBossReplyContext'
+  | 'recordEmptyReply';
+
+/**
+ * One guarded `BOSS_INTERRUPT` arm per jumpable state, targeting `#<id>` with
+ * `reenter: true` so the invoked actor restarts cleanly. Optional `extraActions`
+ * run before the jump (used on `awaitBossReply` to clear pending context).
+ */
+function bossInterrupts(
+  ids: readonly string[],
+  extraActions: readonly SimpleActionName[] = [],
+) {
+  return {
+    BOSS_INTERRUPT: ids.map((id) => ({
+      guard: { type: 'isInterruptTarget' as const, params: { id } },
+      target: `#${id}`,
+      reenter: true,
+      actions: [...extraActions],
+    })),
+  };
+}
+
+/**
+ * One `BOSS_REPLY` arm per registered captain-invoking state, guarded on the
+ * pending question's `resumeStateId` and targeting `#<id>` with `reenter: true`.
+ * `captureBossReply` records the answer so the resumed state's `invoke.input`
+ * carries it; pending context is intentionally NOT cleared on the resume arm.
  */
 function resumableStates(ids: readonly string[]) {
-  return ids.map((id) => ({
-    guard: { type: 'isResumeTarget' as const, params: { id } },
-    target: `#${id}`,
-    reenter: true as const,
-    actions: ['applyBossReply'] as const,
-  }));
+  return {
+    BOSS_REPLY: ids.map((id) => ({
+      guard: { type: 'isResumeTarget' as const, params: { id } },
+      target: `#${id}`,
+      reenter: true,
+      actions: ['captureBossReply' as const],
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Setup: types, the placeholder Captain actor, guards, and actions
+// Machine
 // ---------------------------------------------------------------------------
 
-/**
- * Placeholder Captain actor. It has the typed CaptainInput -> CaptainOutput
- * contract but no concrete implementation: it fails explicitly so a runner that
- * forgets to provide the real actor cannot silently no-op.
- */
-const captainPlaceholder = fromPromise<CaptainOutput, CaptainInput>(
-  async () => {
-    throw new Error('captain actor must be provided by the runner');
-  },
-);
-
-const machineSetup = setup({
+export const linkMachine = setup({
   types: {
     context: {} as LinkContext,
     events: {} as LinkEvent,
     input: {} as LinkInput,
   },
   actors: {
-    captain: captainPlaceholder,
+    // Typed placeholder: the runner must supply the real Captain via `.provide`.
+    captain: fromPromise<CaptainOutput, CaptainInput>(async () => {
+      throw new Error('captain actor must be provided by the runner');
+    }),
   },
   guards: {
-    isDone: ({ event }) => outputOf(event).guard === 'done',
-    isNeedsBossReply: ({ event }) => outputOf(event).guard === 'needsBossReply',
-    isNeedsBossReplyWithQuestion: ({ event }) => {
-      const output = outputOf(event);
-      if (output.guard !== 'needsBossReply') return false;
-      const question: unknown = (output as { question?: unknown }).question;
-      return typeof question === 'string' && question.trim().length > 0;
-    },
-    isEmptyAnswer: ({ event }) =>
-      event.type === 'BOSS_REPLY' && event.answer.trim().length === 0,
-    isResumeTarget: ({ context }, params: { id: string }) =>
+    isInterruptTarget: ({ event }, params: { id: string }) =>
+      event.type === 'BOSS_INTERRUPT' && event.targetId === params.id,
+    isResumeTarget: ({ context, event }, params: { id: string }) =>
+      event.type === 'BOSS_REPLY' &&
+      event.answer.trim().length > 0 &&
       context.pendingBossQuestion?.resumeStateId === params.id,
+    isEmptyBossReply: ({ event }) =>
+      event.type === 'BOSS_REPLY' && event.answer.trim().length === 0,
   },
   actions: {
-    // Populate context from a Boss entry event (dedicated action).
-    applyBossEntry: assign(({ event }) => {
-      if (event.type !== 'LINK_REQUEST') return {};
-      return { fsmArtifact: event.fsmArtifact, target: event.target };
+    /** Start a fresh Boss-initiated turn: reset inspection scratch. */
+    startTransform: assign({
+      lastResult: () => undefined,
+      lastError: () => undefined,
     }),
-    // Capture the Boss answer for the resumed state's continuation prompt.
-    applyBossReply: assign(({ event }) => {
-      if (event.type !== 'BOSS_REPLY') return {};
-      return { bossReply: event.answer };
+    /** Suspend: record the pending question; clear any stale Boss answer. */
+    setPendingBossQuestion: assign((_args, params: PendingBossQuestion) => ({
+      pendingBossQuestion: params,
+      bossReply: undefined,
+    })),
+    /** Capture Boss's answer for the continuation prompt on resume. */
+    captureBossReply: assign({
+      bossReply: ({ event }) =>
+        event.type === 'BOSS_REPLY' ? event.answer : undefined,
     }),
-    // Persist the discriminated result for inspection only.
-    rememberResult: assign({
-      lastResult: ({ event }) => outputOf(event),
-    }),
-    rememberCaptainError: assign({
-      lastError: ({ event }) => errorOf(event),
-    }),
-    // Suspend for a Boss reply: record the pending question and clear any prior answer.
-    setPendingBossQuestion: assign(
-      (
-        { event },
-        params: { stateId: string; sourceItem: string; player: string },
-      ) => {
-        const output = outputOf(event);
-        const question: unknown = (output as { question?: unknown }).question;
-        return {
-          pendingBossQuestion: {
-            questionId: params.stateId,
-            resumeStateId: params.stateId,
-            sourceItem: params.sourceItem,
-            player: params.player,
-            question: typeof question === 'string' ? question : '',
-          },
-          bossReply: undefined,
-        };
-      },
-    ),
-    // Abandon any pending Boss question.
+    /** Drop pending-question context on any non-resume exit / normal outcome. */
     clearBossReplyContext: assign({
       pendingBossQuestion: () => undefined,
       bossReply: () => undefined,
     }),
+    /** Record a malformed empty Boss reply for inspection in `failed`. */
+    recordEmptyReply: assign({
+      lastError: () =>
+        new Error('BOSS_REPLY received an empty or whitespace-only answer.'),
+    }),
   },
-});
-
-// ---------------------------------------------------------------------------
-// Machine
-// ---------------------------------------------------------------------------
-
-export const linkMachine = machineSetup.createMachine({
+}).createMachine({
   id: 'link',
   initial: 'ready',
-  context: ({ input }) => ({
-    fsmArtifact: input.fsmArtifact ?? '',
-    target: input.target ?? '',
+  context: (): LinkContext => ({
+    lastResult: undefined,
+    lastError: undefined,
+    pendingBossQuestion: undefined,
+    bossReply: undefined,
   }),
+  // Root-level Boss interrupts: reachable from any active state.
+  on: {
+    ...bossInterrupts(INTERRUPT_IDS),
+  },
   states: {
-    // Quiescent idle hub — no invoke, so construction/start performs no Captain call.
     ready: {
       id: 'ready',
       description:
-        'Quiescent idle hub; waits for a Boss transformation request before any Captain call.',
+        'Idle; waiting for Boss to request an FSM-to-runtime linking transformation.',
       tags: ['playbook.parked'],
       meta: {
         playbook: {
           stateId: 'ready',
           description:
-            'Quiescent idle hub; waits for a Boss transformation request before any Captain call.',
+            'Idle; waiting for Boss to request an FSM-to-runtime linking transformation.',
         },
       },
       on: {
-        LINK_REQUEST: { target: '#linking', actions: 'applyBossEntry' },
+        COMPILE: {
+          target: '#compile',
+          actions: ['startTransform', 'clearBossReplyContext'],
+        },
       },
     },
 
-    // The single captain-invoking state; realizes GEARS item LINK-1.
-    linking: {
-      id: 'linking',
+    compile: {
+      id: 'compile',
       description:
-        'Captain carries out the FSM-to-Runtime linking specified by LINK-1.',
+        'Captain compiles the source XState FSM artifact into a host-agnostic PlaybookRuntime factory module.',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
-          stateId: 'linking',
+          stateId: 'compile',
           description:
-            'Captain carries out the FSM-to-Runtime linking specified by LINK-1.',
+            'Captain compiles the source XState FSM artifact into a host-agnostic PlaybookRuntime factory module.',
         },
       },
       invoke: {
         src: 'captain',
         input: ({ context }): CaptainInput => ({
-          stateId: 'linking',
+          stateId: 'compile',
           sourceItem: 'LINK-1',
-          prompt: LINK_1_PROMPT,
+          prompt: [
+            'Compile the gears2fsm FSM artifact into a `PlaybookRuntime`: a host-agnostic runner that drives the FSM, classifies Boss input into typed events, runs direct-Captain, delegated-player, and nested-playbook actors, executes deterministic script actors locally without any agent, adjudicates Captain and player output into FSM guards, and surfaces transitions as status and telemetry.',
+            'Emit a `PlaybookRuntime` factory module — TypeScript, host-agnostic — as the target; hosts are out of scope for this phase.',
+            'Invoke the runtime through the stable `PlaybookPorts` contract, so presentation layers (tmux-play, web, CLI, tests) implement the six ports once and inherit every playbook.',
+            "Assume each host has an adapter that loads a `PlaybookRuntime` module and supplies the host's primitives as `PlaybookPorts`; the adapter speaks only `PlaybookPorts` to the runtime and shall not leak host types back into it.",
+            'Do not modify the FSM artifact and do not re-derive Captain prompts, result keys, or guard semantics — those are fixed by the FSM.',
+            'PlaybookRuntime contract:',
+            'Default-export a factory `createPlaybookRuntime(options: PlaybookRuntimeOptions): PlaybookRuntime` that conforms to `PlaybookRuntimeFactory<PlaybookRuntimeOptions>`, the generic factory type the shared contract module exposes.',
+            'Give `PlaybookRuntime` four methods: `init(session: PlaybookSession): Promise<void>`; `handleBossInput(turn: { text: string; signal: AbortSignal }): Promise<PlaybookRunResult>`; `resumePlaybookCall(input: { callId: string; result: PlaybookCallResult; signal: AbortSignal }): Promise<PlaybookRunResult>`; and `dispose(): Promise<void>`.',
+            'In `init`, receive the host-owned playbook session identity and ports, construct the XState actor with FSM `input` derived from `options`, and start the actor.',
+            'Let the runtime own the actor for its lifetime: `handleBossInput` runs one turn, and `dispose` stops the actor and drains pending port emissions.',
+            'Expect the host to generate a non-empty, globally unique `sessionId` for each init-to-dispose lifecycle and to supply the stable registry or authored playbook id as `playbookId`.',
+            'Validate non-empty session, playbook, and root ids; a safe non-negative integer depth; root identity (`depth === 0` and `rootSessionId === sessionId` with no parent fields); and child identity (`depth > 0` with non-empty parent session and call ids).',
+            "Copy those identity scalars and the port references into the runtime's own immutable record rather than retaining the caller's mutable session object.",
+            'Require a child `sessionId` to differ from both its `rootSessionId` and `parentSessionId`.',
+            'Make run outcomes exact: `no-action` means no FSM event was sent; `quiescent` means a non-failure parked or idle state; `failed` means the FSM is in a recoverable failure state; `terminal` means top-level final with optional JSON output; `aborted` means the turn signal ended work; and `suspended` means exactly one `pendingCall` is active.',
+            'Shape `PlaybookRunResult` as a discriminated union: `quiescent`/`no-action` carry `state`; `failed`/`aborted` carry `state` and optional normalized `error`; `terminal` carries `state` and optional JSON `output`; and `suspended` carries `state` and a `pendingCall` of `{ callId, playbookId, childSessionId }`.',
+            'Reject the runtime method for control-plane exceptions rather than let them masquerade as a recoverable workflow `failed` result.',
+            'Keep `PlaybookRuntimeOptions` host-agnostic, carrying only per-run knobs such as identity strings (e.g., model names a playbook substitutes into prompt placeholders) and strategy overrides the linker exposes.',
+            "Emit a typed options interface per playbook derived from the FSM's `CodingInput` (or equivalent).",
+            "Do not treat the CLI's absence of `--link-option` values as meaning `PlaybookRuntimeOptions` is empty: CLI link options are compile-time inputs, while the runtime options interface is independently derived from every required FSM input field not supplied by `PlaybookSession` or another linker-owned source.",
+            'Keep a required immutable `enabledPlaybooks` catalog as a required readonly runtime option passed through to machine input; neither invent an empty catalog nor require it baked into a CLI link option.',
+            'Treat player binding as a linker-time input baked into the emitted runtime by default; a linker may also expose it via `PlaybookRuntimeOptions` for per-run remapping, but the contract requires only that the runtime ship with a deterministic binding it applies at every `callPlayer` site.',
+            'PlaybookPorts contract:',
+            'Have the runtime speak to the host only through six `PlaybookPorts`: `callPlayer(playerId, prompt, signal, options)`, `callCaptain(prompt, signal, options)`, `callJudge(prompt, signal)`, `callPlaybook(request, signal)`, `emitStatus(message, data?)`, and `emitTelemetry(event)`.',
+            "Carry `resume: string | false` in `PlayerCallOptions`; carry `visibility: 'visible' | 'hidden'`, `resume: string | false`, and optional `allowedTools?: readonly string[]` in `CaptainCallOptions`.",
+            "Shape `PlayerResult` as `status: 'ok' | 'aborted' | 'error'` with optional `resumeToken`, `finalText`, and `error`; shape `CaptainResult` as the same status with optional `finalText` and `error` but no resume token or player-continuation selection.",
+            "Mirror cligent's `PlayerRunResult` status, resume token, final text, and error fields in `PlayerResult`, and treat `status !== 'ok'` as a player failure routed through the FSM's error path.",
+            "Run `callCaptain` as a direct-Captain FSM actor against the host's Captain agent, passing `{ visibility: 'visible', resume: false }` for authored workflow calls so XState context, not an agent conversation, owns workflow continuity.",
+            'Keep the tool restriction source-owned: additionally pass `allowedTools: []` exactly when the GEARS source itself restricts the acting Captain from tools (a routing-only Captain policy such as the default generic Captain).',
+            "Carry no `allowedTools` restriction for a transformation-performing Captain — e.g., a compiler phase compiled from a transformation-spec source whose behavior writes a declared target artifact — because it works through the host Captain's own tools.",
+            "Keep `CaptainCallOptions.allowedTools` optional: an explicit empty array requests a tool-free call, while omission preserves the host Captain's configured tools.",
+            "Treat a non-`ok` `CaptainResult`, or an `ok` result without non-empty `finalText`, as a failure recorded on the call's single finish trace, and reject the actor through the FSM's error path.",
+            "Treat such structured host-result failures as recoverable workflow failures, not control-plane failures: let the actor take `onError`, drive it to quiescence, drain ordered emissions, and resolve the public method with `{ outcome: 'failed' }` carrying the failure state's error, matching the delegated-player result boundary.",
+            'Keep a non-abort thrown `callCaptain` port, a malformed host result, and a rejecting trace sink as control-plane failures that reject the public method.',
+            "If the required finish sink rejects after a structured host-result failure, keep the actor's error and failure-state evidence as the host-result failure while rejecting the public method with the sink failure surfaced by the turn's emission drain; absent such a control-plane failure, if the combined signal has aborted, let ordinary abort settlement remain authoritative after the actor reaches its error path.",
+            'Own a map from resolved player id to its latest non-empty `resumeToken` in every linked runtime.',
+            'Before reading a resolved direct-Captain or delegated-player result, validate, detach, and freeze it through the shared `validateCaptainResult` or `validatePlayerResult` helper, accepting an exact object shape (only the declared status and optional string fields, JSON-unsafe members reject) so caller mutation after resolution cannot change trace evidence or player continuity, and validating before adopting a resume token or reading final text.',
+            'Pass `{ resume: false }` on the first call to each player in a playbook session and the exact stored token on later calls.',
+            'After a resolved call, replace the token when the result carries one or clear it when absent before interpreting `status`, and leave the prior token unchanged for a rejected call with no result.',
+            'After awaiting a host Captain or player promise, re-check the combined invocation/public-boundary signal before validating the result, adopting a resume token, or emitting a successful finish, so a host promise that ignores cancellation and resolves late is paired as aborted and does not mutate continuity or masquerade as success.',
+            'Keep the resume-token map across actor reconstruction inside the same runtime and discard it at `dispose`.',
+            'Keep an in-flight set keyed by resolved player id and reject a second concurrent call to the same id before crossing the host port, while allowing calls to distinct resolved player ids to overlap.',
+            "Treat `callJudge` as returning free-form text parsed per the state's adjudication strategy; one port serves both classifier and adjudicator, varying only in prompt.",
+            'Pass concurrent `callJudge` attempts within one linked runtime through one abort-aware local FIFO; after the host promise resolves, require a string reply and re-check the combined signal before tracing or parsing success, so a non-cooperative late judge cannot outlive cancellation.',
+            'Serialize `callCaptain` and `callJudge` together through one shared abort-aware concurrency-one FIFO because both use the same single-flight Captain lane, even when distinct player ports overlap.',
+            "Let a direct Captain call's subsequent adjudication enter that same queue only after the visible call has settled, and do not hold one queue lease while requesting the other port.",
+            'Use one shared `PQueue({ concurrency: 1 })` for the individual host `callCaptain` and `callJudge` promises; do not pass an invocation or public-boundary signal as `PQueue.add(..., { signal })`, because PQueue may release a running slot as soon as that signal aborts while a non-cooperative host promise still executes; instead check the combined signal inside the queued task before crossing the host port, await the host promise without releasing the queue lease, and check the signal again afterward.',
+            "Start a function-style child call with `callPlaybook`: the caller runtime supplies its stable call id and the XState invocation's lifetime signal, and the host drives the child's initial text before resolving the port with either an immediate settled result or a suspended child session.",
+            'Resume suspension later through `PlaybookRuntime.resumePlaybookCall`, and do not let the port promise itself remain pending across Boss turns.',
+            "Shape `PlaybookCallRequest` as `{ callId, playbookId, text }`; `PlaybookCallResult` as a status-discriminated `ok`/`aborted`/`error` union carrying `playbookId`, `childSessionId`, optional `state`, and `output` or normalized `error`; and `PlaybookCallStart` as `{ state: 'settled'; result }` or `{ state: 'suspended'; childSessionId }`.",
+            'Make `emitStatus` human-readable and `emitTelemetry` structured; keep both async, ordered, awaited, and never-dropped, awaiting each emission before issuing the next.',
+            'Never let the runtime speak to LLMs directly or touch host types beyond `PlaybookPorts`.',
+            'Playbook trace:',
+            'Emit a boundary-complete, ordered trace through `emitTelemetry` topic `playbook.trace` in every linked runtime.',
+            'Carry in each payload `schemaVersion: 2`, the immutable session identity and causality, a contiguous one-based `sequence`, a Unix-millisecond `timestamp`, a trace `type`, event `payload`, and the runtime-local `turnId` and paired `callId` where applicable.',
+            'Draw the trace `type` from `session.started`, `boss.input.received`, `judge.call.started`, `judge.call.finished`, `player.call.started`, `player.call.finished`, `captain.call.started`, `captain.call.finished`, `playbook.call.started`, `playbook.call.finished`, `fsm.transition`, `status.emitted`, `boss.input.settled`, and `session.disposed`.',
+            'Carry in call pairs exact prompts and replies, normalized failures, actor and state identity, and their boundary-specific options.',
+            "Carry `allowedTools` on direct-Captain start and finish payloads exactly when the originating `CaptainCallOptions` selects it, and omit the member when the call preserves the host Captain's configured tools.",
+            'Carry the descriptor as top-level `state` and its singular `stateId` when present on `session.started` and `session.disposed`.',
+            "Carry the working snapshot's singular `stateId` when one exists on every judge start and finish, where classification uses the current descriptor and adjudication uses the invoking actor input; the default Captain always has a singular id while a parallel snapshot may omit it.",
+            "Carry `status: 'ok' | 'aborted' | 'error'` on every judge finish.",
+            'Carry the described top-level `state` and its singular `stateId` when present, plus the message and optional data, on every `status.emitted`, so consumers need not recover state identity from a nested ad hoc object.',
+            'Use `reply` for judge results, and carry the selected `resume` on both player start and finish payloads.',
+            "Carry on Captain start and finish payloads the exact composed prompt, `visibility: 'visible'`, the direct invocation's `stateId` and `sourceItem`, and no player resume selection or resume token.",
+            'Set judge `purpose` to `boss-input-classification`, `player-output-adjudication`, or `captain-output-adjudication`.',
+            'Represent every error as `{ name, message, stack? }` rather than a raw string or `Error` instance.',
+            'Preserve the exact `CaptainResult` status and final text when present on the Captain finish payload, carrying any failure in normalized form, so an `ok` result without `finalText` retains status `ok` but also carries the normalized missing-text failure that makes the actor reject.',
+            "If the Captain port rejects before returning a result, carry explicit `status: 'aborted'` when the combined signal has aborted or `status: 'error'` otherwise, and never omit status merely because there was no structured host result.",
+            'Apply the pair obligation when a port promise rejects or throws: emit and drain one normalized finish boundary before propagating the failure, and never leave a started call boundary without its matching finished boundary.',
+            'If a started-boundary sink records the event and then rejects, make one best-effort normalized error-finish attempt with the same call id and then reject the original start error; do not retry either event or let a failure of that finish attempt replace the start error.',
+            'Keep each `callId` on a call boundary unique within the runtime session, and never reuse a stable FSM `stateId` (identity metadata in the payload) as a call id across repeated invocations.',
+            'Omit optional trace and run-result members when absent; do not create own `turnId`, `callId`, parent identity, output, or error properties with value `undefined` and rely on JSON serialization to drop them.',
+            'Project the complete structured run result in a `boss.input.settled` payload: its outcome must be one of the `PlaybookRunResult` discriminants (never an invented `error` outcome), and it shall include `state`, singular `stateId`, `pendingCall`, `output`, and normalized `error` whenever the matching result arm carries them.',
+            'Serialize every trace, human status, and state telemetry call through one runtime-owned concurrency-one emission queue; allocate the sequence and enqueue atomically, and drain that queue in every public method before it resolves or rejects.',
+            "Ensure a state transition emission queued on entry is observed before the invoked boundary's `*.started` event, even when a host delays `emitTelemetry`.",
+            'Use `PQueue({ concurrency: 1 })` from `p-queue` for this ordering and drain it with `onIdle()` rather than recreate a promise-queue implementation in every generated artifact.',
+            'Have an XState inspection callback synchronously enqueue the transition trace, state telemetry, status trace, and human status in that order before it returns, and have `emitStatus` likewise enqueue its trace and port emission in the same synchronous call.',
+            "Do not enqueue state telemetry or the status port from a `trace(...).then(...)` continuation, because the queue can become momentarily idle and let an invoked actor's `await drain()` overtake those dependent enqueues.",
+            'Do all validation before these synchronous enqueues, and catch later sink failures into the appropriate latch without changing their queue position.',
+            'Carry the same transition, pending-question, and normalized-error fields on FSM trace events as on state telemetry.',
+            'Await and sequence trace emissions before the boundary operation or human status/state telemetry they describe.',
+            'Carry the same root/parent/depth identity on every event in one session.',
+            "Order a parent call start before its child `session.started`, and the child's `session.disposed` before the parent call finish.",
+            'Allow parallel call finishes in either order, so consumers use call ids for pairing and sequence for the observed total order.',
+            'Cover everything observable through `PlaybookRuntime` in this trace, leave host-specific adapter streaming in the host record stream, and never let trace payloads become Boss-visible status or prompt text.',
+            'Linker inputs:',
+            'Accept as link-compiler inputs the FSM artifact (path to a `.fsm.ts`); a player binding mapping GEARS players declared in the text2gears source to opaque player-identifier strings; and an adjudication strategy (default: LLM-judge per state) plus a Boss-event mapping (default: free-text judge classification), both host-agnostic.',
+            'Where no binding is supplied, apply the default binding — each player to its lowercased name (e.g., `Coder` → `coder`) — and record the applied binding in the emitted header.',
+            "Keep the host's identity out of compilation, so the linked module runs unchanged under any host that implements `PlaybookPorts`.",
+            'Player binding:',
+            "Map every named player (from a delegated GEARS state's `player` actor `invoke.input.player`) to a `playerId` string used in `PlaybookPorts.callPlayer(playerId, …)`, which the host adapter routes to its concrete primitive.",
+            "Carry each direct-Captain and delegated-player invocation's working leaf explicit `stateId`, using that field for call identity rather than inferring one leaf from a structured root snapshot.",
+            'Let direct `captain` actor states bypass player binding and call `PlaybookPorts.callCaptain`, and do not synthesize a player id named `captain` for them.',
+            "Resolve composite-player aliases (e.g., `Committer = Coder | Reviewer`) per source item by inspecting the `PlayerInput` fields populated at that state: bind to the sole present `<playerName>Player` field; prefer the first-listed alternative in alias declaration order when several are present; and fall back to the alias's first alternative when none are present.",
+            'Make resolution deterministic and record it in the emitted module so maintainers can audit it without re-running the linker.',
+            "Do not invent player identifiers beyond the recorded default binding, and do not silently collapse aliases at the FSM level: composite players keep their `player: 'Committer'` value on `PlayerInput`, and resolution decides only the `callPlayer` invocation.",
+            'Player prompt composition:',
+            "Compose the actual player prompt from the state's `PlayerInput`, keeping `input.prompt` as the GEARS-derived domain prompt body that shall not be mutated, re-flowed, or used to store framework control instructions.",
+            'Allow the composer to prepend structured labelled blocks from typed `PlayerInput` fields the FSM exposes (for example `Boss intent:`, `Review items:`, `Rebuttals:`, or `Task description:`), kept outside the domain prompt body.',
+            "Do not inject a player-visible Boss-question instruction: Boss-question detection is adjudicator-facing, coming from the state's `needsBossReply` result description, not from extra prompt text.",
+            'When `PlayerInput` carries both `pendingBossQuestion` and `bossReply`, prepend the continuation preamble and labelled Q&A blocks before ordinary structured blocks and before the domain prompt body, using exactly the preamble line `You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.`, then a `Boss question:` block carrying `pendingBossQuestion.question`, then a `Boss reply:` block carrying `bossReply`.',
+            'Treat the continuation preamble as framework text supplied by the runtime, not part of the GEARS blockquote, and never place it in `invoke.input.prompt`.',
+            'Retain the blank line after the Boss reply before the next structured block or domain prompt, producing exactly two newline characters at that boundary; when joining an array with `"\\n"`, use two trailing empty strings after `bossReply` (one trailing empty string emits only one newline and is nonconformant), equivalently appending `"\\n\\n"` exactly once before the following block or domain body.',
+            'Captain prompt composition:',
+            "Compose a direct Captain prompt from the state's `CaptainInput` under the same prompt-integrity rules: keep `input.prompt` as the verbatim GEARS domain body, while supplying specific typed fields as labelled blocks substituted for their declared placeholders, and introduce no player binding or player resume instruction.",
+            'Substitute string fields verbatim; validate arrays and objects such as the sanitized enabled-playbook catalog, remaining plan, and completed child results as JSON-safe and render them as deterministic JSON, never coercing them through default JavaScript string conversion or exposing untyped context.',
+            'Sort object keys lexicographically at every depth while preserving array order in deterministic rendering, so equivalent JSON values produce the same prompt independent of host property insertion order.',
+            'At construction, validate a structured host-owned catalog against its declared exact entry shape, copy it, and freeze it recursively so later caller mutation or extra properties cannot alter a prompt or machine decision.',
+            'For the default Captain catalog, require every entry to have exactly the own enumerable data keys `id`, `command`, and `intent`, all three non-empty strings with unique `id` values, and reject empty values, duplicate ids, extra keys, accessors, non-plain objects, and non-JSON data at runtime construction rather than silently repairing or discarding them.',
+            "When a direct Captain task resumes from its own Boss question, prepend the same continuation preamble and labelled Q&A blocks defined for player prompt composition, pass the complete composed prompt once to `callCaptain` with `{ visibility: 'visible', resume: false }` and the same source-owned tool restriction as the originating call, and do not expose the subsequent adjudicator prompt or structured judge reply through that visible call.",
+            "Keep the composed prompt to only the GEARS blockquote, typed runtime evidence blocks, and the continuation preamble; do not append the state's result map, guard names, result-property schema, adjudication request, workspace context, or tool instructions.",
+            'Replace every known placeholder whose matching typed field is present in the supplied input; do not choose one exclusive replacement set from `stateId`, source-item identity, or another variant discriminator, and render every matching placeholder even when verification combines catalog, intent, plan, result, question, and reply fields in one synthetic input.',
+            "Construct the replacement table from field presence alone: populate `<remaining-plan>` when `remainingPlan` is supplied and `<completed-call-results>` when `completedCallResults` is supplied, regardless of the input's `stateId` or `sourceItem`, and treat a branch such as `if (input.stateId === 'reassessment')` around either replacement as nonconformant.",
+            'Boss-event mapping:',
+            "Treat the FSM's `events` union as enumerating every Boss-originated event, with the runtime receiving Boss input as a free-form string (`handleBossInput.text`).",
+            "Where the current ready or reconstructed terminal machine accepts exactly one ordinary textual entry event and no Boss question is pending, send that event deterministically and attach the exact original text to its declared textual payload field without invoking `callJudge`; the default Captain's ready entry is `{ type: 'BOSS_INTENT', bossIntent: turn.text }`.",
+            "For all other non-empty turns, use `callJudge` only to choose one of the FSM's event kinds and non-text routing fields, or no FSM action.",
+            'Include the exact, unmodified `turn.text` in a clearly labelled Boss-message block in the classifier prompt so the judge can make that choice, without authorizing the judge to rewrite runtime-owned textual payload fields.',
+            'Attach the exact original text as `bossIntent` for `BOSS_INTENT` and `BOSS_INTERRUPT`, and as `answer` for `BOSS_REPLY`; the classifier prompt shall neither request nor accept a copy of those fields, and classifier-authored paraphrases shall never become machine context.',
+            'Produce no event, judge call, Captain call, player call, status emission, or FSM transition for empty or whitespace-only text, while still emitting its received and settled session-trace events.',
+            "Demand JSON in the classifier prompt against the FSM's typed event union and any state-specific Boss input contract, including non-text routing payload fields required for each event but excluding the runtime-owned textual fields.",
+            "Keep fields the FSM's event union declares optional as optional in the classifier contract and reply parser; do not promote them to required.",
+            'Parse the judge reply tolerantly before validating the event: recover the intended JSON object from surrounding prose or a Markdown fence, ignore earlier non-JSON bracketed prose, remove a trailing comma before a closing brace or bracket, and complete a truncated unterminated string or unclosed object/array.',
+            "When several values are recoverable, choose the first object in document order, preferring a strict parse at each candidate position before repairing that same candidate; for each opening-brace position first scan strings and nesting to find that candidate's earliest balanced closing boundary; operate both the strict parse and the trailing-comma repair on only that bounded substring; if no closing boundary exists, allow repair to complete the unterminated suffix; never repair the entire remaining document after a balanced candidate; and advance to the next opening brace only after strict and repaired parsing of the current bounded candidate both fail, so an earlier repairable object wins over every later strict object.",
+            'When no object is recoverable or the recovered event/payload is invalid, emit exactly one status and send no FSM event, treating a malformed classification as recoverable control input rather than a public boundary rejection.',
+            'Treat a recovered `BOSS_REPLY` that names no currently pending question as such a malformed classification: emit the one recovery status, send no event, leave the actor unchanged, and return `no-action` after emissions drain.',
+            'Keep host-owned runtime options, player bindings, and enabled-playbook catalogs out of Boss-event payload: the classifier schema and parser shall not invite or accept them, and classified prose shall never overwrite their machine context.',
+            'Require every recovered classifier object to have exactly `type` plus the declared non-text routing keys for its selected event arm; reject the classification on extra own keys, including a classifier-authored `bossIntent` or `answer`, and do not accept and discard injected catalog, option, state, or routing fields.',
+            "Treat `NO_ACTION` as exactly `{ type: 'NO_ACTION' }`; a valid `NO_ACTION` returns `no-action` without an invalid-classification status and leaves the actor untouched, as a successful classifier choice distinct from malformed or unrecoverable output.",
+            'After any successful classifier call drains, re-check the active Boss signal before reconstructing a terminal actor or sending the selected event; if it aborted while the classifier finish emission was pending, return and trace the same structured `aborted` result against the unchanged actor.',
+            'When the FSM supports a Boss-reply suspension state, inspect the actor snapshot context and include each exact pending Boss question, question id, and asking player in the prompt so the judge can distinguish a reply from a fresh directive.',
+            'With one pending question, fill a classified `BOSS_REPLY` that omits its optional id with that sole id; with several pending questions, require the classifier to supply a known id.',
+            'Let a reply re-enter only its recorded resume state and preserve the original intent, plan, prior child results, and Q&A continuation context.',
+            'Include only `questionId`, `player`, and `question` in the classifier-facing pending-question block, and keep internal `resumeStateId`, source-item identity, and other machine-routing fields authoritative in snapshot context and out of the judge prompt.',
+            'Allow, as fresh directives while parked, every applicable root entry event and `BOSS_INTERRUPT`; accepting one shall abandon and clear the pending question and reply context before new work begins.',
+            'Do not define slash-prefix commands for states or features inside a playbook runtime; reserve the `/command` namespace for host-level or playbook-selection UX before a turn reaches `handleBossInput`.',
+            'Treat text beginning with `/` forwarded to `handleBossInput` as ordinary Boss text mapped through the same deterministic-or-classified Boss-event rules.',
+            'Expect hosts to resolve host-level concerns before choosing a playbook runtime, pass Boss content as text once they call `handleBossInput`, and not pre-classify in-playbook FSM events or rely on slash forms as a runtime protocol.',
+            "Reach `BOSS_INTERRUPT` (or the FSM's equivalent explicit-state-jump event) only by the judge choosing it and supplying its required target payload; it is not an abort surface, aborts go through the abort signal and the abort strategies, and a host where the abort signal is terminal (e.g., SIGINT runs shutdown) shall not route abort to `BOSS_INTERRUPT`.",
+            'Captain adjudication:',
+            "After a direct Captain or delegated player call returns, coerce `result.finalText` into one of the per-state `invoke.input.result` keys and extract any payload fields the state's `result` description names as required.",
+            'Recognize in required-field extraction both an exact backticked property name such as `` `question` `` and the standard annotated form `` `question: <verbatim question text>` ``, treating only `question` as the JSON property name in either form.',
+            "Limit extraction to the description's explicit `Output shall include` clause (or equivalent typed output metadata); do not turn backticked prose before that clause — statuses, guards, or concepts such as `ok`, `aborted`, and `error` — into required judge fields.",
+            "For a direct Captain result, treat `question` and `response` as human-presentation fields owned by the visible call rather than fields authored by the hidden judge: have the adjudicator select the guard and supply only other structural fields required by that guard, then inject the exact non-empty `CaptainResult.finalText` as the selected output's `question` or `response` after validating the selection, and reject a judge reply that supplies either presentation field as an undeclared extra key so hidden adjudication cannot replace, paraphrase, or decorate prose Boss already saw.",
+            'Retain, for delegated-player adjudication, extraction of every required field from the judge reply, including a player-authored Boss question.',
+            'Use the same document-order tolerant JSON recovery as the Boss classifier in the adjudicator; unlike invalid classification, treat a reply from which no object can be recovered, an undeclared guard, or a missing required field as a control-plane error thrown after the invocation reaches its FSM error path and ordered emissions drain.',
+            'Select adjudication strategies in this order — LLM-judge (default) and Marker-parse (delegated-player alternative).',
+            "For LLM-judge, construct a fresh `callJudge` prompt that names the source item's actor (and delegated player where applicable), includes the actor's verbatim output, lists the `result` keys with their descriptions, and demands a JSON `{ guard, …structuralPayloadFields }` answer keyed to exactly one declared guard, excluding the runtime-owned direct-Captain `question` and `response` fields, without interpreting, paraphrasing, or altering the FSM's `result` text (carry the description verbatim).",
+            'For Marker-parse, use a deterministic parser that scans player output for a terminal control line such as `FSM-RESULT: { "guard": "...", ... }`, useful when player adapters emit structured trailers and the operator wants to avoid the extra LLM call.',
+            'Allow selecting different strategies per delegated-player state, defaulting to LLM-judge for every state; require direct-Captain states to use the LLM judge so their visible prose stays human-readable and carries no marker or control JSON, with their adjudicator call using purpose `captain-output-adjudication` and remaining hidden at the host adapter.',
+            'When the direct Captain result selects a terminal `response`, use the exact already-visible `CaptainResult.finalText` as both the machine response and Boss presentation, and do not make a second visible Captain call or expose the hidden structured adjudication merely to present the same response.',
+            'Fail the adjudicator loudly on a guard the state does not declare, a missing required payload field, or an empty/malformed response, and keep these cases distinguishable in the thrown error: malformed JSON recovery identifies the missing JSON object, an unknown selection identifies an undeclared guard, and an incomplete selection identifies the missing required field; a generic “no declared guard selected” error for all three is nonconformant.',
+            'Treat adjudicator failures as control-plane errors propagated by throwing out of `handleBossInput` after attempting cleanup; the host adapter surfaces the throw on its control-plane channel (cligent surfaces such throws as `runtime_error`).',
+            "Reserve the host's player-result channels (`player_finished` and equivalents) for failures the player itself produced, emitted when `callPlayer` resolves with `status !== 'ok'`; keep direct-Captain host-result failures on the Captain actor boundary following the recoverable FSM failure path, not reported as player failures.",
+            'Keep Captain transport, result-shape, trace-sink, and adjudication failures as control-plane errors unless the transport failure is causally identical to the active abort signal.',
+            "Because XState still needs the invoked promise to settle, latch an adjudicator, actor-output JSON-validation, or nested-boundary control error outside machine context, allow the invocation's `onError` path to reach quiescence, drain all emissions, then reject the public runtime method with that original error rather than return a recoverable `{ outcome: 'failed' }` workflow result.",
+            "Let the first latched non-abort control error take precedence over a coincident boundary-signal abort; read and clear the latch only in the public boundary's `finally` cleanup after XState and emissions have settled, so it cannot leak into a later Boss turn or be erased before rejection.",
+            'Treat an `AbortError`-named transport, validation, or trace-sink failure as still a non-abort control error unless it is causally identical to the applicable signal reason; never let error names change original-error or first-latch precedence.',
+            'When a host port or structured-result validator fails after a call-start boundary, latch that original error before attempting the required finish trace; if the finish sink records the event and then rejects, do not emit a second finish and do not let the sink failure replace the earlier control error returned by the public boundary, retaining the sink failure only as independent cleanup evidence.',
+            'Script execution:',
+            'Where the FSM declares the typed `script` actor from gears2fsm, provide its implementation through the shared factory; do not regenerate a script executor inside each emitted module.',
+            'Treat a script invocation as the one actor kind that runs without any agent: it makes no `callPlayer`, `callCaptain`, or `callJudge` call and needs no adjudication.',
+            "Have the provided script actor execute `input.command` verbatim through the platform's POSIX shell (`sh -c`), with the working directory taken from `PlaybookRuntimeOptions.cwd` when the caller supplies it, else the process working directory; declare the optional `cwd` option on the emitted options interface whenever the FSM contains a script state, and pass the validated option to the shared script actor through the spec.",
+            "Resolve the script actor deterministically from the child's exit status: status zero resolves `{ guard: <first declared guard>, exitStatus: 0 }`, and any nonzero status resolves the second declared guard with that status; keep guard selection mechanical and never route script output through the judge.",
+            "Reject only when the command cannot be spawned at all, routing through the state's ordinary `onError` path.",
+            "Honor the active turn's abort signal by terminating the child process and rejecting per the abort strategies.",
+            'Emit, after the child settles and before the invocation resolves, one status line `Executed script for <stateId> (exit <status>).` and one telemetry event under topic `playbook.script` with payload `{ stateId, sourceItem, exitStatus }`, through the ordinary serialized emission channel.',
+            'Emit no `*.call.*` trace pair for script execution: the surrounding FSM transition trace and the `playbook.script` telemetry are its record, so trace schema consumers see no new event types.',
+            'Keep script stdout and stderr out of machine context, prompts, and trace payloads, as they are not workflow data.',
+            'Nested playbook bridge:',
+            'Where the FSM declares the typed `playbook` actor from gears2fsm, provide it with the shared `createNestedPlaybookBridge(...).actorLogic` wired by the shared factory, and do not regenerate a second pending-call, identity-validation, or abort-cleanup substrate inside each linked artifact.',
+            'Instantiate the generic bridge with the FSM-exported `PlaybookInput` type so XState `.provide(...)` receives the exact declared actor input rather than a structurally similar local type.',
+            'Construct one bridge per runtime and wire every integration hook: allocate ids with `nextCallId`; return the currently active public-boundary signal from `getBoundarySignal`; bind `resumePlaybookCall.signal` before settling the deferred actor through `bindResumeSignal`; enqueue the exact start/finish trace through `emitStarted`/`emitFinished`; drain the global emission queue through `drain`; latch the original control error through `onControlPlaneError`; and retain any cleanup/observer failure through `onBackgroundError` for the next public boundary or disposal rejection — leaving none of these optional API hooks unwired merely because their TypeScript properties are optional.',
+            "On invocation, have the bridge allocate a runtime-local call id, trace the start, and call `PlaybookPorts.callPlaybook` with the composed target/text and the bridge signal combined from the XState invocation lifetime, the active public boundary, and the bridge's own disposal controller.",
+            'For a literal invocation, retain the existing static/composed target and text values; for a dynamic invocation, use the evaluated `PlaybookInput.playbookId` and `PlaybookInput.text` values, require both to be strings with non-empty target and text, and preserve the exact resolved values in the request and trace.',
+            "Preserve the FSM's static `playbookIdContext` and `textContext` metadata for conformance; do not parse function source, treat either metadata name as the runtime value, or freeze a dynamic call to the value observed during artifact inspection.",
+            "If the port returns `state: 'settled'`, validate the result, emit and drain `playbook.call.finished`, then resolve successful output or reject an aborted/error result.",
+            "If the port returns `state: 'suspended'`, record one pending call and await a runtime-owned deferred result; only after that pending record exists may the drive boundary treat the call state's `playbook.suspended` tag as quiescent.",
+            'Support at most one pending child call per runtime, and reject a second.',
+            'Retain the call-start `turnId` in the pending record, and have a resumed finish and every parent transition, Captain reassessment, and status caused by that return use this retained id — not an absent or newly allocated current-turn value — by having the finish callback receive or close over that stored id rather than read a mutable global turn id at resume time.',
+            'Strictly validate the start discriminant, non-empty suspended child session id, settled target identity, optional state descriptor, normalized error, and JSON-safe output; treat a malformed start, malformed result, identity mismatch, or non-JSON value as a control-plane error.',
+            'Once a start trace exists, emit and drain exactly one matching finish trace on every thrown port, validation failure, immediate result, suspension resume, invocation abort, and disposal path, and let malformed data neither create a pending identity nor be reassessed as ordinary child evidence.',
+            'Detach and recursively freeze a validated start/result before tracing it or delivering it to the FSM, so caller mutation after port resolution cannot alter identity, evidence, or trace payloads.',
+            'Treat a non-abort `callPlaybook` throw/rejection as a control-plane failure: pair its finish, latch and rethrow the original error, and take the FSM fallback error path; treat a rejection caused by the combined abort signal as an authored `aborted` child result.',
+            'Allow the optional output field to be absent from an otherwise valid successful child result, and omit an absent or `undefined` output from generated event and trace descriptors instead of snapshotting it as a JSON value.',
+            "When cancellation wins while the host's opening promise is still pending, retain and drain that exact promise before emitting the matching finish boundary, ignore an abort-reason rejection from that opening promise, surface any other late rejection as a control-plane cleanup failure, and recover a child session identity from a late resolved start when available; pass the host port directly to the shared bridge rather than recreate this opening-promise drainage locally.",
+            'When aborting a public turn during that opening promise, abort the combined bridge signal, wait for opening cleanup and the paired finish, let the promise actor reach its `onError` quiescent state, and only then return an aborted run result, neither hanging on a never-registered child-resume path nor returning while the opening promise or finish emission remains live.',
+            'Retain a one-shot invocation-signal listener in the pending record: if the call state is stopped, have it settle and clear the deferred call as an aborted `NestedPlaybookCallError`, drain the matching finish boundary after host abort cleanup, and make a later nested invocation possible, rather than leaving a permanently pending record merely because XState stopped observing the promise actor.',
+            'In `resumePlaybookCall`, accept only the matching pending call id, target playbook id, and child session id; bind its new turn signal for work resumed in the parent; emit and drain the call-finish trace; settle the bridge deferred; and use XState `waitFor` to drive the parent to its next quiescent, suspended, failed, aborted, or terminal result.',
+            'Resolve the actor and reach `invoke.onDone` for an `ok` result; reject it and reach `invoke.onError` for `aborted` and `error` results, making the rejection an `Error` whose public readonly `result` property is the exact normalized `PlaybookCallResult`, rather than throwing the result object directly or discarding its status.',
+            'Reject unknown, duplicate, or stale call ids without changing actor state, and emit the finish trace before any parent FSM transition caused by the child return.',
+            'Expect the host to independently validate every evaluated target against its enabled registry; linker-time metadata is not authorization to call a target.',
+            'In disposal, settle an outstanding call as aborted and drain its finish trace before `session.disposed`; if registered child abort cleanup rejects, emit the paired finish with an error result and reject `abortPending` or disposal with that original cleanup error rather than swallow it merely because the promise actor also observes a `NestedPlaybookCallError`, and still drain parent disposal, emit its one `session.disposed` boundary, and clear the bound session before rejecting with that preserved cleanup error.',
+            'Require child output and errors to be JSON-safe, and treat a non-JSON-safe result as a control-plane error.',
+            'Session lifecycle:',
+            'Reject use before `init`, a second active turn or resume, and re-initializing a live session; share one active-turn sentinel between `handleBossInput` and `resumePlaybookCall` so neither overlaps the other, and prevent disposal from racing a live boundary.',
+            'Reject a dispose request made during an active public boundary without beginning teardown; share one disposal promise across idle concurrent dispose requests; have later calls after disposal return that settled disposal outcome without emitting another boundary; and start no new turn or resume once disposal begins.',
+            "For disposal requested during initialization, retain one teardown promise, wait for initialization's success or failure cleanup, and emit at most one `session.disposed` boundary; make disposal before initialization terminal and coalesced, so later initialization rejects and every later disposal call returns the first retained promise.",
+            "Represent in-flight initialization with a cleanup-complete latch resolved by `init`'s outer `finally` after either successful startup or complete failed-start cleanup; do not expose the fallible inner startup promise as that latch, because it rejects before the outer cleanup and lets concurrent disposal race the cleanup's own `session.disposed` attempt.",
+            "Put session validation and snapshotting, bridge/actor construction, initial state reads, and startup emissions inside that guarded outer `try`, and let none throw before the cleanup-complete latch's `finally` can resolve, so a rejected session identity does not leave later disposal waiting forever.",
+            'Do not declare the generated `dispose` method `async`, because an async wrapper returns a distinct promise and breaks identity coalescing; return the retained teardown promise directly and use `Promise.reject(...)` for precondition failures.',
+            'In `init`, bind the immutable `PlaybookSession`, emit `session.started` with the initial normalized state descriptor, and construct the session-scoped (not turn-scoped) XState actor with FSM `input` derived from `options`.',
+            "Use XState v5's public actor inspection `@xstate.snapshot` event for the root actor so each transition's triggering event and snapshot can be surfaced via `emitStatus` and `emitTelemetry` before the next event fires; do not consult private actor nodes or infer the event later from context.",
+            'Filter inspection events by `inspectionEvent.actorRef === rootActor`, not merely by the actor-system root id, so promise-child snapshots are not emitted as root FSM transitions.',
+            'Have the inspection callback only validate and synchronously enqueue emission work, catching validation/enqueue failures into the control/background-error latch, and never let an exception escape or call an async port directly.',
+            'Make its transition `event` field a detached JSON-safe descriptor, never the raw XState inspection event: preserve the string `type` (or use `unknown` when absent), copy only declared Boss-union payload fields and a validated actor `output`, and normalize an `error` member before inclusion.',
+            'Omit `input`, `actorId`, system/ref data, and every other XState-internal field even when JSON-safe, so `xstate.init.input` cannot leak the host catalog into transition telemetry; in particular, do not call `snapshotJsonValue(event)` on an `xstate.error.actor.*` event that contains a raw `Error`.',
+            'Construct the actor without starting it, read its public initial snapshot, emit and drain `session.started`, and only then call `actor.start()`, so the initial inspection-driven transition/status emissions do not precede the session-start trace.',
+            'Have any actor-construction helper return the actor and assign it at the call site, because TypeScript does not narrow a captured optional actor variable from assignment hidden inside a helper; retain a non-optional local actor reference across terminal reconstruction and event sending.',
+            'Allow an actor-construction helper to read the already-bound immutable session directly for machine input such as `session.playbookId`, but do not have it call a lifecycle assertion that also requires the actor to exist, since the actor does not exist until that helper returns and coupling session access to actor availability makes every valid `init` fail before construction completes.',
+            "Pass the repository's full strict `tsc` build with no unused helper or destructured parameter, not only a transpile-only or target-local syntax check.",
+            'For the default Captain runtime, let the initial quiescent `ready` snapshot emit the ordinary structured transition trace and telemetry but no human status, as it is not a Boss-relevant transition; treat any initial transition-trace or telemetry sink failure as part of `init`, rejecting initialization, stopping the actor, and performing failed-start cleanup rather than swallowing it as a later background error.',
+            "Where the FSM input declares `selfPlaybookId`, seed it from the immutable `session.playbookId`, and do not expose a caller option or reuse a working leaf's `stateId` as the self-call identity.",
+            'If initialization fails after attempting `session.started`, stop the actor, abort/drain nested and host work, make one best-effort `session.disposed` attempt before clearing the bound session, and preserve the original initialization error if cleanup or disposal emission also fails.',
+            'Suppress root inspection emissions before stopping the failed actor because XState emits a stop snapshot, so that teardown snapshot does not retry a transition/status sink that already failed initialization; reset the inspection gate, queues, error latches, prior state, and all per-session sequence counters so a permitted retry starts with trace sequence `1`.',
+            'Per `handleBossInput`, first allocate a runtime-local turn id and trace the exact Boss text; then map `turn.text` through the Boss-event mapping, using deterministic exact entry where applicable and classification otherwise, and if mapping produces no event, return after draining any port emissions.',
+            'If the classifier port rejects, emit and drain the Boss-settled error boundary, send no event, leave the actor unchanged (including a terminal actor), and reject the original error; if that rejection is caused by the active Boss abort signal, return and trace the same structured `aborted` result instead of `no-action`; if the port resolves but its reply cannot be recovered or validated, emit the one recovery status, send no event, leave the actor unchanged, and return `no-action` after the ordinary settled boundary drains.',
+            'Only after classification produces a real event, if the actor is in a `final` state, dispose and reconstruct it because `final` is terminal and cannot accept new events; leave a terminal actor untouched for `NO_ACTION`, classifier rejection, and malformed classification.',
+            'Bind the active public-boundary signal and send the classified event to the actor.',
+            'Drive to quiescence by providing each invoked actor according to its declared kind: for `player`, build a player prompt, call `callPlayer`, adjudicate, and resolve the invoke; for `captain`, build a direct Captain prompt, call `callCaptain` visibly, adjudicate through the shared hidden judge path, and resolve the invoke; for `playbook`, use the nested playbook bridge; for `script`, use script execution with no port call and no adjudication — letting parallel regions run distinct resolved players independently while Captain and judge work stays serialized by the shared host queue.',
+            "Use XState `waitFor` over public tags/status until no `playbook.busy` state is active, a registered child call is suspended, or the actor is terminal/error, passing `pendingCalls: nestedBridge` so a suspended tag is quiescent only after its child identity exists; under natural rejection, do not pass the already-aborted public turn signal as wait cancellation, because it has already been combined into the invoked boundary and the runtime must now wait for XState's `onError` transition and quiescence.",
+            'Return a structured `PlaybookRunResult` after all in-flight calls and ordered emissions caused by the turn drain.',
+            'Per `resumePlaybookCall`, follow the nested playbook bridge and return the same structured run-result boundary without classifying new Boss text; drain the transition/status/telemetry queue before returning as `handleBossInput` does; do not allocate a new Boss-input `turnId` but retain the original call-start turn id for its matching finish and for the parent continuation caused by that return; and emit neither `boss.input.received` nor `boss.input.settled`, since a resume is not a Boss-input turn and the structured result is the method return.',
+            "On every success and exceptional path of a resume, drain ordered emissions, select the first latched non-abort control error before considering abort, and clear boundary latches in `finally` — including when `nestedBridge.resume(...)` rejects, capturing that operation error, allowing the promise actor's `onError` transition to settle, and selecting the first latched control error only after all ordered emissions drain — so a failed resume cannot leak an emission error into a later turn.",
+            'In `dispose`, capture the final public state and stop the root actor before settling or aborting a suspended nested bridge, so the bridge rejection cannot reenter the FSM and start new actor work during disposal; then drain pending port emissions and every in-flight Captain/player/judge/child opening, emit `session.disposed` with the final descriptor, and discard player resume tokens.',
+            'Drain host child abort cleanup and child `session.disposed` before the parent call finish, which drains before parent `session.disposed`; use cleanup/finally structure so a bridge or emission failure cannot skip the parent disposal boundary or leave the runtime bound.',
+            "Surface the actor's `lastError` field via `emitStatus` when the machine enters its `failed` state.",
+            'For the default Captain runtime, emit no human status for an initial `ready` state or a terminal `done` state, since the terminal response is already visible Captain prose and a synthetic “entered done” message would present it twice, while structured transition trace and telemetry still apply to both states.',
+            "Have every provided actor boundary first drain the queued state-entry transition/status/telemetry caused by entering its working leaf, so a call's `*.started` trace cannot overtake the transition that explains it, and have every public runtime method drain that queue before it resolves or rejects.",
+            'Require this initial `await drain()` inside each provided `fromPromise` body, because XState may begin that body before publishing the root snapshot and the await yields so the synchronous inspection callback can enqueue the entering transition first.',
+            "If a `*.call.started` trace records and then its sink rejects, begin no host call; still enqueue exactly one synthetic paired `*.call.finished` trace with `status: 'error'`, preserving the original call id, turn id, actor visibility, state/source identity, and prompt or request metadata from the start boundary, then follow the same latched control-error, FSM settlement, and ordered-drain path as any other call-start failure, and do not let the synthetic finish replace the original sink error.",
+            'Parked-session snapshot (optional):',
+            'Optionally implement the durable-session capability of `@sublang/playbook/runtime` — `exportSnapshot()` and `restore(session, snapshot)` (DR-014) — so a host can persist a parked session and rehydrate it in a later process; a runtime that implements either member shall implement both, and when generated for a host that needs durability the pair shall behave as specified below.',
+            'Have `exportSnapshot()` return `undefined` unless the runtime is at a safe capture point: initialized, not disposing or disposed, no active `handleBossInput`/`resumePlaybookCall` boundary, no pending nested playbook call, and the root actor at a quiescent state with actor status `active`.',
+            "At a safe capture point, return a JSON-safe `PlaybookRuntimeSnapshot` carrying: `schemaVersion` (literal `1`); `playbookId` (the bound session's playbook id); `machine` (the root actor's `getPersistedSnapshot()` result passed through the shared JSON detachment with any raw `Error` context value such as FSM `lastError` normalized to `{ name, message, stack? }` first, opaque to hosts); `playerResumeTokens` (the resume-token map as a plain object); `sequences` (the live `trace`, `turn`, `judgeCall`, `playerCall`, and `playbookCall` counters, plus `captainCall` when the runtime supports direct Captain calls, with `captainCall` optional under schema version `1` for backward compatibility but persisted by a direct-Captain-capable runtime); `state` (the current normalized state descriptor); and `pendingBossQuestions` (the pending Boss question(s) from FSM context as a list of `{ questionId, player, question, sourceItem? }`, empty when the parked state awaits no reply, so hosts can surface the question without parsing status lines or telemetry).",
+            'Treat `restore(session, snapshot)` as an alternative to `init` under the same lifecycle guards: reject when already initialized, disposing, or disposed, and validate `snapshot.schemaVersion` and that `snapshot.playbookId` equals `session.playbookId` before touching state.',
+            "Expect the host to supply the same immutable `PlaybookSession` identity the snapshot was exported under and recreate the runtime through the same factory with equivalent options; do not diff options, and leave module identity (that the factory constructing this runtime still belongs to the snapshot's playbook) as the host's check before calling `restore`.",
+            'Have `restore` bind the session; restore the resume-token map, the sequence counters (using the persisted global `trace` counter as a collision-safe floor for an absent legacy `captainCall`), and the prior-state descriptor from the snapshot; construct the actor with the persisted `machine` snapshot; and start it with root inspection emissions suppressed so rehydration emits no `session.started` trace, no transition trace, and no human status, since the session already started and the next public boundary continues the contiguous trace sequence.',
+            "After start, fail `restore` through the same failed-start cleanup path as `init` when a restored actor's status is not `active` or its state descriptor cannot be normalized, and leave the runtime unbound on a restore failure so `dispose` remains callable and terminal.",
+            'Abort:',
+            'Treat `handleBossInput.signal` as the abort surface, honored at every `callPlayer`/`callCaptain`/`callJudge` and at every poll between transitions.',
+            'Give each provided Captain, player, judge, or nested-playbook boundary a signal combined from its XState invocation-lifetime signal and the currently active `handleBossInput` or `resumePlaybookCall` signal (for example with the shared `combineAbortSignals`).',
+            'Classify a rejection as cancellation by its causal identity with the applicable signal reason, not by an `AbortError` name or by observing only that the signal is also aborted; signals may carry an ordinary `Error`, while a distinct transport or sink failure occurring after abort remains a non-abort control error and takes precedence.',
+            'On abort, do not merely race the imperative wait and return while an invocation remains live: let the selected rejection path settle and drive the actor to a quiescent state before returning from the turn, and let no trace, status, state, or call completion caused by that turn appear after the public method returns.',
+            "Select one of three abort strategies per FSM: natural rejection — the runtime's Captain or player actor (e.g., `fromPromise`) ends the invocation by rejecting and the FSM routes the rejection through `onError` to a quiescent sink, where the cancelled port call may itself reject or resolve with `{ status: 'aborted' | 'error' }` that the runtime converts into an actor rejection, either shape permitted because the contract is on the actor boundary, preferred when every Captain- or player-invoking state's `onError` lands somewhere quiescent.",
+            "Or synthetic pre-emption to a quiescent target — send the FSM's pre-emption event (e.g., `BOSS_INTERRUPT { targetId: <state> }`) with a target that is itself quiescent (typically `ready` or `failed`), never the active state, because gears2fsm prescribes `reenter: true` for `bossInterrupts` so re-entering the active state restarts its `invoke` and spawns a fresh agent call.",
+            'Or programmatic stop — `actor.stop()` and report the turn as aborted via `emitStatus`, reserved for FSMs with neither `onError` wiring nor a pre-emption event.',
+            "Leave whether the host's outer abort (e.g., SIGINT) is recoverable or terminal to the host, exit `handleBossInput` cleanly in either case, and let the host decide whether to call `dispose` afterward.",
+            'Status and telemetry:',
+            'Emit at minimum one `emitStatus` per Boss-relevant transition (entering a state whose semantics matter to Boss — e.g., `respondToReview`, `failed`), defaulting to emit on every transition and let the host filter, while allowing hosts to bind a stricter rule.',
+            'Emit at minimum one `emitTelemetry` per state transition under a namespaced topic (recommended `playbook.fsm.state`) with structured `from`, `to`, `event`, `previousState`, and `state` fields; carry the JSON-safe XState value, active stable ids from public state metadata, tags, status, and quiescence in descriptors without inspecting private XState nodes.',
+            'Carry additionally in the payload the exact pending Boss question or keyed questions selected from public snapshot context, and normalize any transition error without retaining a raw `Error` instance.',
+            'Do not reduce this payload to the current state: keep `from` and `previousState` as the authoritative prior descriptor and `to` and `state` as the new descriptor, and on the first observed transition use the initialized state as both the prior and new descriptor when no earlier transition exists.',
+            "Snapshot and recursively freeze the complete described telemetry payload independently from the state retained as `previousState`, so an observer cannot mutate a later transition's authoritative `from` state.",
+            'Let observers consume telemetry, and never have the runtime interpret the topic.',
+            "Allow player prompts and adjudicator JSON to additionally ride the host's own record channels when the host has them (cligent's `captain_*`/`player_*`), while keeping the `playbook.trace` copies as the host-agnostic runtime-boundary record.",
+            'Output:',
+            'Emit one thin TypeScript module per playbook, not regenerating the FSM-interpreter machinery (actor wiring, boundary tracing, Boss-event mapping, adjudication, script execution, nested-playbook bridging, session lifecycle, abort handling, and the optional parked-session snapshot capability) per artifact: ship it once as the shared `createXStatePlaybookRuntime(machine, spec)` factory exported by `@sublang/playbook/xstate-runtime`, and have the emitted module hand its FSM and a small per-playbook `spec` to that factory, so a runtime fix ships as a package release instead of a re-link of every artifact.',
+            "Import the FSM artifact by relative path with an extension-bearing runtime specifier: use the NodeNext-compatible `.js` specifier (for example `./code.fsm.js`) when the linked TypeScript is part of a package that compiles and ships JavaScript siblings, never a `.ts` specifier the package's supported Node versions cannot load; retain `.ts` only for an explicitly source-only host that supports direct TypeScript loading and ships no JavaScript build.",
+            'Restrict the module to erasable TypeScript syntax — type annotations that strip cleanly, no constructor parameter properties, `enum`s, or namespaces — so a host running under type stripping loads it directly.',
+            "Import `createXStatePlaybookRuntime` (plus any shared strategy defaults its `_internal` surface re-exports) from the shared engine module through its bare specifier `@sublang/playbook/xstate-runtime`, and the contract types through `@sublang/playbook/runtime`; do not copy, inline, or re-derive interpreter machinery (actor bridges, trace emission, judge-JSON recovery, lifecycle guards) beside the factory call, and do not import `xstate`, `p-queue`, or `node:child_process`, which are the shared engine's dependencies.",
+            'Declare and export the typed `PlaybookRuntimeOptions` interface for that playbook, derived from every required FSM input field not supplied by `PlaybookSession` or another linker-owned source, plus the optional `cwd` option whenever the FSM contains a `script` state.',
+            "Supply the spec's `snapshotOptions` with the same options-validation semantics previously generated inline: validate and JSON-snapshot the caller's options, rejecting undeclared keys and non-conforming values, so the factory binds an immutable options record before constructing any actor.",
+            "Supply in `spec` only what the factory cannot read from the FSM artifact's own data: the deterministic textual entry event where the Boss-event mapping prescribes deterministic entry; compact `bossEvents` metadata for each additional Boss-union arm whose exact required/optional judge fields, runtime-owned text fields, or closed string values disappear under TypeScript erasure; `placeholderFields` only for authored token/field exceptions not covered by the canonical kebab-token-to-camel-field mapping and the canonical `<#>` → `irNumber` special case; the transition-event payload fields the FSM's Boss union declares; a non-default player binding where the linker inputs supplied one; and any per-playbook strategy override (classifier, prompt composers, required-field extraction, status formatting) an earlier section requires for that playbook — taking everything else (player/script/captain/nested actor provisioning, prompt composition, classification, adjudication, statuses, resumable-state derivation) from the factory's generic defaults, which implement the behavioral sections of this specification.",
+            "Keep the shared classifier's reply contract exactly flat `{ type, ...declaredFields }` in the metadata, and distinguish judge-authored routing fields from exact-text fields the runtime attaches itself.",
+            "Type the spec's Boss-event metadata as optional `bossEvents?: readonly XStateBossEventSpec[]` and `placeholderFields?: Readonly<Record<string, string>>`, where `XStateBossEventSpec` is `{ type: string; fields?: Readonly<Record<string, XStateBossEventFieldSpec>> }` and `XStateBossEventFieldSpec` is `{ source: 'judge' | 'text'; required?: boolean; values?: readonly string[] }`.",
+            'Merge supplied `bossEvents` metadata with, and never replace or weaken, runtime-derived entry text ownership or closed interrupt targets, and treat a conflicting duplicate field contract as a linker/runtime construction error.',
+            "Treat `NO_ACTION` and `BOSS_REPLY` as runtime-owned event types the factory supplies itself — `NO_ACTION` as exactly `{ type: 'NO_ACTION' }`, and `BOSS_REPLY` as an optional judge-selected `questionId` plus the exact-text `answer` the runtime attaches — carry no `bossEvents` entry for either type (supplying one is a construction error), and report the gap rather than emit the entry when a runtime-owned arm is judged to have lost payload detail under erasure.",
+            'Default-export the factory call as `createPlaybookRuntime`, typed `PlaybookRuntimeFactory<PlaybookRuntimeOptions>`.',
+            'Expose under an `_internal` export the pure helpers verification needs — at least the player-prompt and Captain-prompt composers (`composePlayerPrompt` and `composeCaptainPrompt`), which may re-export the shared defaults when the spec does not override composition — so compilation-correctness tests can exercise composition without a host.',
+            'Hold no host-specific types and no host primitive calls: speak only `PlaybookPorts` for every agent and host concern, and keep the `node:child_process` dependency in the shared factory, not the emitted module.',
+            'Record the linker inputs (FSM path, player binding, strategies) in a top-of-file header comment so the file is reproducible from the same inputs.',
+            'Source the contract types (`PlayerResult`, `PlayerCallOptions`, `CaptainResult`, `CaptainCallOptions`, `PlaybookPorts`, `PlaybookSession`, `PlaybookTraceEvent`, `PlaybookCallRequest`, `PlaybookCallResult`, `PlaybookCallStart`, `PlaybookStateValue`, `PlaybookState`, `PlaybookRunResult`, `PlaybookRuntime`, `PlaybookRuntimeFactory`) from the single shared type-only module instead of redefining them, re-export the names its consumers import so every linked playbook shares one contract definition, and keep the dependency running one way — from each linked module to the shared engine and contract, never the reverse.',
+            'When a co-located integration test for the linked runtime already exists, run it before reporting success and treat any failure as a generation failure; do not delete, skip, or weaken that suite to make a new artifact pass, since it is executable evidence for lifecycle, ordering, error-propagation, and host-boundary requirements static artifact checks cannot establish.',
+            'Allow internal trace/status helpers to accept `unknown`, validate it with the same JSON-safety rules as the public boundary, and only then emit a `JsonValue`; do not require nominally typed public interfaces such as `NormalizedError`, `PlaybookState`, `PlaybookCallRequest`, or `PlaybookCallResult` to satisfy a `JsonValue` index signature at compile time, and do not silence that mismatch with an unchecked cast.',
+            "Make prompt placeholder substitution one callback-based pass over the original template with literal replacement strings, so placeholder-looking text inside Boss/catalog/plan/result values and JavaScript replacement tokens such as `$&`, `$$`, dollar-backtick, and `$'` are not interpreted or substituted again.",
+            'Out of scope:',
+            'Do not define player prompts, result keys, or guard semantics — those belong in the GEARS source and the FSM artifact.',
+            'Leave host adapter implementations, host configuration, and presentation layouts as per-project decisions, constraining only the `PlaybookPorts` contract they satisfy.',
+            'Leave trace persistence, multiple Boss-selected root engagements, recursive playbook calls, multi-Boss orchestration, and visualizer rendering to separate hosts/observers without changing this specification; a host may persist the emitted trace but the runtime does not rehydrate a disposed actor from it; and keep parked-session durability in scope only through the optional snapshot surface (DR-014).',
+          ].join('\n'),
           result: {
-            done: 'The acting agent completed the behavior.',
+            linked:
+              'Captain emitted the `PlaybookRuntime` factory module as specified, running any existing co-located integration test before reporting success.',
+            unrepresentable:
+              'Captain reported a construction or representability gap — such as a runtime-owned Boss-event arm losing payload detail under erasure — or a generation failure such as an existing integration test failing, rather than emitting a nonconforming module.',
             needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
           },
-          fsmArtifact: context.fsmArtifact,
-          ...(context.pendingBossQuestion
-            ? { pendingBossQuestion: context.pendingBossQuestion }
-            : {}),
-          ...(context.bossReply !== undefined
-            ? { bossReply: context.bossReply }
-            : {}),
+          pendingBossQuestion: context.pendingBossQuestion,
+          bossReply: context.bossReply,
         }),
         onDone: [
-          // Valid Boss-reply suspension: needsBossReply carrying a question.
           {
-            guard: 'isNeedsBossReplyWithQuestion',
+            guard: ({ event }) =>
+              event.output.guard === 'needsBossReply' &&
+              typeof event.output.question === 'string' &&
+              event.output.question.trim().length > 0,
             target: '#awaitBossReply',
+            actions: {
+              type: 'setPendingBossQuestion',
+              params: ({ event }): PendingBossQuestion => ({
+                questionId: 'compile',
+                resumeStateId: 'compile',
+                sourceItem: 'LINK-1',
+                player: 'Captain',
+                question:
+                  event.output.guard === 'needsBossReply'
+                    ? event.output.question
+                    : '',
+              }),
+            },
+          },
+          {
+            guard: ({ event }) => event.output.guard === 'needsBossReply',
+            target: '#failed',
             actions: [
-              'rememberResult',
-              {
-                type: 'setPendingBossQuestion',
-                params: {
-                  stateId: 'linking',
-                  sourceItem: 'LINK-1',
-                  player: 'Captain',
-                },
-              },
+              assign({
+                lastResult: ({ event }) => event.output,
+                lastError: () =>
+                  new Error(
+                    'Captain returned needsBossReply without a question.',
+                  ),
+              }),
+              'clearBossReplyContext',
             ],
           },
-          // Malformed: needsBossReply without a question -> failed.
           {
-            guard: 'isNeedsBossReply',
-            target: '#failed',
-            actions: ['rememberResult', 'clearBossReplyContext'],
-          },
-          // Success: linking complete -> terminate.
-          {
-            guard: 'isDone',
+            guard: ({ event }) => event.output.guard === 'linked',
             target: '#done',
-            actions: ['rememberResult', 'clearBossReplyContext'],
+            actions: [
+              assign({ lastResult: ({ event }) => event.output }),
+              'clearBossReplyContext',
+            ],
           },
-          // Any other guard is out of contract (malformed) -> failed.
+          {
+            guard: ({ event }) => event.output.guard === 'unrepresentable',
+            target: '#done',
+            actions: [
+              assign({ lastResult: ({ event }) => event.output }),
+              'clearBossReplyContext',
+            ],
+          },
           {
             target: '#failed',
-            actions: ['rememberResult', 'clearBossReplyContext'],
+            actions: [
+              assign({
+                lastResult: ({ event }) => event.output,
+                lastError: ({ event }) =>
+                  new Error(
+                    `Captain returned an undeclared guard: ${event.output.guard}`,
+                  ),
+              }),
+              'clearBossReplyContext',
+            ],
           },
         ],
         onError: {
           target: '#failed',
-          actions: ['rememberCaptainError', 'clearBossReplyContext'],
+          actions: assign({ lastError: ({ event }) => event.error }),
         },
       },
     },
 
-    // Third Boss surface: suspend here until Boss answers, then resume the same state.
     awaitBossReply: {
       id: 'awaitBossReply',
       description: "Waiting for Boss to answer the acting agent's question.",
@@ -549,55 +640,58 @@ export const linkMachine = machineSetup.createMachine({
       },
       on: {
         BOSS_REPLY: [
-          // Empty or whitespace-only answer is malformed -> failed.
           {
-            guard: 'isEmptyAnswer',
+            guard: 'isEmptyBossReply',
             target: '#failed',
-            actions: 'clearBossReplyContext',
+            actions: ['recordEmptyReply', 'clearBossReplyContext'],
           },
-          // Resume the suspended captain-invoking state with the Q+A available.
-          ...resumableStates(RESUMABLE_STATE_IDS),
+          ...resumableStates(RESUMABLE_IDS).BOSS_REPLY,
         ],
-        // A fresh Boss directive starts a new turn and clears stale context.
-        LINK_REQUEST: {
-          target: '#linking',
-          actions: ['clearBossReplyContext', 'applyBossEntry'],
+        // A Boss interrupt while waiting abandons the pending question.
+        ...bossInterrupts(INTERRUPT_IDS, ['clearBossReplyContext']),
+        // A fresh Boss directive while waiting starts a fresh turn.
+        COMPILE: {
+          target: '#compile',
+          actions: ['startTransform', 'clearBossReplyContext'],
         },
       },
     },
 
-    // Recoverable error hub: not final; Boss may recover via a fresh request.
     failed: {
       id: 'failed',
       description:
-        'A Captain invocation or Boss reply failed; recoverable via a fresh Boss request.',
+        'The Captain call errored or produced malformed output; Boss may recover.',
       tags: ['playbook.parked'],
       meta: {
         playbook: {
           stateId: 'failed',
           description:
-            'A Captain invocation or Boss reply failed; recoverable via a fresh Boss request.',
+            'The Captain call errored or produced malformed output; Boss may recover.',
         },
       },
+      // Recoverable: Boss may restart here, or interrupt out via root handler.
       on: {
-        LINK_REQUEST: { target: '#linking', actions: 'applyBossEntry' },
+        COMPILE: {
+          target: '#compile',
+          actions: ['startTransform', 'clearBossReplyContext'],
+        },
       },
     },
 
-    // Completion signal for the runner.
     done: {
       id: 'done',
       type: 'final',
-      description: 'FSM-to-Runtime linking complete.',
+      description:
+        'The FSM-to-runtime linking concluded: the PlaybookRuntime factory module was emitted, or the source was reported unrepresentable.',
       meta: {
         playbook: {
           stateId: 'done',
-          description: 'FSM-to-Runtime linking complete.',
+          description:
+            'The FSM-to-runtime linking concluded: the PlaybookRuntime factory module was emitted, or the source was reported unrepresentable.',
         },
       },
     },
   },
 });
 
-export { resumableStates };
 export default linkMachine;

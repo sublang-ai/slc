@@ -89,12 +89,14 @@ for (const phase of ['text2gears', 'gears2fsm', 'link']) {
       },
       runtimeDependencies: [
         // The thin linked artifact executes through the shared engine, so the
-        // pinned identity covers it beside xstate (DR-017).
+        // pinned identity covers it beside xstate (DR-017). The specifier is
+        // the exact subpath the emitted module imports (the package exports
+        // no bare entry point).
         {
           kind: 'package',
           locator: toPosix(relative(pipelineDir, playbookPackage.root)),
           provenance: `@sublang/playbook@${playbookPackage.version}`,
-          specifier: '@sublang/playbook',
+          specifier: '@sublang/playbook/xstate-runtime',
         },
         {
           kind: 'package',
