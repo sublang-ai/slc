@@ -86,8 +86,34 @@ jobs:
             exit 1
           fi
 
-      - name: Publish to npm with provenance
-        run: npm publish --provenance --access public
+      - name: Detect first npm publication
+        id: npm_package
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          if output=$(npm view "$PACKAGE_NAME" name --json 2>&1); then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif printf '%s' "$output" | grep -q 'E404'; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' "$output"
+            echo "::error::Could not determine whether $PACKAGE_NAME exists on npm"
+            exit 1
+          fi
+
+      - name: Publish to npm with trusted OIDC
+        if: steps.npm_package.outputs.exists == 'true'
+        run: npm publish --ignore-scripts --provenance --access public
+
+      - name: Bootstrap the first npm publication
+        if: steps.npm_package.outputs.exists == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::The first publication requires a short-lived, read/write @sublang NPM_BOOTSTRAP_TOKEN with bypass 2FA"
+            exit 1
+          fi
+          npm publish --ignore-scripts --provenance --access public
 
       - name: Create GitHub release
         env:
