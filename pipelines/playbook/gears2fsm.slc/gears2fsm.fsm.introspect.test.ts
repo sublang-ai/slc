@@ -15,9 +15,9 @@ const PINNED = {
     {
       state: 'compile',
       actor: 'captain',
-      sourceItem: 'G2F-1',
+      sourceItem: 'GEARS2FSM-1',
       player: '',
-      resultKeys: ['compiled', 'needsBossReply', 'rejected'],
+      resultKeys: ['done', 'needsBossReply'],
       onDone: [
         {
           index: 0,
@@ -36,11 +36,6 @@ const PINNED = {
         },
         {
           index: 3,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 4,
           target: 'failed',
           guarded: false,
         },

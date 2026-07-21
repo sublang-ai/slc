@@ -17,28 +17,25 @@ import * as playbook from './link.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'linking',
+    state: 'compile',
     sourceItem: 'LINK-1',
     player: '',
-    reads: ['bossReply', 'fsmArtifact', 'pendingBossQuestion'],
+    reads: ['bossReply', 'pendingBossQuestion'],
     wires: {
-      fsmArtifact: ['fsmArtifact'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
     placeholders: [
-      '<fsm-artifact>',
       '<PlaybookRuntimeOptions>',
       '<void>',
       '<PlaybookRunResult>',
       '<playerName>',
-      '<pendingBossQuestion.question>',
-      '<bossReply>',
       '<remaining-plan>',
       '<completed-call-results>',
       '<stateId>',
       '<status>',
       '<state>',
+      '<#>',
     ],
   },
 ];
@@ -49,7 +46,7 @@ describe('link: prompt contract', () => {
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    linking: ['<fsm-artifact>'],
+    compile: [],
   };
 
   const composeCaptain = (
