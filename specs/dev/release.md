@@ -57,20 +57,23 @@ release checks and package smoke, extract the matching changelog section into a
 file, publish the package with lifecycle scripts disabled, and create a GitHub
 release from those notes. Disabling lifecycle scripts at that final step shall
 not skip validation because the same `release:check` has already completed in
-the workflow without registry credentials in its environment.
+the workflow without registry credentials in its environment. When the tagged
+version is already on the registry — a maintainer-published first version or a
+re-run tag — the workflow shall skip the publish step and still create the
+GitHub release when it is missing, so the run completes idempotently.
 
 ### RELEASE-8
 
-When an existing package is published, npm shall use OIDC trusted publishing
-and the `--provenance` flag without a static npm token. Because npm requires a
+When the release workflow publishes, npm shall use OIDC trusted publishing and
+the `--provenance` flag; no static registry token shall exist in the workflow
+configuration or the repository's Actions secrets. Because npm requires a
 package to exist before its trusted publisher can be configured [[3]], the
-first publication may use only the `NPM_BOOTSTRAP_TOKEN` Actions secret as a
-fallback. That secret shall contain a short-lived granular token authorized for
-the `@sublang` package scope with read/write access and bypass 2FA enabled for
-the noninteractive direct publication [[4]]. After the first publication, a
-maintainer shall configure `sublang-ai/slc` and `release.yml` as the package's
-trusted GitHub Actions publisher, revoke the granular token on npm, and remove
-the bootstrap secret before another release tag is pushed.
+first publication shall be performed by a maintainer from an interactive
+`npm login` session, protected by the same `prepublishOnly` release gate.
+After the first publication and before the next release tag, the maintainer
+shall configure `sublang-ai/slc` with `release.yml` as the package's trusted
+GitHub Actions publisher (e.g. `npm trust github @sublang/slc
+--repo sublang-ai/slc --file .github/workflows/release.yml`).
 
 ### RELEASE-9
 
@@ -110,12 +113,12 @@ When preparing a release tag, the developer or agent shall verify that all
 release checks pass from a clean locked install, the changelog and package
 version name the release, all changes are committed and pushed to `main`, the
 publishable tarball contains only intended production files, and CI is green
-for the release commit. Before the first tag, a maintainer shall also configure
-the one-time bootstrap secret required by RELEASE-8.
+for the release commit. Before the first tag, a maintainer shall also perform
+the interactive first publication and configure the trusted publisher required
+by [RELEASE-8](#release-8).
 
 ## References
 
 [1]: https://semver.org/spec/v2.0.0.html "Semantic Versioning 2.0.0"
 [2]: https://keepachangelog.com/en/1.1.0/ "Keep a Changelog 1.1.0"
 [3]: https://docs.npmjs.com/cli/v11/commands/npm-trust/ "npm trust"
-[4]: https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/ "Publishing scoped public packages"

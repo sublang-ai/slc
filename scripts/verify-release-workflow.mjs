@@ -27,36 +27,32 @@ const step = (name) => {
 assert.equal(workflow.permissions['id-token'], 'write');
 assert.doesNotMatch(JSON.stringify(workflow.env ?? {}), registryCredential);
 
-const detection = step('Detect first npm publication');
-assert.equal(detection.id, 'npm_package');
+// Publication is trusted OIDC only (RELEASE-8): the detection step decides
+// idempotently whether the tagged version still needs publishing, and no
+// static registry credential exists anywhere in the workflow.
+const detection = step('Detect an already published version');
+assert.equal(detection.id, 'npm_version');
 assert.match(detection.run, /npm view/);
 assert.match(detection.run, /E404/);
+assert.match(detection.run, /::error::/);
 
 const trusted = step('Publish to npm with trusted OIDC');
-assert.equal(trusted.if, "steps.npm_package.outputs.exists == 'true'");
+assert.equal(trusted.if, "steps.npm_version.outputs.published == 'false'");
 assert.equal(
   trusted.run,
   'npm publish --ignore-scripts --provenance --access public',
 );
 assert.equal(trusted.env, undefined);
 
-const bootstrap = step('Bootstrap the first npm publication');
-assert.equal(bootstrap.if, "steps.npm_package.outputs.exists == 'false'");
-assert.equal(
-  bootstrap.env.NODE_AUTH_TOKEN,
-  '${{ secrets.NPM_BOOTSTRAP_TOKEN }}',
-);
-assert.match(bootstrap.run, /NPM_BOOTSTRAP_TOKEN with bypass 2FA/);
-assert.match(
-  bootstrap.run,
-  /npm publish --ignore-scripts --provenance --access public/,
-);
+const skip = step('Skip the already published version');
+assert.equal(skip.if, "steps.npm_version.outputs.published == 'true'");
+assert.doesNotMatch(skip.run ?? '', /npm publish/);
 
 const serialized = JSON.stringify(workflow);
 assert.equal(
-  serialized.match(/\$\{\{\s*secrets\./g)?.length,
-  1,
-  "the bootstrap step must contain the workflow's only Actions secret",
+  serialized.match(/\$\{\{\s*secrets\./g),
+  null,
+  'the release workflow must reference no Actions secrets',
 );
 
 const publishSteps = allSteps.flatMap((candidate) =>
@@ -66,8 +62,8 @@ const publishSteps = allSteps.flatMap((candidate) =>
 );
 assert.deepEqual(
   publishSteps,
-  ['Publish to npm with trusted OIDC', 'Bootstrap the first npm publication'],
-  'only the trusted and bootstrap steps may publish',
+  ['Publish to npm with trusted OIDC'],
+  'only the trusted step may publish',
 );
 
 for (const job of jobs) {
@@ -75,7 +71,6 @@ for (const job of jobs) {
 }
 
 for (const candidate of allSteps) {
-  if (candidate === bootstrap) continue;
   assert.doesNotMatch(
     JSON.stringify(candidate),
     registryCredential,
@@ -83,4 +78,4 @@ for (const candidate of allSteps) {
   );
 }
 
-console.log('release workflow preserves trusted/bootstrap publication');
+console.log('release workflow preserves trusted-only publication');
