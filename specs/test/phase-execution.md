@@ -69,7 +69,7 @@ Where phases are backed by `legacy`, `session-v1`, and `composed-v2` fixture `pl
 ### PHEXEC-28
 Verifies: [PHEXEC-27](../dev/phase-execution.md#phexec-27), [PHEXEC-30](../dev/phase-execution.md#phexec-30), [COMPILE-6](../user/compiler.md#compile-6)
 
-When the slc command runs a fixture phase, a phase with no pin file or absent from a present pin file shall interpret, a current pin with absent or exact `@sublang/playbook@0.9.0` link-target provenance shall select the `legacy` compiled executor without interpreting, a current pin with exact `@sublang/playbook@1.0.0` provenance shall select the six-port `composed-v2` executor, a current pin carrying any other unmapped provenance or a compiled artifact the selected host cannot run shall fail closed without profile inference or initialization retry, and a stale pin, a malformed pin record, or an unparseable pin file shall fail the run with a diagnostic and not interpret.
+When the slc command runs a fixture phase, a phase with no pin file or absent from a present pin file shall interpret, a current pin with absent or exact `@sublang/playbook@0.9.0` link-target provenance shall select the `legacy` compiled executor without interpreting, a current pin with exact `@sublang/playbook@1.0.0` or `@sublang/playbook@2.0.0` provenance shall select the six-port `composed-v2` executor, a current pin carrying any other unmapped provenance — including `@sublang/playbook@1.3.0` — or a compiled artifact the selected host cannot run shall fail closed without profile inference or initialization retry, and a stale pin, a malformed pin record, or an unparseable pin file shall fail the run with a diagnostic and not interpret.
 
 ### PHEXEC-32
 
