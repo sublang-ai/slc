@@ -12,9 +12,9 @@
 三行命令，在本目录下运行：
 
 ```sh
-slc playbook workflow.zh.txt
-playbook run ./workflow.zh.ts "<task>"
-git log --oneline
+slc playbook workflow.zh.txt  # 将输入的工作流描述编译成 playbook
+playbook run ./workflow.zh.ts "<task>"  # 你指定任务，执行工作流
+git log --oneline  # 查看工作流的提交记录
 ```
 
 前置条件：
@@ -22,17 +22,17 @@ git log --oneline
 - macOS 或 Linux（Windows 请使用 WSL 或 Git Bash——工作流的脚本化步骤经由 `sh` 执行）
 - Node.js ≥ 23.6
 - `npm install -g @sublang/slc @sublang/playbook`——`slc` 编译器与 `playbook` 执行环境
-- 默认配置：已安装并登录 [Claude Code CLI](https://www.anthropic.com/claude-code)，`claude` 命令行可用。可配置为其他 agent /模型，以及为各角色（编码者、审查者、Captain 等）设置 agent /模型等，参见[角色设置](#角色设置)。
+- 默认配置：已安装并登录 [Claude Code CLI](https://www.anthropic.com/claude-code)，`claude` 命令行可用。可配置为其他 agent／模型，以及为各角色（编码者、审查者、Captain 等）设置 agent／模型等，参见[角色设置](#角色设置)。
 - `git`
 
 ## 详细说明
 
 ### 输入
 
-[`workflow.zh.txt`](workflow.zh.txt)：
+[`workflow.zh.txt`](workflow.zh.txt)——以下命令所编译的中文源文本；[`workflow.txt`](workflow.txt) 是同一段落的英文表述，由[英文版 README](README.md) 的流程编译：
 
 > 用两个agent来完成输入的任务，一个agent按任务要求对当前目录的代码进行修改并提交Git，另一个agent对提交的commit进行review并提出合理问题，交回给第一个agent做判断。
-> 它可以接受或拒绝但要讲清楚原因，两个agent争论直至达成一致（争论不超过2轮，即至多到总计第3次判断后不再争论，自己定夺），由第一个agent负责按结论修改代码，再次提交。
+> 它可以接受或拒绝但要讲清楚原因，两个agent争论直至达成一致（争论不超过2轮，即至多到总计第3次判断后不再争论），由第一个agent负责按结论修改代码，再次提交。
 > 依此循环，直到review没有任何问题后结束。循环次数不超过2次。
 
 留意这段话**未明确**的部分：没有给两个 agent 命名，没有交代一轮争论中如何交互，还默认当前目录已是 Git 仓库。编译器将在状态机中把这三点都明确下来，而文中两处明确的上界（争论至多 2 轮、循环至多 2 次）则会成为状态机里的循环计数器。
@@ -48,12 +48,12 @@ slc playbook workflow.zh.txt
 编译耗时可能超过十分钟。
 
 制品输出在当前目录下，包括：`./workflow.zh.playbook/`（编译中间产物）与 `./workflow.zh.ts`（可运行的入口）。
-我们提供参考制品，置于 [`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/) 下，供预览或对比校验。
+我们提供参考制品，置于 [`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/) 下，供预览或对比校验；英文流程的参考制品与之并列。
 你也可以跳过实际编译，直接阅读。
 
 | 中间制品 | 说明 |
 | --- | --- |
-| `workflow.zh.text.md` | 规范化后的源文本：声明 player `编码者` 与 `审查者`，把原文整理为编号步骤；含义与语言不变。 |
+| `workflow.zh.text.md` | 规范化后的源文本：声明 player `编码者` 与 `审查者`，把原文整理为编号步骤。 |
 | `workflow.zh.gears.raw.md` | 由源文本生成的 GEARS 规约条目（优化前）。 |
 | `workflow.zh.gears.md` | 优化后的 GEARS 规约条目：Git 检查被改写为无需 LLM 的固定 shell 命令。 |
 | `workflow.zh.fsm.ts` | 由 GEARS 条目生成的 XState 状态机。 |
@@ -82,24 +82,23 @@ playbook run ./workflow.zh.ts \
 - 当某轮评审不再有问题时，状态机到达终态，运行以 `0` 退出。
 
 ```sh
-git log --oneline   # 只有经过评审的那些 commit——嵌套仓库自己的历史
-git show            # 对 sample.c 的那次经过评审的修复
+git log --oneline   # 经过评审的那些提交
+git show            # 对 sample.c 的修复
 ```
 
-重新运行前，可从仓库根目录还原 `demo/`：
+如果想重新运行，可从仓库根目录还原 `demo/`：
 
 ```sh
 rm -rf demo/.git demo/workflow.zh.playbook demo/workflow.zh.ts
 git checkout -- demo/
 ```
 
-真正投入使用时，在你自己项目的**根目录**下运行同一条命令、换成你自己的任务——在那里脚本步骤会发现 `.git` 并直接通过。
-
-> 两个 agent 会向你运行命令的那个目录提交。这正是它的用途——但请指向一个你愿意让它被修改的工作区。
+真正投入使用时，在你自己项目的**根目录**下运行 `playbook run` 命令，指定 playbook 路径，换成你自己的任务——在那里脚本步骤会发现 `.git` 并跳过初始化。
+两个 agent 会向你运行命令的那个目录提交。
 
 ## 这个演示说明了什么
 
 - **自然语言就是源代码。** 输入的自然语言从未被编辑；规范化做的是把它隐含的结构显式化。
 - **确定性的编排。** 这个循环——谁行动、何时停止——是编译出来的状态机，而不是 prompt 的即兴发挥；只有每个状态**内部**的工作才用到 LLM。
 - **加入编译优化。** 一个无需判断的步骤变成了编译期可验证的 shell 命令：更省、更快，且不会产生幻觉。
-- **验证与产物一同交付。** 编译器同时发布用来验证自身输出符合源规格的测试。
+- **验证与产物一同交付。** 编译器同时生成用来验证自身输出符合源规约的测试。
