@@ -9,14 +9,13 @@
 //                       and the sole actor is the direct Captain, which bypasses
 //                       player binding and is served by PlaybookPorts.callCaptain.
 //   Adjudication:       LLM-judge per Captain state (factory default).
-//   Boss-event mapping: deterministic entry event `COMPILE` at ready and a
-//                       reconstructed terminal machine — the sole ordinary
-//                       entry event, so no classifier judge call is needed.
-//                       `COMPILE` carries no context-consumed payload, so the
-//                       attached entry text is inert (the FSM reads its
-//                       CaptainInput from context, not the event). While parked
-//                       (`failed`/`awaitBossReply`) the shared classifier maps
-//                       Boss text among COMPILE, BOSS_REPLY, and BOSS_INTERRUPT.
+//   Boss-event mapping: `COMPILE` carries no textual payload field, so the
+//                       shared classifier selects it at ready, a reconstructed
+//                       terminal machine, or while parked (`failed`/
+//                       `awaitBossReply`) instead of inventing an event member.
+//                       The FSM reads CaptainInput from context, not the event.
+//                       The classifier also maps parked-state Boss text among
+//                       COMPILE, BOSS_REPLY, and BOSS_INTERRUPT.
 //                       `BOSS_INTERRUPT` is derived from the FSM root;
 //                       `BOSS_REPLY`/`NO_ACTION` are runtime-owned (default).
 //   Abort strategy:     natural rejection — the Captain actor rejects on abort
@@ -101,14 +100,11 @@ function snapshotOptions(value: unknown): PlaybookRuntimeOptions {
 
 // Everything the factory cannot read from the FSM artifact's own data
 // (slc/link.md §Output):
-// - `entryEvent`: `COMPILE` is the sole ordinary entry event at `ready` and a
-//   reconstructed terminal machine, so the runtime sends it deterministically
-//   without a classifier judge call (slc/link.md §Boss-event mapping). This FSM
-//   consumes no entry payload (CaptainInput is built from context, not the
-//   event), so the attached `bossText` slot is inert; it is deliberately left
-//   out of `transitionEventFields` so it never enters telemetry. Declaring the
-//   entry event also lets the parked-state classifier (`failed`,
-//   `awaitBossReply`) offer `COMPILE` for a fresh directive.
+// - `bossEvents`: `COMPILE` carries no textual payload field, so it cannot be a
+//   deterministic textual entry event under slc/link.md §Boss-event mapping.
+//   Its type-only contract is erased under TypeScript, so the runtime needs it
+//   here to offer `COMPILE` to the classifier at ready, a reconstructed
+//   terminal machine, and parked states (`failed`, `awaitBossReply`).
 // - `transitionEventFields`: the exact string payload fields the FSM's Boss
 //   union declares (BOSS_INTERRUPT.targetId, BOSS_REPLY.answer/questionId),
 //   copied into transition telemetry/trace descriptors.
@@ -120,7 +116,7 @@ function snapshotOptions(value: unknown): PlaybookRuntimeOptions {
 const spec: XStatePlaybookRuntimeSpec<PlaybookRuntimeOptions> = {
   label: 'text2gears',
   snapshotOptions,
-  entryEvent: { type: 'COMPILE', textField: 'bossText' },
+  bossEvents: [{ type: 'COMPILE' }],
   transitionEventFields: ['targetId', 'answer', 'questionId'],
 };
 

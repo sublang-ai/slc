@@ -99,6 +99,15 @@ describe('resolvesToPlaybook (PIN-13)', () => {
         ].join('\n'),
       ),
     ).toBe(true);
+    expect(
+      resolvesToPlaybook(
+        [
+          "import { createXStatePlaybookRuntime as createRuntime } from '@sublang/playbook/xstate-runtime';",
+          'const createPlaybookRuntime = createRuntime({}, {});',
+          'export default createPlaybookRuntime;',
+        ].join('\n'),
+      ),
+    ).toBe(true);
   });
 
   it('rejects a factory call whose callee is not the shared engine import', () => {
@@ -107,6 +116,26 @@ describe('resolvesToPlaybook (PIN-13)', () => {
         [
           "import { somethingElse } from 'another-package';",
           'const createPlaybookRuntime = somethingElse();',
+          'export default createPlaybookRuntime;',
+        ].join('\n'),
+      ),
+    ).toBe(false);
+    // Importing a different export from the trusted module does not make its
+    // result a Playbook runtime factory, even if it is renamed to look like it.
+    expect(
+      resolvesToPlaybook(
+        [
+          "import { anotherFactory } from '@sublang/playbook/xstate-runtime';",
+          'const createPlaybookRuntime = anotherFactory({}, {});',
+          'export default createPlaybookRuntime;',
+        ].join('\n'),
+      ),
+    ).toBe(false);
+    expect(
+      resolvesToPlaybook(
+        [
+          "import { anotherFactory as createXStatePlaybookRuntime } from '@sublang/playbook/xstate-runtime';",
+          'const createPlaybookRuntime = createXStatePlaybookRuntime({}, {});',
           'export default createPlaybookRuntime;',
         ].join('\n'),
       ),

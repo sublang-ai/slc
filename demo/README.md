@@ -41,6 +41,7 @@ Prerequisites:
 compile; [`workflow.zh.txt`](workflow.zh.txt) is the same paragraph in
 Chinese, compiled by the [Chinese README](README.zh.md)'s flow:
 
+> Before work begins, ensure the current directory is the root of its own Git repository; if `.git` is absent there, initialize a repository there.
 > Use two agents to carry out the input task.
 > One agent modifies the code in the current directory as the task requires and commits it to Git; the other agent reviews the resulting commit and raises reasonable findings, handing them back to the first agent to judge — it may accept or reject them, but must explain why.
 > The two agents argue until they reach agreement (arguing no more than 2 rounds, i.e. after the 3rd judgment in total they stop arguing), and the first agent is responsible for changing the code according to the conclusion and committing again.
@@ -48,9 +49,9 @@ Chinese, compiled by the [Chinese README](README.zh.md)'s flow:
 > No more than 2 loops.
 
 Note what the paragraph leaves **unstated**: it never names the two
-agents, never says how a round of debate is exchanged, and assumes the
-current directory is already a Git repository. The compiler makes all
-three explicit in the state machine, while the two stated bounds — at
+agents or says how a round of debate is exchanged. The compiler makes both
+explicit in the state machine. The stated repository-root setup becomes a
+scripted state, while the two stated bounds — at
 most 2 debate rounds, at most 2 loops — become loop counters there.
 
 ### Compile
