@@ -48,10 +48,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify:definitions": "node scripts/verify-playbook-definitions.mjs",
+    "verify:release": "node scripts/verify-release-workflow.mjs",
     "verify:artifacts": "node scripts/verify-artifacts.mjs pipelines/playbook/text2gears.slc text2gears && node scripts/verify-artifacts.mjs pipelines/playbook/gears2fsm.slc gears2fsm && node scripts/verify-artifacts.mjs pipelines/playbook/link.slc link",
     "verify:pins": "node scripts/generate-pins.mjs && git diff --exit-code -- pipelines/playbook/slc.pins.json",
     "verify:demo": "node demo/reference/check.mjs en",
-    "release:check": "npm run format:check && npm run lint && npm run build && npm test && npm run verify:definitions && npm run verify:artifacts && npm run verify:pins && npm run verify:demo && npm run test:package",
+    "release:check": "npm run format:check && npm run lint && npm run build && npm test && npm run verify:definitions && npm run verify:release && npm run verify:artifacts && npm run verify:pins && npm run verify:demo && npm run test:package",
     "prepublishOnly": "npm run release:check"
   },
   "devDependencies": {
