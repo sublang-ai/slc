@@ -15,9 +15,9 @@ review raises no further findings.
 Three lines, run from this directory:
 
 ```sh
-slc playbook workflow.zh.txt
-playbook run ./workflow.zh.ts "<task>"
-git log --oneline
+slc playbook workflow.txt  # compile the input workflow description to a playbook
+playbook run ./workflow.ts "<task>"  # run the workflow playbook with a task you specify
+git log --oneline  # view what the run produced
 ```
 
 Prerequisites:
@@ -33,13 +33,13 @@ Prerequisites:
   reviewer, Captain) — see [role setup](#role-setup).
 - `git`
 
-## In detail
+## More details
 
 ### Input
 
-[`workflow.zh.txt`](workflow.zh.txt) — the Chinese original the commands
-compile; [`workflow.txt`](workflow.txt) is an English rendering of the
-same paragraph:
+[`workflow.txt`](workflow.txt) — the English source the commands below
+compile; [`workflow.zh.txt`](workflow.zh.txt) is the same paragraph in
+Chinese, compiled by the [Chinese README](README.zh.md)'s flow:
 
 > Use two agents to carry out the input task.
 > One agent modifies the code in the current directory as the task requires and commits it to Git; the other agent reviews the resulting commit and raises reasonable findings, handing them back to the first agent to judge — it may accept or reject them, but must explain why.
@@ -56,32 +56,33 @@ most 2 debate rounds, at most 2 loops — become loop counters there.
 ### Compile
 
 ```sh
-slc playbook workflow.zh.txt
+slc playbook workflow.txt
 ```
 
 `slc` first normalizes the input text into the form the playbook pipeline
 expects, links the result against the installed `@sublang/playbook`
-runtime, and by default runs the compile optimization that removes LLM
+runtime, and by default runs the compile optimization that reduces LLM
 calls.
 The agent used by the compilation itself is configured in
 `~/.config/slc/config.yaml`.
 Compiling may take more than ten minutes.
 
-Artifacts land in the current directory: `./workflow.zh.playbook/` (the
-compile intermediates) and `./workflow.zh.ts` (the runnable entry).
+Artifacts land in the current directory: `./workflow.playbook/` (the
+compile intermediates) and `./workflow.ts` (the runnable entry).
 Reference artifacts are provided under
-[`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/), for
-preview or comparison.
+[`reference/workflow.playbook/`](reference/workflow.playbook/), for
+preview or comparison; the Chinese flow's reference set sits alongside
+it.
 You can also skip compiling and just read them.
 
 | Intermediate | What it is |
 | --- | --- |
-| `workflow.zh.text.md` | The normalized source text: declares the players `编码者` and `审查者` and arranges the original into numbered steps; meaning and language unchanged. |
-| `workflow.zh.gears.raw.md` | The GEARS spec items generated from the source text (before optimization). |
-| `workflow.zh.gears.md` | The optimized GEARS spec items: the Git check is rewritten into a fixed shell command that needs no LLM. |
-| `workflow.zh.fsm.ts` | The XState machine generated from the GEARS items. |
-| `workflow.zh.playbook.ts` | The linked runtime module: drives the machine and calls each agent. |
-| `workflow.zh.*.test.ts` | Verification tests emitted alongside the artifacts, pinning the compiler's output to the source spec. |
+| `workflow.text.md` | The normalized source text: declares the players `Coder` and `Reviewer` and arranges the original into numbered steps. |
+| `workflow.gears.raw.md` | The GEARS spec items generated from the source text (before optimization). |
+| `workflow.gears.md` | The optimized GEARS spec items: the Git check is rewritten into a fixed shell command that needs no LLM. |
+| `workflow.fsm.ts` | The XState machine generated from the GEARS items. |
+| `workflow.playbook.ts` | The linked runtime module: drives the machine and calls each agent. |
+| `workflow.*.test.ts` | Verification tests emitted alongside the artifacts, pinning the compiler's output to the source spec. |
 
 ### Use
 
@@ -90,18 +91,18 @@ depends on element order and gets even-length arrays wrong. From this
 directory, hand it to the two agents:
 
 ```sh
-playbook run ./workflow.zh.ts \
+playbook run ./workflow.ts \
   "There is a bug in the median function in sample.c: the result depends on element order, and even-length arrays are wrong too. Fix it."
 ```
 
 (Skipped the compile? Run the reference entry directly:
-`playbook run ./reference/workflow.zh.ts "<task>"`)
+`playbook run ./reference/workflow.ts "<task>"`)
 
 <a id="role-setup"></a>
 
 Every role defaults to `claude`; to choose an agent, model, or other
-parameters, add `--player 编码者=claude:claude-sonnet-5 --player
-审查者=codex:gpt-5.6-terra --captain claude:claude-sonnet-5`
+parameters, add `--player Coder=claude:claude-sonnet-5 --player
+Reviewer=codex:gpt-5.6-terra --captain claude:claude-sonnet-5`
 (`<adapter>[:<model>][@<effort>]`).
 
 The workflow operates on the **current directory**, and its scripted
@@ -116,24 +117,21 @@ repository. This one is not, so the step runs `git init` first. Then:
   the run exits `0`.
 
 ```sh
-git log --oneline   # just the reviewed commits — the nested repo's own history
+git log --oneline   # the reviewed commits
 git show            # the reviewed fix to sample.c
 ```
 
 To reset before running again, from the repository root:
 
 ```sh
-rm -rf demo/.git demo/workflow.zh.playbook demo/workflow.zh.ts
+rm -rf demo/.git demo/workflow.playbook demo/workflow.ts
 git checkout -- demo/
 ```
 
-To use it for real, run the same command from your own project's **root**
-with your own task — there the scripted step finds `.git` and passes
+To use it for real, run the `playbook run` command from your own project's **root**
+with the path to the playbook and your own task — there the scripted step finds `.git` and passes
 through.
-
-> The agents commit into whatever directory you run the command in. That
-> is the point — but point it at a working tree you are willing to have
-> modified.
+The agents commit into whatever directory you run the command in.
 
 ## What this demo shows
 
@@ -145,5 +143,5 @@ through.
 - **Compile-time optimization.** A step needing no judgment became a
   shell command verifiable at compile time: cheaper, faster, and immune
   to hallucination.
-- **Verification ships with the artifacts.** The compiler also publishes
+- **Verification ships with the artifacts.** The compiler also generates
   the tests that check its own output against the source spec.
