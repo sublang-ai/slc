@@ -18,7 +18,7 @@ import * as playbook from './gears2fsm.playbook.js';
 const CONTRACT = [
   {
     state: 'compile',
-    sourceItem: 'G2F-1',
+    sourceItem: 'GEARS2FSM-1',
     player: '',
     reads: ['bossReply', 'pendingBossQuestion'],
     wires: {

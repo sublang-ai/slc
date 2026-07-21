@@ -2,12 +2,15 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 // Behavior pins for the reviewed compiled meta-phase artifacts under
-// pipelines/playbook/{text2gears,gears2fsm,link}.slc, rebuilt against the
-// composed six-port Playbook 0.10 profile: `init` takes a root
-// `PlaybookSession`, `handleBossInput` returns a structured
-// `PlaybookRunResult`, and every working state performs direct Captain work
-// (`callCaptain`, visible) adjudicated through `callJudge` — these machines
-// declare no delegated player, so no turn ever crosses `callPlayer`.
+// pipelines/playbook/{text2gears,gears2fsm,link}.slc, rebuilt as Playbook
+// 2.0.0 thin modules over the shared `createXStatePlaybookRuntime` engine
+// (DR-017): `init` takes a root `PlaybookSession`, `handleBossInput` returns
+// a structured `PlaybookRunResult`, and every working state performs direct
+// Captain work (`callCaptain`, visible) adjudicated through `callJudge` —
+// these machines declare no delegated player, so no turn ever crosses
+// `callPlayer`. Deterministic entry is scoped to ready and reconstructed
+// terminal states; a turn arriving at `failed` re-enters through the
+// interrupt classifier.
 
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -36,11 +39,15 @@ const pipelineDir = fileURLToPath(
   new URL('../pipelines/playbook/', import.meta.url),
 );
 
-// The link classifier supplies LINK_REQUEST's two structured routing fields;
-// the runtime substitutes `<fsm-artifact>` in the Captain prompt from context
-// seeded by them (link.playbook.ts §Boss-event mapping).
-const LINK_CLASSIFICATION =
-  '{"type":"LINK_REQUEST","fsmArtifact":"/tmp/machine.fsm.ts","target":"/tmp/machine.playbook.ts"}';
+// gears2fsm and link enter through a payload-free classified `COMPILE`
+// (their thin specs declare it under `bossEvents`); the workspace request
+// reaches the Captain through the host transport's appended workspace
+// contract (PHEXEC-34), not through classified routing fields.
+const COMPILE_CLASSIFICATION = '{"type":"COMPILE"}';
+
+// The shared 2.0.0 engine's classifier prompt preamble.
+const CLASSIFICATION_ANCHOR =
+  'Classify the following Boss message into exactly one event.';
 
 const quietPorts = (overrides: Partial<PlaybookPorts> = {}): PlaybookPorts => ({
   callPlayer: async () => ({ status: 'ok', finalText: 'done' }),
@@ -76,7 +83,11 @@ const rootSession = (
   };
 };
 
-/** stateId carried by the `to` descriptor of `playbook.fsm.state` telemetry. */
+/**
+ * stateId carried by the `to` descriptor of `playbook.fsm.state` telemetry.
+ * The 2.0.0 shared engine carries `to` as the plain state id string; the
+ * pre-2.0.0 fat artifacts carried a `{ stateId }` descriptor.
+ */
 function transitionTarget(event: {
   topic: string;
   payload: unknown;
@@ -87,6 +98,7 @@ function transitionTarget(event: {
     return undefined;
   }
   const to = (payload as { to: unknown }).to;
+  if (typeof to === 'string') return to;
   if (typeof to !== 'object' || to === null || !('stateId' in to)) {
     return undefined;
   }
@@ -109,9 +121,10 @@ interface ArtifactCase {
   readonly create: () => PlaybookRuntime;
   readonly bossText: string;
   /**
-   * Judge replies in call order. text2gears and gears2fsm enter from `ready`
-   * through their deterministic COMPILE event, so their sole judge call is the
-   * Captain-output adjudication; link classifies first, then adjudicates.
+   * Judge replies in call order. text2gears enters from `ready` through its
+   * deterministic COMPILE event, so its sole judge call is the Captain-output
+   * adjudication; gears2fsm and link classify their payload-free COMPILE
+   * first, then adjudicate.
    */
   readonly judgeReplies: readonly string[];
   /** Substring the first judge prompt must carry. */
@@ -135,17 +148,17 @@ const artifacts: readonly ArtifactCase[] = [
     name: 'gears2fsm',
     create: () => createGears2Fsm({}),
     bossText: 'Compile the GEARS package into an FSM.',
-    judgeReplies: ['{"guard":"compiled"}'],
-    firstJudgeAnchor: ADJUDICATION_ANCHOR,
+    judgeReplies: [COMPILE_CLASSIFICATION, '{"guard":"done"}'],
+    firstJudgeAnchor: CLASSIFICATION_ANCHOR,
     promptAnchor: 'XState v5 finite state machine',
   },
   {
     name: 'link',
     create: () => createLink({}),
     bossText: 'Link /tmp/machine.fsm.ts into /tmp/machine.playbook.ts.',
-    judgeReplies: [LINK_CLASSIFICATION, '{"guard":"done"}'],
-    firstJudgeAnchor: 'Classify this Boss message for the link playbook FSM.',
-    promptAnchor: '/tmp/machine.fsm.ts',
+    judgeReplies: [COMPILE_CLASSIFICATION, '{"guard":"linked"}'],
+    firstJudgeAnchor: CLASSIFICATION_ANCHOR,
+    promptAnchor: 'into a `PlaybookRuntime`',
   },
 ];
 
@@ -159,7 +172,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
     );
     expect(gears2fsm).toContain('default single-outcome contract');
     expect(gears2fsm).toContain('The acting agent completed the behavior.');
-    expect(gears2fsm).toContain('Tag every invoking working leaf');
+    expect(gears2fsm).toContain('Every invoking working leaf');
     expect(gears2fsm).toContain('playbook.busy');
     expect(gears2fsm).toContain('erasable TypeScript syntax');
 
@@ -171,7 +184,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
     expect(link).toContain('Executed script for');
     expect(link).toContain('sh -c');
     expect(link).toContain(
-      'implements the six ports once and inherits every playbook',
+      'implement the six ports once and inherit every playbook',
     );
     expect(link).toContain('erasable TypeScript syntax');
 
@@ -294,7 +307,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
       rootSession({
         callJudge: async () => {
           judgeCalls += 1;
-          return '{"guard":"compiled"}';
+          return COMPILE_CLASSIFICATION;
         },
         callCaptain: async () => {
           started();
@@ -312,10 +325,10 @@ describe('reviewed compiled meta-phase artifacts', () => {
     controller.abort();
     const result = await turn;
     // A host promise that ignores cancellation and resolves late is paired as
-    // aborted; the late ok result is never adjudicated and does not masquerade
-    // as success.
+    // aborted; only the classification judge call ran — the late ok result is
+    // never adjudicated and does not masquerade as success.
     expect(result.outcome).toBe('aborted');
-    expect(judgeCalls).toBe(0);
+    expect(judgeCalls).toBe(1);
     await runtime.dispose();
   });
 
@@ -336,7 +349,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
       rootSession({
         callJudge: async () => {
           judgeCalls += 1;
-          return LINK_CLASSIFICATION;
+          return COMPILE_CLASSIFICATION;
         },
         callCaptain: async () => {
           started();
@@ -399,7 +412,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
       rootSession({
         callJudge: async () => {
           controller.abort();
-          return LINK_CLASSIFICATION;
+          return COMPILE_CLASSIFICATION;
         },
         callCaptain: async () => {
           captainCalls += 1;
@@ -421,6 +434,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
     const runtime = createGears2Fsm({});
     const controller = new AbortController();
     const states: string[] = [];
+    let judgeCalls = 0;
     await runtime.init(
       rootSession({
         callCaptain: async () => ({
@@ -428,8 +442,12 @@ describe('reviewed compiled meta-phase artifacts', () => {
           finalText: 'Compiled the machine.',
         }),
         callJudge: async () => {
+          judgeCalls += 1;
+          // The first call classifies the fresh COMPILE; the abort lands
+          // during the second (adjudication) call.
+          if (judgeCalls === 1) return COMPILE_CLASSIFICATION;
           controller.abort();
-          return '{"guard":"compiled"}';
+          return '{"guard":"done"}';
         },
         emitTelemetry: async (event) => {
           const target = transitionTarget(event);
@@ -452,13 +470,13 @@ describe('reviewed compiled meta-phase artifacts', () => {
     {
       name: 'gears2fsm',
       create: (): PlaybookRuntime => createGears2Fsm({}),
-      priorReplies: [] as readonly string[],
+      priorReplies: [COMPILE_CLASSIFICATION] as readonly string[],
       bossText: 'Compile the GEARS package.',
     },
     {
       name: 'link',
       create: (): PlaybookRuntime => createLink({}),
-      priorReplies: [LINK_CLASSIFICATION] as readonly string[],
+      priorReplies: [COMPILE_CLASSIFICATION] as readonly string[],
       bossText: 'Link the artifact.',
     },
   ])(
@@ -489,7 +507,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
     },
   );
 
-  it('normalizes an undefined adjudicator rejection into a control-plane error', async () => {
+  it('resolves an undefined adjudicator rejection as the failed outcome', async () => {
     const runtime = createText2Gears({});
     await runtime.init(
       rootSession({
@@ -497,19 +515,14 @@ describe('reviewed compiled meta-phase artifacts', () => {
       }),
     );
 
-    // A degenerate `undefined` judge rejection still rejects the turn; the
-    // runtime surfaces it as its normalized missing-reply control error.
-    let caught: unknown = 'turn resolved';
-    try {
-      await runtime.handleBossInput({
-        text: 'Compile.',
-        signal: new AbortController().signal,
-      });
-    } catch (error) {
-      caught = error;
-    }
-    expect(caught).toBeInstanceOf(Error);
-    expect((caught as Error).message).toBe('judge returned no reply');
+    // The shared 2.0.0 judge boundary has no error to latch from a
+    // degenerate `undefined` rejection, so the turn settles into the
+    // recoverable failed state instead of rejecting the public boundary.
+    const result = await runtime.handleBossInput({
+      text: 'Compile.',
+      signal: new AbortController().signal,
+    });
+    expect(result.outcome).toBe('failed');
     await runtime.dispose();
   });
 
@@ -526,6 +539,12 @@ describe('reviewed compiled meta-phase artifacts', () => {
         callJudge: async () => {
           judgeCalls += 1;
           if (judgeCalls === 1) throw new Error('judge-fail');
+          // Entry from `failed` is classified rather than deterministic
+          // under the 2.0.0 engine, so the recovery turn first routes
+          // through the interrupt classifier.
+          if (judgeCalls === 2) {
+            return '{"type":"BOSS_INTERRUPT","targetId":"compile"}';
+          }
           return '{"guard":"compiled"}';
         },
         emitTelemetry: async (event) => {
@@ -646,7 +665,10 @@ describe('compiled meta phases carry the host workspace contract (PHEXEC-35)', (
         `artifact to write: ${join(dir, 'workflow.fsm.ts')}`,
         `write only ${join(dir, 'workflow.fsm.ts')}`,
       ],
-      judgeReply: () => '{"guard":"compiled"}',
+      judgeReply: (prompt) =>
+        prompt.startsWith(CLASSIFICATION_ANCHOR)
+          ? COMPILE_CLASSIFICATION
+          : '{"guard":"done"}',
     },
     {
       name: 'link',
@@ -662,21 +684,19 @@ describe('compiled meta phases carry the host workspace contract (PHEXEC-35)', (
       target: 'workflow.playbook.ts',
       promptAnchor: 'into a `PlaybookRuntime`',
       workspaceAnchors: (dir) => [
-        // The runtime substitutes `<fsm-artifact>` from the classified event.
+        // The paths reach the Captain only through the host transport's
+        // appended workspace contract (PHEXEC-34): the classified COMPILE
+        // carries no routing fields under the 2.0.0 thin artifact.
         join(dir, 'workflow.fsm.ts'),
         `object artifacts to read, in order: ${join(dir, 'workflow.fsm.ts')}`,
         `link target module: ${join(dir, 'runtime.ts')}`,
         `artifact to write: ${join(dir, 'workflow.playbook.ts')}`,
         `write only ${join(dir, 'workflow.playbook.ts')}`,
       ],
-      judgeReply: (prompt, dir) =>
-        prompt.includes('Classify this Boss message')
-          ? JSON.stringify({
-              type: 'LINK_REQUEST',
-              fsmArtifact: join(dir, 'workflow.fsm.ts'),
-              target: join(dir, 'runtime.ts'),
-            })
-          : '{"guard":"done"}',
+      judgeReply: (prompt) =>
+        prompt.startsWith(CLASSIFICATION_ANCHOR)
+          ? COMPILE_CLASSIFICATION
+          : '{"guard":"linked"}',
     },
   ];
 

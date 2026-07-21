@@ -13,11 +13,11 @@ const PINNED = {
   initial: 'ready',
   captain: [
     {
-      state: 'linking',
+      state: 'compile',
       actor: 'captain',
       sourceItem: 'LINK-1',
       player: '',
-      resultKeys: ['done', 'needsBossReply'],
+      resultKeys: ['linked', 'needsBossReply', 'unrepresentable'],
       onDone: [
         {
           index: 0,
@@ -36,6 +36,11 @@ const PINNED = {
         },
         {
           index: 3,
+          target: 'done',
+          guarded: true,
+        },
+        {
+          index: 4,
           target: 'failed',
           guarded: false,
         },
@@ -55,10 +60,10 @@ const PINNED = {
       state: 'ready',
       final: false,
       on: {
-        LINK_REQUEST: [
+        COMPILE: [
           {
             index: 0,
-            target: 'linking',
+            target: 'compile',
             guarded: false,
           },
         ],
@@ -76,14 +81,31 @@ const PINNED = {
           },
           {
             index: 1,
-            target: 'linking',
+            target: 'compile',
             guarded: true,
           },
         ],
-        LINK_REQUEST: [
+        BOSS_INTERRUPT: [
           {
             index: 0,
-            target: 'linking',
+            target: 'ready',
+            guarded: true,
+          },
+          {
+            index: 1,
+            target: 'compile',
+            guarded: true,
+          },
+          {
+            index: 2,
+            target: 'failed',
+            guarded: true,
+          },
+        ],
+        COMPILE: [
+          {
+            index: 0,
+            target: 'compile',
             guarded: false,
           },
         ],
@@ -93,10 +115,10 @@ const PINNED = {
       state: 'failed',
       final: false,
       on: {
-        LINK_REQUEST: [
+        COMPILE: [
           {
             index: 0,
-            target: 'linking',
+            target: 'compile',
             guarded: false,
           },
         ],
@@ -108,8 +130,26 @@ const PINNED = {
       on: {},
     },
   ],
-  rootOn: {},
-  interruptTargets: [],
+  rootOn: {
+    BOSS_INTERRUPT: [
+      {
+        index: 0,
+        target: 'ready',
+        guarded: true,
+      },
+      {
+        index: 1,
+        target: 'compile',
+        guarded: true,
+      },
+      {
+        index: 2,
+        target: 'failed',
+        guarded: true,
+      },
+    ],
+  },
+  interruptTargets: ['ready', 'compile', 'failed'],
 };
 
 describe('link: FSM introspection', () => {
