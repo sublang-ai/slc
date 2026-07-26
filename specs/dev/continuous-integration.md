@@ -39,7 +39,7 @@ Where the dependency manifest and lock adopt `@sublang/playbook@2.0.0`, when rep
 Where a commit is pushed or proposed by pull request, when repository
 continuous integration runs, the workflow shall exercise the English demo
 reference through its runtime boundary, validate the publishable tarball in an
-empty consumer project, and verify that the release workflow keeps the
-first-publication bootstrap credential isolated from later OIDC publication
+empty consumer project, and verify that the release workflow publishes through
+trusted OIDC alone, carrying no static registry credential
 ([RELEASE-8](release.md#release-8), [RELEASE-10](release.md#release-10),
 [RELEASE-11](release.md#release-11)).
