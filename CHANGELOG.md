@@ -25,8 +25,8 @@ and this project adheres to
   verification suites.
 - Project-local configuration seeding and an English two-agent review-loop
   reference compile.
-- CI-gated npm publication with provenance, an isolated first-publication
-  bootstrap credential, and tokenless OIDC for later releases.
+- CI-gated npm publication with provenance: an interactive first publication
+  by a maintainer, then token-free OIDC for every later release.
 
 ### Fixed
 

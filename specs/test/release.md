@@ -31,11 +31,9 @@ global module path.
 ### RELEASE-16
 Verifies: [RELEASE-8](../dev/release.md#release-8)
 
-Where the release workflow is publishing a package version, when the npm
-package already exists, the publish step shall use trusted OIDC without a
-static token. When the package does not exist, only the first-publication step
-shall receive `NPM_BOOTSTRAP_TOKEN`, and it shall fail with an explicit error
-when that secret is absent. A deterministic workflow check shall enforce this
-separation, reject every additional static-secret or publication path, and
-require lifecycle scripts to remain disabled for both publication commands in
-CI and the prepublish release gate.
+Where the release workflow is publishing a package version, when that
+publication runs, its single publish step shall use trusted OIDC and no static
+registry credential shall reach the workflow. A deterministic workflow check
+shall reject every static-secret or additional publication path and require
+lifecycle scripts to remain disabled for the publication command in CI and for
+the prepublish release gate.

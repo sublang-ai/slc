@@ -22,9 +22,9 @@ auditable notes.
 - [x] The package smoke validates tarball contents, installed executable and
   exports, and an external thin entry import.
 - [x] CI runs the release-grade definition, artifact, pin, demo, and package
-  checks; the tag workflow requires green main CI, uses a one-time bootstrap
-  credential while the npm package is absent and OIDC thereafter, publishes
-  with provenance and public access, and creates the GitHub release.
+  checks; the tag workflow requires green main CI, publishes through trusted
+  OIDC with no registry secret, with provenance and public access, and creates
+  the GitHub release.
 
 ## Tasks
 
@@ -33,11 +33,12 @@ auditable notes.
 
 ## Maintainer handoff
 
-- [ ] Immediately before `v0.1.0`, create the short-lived npm bootstrap token
-  described by RELEASE-8 and store it as the `NPM_BOOTSTRAP_TOKEN` Actions
-  secret.
-- [ ] Immediately after the first publication, configure the npm trusted
-  publisher, revoke the granular token on npm, and remove the Actions secret.
+- [ ] Publish `0.1.0` from an interactive `npm login` session, as RELEASE-8
+  requires while the package does not yet exist and no trusted publisher can
+  be configured.
+- [ ] Immediately after that first publication and before the next release
+  tag, configure `release.yml` as the package's npm trusted publisher, so
+  every later tag publishes through OIDC with no Actions secret.
 
 ## Acceptance criteria
 
@@ -45,7 +46,6 @@ auditable notes.
 - `npm pack` identifies `@sublang/slc@0.1.0` and contains only the intended
   production surface.
 - The release commit is on `main`, pushed, and green before `v0.1.0` is tagged.
-- Before `v0.1.0` is tagged, a maintainer stores the one-time
-  `NPM_BOOTSTRAP_TOKEN` Actions secret. After publication, the maintainer
-  configures `release.yml` as the npm trusted publisher, revokes the granular
-  token on npm, and removes the secret.
+- The first publication is performed interactively by a maintainer, and the
+  repository carries no registry secret at any point; after it, `release.yml`
+  is configured as the npm trusted publisher for later tags.
