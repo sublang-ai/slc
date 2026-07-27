@@ -93,8 +93,13 @@ demo artifacts, repository scripts, and workflow files.
 
 Where a compiled thin artifact imports `@sublang/playbook/xstate-runtime` and
 its FSM imports `xstate` from the artifact's destination, the documented
-installation shall place `@sublang/slc` and `@sublang/playbook` in the target
-project rather than relying on global-only package resolution.
+installation shall resolve those imports from the artifact's own location —
+either by placing `@sublang/slc` and `@sublang/playbook` in the target project,
+or by relying on a host that provisions its own engine beside the artifact
+(`@sublang/playbook` 3.2 and later). The documentation shall state that a
+project-local install is authoritative wherever it resolves, and that a project
+manifest declaring `@sublang/playbook` requires its own install because
+provisioning refuses to shadow a declared dependency.
 
 ### RELEASE-12
 
