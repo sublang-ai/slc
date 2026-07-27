@@ -41,7 +41,7 @@
     "node": ">=23.6"
   },
   "scripts": {
-    "build": "tsc && cp src/normalize.md src/slc.config.template.yaml dist/",
+    "build": "rm -rf dist && tsc && cp src/normalize.md src/slc.config.template.yaml dist/",
     "test": "vitest run",
     "test:package": "node scripts/test-package.mjs",
     "test:acceptance": "node scripts/test-acceptance.mjs",
