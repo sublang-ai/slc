@@ -96,7 +96,7 @@ its FSM imports `xstate` from the artifact's destination, the documented
 installation shall resolve those imports from the artifact's own location —
 either by placing `@sublang/slc` and `@sublang/playbook` in the target project,
 or by relying on a host that provisions its own engine beside the artifact
-(`@sublang/playbook` 3.2 and later). The documentation shall state that a
+(`@sublang/playbook` 3.1 and later). The documentation shall state that a
 project-local install is authoritative wherever it resolves, and that a project
 manifest declaring `@sublang/playbook` requires its own install because
 provisioning refuses to shadow a declared dependency.
@@ -108,7 +108,7 @@ manual publication. The tag workflow shall run that same gate explicitly and
 then invoke npm with lifecycle scripts disabled so registry credentials cannot
 reach formatting, lint, build, tests, immutable Playbook-definition
 verification, release-workflow verification, reviewed-artifact verification,
-reproducible pin verification, the English demo reference check, or the
+reproducible pin verification, the demo reference checks (en and zh), or the
 installed-tarball smoke.
 
 ## Pre-release Checklist

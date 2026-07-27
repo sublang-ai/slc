@@ -2,14 +2,14 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 // CI-4 / SELFHOST-11: prove that the definitions vendored for compiled pin
-// selection carry the immutable Playbook 2.0.0 normative content. SLC adds
+// selection carry the immutable Playbook 3.1.0 normative content. SLC adds
 // only its explicit Pin Inputs, whose exact lists are part of the pin closure.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const expectedPlaybookVersion = '2.0.0';
+const expectedPlaybookVersion = '3.1.0';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const pipelineDir = join(repoRoot, 'pipelines', 'playbook');
 

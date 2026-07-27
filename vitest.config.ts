@@ -20,6 +20,14 @@ export default defineConfig({
     // emitted verification tests); it is reviewed by the build-and-review
     // scripts, not by the repo suite. Committed artifact directories under
     // pipelines/ DO run their emitted tests here.
-    exclude: ['node_modules/**', 'dist/**', '.scratch/**'],
+    // demo/workflow*.playbook/ are gitignored end-user compile outputs; the
+    // committed copies under demo/reference/ are the ones the suite runs.
+    exclude: [
+      '**/node_modules/**',
+      'dist/**',
+      '.scratch/**',
+      'demo/workflow.playbook/**',
+      'demo/workflow.zh.playbook/**',
+    ],
   },
 });

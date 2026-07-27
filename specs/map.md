@@ -41,6 +41,7 @@ meta.md     The spec of specs
 | DR-015 | [015-first-run-config-seeding.md](decisions/015-first-run-config-seeding.md) | First-run seeding of `~/.config/slc/config.yaml` from a bundled starter template (`agent: claude-code`), superseding DR-006's never-written consequence |
 | DR-016 | [016-gears-grammar-provenance.md](decisions/016-gears-grammar-provenance.md) | The pinned GEARS grammar comes from the published `@sublang/spex` package (en + zh), replacing this repo's drifted local copies in the compile-pin closure |
 | DR-017 | [017-playbook-2-0-thin-runtime-adoption.md](decisions/017-playbook-2-0-thin-runtime-adoption.md) | Playbook 2.0 adoption: 2.0.0 provenance to `composed-v2`, resolved Captain-failure mapping, thin-artifact pin closure with the shared engine, registry-entry role binding, and atomic reviewed assets |
+| DR-018 | [018-playbook-3-1-adoption.md](decisions/018-playbook-3-1-adoption.md) | Playbook 3.1 adoption: 3.1.0 provenance to `composed-v2`, link.md judge-envelope and compat-stamping re-sync, full bundle rebuild, coupled demo manifest, and the global-first consumption model |
 
 ## Iterations
 
@@ -64,6 +65,7 @@ meta.md     The spec of specs
 | IR-015 | [015-playbook-2-0-adoption.md](iterations/015-playbook-2-0-adoption.md) | Adopt DR-017: dependency bumps, 2.0.0 provenance mapping, definition re-sync, meta-artifact rebuild, pin regeneration, entry role binding, and the English demo reference |
 | IR-016 | [016-first-release.md](iterations/016-first-release.md) | Prepare the first npm release: 0.1.0 metadata and changelog, project-local thin-runtime install, package smoke, and CI-green token-free OIDC publication |
 | IR-017 | [017-local-release-acceptance.md](iterations/017-local-release-acceptance.md) | Add the installed-package runtime drive and the opt-in real-agent compile/run acceptance gate |
+| IR-018 | [018-playbook-3-1-adoption.md](iterations/018-playbook-3-1-adoption.md) | Adopt Playbook 3.1 atomically, regenerate the zh demo reference as end-user acceptance, and prepare 0.2.0 |
 
 ## Packages
 

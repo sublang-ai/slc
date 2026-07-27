@@ -17,7 +17,7 @@ import * as playbook from './gears2fsm.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'compile',
+    state: 'transform',
     sourceItem: 'GEARS2FSM-1',
     player: '',
     reads: ['bossReply', 'pendingBossQuestion'],
@@ -34,6 +34,8 @@ const CONTRACT = [
       '<#>',
       '<id>',
       '<target-field>',
+      '<stable-state-id>',
+      '<ITEM-A>',
     ],
   },
 ];
@@ -44,7 +46,7 @@ describe('gears2fsm: prompt contract', () => {
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    compile: [],
+    transform: [],
   };
 
   const composeCaptain = (

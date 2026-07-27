@@ -184,5 +184,14 @@ describe('createConfiguredExecutor (CLI-7, CLI-8)', () => {
     expect(() => compiled(choice('@sublang/playbook@1.1.0'))).toThrow(
       /unsupported pinned Playbook runtime contract/,
     );
+    // 3.1.0 ships runtime.ts byte-identical to 2.0.0 with only the additive
+    // compat self-report, so it joins the composed profile (DR-018); the
+    // never-installed 3.0.0 stays fail-closed.
+    expect(typeof compiled(choice('@sublang/playbook@3.1.0')).run).toBe(
+      'function',
+    );
+    expect(() => compiled(choice('@sublang/playbook@3.0.0'))).toThrow(
+      /unsupported pinned Playbook runtime contract/,
+    );
   });
 });

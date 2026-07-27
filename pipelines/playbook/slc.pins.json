@@ -12,11 +12,11 @@
       },
       "artifact": {
         "path": "text2gears.slc/text2gears.playbook.ts",
-        "hash": "sha256:9eaf52cbb74d1290b9ec7970cbb5b1f2b515d311b8869d960abacb7467e99dfe"
+        "hash": "sha256:5a1b65b2cf673261b21d4495c8d0e855bdd9fa03ff7b99c6ac34033e84b628da"
       },
       "artifactBundle": {
         "path": "text2gears.slc",
-        "hash": "sha256:9dff7908b4b0b5a5366e6041b5ed378cebcc29178313191a4c1ee4c17ce0ddf4"
+        "hash": "sha256:7e8215f87a8ea026cdbba08f29a8f839193e300b9db42590a55cbfe7e1c57a3a"
       },
       "semanticInputs": [
         {
@@ -29,7 +29,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:65cdac028e81f274f01bedc5b776944356bb1b0ef98edf965e586e7da70025e4"
+          "hash": "sha256:d1a3e411993b5c37a07af7e618ccf259da62bd6ea0c19f7a1f35df288e907cfe"
         }
       ],
       "externalInputs": [],
@@ -37,9 +37,9 @@
         {
           "kind": "package",
           "locator": "../../node_modules/@sublang/playbook",
-          "provenance": "@sublang/playbook@2.0.0",
+          "provenance": "@sublang/playbook@3.1.0",
           "specifier": "@sublang/playbook/xstate-runtime",
-          "identity": "sha256:cebe3f7fe364871da1674fa03a1b98d4412958f732f2b0892835adbdb2e94b8c"
+          "identity": "sha256:e3f9d9067c4942bccff7b0aa5fe825a306bd1a518bed2b60139b1ae376ef141a"
         },
         {
           "kind": "package",
@@ -53,7 +53,7 @@
         "kind": "file",
         "locator": "../../node_modules/@sublang/playbook/src/runtime.ts",
         "identity": "sha256:a1d50327f9f4f504af5fca0db138b798763f67dc906296f49f5f6c4341e05aa4",
-        "provenance": "@sublang/playbook@2.0.0"
+        "provenance": "@sublang/playbook@3.1.0"
       },
       "producer": {
         "pipeline": "slc"
@@ -66,11 +66,11 @@
       },
       "artifact": {
         "path": "gears2fsm.slc/gears2fsm.playbook.ts",
-        "hash": "sha256:8c0bc68c95a4913b6da88bcb1b0d8e39e43f29734cc2b5ab6f5c0da2b4e9a0d2"
+        "hash": "sha256:63193dfe97fb82242c0f58b285f6d7d7a5b82c80c2e4b00b3387ad545d96e89f"
       },
       "artifactBundle": {
         "path": "gears2fsm.slc",
-        "hash": "sha256:0b3784479727d91ebc63669f1c94395f282d0a2f4852015d82c0b72dc8ddbdac"
+        "hash": "sha256:9a06f881b2afe2e0e288e86035014f080815312af80f16b3845852533d601319"
       },
       "semanticInputs": [
         {
@@ -83,11 +83,11 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:65cdac028e81f274f01bedc5b776944356bb1b0ef98edf965e586e7da70025e4"
+          "hash": "sha256:d1a3e411993b5c37a07af7e618ccf259da62bd6ea0c19f7a1f35df288e907cfe"
         },
         {
           "path": "link.md",
-          "hash": "sha256:3ef2c9affcda64b77d636d35108e1ce7abd22d4557490144a693879b0ffbb16d"
+          "hash": "sha256:4b61b636c0dba915684ee7b9fd0ada0fa3cf85134499c1a8c30792bc207a5eec"
         },
         {
           "path": "text2gears.md",
@@ -99,9 +99,9 @@
         {
           "kind": "package",
           "locator": "../../node_modules/@sublang/playbook",
-          "provenance": "@sublang/playbook@2.0.0",
+          "provenance": "@sublang/playbook@3.1.0",
           "specifier": "@sublang/playbook/xstate-runtime",
-          "identity": "sha256:cebe3f7fe364871da1674fa03a1b98d4412958f732f2b0892835adbdb2e94b8c"
+          "identity": "sha256:e3f9d9067c4942bccff7b0aa5fe825a306bd1a518bed2b60139b1ae376ef141a"
         },
         {
           "kind": "package",
@@ -115,7 +115,7 @@
         "kind": "file",
         "locator": "../../node_modules/@sublang/playbook/src/runtime.ts",
         "identity": "sha256:a1d50327f9f4f504af5fca0db138b798763f67dc906296f49f5f6c4341e05aa4",
-        "provenance": "@sublang/playbook@2.0.0"
+        "provenance": "@sublang/playbook@3.1.0"
       },
       "producer": {
         "pipeline": "slc"
@@ -124,15 +124,15 @@
     "link": {
       "definition": {
         "path": "link.md",
-        "hash": "sha256:3ef2c9affcda64b77d636d35108e1ce7abd22d4557490144a693879b0ffbb16d"
+        "hash": "sha256:4b61b636c0dba915684ee7b9fd0ada0fa3cf85134499c1a8c30792bc207a5eec"
       },
       "artifact": {
         "path": "link.slc/link.playbook.ts",
-        "hash": "sha256:02116312ab458dd3bbdad4d8510a8458ef169886d417e3286cc1a51a07a906c6"
+        "hash": "sha256:9010784fa93a9c1ba0f783a114964906e88a1083adeff203e6bcbf0162c414ba"
       },
       "artifactBundle": {
         "path": "link.slc",
-        "hash": "sha256:bf3fb625dd99de1150b35e4c94f0cb356edec2b996eb92bdde111992aea59714"
+        "hash": "sha256:337bbb7811d9097d5b25d7a6f8b96bac0ef7fa95c2e704aaccde30f750cd8480"
       },
       "semanticInputs": [
         {
@@ -145,7 +145,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:65cdac028e81f274f01bedc5b776944356bb1b0ef98edf965e586e7da70025e4"
+          "hash": "sha256:d1a3e411993b5c37a07af7e618ccf259da62bd6ea0c19f7a1f35df288e907cfe"
         },
         {
           "path": "gears2fsm.md",
@@ -161,9 +161,9 @@
         {
           "kind": "package",
           "locator": "../../node_modules/@sublang/playbook",
-          "provenance": "@sublang/playbook@2.0.0",
+          "provenance": "@sublang/playbook@3.1.0",
           "specifier": "@sublang/playbook/xstate-runtime",
-          "identity": "sha256:cebe3f7fe364871da1674fa03a1b98d4412958f732f2b0892835adbdb2e94b8c"
+          "identity": "sha256:e3f9d9067c4942bccff7b0aa5fe825a306bd1a518bed2b60139b1ae376ef141a"
         },
         {
           "kind": "package",
@@ -177,7 +177,7 @@
         "kind": "file",
         "locator": "../../node_modules/@sublang/playbook/src/runtime.ts",
         "identity": "sha256:a1d50327f9f4f504af5fca0db138b798763f67dc906296f49f5f6c4341e05aa4",
-        "provenance": "@sublang/playbook@2.0.0"
+        "provenance": "@sublang/playbook@3.1.0"
       },
       "producer": {
         "pipeline": "slc"

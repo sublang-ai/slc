@@ -39,11 +39,11 @@ const pipelineDir = fileURLToPath(
   new URL('../pipelines/playbook/', import.meta.url),
 );
 
-// All three meta phases enter through a payload-free classified `COMPILE`
-// (their thin specs declare it under `bossEvents`); the workspace request
-// reaches the Captain through the host transport's appended workspace
-// contract (PHEXEC-34), not through classified routing fields.
-const COMPILE_CLASSIFICATION = '{"type":"COMPILE"}';
+// All three meta phases enter through a payload-free classified
+// `BOSS_REQUEST` (their thin specs declare it under `bossEvents`); the
+// workspace request reaches the Captain through the host transport's appended
+// workspace contract (PHEXEC-34), not through classified routing fields.
+const COMPILE_CLASSIFICATION = '{"type":"BOSS_REQUEST"}';
 
 // The shared 2.0.0 engine's classifier prompt preamble.
 const CLASSIFICATION_ANCHOR =
@@ -138,7 +138,7 @@ const artifacts: readonly ArtifactCase[] = [
     name: 'text2gears',
     create: () => createText2Gears({}),
     bossText: 'Compile the requested source into GEARS.',
-    judgeReplies: [COMPILE_CLASSIFICATION, '{"guard":"compiled"}'],
+    judgeReplies: [COMPILE_CLASSIFICATION, '{"guard":"done"}'],
     firstJudgeAnchor: CLASSIFICATION_ANCHOR,
     promptAnchor: 'free-form natural-language procedure description',
   },
@@ -154,7 +154,7 @@ const artifacts: readonly ArtifactCase[] = [
     name: 'link',
     create: () => createLink({}),
     bossText: 'Link /tmp/machine.fsm.ts into /tmp/machine.playbook.ts.',
-    judgeReplies: [COMPILE_CLASSIFICATION, '{"guard":"linked"}'],
+    judgeReplies: [COMPILE_CLASSIFICATION, '{"guard":"done"}'],
     firstJudgeAnchor: CLASSIFICATION_ANCHOR,
     promptAnchor: 'into a `PlaybookRuntime`',
   },
@@ -170,7 +170,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
     );
     expect(gears2fsm).toContain('default single-outcome contract');
     expect(gears2fsm).toContain('The acting agent completed the behavior.');
-    expect(gears2fsm).toContain('Every invoking working leaf');
+    expect(gears2fsm).toContain('every invoking working leaf');
     expect(gears2fsm).toContain('playbook.busy');
     expect(gears2fsm).toContain('erasable TypeScript syntax');
 
@@ -523,9 +523,9 @@ describe('reviewed compiled meta-phase artifacts', () => {
           // under the 2.0.0 engine, so the recovery turn first routes
           // through the interrupt classifier.
           if (judgeCalls === 3) {
-            return '{"type":"BOSS_INTERRUPT","targetId":"compile"}';
+            return '{"type":"BOSS_INTERRUPT","targetId":"transform"}';
           }
-          return '{"guard":"compiled"}';
+          return '{"guard":"done"}';
         },
         emitTelemetry: async (event) => {
           if (failEmission && transitionTarget(event) === 'failed') {
@@ -629,7 +629,7 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
       judgeReply: (prompt) =>
         prompt.startsWith(CLASSIFICATION_ANCHOR)
           ? COMPILE_CLASSIFICATION
-          : '{"guard":"compiled"}',
+          : '{"guard":"done"}',
     },
     {
       name: 'gears2fsm',
@@ -678,7 +678,7 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
       judgeReply: (prompt) =>
         prompt.startsWith(CLASSIFICATION_ANCHOR)
           ? COMPILE_CLASSIFICATION
-          : '{"guard":"linked"}',
+          : '{"guard":"done"}',
     },
   ];
 
