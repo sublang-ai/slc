@@ -99,10 +99,11 @@ Compiling may take more than ten minutes.
 Artifacts land in the current directory: `./workflow.playbook/` (the
 compile intermediates) and `./workflow.ts` (the runnable entry).
 Reference artifacts are provided under
-[`reference/workflow.playbook/`](reference/workflow.playbook/), for
-preview or comparison; the Chinese flow's set is being regenerated with
-the released packages and will land alongside it.
-You can also skip compiling and just read them.
+[`reference/workflow.playbook/`](reference/workflow.playbook/) — and the
+Chinese flow's under
+[`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/) —
+for preview or comparison. You can also skip compiling and just read
+them.
 
 | Intermediate | What it is |
 | --- | --- |
@@ -166,7 +167,7 @@ To use it for real, run `playbook run` from your own project's **root**
 with the path to the playbook and your own task — there the scripted
 step finds `.git` and passes through. Copy the entry (`workflow.ts`)
 **together with** its `workflow.playbook/` directory; the two move as a
-pair. With a global install (playbook 3.2+) that is all you need —
+pair. With a global install (playbook 3.1+) that is all you need —
 `playbook run` links the engine beside the artifact on its first run
 there. If that project's `package.json` declares `@sublang/playbook`,
 install it there instead (`npm install --save-dev @sublang/playbook@3`):

@@ -118,6 +118,7 @@ try {
   const loaded = await import(pathToFileURL(entry).href);
   const registryEntry = loaded.default;
   const seenPlayers = [];
+  const playerPrompts = [];
   const judgeReplies = ['{"guard":"done"}', '{"guard":"clean"}'];
   const runtime = registryEntry.createRuntime({
     captainOptions: { cwd: workdir },
@@ -129,8 +130,9 @@ try {
     rootSessionId: sessionId,
     depth: 0,
     ports: {
-      callPlayer: async (playerId) => {
+      callPlayer: async (playerId, prompt) => {
         seenPlayers.push(playerId);
+        playerPrompts.push(prompt);
         return { status: 'ok', finalText: 'done' };
       },
       callCaptain: async () => {
@@ -158,6 +160,16 @@ try {
     'entry maps runtime role ids to documented players',
     JSON.stringify(seenPlayers) === JSON.stringify(players),
     seenPlayers.join(', '),
+  );
+  // A workflow whose machine never delivers the Boss task to its first
+  // player is unusable however cleanly it reaches terminal: the coder would
+  // have to ask what the task is. Two zh compiles shipped exactly that —
+  // intent gating entry but absent from every prompt — so the smoke pins
+  // task delivery, not just termination.
+  report(
+    'first player prompt carries the Boss task text',
+    playerPrompts.length > 0 && playerPrompts[0].includes('smoke task'),
+    playerPrompts[0]?.slice(0, 120),
   );
   try {
     await access(join(workdir, '.git'));
