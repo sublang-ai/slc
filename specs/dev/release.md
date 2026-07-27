@@ -118,6 +118,22 @@ for the release commit. Before the first tag, a maintainer shall also perform
 the interactive first publication and configure the trusted publisher required
 by [RELEASE-8](#release-8).
 
+## Local Acceptance
+
+### RELEASE-17
+
+Where a maintainer prepares a release tag, when the opt-in local acceptance
+gate runs, it shall pack the candidate, install it into a scratch consumer
+project, compile a minimal workflow through the installed executable with the
+maintainer's configured coding agent, and drive that freshly compiled playbook
+through the installed host with real agents, reporting a non-zero exit when any
+stage fails. It shall retain its scratch tree whenever a stage fails, so the
+compiled artifacts and the agents' commits remain inspectable. It shall state a
+missing prerequisite as an actionable message rather than failing inside a
+downstream tool, and because it spends real model calls
+it shall stay outside repository continuous integration and outside the
+[RELEASE-13](#release-13) release checks that run before every publication.
+
 ## References
 
 [1]: https://semver.org/spec/v2.0.0.html "Semantic Versioning 2.0.0"

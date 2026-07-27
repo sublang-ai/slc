@@ -124,20 +124,66 @@ try {
     join(consumer, 'workflow.playbook'),
     { recursive: true },
   );
-  execFileSync(
-    process.execPath,
+  // Drive one Boss turn from the consumer project (RELEASE-17). The repo's
+  // demo checker already exercises this boundary against the working tree;
+  // doing it here proves the *published* dependency closure runs, so a
+  // package that installs but cannot execute its own emitted entry fails
+  // before publication. Fake ports keep it deterministic and agent-free —
+  // the scripted Git state is the only actor that does real work.
+  mkdirSync(join(consumer, 'work'));
+  writeFileSync(
+    join(consumer, 'smoke.mjs'),
     [
-      '--input-type=module',
-      '--eval',
-      [
-        "await import('@sublang/slc');",
-        "await import('@sublang/slc/verify');",
-        "const entry = (await import('./workflow.ts')).default;",
-        "if (entry.id !== 'workflow') throw new Error('external entry did not load');",
-      ].join('\n'),
-    ],
-    { cwd: consumer, stdio: 'pipe' },
+      "import { access } from 'node:fs/promises';",
+      "import { join } from 'node:path';",
+      "await import('@sublang/slc');",
+      "await import('@sublang/slc/verify');",
+      "const entry = (await import('./workflow.ts')).default;",
+      "if (entry.id !== 'workflow') throw new Error('external entry did not load');",
+      "const workdir = join(process.cwd(), 'work');",
+      'const seenPlayers = [];',
+      'const judgeReplies = [\'{"guard":"done"}\', \'{"guard":"clean"}\'];',
+      'const runtime = entry.createRuntime({ captainOptions: { cwd: workdir } });',
+      "const sessionId = 'package-smoke';",
+      'await runtime.init({',
+      '  sessionId,',
+      '  playbookId: entry.id,',
+      '  rootSessionId: sessionId,',
+      '  depth: 0,',
+      '  ports: {',
+      '    callPlayer: async (playerId) => {',
+      '      seenPlayers.push(playerId);',
+      "      return { status: 'ok', finalText: 'done' };",
+      '    },',
+      "    callCaptain: async () => { throw new Error('unexpected Captain call'); },",
+      '    callJudge: async () => {',
+      '      const reply = judgeReplies.shift();',
+      "      if (reply === undefined) throw new Error('unexpected judge call');",
+      '      return reply;',
+      '    },',
+      "    callPlaybook: async () => { throw new Error('unexpected playbook call'); },",
+      '    emitStatus: async () => {},',
+      '    emitTelemetry: async () => {},',
+      '  },',
+      '});',
+      'const result = await runtime.handleBossInput({',
+      "  text: 'package smoke task',",
+      '  signal: new AbortController().signal,',
+      '});',
+      'await runtime.dispose();',
+      "if (result.outcome !== 'terminal') {",
+      '  throw new Error(`installed entry settled ${result.outcome}, expected terminal`);',
+      '}',
+      'if (seenPlayers.length === 0) {',
+      "  throw new Error('installed entry drove no player call');",
+      '}',
+      "await access(join(workdir, '.git'));",
+    ].join('\n'),
   );
+  execFileSync(process.execPath, ['smoke.mjs'], {
+    cwd: consumer,
+    stdio: 'pipe',
+  });
 
   console.log(
     `package smoke passed: ${manifest.name}@${manifest.version} (${paths.size} files)`,
