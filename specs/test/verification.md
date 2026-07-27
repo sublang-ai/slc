@@ -53,3 +53,12 @@ Where synthetic GEARS contains a canonical `Results:` block after an acting bloc
 Verifies: [VERIFY-15](../dev/verification.md#verify-15), [VERIFY-16](../dev/verification.md#verify-16)
 
 When a GEARS package contains a script item realized by a matching `script` actor state, the conformance and coverage checks shall pass; when the command drifts, a guard is renamed or reordered, `needsBossReply` is added, or the item is realized by a captain or player state, the conformance check shall report the drift.
+
+### VERIFY-19
+Verifies: [VERIFY-18](../dev/verification.md#verify-18)
+
+Where a link phase writes a linked module whose relative import names a file
+that does not exist beside it, when the run completes, the slc command shall
+exit non-zero with a diagnostic naming the module and the unresolvable
+specifier; where every relative import resolves, the same run shall succeed
+unchanged.
