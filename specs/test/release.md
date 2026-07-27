@@ -37,3 +37,16 @@ registry credential shall reach the workflow. A deterministic workflow check
 shall reject every static-secret or additional publication path and require
 lifecycle scripts to remain disabled for the publication command in CI and for
 the prepublish release gate.
+
+### RELEASE-18
+Verifies: [RELEASE-10](../dev/release.md#release-10), [RELEASE-17](../dev/release.md#release-17)
+
+Where the publishable tarball is installed into an empty consumer project,
+when the release checks exercise it, the consumer shall load the emitted entry
+and drive one Boss turn over fake host ports to a terminal outcome, with the
+scripted state initializing a repository in the run directory without an agent
+call. Where a maintainer additionally runs the opt-in acceptance gate, a
+minimal workflow compiled by the installed executable shall emit a loadable
+entry, and running that same freshly compiled playbook shall reach a terminal
+outcome whose repaired sample passes a compiled median check; where the
+compile stage is skipped, the committed reference set shall stand in for it.

@@ -63,6 +63,7 @@ meta.md     The spec of specs
 | IR-014 | [014-gears-provenance-adoption.md](iterations/014-gears-provenance-adoption.md) | Adopt DR-016: spex dependency, vendored definition sync, grammar Pin Inputs swap, pin regeneration (meta-artifact recompile deferred) |
 | IR-015 | [015-playbook-2-0-adoption.md](iterations/015-playbook-2-0-adoption.md) | Adopt DR-017: dependency bumps, 2.0.0 provenance mapping, definition re-sync, meta-artifact rebuild, pin regeneration, entry role binding, and the English demo reference |
 | IR-016 | [016-first-release.md](iterations/016-first-release.md) | Prepare the first npm release: 0.1.0 metadata and changelog, project-local thin-runtime install, package smoke, and CI-green token-free OIDC publication |
+| IR-017 | [017-local-release-acceptance.md](iterations/017-local-release-acceptance.md) | Add the installed-package runtime drive and the opt-in real-agent compile/run acceptance gate |
 
 ## Packages
 
@@ -124,8 +125,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [release.md](dev/release.md) | SemVer, changelog, package contract, interactive first publication, CI-green token-free OIDC publication, GitHub release, and pre-release checks |
-| test | [release.md](test/release.md) | Tarball hygiene, installed executable and exports, external thin-artifact resolution, and token-free OIDC publication |
+| dev | [release.md](dev/release.md) | SemVer, changelog, package contract, interactive first publication, CI-green token-free OIDC publication, GitHub release, pre-release checks, and the opt-in local acceptance gate |
+| test | [release.md](test/release.md) | Tarball hygiene, installed executable and exports, external thin-artifact resolution, installed-package runtime drive, token-free OIDC publication, and real-agent acceptance |
 
 ### SELFHOST
 
