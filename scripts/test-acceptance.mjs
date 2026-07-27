@@ -24,7 +24,8 @@
  * The compile stage uses the maintainer's own slc agent configuration
  * (`~/.config/slc/config.yaml`, or `SLC_AGENT`/`SLC_MODEL`/`SLC_EFFORT`); the
  * run stage uses playbook's own defaults unless `ACCEPTANCE_PLAYER` /
- * `ACCEPTANCE_CAPTAIN` name agent specs.
+ * `ACCEPTANCE_CAPTAIN` name `<adapter>[:<model>][@<effort>]` specs, in which
+ * case only those adapters' CLIs are required.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -44,6 +45,25 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = new Set(process.argv.slice(2));
+
+const KNOWN_FLAGS = new Set(['--keep', '--compile-only', '--run-only']);
+
+/** Refuses an invocation that would silently test nothing. */
+function usage(message) {
+  console.error(`test:acceptance: ${message}`);
+  console.error(
+    'usage: npm run test:acceptance -- [--compile-only | --run-only] [--keep]',
+  );
+  process.exit(1);
+}
+
+for (const arg of args) {
+  if (!KNOWN_FLAGS.has(arg)) usage(`unknown option ${arg}`);
+}
+if (args.has('--compile-only') && args.has('--run-only')) {
+  usage('--compile-only and --run-only are mutually exclusive');
+}
+
 const keep = args.has('--keep');
 const runCompile = !args.has('--run-only');
 const runWorkflow = !args.has('--compile-only');
@@ -67,6 +87,44 @@ function ok(label, detail = '') {
 
 function fail(label, detail) {
   throw new Error(`${label}${detail === undefined ? '' : ` — ${detail}`}`);
+}
+
+/** The CLI each cligent adapter shorthand drives. */
+const ADAPTER_CLI = {
+  claude: 'claude',
+  codex: 'codex',
+  gemini: 'gemini',
+  opencode: 'opencode',
+};
+
+/** The adapter of an `<adapter>[:<model>][@<effort>]` agent spec. */
+function specAdapter(spec) {
+  return spec.split('@')[0].split(':')[0];
+}
+
+/**
+ * The CLIs this run will actually invoke.
+ *
+ * Every unset role falls back to playbook's own `claude` default, so an
+ * override only removes the requirement for the role it names — asking for
+ * exactly the agents the lineup uses and no others.
+ */
+function requiredAgentClis() {
+  const adapters = new Set(
+    [process.env.ACCEPTANCE_PLAYER, process.env.ACCEPTANCE_CAPTAIN].map(
+      (spec) => (spec === undefined ? 'claude' : specAdapter(spec)),
+    ),
+  );
+  return [...adapters].map((adapter) => {
+    const cli = ADAPTER_CLI[adapter];
+    if (cli === undefined) {
+      fail(
+        `unknown agent adapter "${adapter}"`,
+        `expected one of ${Object.keys(ADAPTER_CLI).join(', ')}`,
+      );
+    }
+    return cli;
+  });
 }
 
 /** Fails with an actionable message rather than a confusing downstream error. */
@@ -101,22 +159,26 @@ function requirePrerequisites() {
     ok('slc agent configured', configured);
   }
 
-  for (const cli of runWorkflow ? ['claude'] : []) {
+  for (const cli of runWorkflow ? requiredAgentClis() : []) {
     try {
       execFileSync('sh', ['-c', `command -v ${cli}`], { stdio: 'pipe' });
       ok(`${cli} CLI on PATH`);
     } catch {
-      fail(
-        `the run stage needs the ${cli} CLI installed and signed in`,
-        'or name other agents with ACCEPTANCE_PLAYER / ACCEPTANCE_CAPTAIN',
-      );
+      fail(`the run stage needs the ${cli} CLI installed and signed in`);
     }
   }
 }
 
 /** Packs the candidate and installs it, plus the playbook host, in a consumer. */
 function installCandidate(scratch) {
-  step('pack and install the candidate');
+  step('build, pack, and install the candidate');
+  // `dist/` is generated and git-ignored, and packing runs with lifecycle
+  // scripts disabled, so nothing else here would produce it: a clean checkout
+  // would pack a tarball with no executable, and a stale one would test
+  // yesterday's output. Build first so the tarball is always HEAD's.
+  execFileSync('npm', ['run', 'build'], { cwd: repoRoot, stdio: 'pipe' });
+  ok('built from the working tree');
+
   const cache = join(scratch, 'npm-cache');
   const packs = join(scratch, 'packs');
   mkdirSync(packs);

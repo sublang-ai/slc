@@ -108,6 +108,12 @@ installed-tarball smoke.
 
 ## Pre-release Checklist
 
+### RELEASE-19
+
+When the package build runs, it shall remove any previously generated output
+before compiling, so a rename or deletion in the sources cannot leave a
+superseded artifact in the publishable tarball ([RELEASE-10](#release-10)).
+
 ### RELEASE-13
 
 When preparing a release tag, the developer or agent shall verify that all
@@ -123,11 +129,15 @@ by [RELEASE-8](#release-8).
 ### RELEASE-17
 
 Where a maintainer prepares a release tag, when the opt-in local acceptance
-gate runs, it shall pack the candidate, install it into a scratch consumer
-project, compile a minimal workflow through the installed executable with the
-maintainer's configured coding agent, and drive that freshly compiled playbook
-through the installed host with real agents, reporting a non-zero exit when any
-stage fails. It shall retain its scratch tree whenever a stage fails, so the
+gate runs, it shall build the candidate from the working tree before packing
+it — the generated output is untracked, so an unbuilt checkout would otherwise
+pack no executable and a stale one would test superseded output — install it
+into a scratch consumer project, compile a minimal workflow through the
+installed executable with the maintainer's configured coding agent, and drive
+that freshly compiled playbook through the installed host with real agents,
+reporting a non-zero exit when any stage fails. It shall refuse an invocation
+that selects no stage and require only the agent CLIs its configured lineup
+actually invokes. It shall retain its scratch tree whenever a stage fails, so the
 compiled artifacts and the agents' commits remain inspectable. It shall state a
 missing prerequisite as an actionable message rather than failing inside a
 downstream tool, and because it spends real model calls
