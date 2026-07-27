@@ -13,24 +13,30 @@ the 0.2.0 release.
 
 ## Deliverables
 
-- [ ] `@sublang/playbook` at `^3.1.0`, locked to 3.1.0; `demo/package.json`
+- [x] `@sublang/playbook` at `^3.1.0`, locked to 3.1.0; `demo/package.json`
       at the same majors with `@sublang/slc` at `^0.2.0`.
-- [ ] Vendored `link.md` re-synced (judge-prompt envelope, `spec.compat`
+- [x] Vendored `link.md` re-synced (judge-prompt envelope, `spec.compat`
       stamping) with `## Pin Inputs` retained; the other three definitions
       confirmed normatively unchanged.
-- [ ] All three bundles rebuilt via interpreted `slc slc` runs and verified;
+- [x] All three bundles rebuilt via interpreted `slc slc` runs and verified;
       pins regenerated with exact 3.1.0 provenance, byte-reproducible.
-- [ ] `runtimeContractForPin` maps exact 3.1.0 to `composed-v2`; 1.3.0 and
+- [x] `runtimeContractForPin` maps exact 3.1.0 to `composed-v2`; 1.3.0 and
       3.0.0 stay fail-closed with test coverage; PHEXEC-30/28, SELFHOST-11
       and its acceptance, and CI-4 name 3.1.0.
-- [ ] `demo/reference/workflow.zh.*` regenerated through the packed 0.2.0
-      candidate installed into `demo/` exactly as an end user would compile;
-      `check.mjs zh` passes and joins `verify:demo`.
-- [ ] READMEs concise and global-first: provisioning attributed to
+- [x] `demo/reference/workflow.zh.*` regenerated: four end-user interpreted
+      compiles through the packed candidate failed acceptance in distinct
+      ways, so the landed set comes from the pinned compiled pipeline (the
+      English reference's provenance) with one reviewed script correction;
+      `check.mjs zh` passes all stages and joins `verify:demo`.
+- [x] READMEs concise and global-first: provisioning attributed to
       playbook 3.1, trimmed install prose pointing at spec items, zh mirror
       updated with its restored native reference entry.
 - [ ] `CHANGELOG.md` 0.2.0 section; version 0.2.0; `release:check` green;
       release steps per [RELEASE-13](../dev/release.md#release-13).
+- [x] The RELEASE-17 acceptance gate's compile stage caught an interpreted
+      link emitting `./minimal.fsm.js` beside a `.ts`-only bundle with a zero
+      exit; the deterministic VERIFY-18 load-integrity check now fails such a
+      compile at the link and at entry emission.
 
 ## Acceptance criteria
 

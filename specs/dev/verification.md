@@ -78,3 +78,14 @@ When parsing GEARS items, the slc command shall recognize the optimizer-introduc
 ### VERIFY-16
 
 When checking FSM transition coverage, the slc command shall drive `script` actor states like other work states — resolving each declared exit-status guard — so an optimized artifact's transitions are covered as strictly as an unoptimized one's ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+
+### VERIFY-18
+
+When a link phase completes with a `.ts` or `.js` target, and when the entry
+module is emitted, the slc command shall verify that every relative import
+specifier in the emitted module resolves to an existing file from the
+module's own location, and shall fail the run with a diagnostic naming the
+module and each unresolvable specifier — a compile whose output cannot load
+is a failed compile, not a success with a latent runtime error. (Found by the
+[RELEASE-17](release.md#release-17) acceptance gate: an interpreted link
+emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.)
