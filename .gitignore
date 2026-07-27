@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 /demo/workflow.zh.playbook/
 /demo/workflow.ts
 /demo/workflow.zh.ts
+
+# the demo's own consumer install (demo/package.json)
+/demo/node_modules/
+/demo/package-lock.json
