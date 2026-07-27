@@ -83,7 +83,9 @@ export function declaredPlayers(gears: string): string[] {
   const players: string[] = [];
   let inBlock = false;
   for (const line of gears.split('\n')) {
-    if (/^Players:\s*$/.test(line)) {
+    // Gears render the declaration either as a `Players:` line or as a
+    // markdown `Players` heading; both carry the same source declaration.
+    if (/^(?:#{1,6}\s+Players|Players:)\s*$/.test(line.trim())) {
       inBlock = true;
       continue;
     }

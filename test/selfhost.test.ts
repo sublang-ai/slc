@@ -674,6 +674,15 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     ).toEqual(['Writer', 'Reviewer']);
   });
 
+  it('reads the markdown-heading form of the Players declaration (SELFHOST-15)', () => {
+    // A real interpreted compile rendered the declaration as `## Players`
+    // with a bare bullet; the emitter must not declare an empty role list
+    // for a workflow that plainly names its player.
+    expect(declaredPlayers('## Players\n\n- Worker\n\n## Items\n')).toEqual([
+      'Worker',
+    ]);
+  });
+
   it('binds runtime-resolved player ids back to declared role ids at callPlayer (SELFHOST-16, DR-017)', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-entry-binding-'));
     try {
