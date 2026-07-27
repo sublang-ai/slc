@@ -136,8 +136,9 @@ into a scratch consumer project, compile a minimal workflow through the
 installed executable with the maintainer's configured coding agent, and drive
 that freshly compiled playbook through the installed host with real agents,
 reporting a non-zero exit when any stage fails. It shall refuse an invocation
-that selects no stage and require only the agent CLIs its configured lineup
-actually invokes. It shall retain its scratch tree whenever a stage fails, so the
+that selects no stage, bind every player and the Captain explicitly so the
+maintainer's own host run defaults cannot change what it tests, and require
+exactly the agent CLIs that bound lineup invokes. It shall retain its scratch tree whenever a stage fails, so the
 compiled artifacts and the agents' commits remain inspectable. It shall state a
 missing prerequisite as an actionable message rather than failing inside a
 downstream tool, and because it spends real model calls

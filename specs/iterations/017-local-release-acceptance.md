@@ -18,9 +18,10 @@ existing gate is static or agent-free, so nothing verified that a published
       compiles a minimal workflow and runs a compiled playbook through the
       installed executables with real agents (`RELEASE-17`).
 - [x] The acceptance gate builds the candidate before packing, refuses an
-      invocation selecting no stage, requires only the agent CLIs its lineup
-      invokes, reports missing prerequisites as actionable messages, and stays
-      out of CI and `release:check`.
+      invocation selecting no stage, binds the lineup explicitly so host run
+      defaults cannot change what it tests, requires exactly the agent CLIs
+      that lineup invokes, reports missing prerequisites as actionable
+      messages, and stays out of CI and `release:check`.
 - [x] The package build clears generated output first (`RELEASE-19`), so a
       superseded artifact cannot reach the tarball.
 
