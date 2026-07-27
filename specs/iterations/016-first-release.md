@@ -33,9 +33,9 @@ auditable notes.
 
 ## Maintainer handoff
 
-- [ ] Publish `0.1.0` from an interactive `npm login` session, as RELEASE-8
+- [x] Publish `0.1.0` from an interactive `npm login` session, as RELEASE-8
   requires while the package does not yet exist and no trusted publisher can
-  be configured.
+  be configured. (Published 2026-07-21.)
 - [ ] Immediately after that first publication and before the next release
   tag, configure `release.yml` as the package's npm trusted publisher, so
   every later tag publishes through OIDC with no Actions secret.

@@ -17,7 +17,7 @@ import * as playbook from './link.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'compile',
+    state: 'link',
     sourceItem: 'LINK-1',
     player: '',
     reads: ['bossReply', 'pendingBossQuestion'],
@@ -29,6 +29,10 @@ const CONTRACT = [
       '<PlaybookRuntimeOptions>',
       '<void>',
       '<PlaybookRunResult>',
+      '<PlayerResult>',
+      '<CaptainResult>',
+      '<string>',
+      '<PlaybookCallStart>',
       '<playerName>',
       '<remaining-plan>',
       '<completed-call-results>',
@@ -46,7 +50,7 @@ describe('link: prompt contract', () => {
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    compile: [],
+    link: [],
   };
 
   const composeCaptain = (

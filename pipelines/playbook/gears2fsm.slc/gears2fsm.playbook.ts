@@ -5,11 +5,11 @@
 // FSM path: ./gears2fsm.fsm.ts
 // Player binding: none (no delegated-player states)
 // Adjudication strategy: LLM-judge per direct-Captain state (default)
-// Boss-event mapping: LLM-judge classification. The FSM's `COMPILE` entry event
-//   carries no textual payload field, so no deterministic textual entry event
-//   applies; it is declared as a classifier-selectable directive. `BOSS_INTERRUPT`
-//   (targets ready/compile/failed) and the runtime-owned `BOSS_REPLY` are derived
-//   by the shared factory from the FSM.
+// Boss-event mapping: LLM-judge classification. The FSM's `BOSS_REQUEST` entry
+//   event carries no textual payload field, so no deterministic textual entry
+//   event applies; it is declared as a classifier-selectable directive.
+//   `BOSS_INTERRUPT` (target `transform`) and the runtime-owned `BOSS_REPLY` are
+//   derived by the shared factory from the FSM.
 // Abort strategy: natural rejection (the captain invoke's onError lands the
 //   machine quiescent in `failed`; control-plane failures reject the boundary).
 //
@@ -76,20 +76,27 @@ function snapshotOptions(value: unknown): PlaybookRuntimeOptions {
 
 const spec: XStatePlaybookRuntimeSpec<PlaybookRuntimeOptions> = {
   label: 'gears2fsm',
+  // DR-022: compatibility values current at link time. `artifactSchema` is the
+  // thin-module format this artifact was emitted in, and `runtimeAbi` is the
+  // installed shared engine's RUNTIME_ABI self-report (verified present in its
+  // SUPPORTED_ARTIFACT_SCHEMAS). The loading engine rechecks this and fails
+  // construction on skew.
+  compat: { artifactSchema: 1, runtimeAbi: 1 },
   snapshotOptions,
-  // `COMPILE` carries no textual payload field, so it cannot be a deterministic
-  // textual entry event; it is offered to the classifier as a fresh directive.
-  // Its contract is erased under TypeScript, so it is declared here. The factory
-  // derives `BOSS_INTERRUPT` and the runtime-owned `BOSS_REPLY` from the machine.
-  bossEvents: [{ type: 'COMPILE' }],
+  // `BOSS_REQUEST` carries no textual payload field, so it cannot be a
+  // deterministic textual entry event; it is offered to the classifier as a
+  // fresh directive. Its contract is erased under TypeScript, so it is declared
+  // here. The factory derives `BOSS_INTERRUPT` and the runtime-owned
+  // `BOSS_REPLY` from the machine.
+  bossEvents: [{ type: 'BOSS_REQUEST' }],
   // The FSM Boss-union payload string fields the transition-event descriptor
   // copies for telemetry (`targetId` on BOSS_INTERRUPT; `answer`/`questionId` on
   // BOSS_REPLY). These names are erased from the machine under TypeScript.
   transitionEventFields: ['targetId', 'answer', 'questionId'],
   // The single captain-invoking state that can suspend for a Boss reply. The
-  // machine's `awaitBossReply` also carries an empty-reply arm to `failed`, which
-  // is not a resume target, so the precise resumable set is pinned here.
-  resumableStateIds: new Set(['compile']),
+  // machine's `awaitBossReply` also carries an empty-reply arm to `failed`,
+  // which is not a resume target, so the precise resumable set is pinned here.
+  resumableStateIds: new Set(['transform']),
 };
 
 const createPlaybookRuntime: PlaybookRuntimeFactory<PlaybookRuntimeOptions> =

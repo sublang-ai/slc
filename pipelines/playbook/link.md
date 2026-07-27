@@ -728,9 +728,12 @@ Two default adjudication strategies, in selection order:
   lists the `result` keys with their descriptions, and demands a JSON
   `{ guard, …structuralPayloadFields }` answer keyed to exactly one of the
   declared guards, excluding the runtime-owned direct-Captain `question` and
-  `response` fields above. The judge prompt shall not interpret the player's
-  output, paraphrase it, or alter the FSM's `result` text — it carries
-  the description verbatim.
+  `response` fields above. The prompt shall identify hidden control work,
+  prohibit tool use, file inspection, and external evidence, direct the judge
+  to decide only from the supplied actor output and declared outcomes, and
+  require exactly one JSON object with no prose. The judge prompt shall not
+  interpret the player's output, paraphrase it, or alter the FSM's `result`
+  text — it carries the description verbatim.
 - **Marker-parse** (delegated-player alternative): a deterministic parser that
   scans the player output for a terminal control line such as
   `FSM-RESULT: { "guard": "...", ... }`. Useful when player adapters can
@@ -1338,6 +1341,20 @@ The emitted module:
   type; supplying one is a construction error, so a linker that judges a
   runtime-owned arm to have lost payload detail under erasure shall report
   that gap rather than emit the entry.
+- Supplies `spec.compat` with the compatibility values current at link time:
+  `{ artifactSchema, runtimeAbi }`, where `artifactSchema` is `1` — the
+  schema number of the thin-module format this §Output defines — and
+  `runtimeAbi` is the installed shared engine's `RUNTIME_ABI` self-report.
+  The linker shall verify that the installed engine lists the emitted
+  schema in `SUPPORTED_ARTIFACT_SCHEMAS` and treat its absence as a
+  link-time error; it shall not stamp a different member (such as the
+  highest) merely because that engine also supports a newer artifact
+  format — the declaration names the format of the emitted module, not
+  the capability of the emitting engine. The factory checks the
+  declaration against the engine instance that actually loads the emitted
+  module and fails construction on a mismatch, so an artifact linked under
+  one engine cannot run silently skewed under another. Modules emitted
+  before this contract carry no `compat` member and remain loadable.
 - Default-exports the factory call as `createPlaybookRuntime`, typed
   `PlaybookRuntimeFactory<PlaybookRuntimeOptions>`.
 - Exposes, under an `_internal` export, the pure helpers verification
