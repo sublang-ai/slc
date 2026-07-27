@@ -23,9 +23,9 @@
  *
  * The compile stage uses the maintainer's own slc agent configuration
  * (`~/.config/slc/config.yaml`, or `SLC_AGENT`/`SLC_MODEL`/`SLC_EFFORT`); the
- * run stage uses playbook's own defaults unless `ACCEPTANCE_PLAYER` /
- * `ACCEPTANCE_CAPTAIN` name `<adapter>[:<model>][@<effort>]` specs, in which
- * case only those adapters' CLIs are required.
+ * run stage binds every role explicitly — `claude` unless `ACCEPTANCE_PLAYER`
+ * / `ACCEPTANCE_CAPTAIN` name `<adapter>[:<model>][@<effort>]` specs — so the
+ * maintainer's own `run.*` playbook config never changes what the gate tests.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -89,6 +89,9 @@ function fail(label, detail) {
   throw new Error(`${label}${detail === undefined ? '' : ` — ${detail}`}`);
 }
 
+/** The agent bound to any role the maintainer does not override. */
+const DEFAULT_AGENT = 'claude';
+
 /** The CLI each cligent adapter shorthand drives. */
 const ADAPTER_CLI = {
   claude: 'claude',
@@ -102,18 +105,27 @@ function specAdapter(spec) {
   return spec.split('@')[0].split(':')[0];
 }
 
+/** The spec bound to every required role, overridable per run. */
+function playerSpec() {
+  return process.env.ACCEPTANCE_PLAYER ?? DEFAULT_AGENT;
+}
+
+/** The spec bound to the Captain, overridable per run. */
+function captainSpec() {
+  return process.env.ACCEPTANCE_CAPTAIN ?? DEFAULT_AGENT;
+}
+
 /**
  * The CLIs this run will actually invoke.
  *
- * Every unset role falls back to playbook's own `claude` default, so an
- * override only removes the requirement for the role it names — asking for
- * exactly the agents the lineup uses and no others.
+ * The gate binds every role explicitly ({@link runStage}), so this is exactly
+ * the set the run will invoke — the maintainer's own `run.*` playbook config
+ * never participates, and the check cannot ask for an agent the run will not
+ * use or miss one it will.
  */
 function requiredAgentClis() {
   const adapters = new Set(
-    [process.env.ACCEPTANCE_PLAYER, process.env.ACCEPTANCE_CAPTAIN].map(
-      (spec) => (spec === undefined ? 'claude' : specAdapter(spec)),
-    ),
+    [playerSpec(), captainSpec()].map((spec) => specAdapter(spec)),
   );
   return [...adapters].map((adapter) => {
     const cli = ADAPTER_CLI[adapter];
@@ -335,15 +347,21 @@ function runStage(consumer, source) {
   if (roles.length === 0) fail('the entry under test declares no roles');
   ok('entry declares its required roles', roles.join(', '));
 
+  // Bind every role explicitly rather than letting any stay unset: `playbook
+  // run` resolves an unset role through the maintainer's own `run.player`,
+  // `run.players`, and `run.captain` config before its built-in fallback, so
+  // an implicit lineup would make both this run and the prerequisite check
+  // depend on a personal file. Flags outrank that config, so the gate is the
+  // same on every machine.
   const lineup = [];
-  if (process.env.ACCEPTANCE_PLAYER !== undefined) {
-    for (const role of roles) {
-      lineup.push('--player', `${role}=${process.env.ACCEPTANCE_PLAYER}`);
-    }
+  for (const role of roles) {
+    lineup.push('--player', `${role}=${playerSpec()}`);
   }
-  if (process.env.ACCEPTANCE_CAPTAIN !== undefined) {
-    lineup.push('--captain', process.env.ACCEPTANCE_CAPTAIN);
-  }
+  lineup.push('--captain', captainSpec());
+  ok(
+    'lineup bound explicitly',
+    `players ${playerSpec()}, captain ${captainSpec()}`,
+  );
 
   const started = Date.now();
   const stdout = execFileSync(
