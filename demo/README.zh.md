@@ -33,7 +33,7 @@ git log --oneline
 每一步做什么：
 
 1. **`npm install`** 安装 `@sublang/slc`（编译器）与 `@sublang/playbook`（提供 `playbook` 命令，以及生成文件从 `./node_modules` 导入的运行时引擎）。必须先于各条 `npx` 命令执行——若什么都没装，`npx` 会提示从 npm 仓库下载名为 `slc`、`playbook` 的**无关同名包**。
-2. **`npx slc playbook workflow.zh.txt`** 把这一段描述编译成可运行的 playbook。编译会调用你配置的 agent，**可能耗时十分钟以上**；`./workflow.zh.ts` 出现即编译成功。赶时间？可以跳过——[`reference/`](reference/) 内附带预编译制品；中文参考制品重新生成前，可先运行英文参考入口 `npx playbook run ./reference/workflow.ts "<task>"`（任务文本仍可用中文书写）。
+2. **`npx slc playbook workflow.zh.txt`** 把这一段描述编译成可运行的 playbook。编译会调用你配置的 agent，**可能耗时十分钟以上**；`./workflow.zh.ts` 出现即编译成功。赶时间？可以跳过——[`reference/`](reference/) 内附带预编译制品，直接运行 `npx playbook run ./reference/workflow.zh.ts "<task>"`（任务文本同下一步）。
 3. **`npx playbook run …`** 把带 bug 的 [`sample.c`](sample.c) 交给两个 agent。它们在此处新建的 Git 仓库里提交、评审、争论；每一轮都是真实的 agent 工作，同样需要一些时间。当某轮评审不再有问题时，运行以 `0` 退出。
 4. **`git log`** 查看循环产出：经过评审的提交（`git show` 显示最终修复）。
 
@@ -61,7 +61,7 @@ npx slc playbook workflow.zh.txt
 编译耗时可能超过十分钟。
 
 制品输出在当前目录下，包括：`./workflow.zh.playbook/`（编译中间产物）与 `./workflow.zh.ts`（可运行的入口）。
-我们提供参考制品供预览或对比校验：英文流程的参考制品位于 [`reference/workflow.playbook/`](reference/workflow.playbook/)；中文参考制品正基于已发布的软件包重新生成，完成后置于 `reference/workflow.zh.playbook/`。
+我们提供参考制品供预览或对比校验：中文流程位于 [`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/)，英文流程位于 [`reference/workflow.playbook/`](reference/workflow.playbook/)。
 你也可以跳过实际编译，直接阅读这些参考制品。
 
 | 中间制品 | 说明 |
@@ -82,11 +82,11 @@ npx playbook run ./workflow.zh.ts \
   "sample.c 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它。"
 ```
 
-（跳过了编译？中文参考入口重新生成前，可先运行英文参考入口：`npx playbook run ./reference/workflow.ts "<task>"`，任务文本仍可用中文书写。）
+（跳过了编译？直接运行参考入口：`npx playbook run ./reference/workflow.zh.ts "<task>"`）
 
 ### 角色设置
 
-每个角色都默认使用 `claude`——包括编码者、审查者两个 player，以及 Captain（隐藏的编排者，负责轮次路由与结果裁决）。想按角色指定 agent、模型或推理力度，可加形如 `<adapter>[:<model>][@<effort>]` 的参数，例如：`--player 编码者=claude:claude-sonnet-5 --player 审查者=codex:gpt-5.6-terra --captain claude:claude-sonnet-5@high`。（注意：临时运行英文参考入口时，player 名为 `Coder` 与 `Reviewer`，应写 `--player Coder=…` 等。）
+每个角色都默认使用 `claude`——包括编码者、审查者两个 player，以及 Captain（隐藏的编排者，负责轮次路由与结果裁决）。想按角色指定 agent、模型或推理力度，可加形如 `<adapter>[:<model>][@<effort>]` 的参数，例如：`--player 编码者=claude:claude-sonnet-5 --player 审查者=codex:gpt-5.6-terra --captain claude:claude-sonnet-5@high`。（英文参考入口的 player 名为 `Coder` 与 `Reviewer`。）
 
 工作流作用于**当前目录**，其脚本化的第一步会检查该目录是否为 Git 仓库的**根目录**。本目录不是，于是这一步首先执行 `git init`，随后：
 
@@ -108,7 +108,7 @@ git checkout -- demo/
 
 （已安装的 `demo/node_modules` 可以保留。）
 
-真正投入使用时，在你自己项目的**根目录**下运行 `playbook run` 命令，指定 playbook 路径，换成你自己的任务——在那里脚本步骤会发现 `.git` 并跳过初始化。把入口（`workflow.zh.ts`）**连同**它的 `workflow.zh.playbook/` 目录一并复制过去，这两者不可分开。若采用全局安装（playbook 3.2 及以上），这样就够了——`playbook run` 首次在那里运行时会把引擎链接到制品旁边。若那个项目的 `package.json` 声明了 `@sublang/playbook`，则应在该项目内安装（`npm install --save-dev @sublang/playbook@3`）：已声明的依赖具有权威性，此时自动链接会拒绝执行，而不会掩盖缺失的安装。本演示正是因此采用项目内安装——它位于 slc 仓库之内，而该仓库的 manifest 声明了这个引擎。
+真正投入使用时，在你自己项目的**根目录**下运行 `playbook run` 命令，指定 playbook 路径，换成你自己的任务——在那里脚本步骤会发现 `.git` 并跳过初始化。把入口（`workflow.zh.ts`）**连同**它的 `workflow.zh.playbook/` 目录一并复制过去，这两者不可分开。若采用全局安装（playbook 3.1 及以上），这样就够了——`playbook run` 首次在那里运行时会把引擎链接到制品旁边。若那个项目的 `package.json` 声明了 `@sublang/playbook`，则应在该项目内安装（`npm install --save-dev @sublang/playbook@3`）：已声明的依赖具有权威性，此时自动链接会拒绝执行，而不会掩盖缺失的安装。本演示正是因此采用项目内安装——它位于 slc 仓库之内，而该仓库的 manifest 声明了这个引擎。
 两个 agent 的提交会落在你运行命令的那个目录所在的仓库里。
 
 ## 这个演示说明了什么
