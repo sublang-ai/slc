@@ -1,0 +1,5 @@
+# Serves both the slc repository and the nested repository the demo's
+# first scripted step creates here: install and compile output never
+# becomes part of either history.
+node_modules/
+package-lock.json

@@ -1,0 +1,10 @@
+{
+  "name": "slc-demo",
+  "private": true,
+  "type": "module",
+  "description": "Consumer project for the slc demo: npm install here, then compile and run the workflow from this directory.",
+  "dependencies": {
+    "@sublang/playbook": "^2.0.0",
+    "@sublang/slc": "^0.1.0"
+  }
+}
