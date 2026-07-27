@@ -10,7 +10,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -497,6 +497,54 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     );
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('changed during the run');
+  });
+
+  it('fails a link whose module carries an unresolvable relative import (VERIFY-19)', async () => {
+    await mkdir(artDir, { recursive: true });
+    const object = join(artDir, 'onboarding.fsm.ts');
+    await writeFile(object, 'fsm');
+    await writeFile(join(srcDir, 'runner.ts'), 'runner');
+    const agent: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match)
+          await writeFile(
+            match[1].trim(),
+            "import './onboarding.fsm.js';\nexport default 1;\n",
+          );
+        return { status: 'success', text: 'wrote the artifact' };
+      },
+    };
+    const result = await runSlc(
+      ['flow.link', object, join(srcDir, 'runner.ts')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('./onboarding.fsm.js');
+    expect(result.diagnostics.join('\n')).toContain('VERIFY-18');
+  });
+
+  it('accepts a link whose relative imports resolve beside the module (VERIFY-19)', async () => {
+    await mkdir(artDir, { recursive: true });
+    const object = join(artDir, 'onboarding.fsm.ts');
+    await writeFile(object, 'fsm');
+    await writeFile(join(srcDir, 'runner.ts'), 'runner');
+    const agent: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match) {
+          const target = match[1].trim();
+          await writeFile(join(dirname(target), 'helper.ts'), 'export {};\n');
+          await writeFile(target, "import './helper.ts';\nexport default 1;\n");
+        }
+        return { status: 'success', text: 'wrote the artifact' };
+      },
+    };
+    const result = await runSlc(
+      ['flow.link', object, join(srcDir, 'runner.ts')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(true);
   });
 
   it('fails when a phase filename disagrees with its ## Formats (PIPE-23)', async () => {

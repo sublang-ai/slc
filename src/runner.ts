@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
 import { emitEntryModule } from './entry-module.js';
+import { unresolvableRelativeImports } from './emitted-imports.js';
 import {
   type ExecuteRequest,
   type PhaseExecutor,
@@ -342,6 +343,18 @@ async function runFullLink(
         gearsPath: gearsPlan.path,
         textPath,
       });
+      const missing = await unresolvableRelativeImports(entryPath);
+      if (missing.length > 0) {
+        return {
+          ok: false,
+          outputs: verified.outputs,
+          diagnostics: [
+            ...verified.diagnostics,
+            `entry module ${entryPath} has unresolvable relative imports: ` +
+              `${missing.join(', ')} (VERIFY-18)`,
+          ],
+        };
+      }
       return { ...verified, outputs: [...verified.outputs, entryPath] };
     }
   }
@@ -640,6 +653,25 @@ async function executeSteps(
       return { ok: false, outputs, diagnostics };
     }
     diagnostics.push(...result.diagnostics);
+    // A linked module that cannot resolve its own relative imports cannot
+    // load under `playbook run`; fail the link rather than report success
+    // for a dead artifact (VERIFY-18).
+    if (
+      step.phase === 'link' &&
+      (step.targetExt === '.ts' || step.targetExt === '.js')
+    ) {
+      const missing = await unresolvableRelativeImports(
+        step.request.kind === 'link' ? step.request.linked : target,
+      );
+      if (missing.length > 0) {
+        diagnostics.push(
+          `linked module ${target} has unresolvable relative imports: ` +
+            `${missing.join(', ')} — an emitted module that cannot load ` +
+            'fails the link (VERIFY-18)',
+        );
+        return { ok: false, outputs, diagnostics };
+      }
+    }
     outputs.push(target);
   }
   return { ok: true, outputs, diagnostics };
