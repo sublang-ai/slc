@@ -47,33 +47,18 @@ compile stage — without waiting on a compile.
 
 ## Install
 
-Install the compiler and the Playbook runtime once, globally:
-
 ```bash
 npm install -g @sublang/slc @sublang/playbook
 slc --version
 ```
 
-Compiled artifacts are thin: the emitted FSM imports `xstate` and the
-runtime module imports `@sublang/playbook/xstate-runtime`, and Node
-resolves both from the **artifact's** own directory rather than from the
-host that runs it. `playbook run` closes that gap — before loading an
-artifact it probes those two imports and, when they do not resolve,
-links the engine it is itself running into a `node_modules` beside the
-artifact, naming what it linked (`--no-provision` opts out). Requires
-`@sublang/playbook` 3.2 or later.
-
-A project-local install still works and always wins: where the engine
-already resolves from the artifact's project, `playbook run` touches
-nothing. Prefer that — or work in a project whose `package.json`
-declares `@sublang/playbook`, where the declared install is
-authoritative and provisioning deliberately refuses rather than shadow a
-broken one — and drive the CLIs through `npx`:
-
-```bash
-npm install --save-dev @sublang/slc @sublang/playbook@3
-npx slc --version
-```
+Compiled artifacts import the Playbook engine from their own directory;
+when that import does not resolve, `playbook run` (3.1+) links its own
+engine beside the artifact and says so (`--no-provision` opts out).
+Working inside an npm project instead? Install both packages there and
+prefix the commands with `npx` — a project's own install is always
+authoritative ([RELEASE-11](specs/dev/release.md#release-11) has the
+full rules).
 
 Requirements:
 
@@ -100,7 +85,7 @@ slc playbook my-workflow.md
 
 `slc` finds the `playbook` pipeline inside its own `@sublang/playbook`
 dependency, so it compiles in any directory — no clone, no project
-setup. (With a project-local install, prefix these commands with `npx`.) Compilation drives your configured coding agent — the first run
+setup. Compilation drives your configured coding agent — the first run
 seeds `~/.config/slc/config.yaml` with `agent: claude-code`; set
 `SLC_AGENT` (or edit that file) to use another agent CLI — and a full
 pipeline can take more than ten minutes. Plain-text input (`.txt`)
@@ -142,26 +127,10 @@ pipelinePath: # search roots for <pipeline> references; defaults to the cwd
   - ./pipelines
 ```
 
-Discovery order (first match wins):
-
-1. `slc.config.yaml` in the working directory.
-2. `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`.
-
-`slc --config <path>` loads a specific file and disables discovery; a `--config`
-path that does not exist is an error, whereas a discovery miss simply falls
-through to the environment and defaults. Unknown keys, malformed YAML, and
-wrong-typed values are rejected.
-
-The matching environment variables, which override the file per key, are:
-
-| Variable | Overrides | Meaning |
-| --- | --- | --- |
-| `SLC_AGENT` | `agent` | agent CLI: `claude-code`, `codex`, `gemini`, `opencode` |
-| `SLC_MODEL` | `model` | optional model for the agent CLI |
-| `SLC_PIPELINE_PATH` | `pipelinePath` | OS path-list of search roots (default: cwd) |
-
-Credentials are read by the agent CLI from the inherited process environment.
-Run `slc --help` for the full invocation and configuration summary.
+A `slc.config.yaml` in the working directory wins over the user config;
+`SLC_AGENT`, `SLC_MODEL`, and `SLC_PIPELINE_PATH` override either per
+key. Discovery order, `--config`, and validation rules live in the
+[CLI spec](specs/user/cli.md); `slc --help` prints the summary.
 
 ## How pipelines work
 
@@ -182,14 +151,10 @@ Every phase runs through a coding agent, one of two ways:
   pipeline, using the definitions shipped inside `@sublang/playbook`.
 - **Compiled** — the phase's own compiled playbook artifact drives the
   agent through audited state-machine steps. This repository's checkout
-  runs its bundled phases this way: `slc` is self-hosting, and the
-  reserved `slc` meta-pipeline compiles the phase definitions themselves
-  into artifacts that ship reviewed and sha256-pinned under
-  [`pipelines/playbook/`](pipelines/playbook). Pins bind each artifact
-  to every input that shaped it
-  ([`slc.pins.json`](pipelines/playbook/slc.pins.json)), so which
-  artifact executes is reproducible, and pinned runs fail closed on
-  drift instead of silently reinterpreting.
+  runs its bundled phases this way: `slc` is self-hosting, its phase
+  definitions compiled, reviewed, and sha256-pinned under
+  [`pipelines/playbook/`](pipelines/playbook), failing closed on drift
+  ([self-hosting spec](specs/user/self-hosting.md)).
 
 Specs are the source of truth — start at the
 [spec map](specs/map.md).

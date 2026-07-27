@@ -13,34 +13,24 @@ const PINNED = {
   initial: 'ready',
   captain: [
     {
-      state: 'compile',
+      state: 'transform',
       actor: 'captain',
-      sourceItem: 'T2G-1',
+      sourceItem: 'TEXT2GEARS-1',
       player: '',
-      resultKeys: ['compiled', 'needsBossReply', 'unrepresentable'],
+      resultKeys: ['done', 'needsBossReply'],
       onDone: [
         {
           index: 0,
-          target: 'awaitBossReply',
+          target: 'done',
           guarded: true,
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'awaitBossReply',
           guarded: true,
         },
         {
           index: 2,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 3,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 4,
           target: 'failed',
           guarded: false,
         },
@@ -60,10 +50,10 @@ const PINNED = {
       state: 'ready',
       final: false,
       on: {
-        COMPILE: [
+        BOSS_REQUEST: [
           {
             index: 0,
-            target: 'compile',
+            target: 'transform',
             guarded: false,
           },
         ],
@@ -76,36 +66,12 @@ const PINNED = {
         BOSS_REPLY: [
           {
             index: 0,
-            target: 'failed',
+            target: 'transform',
             guarded: true,
           },
           {
             index: 1,
-            target: 'compile',
-            guarded: true,
-          },
-        ],
-        BOSS_INTERRUPT: [
-          {
-            index: 0,
-            target: 'ready',
-            guarded: true,
-          },
-          {
-            index: 1,
-            target: 'compile',
-            guarded: true,
-          },
-          {
-            index: 2,
             target: 'failed',
-            guarded: true,
-          },
-        ],
-        COMPILE: [
-          {
-            index: 0,
-            target: 'compile',
             guarded: false,
           },
         ],
@@ -115,10 +81,10 @@ const PINNED = {
       state: 'failed',
       final: false,
       on: {
-        COMPILE: [
+        BOSS_REQUEST: [
           {
             index: 0,
-            target: 'compile',
+            target: 'transform',
             guarded: false,
           },
         ],
@@ -134,22 +100,12 @@ const PINNED = {
     BOSS_INTERRUPT: [
       {
         index: 0,
-        target: 'ready',
-        guarded: true,
-      },
-      {
-        index: 1,
-        target: 'compile',
-        guarded: true,
-      },
-      {
-        index: 2,
-        target: 'failed',
+        target: 'transform',
         guarded: true,
       },
     ],
   },
-  interruptTargets: ['ready', 'compile', 'failed'],
+  interruptTargets: ['transform'],
 };
 
 describe('text2gears: FSM introspection', () => {

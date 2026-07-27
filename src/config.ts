@@ -229,11 +229,15 @@ function runtimeContractForPin(
   // the six-port boundary and structured results while moving Captain host
   // failures onto the resolved `failed` path and emitting thin linked
   // modules (DR-017), so all three provenances select the composed profile.
-  // 1.3.0 was never installed or reviewed and stays fail-closed.
+  // 3.1.0 ships runtime.ts byte-identical to 2.0.0 and only adds the
+  // additive DR-022 compat self-report on the shared engine, so it selects
+  // the same profile (DR-018). 1.3.0 and 3.0.0 were never installed or
+  // reviewed here and stay fail-closed.
   if (
     provenance === '@sublang/playbook@0.10.0' ||
     provenance === '@sublang/playbook@1.0.0' ||
-    provenance === '@sublang/playbook@2.0.0'
+    provenance === '@sublang/playbook@2.0.0' ||
+    provenance === '@sublang/playbook@3.1.0'
   ) {
     return 'composed-v2';
   }

@@ -17,8 +17,8 @@ import * as playbook from './text2gears.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'compile',
-    sourceItem: 'T2G-1',
+    state: 'transform',
+    sourceItem: 'TEXT2GEARS-1',
     player: '',
     reads: ['bossReply', 'pendingBossQuestion'],
     wires: {
@@ -44,7 +44,7 @@ describe('text2gears: prompt contract', () => {
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    compile: [],
+    transform: [],
   };
 
   const composeCaptain = (
