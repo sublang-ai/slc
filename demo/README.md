@@ -12,32 +12,60 @@ review raises no further findings.
 
 ## Quick start
 
-Three lines, run from this directory:
+Prerequisites: macOS or Linux (on Windows, use WSL or Git Bash — the
+workflow's scripted step runs through `sh`), Node.js ≥ 23.6, `git`, and
+the [Claude Code CLI](https://www.anthropic.com/claude-code) installed
+and signed in so the `claude` command works. Other agents and models can
+be chosen per role — see [Role setup](#role-setup).
+
+This directory is a self-contained npm project. From `demo/`, install
+first, then run:
 
 ```sh
-npx slc playbook workflow.txt  # compile the input workflow description to a playbook
-npx playbook run ./workflow.ts "<task>"  # run the workflow playbook with a task you specify
-git log --oneline  # view what the run produced
+npm install
 ```
 
-Prerequisites:
+```sh
+npx slc playbook workflow.txt
+```
 
-- macOS or Linux (on Windows, use WSL or Git Bash — the workflow's
-  scripted step runs through `sh`)
-- Node.js ≥ 23.6
-- `npm install --save-dev @sublang/slc @sublang/playbook` in the project — the
-  compiler, runtime host, and project-local engine imported by generated files
-- Default setup: [Claude Code CLI](https://www.anthropic.com/claude-code)
-  installed and signed in, so the `claude` command is available. Other
-  agents and models can be configured, including per role (coder,
-  reviewer, Captain) — see [role setup](#role-setup).
-- `git`
+```sh
+npx playbook run ./workflow.ts \
+  "There is a bug in the median function in sample.c: the result depends on element order, and even-length arrays are wrong too. Fix it."
+```
+
+```sh
+git log --oneline
+```
+
+What each step does:
+
+1. **`npm install`** brings in `@sublang/slc` (the compiler) and
+   `@sublang/playbook` (the `playbook` command, plus the runtime engine
+   that generated files import from `./node_modules`). It must run
+   before the `npx` lines — with nothing installed, `npx` would offer
+   to download `slc` and `playbook` from the registry, which are
+   **unrelated packages** that happen to share the names.
+2. **`npx slc playbook workflow.txt`** compiles the one-paragraph
+   description into a runnable playbook. The compile calls your
+   configured agent and **can take more than ten minutes**; it succeeds
+   when `./workflow.ts` appears. In a hurry? Skip it — a precompiled
+   copy ships in [`reference/`](reference/), runnable as
+   `npx playbook run ./reference/workflow.ts "<task>"` with the same
+   task string as the next step.
+3. **`npx playbook run …`** hands the buggy [`sample.c`](sample.c) to
+   the two agents. They commit, review, and debate inside a Git
+   repository created here; every round is real agent work, so expect
+   this to take a while too. The run exits `0` when a review comes back
+   clean.
+4. **`git log`** shows what the loop produced: the reviewed commits
+   (`git show` displays the final fix).
 
 ## More details
 
 ### Input
 
-[`workflow.txt`](workflow.txt) — the English source the commands below
+[`workflow.txt`](workflow.txt) — the English source the commands above
 compile; [`workflow.zh.txt`](workflow.zh.txt) is the same paragraph in
 Chinese, compiled by the [Chinese README](README.zh.md)'s flow:
 
@@ -64,8 +92,8 @@ npx slc playbook workflow.txt
 expects, links the result against the installed `@sublang/playbook`
 runtime, and by default runs the compile optimization that reduces LLM
 calls.
-The agent used by the compilation itself is configured in
-`~/.config/slc/config.yaml`.
+The agent driving the compilation is set in `~/.config/slc/config.yaml`
+(created on the first run; defaults to Claude Code).
 Compiling may take more than ten minutes.
 
 Artifacts land in the current directory: `./workflow.playbook/` (the
@@ -96,15 +124,17 @@ npx playbook run ./workflow.ts \
   "There is a bug in the median function in sample.c: the result depends on element order, and even-length arrays are wrong too. Fix it."
 ```
 
-(Skipped the compile? Run the reference entry directly:
-`npx playbook run ./reference/workflow.ts "<task>"`)
+(Skipped the compile? Run the reference entry directly, with the same
+task string: `npx playbook run ./reference/workflow.ts "<task>"`)
 
-<a id="role-setup"></a>
+### Role setup
 
-Every role defaults to `claude`; to choose an agent, model, or other
-parameters, add `--player Coder=claude:claude-sonnet-5 --player
-Reviewer=codex:gpt-5.6-terra --captain claude:claude-sonnet-5`
-(`<adapter>[:<model>][@<effort>]`).
+Every role defaults to `claude` — the coder and reviewer players, and
+the Captain, the hidden orchestrator that routes turns and adjudicates
+results. To choose an agent, model, or effort per role, add flags in the
+form `<adapter>[:<model>][@<effort>]`, for example: `--player
+Coder=claude:claude-sonnet-5 --player Reviewer=codex:gpt-5.6-terra
+--captain claude:claude-sonnet-5@high`.
 
 The workflow operates on the **current directory**, and its scripted
 first step checks whether that directory is the **root** of a Git
@@ -122,16 +152,28 @@ git log --oneline   # the reviewed commits
 git show            # the reviewed fix to sample.c
 ```
 
-To reset before running again, from the repository root:
+To reset before running again, from the slc repo root (the directory
+above `demo/`):
 
 ```sh
 rm -rf demo/.git demo/workflow.playbook demo/workflow.ts
 git checkout -- demo/
 ```
 
-To use it for real, run the `npx playbook run` command from your own project's **root**
-with the path to the playbook and your own task — there the scripted step finds `.git` and passes
-through.
+(The installed `demo/node_modules` can stay.)
+
+To use it for real, run `playbook run` from your own project's **root**
+with the path to the playbook and your own task — there the scripted
+step finds `.git` and passes through. Copy the entry (`workflow.ts`)
+**together with** its `workflow.playbook/` directory; the two move as a
+pair. With a global install (playbook 3.2+) that is all you need —
+`playbook run` links the engine beside the artifact on its first run
+there. If that project's `package.json` declares `@sublang/playbook`,
+install it there instead (`npm install --save-dev @sublang/playbook@3`):
+a declared dependency is authoritative, so provisioning refuses rather
+than shadow a missing install. The demo itself uses a project-local
+install for exactly that reason — it sits inside the slc repository,
+whose manifest declares the engine.
 The agents commit into whatever directory you run the command in.
 
 ## What this demo shows

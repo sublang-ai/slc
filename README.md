@@ -3,51 +3,77 @@
 
 # slc
 
+[![npm version](https://img.shields.io/npm/v/@sublang/slc)](https://www.npmjs.com/package/@sublang/slc)
+[![Node.js](https://img.shields.io/node/v/@sublang/slc)](https://nodejs.org/)
 [![CI](https://github.com/sublang-ai/slc/actions/workflows/ci.yml/badge.svg)](https://github.com/sublang-ai/slc/actions/workflows/ci.yml)
 
-_The SubLang Compiler: pipelines whose phases are written in prose and
-carried out by coding agents._
+_The SubLang Compiler: describe a workflow in a paragraph of prose, get a
+deterministic multi-agent program you can inspect, verify, and run._
 
-`slc` runs compilation pipelines in which each phase is defined by a
-plain markdown file and executed by an AI coding agent (reached through
-[cligent](https://github.com/sublang-ai/cligent)). Adding a phase means
-writing a definition, never changing the compiler: `slc` itself performs
-only the generic mechanics — chaining phases by their declared formats,
-validating names and locations, and placing artifacts.
+You write what should happen — in English or Chinese, no DSL, no
+orchestration framework. `slc` compiles that paragraph into a spec, a
+state machine, and a runnable **playbook** that drives AI coding agents
+through it. Why compile prose instead of prompting with it:
 
-```bash
-slc <pipeline>[.<phase>] <source> [-o <target>]
-```
+- **Deterministic where it matters.** Who acts, in what order, when to
+  stop — the control flow becomes an inspectable
+  [XState](https://xstate.js.org) machine, not prompt improvisation.
+  LLM judgment is confined to the work *inside* each state.
+- **Auditable at every stage.** The intermediates are first-class files
+  you can read and edit: the normalized text, one testable "shall" item
+  per behavior (in the GEARS spec grammar the SubLang stack shares), and
+  the state machine itself. The compiler also emits verification tests
+  binding its output to the source spec.
+- **Cheaper and safer by optimization.** Steps that need no judgment are
+  rewritten at compile time into plain shell commands — no LLM call, no
+  hallucination, verifiable before anything runs.
+- **Your agents, per role.** Compilation and execution run through the
+  agent CLIs you already use — Claude Code, Codex, Gemini, OpenCode —
+  selectable per role.
 
-Its flagship pipeline is `playbook`, the compilation service behind
-[playbook](https://github.com/sublang-ai/playbook): it turns a workflow
-written in prose into GEARS spec items (one normative item per state
-behavior) and then into an inspectable XState v5 state machine,
-optionally linked into the runnable runtime module playbook's hosts
-execute.
+The flagship pipeline is `playbook` (the name of both the pipeline and
+the sibling [playbook](https://github.com/sublang-ai/playbook) project
+that executes its output): prose → GEARS spec items → XState machine →
+a linked module the `playbook` CLI runs.
 
-Distinctively, `slc` is self-hosting. The reserved `slc` meta-pipeline
-compiles phase definitions themselves into runnable playbook artifacts:
-the bundled phases ship compiled, reviewed, and sha256-pinned under
-[`pipelines/playbook/`](pipelines/playbook). A pinned phase runs exactly
-its reviewed compiled artifact, verified by hash — a missing or stale
-pin fails with a diagnostic instead of silently reinterpreting — while
-unpinned phases fall back to the agent reading the definition directly.
+## See it run
+
+The [demo](demo/README.md) compiles a one-paragraph description into a
+two-agent code-review loop, then lets it loose on a buggy C file: the
+coder and reviewer commit, review, and debate inside a real Git
+repository until the review comes back clean. Precompiled reference
+artifacts are included, so you can watch a run — or just read every
+compile stage — without waiting on a compile.
 
 ## Install
 
-Install the compiler and Playbook runtime in the project that will contain the
-generated artifacts:
+Install the compiler and the Playbook runtime once, globally:
 
 ```bash
-npm install --save-dev @sublang/slc @sublang/playbook
-npx slc --version
+npm install -g @sublang/slc @sublang/playbook
+slc --version
 ```
 
-The project-local Playbook install is required: generated thin runtime modules
-import `@sublang/playbook/xstate-runtime` and their FSMs import `xstate` from
-the artifact's project. A global-only install does not provide Node module
-resolution for artifacts written elsewhere.
+Compiled artifacts are thin: the emitted FSM imports `xstate` and the
+runtime module imports `@sublang/playbook/xstate-runtime`, and Node
+resolves both from the **artifact's** own directory rather than from the
+host that runs it. `playbook run` closes that gap — before loading an
+artifact it probes those two imports and, when they do not resolve,
+links the engine it is itself running into a `node_modules` beside the
+artifact, naming what it linked (`--no-provision` opts out). Requires
+`@sublang/playbook` 3.2 or later.
+
+A project-local install still works and always wins: where the engine
+already resolves from the artifact's project, `playbook run` touches
+nothing. Prefer that — or work in a project whose `package.json`
+declares `@sublang/playbook`, where the declared install is
+authoritative and provisioning deliberately refuses rather than shadow a
+broken one — and drive the CLIs through `npx`:
+
+```bash
+npm install --save-dev @sublang/slc @sublang/playbook@3
+npx slc --version
+```
 
 Requirements:
 
@@ -64,28 +90,36 @@ Requirements:
 
 ## Quick start
 
-From the repo root — its [`slc.config.yaml`](slc.config.yaml) routes the
-`playbook` pipeline to the bundled copy under `pipelines/` — compile a
-prose workflow:
+In any directory, write a prose workflow as a `.md` or plain `.txt`
+file — [`demo/workflow.txt`](demo/workflow.txt) is a complete
+one-paragraph example — and compile it:
 
 ```bash
-npx slc playbook my-workflow.md
+slc playbook my-workflow.md
 ```
 
-This writes `my-workflow.playbook/` — the intermediates
-(`my-workflow.gears.md`, the XState machine `my-workflow.fsm.ts`), the
-runnable runtime module, and its verification tests — plus the
-`my-workflow.ts` entry that `playbook run` consumes, all in your
-working directory. A raw input (any extension the entry phase doesn't
-declare, e.g. `.txt`) is normalized first, and the pipeline's
-optimization pass runs by default (`--no-optimize` skips it). For what
-a prose workflow looks like, see playbook's canonical worked example,
-[`code.md`](https://github.com/sublang-ai/playbook/blob/main/reference/sdlc/code.md).
-Intermediates are first-class: edit one and re-run a single
-phase (`npx slc playbook.gears2fsm …`) and it lands in the same place.
-`npx slc --help` shows all invocation forms. The repo config pins
-`agent: claude-code` — set `SLC_AGENT` (or edit the config) to compile
-with another agent CLI.
+`slc` finds the `playbook` pipeline inside its own `@sublang/playbook`
+dependency, so it compiles in any directory — no clone, no project
+setup. (With a project-local install, prefix these commands with `npx`.) Compilation drives your configured coding agent — the first run
+seeds `~/.config/slc/config.yaml` with `agent: claude-code`; set
+`SLC_AGENT` (or edit that file) to use another agent CLI — and a full
+pipeline can take more than ten minutes. Plain-text input (`.txt`)
+works too; it is normalized first. The pipeline's optimization pass,
+which rewrites judgment-free steps into plain script, runs by default
+(`--no-optimize` skips it).
+
+Artifacts land in your working directory: `my-workflow.playbook/` holds
+the intermediates — `my-workflow.gears.md`, the XState machine
+`my-workflow.fsm.ts`, the linked runtime module, and its verification
+tests — and `my-workflow.ts` is the runnable entry. Run it:
+
+```bash
+playbook run ./my-workflow.ts "<your task>"
+```
+
+Intermediates are first-class: edit one and re-run a single phase
+(`slc playbook.gears2fsm …`) and it lands in the same place.
+`slc --help` shows all invocation forms.
 
 Success prints the written artifact paths and exits 0; a failure prints
 diagnostics to stderr — naming the failing phase when one is at fault —
@@ -135,21 +169,27 @@ A pipeline is a directory of phase definitions named
 `<source-format>2<target-format>.md`, each declaring its formats in a
 `## Formats` table, plus an optional `link.md` defining the terminal
 link phase. `slc` infers phase order by chaining formats — no
-manifest — and refuses incomplete, branching, or cyclic chains. The
-bundled `playbook` pipeline chains `text2gears` and `gears2fsm`, with
-`link` emitting the runnable runtime.
+manifest — and refuses incomplete, branching, or cyclic chains. Adding
+a phase means writing a definition, never changing the compiler: `slc`
+itself performs only the generic mechanics of chaining, validation, and
+artifact placement. The bundled `playbook` pipeline chains `text2gears`
+and `gears2fsm`, with `link` emitting the runnable runtime.
 
 Every phase runs through a coding agent, one of two ways:
 
 - **Interpreted** — the configured agent reads the definition and
-  performs it.
-- **Compiled** — the phase's own compiled playbook artifact (produced by
-  the `slc` meta-pipeline, reviewed, and pinned in
-  [`slc.pins.json`](pipelines/playbook/slc.pins.json)) drives the agent
-  through audited state-machine steps. Pins bind each artifact by
-  sha256 to every input that shaped it — definition, artifact bundle,
-  and runtime dependencies — so which artifact executes is reproducible,
-  and pinned runs fail closed on drift.
+  performs it. This is how an npm-installed `slc` runs the `playbook`
+  pipeline, using the definitions shipped inside `@sublang/playbook`.
+- **Compiled** — the phase's own compiled playbook artifact drives the
+  agent through audited state-machine steps. This repository's checkout
+  runs its bundled phases this way: `slc` is self-hosting, and the
+  reserved `slc` meta-pipeline compiles the phase definitions themselves
+  into artifacts that ship reviewed and sha256-pinned under
+  [`pipelines/playbook/`](pipelines/playbook). Pins bind each artifact
+  to every input that shaped it
+  ([`slc.pins.json`](pipelines/playbook/slc.pins.json)), so which
+  artifact executes is reproducible, and pinned runs fail closed on
+  drift instead of silently reinterpreting.
 
 Specs are the source of truth — start at the
 [spec map](specs/map.md).
@@ -163,8 +203,9 @@ Specs are the source of truth — start at the
   coding-agent SDK `slc` executes phases through.
 - [playbook](https://github.com/sublang-ai/playbook) — authors the
   `playbook` pipeline's phase specs and runs the compiled output.
-- [spex](https://github.com/sublang-ai/spex) — the desktop app that
-  invokes `slc` for its in-app playbook compile flow.
+- [spex](https://github.com/sublang-ai/spex) — the spec tool that owns
+  the shared GEARS grammar and invokes `slc` for its in-app playbook
+  compile flow.
 
 ## Develop
 
@@ -175,8 +216,11 @@ npm test
 npm run lint
 ```
 
-CI additionally re-verifies the compiled meta-phase bundles and checks
-that pin regeneration is byte-identical to the committed index.
+A checkout's own [`slc.config.yaml`](slc.config.yaml) routes the
+`playbook` pipeline to the bundled copy under `pipelines/`, so repo
+compiles exercise the pinned artifacts. CI additionally re-verifies the
+compiled meta-phase bundles and checks that pin regeneration is
+byte-identical to the committed index.
 
 ## Contributing
 
