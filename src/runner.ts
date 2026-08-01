@@ -686,9 +686,23 @@ async function executeSteps(
       step.phase === 'link' &&
       (step.targetExt === '.ts' || step.targetExt === '.js')
     ) {
-      const missing = await unresolvableRelativeImports(
-        step.request.kind === 'link' ? step.request.linked : target,
-      );
+      let missing: string[];
+      try {
+        missing = await unresolvableRelativeImports(
+          step.request.kind === 'link' ? step.request.linked : target,
+        );
+      } catch (error) {
+        // A target that cannot even be read is a dead artifact too — a
+        // directory at the linked path passes the DR-003 existence and
+        // extension checks and then fails the read. Fail the link here so
+        // every started phase still reaches a terminal event (CLI-32).
+        fail();
+        diagnostics.push(
+          `linked module ${target} could not be read: ${messageOf(error)} — ` +
+            'an emitted module that cannot load fails the link (VERIFY-18)',
+        );
+        return { ok: false, outputs, diagnostics };
+      }
       if (missing.length > 0) {
         fail();
         diagnostics.push(
