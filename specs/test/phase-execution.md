@@ -85,7 +85,7 @@ Where a compiled fixture runtime emits status and operational telemetry mid-turn
 ### PHEXEC-38
 Verifies: [PHEXEC-36](../dev/phase-execution.md#phexec-36), [PHEXEC-12](../dev/phase-execution.md#phexec-12)
 
-Where a faked agent transport yields an initial event and then stalls under a short configured stall timeout, when a phase runs through the transport, the slc command shall abort the stalled call once the timeout elapses, map it to a failed call whose diagnostic carries the inactivity duration, and make no additional agent invocation.
+Where a faked agent transport yields an initial event and then stalls under a short configured stall timeout, when a phase runs through the transport, the slc command shall abort the stalled call once the timeout elapses, map it to a failed call whose diagnostic carries the inactivity duration, and make no additional agent invocation; whereas where the aborted transport still yields a successful terminal event within the post-abort drain, the slc command shall report that success rather than a stall.
 
 ### PHEXEC-35
 Verifies: [PHEXEC-34](../dev/phase-execution.md#phexec-34)

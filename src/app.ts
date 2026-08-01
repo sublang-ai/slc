@@ -23,7 +23,11 @@ import {
   resolveAgentSelection,
   type AgentSelection,
 } from './config.js';
-import { loadConfigFile, type FileConfig } from './config-file.js';
+import {
+  loadConfigFile,
+  MAX_STALL_TIMEOUT_SECONDS,
+  type FileConfig,
+} from './config-file.js';
 import { createProgressReporter, type ProgressSink } from './progress.js';
 import {
   createPipelineResolver,
@@ -186,6 +190,13 @@ function parseStallTimeout(value: string | undefined): number | undefined {
   if (!Number.isFinite(seconds) || seconds < 0) {
     throw new Error(
       `SLC_STALL_TIMEOUT "${value}" must be a non-negative number of seconds (0 disables the stall watchdog)`,
+    );
+  }
+  // Beyond the timer range Node clamps the delay to 1 ms, which would abort
+  // every agent call at once — refuse rather than invert the watchdog.
+  if (seconds > MAX_STALL_TIMEOUT_SECONDS) {
+    throw new Error(
+      `SLC_STALL_TIMEOUT "${value}" must be at most ${MAX_STALL_TIMEOUT_SECONDS} seconds (0 disables the stall watchdog)`,
     );
   }
   return seconds;
