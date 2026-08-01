@@ -41,6 +41,18 @@ Verifies: [CLI-4](../user/cli.md#cli-4), [CLI-11](../dev/cli.md#cli-11)
 
 Where a run is rejected, a phase fails, or a phase reports `BLOCKED`, when the slc executable runs, the slc executable shall print the failure report — naming the failing phase and its target when a phase is at fault — to standard error, write nothing to standard output, and exit non-zero.
 
+## Progress
+
+### CLI-36
+Verifies: [CLI-32](../user/cli.md#cli-32), [CLI-35](../dev/cli.md#cli-35), [CLI-3](../user/cli.md#cli-3)
+
+Where the run succeeds over faked dependencies, when the slc executable runs a full pipeline, the slc executable shall write each phase's start line and its finish line carrying the elapsed time to standard error in execution order, and shall keep standard output limited to the written artifact paths.
+
+### CLI-37
+Verifies: [CLI-34](../user/cli.md#cli-34), [CLI-35](../dev/cli.md#cli-35), [PHEXEC-36](../dev/phase-execution.md#phexec-36)
+
+Where a faked agent transport stalls after its first event and a short stall timeout is configured, when the slc executable runs a phase, the slc executable shall abort the call once the timeout elapses, print a failure report naming the phase, its target, and the inactivity duration to standard error, write nothing to standard output, and exit non-zero.
+
 ## Process control
 
 ### CLI-17
