@@ -19,6 +19,7 @@ import type { AgentAdapter } from '@sublang/cligent';
 
 import {
   createConfiguredCompiledFactory,
+  createConfiguredExecutor,
   resolveAgentSelection,
   type AgentSelection,
 } from '../src/config.js';
@@ -302,6 +303,160 @@ describe('reporting (CLI-15, CLI-16)', () => {
     expect(code).toBe(1);
     expect(out.join('')).toBe('');
     expect(err.join('')).toContain('BLOCKED');
+  });
+});
+
+describe('progress (CLI-36, CLI-37)', () => {
+  // interpretedDeps plus the bin's progress sink, mirroring buildSlcDeps's
+  // wiring of io.progress into SlcDeps (CLI-35).
+  const progressDeps: DepsBuilder = ({ signal, progress }) => ({
+    ...interpretedDeps(agent().agent, signal),
+    progress,
+  });
+  let current: ReturnType<typeof makeAgent>;
+  const agent = (): ReturnType<typeof makeAgent> => current;
+
+  beforeEach(() => {
+    current = makeAgent();
+  });
+
+  it('writes start and finish lines with elapsed times in order (CLI-36)', async () => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await run(['flow', source], {
+      env: {},
+      stdout: (t) => out.push(t),
+      stderr: (t) => err.push(t),
+      buildDeps: progressDeps,
+    });
+
+    expect(code).toBe(0);
+    const lines = err
+      .join('')
+      .split('\n')
+      .filter((line) => line !== '');
+    expect(lines).toEqual([
+      `→ text2gears (writing ${join(artDir, 'onboarding.gears.md')})`,
+      expect.stringMatching(
+        /^✓ text2gears wrote .+onboarding\.gears\.md \(\d+s\)$/,
+      ) as unknown,
+      `→ gears2fsm (writing ${join(artDir, 'onboarding.fsm.ts')})`,
+      expect.stringMatching(
+        /^✓ gears2fsm wrote .+onboarding\.fsm\.ts \(\d+s\)$/,
+      ) as unknown,
+      // The agents' end-of-run summaries still follow the live progress.
+      'wrote the artifact',
+      'wrote the artifact',
+    ]);
+    // Stdout stays reserved for the success report (CLI-3).
+    expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
+    expect(out.join('')).not.toContain('→');
+  });
+
+  it('reports a failing phase with a ✗ line and keeps stdout empty (CLI-36, CLI-16)', async () => {
+    current = makeAgent({ skip: true });
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await run(['flow', source], {
+      env: {},
+      stdout: (t) => out.push(t),
+      stderr: (t) => err.push(t),
+      buildDeps: progressDeps,
+    });
+
+    expect(code).toBe(1);
+    expect(out.join('')).toBe('');
+    const report = err.join('');
+    expect(report).toContain('→ text2gears');
+    expect(report).toMatch(
+      /✗ text2gears failed at .+onboarding\.gears\.md \(\d+s\)/,
+    );
+  });
+
+  it('aborts a stalled agent call and reports the inactivity duration (CLI-37)', async () => {
+    // A transport that yields one event and then stalls until aborted — the
+    // measured issue-#4 failure mode (a live session waiting on the network).
+    const stallingAdapter: AgentAdapter = {
+      agent: 'claude-code',
+      async isAvailable() {
+        return true;
+      },
+      async *run(_prompt: string, options?: { abortSignal?: AbortSignal }) {
+        yield {
+          type: 'init',
+          agent: 'claude-code',
+          timestamp: 1,
+          sessionId: 'stall',
+          payload: { model: 'm', cwd: '.', tools: [] },
+        } as never;
+        await new Promise<void>((resolve) => {
+          options?.abortSignal?.addEventListener('abort', () => resolve(), {
+            once: true,
+          });
+        });
+      },
+    };
+    const out: string[] = [];
+    const err: string[] = [];
+    // Pre-create the user config so first-run seeding stays out of stderr.
+    await mkdir(join(root, 'slc'), { recursive: true });
+    await writeFile(join(root, 'slc', 'config.yaml'), 'agent: claude-code\n');
+    const code = await run(['flow.text2gears', source], {
+      env: {
+        SLC_AGENT: 'claude-code',
+        SLC_PIPELINE_PATH: pipelinesRoot,
+        SLC_STALL_TIMEOUT: '0.05',
+        XDG_CONFIG_HOME: root,
+      },
+      cwd: root,
+      stdout: (t) => out.push(t),
+      stderr: (t) => err.push(t),
+      buildDeps: (io) =>
+        buildSlcDeps(io, (selection, opts = {}) =>
+          createConfiguredExecutor(selection, {
+            ...opts,
+            adapterFactory: () => stallingAdapter,
+          }),
+        ),
+    });
+
+    expect(code).toBe(1);
+    expect(out.join('')).toBe('');
+    const report = err.join('');
+    // The failure report names the phase, target, and the inactivity window.
+    expect(report).toContain('text2gears');
+    expect(report).toContain('onboarding.gears.md');
+    expect(report).toContain('stalled');
+  });
+});
+
+describe('stall timeout resolution (CLI-34, CLI-35)', () => {
+  const env = { SLC_AGENT: 'claude-code' };
+
+  it('defaults to 600 seconds', () => {
+    expect(resolveRunConfig(env, {}).stallTimeoutMs).toBe(600_000);
+  });
+
+  it('takes the config-file value when the environment is silent', () => {
+    expect(resolveRunConfig(env, { stallTimeout: 30 }).stallTimeoutMs).toBe(
+      30_000,
+    );
+  });
+
+  it('lets SLC_STALL_TIMEOUT override the file, with 0 disabling', () => {
+    expect(
+      resolveRunConfig({ ...env, SLC_STALL_TIMEOUT: '0' }, { stallTimeout: 30 })
+        .stallTimeoutMs,
+    ).toBe(0);
+  });
+
+  it('refuses a malformed SLC_STALL_TIMEOUT', () => {
+    expect(() =>
+      resolveRunConfig({ ...env, SLC_STALL_TIMEOUT: 'soon' }, {}),
+    ).toThrow(/SLC_STALL_TIMEOUT/);
+    expect(() =>
+      resolveRunConfig({ ...env, SLC_STALL_TIMEOUT: '-1' }, {}),
+    ).toThrow(/SLC_STALL_TIMEOUT/);
   });
 });
 
@@ -863,11 +1018,19 @@ describe('compiled execution through the bin (CLI-28)', () => {
         ),
     });
 
-    expect(err.join('')).toBe('');
     expect(code).toBe(0);
     // DR-014: the run's cwd is `root`, not the source's directory, so the
     // artifact lands under `<root>/onboarding.flow/` (out-of-tree, PIPE-38).
     const target = join(root, 'onboarding.flow', 'onboarding.gears.md');
+    // Stderr carries only the in-run progress lines (DR-019, CLI-32).
+    const progressLines = err
+      .join('')
+      .split('\n')
+      .filter((l) => l !== '');
+    expect(progressLines).toEqual([
+      `→ text2gears (writing ${target})`,
+      expect.stringMatching(/^✓ text2gears wrote .+ \(\d+s\)$/) as unknown,
+    ]);
     expect(out.join('')).toContain(target);
     expect(interpretedRuns).toEqual([]);
     const { readFile } = await import('node:fs/promises');

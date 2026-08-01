@@ -149,6 +149,8 @@ export function createConfiguredExecutor(
     cwd?: string;
     maxTurns?: number;
     permissions?: PermissionPolicy;
+    /** Agent-stall watchdog window in milliseconds; 0/absent disables (DR-019). */
+    stallTimeoutMs?: number;
   } = {},
 ): PhaseExecutor {
   const agent = createConfiguredAgentClient(selection, opts);
@@ -170,6 +172,8 @@ export function createConfiguredAgentClient(
     adapterFactory?: AdapterFactory;
     maxTurns?: number;
     permissions?: PermissionPolicy;
+    /** Agent-stall watchdog window in milliseconds; 0/absent disables (DR-019). */
+    stallTimeoutMs?: number;
   } = {},
 ): AgentClient {
   const adapter = (opts.adapterFactory ?? defaultAdapterFactory)(
@@ -180,6 +184,7 @@ export function createConfiguredAgentClient(
     maxTurns: opts.maxTurns,
     permissions: opts.permissions,
     effort: selection.effort,
+    stallTimeoutMs: opts.stallTimeoutMs,
   });
 }
 
@@ -198,6 +203,10 @@ export function createConfiguredCompiledFactory(
     cwd?: string;
     maxTurns?: number;
     permissions?: PermissionPolicy;
+    /** Agent-stall watchdog window in milliseconds; 0/absent disables (DR-019). */
+    stallTimeoutMs?: number;
+    /** Live status sink streaming the runtime's non-trace status (DR-019, PHEXEC-25). */
+    onStatus?: (line: string) => void;
   } = {},
 ): (choice: CompiledSelection) => PhaseExecutor {
   const client = (): AgentClient =>
@@ -212,6 +221,7 @@ export function createConfiguredCompiledFactory(
       judge: client(),
       defaultModel: selection.model,
       cwd: opts.cwd,
+      onStatus: opts.onStatus,
     });
 }
 

@@ -57,6 +57,31 @@ describe('loadConfigFile (CLI-20, CLI-21)', () => {
     });
   });
 
+  it('parses a numeric stallTimeout, including the disabling 0 (CLI-34)', async () => {
+    await write(cwd, CONFIG_FILE, 'agent: codex\nstallTimeout: 30\n');
+    expect((await loadConfigFile({ cwd, configHome: home })).config).toEqual({
+      agent: 'codex',
+      stallTimeout: 30,
+    });
+
+    await write(cwd, CONFIG_FILE, 'agent: codex\nstallTimeout: 0\n');
+    expect(
+      (await loadConfigFile({ cwd, configHome: home })).config.stallTimeout,
+    ).toBe(0);
+  });
+
+  it('rejects a negative or non-numeric stallTimeout', async () => {
+    await write(cwd, CONFIG_FILE, 'agent: codex\nstallTimeout: -1\n');
+    await expect(loadConfigFile({ cwd, configHome: home })).rejects.toThrow(
+      /stallTimeout/,
+    );
+
+    await write(cwd, CONFIG_FILE, 'agent: codex\nstallTimeout: soon\n');
+    await expect(loadConfigFile({ cwd, configHome: home })).rejects.toThrow(
+      /stallTimeout/,
+    );
+  });
+
   it('discovers the cwd config in preference to the home config', async () => {
     const cwdPath = await write(cwd, CONFIG_FILE, 'agent: codex\n');
     await write(home, HOME_CONFIG, 'agent: gemini\n');

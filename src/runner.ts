@@ -26,6 +26,7 @@ import {
 } from './execution.js';
 import { type Invocation, parseInvocation } from './invocation.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
+import type { ProgressSink } from './progress.js';
 import { evaluatePin, evaluatePinFile } from './pin-currency.js';
 import { PinError, loadPinFile, type PinFile, type PinRecord } from './pins.js';
 import type { Phase } from './phase.js';
@@ -72,6 +73,11 @@ export interface SlcDeps {
   /** Invocation working directory anchoring artifact placement (DR-014); defaults to the process cwd. */
   cwd?: string;
   signal?: AbortSignal;
+  /**
+   * Receives phase start/finish/failure events with elapsed times as the run
+   * progresses (DR-019, CLI-32). Absent for hosts that want a quiet run.
+   */
+  progress?: ProgressSink;
 }
 
 /** The outcome of an `slc` run. */
@@ -622,6 +628,18 @@ async function executeSteps(
         ? step.request.target
         : step.request.linked;
 
+    // In-run progress (DR-019, CLI-32): announce the phase, then report its
+    // outcome with the elapsed time.
+    const startedAt = Date.now();
+    deps.progress?.({ kind: 'phase-start', phase: step.phase, target });
+    const fail = (): void =>
+      deps.progress?.({
+        kind: 'phase-fail',
+        phase: step.phase,
+        target,
+        elapsedMs: Date.now() - startedAt,
+      });
+
     const selection = await selectExecutor(
       step.phase,
       pipeline.dir,
@@ -629,6 +647,7 @@ async function executeSteps(
       deps,
     );
     if (selection.kind === 'fail') {
+      fail();
       diagnostics.push(
         formatFailureReport({
           phase: step.phase,
@@ -649,6 +668,7 @@ async function executeSteps(
       signal: deps.signal,
     });
     if (!result.ok) {
+      fail();
       diagnostics.push(formatFailureReport(result.report));
       return { ok: false, outputs, diagnostics };
     }
@@ -664,6 +684,7 @@ async function executeSteps(
         step.request.kind === 'link' ? step.request.linked : target,
       );
       if (missing.length > 0) {
+        fail();
         diagnostics.push(
           `linked module ${target} has unresolvable relative imports: ` +
             `${missing.join(', ')} — an emitted module that cannot load ` +
@@ -672,6 +693,12 @@ async function executeSteps(
         return { ok: false, outputs, diagnostics };
       }
     }
+    deps.progress?.({
+      kind: 'phase-finish',
+      phase: step.phase,
+      target,
+      elapsedMs: Date.now() - startedAt,
+    });
     outputs.push(target);
   }
   return { ok: true, outputs, diagnostics };
