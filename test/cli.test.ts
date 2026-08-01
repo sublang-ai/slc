@@ -1107,4 +1107,108 @@ describe('compiled execution through the bin (CLI-28)', () => {
     const { readFile } = await import('node:fs/promises');
     expect(await readFile(target, 'utf8')).toBe('compiled:prose');
   });
+
+  it('reports an unmapped pinned provenance through the phase-failure path (CLI-16, CLI-36)', async () => {
+    // Selecting the compiled executor throws for an unmapped provenance
+    // (PHEXEC-30) instead of returning a verdict. The run must still close its
+    // progress line and name the phase and target, exactly as a stale pin
+    // does — not strand a start line behind a bare message (CLI-4, CLI-32).
+    const bundleDir = join(pipelineDir, 'text2gears.slc');
+    await mkdir(bundleDir);
+    await writeFile(
+      join(bundleDir, 'text2gears.playbook.ts'),
+      'export default function createPlaybookRuntime() {\n' +
+        '  return { async init() {}, async handleBossInput() {}, async dispose() {} };\n' +
+        '}\n',
+    );
+    // The pin must evaluate *current* — a stale one never reaches the factory.
+    for (const name of [
+      'text2gears.fsm.ts',
+      'text2gears.gears.md',
+      'text2gears.gears-fsm.test.ts',
+      'text2gears.fsm.introspect.test.ts',
+      'text2gears.prompt-contract.test.ts',
+      'text2gears.fsm.coverage.test.ts',
+    ]) {
+      await writeFile(join(bundleDir, name), `fixture: ${name}\n`);
+    }
+    await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target bytes\n');
+    const record: PinRecord = {
+      definition: {
+        path: 'text2gears.md',
+        hash: await hashFile(join(pipelineDir, 'text2gears.md')),
+      },
+      artifact: {
+        path: 'text2gears.slc/text2gears.playbook.ts',
+        hash: await hashFile(join(bundleDir, 'text2gears.playbook.ts')),
+      },
+      artifactBundle: {
+        path: 'text2gears.slc',
+        hash: await hashTree(bundleDir),
+      },
+      semanticInputs: [],
+      externalInputs: [],
+      runtimeDependencies: [],
+      linkTarget: {
+        kind: 'file',
+        locator: 'linktarget.ts',
+        identity: await hashFile(join(pipelineDir, 'linktarget.ts')),
+        // Never installed or reviewed here, so it stays fail-closed.
+        provenance: '@sublang/playbook@1.3.0',
+      },
+    };
+    await writeFile(
+      join(pipelineDir, PINS_FILE),
+      JSON.stringify(
+        {
+          schema: PIN_SCHEMA,
+          hashAlgorithm: PIN_HASH_ALGORITHM,
+          pathBoundary: { path: '.' },
+          pins: { text2gears: record },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const out: string[] = [];
+    const err: string[] = [];
+    await mkdir(join(root, 'slc'), { recursive: true });
+    await writeFile(join(root, 'slc', 'config.yaml'), 'agent: claude-code\n');
+    const code = await run(['flow.text2gears', source], {
+      env: {
+        SLC_AGENT: 'claude-code',
+        SLC_PIPELINE_PATH: pipelinesRoot,
+        XDG_CONFIG_HOME: root,
+      },
+      cwd: root,
+      stdout: (t) => out.push(t),
+      stderr: (t) => err.push(t),
+      buildDeps: (io) =>
+        buildSlcDeps(io, undefined, (selection, opts = {}) =>
+          createConfiguredCompiledFactory(selection, {
+            ...opts,
+            adapterFactory: () => ({}) as unknown as AgentAdapter,
+          }),
+        ),
+    });
+
+    expect(code).toBe(1);
+    expect(out.join('')).toBe('');
+    const target = join(root, 'onboarding.flow', 'onboarding.gears.md');
+    const lines = err
+      .join('')
+      .split('\n')
+      .filter((l) => l !== '');
+    // The start line is closed by a ✗ carrying the elapsed time...
+    expect(lines[0]).toBe(`→ text2gears (writing ${target})`);
+    expect(lines[1]).toMatch(
+      /^✗ text2gears failed at .+onboarding\.gears\.md \(\d+s\)$/,
+    );
+    // ...and the report names the failing phase, its target, and the reason.
+    expect(lines[2]).toBe(`slc: phase "text2gears" failed at "${target}"`);
+    expect(lines[3]).toContain(
+      'unsupported pinned Playbook runtime contract: @sublang/playbook@1.3.0',
+    );
+  });
 });
