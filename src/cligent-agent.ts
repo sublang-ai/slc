@@ -39,13 +39,19 @@ export interface WatchdogTimers {
   clearTimeout(handle: unknown): void;
 }
 
-const defaultWatchdogTimers: WatchdogTimers = {
-  setTimeout: (callback, ms) => {
-    const handle = setTimeout(callback, ms);
-    // The watchdog must never keep the process alive on its own.
-    handle.unref?.();
-    return handle;
-  },
+/**
+ * The production watchdog timers. Exported so a test can assert the ref
+ * behavior the watchdog's correctness depends on, which an injected fake
+ * would bypass.
+ */
+export const defaultWatchdogTimers: WatchdogTimers = {
+  // Deliberately referenced: the watchdog is the only thing guaranteed to end
+  // a stalled call, so it must hold the event loop open for its window. An
+  // unref'd timer lets Node exit the moment a dead agent transport stops
+  // holding I/O, killing the run before the stall is ever diagnosed. The
+  // timer is cleared on every event and in `dispose`, so it cannot outlive
+  // the call it guards.
+  setTimeout: (callback, ms) => setTimeout(callback, ms),
   clearTimeout: (handle) => clearTimeout(handle as NodeJS.Timeout),
 };
 
