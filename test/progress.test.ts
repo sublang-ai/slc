@@ -115,9 +115,12 @@ describe('createProgressReporter heartbeat (CLI-33)', () => {
     timers.tick(31_000);
     expect(lines[2]).toBe('… gears2fsm still running (1m00s)\n');
 
-    // Any rendered event resets the silence window.
+    // Any rendered event — a streamed status line included — resets the
+    // silence window. Advance to just under the bound measured from the
+    // status line but past it measured from the previous heartbeat, so this
+    // fails if a status line stops counting as output.
     reporter.sink({ kind: 'status', text: 'Entered transform.' });
-    timers.tick(20_000);
+    timers.tick(28_000);
     expect(lines).toHaveLength(4);
 
     reporter.sink({

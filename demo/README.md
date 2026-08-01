@@ -99,9 +99,10 @@ runtime, and by default runs the compile optimization that reduces LLM
 calls.
 The agent driving the compilation is set in `~/.config/slc/config.yaml`
 (created on the first run; defaults to Claude Code).
-Compile time is agent- and workload-dependent: the early phases have
-measured about 4–5 minutes each, while full compiles of this workflow
-have ranged from tens of minutes to more than two hours. `slc` prints
+Compile time is agent- and workload-dependent: the first intermediate
+has measured about 4 minutes in and the next about a minute later,
+while full compiles of this workflow have ranged from tens of minutes
+to more than two hours — the later phases dominate. `slc` prints
 each phase, each artifact with its elapsed time, and a heartbeat while
 work is in flight, so you can tell progress from a stall.
 

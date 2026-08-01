@@ -51,6 +51,8 @@ An absolute per-phase deadline would misfire on legitimately long phases, whose 
 
 - The stall signal is agent inactivity: an in-flight agent call whose transport observes no adapter event for the stall timeout is aborted through the existing cancellation plumbing and reported as a failed call carrying the inactivity duration.
   Cligent's abort drain guarantees the event loop terminates promptly with a terminal event, so a watchdog abort is safe at the transport seam.
+  That same drain can deliver a genuine success for a call that completed just as the window expired; the observed outcome then wins over the stall verdict, because discarding a finished phase is the expensive false negative this watchdog exists to prevent, and a real hang drains to an interrupted outcome rather than a successful one.
+- The configured window must stay representable as a timer delay, so a value the runtime would silently clamp is refused at both configuration sources rather than inverting the watchdog into an immediate abort.
 - The watchdog applies to every agent call on both transports: the single interpreted invocation and each compiled player, Captain, and judge call.
 - A tripped watchdog surfaces through the unchanged phase protocols: a failure report naming the phase and target, no retry of the call ([PHEXEC-12](../dev/phase-execution.md#phexec-12), [PHEXEC-23](../dev/phase-execution.md#phexec-23)), and fail-closed handling for a pinned phase — never a silent interpreted fallback ([PHEXEC-27](../dev/phase-execution.md#phexec-27)).
 - The timeout is configuration: the `stallTimeout` config-file key in seconds, overridden by a non-blank `SLC_STALL_TIMEOUT`, defaulting to 600 seconds, with `0` disabling the watchdog.
