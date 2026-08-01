@@ -77,6 +77,16 @@ Verifies: [PHEXEC-31](../dev/phase-execution.md#phexec-31)
 
 Where a `composed-v2` fixture calls Captain with visible or hidden control work and then calls its hidden judge, when the SLC phase adapter runs it, each Cligent call shall receive `resume: false` and an explicitly empty allowed-tool list without sharing an agent conversation; whereas any missing, inherited, accessor-backed, non-false resume, or nonempty allowed-tool option on the direct Captain call shall reject before the agent transport runs.
 
+### PHEXEC-37
+Verifies: [PHEXEC-25](../dev/phase-execution.md#phexec-25)
+
+Where a compiled fixture runtime emits status and operational telemetry mid-turn and the executor is configured with a status sink, when the executor runs the phase, each non-trace status line shall reach the sink before the run settles and shall not repeat in the returned diagnostics, exact `playbook.trace` payloads shall reach neither the sink nor the diagnostics, and the same fixture without a sink shall retain the drainable-diagnostics behavior.
+
+### PHEXEC-38
+Verifies: [PHEXEC-36](../dev/phase-execution.md#phexec-36), [PHEXEC-12](../dev/phase-execution.md#phexec-12)
+
+Where a faked agent transport yields an initial event and then stalls under a short configured stall timeout, when a phase runs through the transport, the slc command shall abort the stalled call once the timeout elapses, map it to a failed call whose diagnostic carries the inactivity duration, and make no additional agent invocation.
+
 ### PHEXEC-35
 Verifies: [PHEXEC-34](../dev/phase-execution.md#phexec-34)
 
