@@ -23,7 +23,10 @@ import {
   resolveAgentSelection,
   type AgentSelection,
 } from '../src/config.js';
-import { loadConfigFile } from '../src/config-file.js';
+import {
+  loadConfigFile,
+  MAX_STALL_TIMEOUT_SECONDS,
+} from '../src/config-file.js';
 import { hashFile } from '../src/hash.js';
 import { hashTree } from '../src/pin-currency.js';
 import {
@@ -353,6 +356,47 @@ describe('progress (CLI-36, CLI-37)', () => {
     expect(out.join('')).not.toContain('→');
   });
 
+  it('renders progress while phases run, not buffered until the run settles (CLI-36)', async () => {
+    // Liveness is the whole point of issue #4: a run that collects progress
+    // and flushes it at the end produces identical final output, so assert
+    // what stderr had already received at the moment each phase was still
+    // executing. Buffering leaves these snapshots empty.
+    const err: string[] = [];
+    const seenDuringPhase: string[][] = [];
+    const observing: AgentClient = {
+      run: async ({ prompt }) => {
+        seenDuringPhase.push([...err]);
+        const target = /artifact to write: (.+)/.exec(prompt)?.[1].trim();
+        if (target !== undefined) await writeFile(target, 'output\n');
+        return { status: 'success', text: 'wrote the artifact' };
+      },
+    };
+
+    const code = await run(['flow', source], {
+      env: {},
+      stdout: () => {},
+      stderr: (t) => err.push(t),
+      buildDeps: ({ signal, progress }) => ({
+        ...interpretedDeps(observing, signal),
+        progress,
+      }),
+    });
+
+    expect(code).toBe(0);
+    expect(seenDuringPhase).toHaveLength(2);
+    // The first phase saw only its own start line.
+    expect(seenDuringPhase[0].join('')).toBe(
+      `→ text2gears (writing ${join(artDir, 'onboarding.gears.md')})\n`,
+    );
+    // The second saw the first phase's completion too — progress accumulates
+    // as the run proceeds rather than appearing all at once at the end.
+    const second = seenDuringPhase[1].join('');
+    expect(second).toContain('✓ text2gears wrote');
+    expect(second).toContain(
+      `→ gears2fsm (writing ${join(artDir, 'onboarding.fsm.ts')})`,
+    );
+  });
+
   it('reports a failing phase with a ✗ line and keeps stdout empty (CLI-36, CLI-16)', async () => {
     current = makeAgent({ skip: true });
     const out: string[] = [];
@@ -457,6 +501,27 @@ describe('stall timeout resolution (CLI-34, CLI-35)', () => {
     expect(() =>
       resolveRunConfig({ ...env, SLC_STALL_TIMEOUT: '-1' }, {}),
     ).toThrow(/SLC_STALL_TIMEOUT/);
+  });
+
+  it('refuses a window Node would clamp to 1 ms rather than invert the watchdog', () => {
+    // Above 2^31-1 ms Node silently clamps the delay, which would abort every
+    // agent call immediately — the opposite of what the setting asks for.
+    expect(
+      resolveRunConfig(
+        { ...env, SLC_STALL_TIMEOUT: String(MAX_STALL_TIMEOUT_SECONDS) },
+        {},
+      ).stallTimeoutMs,
+    ).toBe(MAX_STALL_TIMEOUT_SECONDS * 1000);
+    expect(() =>
+      resolveRunConfig(
+        { ...env, SLC_STALL_TIMEOUT: String(MAX_STALL_TIMEOUT_SECONDS + 1) },
+        {},
+      ),
+    ).toThrow(/at most/);
+    // The unit-confusion case: "3600000" meaning milliseconds, not seconds.
+    expect(() =>
+      resolveRunConfig({ ...env, SLC_STALL_TIMEOUT: '3600000' }, {}),
+    ).toThrow(/at most/);
   });
 });
 
@@ -921,9 +986,12 @@ describe('compiled execution through the bin (CLI-28)', () => {
       [
         "import { readFile, writeFile } from 'node:fs/promises';",
         'export default function createPlaybookRuntime() {',
+        '  let ports;',
         '  return {',
-        '    async init() {},',
+        '    async init(value) { ports = value; },',
         '    async handleBossInput({ text }) {',
+        // Emitted mid-turn: the host must stream it, not bank it (DR-019).
+        "      await ports.emitStatus('Entered transform.');",
         "      const marker = 'Request: ';",
         '      const line = text.split(String.fromCharCode(10)).find((l) => l.startsWith(marker));',
         '      const { source, target } = JSON.parse(line.slice(marker.length));',
@@ -1022,13 +1090,16 @@ describe('compiled execution through the bin (CLI-28)', () => {
     // DR-014: the run's cwd is `root`, not the source's directory, so the
     // artifact lands under `<root>/onboarding.flow/` (out-of-tree, PIPE-38).
     const target = join(root, 'onboarding.flow', 'onboarding.gears.md');
-    // Stderr carries only the in-run progress lines (DR-019, CLI-32).
+    // Stderr carries the in-run progress lines, including the compiled
+    // runtime's own status streamed through the bin's sink rather than
+    // drained into the end-of-run diagnostics (DR-019, CLI-32, CLI-35).
     const progressLines = err
       .join('')
       .split('\n')
       .filter((l) => l !== '');
     expect(progressLines).toEqual([
       `→ text2gears (writing ${target})`,
+      '◇ Entered transform.',
       expect.stringMatching(/^✓ text2gears wrote .+ \(\d+s\)$/) as unknown,
     ]);
     expect(out.join('')).toContain(target);

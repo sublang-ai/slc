@@ -12,6 +12,7 @@ import {
   CONFIG_FILE,
   ConfigFileError,
   HOME_CONFIG,
+  MAX_STALL_TIMEOUT_SECONDS,
   loadConfigFile,
 } from '../src/config-file.js';
 
@@ -80,6 +81,27 @@ describe('loadConfigFile (CLI-20, CLI-21)', () => {
     await expect(loadConfigFile({ cwd, configHome: home })).rejects.toThrow(
       /stallTimeout/,
     );
+  });
+
+  it('rejects a stallTimeout Node would clamp to 1 ms', async () => {
+    // Above the timer range the watchdog would trip instantly on every call.
+    await write(
+      cwd,
+      CONFIG_FILE,
+      `agent: codex\nstallTimeout: ${MAX_STALL_TIMEOUT_SECONDS + 1}\n`,
+    );
+    await expect(loadConfigFile({ cwd, configHome: home })).rejects.toThrow(
+      /at most/,
+    );
+
+    await write(
+      cwd,
+      CONFIG_FILE,
+      `agent: codex\nstallTimeout: ${MAX_STALL_TIMEOUT_SECONDS}\n`,
+    );
+    expect(
+      (await loadConfigFile({ cwd, configHome: home })).config.stallTimeout,
+    ).toBe(MAX_STALL_TIMEOUT_SECONDS);
   });
 
   it('discovers the cwd config in preference to the home config', async () => {

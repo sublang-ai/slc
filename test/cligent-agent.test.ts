@@ -166,6 +166,51 @@ describe('createCligentAgent stall watchdog (PHEXEC-36, PHEXEC-38)', () => {
     expect(result).toMatchObject({ status: 'success', text: 'finished' });
   });
 
+  it('honors a real success that lands inside the post-abort drain', async () => {
+    // Cligent gives the adapter a 500 ms grace after an abort and yields a
+    // genuine terminal event verbatim. A phase that finishes in that window
+    // did its work and wrote its artifact; reporting a hang would discard a
+    // completed — and expensive — phase.
+    const adapter: AgentAdapter = {
+      agent: 'fixture',
+      async isAvailable() {
+        return true;
+      },
+      async *run(_prompt: string, options?: AgentOptions) {
+        yield event('init', { model: 'm', cwd: '.', tools: [] });
+        // A long, event-silent model turn that happens to finish just after
+        // the watchdog fires.
+        await new Promise<void>((resolve) => {
+          options?.abortSignal?.addEventListener(
+            'abort',
+            () => setTimeout(resolve, 60),
+            { once: true },
+          );
+        });
+        yield event('done', {
+          status: 'success',
+          result: 'the real artifact summary',
+          resumeToken: 'sess-9',
+          usage: { inputTokens: 1, outputTokens: 1, toolUses: 0 },
+          durationMs: 1,
+        });
+      },
+    };
+    const client = createCligentAgent({ adapter, stallTimeoutMs: 40 });
+
+    const result = await client.run({
+      prompt: 'silent-turn',
+      signal: new AbortController().signal,
+    });
+
+    expect(result).toMatchObject({
+      status: 'success',
+      text: 'the real artifact summary',
+      resumeToken: 'sess-9',
+    });
+    expect(result.text).not.toContain('stalled');
+  });
+
   it('keeps a caller abort a plain interruption, not a stall error', async () => {
     const adapter: AgentAdapter = {
       agent: 'fixture',

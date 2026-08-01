@@ -130,7 +130,12 @@ export function createCligentAgent(opts: {
         watchdog.dispose();
       }
 
-      if (watchdog.tripped) {
+      // A real success that lands inside Cligent's post-abort drain wins over
+      // the stall verdict: the call did complete, and reporting a hang would
+      // discard a finished phase — the expensive false negative this watchdog
+      // exists to avoid causing. A genuine stall drains to `interrupted`, so
+      // this never softens a real hang.
+      if (watchdog.tripped && status !== 'success') {
         return {
           status: 'error',
           text:
