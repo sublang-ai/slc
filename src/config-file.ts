@@ -25,6 +25,14 @@ import { fileURLToPath } from 'node:url';
 
 import { parse } from 'yaml';
 
+/**
+ * Largest stall timeout that stays representable as a timer delay (DR-019).
+ * Node clamps any `setTimeout` delay above 2^31-1 ms to 1 ms, so an
+ * out-of-range window would silently invert the watchdog and abort every
+ * agent call immediately; both configuration sources refuse it instead.
+ */
+export const MAX_STALL_TIMEOUT_SECONDS = Math.floor(2_147_483_647 / 1000);
+
 /** Config-file basename discovered in the working directory (DR-006). */
 export const CONFIG_FILE = 'slc.config.yaml';
 /** Config-file path under the user config home (DR-006). */
@@ -237,6 +245,13 @@ function requireSeconds(value: unknown, key: string, path: string): number {
     throw new ConfigFileError(
       'config-invalid',
       `Config key "${key}" in ${path} must be a non-negative number of seconds`,
+    );
+  }
+  if (value > MAX_STALL_TIMEOUT_SECONDS) {
+    throw new ConfigFileError(
+      'config-invalid',
+      `Config key "${key}" in ${path} must be at most ${MAX_STALL_TIMEOUT_SECONDS} seconds ` +
+        '(use 0 to disable the stall watchdog)',
     );
   }
   return value;
