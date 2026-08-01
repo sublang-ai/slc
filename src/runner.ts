@@ -640,12 +640,18 @@ async function executeSteps(
         elapsedMs: Date.now() - startedAt,
       });
 
-    const selection = await selectExecutor(
-      step.phase,
-      pipeline.dir,
-      pinFile,
-      deps,
-    );
+    // Selecting a compiled executor can throw rather than return a verdict —
+    // notably an unmapped pinned Playbook provenance, which the host factory
+    // rejects (PHEXEC-30). That is the same fail-closed family as a stale pin,
+    // so it is reported through the phase-failure path; letting it unwind
+    // would strand the phase-start line with no terminal event and drop the
+    // phase and target from the report (CLI-4, CLI-32, PHEXEC-27).
+    let selection: Strategy;
+    try {
+      selection = await selectExecutor(step.phase, pipeline.dir, pinFile, deps);
+    } catch (error) {
+      selection = { kind: 'fail', reasons: [messageOf(error)] };
+    }
     if (selection.kind === 'fail') {
       fail();
       diagnostics.push(
