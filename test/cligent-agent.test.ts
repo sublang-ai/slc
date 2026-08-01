@@ -5,7 +5,10 @@ import { describe, expect, it } from 'vitest';
 
 import type { AgentAdapter, AgentEvent, AgentOptions } from '@sublang/cligent';
 
-import { createCligentAgent } from '../src/cligent-agent.js';
+import {
+  createCligentAgent,
+  defaultWatchdogTimers,
+} from '../src/cligent-agent.js';
 
 describe('createCligentAgent player continuation', () => {
   it('forwards explicit selection and exposes the returned resume token', async () => {
@@ -109,6 +112,23 @@ describe('createCligentAgent stall watchdog (PHEXEC-36, PHEXEC-38)', () => {
     expect(result.text).toContain('stalled');
     expect(result.text).toContain('0s'); // the 40 ms window, as elapsed text
     expect(runs).toBe(1); // no retry of the aborted call (PHEXEC-12)
+  });
+
+  it('arms a referenced timer so a dead transport still trips the watchdog', () => {
+    // Regression: an unref'd watchdog timer lets Node exit before the window
+    // elapses whenever the stalled transport holds no I/O of its own — the
+    // process dies with an unsettled-await warning and the stall is never
+    // diagnosed. Assert the production timers directly: an injected fake
+    // would bypass the very property under test, and vitest's own event loop
+    // hides the failure from any behavioral assertion.
+    const handle = defaultWatchdogTimers.setTimeout(() => {}, 60_000) as {
+      hasRef?: () => boolean;
+    };
+    try {
+      expect(handle.hasRef?.()).toBe(true);
+    } finally {
+      defaultWatchdogTimers.clearTimeout(handle);
+    }
   });
 
   it('treats any adapter event as activity and lets a chatty call finish', async () => {
