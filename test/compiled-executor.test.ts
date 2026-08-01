@@ -142,6 +142,61 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe('compiled:hello');
   });
 
+  it('streams status live to a configured sink without duplicating diagnostics (PHEXEC-37)', async () => {
+    const streamed: string[] = [];
+    let streamedDuringTurn = 0;
+    let ports: PlaybookPorts | undefined;
+    const target = join(root, 'out.ts');
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      player: idleAgent,
+      judge: idleAgent,
+      onStatus: (line) => streamed.push(line),
+      loadFactory: async () => () => ({
+        async init(value) {
+          ports = value as PlaybookPorts;
+        },
+        async handleBossInput() {
+          await ports?.emitStatus('Entered transform.');
+          await ports?.emitTelemetry({
+            topic: 'playbook.fsm.state',
+            payload: { from: 'ready', to: 'transform' },
+          });
+          await ports?.emitTelemetry({
+            topic: 'playbook.trace',
+            payload: { prompt: 'private prompt', resumeToken: 'private' },
+          });
+          // Live streaming: the lines arrived while the turn was still running.
+          streamedDuringTurn = streamed.length;
+          await writeFile(target, 'compiled output');
+        },
+        async dispose() {},
+      }),
+    });
+
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: join(root, 'src.md'),
+        target,
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(streamed).toEqual([
+      'Entered transform.',
+      '[playbook.fsm.state] {"from":"ready","to":"transform"}',
+    ]);
+    expect(streamedDuringTurn).toBe(2);
+    // Streamed lines do not repeat as end-of-run diagnostics, and trace
+    // payloads reach neither channel (PHEXEC-25).
+    expect(result.diagnostics).toEqual([]);
+    expect(streamed.join('\n')).not.toContain('private');
+  });
+
   it('derives blocked when a clean turn produces no output', async () => {
     const result = await runFixture('BLOCK');
     expect(result.status).toBe('blocked');

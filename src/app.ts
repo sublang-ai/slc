@@ -24,6 +24,7 @@ import {
   type AgentSelection,
 } from './config.js';
 import { loadConfigFile, type FileConfig } from './config-file.js';
+import { createProgressReporter, type ProgressSink } from './progress.js';
 import {
   createPipelineResolver,
   pipelineSearchRoots,
@@ -56,6 +57,8 @@ export type DepsBuilder = (io: {
   configPath?: string;
   /** Sink for host notes such as first-run config seeding (DR-015, CLI-30). */
   note?: (text: string) => void;
+  /** The run's progress sink, rendered to stderr by the bin (DR-019, CLI-35). */
+  progress?: ProgressSink;
 }) => SlcDeps | Promise<SlcDeps>;
 
 /** Injectable IO and configuration for {@link run}; all fields default to the process. */
@@ -93,7 +96,7 @@ export type CompiledFactoryBuilder = typeof createConfiguredCompiledFactory;
  *   agent, or the resolved agent is unsupported (CLI-12).
  */
 export async function buildSlcDeps(
-  { env, cwd, signal, configPath, note }: Parameters<DepsBuilder>[0],
+  { env, cwd, signal, configPath, note, progress }: Parameters<DepsBuilder>[0],
   // Injectable so a test can capture the executor options — notably the
   // non-interactive write permission below — without constructing a real
   // adapter, the same seam pattern as `createConfiguredExecutor`'s
@@ -108,17 +111,33 @@ export async function buildSlcDeps(
     // First-run seeding (DR-015): name the created user config on stderr.
     onSeed: (path) => note?.(`slc: seeded ${path} (agent: claude-code)\n`),
   });
-  const { selection, pipelinePath } = resolveRunConfig(env, file.config);
+  const { selection, pipelinePath, stallTimeoutMs } = resolveRunConfig(
+    env,
+    file.config,
+  );
   const resolver = withReservedPipelines(
     createPipelineResolver(pipelineSearchRoots(pipelinePath, cwd)),
   );
   // Auto-accept the agents' file operations so a non-interactive `slc` run can
   // write its target artifact; the DR-003 generic checks still guard the
-  // protected inputs (DR-004).
-  const agentOpts = { cwd, permissions: { mode: 'auto' as const } };
+  // protected inputs (DR-004). The stall watchdog rides every constructed
+  // transport (DR-019, CLI-35).
+  const agentOpts = {
+    cwd,
+    permissions: { mode: 'auto' as const },
+    stallTimeoutMs,
+  };
   const executor = createExecutor(selection, agentOpts);
-  const compiled = createCompiled(selection, agentOpts);
-  return { resolver, executor, compiled, cwd, signal };
+  // Compiled-runtime status streams to the same reporter as phase progress
+  // (PHEXEC-25, CLI-32).
+  const compiled = createCompiled(selection, {
+    ...agentOpts,
+    onStatus:
+      progress === undefined
+        ? undefined
+        : (line: string) => progress({ kind: 'status', text: line }),
+  });
+  return { resolver, executor, compiled, cwd, signal, progress };
 }
 
 /** The cligent-invocation selection after merging environment over file (DR-006). */
@@ -126,14 +145,23 @@ export interface RunConfig {
   selection: AgentSelection;
   /** Search-root source: an `SLC_PIPELINE_PATH` string, the file's sequence, or undefined. */
   pipelinePath: string | string[] | undefined;
+  /** Agent-stall watchdog window in milliseconds; `0` disables (DR-019, CLI-34). */
+  stallTimeoutMs: number;
 }
+
+/** Default agent-stall watchdog window in seconds (DR-019, CLI-34). */
+export const DEFAULT_STALL_TIMEOUT_SECONDS = 600;
 
 /**
  * Merges the environment over config-file values per key (DR-006, CLI-20): for
  * each key a non-blank environment variable wins, otherwise the file value,
  * otherwise the built-in default. The agent and model go through
  * {@link resolveAgentSelection} so the supported-agent check stays single-sourced
- * (CLI-7, CLI-12).
+ * (CLI-7, CLI-12); the stall timeout defaults to
+ * {@link DEFAULT_STALL_TIMEOUT_SECONDS} with `0` disabling the watchdog
+ * (DR-019, CLI-34).
+ *
+ * @throws {Error} when `SLC_STALL_TIMEOUT` is not a non-negative number.
  */
 export function resolveRunConfig(
   env: Record<string, string | undefined>,
@@ -145,7 +173,22 @@ export function resolveRunConfig(
     SLC_EFFORT: nonBlank(env.SLC_EFFORT) ?? file.effort,
   });
   const pipelinePath = nonBlank(env.SLC_PIPELINE_PATH) ?? file.pipelinePath;
-  return { selection, pipelinePath };
+  const stallSeconds =
+    parseStallTimeout(nonBlank(env.SLC_STALL_TIMEOUT)) ??
+    file.stallTimeout ??
+    DEFAULT_STALL_TIMEOUT_SECONDS;
+  return { selection, pipelinePath, stallTimeoutMs: stallSeconds * 1000 };
+}
+
+function parseStallTimeout(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    throw new Error(
+      `SLC_STALL_TIMEOUT "${value}" must be a non-negative number of seconds (0 disables the stall watchdog)`,
+    );
+  }
+  return seconds;
 }
 
 /** Returns `value` when set and not all-whitespace, else `undefined` (DR-006). */
@@ -182,12 +225,14 @@ export function usageText(): string {
     '  environment variable below:',
     '    ./slc.config.yaml',
     '    ${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml',
-    '  Keys: agent, model, effort, pipelinePath.',
+    '  Keys: agent, model, effort, pipelinePath, stallTimeout.',
     '',
     '  SLC_AGENT          agent CLI: claude-code | codex | gemini | opencode',
     '  SLC_MODEL          optional model for the agent CLI',
     '  SLC_EFFORT         optional adapter-scoped reasoning effort (e.g. xhigh)',
     '  SLC_PIPELINE_PATH  search roots for <pipeline> references (default: cwd)',
+    '  SLC_STALL_TIMEOUT  seconds of agent inactivity before a stalled call',
+    '                     fails the run (default: 600; 0 disables)',
     '',
   ].join('\n');
 }
@@ -244,6 +289,9 @@ export async function run(
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
   const signal = options.signal ?? new AbortController().signal;
+  // In-run progress renders on stderr as it happens, with the silence-bounded
+  // heartbeat (DR-019, CLI-32, CLI-33, CLI-35).
+  const reporter = createProgressReporter(stderr);
 
   let deps: SlcDeps;
   let rest: readonly string[];
@@ -258,15 +306,22 @@ export async function run(
       signal,
       configPath: extracted.configPath,
       note: stderr,
+      progress: reporter.sink,
     });
   } catch (error) {
     // Configuration refusals — a bad `--config`, an invalid config file
     // (CLI-21), or an unset/unsupported agent (CLI-12) — fail the run.
+    reporter.dispose();
     stderr(`${name}: ${messageOf(error)}\n`);
     return 1;
   }
 
-  const result = await runSlc(rest, deps);
+  let result;
+  try {
+    result = await runSlc(rest, deps);
+  } finally {
+    reporter.dispose();
+  }
 
   if (result.ok) {
     if (result.outputs.length > 0) stdout(`${result.outputs.join('\n')}\n`);
