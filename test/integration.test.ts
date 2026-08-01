@@ -524,6 +524,31 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     expect(result.diagnostics.join('\n')).toContain('VERIFY-18');
   });
 
+  it('fails the link when the emitted module cannot be read at all (VERIFY-18)', async () => {
+    // A directory at the linked path satisfies the DR-003 existence and
+    // extension checks, so the read is where it surfaces; it must fail the
+    // link rather than unwind past the phase's failure report.
+    await mkdir(artDir, { recursive: true });
+    const object = join(artDir, 'onboarding.fsm.ts');
+    await writeFile(object, 'fsm');
+    await writeFile(join(srcDir, 'runner.ts'), 'runner');
+    const agent: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match) await mkdir(match[1].trim(), { recursive: true });
+        return { status: 'success', text: 'wrote the artifact' };
+      },
+    };
+    const result = await runSlc(
+      ['flow.link', object, join(srcDir, 'runner.ts')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    const report = result.diagnostics.join('\n');
+    expect(report).toContain('could not be read');
+    expect(report).toContain('VERIFY-18');
+  });
+
   it('accepts a link whose relative imports resolve beside the module (VERIFY-19)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
