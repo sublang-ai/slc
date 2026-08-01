@@ -41,6 +41,8 @@ export interface FileConfig {
   model?: string;
   effort?: string;
   pipelinePath?: string[];
+  /** Agent-stall watchdog window in seconds; `0` disables (DR-019, CLI-34). */
+  stallTimeout?: number;
 }
 
 /**
@@ -174,7 +176,13 @@ async function readConfigFile(path: string): Promise<FileConfig> {
   return normalizeFileConfig(raw, path);
 }
 
-const ALLOWED_KEYS = new Set(['agent', 'model', 'effort', 'pipelinePath']);
+const ALLOWED_KEYS = new Set([
+  'agent',
+  'model',
+  'effort',
+  'pipelinePath',
+  'stallTimeout',
+]);
 
 function normalizeFileConfig(value: unknown, path: string): FileConfig {
   if (value === null || value === undefined) {
@@ -192,7 +200,7 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
     if (!ALLOWED_KEYS.has(key)) {
       throw new ConfigFileError(
         'config-invalid',
-        `Unknown config key "${key}" in ${path}; allowed keys: agent, model, effort, pipelinePath`,
+        `Unknown config key "${key}" in ${path}; allowed keys: agent, model, effort, pipelinePath, stallTimeout`,
       );
     }
   }
@@ -214,7 +222,24 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
       path,
     );
   }
+  if (input.stallTimeout !== undefined) {
+    config.stallTimeout = requireSeconds(
+      input.stallTimeout,
+      'stallTimeout',
+      path,
+    );
+  }
   return config;
+}
+
+function requireSeconds(value: unknown, key: string, path: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new ConfigFileError(
+      'config-invalid',
+      `Config key "${key}" in ${path} must be a non-negative number of seconds`,
+    );
+  }
+  return value;
 }
 
 function requireString(value: unknown, key: string, path: string): string {

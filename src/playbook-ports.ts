@@ -64,6 +64,14 @@ export function createPlaybookPorts(opts: {
    * carry it.
    */
   captainWorkspace?: string;
+  /**
+   * Live status sink (DR-019, PHEXEC-25): when set, human status and non-trace
+   * operational telemetry stream here as they occur instead of being collected
+   * for {@link PlaybookPortsAdapter.drainDiagnostics}, so a long compiled phase
+   * is observable while it runs. `playbook.trace` payloads are excluded from
+   * the streamed lines exactly as from ordinary diagnostics.
+   */
+  onStatus?: (line: string) => void;
 }): PlaybookPortsAdapter {
   const diagnostics: string[] = [];
   const players = new Map<string, AgentClient>();
@@ -149,9 +157,7 @@ export function createPlaybookPorts(opts: {
     },
 
     async emitStatus(message: string, data?: unknown): Promise<void> {
-      diagnostics.push(
-        data === undefined ? message : `${message} ${stringify(data)}`,
-      );
+      report(data === undefined ? message : `${message} ${stringify(data)}`);
     },
 
     async emitTelemetry(event: {
@@ -159,13 +165,26 @@ export function createPlaybookPorts(opts: {
       payload: unknown;
     }): Promise<void> {
       if (event.topic === 'playbook.trace') return;
-      diagnostics.push(`[${event.topic}] ${stringify(event.payload)}`);
+      report(`[${event.topic}] ${stringify(event.payload)}`);
     },
 
     drainDiagnostics(): string[] {
       return diagnostics.splice(0);
     },
   };
+
+  /**
+   * Streams a non-trace line live when the host configured a sink, otherwise
+   * collects it as a drainable diagnostic — never both, so streamed lines do
+   * not repeat in the run's diagnostics (DR-019, PHEXEC-25).
+   */
+  function report(line: string): void {
+    if (opts.onStatus !== undefined) {
+      opts.onStatus(line);
+      return;
+    }
+    diagnostics.push(line);
+  }
 
   async function withSerialCaptain<T>(
     signal: AbortSignal,

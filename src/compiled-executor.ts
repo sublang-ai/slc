@@ -108,6 +108,12 @@ export function createCompiledExecutor(opts: {
   cwd?: string;
   /** Stable authored phase identity used as the Playbook session's playbook id. */
   playbookId?: string;
+  /**
+   * Live status sink (DR-019, PHEXEC-25): streams the runtime's human status
+   * and non-trace telemetry as it occurs; absent hosts keep the drained
+   * end-of-run diagnostics.
+   */
+  onStatus?: (line: string) => void;
   /** Session-id seam for deterministic tests; defaults to {@link randomUUID}. */
   createSessionId?: () => string;
   /** Exact pinned runtime boundary; defaults to the current legacy contract. */
@@ -136,6 +142,7 @@ export function createCompiledExecutor(opts: {
         // transported prompt carries the request's absolute paths and
         // write-scope rules (PHEXEC-34).
         captainWorkspace: composeWorkspaceContract(input),
+        onStatus: opts.onStatus,
       });
       // Hand the runtime only Playbook's ports — never the host-only
       // drainDiagnostics, nor a file capability (DR-005, PHEXEC-23).

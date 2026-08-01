@@ -507,4 +507,31 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     // Draining clears the buffer.
     expect(ports.drainDiagnostics()).toEqual([]);
   });
+
+  it('streams status and telemetry live to a configured sink instead of buffering (DR-019)', async () => {
+    const agent = fakeAgent({ status: 'success', text: 'ok' });
+    const streamed: string[] = [];
+    const ports = createPlaybookPorts({
+      player: agent,
+      judge: agent,
+      onStatus: (line) => streamed.push(line),
+    });
+
+    await ports.emitStatus('drafting');
+    await ports.emitStatus('progress', { turn: 2 });
+    await ports.emitTelemetry({ topic: 'cost', payload: { tokens: 100 } });
+    // Trace privacy holds on the streamed path too (PHEXEC-25, PHEXEC-37).
+    await ports.emitTelemetry({
+      topic: 'playbook.trace',
+      payload: { prompt: 'private prompt', resumeToken: 'private token' },
+    });
+
+    expect(streamed).toEqual([
+      'drafting',
+      'progress {"turn":2}',
+      '[cost] {"tokens":100}',
+    ]);
+    // Streamed lines never repeat as drained diagnostics.
+    expect(ports.drainDiagnostics()).toEqual([]);
+  });
 });

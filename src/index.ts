@@ -19,5 +19,6 @@ export * from './invocation.js';
 export * from './link.js';
 export * from './phase.js';
 export * from './pipeline.js';
+export * from './progress.js';
 export * from './resolver.js';
 export * from './runner.js';
