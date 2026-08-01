@@ -48,16 +48,21 @@ What each step does:
    **unrelated packages** that happen to share the names.
 2. **`npx slc playbook workflow.txt`** compiles the one-paragraph
    description into a runnable playbook. The compile calls your
-   configured agent and **can take more than ten minutes**; it succeeds
-   when `./workflow.ts` appears. In a hurry? Skip it — a precompiled
-   copy ships in [`reference/`](reference/), runnable as
+   configured agent, and **its duration is agent- and
+   workload-dependent: measured compiles of this five-line workflow have
+   run from tens of minutes to more than two hours**. It reports each
+   phase on stderr as it goes and succeeds when `./workflow.ts` appears.
+   Want to skip the wait? A precompiled copy ships in
+   [`reference/`](reference/), runnable as
    `npx playbook run ./reference/workflow.ts "<task>"` with the same
-   task string as the next step.
+   task string as the next step — though note the run itself is real
+   agent work too (see below).
 3. **`npx playbook run …`** hands the buggy [`sample.c`](sample.c) to
    the two agents. They commit, review, and debate inside a Git
-   repository created here; every round is real agent work, so expect
-   this to take a while too. The run exits `0` when a review comes back
-   clean.
+   repository created here; every round is real agent work, so expect a
+   run on the order of an hour — one run from the precompiled artifacts
+   measured about 51 minutes, varying with agent, model, and task. The
+   run exits `0` when a review comes back clean.
 4. **`git log`** shows what the loop produced: the reviewed commits
    (`git show` displays the final fix).
 
@@ -94,7 +99,11 @@ runtime, and by default runs the compile optimization that reduces LLM
 calls.
 The agent driving the compilation is set in `~/.config/slc/config.yaml`
 (created on the first run; defaults to Claude Code).
-Compiling may take more than ten minutes.
+Compile time is agent- and workload-dependent: the early phases have
+measured about 4–5 minutes each, while full compiles of this workflow
+have ranged from tens of minutes to more than two hours. `slc` prints
+each phase, each artifact with its elapsed time, and a heartbeat while
+work is in flight, so you can tell progress from a stall.
 
 Artifacts land in the current directory: `./workflow.playbook/` (the
 compile intermediates) and `./workflow.ts` (the runnable entry).

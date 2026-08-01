@@ -11,6 +11,29 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **In-run progress reporting.** A compile now reports each phase on
+  stderr as it starts and as its artifact lands with the elapsed time,
+  streams a compiled phase's runtime status lines live instead of
+  buffering them until the run ends, and emits a heartbeat so the
+  terminal is never silent for more than 30 seconds while work is in
+  flight. `runSlc` takes an optional progress sink; hosts that supply
+  none keep the previous quiet behavior.
+- **An agent-stall watchdog.** An agent call that observes no activity
+  for `stallTimeout` seconds — the new config-file key, overridden by
+  `SLC_STALL_TIMEOUT`, defaulting to 600 with `0` disabling — is
+  aborted and reported as a failed phase naming the inactivity
+  duration, instead of hanging indefinitely on a stalled session. The
+  aborted call is never retried and a pinned phase still fails closed
+  ([DR-019](specs/decisions/019-compile-progress-stall-watchdog.md)).
+
+### Changed
+
+- Documented compile and run durations are now measured ranges stated
+  as agent- and workload-dependent, replacing the "more than ten
+  minutes" estimate.
+
 ## [0.2.0] - 2026-07-27
 
 ### Added

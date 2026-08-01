@@ -33,8 +33,8 @@ git log --oneline
 每一步做什么：
 
 1. **`npm install`** 安装 `@sublang/slc`（编译器）与 `@sublang/playbook`（提供 `playbook` 命令，以及生成文件从 `./node_modules` 导入的运行时引擎）。必须先于各条 `npx` 命令执行——若什么都没装，`npx` 会提示从 npm 仓库下载名为 `slc`、`playbook` 的**无关同名包**。
-2. **`npx slc playbook workflow.zh.txt`** 把这一段描述编译成可运行的 playbook。编译会调用你配置的 agent，**可能耗时十分钟以上**；`./workflow.zh.ts` 出现即编译成功。赶时间？可以跳过——[`reference/`](reference/) 内附带预编译制品，直接运行 `npx playbook run ./reference/workflow.zh.ts "<task>"`（任务文本同下一步）。
-3. **`npx playbook run …`** 把带 bug 的 [`sample.c`](sample.c) 交给两个 agent。它们在此处新建的 Git 仓库里提交、评审、争论；每一轮都是真实的 agent 工作，同样需要一些时间。当某轮评审不再有问题时，运行以 `0` 退出。
+2. **`npx slc playbook workflow.zh.txt`** 把这一段描述编译成可运行的 playbook。编译会调用你配置的 agent，**耗时取决于所用 agent 与工作流规模：这段五行工作流的实测编译从数十分钟到两小时以上不等**；编译过程会在 stderr 上逐阶段报告进度，`./workflow.zh.ts` 出现即编译成功。想跳过等待？[`reference/`](reference/) 内附带预编译制品，直接运行 `npx playbook run ./reference/workflow.zh.ts "<task>"`（任务文本同下一步）——但请注意运行本身同样是真实的 agent 工作（见下一条）。
+3. **`npx playbook run …`** 把带 bug 的 [`sample.c`](sample.c) 交给两个 agent。它们在此处新建的 Git 仓库里提交、评审、争论；每一轮都是真实的 agent 工作，通常需要约一小时——基于预编译制品的一次运行实测约 51 分钟，具体取决于 agent、模型与任务。当某轮评审不再有问题时，运行以 `0` 退出。
 4. **`git log`** 查看循环产出：经过评审的提交（`git show` 显示最终修复）。
 
 ## 详细说明
@@ -58,7 +58,8 @@ npx slc playbook workflow.zh.txt
 
 `slc` 会先将输入文本按 playbook 要求规范化，最终链接到已安装的 `@sublang/playbook` 运行时，并默认执行减少 LLM 调用的编译优化。
 编译所用的 agent 由 `~/.config/slc/config.yaml` 指定（首次运行会自动生成，默认为 Claude Code）。
-编译耗时可能超过十分钟。
+编译耗时取决于 agent 与工作流规模：前段各阶段实测约 4–5 分钟，而整条流水线实测从数十分钟到两小时以上不等。
+`slc` 会逐阶段打印进度、每个制品的落盘耗时，以及工作进行中的心跳，因此正在推进还是已经卡死一望便知。
 
 制品输出在当前目录下，包括：`./workflow.zh.playbook/`（编译中间产物）与 `./workflow.zh.ts`（可运行的入口）。
 我们提供参考制品供预览或对比校验：中文流程位于 [`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/)，英文流程位于 [`reference/workflow.playbook/`](reference/workflow.playbook/)。
