@@ -87,10 +87,13 @@ slc playbook my-workflow.md
 dependency, so it compiles in any directory — no clone, no project
 setup. Compilation drives your configured coding agent — the first run
 seeds `~/.config/slc/config.yaml` with `agent: claude-code`; set
-`SLC_AGENT` (or edit that file) to use another agent CLI — and a full
-pipeline can take more than ten minutes. Plain-text input (`.txt`)
-works too; it is normalized first. The pipeline's optimization pass,
-which rewrites judgment-free steps into plain script, runs by default
+`SLC_AGENT` (or edit that file) to use another agent CLI. Expect it to
+take a while: duration is agent- and workload-dependent, and measured
+compiles of a five-line workflow have run from tens of minutes to more
+than two hours, with the first intermediate typically landing within
+about five minutes. Plain-text input (`.txt`) works too; it is
+normalized first. The pipeline's optimization pass, which rewrites
+judgment-free steps into plain script, runs by default
 (`--no-optimize` skips it).
 
 Artifacts land in your working directory: `my-workflow.playbook/` holds
@@ -106,9 +109,16 @@ Intermediates are first-class: edit one and re-run a single phase
 (`slc playbook.gears2fsm …`) and it lands in the same place.
 `slc --help` shows all invocation forms.
 
-Success prints the written artifact paths and exits 0; a failure prints
-diagnostics to stderr — naming the failing phase when one is at fault —
-and exits non-zero.
+While a compile runs, `slc` reports progress on stderr: each phase as it
+starts, each artifact as it lands with the elapsed time, the compiled
+runtime's own state transitions, and a heartbeat so the terminal is
+never silent for more than 30 seconds. An agent call that goes quiet for
+`stallTimeout` seconds (default 600, `0` disables) is aborted and
+reported as a failed phase rather than hanging indefinitely.
+
+Success prints the written artifact paths to stdout and exits 0; a
+failure prints diagnostics to stderr — naming the failing phase when one
+is at fault — and exits non-zero.
 
 ## Configuration
 
@@ -123,14 +133,16 @@ and `pipelinePath` to the working directory.
 # slc.config.yaml
 agent: claude-code # claude-code | codex | gemini | opencode
 model: claude-opus-4-8 # optional; omit to use the agent CLI's default
+stallTimeout: 600 # seconds of agent silence before a stalled call fails
 pipelinePath: # search roots for <pipeline> references; defaults to the cwd
   - ./pipelines
 ```
 
 A `slc.config.yaml` in the working directory wins over the user config;
-`SLC_AGENT`, `SLC_MODEL`, and `SLC_PIPELINE_PATH` override either per
-key. Discovery order, `--config`, and validation rules live in the
-[CLI spec](specs/user/cli.md); `slc --help` prints the summary.
+`SLC_AGENT`, `SLC_MODEL`, `SLC_STALL_TIMEOUT`, and `SLC_PIPELINE_PATH`
+override either per key. Discovery order, `--config`, and validation
+rules live in the [CLI spec](specs/user/cli.md); `slc --help` prints the
+summary.
 
 ## How pipelines work
 
