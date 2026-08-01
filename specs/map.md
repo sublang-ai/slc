@@ -42,6 +42,7 @@ meta.md     The spec of specs
 | DR-016 | [016-gears-grammar-provenance.md](decisions/016-gears-grammar-provenance.md) | The pinned GEARS grammar comes from the published `@sublang/spex` package (en + zh), replacing this repo's drifted local copies in the compile-pin closure |
 | DR-017 | [017-playbook-2-0-thin-runtime-adoption.md](decisions/017-playbook-2-0-thin-runtime-adoption.md) | Playbook 2.0 adoption: 2.0.0 provenance to `composed-v2`, resolved Captain-failure mapping, thin-artifact pin closure with the shared engine, registry-entry role binding, and atomic reviewed assets |
 | DR-018 | [018-playbook-3-1-adoption.md](decisions/018-playbook-3-1-adoption.md) | Playbook 3.1 adoption: 3.1.0 provenance to `composed-v2`, link.md judge-envelope and compat-stamping re-sync, full bundle rebuild, coupled demo manifest, and the global-first consumption model |
+| DR-019 | [019-compile-progress-stall-watchdog.md](decisions/019-compile-progress-stall-watchdog.md) | In-run progress on stderr: per-phase lines with elapsed times, live compiled-status streaming, a 30 s silence-bounded heartbeat, a configurable agent-inactivity watchdog, and measured time estimates |
 
 ## Iterations
 
@@ -66,6 +67,7 @@ meta.md     The spec of specs
 | IR-016 | [016-first-release.md](iterations/016-first-release.md) | Prepare the first npm release: 0.1.0 metadata and changelog, project-local thin-runtime install, package smoke, and CI-green token-free OIDC publication |
 | IR-017 | [017-local-release-acceptance.md](iterations/017-local-release-acceptance.md) | Add the installed-package runtime drive and the opt-in real-agent compile/run acceptance gate |
 | IR-018 | [018-playbook-3-1-adoption.md](iterations/018-playbook-3-1-adoption.md) | Adopt Playbook 3.1 atomically, regenerate the zh demo reference as end-user acceptance, and prepare 0.2.0 |
+| IR-019 | [019-compile-progress-stall-watchdog.md](iterations/019-compile-progress-stall-watchdog.md) | Implement DR-019: progress sink and stderr reporter, live status streaming, silence heartbeat, agent-stall watchdog, measured-time docs |
 
 ## Packages
 
@@ -79,9 +81,9 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [cli.md](user/cli.md) | Executable surface: version/help, success and failure reporting, cancellation, config file |
-| dev | [cli.md](dev/cli.md) | Bin wiring: resolver, agent/config-file selection, executor injection, process control |
-| test | [cli.md](test/cli.md) | Integration: version/help, reporting, exit codes, cancellation, config file/env, pinned compiled execution |
+| user | [cli.md](user/cli.md) | Executable surface: version/help, success and failure reporting, in-run progress and heartbeat, stall watchdog, cancellation, config file |
+| dev | [cli.md](dev/cli.md) | Bin wiring: resolver, agent/config-file selection, executor injection, progress reporter, stall-timeout resolution, process control |
+| test | [cli.md](test/cli.md) | Integration: version/help, reporting, progress lines, stall watchdog, exit codes, cancellation, config file/env, pinned compiled execution |
 
 ### COMPILE
 
@@ -106,8 +108,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade, six-port Cligent adapter, and provenance-driven selection |
-| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked protocol, compiled runtime profiles including direct Captain, and pin-selection acceptance |
+| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade, six-port Cligent adapter, provenance-driven selection, live status streaming, and the agent-stall watchdog |
+| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked protocol, compiled runtime profiles including direct Captain, pin-selection, streamed-status, and stall-watchdog acceptance |
 
 ### PIN
 
