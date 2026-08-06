@@ -44,6 +44,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+
+// Playbook 4 installs no agent SDK (DR-020): cligent declares them as
+// optional peers, so a consumer's closure carries none. Which package backs
+// which adapter is cligent's to publish, so read it from the descriptor
+// rather than restating a map that could drift.
+const { AGENT_RUNTIME_TARGETS } = await import('@sublang/cligent');
 const args = new Set(process.argv.slice(2));
 
 const KNOWN_FLAGS = new Set(['--keep', '--compile-only', '--run-only']);
@@ -139,6 +145,23 @@ function requiredAgentClis() {
   });
 }
 
+/**
+ * The SDK packages the adapters of this run need, per cligent's descriptor.
+ *
+ * The compile stage's adapter comes from the maintainer's own slc config and
+ * is not knowable here, so every adapter's peer SDK is supplied: an unused
+ * one costs an install, a missing one fails the stage it was needed for.
+ */
+function requiredSdkPackages() {
+  const packages = new Set();
+  for (const targets of Object.values(AGENT_RUNTIME_TARGETS)) {
+    for (const target of targets) {
+      if (target.kind === 'peer') packages.add(target.package);
+    }
+  }
+  return [...packages].sort();
+}
+
 /** Fails with an actionable message rather than a confusing downstream error. */
 function requirePrerequisites() {
   step('prerequisites');
@@ -229,10 +252,46 @@ function installCandidate(scratch) {
       '--cache',
       cache,
       tarball,
+      ...requiredSdkPackages(),
     ],
     { cwd: consumer, stdio: 'pipe' },
   );
   ok('installed into a scratch consumer project');
+
+  // A user's install is only usable if CLIGENT can find the SDK, which it
+  // does by walking from its own installed location — not the consumer root.
+  // Ask the consumer's own cligent, so this reports exactly what a real run
+  // will see. (A require() probe would be wrong twice over: it resolves from
+  // the wrong place, and these SDKs are ESM-only, so requiring them throws
+  // ERR_PACKAGE_PATH_NOT_EXPORTED even when correctly installed.)
+  const absent = execFileSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `const { AGENT_RUNTIME_TARGETS, readRuntimeVersion } = await import('@sublang/cligent');
+       const missing = [];
+       for (const targets of Object.values(AGENT_RUNTIME_TARGETS)) {
+         for (const target of targets) {
+           if (target.kind === 'peer' && readRuntimeVersion(target) === undefined) {
+             missing.push(target.package);
+           }
+         }
+       }
+       process.stdout.write(missing.join(','));`,
+    ],
+    { cwd: consumer, encoding: 'utf8' },
+  ).trim();
+  if (absent !== '') {
+    fail(
+      `the installed cligent cannot find ${absent}`,
+      'playbook 4 supplies no agent SDK; the consumer install must',
+    );
+  }
+  ok(
+    'agent SDKs visible to the installed cligent',
+    requiredSdkPackages().join(', '),
+  );
   return consumer;
 }
 

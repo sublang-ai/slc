@@ -193,5 +193,15 @@ describe('createConfiguredExecutor (CLI-7, CLI-8)', () => {
     expect(() => compiled(choice('@sublang/playbook@3.0.0'))).toThrow(
       /unsupported pinned Playbook runtime contract/,
     );
+    // 4.0.0 ships runtime.ts and the engine byte-identical to 3.1.0's — its
+    // major marks the SDK-topology break, cligent taking over runtime
+    // versions, not a contract change — so it joins the composed profile
+    // (DR-020); an unreviewed 4.1.0 stays fail-closed like any other.
+    expect(typeof compiled(choice('@sublang/playbook@4.0.0')).run).toBe(
+      'function',
+    );
+    expect(() => compiled(choice('@sublang/playbook@4.1.0'))).toThrow(
+      /unsupported pinned Playbook runtime contract/,
+    );
   });
 });
