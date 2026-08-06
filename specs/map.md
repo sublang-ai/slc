@@ -43,6 +43,7 @@ meta.md     The spec of specs
 | DR-017 | [017-playbook-2-0-thin-runtime-adoption.md](decisions/017-playbook-2-0-thin-runtime-adoption.md) | Playbook 2.0 adoption: 2.0.0 provenance to `composed-v2`, resolved Captain-failure mapping, thin-artifact pin closure with the shared engine, registry-entry role binding, and atomic reviewed assets |
 | DR-018 | [018-playbook-3-1-adoption.md](decisions/018-playbook-3-1-adoption.md) | Playbook 3.1 adoption: 3.1.0 provenance to `composed-v2`, link.md judge-envelope and compat-stamping re-sync, full bundle rebuild, coupled demo manifest, and the global-first consumption model |
 | DR-019 | [019-compile-progress-stall-watchdog.md](decisions/019-compile-progress-stall-watchdog.md) | In-run progress on stderr: per-phase lines with elapsed times, live compiled-status streaming, a 30 s silence-bounded heartbeat, a configurable agent-inactivity watchdog, and measured time estimates |
+| DR-020 | [020-playbook-4-0-adoption.md](decisions/020-playbook-4-0-adoption.md) | Playbook 4.0 adoption: 4.0.0 provenance to `composed-v2` on a byte-identical runtime, retained bundles with regenerated pins, cligent 0.18 as runtime-version authority, SDKs as devDependencies and demo-named vendors |
 
 ## Iterations
 
@@ -68,6 +69,7 @@ meta.md     The spec of specs
 | IR-017 | [017-local-release-acceptance.md](iterations/017-local-release-acceptance.md) | Add the installed-package runtime drive and the opt-in real-agent compile/run acceptance gate |
 | IR-018 | [018-playbook-3-1-adoption.md](iterations/018-playbook-3-1-adoption.md) | Adopt Playbook 3.1 atomically, regenerate the zh demo reference as end-user acceptance, and prepare 0.2.0 |
 | IR-019 | [019-compile-progress-stall-watchdog.md](iterations/019-compile-progress-stall-watchdog.md) | Implement DR-019: progress sink and stderr reporter, live status streaming, silence heartbeat, agent-stall watchdog, measured-time docs |
+| IR-020 | [020-playbook-4-0-adoption.md](iterations/020-playbook-4-0-adoption.md) | Adopt Playbook 4.0 and cligent 0.18 atomically with retained bundles, regenerated pins, and prepare 0.3.0 |
 
 ## Packages
 
