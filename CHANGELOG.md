@@ -11,6 +11,29 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-06
+
+### Changed
+
+- **Playbook 4.0 adoption: the transitive Codex freeze ends structurally.**
+  The dependency ranges move to `@sublang/playbook` `^4.0.0` and
+  `@sublang/cligent` `^0.18.0`. Playbook 4.0.0 no longer depends on any
+  agent SDK — which SDK versions work is now cligent's to publish and
+  enforce at load — so no SLC install closure carries an SDK range any
+  more, and the `^0.139.0` caret that froze Codex below current models
+  disappears with it. Exact `@sublang/playbook@4.0.0` link-target
+  provenance selects the six-port `composed-v2` profile: the release ships
+  `runtime.ts`, the shared engine, and all four phase definitions
+  byte-identical to 3.1.0's, so the three reviewed meta-phase bundles are
+  retained and every pin regenerates with 4.0.0 provenance as one reviewed
+  set. The repository supplies the Claude and Codex SDKs as
+  `devDependencies` for the opt-in live acceptance; the published package
+  declares none. The demo now names its lineup's SDKs as its own
+  dependencies — a project-local tree has no other way to place them where
+  its nested cligent resolves — and couples to `@sublang/slc` `^0.3.0`
+  ([DR-020](specs/decisions/020-playbook-4-0-adoption.md),
+  [IR-020](specs/iterations/020-playbook-4-0-adoption.md)).
+
 ### Added
 
 - **In-run progress reporting.** A compile now reports each phase on
