@@ -241,13 +241,17 @@ function runtimeContractForPin(
   // modules (DR-017), so all three provenances select the composed profile.
   // 3.1.0 ships runtime.ts byte-identical to 2.0.0 and only adds the
   // additive DR-022 compat self-report on the shared engine, so it selects
-  // the same profile (DR-018). 1.3.0 and 3.0.0 were never installed or
-  // reviewed here and stay fail-closed.
+  // the same profile (DR-018). 4.0.0 keeps runtime.ts and the engine
+  // byte-identical to 3.1.0's — its major marks the SDK-topology break,
+  // with cligent owning runtime versions, not a contract change — so it
+  // selects the same profile (DR-020). 1.3.0 and 3.0.0 were never
+  // installed or reviewed here and stay fail-closed.
   if (
     provenance === '@sublang/playbook@0.10.0' ||
     provenance === '@sublang/playbook@1.0.0' ||
     provenance === '@sublang/playbook@2.0.0' ||
-    provenance === '@sublang/playbook@3.1.0'
+    provenance === '@sublang/playbook@3.1.0' ||
+    provenance === '@sublang/playbook@4.0.0'
   ) {
     return 'composed-v2';
   }
