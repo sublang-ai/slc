@@ -180,9 +180,12 @@ step finds `.git` and passes through. Copy the entry (`workflow.ts`)
 pair. With a global install (playbook 3.1+) that is all you need —
 `playbook run` links the engine beside the artifact on its first run
 there. If that project's `package.json` declares `@sublang/playbook`,
-install it there instead (`npm install --save-dev @sublang/playbook@3`):
+install it there instead (`npm install --save-dev @sublang/playbook@4`):
 a declared dependency is authoritative, so provisioning refuses rather
-than shadow a missing install. The demo itself uses a project-local
+than shadow a missing install. A project-local install also needs the
+agent SDKs its lineup uses, as this demo's own manifest declares them —
+playbook 4 supplies none, and a global SDK is invisible to a project's
+nested cligent. The demo itself uses a project-local
 install for exactly that reason — it sits inside the slc repository,
 whose manifest declares the engine.
 The agents commit into whatever directory you run the command in.

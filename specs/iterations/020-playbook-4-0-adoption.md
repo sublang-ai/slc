@@ -32,6 +32,10 @@ boundary.
        regenerate `slc.pins.json` with 4.0.0 provenance.
 3. [x] **Prepare 0.3.0.** Changelog entry for the adoption and the version
        bump.
+4. [x] **Supply the runtimes users need.** Name the agent SDKs in the
+       install instructions, the demo's project-local guidance, and the
+       acceptance consumer — playbook 4 supplies none — and cover the 4.0.0
+       provenance mapping with its fixture assertion.
 
 ## Acceptance criteria
 
@@ -41,8 +45,10 @@ boundary.
   installed 4.0.0, all three bundles pass their generated verification
   unchanged, and pin regeneration is byte-identical with exact
   `@sublang/playbook@4.0.0` link-target provenance.
-- A fixture pin carrying 4.0.0 provenance selects `composed-v2`; 1.3.0 and
-  3.0.0 still fail closed.
+- A fixture pin carrying 4.0.0 provenance selects `composed-v2`; 1.3.0,
+  3.0.0, and an unreviewed 4.1.0 still fail closed.
+- The documented installs and the acceptance consumer carry the agent SDKs
+  the run will drive, resolvable from the installed cligent.
 - The demo's contained install carries playbook 4.0.0 and its lineup's
   SDKs.
 
