@@ -4,7 +4,9 @@
   "type": "module",
   "description": "Consumer project for the slc demo: npm install here, then compile and run the workflow from this directory.",
   "dependencies": {
-    "@sublang/playbook": "^3.1.0",
-    "@sublang/slc": "^0.2.0"
+    "@anthropic-ai/claude-agent-sdk": "*",
+    "@openai/codex-sdk": "*",
+    "@sublang/playbook": "^4.0.0",
+    "@sublang/slc": "^0.3.0"
   }
 }
