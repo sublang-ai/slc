@@ -109,7 +109,7 @@ git checkout -- demo/
 
 （已安装的 `demo/node_modules` 可以保留。）
 
-真正投入使用时，在你自己项目的**根目录**下运行 `playbook run` 命令，指定 playbook 路径，换成你自己的任务——在那里脚本步骤会发现 `.git` 并跳过初始化。把入口（`workflow.zh.ts`）**连同**它的 `workflow.zh.playbook/` 目录一并复制过去，这两者不可分开。若采用全局安装（playbook 3.1 及以上），这样就够了——`playbook run` 首次在那里运行时会把引擎链接到制品旁边。若那个项目的 `package.json` 声明了 `@sublang/playbook`，则应在该项目内安装（`npm install --save-dev @sublang/playbook@3`）：已声明的依赖具有权威性，此时自动链接会拒绝执行，而不会掩盖缺失的安装。本演示正是因此采用项目内安装——它位于 slc 仓库之内，而该仓库的 manifest 声明了这个引擎。
+真正投入使用时，在你自己项目的**根目录**下运行 `playbook run` 命令，指定 playbook 路径，换成你自己的任务——在那里脚本步骤会发现 `.git` 并跳过初始化。把入口（`workflow.zh.ts`）**连同**它的 `workflow.zh.playbook/` 目录一并复制过去，这两者不可分开。若采用全局安装（playbook 3.1 及以上），引擎本身无需再做什么——`playbook run` 首次在那里运行时会把引擎链接到制品旁边——但 playbook 4 不再附带任何智能体 SDK，因此你所用阵容的 SDK 必须与该全局安装并存。若那个项目的 `package.json` 声明了 `@sublang/playbook`，则应在该项目内安装（`npm install --save-dev @sublang/playbook@4`），并连同这些 SDK 一起安装，正如本演示自身的 manifest 所声明：已声明的依赖具有权威性，此时自动链接会拒绝执行，而不会掩盖缺失的安装；而全局安装的 SDK 对项目内嵌套的 cligent 不可见。本演示正是因此采用项目内安装——它位于 slc 仓库之内，而该仓库的 manifest 声明了这个引擎。
 两个 agent 的提交会落在你运行命令的那个目录所在的仓库里。
 
 ## 这个演示说明了什么

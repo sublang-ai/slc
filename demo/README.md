@@ -177,17 +177,18 @@ To use it for real, run `playbook run` from your own project's **root**
 with the path to the playbook and your own task — there the scripted
 step finds `.git` and passes through. Copy the entry (`workflow.ts`)
 **together with** its `workflow.playbook/` directory; the two move as a
-pair. With a global install (playbook 3.1+) that is all you need —
-`playbook run` links the engine beside the artifact on its first run
-there. If that project's `package.json` declares `@sublang/playbook`,
-install it there instead (`npm install --save-dev @sublang/playbook@4`):
-a declared dependency is authoritative, so provisioning refuses rather
-than shadow a missing install. A project-local install also needs the
-agent SDKs its lineup uses, as this demo's own manifest declares them —
-playbook 4 supplies none, and a global SDK is invisible to a project's
-nested cligent. The demo itself uses a project-local
-install for exactly that reason — it sits inside the slc repository,
-whose manifest declares the engine.
+pair. With a global install (playbook 3.1+) the engine needs nothing
+more — `playbook run` links it beside the artifact on its first run
+there — but playbook 4 ships no agent SDK, so the SDKs your lineup
+uses must sit alongside that global install. If that project's
+`package.json` declares `@sublang/playbook`, install it there instead
+(`npm install --save-dev @sublang/playbook@4`) together with those
+SDKs, as this demo's own manifest declares them: a declared dependency
+is authoritative, so provisioning refuses rather than shadow a missing
+install, and a global SDK is invisible to a project's nested cligent.
+The demo itself uses a project-local install for exactly that reason —
+it sits inside the slc repository, whose manifest declares the
+engine.
 The agents commit into whatever directory you run the command in.
 
 ## What this demo shows
