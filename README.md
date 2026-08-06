@@ -56,16 +56,20 @@ slc --version
 The second line supplies the agent SDKs for the default Claude and Codex
 lineup. Playbook 4 installs none itself — which versions work is
 `@sublang/cligent`'s to enforce at load — so name the SDKs your own
-configuration needs; if one is missing or too old, the compile stops
-before any agent call and prints the exact install command for it.
+configuration needs. If one is missing, the compile stops before any
+agent call and names the package to install; if one is too old, it
+names the installed and required versions along with the exact version
+to install.
 
 Compiled artifacts import the Playbook engine from their own directory;
 when that import does not resolve, `playbook run` (3.1+) links its own
 engine beside the artifact and says so (`--no-provision` opts out).
-Working inside an npm project instead? Install both packages there and
-prefix the commands with `npx` — a project's own install is always
-authoritative ([RELEASE-11](specs/dev/release.md#release-11) has the
-full rules).
+Working inside an npm project instead? Install the same set there — the
+compiler, the engine, and the SDKs your lineup uses — and prefix the
+commands with `npx`. A project's own install is always authoritative,
+and a globally installed SDK is invisible to a project's nested
+`@sublang/cligent`, so the SDKs belong in the same tree
+([RELEASE-11](specs/dev/release.md#release-11) has the full rules).
 
 Requirements:
 
