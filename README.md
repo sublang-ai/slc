@@ -49,8 +49,15 @@ compile stage — without waiting on a compile.
 
 ```bash
 npm install -g @sublang/slc @sublang/playbook
+npm install -g @anthropic-ai/claude-agent-sdk @openai/codex-sdk
 slc --version
 ```
+
+The second line supplies the agent SDKs for the default Claude and Codex
+lineup. Playbook 4 installs none itself — which versions work is
+`@sublang/cligent`'s to enforce at load — so name the SDKs your own
+configuration needs; if one is missing or too old, the compile stops
+before any agent call and prints the exact install command for it.
 
 Compiled artifacts import the Playbook engine from their own directory;
 when that import does not resolve, `playbook run` (3.1+) links its own
