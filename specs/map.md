@@ -44,6 +44,7 @@ meta.md     The spec of specs
 | DR-018 | [018-playbook-3-1-adoption.md](decisions/018-playbook-3-1-adoption.md) | Playbook 3.1 adoption: 3.1.0 provenance to `composed-v2`, link.md judge-envelope and compat-stamping re-sync, full bundle rebuild, coupled demo manifest, and the global-first consumption model |
 | DR-019 | [019-compile-progress-stall-watchdog.md](decisions/019-compile-progress-stall-watchdog.md) | In-run progress on stderr: per-phase lines with elapsed times, live compiled-status streaming, a 30 s silence-bounded heartbeat, a configurable agent-inactivity watchdog, and measured time estimates |
 | DR-020 | [020-playbook-4-0-adoption.md](decisions/020-playbook-4-0-adoption.md) | Playbook 4.0 adoption: 4.0.0 provenance to `composed-v2` on a byte-identical runtime, retained bundles with regenerated pins, cligent 0.18 as runtime-version authority, SDKs as devDependencies and demo-named vendors |
+| DR-021 | [021-incremental-build-records-scoped-updates.md](decisions/021-incremental-build-records-scoped-updates.md) | Source-bound build records outside self-host bundles, exact phase reuse, definition-owned scoped updates with protected-region enforcement, and explicit rebuilds |
 
 ## Iterations
 
@@ -83,9 +84,9 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [cli.md](user/cli.md) | Executable surface: version/help, success and failure reporting, in-run progress and heartbeat, stall watchdog, cancellation, config file |
+| user | [cli.md](user/cli.md) | Executable surface: version/help, written and up-to-date success reporting, failure reporting, in-run progress and heartbeat, stall watchdog, cancellation, config file |
 | dev | [cli.md](dev/cli.md) | Bin wiring: resolver, agent/config-file selection, executor injection, progress reporter, stall-timeout resolution, process control |
-| test | [cli.md](test/cli.md) | Integration: version/help, reporting, progress lines, stall watchdog, exit codes, cancellation, config file/env, pinned compiled execution |
+| test | [cli.md](test/cli.md) | Integration: version/help, written/up-to-date/failure reporting, progress lines, stall watchdog, exit codes, cancellation, config file/env, pinned compiled execution |
 
 ### COMPILE
 
@@ -99,6 +100,14 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | dev | [git.md](dev/git.md) | Commit message format and AI co-authorship trailers |
 
+### INCR
+
+| Group | File | Summary |
+| --- | --- | --- |
+| user | [incremental-compilation.md](user/incremental-compilation.md) | User-visible build lineage, exact no-op reuse, scoped updates, conflicts, and explicit rebuilds |
+| dev | [incremental-compilation.md](dev/incremental-compilation.md) | Build-record currentness and self-host exclusion, incremental planning, definition-owned update contracts, protected scopes, and lineage mechanics |
+| test | [incremental-compilation.md](test/incremental-compilation.md) | Integration acceptance for build records, reuse, self-host pin stability, scoped updates, conflicts, and rebuilds |
+
 ### LIC
 
 | Group | File | Summary |
@@ -110,8 +119,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade, six-port Cligent adapter, provenance-driven selection, live status streaming, and the agent-stall watchdog |
-| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked protocol, compiled runtime profiles including direct Captain, pin-selection, streamed-status, and stall-watchdog acceptance |
+| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade, six-port Cligent adapter, protected update metadata, provenance-driven selection, live status streaming, and the agent-stall watchdog |
+| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked protocol, compiled runtime profiles including direct Captain, protected update metadata, pin-selection, streamed-status, and stall-watchdog acceptance |
 
 ### PIN
 
@@ -124,7 +133,7 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link, pass phases, and the generic normalization step |
+| dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI and rebuild parsing, link, pass phases, and the generic normalization step |
 | test | [pipeline.md](test/pipeline.md) | End-to-end pipeline run, chain, naming, path, link, pass-scheduling, and normalization acceptance |
 
 ### RELEASE

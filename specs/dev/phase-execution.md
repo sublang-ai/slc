@@ -147,6 +147,12 @@ Where a `composed-v2` compiled phase makes a transformation-performing direct Ca
 
 Where a positive stall timeout is configured, while an agent call is in flight on either transport — the single interpreted phase invocation or a compiled player, Captain, or judge call — when the Cligent transport observes no agent event for the stall timeout, the slc command shall abort exactly that call through its abort plumbing and report it as a failed call with a diagnostic carrying the inactivity duration, unless the aborted call still yields a successful terminal outcome within the transport's post-abort drain, in which case that outcome stands so a completed phase is never reported as a hang; a reported failure shall surface through the unchanged phase protocols: a failure report naming the phase and target, no retry of the aborted call, no second interpreted invocation, and fail-closed handling — never an interpreted fallback — for a pinned phase ([DR-019](../decisions/019-compile-progress-stall-watchdog.md#inactivity-watchdog-not-a-per-phase-deadline), [PHEXEC-9](#phexec-9), [PHEXEC-12](#phexec-12), [PHEXEC-23](#phexec-23), [PHEXEC-27](#phexec-27)).
 
+## Update metadata
+
+### PHEXEC-39
+
+Where a phase definition declares a scoped-update contract, when the shared host executor returns its phase result, the executor shall optionally carry one schema-exact JSON `sublang.slc.update.v1` metadata value beside status and diagnostics; interpreted execution shall return that value directly from its agent outcome, and the compiled host adapter shall accept it only by diverting the same reserved topic from Playbook's existing `emitTelemetry` port into a dedicated protected SLC-update metadata sink, after mapping the unchanged exact Playbook turn result and excluding the payload from `playbook.trace`, status, and diagnostics, while an unsupported runtime or absent value shall preserve ordinary success with no update trace ([DR-021](../decisions/021-incremental-build-records-scoped-updates.md#trace-contract), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-010](../decisions/010-playbook-runtime-contract-evolution.md#port-policy-and-diagnostic-privacy)).
+
 ## References
 
 [1]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"
