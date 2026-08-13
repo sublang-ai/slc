@@ -16,7 +16,7 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 
 ### COMPILE-1
 
-When the user runs a pipeline on a source, the slc command shall transform the source through the pipeline's ordered phases and produce the pipeline output, leaving each non-final phase's result as an inspectable intermediate in the invocation working directory's artifact directory, so compiling from another directory never rewrites artifacts committed beside the source ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+When the user runs a pipeline on a source, the slc command shall produce the pipeline output through the ordered phase semantics — executing a phase or exactly reusing its recorded result under [DR-021](../decisions/021-incremental-build-records-scoped-updates.md) — and leave each non-final phase's result as an inspectable intermediate in the invocation working directory's artifact directory, so compiling from another directory never rewrites artifacts committed beside the source ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### COMPILE-2
 
@@ -32,16 +32,16 @@ When a run cannot complete — because the invocation or pipeline is rejected, o
 
 ### COMPILE-5
 
-The slc command shall carry out each phase with a coding agent that follows the phase's definition, so the user supplies only the source and the phase definitions and writes no transformation code ([DR-004](../decisions/004-slc-interpreted-phase-execution.md)).
+When a phase requires semantic execution rather than exact recorded reuse, the slc command shall carry it out with a coding agent that follows the phase's definition, so the user supplies only the source and the phase definitions and writes no transformation code ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts)).
 
 ### COMPILE-6
 
-Where a pipeline pins a phase to a reviewed compiled artifact, when the user runs the pipeline, the slc command shall run that artifact for a current pin and shall stop the run with a diagnostic — rather than silently interpreting the phase — when the pin is stale or malformed or the pin file is unreadable ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md)).
+Where a pipeline pins a phase to a reviewed compiled artifact, when the user runs the pipeline, the slc command shall validate and select that artifact before either executing or reusing the phase, shall run it when execution is required, and shall stop the run with a diagnostic — rather than reuse output or silently interpret the phase — when the pin is stale or malformed or the pin file is unreadable ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts)).
 
 ### COMPILE-7
 
-When the user runs a full pipeline with `--normalize` or on a raw source whose extension is not the entry phase's, the slc command shall first rewrite the raw source into a document satisfying the entry phase's stated source requirements — preserving the input's meaning, order, and language, surfacing only implicit structure and implicit executability preconditions — and compile from that normalized source, leaving the user's raw input unchanged ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+When the user runs a full pipeline with `--normalize` or on a raw source whose extension is not the entry phase's, the slc command shall make a normalized document satisfying the entry phase's stated source requirements available to the chain — preserving the input's meaning, order, and language, surfacing only implicit structure and implicit executability preconditions, reusing an exact current normalized artifact when eligible and otherwise rewriting it — and shall leave the user's raw input unchanged ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts)).
 
 ### COMPILE-8
 
-When the user runs a full pipeline, the slc command shall run the pipeline's optimization pass phases between the ordinary phases by default — producing the same canonical artifact names as an unoptimized run plus the inspectable pre-pass intermediates — and shall run the chain without passes when the user gives `--no-optimize` ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+When the user runs a full pipeline, the slc command shall schedule the pipeline's optimization pass phases between the ordinary phases by default — executing or exactly reusing each scheduled step under the build-lineage rules, producing the same canonical artifact names as an unoptimized run plus the inspectable pre-pass intermediates — and shall schedule no pass when the user gives `--no-optimize` ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts)).

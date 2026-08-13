@@ -68,7 +68,7 @@ While `runSlc` is in progress, when the process receives an interrupt, the slc e
 
 ### CLI-11
 
-When `runSlc` returns its result, the slc executable shall, on success, write the produced artifact paths to standard output and return a zero exit code, and otherwise write the failure diagnostics to standard error and return a non-zero exit code ([DR-003](../decisions/003-slc-phase-execution.md#blocked-protocol)).
+Where `runSlc` returns produced paths, an already-current status, or failure diagnostics, when the slc executable reports the result, the slc executable shall respectively write the paths to standard output and return zero, write the up-to-date report to standard output and return zero, or write the diagnostics to standard error and return non-zero ([DR-003](../decisions/003-slc-phase-execution.md#blocked-protocol), [INCR-2](../user/incremental-compilation.md#incr-2)).
 
 ## References
 

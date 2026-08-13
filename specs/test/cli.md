@@ -27,7 +27,7 @@ Where no agent is configured, when the slc executable is run with `--version` or
 ### CLI-14
 Verifies: [CLI-2](../user/cli.md#cli-2), [CLI-9](../dev/cli.md#cli-9)
 
-Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero without resolving a pipeline or selecting an agent.
+Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, the full and full-link forms' `--rebuild` option, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero without resolving a pipeline or selecting an agent.
 
 ## Reporting
 
@@ -46,12 +46,17 @@ Where a run is rejected, a phase fails, or a phase reports `BLOCKED`, when the s
 ### CLI-36
 Verifies: [CLI-32](../user/cli.md#cli-32), [CLI-35](../dev/cli.md#cli-35), [CLI-3](../user/cli.md#cli-3)
 
-Where the run succeeds over faked dependencies, when the slc executable runs a full pipeline, the slc executable shall write each phase's start line and its finish line carrying the elapsed time to standard error in execution order, and shall keep standard output limited to the written artifact paths.
+Where the run succeeds over faked dependencies and no build record exists, when the slc executable runs a full pipeline, the slc executable shall write each executed phase's start line and its finish line carrying the elapsed time to standard error in execution order, and shall keep standard output limited to the written artifact paths.
 
 ### CLI-37
 Verifies: [CLI-34](../user/cli.md#cli-34), [CLI-35](../dev/cli.md#cli-35), [PHEXEC-36](../dev/phase-execution.md#phexec-36)
 
 Where a faked agent transport stalls after its first event and a short stall timeout is configured, when the slc executable runs a phase, the slc executable shall abort the call once the timeout elapses, print a failure report naming the phase, its target, and the inactivity duration to standard error, write nothing to standard output, and exit non-zero.
+
+### CLI-38
+Verifies: [CLI-3](../user/cli.md#cli-3), [CLI-11](../dev/cli.md#cli-11), [INCR-2](../user/incremental-compilation.md#incr-2)
+
+Where `runSlc` returns an already-current incremental success with no written paths, when the slc executable reports it, the slc executable shall print the up-to-date report to standard output, print no phase progress line, and exit zero.
 
 ## Process control
 
@@ -70,17 +75,17 @@ Where neither `SLC_AGENT` nor a config file supplies an agent, or the resolved a
 ### CLI-19
 Verifies: [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7), [CLI-8](../dev/cli.md#cli-8)
 
-Where `SLC_PIPELINE_PATH` locates the pipeline directory and `SLC_AGENT` with an optional `SLC_MODEL` are configured, when the slc executable runs a source, the slc executable shall resolve the reference to that directory and interpret every unpinned phase through the configured agent CLI with that model.
+Where `SLC_PIPELINE_PATH` locates the pipeline directory, `SLC_AGENT` with an optional `SLC_MODEL` are configured, and no build record exists, when the slc executable runs a source, the slc executable shall resolve the reference to that directory and interpret every unpinned phase through the configured agent CLI with that model.
 
 ### CLI-23
 Verifies: [CLI-22](../user/cli.md#cli-22), [CLI-7](../dev/cli.md#cli-7), [CLI-6](../dev/cli.md#cli-6)
 
-Where a config file supplies the agent, model, and pipeline search path and no `SLC_*` variables are set, when the slc executable runs a source, the slc executable shall resolve the reference through the file's search path and interpret every unpinned phase through the file's agent CLI with the file's model, writing the artifact and exiting zero.
+Where a config file supplies the agent, model, and pipeline search path, no `SLC_*` variables are set, and no build record exists, when the slc executable runs a source, the slc executable shall resolve the reference through the file's search path and interpret every unpinned phase through the file's agent CLI with the file's model, writing the artifact and exiting zero.
 
 ### CLI-24
 Verifies: [CLI-7](../dev/cli.md#cli-7), [CLI-6](../dev/cli.md#cli-6), [CLI-20](../dev/cli.md#cli-20)
 
-Where both a config file and a non-blank `SLC_AGENT`, `SLC_MODEL`, or `SLC_PIPELINE_PATH` supply the corresponding key — agent, model, or pipeline search path — when the slc executable runs a source, the slc executable shall use the environment value over the file value for that key, resolving the reference through `SLC_PIPELINE_PATH` rather than the file's `pipelinePath` and interpreting every unpinned phase through the environment's agent CLI and model rather than the file's.
+Where both a config file and a non-blank `SLC_AGENT`, `SLC_MODEL`, or `SLC_PIPELINE_PATH` supply the corresponding key — agent, model, or pipeline search path — and no build record exists, when the slc executable runs a source, the slc executable shall use the environment value over the file value for that key, resolving the reference through `SLC_PIPELINE_PATH` rather than the file's `pipelinePath` and interpreting every unpinned phase through the environment's agent CLI and model rather than the file's.
 
 ### CLI-25
 Verifies: [CLI-20](../dev/cli.md#cli-20), [CLI-22](../user/cli.md#cli-22)
