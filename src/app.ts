@@ -145,10 +145,7 @@ export async function buildSlcDeps(
         ? undefined
         : (line: string) => progress({ kind: 'status', text: line }),
   });
-  const buildIdentity = createBuildIdentityProvider({
-    selection,
-    stallTimeoutMs,
-  });
+  const buildIdentity = createBuildIdentityProvider({ selection });
   return {
     resolver,
     executor,

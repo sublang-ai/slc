@@ -211,7 +211,7 @@ describe('canonical build planning (INCR-7, INCR-10)', () => {
       ],
       products: [
         {
-          id: 'entry:workflow',
+          id: 'entry',
           kind: 'entry',
           path: join(workDir, 'workflow.ts'),
           inputs: ['generator:entry'],

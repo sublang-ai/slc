@@ -578,6 +578,14 @@ describe('existing lineage classification (INCR-6, INCR-9, INCR-11)', () => {
         state: 'incompatible',
         recovery: ['rebuild'],
       });
+
+      // Source drift beside the topology drift must not soften the verdict
+      // to a conflict state (INCR-9).
+      await writeFile(sourcePath, 'changed source\n');
+      expect(await expectReadOnly(() => classify())).toMatchObject({
+        state: 'incompatible',
+        recovery: ['rebuild'],
+      });
     },
   );
 

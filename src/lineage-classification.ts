@@ -261,6 +261,10 @@ export async function classifyLineage(
     return incompatible(...issues);
   }
   if (hasOutputConflict) {
+    // Topology drift beside managed-output drift is incompatible regardless
+    // of source state (INCR-9): source drift must not soften the verdict to
+    // a conflict that appears to survive a source fix.
+    if (!topologyCompatible) return incompatible(...issues);
     if (!sourceExact) {
       return {
         state: 'automatic-conflict',
@@ -269,7 +273,6 @@ export async function classifyLineage(
         recovery: ['rebuild'],
       };
     }
-    if (!topologyCompatible) return incompatible(...issues);
     return {
       state: 'adoption-eligible-conflict',
       issues,
@@ -281,6 +284,9 @@ export async function classifyLineage(
   const hasPlanOrInputDrift =
     !planExact || !inventoryExact || inputDrift.ids.length > 0;
   if (adopted && (!sourceExact || hasPlanOrInputDrift)) {
+    // Adopted topology drift is likewise incompatible before any source
+    // consideration (INCR-9).
+    if (!topologyCompatible) return incompatible(...issues);
     if (!sourceExact) {
       return {
         state: 'automatic-conflict',
@@ -289,7 +295,6 @@ export async function classifyLineage(
         recovery: ['rebuild'],
       };
     }
-    if (!topologyCompatible) return incompatible(...issues);
     return {
       state: 'adoption-eligible-conflict',
       issues,
@@ -1008,7 +1013,7 @@ function missingRequiredBuiltInProduct(
     hasCanonicalLinkedPlaybook(record, artifactBase)
   ) {
     expected.push({
-      id: `entry:${artifactBase}`,
+      id: 'entry',
       kind: 'entry',
       path: `../${artifactBase}.ts`,
       inputs: ['checker:load-integrity', 'generator:entry'],
@@ -1110,10 +1115,7 @@ function isKnownDeterministicProduct(
       'generator:entry',
     ])
   ) {
-    return (
-      product.id === `entry:${artifactBase}` &&
-      product.path === `../${artifactBase}.ts`
-    );
+    return product.id === 'entry' && product.path === `../${artifactBase}.ts`;
   }
   if (
     product.kind !== 'verification' ||

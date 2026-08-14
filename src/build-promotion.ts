@@ -16,8 +16,9 @@
  */
 
 import {
-  copyFile,
+  lstat,
   mkdir,
+  open,
   readdir,
   readFile,
   rename,
@@ -25,14 +26,14 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 
 import type {
   OverlayManifest,
   OverlayObservation,
   SealedOverlay,
 } from './build-overlay.js';
-import { type Hash, hashFile, isHash } from './hash.js';
+import { type Hash, hashBytes, hashFile, isHash } from './hash.js';
 
 const MANIFEST_SCHEMA = 'sublang.slc.stage.v1' as const;
 const MANIFEST_FILE = 'manifest.json';
@@ -167,12 +168,15 @@ export async function recoverLineagePromotion(
   let result: PromotionRecoveryResult = 'nothing-pending';
   for (const stageRoot of await pendingStages(artifactDir)) {
     const manifest = await readManifest(stageRoot);
-    if (manifest === undefined || manifest.artifactDir !== artifactDir) {
-      // Pre-promotion residue (or another bundle's stage name collision):
+    if (manifest !== undefined && manifest.artifactDir !== artifactDir) {
+      // Another bundle's stage name collision: not this recovery's to touch.
+      continue;
+    }
+    if (manifest === undefined || !manifestConfined(manifest, stageRoot)) {
+      // Pre-promotion residue, or a manifest promoteLineage cannot have
+      // written (every path it writes is confined to the stage and bundle):
       // no canonical mutation can have happened through it.
-      if (manifest === undefined) {
-        await rm(stageRoot, { recursive: true, force: true });
-      }
+      await rm(stageRoot, { recursive: true, force: true });
       continue;
     }
     if (await finishForward(stageRoot, manifest, checkpoint)) {
@@ -212,6 +216,17 @@ async function finishForward(
       return false;
     }
     if (state === 'pending') removals.push(entry);
+  }
+
+  // The stage counts as intact only while every still-pending candidate
+  // hashes to its sealed identity; a truncated or altered staged file voids
+  // the stage instead of being committed under a record that cannot
+  // describe it (INCR-8's "intact sealed stage").
+  for (const entry of pending) {
+    if (!(await stagedCandidateIntact(entry))) {
+      await rm(stageRoot, { recursive: true, force: true });
+      return false;
+    }
   }
 
   for (const entry of pending.filter((e) => e !== record && e !== snapshot)) {
@@ -282,12 +297,101 @@ function splitReplaces(entries: readonly ManifestReplace[]): {
   return { body, snapshot, record };
 }
 
+let tempSequence = 0;
+
+/**
+ * Reads one staged candidate and proves it still carries the sealed
+ * identity. The bytes read here are the bytes installed, so a staged file
+ * altered after sealing can never reach a canonical path.
+ */
+async function readStagedCandidate(
+  entry: ManifestReplace,
+): Promise<Uint8Array> {
+  let info;
+  try {
+    info = await lstat(entry.stagedPath);
+  } catch {
+    throw new BuildPromotionError(
+      'interference',
+      `staged candidate is unreadable: ${entry.stagedPath}`,
+    );
+  }
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw new BuildPromotionError(
+      'interference',
+      `staged candidate is not a regular file: ${entry.stagedPath}`,
+    );
+  }
+  const bytes = await readFile(entry.stagedPath);
+  if (hashBytes(bytes) !== entry.candidateIdentity) {
+    throw new BuildPromotionError(
+      'interference',
+      `staged candidate does not match the sealed identity: ${entry.stagedPath}`,
+    );
+  }
+  return bytes;
+}
+
+async function stagedCandidateIntact(entry: ManifestReplace): Promise<boolean> {
+  try {
+    await readStagedCandidate(entry);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function applyReplace(entry: ManifestReplace): Promise<void> {
+  const bytes = await readStagedCandidate(entry);
   const dir = dirname(entry.canonicalPath);
   await mkdir(dir, { recursive: true });
-  const temp = join(dir, `.${basename(entry.canonicalPath)}.slc-tmp`);
-  await copyFile(entry.stagedPath, temp);
-  await rename(temp, entry.canonicalPath);
+  // A unique exclusive temp name cannot collide with an unrecorded file or
+  // follow a planted symlink; the durable rename is the only touch on the
+  // canonical path.
+  const temp = join(
+    dir,
+    `.${basename(entry.canonicalPath)}.${process.pid}-${tempSequence++}.slc-tmp`,
+  );
+  try {
+    const handle = await open(temp, 'wx');
+    try {
+      await handle.writeFile(bytes);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temp, entry.canonicalPath);
+  } catch (error) {
+    await rm(temp, { force: true });
+    throw error;
+  }
+}
+
+/** True when `child` sits strictly inside `parent`. */
+function confined(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+}
+
+/**
+ * A manifest promoteLineage wrote stages only inside its own root and
+ * targets only the bundle (plus the one entry module beside it). Anything
+ * else cannot be this transaction's work and grants no replacement
+ * authority.
+ */
+function manifestConfined(manifest: StageManifest, stageRoot: string): boolean {
+  const artifactDir = manifest.artifactDir;
+  const parent = dirname(artifactDir);
+  return (
+    manifest.replace.every(
+      (entry) =>
+        confined(stageRoot, entry.stagedPath) &&
+        (entry.role === 'entry'
+          ? dirname(entry.canonicalPath) === parent
+          : confined(artifactDir, entry.canonicalPath)),
+    ) &&
+    manifest.remove.every((entry) => confined(artifactDir, entry.canonicalPath))
+  );
 }
 
 async function applyRemove(entry: ManifestRemove): Promise<void> {

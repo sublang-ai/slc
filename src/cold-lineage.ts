@@ -48,7 +48,11 @@ import {
   type OverlayManifest,
   type OverlayRole,
 } from './build-overlay.js';
-import { promoteLineage, recoverLineagePromotion } from './build-promotion.js';
+import {
+  promoteLineage,
+  recoverLineagePromotion,
+  type PromotionCheckpointHandler,
+} from './build-promotion.js';
 import {
   bindDeterministicDerivatives,
   describeDeterministicDerivatives,
@@ -91,6 +95,8 @@ export interface ColdLineageHost {
   cwd: string;
   signal?: AbortSignal;
   progress?: ProgressSink;
+  /** Test seam: observes promotion checkpoints in order. */
+  promotionCheckpoint?: PromotionCheckpointHandler;
 }
 
 /** A canonical lineage run returns only public outputs after promotion. */
@@ -199,23 +205,31 @@ export async function runColdLineage(
       hashBytes(encodedRecord),
     );
 
-    promotionStarted = true;
-    try {
-      await promoteLineage({ overlay: sealed });
-    } catch (error) {
-      await recoverLineagePromotion({
-        artifactDir: topology.artifactDir,
-        pipeline: topology.pipelineName,
-      });
-      await sealed.discard().catch(() => undefined);
-      throw error;
-    }
-
-    return {
+    const completed: ColdLineageResult = {
       ok: true,
       outputs: [...execution.outputs, ...deterministic.outputs],
       diagnostics: [...execution.diagnostics, ...deterministic.diagnostics],
     };
+    promotionStarted = true;
+    try {
+      await promoteLineage({
+        overlay: sealed,
+        checkpoint: host.promotionCheckpoint,
+      });
+    } catch (error) {
+      const recovered = await recoverLineagePromotion({
+        artifactDir: topology.artifactDir,
+        pipeline: topology.pipelineName,
+      });
+      await sealed.discard().catch(() => undefined);
+      // Recovery finishing the candidate forward means the record, snapshot,
+      // and every product are accepted on disk; the interrupted promotion is
+      // an implementation detail, not a failed build.
+      if (recovered === 'candidate-completed') return completed;
+      throw error;
+    }
+
+    return completed;
   } finally {
     if (overlay !== undefined && !promotionStarted) {
       await overlay.discard();
@@ -353,7 +367,11 @@ async function executeColdSteps(
 ): Promise<ColdLineageResult> {
   const outputs: string[] = [];
   const diagnostics: string[] = [];
-  const physical = semanticPhysicalMap(plan, overlay);
+  // Staged bindings cover executed predecessors only (INCR-8), so a source
+  // that shares a step's canonical target path — a --normalize re-run over
+  // the already-normalized intermediate — keeps its original binding for
+  // the step that reads it.
+  const physical = new Map<string, string>();
   const definitions = chainDefinitions(plan.topology);
   const selections = new Map(
     plan.selections.map((selection) => [selection.stepId, selection]),
@@ -362,6 +380,13 @@ async function executeColdSteps(
   for (const step of plan.topology.steps) {
     await overlay.assertBasisCurrent();
     const target = targetOf(step);
+    const planned = plan.products.find(
+      (product) => product.id === step.product,
+    );
+    if (planned === undefined) {
+      throw new Error(`canonical step ${step.id} has no planned product`);
+    }
+    const stagedTarget = overlay.stagePath(planned.path);
     const startedAt = Date.now();
     host.progress?.({ kind: 'phase-start', phase: step.name, target });
     const failProgress = (): void =>
@@ -402,7 +427,7 @@ async function executeColdSteps(
         runRoot: host.cwd,
         semanticInputs,
         physicalReads,
-        physicalWrite: physical.get(resolve(target)) as string,
+        physicalWrite: stagedTarget,
       },
       signal: host.signal,
     });
@@ -422,6 +447,7 @@ async function executeColdSteps(
       elapsedMs: Date.now() - startedAt,
     });
     outputs.push(target);
+    physical.set(resolve(target), stagedTarget);
   }
   return { ok: true, outputs, diagnostics };
 }
@@ -647,7 +673,13 @@ async function emittedInventory(
       indexed.set(runtime, physical);
     }
   };
-  add(plan.topology.sourcePath, plan.topology.sourcePath);
+  // A source living at a step's canonical target path (a --normalize re-run
+  // over the already-normalized intermediate) is represented after execution
+  // by its staged candidate, exactly like the product it aliases.
+  add(
+    plan.topology.sourcePath,
+    semantic.get(resolve(plan.topology.sourcePath)) ?? plan.topology.sourcePath,
+  );
   const externalPaths = new Set<string>();
   for (const step of plan.topology.steps) {
     externalPaths.add(resolve(runRoot, step.request.definitionPath));

@@ -239,6 +239,80 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
     expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
   });
 
+  it('voids a stage whose staged bytes no longer match the sealed identity', async () => {
+    const overlay = await seal(standardSet());
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'manifest-published') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+    // The staged product is truncated between the crash and recovery.
+    await writeFile(join(stage, 'flow.gears.md'), '');
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    // Nothing was committed from the corrupt stage.
+    expect(await readFile(join(artDir, 'flow.gears.md'), 'utf8')).toBe('old');
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
+  });
+
+  it('refuses a manifest whose staged path escapes the stage root', async () => {
+    const outside = join(root, 'outside.md');
+    await writeFile(outside, 'attacker bytes');
+    await writeFile(join(artDir, 'flow.gears.md'), 'old');
+    const manifest = {
+      schema: 'sublang.slc.stage.v1',
+      artifactDir: artDir,
+      replace: [
+        {
+          role: 'semantic',
+          canonicalPath: join(artDir, 'flow.gears.md'),
+          stagedPath: outside,
+          prior: {
+            kind: 'file',
+            identity: hashBytes(new TextEncoder().encode('old')),
+          },
+          candidateIdentity: hashBytes(
+            new TextEncoder().encode('attacker bytes'),
+          ),
+        },
+        {
+          role: 'build-record',
+          canonicalPath: join(artDir, '.slc-build.json'),
+          stagedPath: join(stage, '.slc-build.json'),
+          prior: { kind: 'absent' },
+          candidateIdentity: hashBytes(new TextEncoder().encode('{}')),
+        },
+      ],
+      remove: [],
+    };
+    await writeFile(join(stage, 'manifest.json'), JSON.stringify(manifest));
+    await writeFile(join(stage, '.slc-build.json'), '{}');
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    expect(await readFile(join(artDir, 'flow.gears.md'), 'utf8')).toBe('old');
+  });
+
+  it('never disturbs an unrecorded file resembling a promotion temp name', async () => {
+    const bystander = join(artDir, '.flow.gears.md.slc-tmp');
+    await writeFile(bystander, 'mine');
+    await promoteLineage({ overlay: await seal(standardSet()) });
+    expect(await readFile(bystander, 'utf8')).toBe('mine');
+    expect(await readFile(join(artDir, 'flow.gears.md'), 'utf8')).toBe('new');
+  });
+
   it('rejects a sealed overlay without a build-record replacement', async () => {
     const overlay = await seal([
       { name: 'flow.gears.md', role: 'semantic', candidate: 'new' },
