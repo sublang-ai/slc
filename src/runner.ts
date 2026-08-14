@@ -156,7 +156,11 @@ async function runFull(
     invocation.output === null &&
     invocation.pipeline !== RESERVED_SLC_PIPELINE
   ) {
-    return runColdLineage(topology, { ...deps, cwd: runCwd(deps) });
+    return runColdLineage(
+      topology,
+      { ...deps, cwd: runCwd(deps) },
+      invocation.rebuild === true ? { rebuild: true } : {},
+    );
   }
   await mkdir(topology.artifactDir, { recursive: true });
   const result = await executeSteps(topology.steps, pipeline, deps);
@@ -282,7 +286,11 @@ async function runFullLink(
     invocation.output === null &&
     invocation.pipeline !== RESERVED_SLC_PIPELINE
   ) {
-    return runColdLineage(topology, { ...deps, cwd: runCwd(deps) });
+    return runColdLineage(
+      topology,
+      { ...deps, cwd: runCwd(deps) },
+      invocation.rebuild === true ? { rebuild: true } : {},
+    );
   }
   await mkdir(topology.artifactDir, { recursive: true });
   const result = await executeSteps(topology.steps, pipeline, deps);

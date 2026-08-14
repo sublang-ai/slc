@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-/** Cold canonical build orchestration for source-bound lineage (DR-021). */
+/** Canonical build orchestration for source-bound lineage (DR-021). */
 
 import { lstat, readdir, writeFile } from 'node:fs/promises';
 import {
@@ -31,15 +31,18 @@ import {
   SOURCE_SNAPSHOT_FILE,
   encodeBuildRecord,
   encodeReadLocator,
+  loadLineagePair,
   readRegularFileNoFollow,
   resolveReadLocator,
   stepInputKey,
   type BuildRecord,
+  type LoadedLineage,
   type ProductRecord,
   type StepRecord,
 } from './build-record.js';
 import {
   createCandidateOverlay,
+  type AcceptedOverlayMember,
   type CandidateOverlay,
   type CandidateOverlayMember,
   type OverlayManifest,
@@ -89,30 +92,43 @@ export interface ColdLineageHost {
   progress?: ProgressSink;
 }
 
-/** A cold build returns only canonical public outputs after promotion. */
+/** A canonical lineage run returns only public outputs after promotion. */
 export interface ColdLineageResult {
   ok: boolean;
   outputs: string[];
   diagnostics: string[];
 }
 
-/** Executes and atomically persists one absent-lineage canonical build. */
+/** Execution-control state excluded from the canonical plan identity. */
+export interface CanonicalLineageOptions {
+  rebuild?: true;
+}
+
+/** Executes or classifies one canonical source-bound lineage invocation. */
 export async function runColdLineage(
   topology: FullBuildTopology,
   host: ColdLineageHost,
+  options: CanonicalLineageOptions = {},
 ): Promise<ColdLineageResult> {
   await recoverLineagePromotion({
     artifactDir: topology.artifactDir,
     pipeline: topology.pipelineName,
   });
   const identified = await identifyCurrentPlan(topology, host);
-  const classification = await classifyLineage(identified);
-  if (classification.state !== 'cold') {
-    return {
-      ok: false,
-      outputs: [],
-      diagnostics: formatLineageClassification(classification),
-    };
+  let prior: LoadedLineage = { state: 'absent' };
+  let generation = 1;
+  if (options.rebuild === true) {
+    prior = await loadLineagePair(topology.artifactDir);
+    generation = nextRebuildGeneration(prior, topology);
+  } else {
+    const classification = await classifyLineage(identified);
+    if (classification.state !== 'cold') {
+      return {
+        ok: false,
+        outputs: [],
+        diagnostics: formatLineageClassification(classification),
+      };
+    }
   }
   const sourceBytes = await readSource(topology.sourcePath);
   const sourceHash = hashBytes(sourceBytes);
@@ -125,7 +141,7 @@ export async function runColdLineage(
     overlay = await createCandidateOverlay({
       artifactDir: topology.artifactDir,
       pipeline: topology.pipelineName,
-      accepted: [],
+      accepted: acceptedLineageMembers(prior),
       candidate,
       guards: [
         {
@@ -166,7 +182,12 @@ export async function runColdLineage(
       };
     }
 
-    const record = await buildColdRecord(identified, overlay, sourceHash);
+    const record = await buildColdRecord(
+      identified,
+      overlay,
+      sourceHash,
+      generation,
+    );
     const encodedRecord = encodeBuildRecord(record);
     await writeFile(overlay.stagePath(BUILD_RECORD_FILE), encodedRecord);
     const sealed = await overlay.seal();
@@ -264,6 +285,41 @@ function reconstructedInvocation(
     linkTarget: resolveReadLocator(topology.artifactDir, link.target),
     options: link.options.map((option) => ({ ...option })),
   };
+}
+
+function acceptedLineageMembers(
+  lineage: LoadedLineage,
+): AcceptedOverlayMember[] {
+  if (lineage.state === 'absent') return [];
+  return [
+    {
+      id: 'lineage:source-snapshot',
+      role: 'source-snapshot',
+      path: SOURCE_SNAPSHOT_FILE,
+      identity: hashBytes(lineage.snapshot),
+    },
+    {
+      id: 'lineage:build-record',
+      role: 'build-record',
+      path: BUILD_RECORD_FILE,
+      identity: hashBytes(encodeBuildRecord(lineage.record)),
+    },
+  ];
+}
+
+function nextRebuildGeneration(
+  lineage: LoadedLineage,
+  topology: FullBuildTopology,
+): number {
+  if (lineage.state === 'absent') return 1;
+  const locator = encodeReadLocator(topology.artifactDir, topology.sourcePath);
+  if (locator !== lineage.record.source.locator) return 1;
+  if (lineage.record.lineage.generation === Number.MAX_SAFE_INTEGER) {
+    throw new Error(
+      'build lineage generation cannot advance beyond Number.MAX_SAFE_INTEGER',
+    );
+  }
+  return lineage.record.lineage.generation + 1;
 }
 
 function candidateMembers(plan: CanonicalBuildPlan): CandidateOverlayMember[] {
@@ -677,6 +733,7 @@ async function buildColdRecord(
   plan: CanonicalBuildPlan,
   overlay: CandidateOverlay,
   sourceHash: Hash,
+  generation: number,
 ): Promise<BuildRecord> {
   const products: ProductRecord[] = await Promise.all(
     plan.products.map(async (product) => ({
@@ -746,7 +803,7 @@ async function buildColdRecord(
         ...value,
       })),
     },
-    lineage: { generation: 1, transition: null },
+    lineage: { generation, transition: null },
   };
 }
 
@@ -764,7 +821,7 @@ function assertManifestMatchesRecord(
     identities.set(retained.path, retained.identity);
   }
   if (manifest.remove.length !== 0) {
-    throw new Error('a cold lineage cannot remove managed products');
+    throw new Error('an ordinary lineage candidate cannot remove products');
   }
   const expectedPaths = new Set([
     ...record.products.map((product) => product.path),

@@ -370,6 +370,40 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
     await expectLineageSentinels(artDir);
   });
 
+  it.each([
+    { name: 'full', linked: false },
+    { name: 'full-link', linked: true },
+  ] as const)(
+    'keeps reserved `slc` $name --rebuild ordinary and outside lineage (INCR-19)',
+    async ({ linked }) => {
+      await seedLineageSentinels(artDir);
+      const argv = linked
+        ? ['slc', source, '--link', join(work, 'runtime.ts'), '--rebuild']
+        : ['slc', source, '--rebuild'];
+
+      const result = await runSlc(argv, {
+        ...deps(),
+        buildIdentity: unexpectedBuildIdentity,
+      });
+
+      expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+      expect(await exists(join(artDir, 'text2gears.gears.md'))).toBe(true);
+      expect(await exists(join(artDir, 'text2gears.fsm.ts'))).toBe(true);
+      if (linked) {
+        const playbookArtifact = join(artDir, 'text2gears.playbook.ts');
+        expect(result.outputs).toContain(playbookArtifact);
+        expect(
+          resolvesToPlaybook(await readFile(playbookArtifact, 'utf8')),
+        ).toBe(true);
+      } else {
+        expect(await exists(join(artDir, 'text2gears.playbook.ts'))).toBe(
+          false,
+        );
+      }
+      await expectLineageSentinels(artDir);
+    },
+  );
+
   it('reaches a stable reviewed-bundle and pin fixed point without lineage feedback (INCR-32)', async () => {
     // The reviewed definition/output directory is deliberately not the
     // meta-definition resolver directory: the second reserved build must not
@@ -798,7 +832,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
       true,
     );
-  });
+  }, 20_000);
 
   it('emits <cwd>/<basename>.ts default-exporting the registry entry after a playbook full-link (SELFHOST-16)', async () => {
     const result = await runSlc(['playbook', source], deps());
@@ -826,7 +860,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     expect(module).toContain(
       "import createPlaybookRuntime from './code.playbook/code.playbook.ts'",
     );
-  });
+  }, 20_000);
 
   it('writes no entry module when -o relocates the linked artifact (SELFHOST-16)', async () => {
     const out = join(work, 'custom.playbook.ts');

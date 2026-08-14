@@ -127,6 +127,7 @@ The following invariants make the object self-consistent and portable:
   `provenance.compatibility` is sorted by unique `name`; package versions and a `"provenance"` record have `input: null` and do not establish currentness, while a `"gate"` record's `input` names exactly one `"compatibility"` plan input whose `value` equals the record's value.
 - `lineage.generation` is a positive safe integer.
   A cold or source-rebound lineage starts at `1`; every later accepted state-changing ordinary, update, rebuild, or adoption run records the prior generation plus one; a write-free no-op preserves it.
+  A same-binding state-changing command whose prior generation is `Number.MAX_SAFE_INTEGER` refuses before executor work or promotion rather than wrapping or resetting the counter; explicit source rebinding still starts the replacement lineage at `1`.
   `lineage.transition` is non-null only when the most recent state-changing lineage action is explicit adoption and its prior and replacement `plan.identity` values differ; its `to` value equals the current `plan.identity`.
 - The build record is the promotion commit marker, and the sealed staged candidate is the only recovery state.
   Recovery finishes the complete candidate record and inventory forward from an intact sealed stage and removes the stage before currentness evaluation, never accepting mixed bytes; without an intact sealed stage, a record/byte mismatch is an ordinary conflict resolved by the explicit recovery choices.
