@@ -29,7 +29,14 @@ import {
 } from './build-record.js';
 import { VERIFICATION_TEST_FILES } from './deterministic-derivatives.js';
 import { errorCode, messageOf } from './errors.js';
-import { compareUtf8, hashBytes, type Hash } from './hash.js';
+import {
+  compareUtf8,
+  hashBytes,
+  hashTreeRecords,
+  serializeTreeRecord,
+  type Hash,
+  type TreeEntryRecord,
+} from './hash.js';
 import {
   VERIFIER_SUPPORT_DIR,
   VERIFIER_SUPPORT_FILES,
@@ -498,26 +505,16 @@ async function observeIdentityPath(path: string): Promise<Hash> {
   return observeTreeNoFollow(path);
 }
 
-interface ExactTreeRecord {
-  readonly path: string;
-  readonly serialized: string;
-}
-
 async function observeTreeNoFollow(root: string): Promise<Hash> {
-  const records: ExactTreeRecord[] = [];
+  const records: TreeEntryRecord[] = [];
   await collectTreeNoFollow(root, '', records);
-  records.sort((left, right) => compareUtf8(left.path, right.path));
-  return hashBytes(
-    new TextEncoder().encode(
-      records.map((record) => record.serialized).join('\n'),
-    ),
-  );
+  return hashTreeRecords(records);
 }
 
 async function collectTreeNoFollow(
   root: string,
   prefix: string,
-  records: ExactTreeRecord[],
+  records: TreeEntryRecord[],
 ): Promise<void> {
   const here = prefix ? join(root, ...prefix.split('/')) : root;
   const before = await lstat(here);
@@ -588,33 +585,6 @@ async function readDirectorySnapshot(
   });
   result.sort((left, right) => compareUtf8(left.name, right.name));
   return result;
-}
-
-function serializeTreeRecord(
-  kind: 'file',
-  path: string,
-  identity: string,
-): string {
-  return `[${canonicalJsonString(kind)},${canonicalJsonString(path)},${canonicalJsonString(identity)}]`;
-}
-
-function canonicalJsonString(value: string): string {
-  let serialized = '"';
-  for (const character of value) {
-    const codePoint = character.codePointAt(0);
-    if (codePoint === undefined) continue;
-    if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
-      throw new Error('tree entry contains an unpaired Unicode surrogate');
-    }
-    if (character === '"' || character === '\\') {
-      serialized += `\\${character}`;
-    } else if (codePoint <= 0x1f) {
-      serialized += `\\u${codePoint.toString(16).padStart(4, '0')}`;
-    } else {
-      serialized += character;
-    }
-  }
-  return `${serialized}"`;
 }
 
 async function observeProducts(

@@ -53,3 +53,55 @@ export function isHash(value: string): value is Hash {
 export function compareUtf8(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
 }
+
+/** One tree entry: its path, and its frozen serialized form. */
+export interface TreeEntryRecord {
+  readonly path: string;
+  readonly serialized: string;
+}
+
+function canonicalJsonString(value: string): string {
+  let serialized = '"';
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint === undefined) continue;
+    if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
+      throw new Error('tree entry contains an unpaired Unicode surrogate');
+    }
+    if (character === '"' || character === '\\') {
+      serialized += `\\${character}`;
+    } else if (codePoint <= 0x1f) {
+      serialized += `\\u${codePoint.toString(16).padStart(4, '0')}`;
+    } else {
+      serialized += character;
+    }
+  }
+  return `${serialized}"`;
+}
+
+/**
+ * Serializes one tree entry as `[kind,path,identity]` (DR-007, DR-021).
+ *
+ * Pin currency and build lineage hash trees through different walkers — one
+ * follows links, the other refuses them and re-checks stability — but both
+ * identities are this exact encoding, so it is written once.
+ */
+export function serializeTreeRecord(
+  kind: 'file' | 'symlink',
+  path: string,
+  identity: string,
+): string {
+  return `[${canonicalJsonString(kind)},${canonicalJsonString(path)},${canonicalJsonString(identity)}]`;
+}
+
+/** Hashes tree entries in UTF-8 path order, one LF between entries. */
+export function hashTreeRecords(records: readonly TreeEntryRecord[]): Hash {
+  return hashBytes(
+    new TextEncoder().encode(
+      [...records]
+        .sort((left, right) => compareUtf8(left.path, right.path))
+        .map((record) => record.serialized)
+        .join('\n'),
+    ),
+  );
+}
