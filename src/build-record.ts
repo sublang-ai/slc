@@ -25,6 +25,11 @@ export const UPDATE_TRACE_SCHEMA = 'sublang.slc.update.v1';
 const ID = /^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9._-]*)*$/;
 const EXTENSION = /^\.[A-Za-z0-9]+$/;
 
+/** Reports whether a string is a legal build-record ID. */
+export function isBuildRecordId(value: string): boolean {
+  return ID.test(value);
+}
+
 export type PlanInputKind =
   | 'definition'
   | 'executor'
@@ -61,6 +66,21 @@ export interface PlanRecord {
   inputs: PlanInput[];
   deterministicInputs: string[];
   steps: StepRecord[];
+}
+
+/** Result-independent step fields that enter `plan.identity` (DR-021). */
+export type PlanIdentityStep = Pick<
+  StepRecord,
+  'id' | 'kind' | 'name' | 'source' | 'target' | 'inputs' | 'inputClosure'
+>;
+
+/** The exact result-independent projection accepted by {@link planIdentity}. */
+export interface PlanIdentityProjection {
+  pipeline: string;
+  invocation: InvocationRecord;
+  inputs: PlanInput[];
+  deterministicInputs: string[];
+  steps: PlanIdentityStep[];
 }
 
 export interface InvocationRecord {
@@ -267,12 +287,7 @@ export function canonicalJson(value: unknown): string {
 }
 
 /** Compute the identity of DR-021's result-independent plan projection. */
-export function planIdentity(
-  plan: Pick<
-    PlanRecord,
-    'pipeline' | 'invocation' | 'inputs' | 'deterministicInputs' | 'steps'
-  >,
-): Hash {
+export function planIdentity(plan: PlanIdentityProjection): Hash {
   const invocation = {
     kind: plan.invocation.kind,
     normalize: plan.invocation.normalize,
