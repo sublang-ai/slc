@@ -22,6 +22,7 @@ import {
   phaseStep,
   planFullBuild,
 } from './build-plan.js';
+import { runColdLineage, type BuildIdentityProvider } from './cold-lineage.js';
 import { emitEntryModule } from './entry-module.js';
 import { unresolvableRelativeImports } from './emitted-imports.js';
 import {
@@ -41,7 +42,11 @@ import {
   loadPipeline,
   resolvePipeline,
 } from './pipeline.js';
-import { defaultPlaybookLinkTarget, isReservedPipeline } from './resolver.js';
+import {
+  defaultPlaybookLinkTarget,
+  isReservedPipeline,
+  RESERVED_SLC_PIPELINE,
+} from './resolver.js';
 import {
   emitFsmCoverageTest,
   emitFsmIntrospectionTest,
@@ -54,6 +59,7 @@ import {
 } from './verify-support.js';
 
 export type { CompiledSelection } from './build-plan.js';
+export type { BuildIdentityProvider } from './cold-lineage.js';
 
 /** Host-supplied capabilities for a run. */
 export interface SlcDeps {
@@ -67,6 +73,8 @@ export interface SlcDeps {
    * silently interpreting a phase the pipeline pinned to a compiled artifact.
    */
   compiled?: (selection: CompiledSelection) => PhaseExecutor;
+  /** Re-derives every exact host-owned input used by canonical lineage plans. */
+  buildIdentity: BuildIdentityProvider;
   /** Invocation working directory anchoring artifact placement (DR-014); defaults to the process cwd. */
   cwd?: string;
   signal?: AbortSignal;
@@ -144,6 +152,12 @@ async function runFull(
     pipeline,
     cwd: runCwd(deps),
   });
+  if (
+    invocation.output === null &&
+    invocation.pipeline !== RESERVED_SLC_PIPELINE
+  ) {
+    return runColdLineage(topology, { ...deps, cwd: runCwd(deps) });
+  }
   await mkdir(topology.artifactDir, { recursive: true });
   const result = await executeSteps(topology.steps, pipeline, deps);
   return emitVerification(result, {
@@ -264,6 +278,12 @@ async function runFullLink(
     cwd: runCwd(deps),
     link,
   });
+  if (
+    invocation.output === null &&
+    invocation.pipeline !== RESERVED_SLC_PIPELINE
+  ) {
+    return runColdLineage(topology, { ...deps, cwd: runCwd(deps) });
+  }
   await mkdir(topology.artifactDir, { recursive: true });
   const result = await executeSteps(topology.steps, pipeline, deps);
   const verified = await emitVerification(result, {

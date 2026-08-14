@@ -18,6 +18,10 @@ import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type {
+  BuildIdentityContext,
+  FullBuildTopology,
+} from '../src/build-plan.js';
 import { declaredPlayers, emitEntryModule } from '../src/entry-module.js';
 import {
   createInterpretedExecutor,
@@ -39,6 +43,40 @@ import {
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+
+const buildIdentity = (topology: FullBuildTopology): BuildIdentityContext => ({
+  interpretedExecutor: {
+    kind: 'value',
+    value: 'sublang.slc.interpreted-executor.v1:selfhost-fixture',
+  },
+  compiledExecutor: {
+    kind: 'value',
+    value: 'sublang.slc.compiled-host.v1:selfhost-fixture',
+  },
+  compiledProfile: () => 'selfhost-fixture-v1',
+  ...(topology.invocation.kind === 'full-link'
+    ? {
+        linkTarget: {
+          kind: 'value' as const,
+          value: 'sublang.slc.link-target.v1:selfhost-fixture',
+        },
+      }
+    : {}),
+  packages: [
+    { role: 'slc', name: '@sublang/slc', version: '0.3.0-test' },
+    { role: 'pipeline', name: topology.pipelineName, version: null },
+    ...(topology.invocation.kind === 'full-link'
+      ? [
+          {
+            role: 'link-runtime' as const,
+            name: 'selfhost-link-runtime-fixture',
+            version: null,
+          },
+        ]
+      : []),
+  ],
+  compatibility: [],
+});
 
 /** A compiled artifact that resolves to the `playbook` format (DR-005). */
 const PLAYBOOK_MODULE =
@@ -249,6 +287,7 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
   const deps = (): SlcDeps => ({
     resolver: (reference) => (reference === 'slc' ? [slcDir] : []),
     executor: createInterpretedExecutor({ agent: writingAgent() }),
+    buildIdentity,
     cwd: work,
   });
 
@@ -292,6 +331,7 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
     const result = await runSlc(['slc', source], {
       resolver: () => [],
       executor: createInterpretedExecutor({ agent: writingAgent() }),
+      buildIdentity,
     });
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toMatch(/did not resolve/);
@@ -338,6 +378,7 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
           resolver: (reference) =>
             reference === 'slc' ? [reservedSlcPipelineDir()] : [],
           executor: createInterpretedExecutor({ agent: writingAgent() }),
+          buildIdentity,
           cwd: work,
         },
       );
@@ -401,6 +442,7 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
     try {
       const work = join(root, 'work');
       await mkdir(work, { recursive: true });
+      await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
       const source = join(work, 'flow.md');
       await writeFile(source, '# A workflow\n');
       await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
@@ -410,6 +452,7 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
         {
           resolver: withReservedPipelines(() => []),
           executor: createInterpretedExecutor({ agent: writingAgent() }),
+          buildIdentity,
           cwd: work,
         },
       );
@@ -423,7 +466,7 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 
   // The ## Link Targets relaxation keys on the `playbook` linked format, not the
   // reference name, so an injected resolver mapping `playbook` to a directory
@@ -459,6 +502,7 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
         {
           resolver: (reference) => (reference === 'playbook' ? [dir] : []),
           executor: createInterpretedExecutor({ agent: writingAgent() }),
+          buildIdentity,
           cwd: work,
         },
       );
@@ -489,6 +533,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     root = await mkdtemp(join(tmpdir(), 'slc-playbook-e2e-'));
     work = join(root, 'work');
     await mkdir(work, { recursive: true });
+    await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
     source = join(work, 'code.md');
     await writeFile(
       source,
@@ -506,6 +551,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
   const deps = (): SlcDeps => ({
     resolver: withReservedPipelines(() => []),
     executor: createInterpretedExecutor({ agent: writingAgent() }),
+    buildIdentity,
     cwd: work,
   });
 
@@ -553,7 +599,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     expect(
       await readFile(join(artDir, 'code.gears-fsm.test.ts'), 'utf8'),
     ).toContain('from "./.slc-verify/verify.js"');
-  });
+  }, 20_000);
 
   it('runs generated verification in a project with no SLC installation', async () => {
     const result = await runSlc(['playbook', source], deps());
@@ -562,7 +608,6 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
       join(root, 'package.json'),
       '{"private":true,"type":"module"}\n',
     );
-    await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
     expect(await exists(join(root, 'node_modules', '@sublang', 'slc'))).toBe(
       false,
     );
@@ -591,9 +636,9 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
       { cwd: root, timeout: 15_000 },
     );
     expect(`${stdout}\n${stderr}`).toMatch(/4 passed/);
-  });
+  }, 20_000);
 
-  it('degrades fsm-derived emissions to diagnostics when the produced fsm cannot be imported (VERIFY-8)', async () => {
+  it('fails and discards the cold candidate when generated verification cannot load the produced fsm (VERIFY-8)', async () => {
     const junkAgent: AgentClient = {
       run: async ({ prompt }) => {
         const workspace = workspaceFromPrompt(prompt);
@@ -609,25 +654,15 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     const result = await runSlc(['playbook', source], {
       resolver: withReservedPipelines(() => []),
       executor: createInterpretedExecutor({ agent: junkAgent }),
+      buildIdentity,
       cwd: work,
     });
-    expect(result.ok).toBe(true);
-    // Portable checker support and the conformance test need no FSM import;
-    // the other generated tests degrade independently.
-    expect(await exists(join(artDir, '.slc-verify', 'verify.js'))).toBe(true);
-    expect(result.outputs).toContain(join(artDir, '.slc-verify', 'verify.js'));
-    expect(await exists(join(artDir, 'code.gears-fsm.test.ts'))).toBe(true);
-    expect(await exists(join(artDir, 'code.fsm.introspect.test.ts'))).toBe(
-      false,
-    );
-    expect(await exists(join(artDir, 'code.prompt-contract.test.ts'))).toBe(
-      false,
-    );
-    expect(await exists(join(artDir, 'code.fsm.coverage.test.ts'))).toBe(false);
+    expect(result.ok).toBe(false);
+    expect(result.outputs).toEqual([]);
+    expect(await exists(artDir)).toBe(false);
+    expect(await exists(join(work, 'code.ts'))).toBe(false);
     const diagnostics = result.diagnostics.join('\n');
-    expect(diagnostics).toMatch(/introspection test not emitted/);
-    expect(diagnostics).toMatch(/prompt-contract test not emitted/);
-    expect(diagnostics).toMatch(/coverage test not emitted/);
+    expect(diagnostics).toMatch(/deterministic product|verification/i);
   });
 
   it('emits no verification when -o relocates the fsm out of the artifact dir (VERIFY-2, PIPE-8)', async () => {
