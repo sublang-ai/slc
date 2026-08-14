@@ -19,7 +19,7 @@ A source hash can prove equality but cannot describe a change.
 Scoped updating therefore also needs the prior source bytes and a trace from source units through phase outputs.
 The Playbook artifacts already supply part of that trace — FSM states carry their GEARS `sourceItem` — but they do not yet provide a complete raw-source-to-normalized-step-to-GEARS mapping.
 
-The host must retain [DR-003](003-slc-phase-execution.md)'s boundary: `slc` may plan from hashes, ranges, scope identifiers, and dependency edges, but pipeline definitions must own the meaning of a safe update.
+The host must retain [DR-003](003-slc-phase-execution.md)'s boundary: `slc` may plan from hashes, ranges, scope identifiers, and definition-supplied complete dependency closures, but pipeline definitions must own the meaning of a safe update.
 The ordinary-build record also must not be confused with [DR-007](007-slc-phase-artifact-pinning.md): pins select reviewed compiler implementations, while this record binds one user's source and invocation to one accepted output lineage.
 
 ## Decision
@@ -39,7 +39,7 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
 - Managed paths are relative POSIX paths confined to the artifact directory, except for the one exact canonical entry-module path [DR-014](014-cwd-output-invocation-defaults-entry-emission.md) owns; managed products and their parent path components are not symbolic links, and the read-only source locator may resolve outside that boundary but never authorizes an output write.
 - `slc` stages new state, completes the applicable verification, and promotes only the validated managed-path overlay plus any canonical entry module as one recoverable lineage transaction.
   Rejecting host-managed promotion or execution that honors the physical workspace binding writes no candidate byte to a canonical path; absent an external mutation the prior accepted bytes therefore remain unchanged, and an interrupted promotion is recovered to one complete accepted lineage before reuse, never accepted as a mixed state.
-- Phase execution carries two distinct address layers: definitions and the compiled Boss request receive canonical logical source and target locators as semantic identifiers that grant no filesystem authority, while the host gives the performing agent the sole authorized physical workspace binding for reads and the one write sink.
+- Phase execution carries two distinct address layers: definitions and the compiled Boss request receive canonical logical source and target locators as semantic identifiers that grant no filesystem authority, while the host gives the performing agent the sole authorized physical workspace binding for named host-supplied reads and the one write sink.
   In staged state that binding names candidate predecessors and the write sink in an equivalent staged layout while unchanged read-only inputs retain their canonical physical paths; without staging every physical path is canonical.
   Writing a canonical logical path when its physical binding differs is a write-scope violation: detection fails the run and prevents promotion, but this design does not claim to roll back arbitrary writes made outside the binding by an unrestricted coding agent.
   Staging locators guide I/O only and never enter artifact content or trace identity.
@@ -102,6 +102,7 @@ The following invariants make the object self-consistent and portable:
   Every link target, invocation option, compatibility gate, and step executor has exactly one corresponding input ID used by its owning step or compatibility record; `plan.deterministicInputs` is a sorted unique list containing every and only `"generator"` and `"checker"` input ID used by entry or verification products.
 - `plan.steps` is in execution order; each step's `inputs` is a sorted unique list of `plan.inputs` IDs, `inputClosure` records whether its complete readable semantic closure was explicitly declared, and `target.product` names one unique `"semantic"` product with the same path.
 - A step's `inputKey` is the exact-byte hash of the canonical compact JSON array `[step.id, [<RequestInput>, ...]]`, where request inputs are in logical request order and each exact object is either `{ "kind": "source", "hash": <Hash> }` for the invocation source or `{ "kind": "product", "product": <id>, "hash": <Hash> }` for a predecessor semantic product; every product ID resolves exactly once and its recorded hash equals the entry hash.
+  A compile step has exactly one operand: the external source for the first scheduled step, otherwise its immediate predecessor product; a link step has its object products in invocation order, while its target and options remain plan inputs rather than result-key operands.
   Plan inputs already cover definitions, executors, semantic options, and other build identity, so they do not repeat in this result-specific key.
 - Canonical JSON uses the RFC 8259 compact form, escapes every control character plus `"` and `\\` with lowercase `\u00xx` where no two-character JSON escape exists, emits every other Unicode scalar as its UTF-8 character without escaping solidus or non-ASCII text, and orders object fields exactly as listed in this contract.
   Every array described as sorted uses ascending lexicographic order over the named key's UTF-8 bytes; package roles instead use `"slc"`, `"pipeline"`, `"link-runtime"` order.
@@ -170,6 +171,20 @@ The following invariants make the object self-consistent and portable:
 - There is no change-ratio or generation threshold.
   Textual size cannot establish semantic locality, and a fresh nondeterministic generation is not intrinsically more correct than a verified update.
 
+#### Update grammar
+
+An update contract is present only when the first three nonblank lines under one `## Update` heading are exactly an opening ```` ```json ```` line, the following compact object line, and a closing ```` ``` ```` line, with no surrounding prose:
+
+```json
+{"schema":"sublang.slc.update-contract.v1","traceSchema":"sublang.slc.update.v1"}
+```
+
+The definition contains at most one `## Update` heading.
+The object rejects omitted, additional, or different fields and is followed by these six nonempty direct `###` subsections exactly once and in this order: `Stable input units`, `Target scopes`, `Dependency closure`, `Structural and global scopes`, `Update instructions`, and `Semantic verification`; no other direct `###` subsection is permitted before the next `##` heading.
+The first four subsections own how the executor emits generic trace scopes and dependencies; the last two own update execution and semantic checking.
+`slc` validates only this structure.
+A missing or malformed contract leaves ordinary phase semantics valid but makes the phase update-ineligible.
+
 ### Trace contract
 
 - A definition that supports scoped update owns a generic trace contract in addition to its semantic update rules.
@@ -182,12 +197,48 @@ The following invariants make the object self-consistent and portable:
 - The host adapter validates at most one schema-exact JSON metadata payload after the runtime turn and ordinary result mapping complete.
   The existing exact `legacy`, `session-v1`, and `composed-v2` Playbook result variants and diagnostic-privacy rules remain unchanged.
 - A trace binds the exact input and target hashes and represents each as a complete ordered partition of non-overlapping half-open byte ranges carrying stable opaque scope identifiers.
-  It also carries the definition-declared dependency edges and structural or global classifications needed to expand an input-unit change into a closed target scope.
+  It also carries the definition-declared complete expanded target closure for each input scope and the structural or global classifications needed to select update safely.
   Complete coverage makes separators and otherwise unclassified bytes protected rather than invisible to the byte guard.
-- `slc` validates only this generic shape, byte coverage, identities, and graph integrity.
-  It does not interpret scope names or decide whether the declared dependency graph is semantically sufficient.
+- `slc` validates only this generic shape, byte coverage, identities, and closure cross-references and order.
+  It does not interpret scope names or decide whether the declared complete closure is semantically sufficient.
 - A missing or malformed trace from an otherwise successful ordinary execution does not invalidate its artifact, but disables scoped update from that step.
   A missing or malformed replacement trace from an update candidate rejects that candidate because protected-scope enforcement is then impossible.
+
+#### `sublang.slc.update.v1`
+
+The `UpdateTrace` referenced by `sublang.slc.build.v1` is exactly one object with required fields `schema: "sublang.slc.update.v1"`, `input: PartitionRecord`, `target: PartitionRecord`, and `dependencies: DependencyRecord[]` in that order.
+Every object rejects omitted, additional, null, or wrong-typed fields.
+
+| Type | Exact fields |
+| --- | --- |
+| `PartitionRecord` | `hash: Hash`, `byteLength: number`, `scopes: ScopeRecord[]` |
+| `ScopeRecord` | `scope: string`, `start: number`, `end: number`, `classification: "local" \| "structural" \| "global"` |
+| `DependencyRecord` | `input: string`, `targets: string[]` |
+
+`byteLength`, `start`, and `end` satisfy JavaScript `Number.isSafeInteger`, are nonnegative UTF-8 byte offsets, and every scope string is nonempty, contains no U+0000 through U+001F or U+007F through U+009F scalar, and is unique within its partition.
+For nonempty bytes, scopes are ordered, adjacent, nonempty half-open ranges beginning at `0` and ending at `byteLength`; zero bytes require an empty scopes array.
+Each partition hash identifies the exact bytes with that byte length.
+Dependencies contain exactly one entry per input scope in input order; its `input` names that scope and its unique `targets` name existing target scopes in target order.
+The targets are the definition-owned complete expanded closure, not a graph whose semantic sufficiency SLC infers.
+In a recorded step, `trace.input` matches the exact sole compile operand represented in `inputKey`, and `trace.target` matches the step's semantic product bytes; link steps always record `trace: null`.
+
+#### Executor metadata transport
+
+The host-owned executor result retains `status` and `diagnostics` and may add exactly one optional `metadata` object whose sole field is `"sublang.slc.update.v1": UpdateTrace`.
+An absent member means no trace.
+An interpreted agent uses its existing Cligent final text without an API change and may append this exact final nonblank suffix at most once:
+
+```text
+SLC_RESULT_BEGIN
+{"schema":"sublang.slc.interpreted-result.v1","metadata":{"sublang.slc.update.v1":{...}}}
+SLC_RESULT_END
+```
+
+The middle is one canonical-JSON line, the envelope and metadata objects reject every other field, and `{...}` denotes the exact trace object above rather than literal text.
+`slc` removes a valid suffix before applying existing `BLOCKED:` and diagnostic parsing, never includes reserved marker or envelope text in diagnostics, and treats Cligent's transport status and the remaining prose as the only status authority.
+A duplicate, misplaced, unterminated, or malformed marker occurrence causes every reserved marker block or marker-start suffix to be withheld from status and diagnostic parsing, supplies no metadata, and adds one host diagnostic; ordinary success remains valid, while an update candidate is later rejected for lacking valid replacement metadata.
+Compiled execution instead diverts every `emitTelemetry` event whose topic is exactly `sublang.slc.update.v1` from ordinary telemetry handling.
+Exactly one schema-valid reserved event supplies the metadata member; a malformed payload or more than one reserved event supplies no metadata and adds one host diagnostic without changing the ordinary Playbook result, and no reserved payload appears in trace, status, or ordinary diagnostics.
 
 ### Scoped execution and acceptance
 
@@ -197,7 +248,7 @@ The following invariants make the object self-consistent and portable:
   Semantic sufficiency remains definition-owned.
 - The replacement trace must preserve the eligible input-unit structure and classifications and must not expand the allowed dependency closure.
   A split, merge, reorder, new structural or global classification, or closure expansion rejects the scoped candidate rather than silently widening it after execution.
-- For every executed step, the canonical logical locators remain in the semantic request while the host's separate, sole-authority physical workspace binding directs the performing agent to corresponding staged reads and the staged write sink; later steps consume those staged bytes through the same binding, and canonical paths receive the new bytes only during promotion.
+- For every executed step, the canonical logical locators remain in the semantic request while the host's separate physical workspace binding is sole authority for named host-supplied reads and directs the performing agent to corresponding staged reads and the staged write sink; later steps consume those staged bytes through the same binding, and canonical paths receive the new bytes only during promotion.
   This preserves the one-target execution rule and makes rejection non-destructive for binding-compliant execution; an out-of-binding write instead fails under [DR-003](003-slc-phase-execution.md) without an unsafe rollback promise.
 - Within that authority boundary, the complete requested run is transactional with respect to its prior accepted bundle: no staged candidate, deterministic derivative, source snapshot, or build record replaces accepted state until every required downstream step and verification succeeds and the host begins the recoverable lineage promotion.
 - After an accepted candidate, downstream planning uses its actual output hash.
@@ -207,6 +258,55 @@ The following invariants make the object self-consistent and portable:
   It does not automatically spend a second agent invocation on ordinary execution, preserving [PHEXEC-12](../dev/phase-execution.md#phexec-12)'s one-invocation contract and avoiding a hidden double-cost retry.
 - A fresh nondeterministic generation is not periodic ground truth.
   Absent explicit adoption, the source, authoritative definitions, protected-region equality, and full verification are the acceptance authority; lineage generation remains audit metadata only.
+
+#### Update request
+
+Only an update-capable compile request may add a required `update` object; ordinary compile and every link request retain their existing shape and carry no such field.
+The update object contains exactly these fields in order:
+
+| Field | Exact value |
+| --- | --- |
+| `schema` | `"sublang.slc.update-request.v1"` |
+| `priorInput` | `{ "read": "prior-input", "hash": Hash, "byteLength": number }` |
+| `currentInput` | `{ "read": "source", "hash": Hash, "byteLength": number }` |
+| `priorTarget` | `{ "read": "prior-target", "hash": Hash, "byteLength": number }` |
+| `priorTrace` | `UpdateTrace` |
+| `changes` | `ChangeRecord[]` |
+| `allowedTargetScopes` | `string[]` |
+
+Each `ChangeRecord` contains exactly safe nonnegative integers `priorStart`, `priorEnd`, `currentStart`, and `currentEnd` naming one half-open UTF-8 byte hunk.
+For prior bytes `a` of length `n` and current bytes `b` of length `m`, `slc` defines `D(n,j) = m - j`, `D(i,m) = n - i`, and `D(i,j)` as the minimum of `D(i + 1,j + 1)` when `a[i] = b[j]`, `1 + D(i + 1,j)`, and `1 + D(i,j + 1)`.
+It walks from `(0,0)`, choosing an equal-byte match whenever it preserves `D`, otherwise a deletion whenever it preserves `D`, and otherwise an insertion; this match-before-delete-before-insert priority resolves every repeated-byte alignment.
+Each maximal run of operations without an intervening match becomes one hunk, so adjacent deletion and insertion operations coalesce.
+Each hunk satisfies `start <= end` within both byte lengths and changes at least one side; hunks are strictly ordered and nonoverlapping on both coordinate axes, unchanged gaps and outer ranges are byte-identical, replacing each prior hunk range with its corresponding current range reconstructs the current bytes, and `changes` is empty exactly when the two byte arrays are equal.
+The embedded prior trace is field-for-field equal to the accepted step's recorded trace, and its input and target hashes and lengths equal `priorInput` and `priorTarget` respectively.
+After the planner identifies dirty local input scopes from those hunks under the prior trace, `allowedTargetScopes` is exactly the duplicate-free union of those scopes' complete target closures in prior-target partition order; it is never a caller-chosen subset or superset.
+The three read names resolve through the physical workspace binding below, their hashes and lengths match those bytes, and the request does not otherwise duplicate their content.
+Replacement metadata binds its input partition to `currentInput` and its target partition to the complete candidate bytes.
+Every unchanged input scope retains its exact recorded target closure, while each dirty local input scope's replacement closure contains only scopes in `allowedTargetScopes`.
+Update success uses the ordinary executor status plus a complete candidate file at the one write sink and a valid replacement trace in executor metadata; it never returns a patch.
+
+#### Physical workspace binding
+
+The host-owned binding is exactly one `sublang.slc.workspace.v1` object with required fields `schema`, `reads`, and `write`; every object rejects omitted, additional, null, or wrong-typed fields.
+
+| Type | Exact fields |
+| --- | --- |
+| `WorkspaceRecord` | `schema: "sublang.slc.workspace.v1"`, `reads: ReadBinding[]`, `write: WriteBinding` |
+| `ReadBinding` | `role: string`, `logicalPath: string`, `physicalPath: string`, `kind: "file" \| "directory"`, `identity: Hash` |
+| `WriteBinding` | `role: "target" \| "linked"`, `logicalPath: string`, `physicalPath: string`, `kind: "file"` |
+
+Logical and physical values are normalized absolute host paths.
+An ordinary compile binding contains exactly one `definition`, exactly one `source`, then contiguous `reference:<zero-based-index>` and `semantic-input:<zero-based-index>` roles matching their semantic-request and declared-input order; an update compile appends exactly one `prior-input` and one `prior-target`.
+A link binding instead contains exactly one `definition`, contiguous `object:<zero-based-index>` roles matching object request order, exactly one `link-target`, then contiguous declared `semantic-input:<zero-based-index>` roles; no other role is valid.
+Each logical path equals the corresponding canonical request or declared-input path, each file identity matches exact bytes, and each directory identity uses [DR-007](007-slc-phase-artifact-pinning.md#hashing-and-portability)'s deterministic tree framing and applicable symbolic-link policy.
+The write role matches the request kind, and the write's logical path equals the canonical semantic target while its physical path is the sole authorized sink.
+Its normalized physical path is distinct from every read's physical path, resolves through no writable symbolic-link component, and is provisioned as a fresh file rather than a symbolic or hard link to a readable input.
+Distinct read roles may name the same logical path when prior and current bytes require different physical files; read roles with the same physical path must record the same kind and identity.
+The semantic request and compiled Boss JSON carry only canonical logical paths plus any update object; physical paths appear only in the host binding and are the sole filesystem authority for the named host-supplied paths and the write sink.
+The authoritative definition may separately permit read-only tools, commands, or cited content under [DR-004](004-slc-interpreted-phase-execution.md#interpreter); any such content not enumerated as a semantic-input binding leaves the readable closure open and therefore prevents reuse or scoped update without making ordinary execution invalid.
+The interpreted prompt and each transformation-performing compiled Player or Captain prompt end with exactly one `SLC_WORKSPACE_BEGIN`, one canonical-JSON-line workspace object, and `SLC_WORKSPACE_END`; routing-only Captain and judge prompts remain unchanged.
+The binding never enters artifact bytes, trace scope strings, build identity, Playbook results, or diagnostics.
 
 ### Playbook traceability
 
