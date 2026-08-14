@@ -106,7 +106,7 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | user | [incremental-compilation.md](user/incremental-compilation.md) | User-visible build lineage, exact no-op reuse, scoped updates, conflicts, explicit refinement adoption, and rebuilds |
 | dev | [incremental-compilation.md](dev/incremental-compilation.md) | Build-record currentness and self-host exclusion, incremental planning, definition-owned update contracts, protected scopes, explicit adoption, and lineage mechanics |
-| test | [incremental-compilation.md](test/incremental-compilation.md) | Integration acceptance for build records, reuse, self-host pin stability, scoped updates, conflicts, adoption, and rebuilds |
+| test | [incremental-compilation.md](test/incremental-compilation.md) | Integration acceptance for build records, reuse, self-host pin stability, scoped updates, conflicts, compatible identity rebaselining, adoption-regenerated deterministic derivatives, and rebuilds |
 
 ### LIC
 
@@ -149,7 +149,7 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `playbook` artifact |
 | dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format and reusable/regenerated entry emission, shared-definition resolution, and atomic Playbook 4.0 definition/artifact/pin adoption |
-| test | [self-hosting.md](test/self-hosting.md) | Acceptance: meta-pipeline lineage exclusion, reserved-name and `playbook`-pipeline resolution, compilation, linking and reusable/adoption-regenerated entry emission, plus clean-install consistency of the adopted reviewed set |
+| test | [self-hosting.md](test/self-hosting.md) | Acceptance: meta-pipeline lineage exclusion, reserved-name and `playbook`-pipeline resolution, compilation, linking and entry emission, plus clean-install consistency of the adopted reviewed set |
 
 ### VERIFY
 
