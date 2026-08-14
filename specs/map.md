@@ -71,6 +71,7 @@ meta.md     The spec of specs
 | IR-018 | [018-playbook-3-1-adoption.md](iterations/018-playbook-3-1-adoption.md) | Adopt Playbook 3.1 atomically, regenerate the zh demo reference as end-user acceptance, and prepare 0.2.0 |
 | IR-019 | [019-compile-progress-stall-watchdog.md](iterations/019-compile-progress-stall-watchdog.md) | Implement DR-019: progress sink and stderr reporter, live status streaming, silence heartbeat, agent-stall watchdog, measured-time docs |
 | IR-020 | [020-playbook-4-0-adoption.md](iterations/020-playbook-4-0-adoption.md) | Adopt Playbook 4.0 and cligent 0.18 atomically with retained bundles, regenerated pins, and prepare 0.3.0 |
+| IR-021 | [021-incremental-compilation.md](iterations/021-incremental-compilation.md) | Implement source-bound lineage, exact reuse, scoped updates, safe rebuilds, and explicit adoption |
 
 ## Packages
 
