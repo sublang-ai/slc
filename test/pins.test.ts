@@ -86,6 +86,26 @@ describe('parsePinFile (PIN-5)', () => {
     expect(() => parsePinFile(json(obj))).not.toThrow();
   });
 
+  it('accepts an arbitrary portable pass phase key', () => {
+    const obj = validPinObject();
+    obj.pins = {
+      quality_check: (obj.pins as Record<string, unknown>).text2gears,
+    };
+
+    expect(() => parsePinFile(json(obj))).not.toThrow();
+  });
+
+  it.each(['', '.', '..', 'bad/name', 'bad\\name'])(
+    'rejects the non-portable phase key %j',
+    (name) => {
+      const obj = validPinObject();
+      obj.pins = {
+        [name]: (obj.pins as Record<string, unknown>).text2gears,
+      };
+      expect(() => parsePinFile(json(obj))).toThrow(/phase key/);
+    },
+  );
+
   it('rejects a pin-map key that is not a phase name', () => {
     const obj = validPinObject();
     const pins = obj.pins as Record<string, unknown>;

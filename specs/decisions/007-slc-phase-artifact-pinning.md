@@ -124,6 +124,9 @@ The artifact path shall identify the canonical `.playbook.ts` linked `playbook` 
 It shall resolve to the `playbook` linked format declared by the reserved meta-pipeline link phase.
 The artifact-bundle path shall identify the reviewed artifact directory directly containing that entry module and its canonical local FSM, GEARS, GEARS↔FSM, FSM-introspection, prompt-contract, and FSM-coverage files, so changing a runtime dependency beside the entry module makes the pin stale even when the entry module's own bytes do not change.
 
+Pin-map keys use the phase or pass's non-empty portable definition basename, without a path separator and other than `.` or `..`, with `link` reserved for the link phase.
+This admits format-preserving pass names such as `optimize` in addition to transform names such as `text2gears`.
+
 ### Semantic input closure
 
 The semantic input closure for a pinned phase is:

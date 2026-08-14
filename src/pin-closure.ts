@@ -18,6 +18,8 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute as isPosixAbsolute } from 'node:path/posix';
 
 import { findSection } from './markdown.js';
 import { resolvePinPath } from './pin-paths.js';
@@ -25,6 +27,14 @@ import type { PinRecord } from './pins.js';
 
 const PIN_INPUT_FIELD = 'pin input path';
 const INLINE_CODE = /`([^`]+)`/g;
+
+/** A definition's declared readable closure for incremental-plan identity. */
+export interface DeclaredClosure {
+  /** Whether the authoritative definition explicitly declared `## Pin Inputs`. */
+  closed: boolean;
+  /** Exact resolved semantic inputs, excluding the definition itself. */
+  inputs: Set<string>;
+}
 
 /** Extracts the inline-code paths cited by a `## Pin Inputs` section (DR-007). */
 export function parsePinInputs(content: string): string[] {
@@ -39,6 +49,62 @@ export function parsePinInputs(content: string): string[] {
     }
   }
   return paths;
+}
+
+/**
+ * Derives the declared readable closure used by DR-021 planning.
+ *
+ * Unlike {@link deriveClosure}, this preserves the load-bearing distinction
+ * between a missing `## Pin Inputs` section (open closure) and a present empty
+ * section (closed empty closure). Explicit request references are always
+ * included as readable semantic inputs, but do not turn an open definition
+ * into a closed one. A pin boundary is applied when supplied; an unpinned
+ * definition may cite any portable relative read path because those paths are
+ * identities, never write authority.
+ */
+export async function deriveDeclaredClosure(opts: {
+  pipelineDir: string;
+  definitionPath: string;
+  boundary?: string;
+  references?: readonly string[];
+}): Promise<DeclaredClosure> {
+  const definition = await readFile(opts.definitionPath, 'utf8');
+  const declared = findSection(definition, 'Pin Inputs');
+  const references = (opts.references ?? []).map((path) => resolve(path));
+  const inputs = new Set<string>(references);
+  const seen = new Set<string>();
+  const queue = declared === null ? [] : parsePinInputs(definition);
+
+  for (const reference of references) {
+    if (!isMarkdown(reference)) continue;
+    const content = await readIfPresent(reference);
+    if (content === null) continue;
+    for (const cited of parsePinInputs(content)) queue.push(cited);
+  }
+
+  while (queue.length > 0) {
+    const cited = queue.shift() as string;
+    if (seen.has(cited)) continue;
+    seen.add(cited);
+    const resolved =
+      opts.boundary === undefined
+        ? resolveDeclaredPath(opts.pipelineDir, cited)
+        : resolvePinPath(
+            opts.pipelineDir,
+            opts.boundary,
+            cited,
+            PIN_INPUT_FIELD,
+          );
+    inputs.add(resolved);
+    if (!isMarkdown(cited)) continue;
+    const content = await readIfPresent(resolved);
+    if (content === null) continue;
+    for (const nested of parsePinInputs(content)) {
+      if (!seen.has(nested)) queue.push(nested);
+    }
+  }
+
+  return { closed: declared !== null, inputs };
 }
 
 /**
@@ -125,6 +191,20 @@ export async function closureMatchesRecord(
 
 function isMarkdown(path: string): boolean {
   return path.toLowerCase().endsWith('.md');
+}
+
+function resolveDeclaredPath(pipelineDir: string, path: string): string {
+  if (
+    path.length === 0 ||
+    path.includes('\\') ||
+    path.includes('\0') ||
+    isAbsolute(path) ||
+    isPosixAbsolute(path) ||
+    /^[A-Za-z]:/.test(path)
+  ) {
+    throw new Error(`pin input path must be a portable relative path: ${path}`);
+  }
+  return resolve(pipelineDir, ...path.split('/'));
 }
 
 async function readIfPresent(absolutePath: string): Promise<string | null> {

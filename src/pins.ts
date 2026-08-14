@@ -20,6 +20,7 @@ import { lstat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { isBarePackageSpecifier } from './runtime-package.js';
+import { isPortablePhaseName } from './phase.js';
 
 /** Committed pin-index filename in a pipeline directory (DR-007). */
 export const PINS_FILE = 'slc.pins.json';
@@ -29,7 +30,6 @@ export const PIN_SCHEMA = 'sublang.slc.pins.v2';
 export const PIN_HASH_ALGORITHM = 'sha256';
 
 const LINK_TARGET_KINDS = new Set(['file', 'directory', 'package']);
-const PIN_PHASE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*2[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** A pinned local file recorded by path and exact-byte hash (DR-007). */
 export interface PinFileRef {
@@ -217,10 +217,10 @@ function normalizePins(
   const input = requireObject(value, path);
   const pins: Record<string, PinRecord> = {};
   for (const [name, record] of Object.entries(input)) {
-    if (name !== 'link' && !PIN_PHASE_NAME.test(name)) {
+    if (name !== 'link' && !isPortablePhaseName(name)) {
       throw invalid(
         `${path}.${name}`,
-        'phase key must be "link" or a kebab-case <source>2<target> name',
+        'phase key must be "link" or a portable phase/pass name',
       );
     }
     pins[name] = normalizePinRecord(record, `${path}.${name}`);
