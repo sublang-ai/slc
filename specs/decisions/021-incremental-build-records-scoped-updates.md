@@ -114,8 +114,9 @@ The following invariants make the object self-consistent and portable:
 - `lineage.generation` is a positive safe integer.
   A cold or source-rebound lineage starts at `1`; every later accepted state-changing ordinary, update, rebuild, or adoption run records the prior generation plus one; a write-free no-op preserves it.
   `lineage.transition` is non-null only when the most recent state-changing lineage action is explicit adoption and its prior and replacement `plan.identity` values differ; its `to` value equals the current `plan.identity`.
-- The build record is the promotion commit marker.
-  Recovery seeing the prior marker restores the complete prior record and inventory; recovery seeing the candidate marker finishes the complete candidate record and inventory; either branch removes private recovery state before currentness evaluation and never accepts mixed bytes.
+- The build record is the promotion commit marker, and the sealed staged candidate is the only recovery state.
+  Recovery finishes the complete candidate record and inventory forward from an intact sealed stage and removes the stage before currentness evaluation, never accepting mixed bytes; without an intact sealed stage, a record/byte mismatch is an ordinary conflict resolved by the explicit recovery choices.
+  Promotion therefore needs no separate journal, prior-byte copies, or rollback branch: the sealed stage and the prior and candidate records already carry every hash recovery consults.
 
 ### Exact reuse and conflicts
 
