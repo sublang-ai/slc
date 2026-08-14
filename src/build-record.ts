@@ -781,7 +781,8 @@ function normalizePartition(value: unknown, path: string): PartitionRecord {
 export async function loadLineagePair(
   artifactDir: string,
 ): Promise<LoadedLineage> {
-  const artifactInfo = await optionalLstat(resolve(artifactDir));
+  const artifactRoot = resolve(artifactDir);
+  const artifactInfo = await optionalLstat(artifactRoot);
   if (artifactInfo === null) return { state: 'absent' };
   if (!artifactInfo.isDirectory() || artifactInfo.isSymbolicLink()) {
     throw new BuildRecordError(
@@ -795,7 +796,21 @@ export async function loadLineagePair(
     optionalLstat(recordPath),
     optionalLstat(snapshotPath),
   ]);
-  if (recordInfo === null && snapshotInfo === null) return { state: 'absent' };
+  if (recordInfo === null && snapshotInfo === null) {
+    await requireStableDirectoryAtPath(artifactInfo, artifactRoot);
+    const [currentRecordInfo, currentSnapshotInfo] = await Promise.all([
+      optionalLstat(recordPath),
+      optionalLstat(snapshotPath),
+    ]);
+    await requireStableDirectoryAtPath(artifactInfo, artifactRoot);
+    if (currentRecordInfo === null && currentSnapshotInfo === null) {
+      return { state: 'absent' };
+    }
+    throw new BuildRecordError(
+      'lineage-pair',
+      `${artifactDir} lineage record or snapshot changed while it was read`,
+    );
+  }
   if (recordInfo === null || snapshotInfo === null) {
     throw new BuildRecordError(
       'lineage-pair',
@@ -804,10 +819,12 @@ export async function loadLineagePair(
   }
   requireRegular(recordInfo, recordPath);
   requireRegular(snapshotInfo, snapshotPath);
-  const [recordBytes, snapshot] = await Promise.all([
-    readNoFollow(recordPath),
-    readNoFollow(snapshotPath),
-  ]);
+  const recordBytes = await readRegularFileNoFollow(recordPath);
+  await requireStableDirectoryAtPath(artifactInfo, artifactRoot);
+  const snapshot = await readRegularFileNoFollow(snapshotPath);
+  await requireStableDirectoryAtPath(artifactInfo, artifactRoot);
+  await requireStableFileAtPath(recordInfo, recordPath);
+  await requireStableFileAtPath(snapshotInfo, snapshotPath);
   const record = decodeBuildRecord(recordBytes, recordPath);
   resolveReadLocator(artifactDir, record.source.locator, 'source.locator');
   if (record.plan.invocation.link !== null) {
@@ -848,6 +865,9 @@ export async function loadLineagePair(
       product.kind === 'entry' ? { entryBasename } : {},
     );
   }
+  await requireStableDirectoryAtPath(artifactInfo, artifactRoot);
+  await requireStableFileAtPath(recordInfo, recordPath);
+  await requireStableFileAtPath(snapshotInfo, snapshotPath);
   return { state: 'present', record, snapshot };
 }
 
@@ -1624,18 +1644,39 @@ function requireRegular(
   }
 }
 
-async function readNoFollow(path: string): Promise<Uint8Array> {
+/**
+ * Reads one exact regular file without following its final path or accepting a
+ * path/in-place replacement during the read.
+ *
+ * This is exported for lineage classification, whose source, input, and
+ * product observations need the same authenticated-file boundary as the
+ * reserved record/snapshot pair. It is intentionally not part of the package
+ * entry surface.
+ */
+export async function readRegularFileNoFollow(
+  path: string,
+): Promise<Uint8Array> {
   let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const info = await handle.stat();
-    if (!info.isFile()) {
+    const before = await lstat(path);
+    if (!before.isFile() || before.isSymbolicLink()) {
       throw new BuildRecordError(
         'lineage-unsafe',
-        `${path} must be a regular file`,
+        `${path} must be a regular non-symbolic-link file`,
       );
     }
-    return await handle.readFile();
+    handle = await open(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    const openedBefore = await handle.stat();
+    requireStableFile(before, openedBefore, path);
+    const bytes = await handle.readFile();
+    const openedAfter = await handle.stat();
+    requireStableFile(openedBefore, openedAfter, path);
+    const after = await lstat(path);
+    requireStableFile(openedAfter, after, path);
+    return bytes;
   } catch (error) {
     if (error instanceof BuildRecordError) throw error;
     throw new BuildRecordError(
@@ -1645,6 +1686,77 @@ async function readNoFollow(path: string): Promise<Uint8Array> {
   } finally {
     await handle?.close();
   }
+}
+
+function requireStableFile(
+  before: Awaited<ReturnType<typeof lstat>>,
+  after: Awaited<ReturnType<typeof lstat>>,
+  path: string,
+): void {
+  if (
+    !before.isFile() ||
+    before.isSymbolicLink() ||
+    !after.isFile() ||
+    after.isSymbolicLink() ||
+    before.dev !== after.dev ||
+    before.ino !== after.ino ||
+    before.size !== after.size ||
+    before.mtimeMs !== after.mtimeMs ||
+    before.ctimeMs !== after.ctimeMs
+  ) {
+    throw new BuildRecordError(
+      'lineage-unsafe',
+      `${path} changed identity or bytes while it was read`,
+    );
+  }
+}
+
+function requireStableDirectory(
+  before: Awaited<ReturnType<typeof lstat>>,
+  after: Awaited<ReturnType<typeof lstat>>,
+  path: string,
+): void {
+  if (
+    !before.isDirectory() ||
+    before.isSymbolicLink() ||
+    !after.isDirectory() ||
+    after.isSymbolicLink() ||
+    before.dev !== after.dev ||
+    before.ino !== after.ino
+  ) {
+    throw new BuildRecordError(
+      'lineage-unsafe',
+      `${path} changed identity while lineage was read`,
+    );
+  }
+}
+
+async function requireStableFileAtPath(
+  before: Awaited<ReturnType<typeof lstat>>,
+  path: string,
+): Promise<void> {
+  const after = await optionalLstat(path);
+  if (after === null) {
+    throw new BuildRecordError(
+      'lineage-unsafe',
+      `${path} disappeared while lineage was read`,
+    );
+  }
+  requireStableFile(before, after, path);
+}
+
+async function requireStableDirectoryAtPath(
+  before: Awaited<ReturnType<typeof lstat>>,
+  path: string,
+): Promise<void> {
+  const after = await optionalLstat(path);
+  if (after === null) {
+    throw new BuildRecordError(
+      'lineage-unsafe',
+      `${path} disappeared while lineage was read`,
+    );
+  }
+  requireStableDirectory(before, after, path);
 }
 
 async function rejectSymlinkComponents(
