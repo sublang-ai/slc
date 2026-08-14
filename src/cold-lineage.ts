@@ -68,7 +68,7 @@ import {
   runPhase,
   type PhaseExecutor,
 } from './execution.js';
-import { hashBytes, hashFile, type Hash } from './hash.js';
+import { compareUtf8, hashBytes, hashFile, type Hash } from './hash.js';
 import type { Invocation } from './invocation.js';
 import { loadLinkFile } from './link.js';
 import { loadPipeline } from './pipeline.js';
@@ -724,10 +724,6 @@ function isStrictDescendant(root: string, path: string): boolean {
     locator !== '..' &&
     !locator.startsWith(`..${sep}`)
   );
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
 }
 
 async function buildColdRecord(

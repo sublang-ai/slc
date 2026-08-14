@@ -40,7 +40,7 @@ import {
   type StepKind,
 } from './build-record.js';
 import type { ExecuteRequest } from './execution.js';
-import { hashBytes, hashFile, type Hash } from './hash.js';
+import { compareUtf8, hashBytes, hashFile, type Hash } from './hash.js';
 import type { Invocation } from './invocation.js';
 import { type LinkPhase, linkedArtifactPath } from './link.js';
 import { evaluatePinFile, hashTree } from './pin-currency.js';
@@ -1035,10 +1035,6 @@ function requireId(value: string, label: string): void {
       `${label} ID "${value}" is not a canonical build-record ID`,
     );
   }
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
 }
 
 /** Ensures an identity path names the expected regular file/tree before hashing. */
