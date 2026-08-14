@@ -78,7 +78,7 @@ Every `id` matches `[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9._-]*)*`, is unique in its
 | `StepRecord` | `id: string`, `kind: StepKind`, `name: string`, `source: FormatRecord`, `target: TargetRecord`, `inputKey: Hash`, `inputs: string[]`, `inputClosure: "closed" \| "open"`, `origin: Origin`, `trace: null \| UpdateTrace` |
 | `FormatRecord` | `format: string`, `ext: string` |
 | `TargetRecord` | `format: string`, `ext: string`, `path: string`, `product: string` |
-| `ProductRecord` | `id: string`, `kind: "semantic" \| "entry" \| "verification"`, `path: string`, `hash: Hash` |
+| `ProductRecord` | `id: string`, `kind: "semantic" \| "entry" \| "verification"`, `path: string`, `hash: Hash`, `inputs: string[]` |
 | `ProvenanceRecord` | `packages: PackageRecord[]`, `compatibility: CompatibilityRecord[]` |
 | `PackageRecord` | `role: "slc" \| "pipeline" \| "link-runtime"`, `name: string`, `version: null \| string` |
 | `CompatibilityRecord` | `name: string`, `value: string`, `currentness: "provenance" \| "gate"`, `input: null \| string` |
@@ -94,6 +94,7 @@ The following invariants make the object self-consistent and portable:
 
 - A relative POSIX path is a non-empty `/`-separated string with no NUL, backslash, empty, `.`, or trailing segment and no absolute or drive root.
   `source.locator` and a full-link `invocation.link.target` use that encoding from the resolved canonical artifact directory to their resolved read-only paths and may contain `..` segments; managed product paths additionally contain no `..`, except that the sole entry product is exactly one `..` plus the canonical sibling entry basename.
+  A read locator is canonical only when resolving it and re-encoding that resolved path relative to the artifact directory yields the identical locator, so an outward `..` climb may appear only before non-`..` segments and aliases such as `a/../b` are invalid.
 - `source.hash`, `source.snapshotHash`, and the exact bytes of the source and `.slc-source` are equal when the record is committed.
 - `invocation.kind` is `"full"` exactly when `invocation.link` is `null`; `"full-link"` requires a link object whose option order preserves invocation order.
 - A file-backed `plan.inputs` member — definition, semantic input, link target, or file/tree-backed executor, generator, or checker — has its normalized artifact-directory-relative read locator, `value: null`, and exact byte or deterministic tree hash as `identity`.
@@ -106,8 +107,12 @@ The following invariants make the object self-consistent and portable:
   Plan inputs already cover definitions, executors, semantic options, and other build identity, so they do not repeat in this result-specific key.
 - Canonical JSON uses the RFC 8259 compact form, escapes every control character plus `"` and `\\` with lowercase `\u00xx` where no two-character JSON escape exists, emits every other Unicode scalar as its UTF-8 character without escaping solidus or non-ASCII text, and orders object fields exactly as listed in this contract.
   Every array described as sorted uses ascending lexicographic order over the named key's UTF-8 bytes; package roles instead use `"slc"`, `"pipeline"`, `"link-runtime"` order.
+  `.slc-build.json` is exactly that canonical compact UTF-8 JSON followed by one LF byte, and the LF is framing rather than part of any identity projection.
 - `plan.identity` is the exact-byte hash of the canonical JSON encoding of an object, in field order, containing `pipeline`, `invocation`, `inputs`, `deterministicInputs`, and `steps`; each projected step contains `id`, `kind`, `name`, `source`, `target`, `inputs`, and `inputClosure` in that order, while result-specific `inputKey`, `origin`, and `trace` do not enter it.
+- `origin` records the mode that most recently established the step's current target bytes: ordinary execution records `"ordinary"`, an accepted scoped update records `"updated"` with its non-null replacement trace, explicit adoption records `"user-adopted"` with a null trace, and exact reuse preserves the prior origin and trace unchanged.
+  A link step is never `"updated"`; a non-null adoption transition requires every current step to remain `"user-adopted"` with null traces, while a later state-changing ordinary or update run may create mixed origins only after clearing the transition.
 - `products` is sorted by `path`, has unique IDs and paths, contains every accepted semantic, entry, and verification product and no lineage metadata, and records exact current bytes; semantic and verification paths remain within the artifact directory, while the sole `"entry"` product may use only the exact canonical sibling path derived under [DR-014](014-cwd-output-invocation-defaults-entry-emission.md).
+  A semantic product has `inputs: []`; each entry or verification product's sorted unique `inputs` names the exact generator and checker plan inputs that produce or accept it, generator/checker inputs do not belong to semantic steps, and the union across deterministic products equals `plan.deterministicInputs`.
 - `pipeline`, step names, format names, link-option names, package names, and compatibility names are non-empty; format extensions retain [DR-001](001-slc-pipeline-layout-naming-invocation.md)'s canonical form.
 - `provenance.packages` is sorted in the role order above with one `"slc"`, one `"pipeline"`, and exactly one `"link-runtime"` only for a full-link plan; `null` records that the resolved component has no package version.
   `provenance.compatibility` is sorted by unique `name`; package versions and a `"provenance"` record have `input: null` and do not establish currentness, while a `"gate"` record's `input` names exactly one `"compatibility"` plan input whose `value` equals the record's value.
@@ -123,7 +128,7 @@ The following invariants make the object self-consistent and portable:
 - A canonical full or full-link invocation with neither reserved lineage path runs normally and creates the pair only after success, except that the reserved `slc` meta-pipeline never creates it.
 - On a lineage-eligible pipeline, `.slc-build.json` and `.slc-source` are a mutually valid reserved pair.
   Either path present without the other, or either path being a symbolic link or having the wrong file type, is a conflict rather than an unrecorded file or a cold build; automatic mode never overwrites it.
-- A present record with malformed JSON, a missing, unknown, or wrong-typed schema field, an unsupported schema or hash algorithm, a symbolic-link path, an invalid managed path, or an inventory path not derivable from its canonical plan is a conflict rather than an absent cache; automatic mode refuses to overwrite it.
+- A present record with malformed or noncanonically encoded JSON, a missing, unknown, or wrong-typed schema field, an unsupported schema or hash algorithm, a symbolic-link path, an invalid managed path, or an inventory path not derivable from its canonical plan is a conflict rather than an absent cache; automatic mode refuses to overwrite it.
 - A recorded step is reusable only when its current input key, definition/executor identity, semantic options, and existing output bytes match the record exactly.
   The planner walks the ordered chain and recomputes downstream keys after every executed step; if an executed step reproduces its prior output bytes, still-current downstream steps remain reusable.
 - Reuse additionally requires an explicit closed, content-identified declaration of every output-affecting readable input, using the phase definition's existing semantic-input declaration where applicable.
