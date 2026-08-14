@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import {
+  link,
   mkdir,
   mkdtemp,
   readFile,
@@ -22,19 +23,27 @@ import {
   type PhaseExecutor,
   runPhase,
 } from '../src/execution.js';
+import {
+  createWorkspaceRecord,
+  type WorkspaceRecord,
+} from '../src/workspace.js';
 
 const executor = (
-  impl: (request: ExecuteRequest) => Promise<ExecutorResult> | ExecutorResult,
-): PhaseExecutor => ({ run: (request) => Promise.resolve(impl(request)) });
+  impl: (
+    request: ExecuteRequest,
+    workspace: WorkspaceRecord,
+  ) => Promise<ExecutorResult> | ExecutorResult,
+): PhaseExecutor => ({
+  run: (request, workspace) => Promise.resolve(impl(request, workspace)),
+});
 
 /** An executor that writes `content` to the request target and returns ok. */
 const writingExecutor = (
   content = 'output',
   diagnostics: string[] = [],
 ): PhaseExecutor =>
-  executor(async (request) => {
-    const target = request.kind === 'compile' ? request.target : request.linked;
-    await writeFile(target, content);
+  executor(async (_request, workspace) => {
+    await writeFile(workspace.write.physicalPath, content);
     return { status: 'ok', diagnostics };
   });
 
@@ -75,6 +84,131 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
       target: request.target,
       diagnostics: ['resolved a benign ambiguity'],
     });
+  });
+
+  it('accepts an alternate physical sink while preserving the logical target', async () => {
+    const physicalSource = join(dir, 'candidate-source.md');
+    const physicalTarget = join(dir, 'candidate-target.md');
+    await writeFile(physicalSource, 'candidate source');
+    const workspace = await createWorkspaceRecord(request, {
+      physicalReads: { source: physicalSource },
+      physicalWrite: physicalTarget,
+    });
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      workspace,
+      executor: executor(async (_request, bound) => {
+        await writeFile(bound.write.physicalPath, 'candidate output');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      target: request.target,
+      diagnostics: [],
+    });
+    await expect(readFile(physicalTarget, 'utf8')).resolves.toBe(
+      'candidate output',
+    );
+    await expect(readFile(request.target, 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('fails when an alternate-sink executor also writes the canonical logical target (PHEXEC-3, PHEXEC-6)', async () => {
+    const physicalTarget = join(dir, 'candidate-target.md');
+    const workspace = await createWorkspaceRecord(request, {
+      physicalWrite: physicalTarget,
+    });
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      workspace,
+      executor: executor(async (semantic, bound) => {
+        if (semantic.kind !== 'compile') throw new Error('expected compile');
+        await writeFile(bound.write.physicalPath, 'candidate output');
+        await writeFile(semantic.target, 'out-of-binding output');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain(
+        `protected path "${request.target}" changed during the run`,
+      );
+    }
+  });
+
+  it('fails when an executor mutates an alternate physical read', async () => {
+    const physicalSource = join(dir, 'candidate-source.md');
+    const physicalTarget = join(dir, 'candidate-target.md');
+    await writeFile(physicalSource, 'candidate source');
+    const workspace = await createWorkspaceRecord(request, {
+      physicalReads: { source: physicalSource },
+      physicalWrite: physicalTarget,
+    });
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      workspace,
+      executor: executor(async (_semantic, bound) => {
+        await writeFile(bound.write.physicalPath, 'candidate output');
+        const source = bound.reads.find((read) => read.role === 'source');
+        if (source === undefined) throw new Error('missing source binding');
+        await writeFile(source.physicalPath, 'tampered');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.report.reasons.some(
+          (reason) =>
+            reason.includes(physicalSource) &&
+            reason.includes('changed during the run'),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('fails post-run when the physical sink becomes a hard link to a bound read', async () => {
+    const physicalTarget = join(dir, 'candidate-target.md');
+    const workspace = await createWorkspaceRecord(request, {
+      physicalWrite: physicalTarget,
+    });
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      workspace,
+      executor: executor(async (_semantic, bound) => {
+        await writeFile(bound.write.physicalPath, 'candidate output');
+        await unlink(bound.write.physicalPath);
+        const source = bound.reads.find((read) => read.role === 'source');
+        if (source === undefined) throw new Error('missing source binding');
+        await link(source.physicalPath, bound.write.physicalPath);
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain(
+        'physical workspace is no longer valid: workspace write must be absent or one independent regular file',
+      );
+      expect(
+        result.report.reasons.some((reason) =>
+          reason.includes('changed during the run'),
+        ),
+      ).toBe(false);
+    }
   });
 
   it('fails when the target is not written (PHEXEC-4)', async () => {
@@ -228,12 +362,27 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
 });
 
 describe('runPhase blocked protocol (PHEXEC-7, PHEXEC-9)', () => {
-  const request: ExecuteRequest = {
-    kind: 'compile',
-    definitionPath: '/defs/text2gears.md',
-    source: '/src/onboarding.md',
-    target: '/out/onboarding.gears.md',
-  };
+  let dir: string;
+  let request: ExecuteRequest;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'slc-exec-blocked-'));
+    const definitionPath = join(dir, 'text2gears.md');
+    const source = join(dir, 'onboarding.md');
+    await writeFile(definitionPath, '# definition');
+    await writeFile(source, 'source');
+    request = {
+      kind: 'compile',
+      definitionPath,
+      source,
+      target: join(dir, 'onboarding.gears.md'),
+    };
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
   const run = (executorImpl: PhaseExecutor) =>
     runPhase({
       request,

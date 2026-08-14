@@ -20,12 +20,11 @@
  * protected inputs (not the full write scope); `slc` adds no host-side
  * write-scope enforcement.
  *
- * The turn is seeded per the PHEXEC-29 contract ({@link seedPhaseTurn}), and a
- * transformation-performing direct Captain call additionally carries the host
- * workspace contract ({@link composeWorkspaceContract}; PHEXEC-34) so the
- * host-agnostic artifact's Captain learns the request's absolute paths; the
- * result is derived in {@link drivePhase} from the structured runtime boundary
- * or, for a void-result legacy runtime, the host-observable output delta.
+ * The turn is seeded per the PHEXEC-29 contract ({@link seedPhaseTurn}), while
+ * every performing Player and transformation Captain receives the separate
+ * host-owned physical workspace contract (PHEXEC-34). The result is derived in
+ * {@link drivePhase} from the structured runtime boundary or, for a void-result
+ * legacy runtime, the physical sink's host-observable output delta.
  * See specs/dev/phase-execution.md.
  */
 
@@ -43,11 +42,7 @@ import type {
   PhaseExecutor,
 } from './execution.js';
 import type { AgentClient } from './interpreter.js';
-import {
-  composeWorkspaceContract,
-  mapPhaseResult,
-  seedPhaseTurn,
-} from './phase-runner.js';
+import { mapPhaseResult, seedPhaseTurn } from './phase-runner.js';
 import type { PhaseInput, PhaseResult } from './phase-runner.js';
 import {
   isPlaybookRunResult,
@@ -63,6 +58,7 @@ import {
   type SessionV1PlaybookPorts,
 } from './playbook-contract.js';
 import { createPlaybookPorts, type PlayerTransport } from './playbook-ports.js';
+import type { WorkspaceRecord } from './workspace.js';
 
 /**
  * Imports a compiled `playbook` module and returns its runtime factory
@@ -128,20 +124,18 @@ export function createCompiledExecutor(opts: {
   return {
     async run(
       request: ExecuteRequest,
+      workspace: WorkspaceRecord,
       signal: AbortSignal,
     ): Promise<ExecutorResult> {
       let lastFsmState: string | undefined;
-      const input = phaseInput(request, opts.runRoot);
+      const input = phaseInput(request, workspace);
       const adapter = createPlaybookPorts({
         player: opts.player,
         judge: opts.judge,
         models: opts.models,
         defaultModel: opts.defaultModel,
         cwd: opts.cwd,
-        // The host owns the workspace: a transformation-performing Captain's
-        // transported prompt carries the request's absolute paths and
-        // write-scope rules (PHEXEC-34).
-        captainWorkspace: composeWorkspaceContract(input),
+        workspace,
         onStatus: opts.onStatus,
       });
       // Hand the runtime only Playbook's ports — never the host-only
@@ -173,6 +167,7 @@ export function createCompiledExecutor(opts: {
         signal,
         identity,
         runtimeContract,
+        workspace.write.physicalPath,
       );
       const result = mapVoidContractFailedState(
         driven,
@@ -233,6 +228,7 @@ async function drivePhase(
   signal: AbortSignal,
   identity: { sessionId: string; playbookId: string },
   runtimeContract: RuntimeContractProfile,
+  outputPath: string,
 ): Promise<PhaseResult> {
   let runtime: CompatiblePlaybookRuntime;
   try {
@@ -247,7 +243,6 @@ async function drivePhase(
 
   // Snapshot the output before the turn so a pre-existing stale artifact is not
   // mistaken for fresh output the turn produced.
-  const outputPath = input.kind === 'compile' ? input.target : input.linked;
   const before = await outputState(outputPath);
   const initValue = runtimeInitValue(runtimeContract, identity, ports);
   let runResult: unknown;
@@ -623,22 +618,34 @@ function outputWasProduced(before: OutputState, after: OutputState): boolean {
  * resolving its workspace paths against the run root to absolute host paths the
  * runtime's agents can act on (DR-005).
  */
-function phaseInput(request: ExecuteRequest, runRoot: string): PhaseInput {
-  const abs = (path: string): string => resolve(runRoot, path);
+function phaseInput(
+  request: ExecuteRequest,
+  workspace: WorkspaceRecord,
+): PhaseInput {
   if (request.kind === 'compile') {
     return {
       kind: 'compile',
-      source: abs(request.source),
-      target: abs(request.target),
+      source: workspaceRead(workspace, 'source'),
+      target: workspace.write.logicalPath,
     };
   }
   return {
     kind: 'link',
-    objects: request.objects.map(abs),
-    linkTarget: abs(request.linkTarget),
+    objects: request.objects.map((_, index) =>
+      workspaceRead(workspace, `object:${index}`),
+    ),
+    linkTarget: workspaceRead(workspace, 'link-target'),
     options: optionsRecord(request.options),
-    linked: abs(request.linked),
+    linked: workspace.write.logicalPath,
   };
+}
+
+function workspaceRead(workspace: WorkspaceRecord, role: string): string {
+  const read = workspace.reads.find((candidate) => candidate.role === role);
+  if (read === undefined) {
+    throw new Error(`workspace is missing required ${role} read`);
+  }
+  return read.logicalPath;
 }
 
 function optionsRecord(

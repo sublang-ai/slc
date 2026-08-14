@@ -23,6 +23,11 @@ import type {
   LinkOptionPair,
   PhaseExecutor,
 } from './execution.js';
+import {
+  appendWorkspaceContract,
+  type WorkspaceReadBinding,
+  type WorkspaceRecord,
+} from './workspace.js';
 
 /** A single agent invocation: a prompt plus per-run configuration. */
 export interface AgentRunRequest {
@@ -64,24 +69,40 @@ export interface InterpreterConfig {
 export function buildPhasePrompt(opts: {
   request: ExecuteRequest;
   definition: string;
+  workspace: WorkspaceRecord;
 }): string {
-  const { request, definition } = opts;
-  const target = request.kind === 'compile' ? request.target : request.linked;
+  const { request, definition, workspace } = opts;
+  const target = workspace.write.logicalPath;
   const inputs =
     request.kind === 'compile'
       ? [
-          `source to read: ${request.source}`,
-          ...(request.references ?? []).map(
-            (path) => `reference to consult (read-only): ${path}`,
-          ),
+          `source to read: ${logicalRead(workspace, 'source')}`,
+          ...workspace.reads
+            .filter((read) => read.role.startsWith('reference:'))
+            .map(
+              (read) => `reference to consult (read-only): ${read.logicalPath}`,
+            ),
+          ...workspace.reads
+            .filter((read) => read.role.startsWith('semantic-input:'))
+            .map(
+              (read) => `declared semantic input to read: ${read.logicalPath}`,
+            ),
         ]
       : [
-          `object artifacts to read, in order: ${request.objects.join(', ')}`,
-          `link target module: ${request.linkTarget}`,
+          `object artifacts to read, in order: ${workspace.reads
+            .filter((read) => read.role.startsWith('object:'))
+            .map((read) => read.logicalPath)
+            .join(', ')}`,
+          `link target module: ${logicalRead(workspace, 'link-target')}`,
+          ...workspace.reads
+            .filter((read) => read.role.startsWith('semantic-input:'))
+            .map(
+              (read) => `declared semantic input to read: ${read.logicalPath}`,
+            ),
           `options: ${formatOptions(request.options)}`,
         ];
 
-  return [
+  const prompt = [
     'You are executing one phase of the SubLang Compiler (slc).',
     'The phase definition below is authoritative; follow it exactly and add no rules of your own.',
     '',
@@ -89,23 +110,43 @@ export function buildPhasePrompt(opts: {
     definition,
     '--- END DEFINITION ---',
     '',
-    'Inputs:',
+    'Logical request:',
+    `- phase definition: ${logicalRead(workspace, 'definition')}`,
     ...inputs.map((line) => `- ${line}`),
-    `- artifact to write: ${target}`,
+    `- artifact to produce: ${target}`,
     '',
     'Contract — you must:',
-    `- write only ${target}, creating or overwriting exactly that file;`,
-    '- not edit the sources, the phase or link definition, specs, link targets, object artifacts, or any other file;',
+    '- treat every logical path above as a semantic identifier only, with no filesystem authority;',
+    '- use the final host workspace binding as the sole filesystem authority for its named host-supplied reads and write sink;',
+    '- write only the one host-bound physical sink named by that final binding, and do not write the canonical logical target when it differs from that sink;',
+    '- not edit sources, phase or link definitions, specs, link targets, object artifacts, or any unrelated file;',
     '- not commit or otherwise touch version control;',
     '- produce a complete artifact, not a sketch or placeholder;',
     '- add no domain semantics beyond what the source implies or the definition requires, and drop nothing the source states;',
     '- preserve verbatim any content the definition requires to be preserved;',
-    '- run only the deterministic tools or commands the definition calls for, and read only the content it cites or references;',
-    '- verify the produced artifact against the definition before finishing.',
+    '- run the deterministic tools or commands the definition calls for and read the content it cites or references as needed to follow it;',
+    '- verify the complete produced artifact against the definition before finishing.',
     '',
-    'When done, reply with a concise summary of what you produced and any ambiguity you resolved.',
+    'When done, reply with a concise summary of what you produced, any ambiguity you resolved, and any diagnostics.',
     'If the inputs are malformed under the definition, or the definition is incompatible with them, do not guess: leave the artifact unwritten and reply with a line beginning "BLOCKED:" followed by the concrete reason(s).',
   ].join('\n');
+
+  return appendWorkspaceContract(prompt, workspace);
+}
+
+function logicalRead(workspace: WorkspaceRecord, role: string): string {
+  return requiredRead(workspace, role).logicalPath;
+}
+
+function requiredRead(
+  workspace: WorkspaceRecord,
+  role: string,
+): WorkspaceReadBinding {
+  const read = workspace.reads.find((candidate) => candidate.role === role);
+  if (read === undefined) {
+    throw new Error(`workspace is missing required ${role} read`);
+  }
+  return read;
 }
 
 /**
@@ -123,10 +164,14 @@ export function createInterpretedExecutor(opts: {
   return {
     async run(
       request: ExecuteRequest,
+      workspace: WorkspaceRecord,
       signal: AbortSignal,
     ): Promise<ExecutorResult> {
-      const definition = await readFile(request.definitionPath, 'utf8');
-      const prompt = buildPhasePrompt({ request, definition });
+      const definition = await readFile(
+        requiredRead(workspace, 'definition').physicalPath,
+        'utf8',
+      );
+      const prompt = buildPhasePrompt({ request, definition, workspace });
       const response = await agent.run({
         prompt,
         cwd: config.cwd,

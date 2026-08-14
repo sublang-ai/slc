@@ -12,13 +12,12 @@
  * continuation selection, `callCaptain` and `callJudge` share the Captain
  * transport's single-flight queue, `callPlaybook` fails closed because SLC has
  * no child stack, and status plus non-trace operational telemetry can be
- * drained as diagnostics. A transformation-performing direct Captain call —
- * one whose source-owned options carry no tool restriction — additionally
+ * drained as diagnostics. Every Player and a transformation-performing direct
+ * Captain call — one whose source-owned options carry no tool restriction —
  * carries the host workspace contract appended to its composed prompt, because
  * the linked artifact is host-agnostic and only the host owns the request's
- * workspace paths (PHEXEC-34). Exact `playbook.trace` payloads stay out of ordinary
- * diagnostics (DR-010, DR-011). The adapter holds no host specifics beyond the
- * injected transports. See specs/dev/phase-execution.md.
+ * workspace paths (PHEXEC-34). Exact `playbook.trace` payloads stay out of
+ * ordinary diagnostics (DR-010, DR-011). See specs/dev/phase-execution.md.
  */
 
 import type { AgentClient, AgentRunResult } from './interpreter.js';
@@ -31,6 +30,7 @@ import type {
   PlayerCallOptions,
   PlayerResult,
 } from './playbook-contract.js';
+import { appendWorkspaceContract, type WorkspaceRecord } from './workspace.js';
 
 /** Source-owned ports plus a host-only non-sensitive diagnostic drain. */
 export interface PlaybookPortsAdapter extends CompatiblePlaybookPorts {
@@ -58,12 +58,11 @@ export function createPlaybookPorts(opts: {
   /** Working directory handed to the transports. */
   cwd?: string;
   /**
-   * Host workspace contract appended to transformation-performing direct
-   * Captain prompts — those whose source-owned options carry no `allowedTools`
-   * restriction (PHEXEC-34). Routing-only Captain and judge calls never
-   * carry it.
+   * Host-owned binding appended to every Player and transformation-performing
+   * direct Captain prompt (PHEXEC-34). Routing-only Captain and judge calls
+   * never carry it.
    */
-  captainWorkspace?: string;
+  workspace: WorkspaceRecord;
   /**
    * Live status sink (DR-019, PHEXEC-25): when set, human status and non-trace
    * operational telemetry stream here as they occur instead of being collected
@@ -94,7 +93,7 @@ export function createPlaybookPorts(opts: {
       options?: PlayerCallOptions,
     ): Promise<PlayerResult> {
       const result = await playerFor(playerId).run({
-        prompt,
+        prompt: appendWorkspaceContract(prompt, opts.workspace),
         model: opts.models?.[playerId] ?? opts.defaultModel,
         cwd: opts.cwd,
         ...(options !== undefined ? { resume: options.resume } : {}),
@@ -114,9 +113,8 @@ export function createPlaybookPorts(opts: {
       // composes host-agnostic prompts, and only the host knows the request's
       // absolute source/target paths (PHEXEC-34).
       const transported =
-        isolation.allowedTools === undefined &&
-        opts.captainWorkspace !== undefined
-          ? `${prompt}\n\n${opts.captainWorkspace}`
+        isolation.allowedTools === undefined
+          ? appendWorkspaceContract(prompt, opts.workspace)
           : prompt;
       return withSerialCaptain(signal, async () => {
         const result = await opts.judge.run({

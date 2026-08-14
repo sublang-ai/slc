@@ -12,7 +12,7 @@
  */
 
 import { mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
 import {
@@ -33,6 +33,7 @@ import { type Invocation, parseInvocation } from './invocation.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
 import type { ProgressSink } from './progress.js';
 import { evaluatePin, evaluatePinFile } from './pin-currency.js';
+import { deriveDeclaredClosure } from './pin-closure.js';
 import { PinError, loadPinFile, type PinFile } from './pins.js';
 import {
   type Pipeline,
@@ -512,6 +513,13 @@ async function executeSteps(
       return { ok: false, outputs, diagnostics };
     }
 
+    const semanticInputs = await workspaceSemanticInputs(
+      step,
+      pipeline,
+      pinFile,
+      runCwd(deps),
+    );
+
     const result = await runPhase({
       request: step.request,
       phase: step.name,
@@ -519,6 +527,10 @@ async function executeSteps(
       executor: selection.executor,
       definitions,
       revalidate: () => revalidateChain(pipeline.dir),
+      workspaceOptions: {
+        runRoot: runCwd(deps),
+        semanticInputs,
+      },
       signal: deps.signal,
     });
     if (!result.ok) {
@@ -570,6 +582,30 @@ async function executeSteps(
     outputs.push(target);
   }
   return { ok: true, outputs, diagnostics };
+}
+
+/** Derives the ordered declared reads not already represented as request references. */
+async function workspaceSemanticInputs(
+  step: ScheduledStep,
+  pipeline: Pipeline,
+  pinFile: PinFile | undefined,
+  runRoot: string,
+): Promise<Array<{ logicalPath: string }>> {
+  const references =
+    step.request.kind === 'compile'
+      ? (step.request.references ?? []).map((path) => resolve(runRoot, path))
+      : [];
+  const referencePaths = new Set(references);
+  const pin = step.pinKey === null ? undefined : pinFile?.pins[step.pinKey];
+  const closure = await deriveDeclaredClosure({
+    pipelineDir: pipeline.dir,
+    definitionPath: step.request.definitionPath,
+    boundary: pin === undefined ? undefined : pinFile?.pathBoundary.path,
+    references,
+  });
+  return [...closure.inputs]
+    .filter((path) => !referencePaths.has(resolve(path)))
+    .map((logicalPath) => ({ logicalPath }));
 }
 
 /** An executor to run, or a fail-closed verdict that stops the run (PHEXEC-27). */

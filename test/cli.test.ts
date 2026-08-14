@@ -54,6 +54,11 @@ import {
   createPipelineResolver,
   pipelineSearchRoots,
 } from '../src/resolver.js';
+import {
+  WORKSPACE_BEGIN,
+  WORKSPACE_END,
+  type WorkspaceRecord,
+} from '../src/workspace.js';
 
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats
@@ -78,7 +83,30 @@ const linkDoc = `## Formats
 | <path>.ts | A runner module. |
 `;
 
-/** A fake agent that writes the prompt's declared target, with optional faults. */
+/** Parses the exact final host-owned workspace envelope from a performing prompt. */
+const workspaceFromPrompt = (prompt: string): WorkspaceRecord => {
+  const pattern = new RegExp(
+    `(?:^|\\n)${WORKSPACE_BEGIN}\\n([^\\r\\n]+)\\n${WORKSPACE_END}$`,
+  );
+  const match = pattern.exec(prompt);
+  if (
+    match === null ||
+    prompt.indexOf(WORKSPACE_BEGIN) !== prompt.lastIndexOf(WORKSPACE_BEGIN) ||
+    prompt.indexOf(WORKSPACE_END) !== prompt.lastIndexOf(WORKSPACE_END)
+  ) {
+    throw new Error('prompt has no exact single final SLC workspace envelope');
+  }
+  const record = JSON.parse(match[1]) as WorkspaceRecord;
+  if (
+    record.schema !== 'sublang.slc.workspace.v1' ||
+    typeof record.write?.physicalPath !== 'string'
+  ) {
+    throw new Error('prompt has an invalid SLC workspace record');
+  }
+  return record;
+};
+
+/** A fake agent that writes the prompt's physical sink, with optional faults. */
 const makeAgent = (
   opts: {
     block?: boolean;
@@ -103,8 +131,8 @@ const makeAgent = (
       if (opts.block)
         return { status: 'success', text: 'BLOCKED: the source is malformed' };
       if (opts.error) return { status: 'error', text: 'agent failed' };
-      const match = /artifact to write: (.+)/.exec(prompt);
-      if (match && !opts.skip) await writeFile(match[1].trim(), 'output\n');
+      const workspace = workspaceFromPrompt(prompt);
+      if (!opts.skip) await writeFile(workspace.write.physicalPath, 'output\n');
       return { status: 'success', text: 'wrote the artifact' };
     },
   };
@@ -366,8 +394,8 @@ describe('progress (CLI-36, CLI-37)', () => {
     const observing: AgentClient = {
       run: async ({ prompt }) => {
         seenDuringPhase.push([...err]);
-        const target = /artifact to write: (.+)/.exec(prompt)?.[1].trim();
-        if (target !== undefined) await writeFile(target, 'output\n');
+        const target = workspaceFromPrompt(prompt).write.physicalPath;
+        await writeFile(target, 'output\n');
         return { status: 'success', text: 'wrote the artifact' };
       },
     };

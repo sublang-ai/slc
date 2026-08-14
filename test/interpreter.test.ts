@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,6 +15,12 @@ import {
   buildPhasePrompt,
   createInterpretedExecutor,
 } from '../src/interpreter.js';
+import {
+  createWorkspaceRecord,
+  encodeWorkspaceContract,
+  type WorkspaceReadBinding,
+  type WorkspaceRecord,
+} from '../src/workspace.js';
 
 const compileRequest = (
   overrides: Partial<Extract<ExecuteRequest, { kind: 'compile' }>> = {},
@@ -27,36 +33,103 @@ const compileRequest = (
     ...overrides,
   }) satisfies ExecuteRequest;
 
+const IDENTITY = `sha256:${'0'.repeat(64)}` as WorkspaceReadBinding['identity'];
+
+const promptWorkspace = (
+  request: ExecuteRequest,
+  semanticInputs: readonly string[] = [],
+): WorkspaceRecord => {
+  const read = (role: string, logicalPath: string): WorkspaceReadBinding => ({
+    role,
+    logicalPath,
+    physicalPath: logicalPath,
+    kind: 'file',
+    identity: IDENTITY,
+  });
+  const reads = [read('definition', request.definitionPath)];
+  if (request.kind === 'compile') {
+    reads.push(read('source', request.source));
+    for (const [index, path] of (request.references ?? []).entries()) {
+      reads.push(read(`reference:${index}`, path));
+    }
+  } else {
+    for (const [index, path] of request.objects.entries()) {
+      reads.push(read(`object:${index}`, path));
+    }
+    reads.push(read('link-target', request.linkTarget));
+  }
+  for (const [index, path] of semanticInputs.entries()) {
+    reads.push(read(`semantic-input:${index}`, path));
+  }
+  const logicalWrite =
+    request.kind === 'compile' ? request.target : request.linked;
+  return {
+    schema: 'sublang.slc.workspace.v1',
+    reads,
+    write: {
+      role: request.kind === 'compile' ? 'target' : 'linked',
+      logicalPath: logicalWrite,
+      physicalPath: logicalWrite,
+      kind: 'file',
+    },
+  };
+};
+
 describe('buildPhasePrompt (PHEXEC-11, PHEXEC-14, PHEXEC-15)', () => {
   it('embeds the definition, the target, and the agent contract for a compile phase', () => {
+    const request = compileRequest({
+      references: ['/defs/entry.md'],
+    });
+    const workspace = promptWorkspace(request, ['/defs/grammar.md']);
     const prompt = buildPhasePrompt({
-      request: compileRequest(),
+      request,
       definition: '## Formats\n\nTransform text to gears.',
+      workspace,
     });
     expect(prompt).toContain('Transform text to gears.');
     expect(prompt).toContain('authoritative');
-    expect(prompt).toContain('write only /out/onboarding.gears.md');
+    expect(prompt).toContain('logical path above as a semantic identifier');
+    expect(prompt).toContain('sole filesystem authority');
+    expect(prompt).toContain('host-bound physical sink');
     expect(prompt).toContain('not commit');
     expect(prompt).toContain('source to read: /src/onboarding.md');
+    expect(prompt).toContain(
+      'reference to consult (read-only): /defs/entry.md',
+    );
+    expect(prompt).toContain(
+      'declared semantic input to read: /defs/grammar.md',
+    );
+    expect(prompt).toContain('drop nothing');
+    expect(prompt).toContain('preserve verbatim');
+    expect(prompt).toContain('verify the complete produced artifact');
+    expect(prompt).toContain('any diagnostics');
     expect(prompt).toContain('BLOCKED:');
+    expect(prompt.endsWith(encodeWorkspaceContract(workspace))).toBe(true);
   });
 
   it('lists ordered objects, the link target, and options for a link phase', () => {
+    const request: ExecuteRequest = {
+      kind: 'link',
+      definitionPath: '/defs/link.md',
+      objects: ['/o/main.fsm.ts', '/o/helper.fsm.ts'],
+      linkTarget: '/o/runner.ts',
+      options: [{ name: 'seed', value: '42' }],
+      linked: '/o/app.run.ts',
+    };
+    const workspace = promptWorkspace(request, ['/defs/runtime-contract.md']);
     const prompt = buildPhasePrompt({
-      request: {
-        kind: 'link',
-        definitionPath: '/defs/link.md',
-        objects: ['/o/main.fsm.ts', '/o/helper.fsm.ts'],
-        linkTarget: '/o/runner.ts',
-        options: [{ name: 'seed', value: '42' }],
-        linked: '/o/app.run.ts',
-      },
+      request,
       definition: '## Link Targets',
+      workspace,
     });
     expect(prompt).toContain('/o/main.fsm.ts, /o/helper.fsm.ts');
     expect(prompt).toContain('link target module: /o/runner.ts');
     expect(prompt).toContain('options: seed=42');
-    expect(prompt).toContain('write only /o/app.run.ts');
+    expect(prompt).toContain('artifact to produce: /o/app.run.ts');
+    expect(prompt).toContain(
+      'declared semantic input to read: /defs/runtime-contract.md',
+    );
+    expect(prompt.endsWith(encodeWorkspaceContract(workspace))).toBe(true);
   });
 });
 
@@ -78,9 +151,14 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
   };
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'slc-interp-'));
+    dir = await mkdtemp(join(await realpath(tmpdir()), 'slc-interp-'));
     await writeFile(join(dir, 'text2gears.md'), '## Formats\n\ndo the thing');
-    request = compileRequest({ definitionPath: join(dir, 'text2gears.md') });
+    await writeFile(join(dir, 'source.md'), 'source');
+    request = compileRequest({
+      definitionPath: join(dir, 'text2gears.md'),
+      source: join(dir, 'source.md'),
+      target: join(dir, 'target.md'),
+    });
   });
 
   afterEach(async () => {
@@ -93,8 +171,13 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
       text: 'wrote the gears',
     });
     const executor = createInterpretedExecutor({ agent });
+    const workspace = await createWorkspaceRecord(request);
 
-    const result = await executor.run(request, new AbortController().signal);
+    const result = await executor.run(
+      request,
+      workspace,
+      new AbortController().signal,
+    );
 
     expect(agent.calls).toHaveLength(1);
     expect(agent.calls[0].prompt).toContain('do the thing');
@@ -107,8 +190,9 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
       agent,
       config: { model: 'some-model', cwd: '/work' },
     });
+    const workspace = await createWorkspaceRecord(request);
 
-    await executor.run(request, new AbortController().signal);
+    await executor.run(request, workspace, new AbortController().signal);
 
     expect(agent.calls[0]).toMatchObject({ model: 'some-model', cwd: '/work' });
   });
@@ -118,8 +202,10 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
       status: 'success',
       text: 'BLOCKED: the source has no headings',
     });
+    const workspace = await createWorkspaceRecord(request);
     const result = await createInterpretedExecutor({ agent }).run(
       request,
+      workspace,
       new AbortController().signal,
     );
     expect(result).toEqual({
@@ -130,8 +216,10 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
 
   it('maps an error agent status to an error result', async () => {
     const agent = recordingAgent({ status: 'error', text: '' });
+    const workspace = await createWorkspaceRecord(request);
     const result = await createInterpretedExecutor({ agent }).run(
       request,
+      workspace,
       new AbortController().signal,
     );
     expect(result.status).toBe('error');
@@ -139,8 +227,10 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
 
   it('maps an unfinished agent run to an error result', async () => {
     const agent = recordingAgent({ status: 'incomplete', text: '' });
+    const workspace = await createWorkspaceRecord(request);
     const result = await createInterpretedExecutor({ agent }).run(
       request,
+      workspace,
       new AbortController().signal,
     );
     expect(result).toEqual({
@@ -148,13 +238,128 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
       diagnostics: ['agent did not finish'],
     });
   });
+
+  it('reads the physical definition and appends one exact final binding while retaining logical locators', async () => {
+    const logicalDefinition = join(dir, 'logical-definition.md');
+    const physicalDefinition = join(dir, 'staged-definition.md');
+    const logicalSource = join(dir, 'logical-source.md');
+    const physicalSource = join(dir, 'staged-source.md');
+    const logicalTarget = join(dir, 'logical-target.md');
+    const physicalTarget = join(dir, 'staged-target.md');
+    await writeFile(physicalDefinition, 'PHYSICAL DEFINITION');
+    await writeFile(physicalSource, 'staged source');
+    const stagedRequest: ExecuteRequest = {
+      kind: 'compile',
+      definitionPath: logicalDefinition,
+      source: logicalSource,
+      target: logicalTarget,
+    };
+    const workspace = await createWorkspaceRecord(stagedRequest, {
+      physicalReads: {
+        definition: physicalDefinition,
+        source: physicalSource,
+      },
+      physicalWrite: physicalTarget,
+    });
+    const agent: AgentClient & { calls: AgentRunRequest[] } = {
+      calls: [],
+      async run(call) {
+        this.calls.push(call);
+        await writeFile(workspace.write.physicalPath, 'candidate');
+        return { status: 'success', text: 'done' };
+      },
+    };
+
+    const result = await createInterpretedExecutor({ agent }).run(
+      stagedRequest,
+      workspace,
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(await readFile(physicalTarget, 'utf8')).toBe('candidate');
+    const prompt = agent.calls[0].prompt;
+    expect(prompt).toContain('PHYSICAL DEFINITION');
+    const [body] = prompt.split('\n\nSLC_WORKSPACE_BEGIN\n');
+    expect(body).toContain(logicalDefinition);
+    expect(body).toContain(logicalSource);
+    expect(body).toContain(logicalTarget);
+    expect(body).not.toContain(physicalDefinition);
+    expect(body).not.toContain(physicalSource);
+    expect(body).not.toContain(physicalTarget);
+    expect(prompt.endsWith(encodeWorkspaceContract(workspace))).toBe(true);
+    expect(prompt.match(/SLC_WORKSPACE_BEGIN/g)).toHaveLength(1);
+    expect(prompt.match(/SLC_WORKSPACE_END/g)).toHaveLength(1);
+  });
+
+  it('carries alternate link reads and sink only in the exact final binding', async () => {
+    const logicalDefinition = join(dir, 'logical-link.md');
+    const logicalObject = join(dir, 'logical-object.ts');
+    const logicalRuntime = join(dir, 'logical-runtime.ts');
+    const logicalLinked = join(dir, 'logical-linked.ts');
+    const physicalDefinition = join(dir, 'staged-link.md');
+    const physicalObject = join(dir, 'staged-object.ts');
+    const physicalRuntime = join(dir, 'staged-runtime.ts');
+    const physicalLinked = join(dir, 'staged-linked.ts');
+    await writeFile(physicalDefinition, 'PHYSICAL LINK DEFINITION');
+    await writeFile(physicalObject, 'export const machine = {};');
+    await writeFile(physicalRuntime, 'export const runtime = {};');
+    const linkRequest: ExecuteRequest = {
+      kind: 'link',
+      definitionPath: logicalDefinition,
+      objects: [logicalObject],
+      linkTarget: logicalRuntime,
+      options: [],
+      linked: logicalLinked,
+    };
+    const workspace = await createWorkspaceRecord(linkRequest, {
+      physicalReads: {
+        definition: physicalDefinition,
+        'object:0': physicalObject,
+        'link-target': physicalRuntime,
+      },
+      physicalWrite: physicalLinked,
+    });
+    const agent: AgentClient & { calls: AgentRunRequest[] } = {
+      calls: [],
+      async run(call) {
+        this.calls.push(call);
+        await writeFile(workspace.write.physicalPath, 'linked candidate');
+        return { status: 'success', text: 'done' };
+      },
+    };
+
+    const result = await createInterpretedExecutor({ agent }).run(
+      linkRequest,
+      workspace,
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(await readFile(physicalLinked, 'utf8')).toBe('linked candidate');
+    const prompt = agent.calls[0].prompt;
+    const [body] = prompt.split('\n\nSLC_WORKSPACE_BEGIN\n');
+    expect(body).toContain(logicalDefinition);
+    expect(body).toContain(logicalObject);
+    expect(body).toContain(logicalRuntime);
+    expect(body).toContain(logicalLinked);
+    for (const physical of [
+      physicalDefinition,
+      physicalObject,
+      physicalRuntime,
+      physicalLinked,
+    ]) {
+      expect(body).not.toContain(physical);
+    }
+    expect(prompt.endsWith(encodeWorkspaceContract(workspace))).toBe(true);
+  });
 });
 
 describe('interpreted executor through the boundary (DR-003 + DR-004)', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'slc-interp-run-'));
+    dir = await mkdtemp(join(await realpath(tmpdir()), 'slc-interp-run-'));
   });
 
   afterEach(async () => {
@@ -187,5 +392,45 @@ describe('interpreted executor through the boundary (DR-003 + DR-004)', () => {
     });
 
     expect(result.ok).toBe(true);
+  });
+
+  it('rejects an interpreted agent that writes both the bound sink and differing logical target', async () => {
+    const definition = join(dir, 'text2gears.md');
+    const source = join(dir, 'onboarding.md');
+    const logicalTarget = join(dir, 'canonical.gears.md');
+    const physicalTarget = join(dir, 'candidate.gears.md');
+    await writeFile(definition, '## Formats');
+    await writeFile(source, 'prose');
+    const request: ExecuteRequest = {
+      kind: 'compile',
+      definitionPath: definition,
+      source,
+      target: logicalTarget,
+    };
+    const workspace = await createWorkspaceRecord(request, {
+      physicalWrite: physicalTarget,
+    });
+    const agent: AgentClient = {
+      async run() {
+        await writeFile(physicalTarget, 'candidate gears');
+        await writeFile(logicalTarget, 'out-of-binding gears');
+        return { status: 'success', text: 'done' };
+      },
+    };
+
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      executor: createInterpretedExecutor({ agent }),
+      workspace,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain(
+        `protected path "${logicalTarget}" changed during the run`,
+      );
+    }
   });
 });
