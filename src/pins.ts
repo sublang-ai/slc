@@ -19,6 +19,7 @@
 import { lstat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { errorCode, messageOf } from './errors.js';
 import { isBarePackageSpecifier } from './runtime-package.js';
 import { isPortablePhaseName } from './phase.js';
 
@@ -142,15 +143,6 @@ export async function loadPinFile(pipelineDir: string): Promise<LoadedPins> {
   }
   const source = await readFile(path, 'utf8');
   return { path, file: parsePinFile(source, path) };
-}
-
-function errorCode(error: unknown): string {
-  return typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    typeof error.code === 'string'
-    ? error.code
-    : 'unknown error';
 }
 
 /** Parses and structurally validates the text of a pin file into a {@link PinFile} (PIN-5). */
@@ -449,8 +441,4 @@ function rejectUnknownKeys(
 
 function invalid(field: string, detail: string): PinError {
   return new PinError('pin-invalid', `${field} ${detail}`);
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

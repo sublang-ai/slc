@@ -120,6 +120,8 @@ export async function emitVerifierSupport(
   return written;
 }
 
+// Local copy: this module's bytes are hashed into a deterministic identity
+// descriptor, so importing an unenumerated module would stop covering it.
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

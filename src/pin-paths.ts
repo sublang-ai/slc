@@ -25,6 +25,7 @@ import {
 } from 'node:path';
 import { isAbsolute as posixIsAbsolute } from 'node:path/posix';
 
+import { errorCode, isAbsentPathError } from './errors.js';
 import { PinError } from './pins.js';
 
 /**
@@ -81,7 +82,7 @@ function canonicalProspectivePath(path: string, field: string): string {
     try {
       return resolve(realpathSync.native(cursor), ...suffix.reverse());
     } catch (error) {
-      if (!isAbsentPath(error)) {
+      if (!isAbsentPathError(error)) {
         throw new PinError(
           'pin-invalid',
           `${field} cannot be resolved safely: ${errorCode(error)}`,
@@ -99,20 +100,6 @@ function canonicalProspectivePath(path: string, field: string): string {
     suffix.push(basename(cursor));
     cursor = parent;
   }
-}
-
-function isAbsentPath(error: unknown): boolean {
-  const code = errorCode(error);
-  return code === 'ENOENT' || code === 'ENOTDIR';
-}
-
-function errorCode(error: unknown): string {
-  return typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    typeof error.code === 'string'
-    ? error.code
-    : 'unknown error';
 }
 
 /** Rejects an absolute (POSIX or Windows) path, naming `field` (PIN-5). */

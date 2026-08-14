@@ -18,6 +18,7 @@
 import { createRequire } from 'node:module';
 
 import { createBuildIdentityProvider } from './build-identity.js';
+import { messageOf } from './errors.js';
 import {
   createConfiguredCompiledFactory,
   createConfiguredExecutor,
@@ -389,8 +390,4 @@ export function interruptSignal(emitter: {
 /** True when argv contains any of the given exact flag tokens. */
 function hasFlag(argv: readonly string[], ...flags: string[]): boolean {
   return argv.some((arg) => flags.includes(arg));
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

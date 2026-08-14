@@ -29,6 +29,7 @@ import {
   type StepRecord,
 } from './build-record.js';
 import { VERIFICATION_TEST_FILES } from './deterministic-derivatives.js';
+import { errorCode, messageOf } from './errors.js';
 import { hashBytes, type Hash } from './hash.js';
 import {
   VERIFIER_SUPPORT_DIR,
@@ -1339,19 +1340,6 @@ function sameStepIdentity(
   );
 }
 
-function errorCode(error: unknown): string {
-  return typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    typeof error.code === 'string'
-    ? error.code
-    : 'UNKNOWN';
-}
-
 function compareUtf8(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

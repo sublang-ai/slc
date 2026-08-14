@@ -62,6 +62,7 @@ import {
   type EmittedFileBinding,
 } from './emitted-imports.js';
 import { runMappedEmittedSuite } from './emitted-suite.js';
+import { messageOf } from './errors.js';
 import {
   formatFailureReport,
   runPhase,
@@ -865,8 +866,4 @@ function targetOf(step: ScheduledStep): string {
   return step.request.kind === 'compile'
     ? step.request.target
     : step.request.linked;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
