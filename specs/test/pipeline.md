@@ -17,7 +17,7 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 ### PIPE-20
 Verifies: [PIPE-4](../dev/pipeline.md#pipe-4), [PIPE-8](../dev/pipeline.md#pipe-8), [PIPE-17](../dev/pipeline.md#pipe-17), [COMPILE-1](../user/compiler.md#compile-1), [COMPILE-2](../user/compiler.md#compile-2)
 
-Where a pipeline directory holds a valid linear chain and no build record exists, when the slc command runs the full pipeline on a conforming source, the slc command shall write each intermediate and the output to their canonical `<art-dir>` paths and exit zero.
+Where a pipeline directory holds a valid linear chain and no lineage metadata exists, when the slc command runs the full pipeline on a conforming source, the slc command shall write each intermediate and the output to their canonical `<art-dir>` paths and exit zero.
 
 ### PIPE-21
 Verifies: [PIPE-5](../dev/pipeline.md#pipe-5), [COMPILE-4](../user/compiler.md#compile-4)
@@ -57,7 +57,7 @@ When the slc command runs `slc <pipeline>.link` with exactly one object, the slc
 ### PIPE-26
 Verifies: [PIPE-13](../dev/pipeline.md#pipe-13), [PIPE-15](../dev/pipeline.md#pipe-15), [COMPILE-2](../user/compiler.md#compile-2)
 
-Where no build record exists, when the slc command runs `slc <pipeline> <source> --link <target>`, the slc command shall write the compile-chain exit artifact as an intermediate object and the linked artifact as the output.
+Where no lineage metadata exists, when the slc command runs `slc <pipeline> <source> --link <target>`, the slc command shall write the compile-chain exit artifact as an intermediate object and the linked artifact as the output.
 
 ### PIPE-27
 Verifies: [PIPE-16](../dev/pipeline.md#pipe-16), [COMPILE-4](../user/compiler.md#compile-4)
@@ -77,9 +77,9 @@ When the slc command is run with `--link-option <name>=<value>` pairs, the slc c
 ### PIPE-35
 Verifies: [PIPE-30](../dev/pipeline.md#pipe-30), [PIPE-31](../dev/pipeline.md#pipe-31), [PIPE-32](../dev/pipeline.md#pipe-32), [PIPE-33](../dev/pipeline.md#pipe-33), [COMPILE-8](../user/compiler.md#compile-8)
 
-Where no build record exists, when a pipeline directory contains a format-preserving pass phase, the slc command shall run the pass by default between the producing and consuming phases — the producing phase writing the `.raw` intermediate and the pass the canonical path; with `--no-optimize` it shall run the chain with no passes, and as `slc <pipeline>.<pass>` it shall write the `.opt` sibling.
+Where no lineage metadata exists, when a pipeline directory contains a format-preserving pass phase, the slc command shall run the pass by default between the producing and consuming phases — the producing phase writing the `.raw` intermediate and the pass the canonical path; with `--no-optimize` it shall run the chain with no passes, and as `slc <pipeline>.<pass>` it shall write the `.opt` sibling.
 
 ### PIPE-36
 Verifies: [PIPE-34](../dev/pipeline.md#pipe-34), [PHEXEC-33](../dev/phase-execution.md#phexec-33), [COMPILE-7](../user/compiler.md#compile-7)
 
-Where no build record exists, when the slc command is run with `--normalize`, the slc command shall execute the built-in normalization definition first — receiving the raw source and the entry-phase definition as a read-only reference — write the normalized source into the artifact directory under the entry phase's source name, and run the entry phase from that file.
+Where no lineage metadata exists, when the slc command is run with `--normalize`, the slc command shall execute the built-in normalization definition first — receiving the raw source and the entry-phase definition as a read-only reference — write the normalized source into the artifact directory under the entry phase's source name, and run the entry phase from that file.
