@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
+import { execFileSync } from 'node:child_process';
 import {
   link,
   mkdir,
@@ -179,6 +180,58 @@ describe('physical workspace binding (PHEXEC-11, PHEXEC-34)', () => {
     await expect(readFile(source?.physicalPath ?? '', 'utf8')).resolves.toBe(
       'source',
     );
+  });
+
+  // Each case below isolates one sink guard: the shared fixture at
+  // "rejects a sink that aliases, hard-links, or symbolically redirects a read"
+  // is caught by an earlier guard than the one it names, so without these the
+  // inode, link-count, file-type, and component-walk terms are each removable
+  // with the whole suite still green.
+  it('rejects a sink reached as one inode under two different paths', async () => {
+    const alias = join(root, 'source-alias.md');
+    await symlink(request.source, alias);
+    // The read binds the alias, so the sink's path string matches no read and
+    // its link count is 1: only the resolved identity exposes the collision.
+    await expect(
+      createWorkspaceRecord(request, {
+        physicalReads: { source: alias },
+        physicalWrite: request.source,
+      }),
+    ).rejects.toThrow(/hard link to a readable input/);
+  });
+
+  it('rejects a sink hard-linked to a file outside the binding', async () => {
+    const unrelated = join(root, 'unrelated.md');
+    await writeFile(unrelated, 'unrelated');
+    const sink = join(root, 'sink.md');
+    await link(unrelated, sink);
+    // Writing this sink would silently rewrite a file no read declared.
+    await expect(
+      createWorkspaceRecord(request, { physicalWrite: sink }),
+    ).rejects.toThrow(/independent regular file/);
+  });
+
+  it('rejects a sink that is not a regular file', async () => {
+    const fifo = join(root, 'fifo.md');
+    execFileSync('mkfifo', [fifo]);
+    // A fifo keeps a link count of 1, so only the file-type term refuses it.
+    await expect(
+      createWorkspaceRecord(request, { physicalWrite: fifo }),
+    ).rejects.toThrow(/independent regular file/);
+  });
+
+  it('rejects a sink whose parent directory is a writable symbolic link', async () => {
+    const outside = join(root, 'outside');
+    await mkdir(outside);
+    const redirected = join(root, 'staged');
+    await symlink(outside, redirected);
+    // The leaf is absent and every other guard passes; the component walk is
+    // the only one that sees the escape.
+    await expect(
+      createWorkspaceRecord(request, {
+        physicalWrite: join(redirected, 'out.md'),
+      }),
+    ).rejects.toThrow(/writable symbolic-link component/);
   });
 
   it('rejects an ambiguous prompt that already contains a workspace marker', async () => {
