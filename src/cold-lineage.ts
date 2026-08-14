@@ -3,8 +3,7 @@
 
 /** Cold canonical build orchestration for source-bound lineage (DR-021). */
 
-import { constants } from 'node:fs';
-import { lstat, open, readdir, writeFile } from 'node:fs/promises';
+import { lstat, readdir, writeFile } from 'node:fs/promises';
 import {
   dirname,
   extname,
@@ -17,6 +16,7 @@ import {
 import {
   identifyBuildPlan,
   planFullBuild,
+  BuildPlanError,
   type BuildIdentityContext,
   type CanonicalBuildPlan,
   type CompiledSelection,
@@ -31,7 +31,7 @@ import {
   SOURCE_SNAPSHOT_FILE,
   encodeBuildRecord,
   encodeReadLocator,
-  loadLineagePair,
+  readRegularFileNoFollow,
   resolveReadLocator,
   stepInputKey,
   type BuildRecord,
@@ -69,6 +69,10 @@ import type { Invocation } from './invocation.js';
 import { loadLinkFile } from './link.js';
 import { loadPipeline } from './pipeline.js';
 import type { ProgressSink } from './progress.js';
+import {
+  classifyLineage,
+  formatLineageClassification,
+} from './lineage-classification.js';
 
 /** Host identities are re-derived for both initial planning and final guards. */
 export type BuildIdentityProvider = (
@@ -101,14 +105,15 @@ export async function runColdLineage(
     artifactDir: topology.artifactDir,
     pipeline: topology.pipelineName,
   });
-  const lineage = await loadLineagePair(topology.artifactDir);
-  if (lineage.state !== 'absent') {
-    throw new Error(
-      `build lineage already exists for ${topology.artifactDir}; currentness classification is required`,
-    );
-  }
-
   const identified = await identifyCurrentPlan(topology, host);
+  const classification = await classifyLineage(identified);
+  if (classification.state !== 'cold') {
+    return {
+      ok: false,
+      outputs: [],
+      diagnostics: formatLineageClassification(classification),
+    };
+  }
   const sourceBytes = await readSource(topology.sourcePath);
   const sourceHash = hashBytes(sourceBytes);
   const description = describeDeterministicDerivatives(topology);
@@ -200,14 +205,24 @@ async function identifyCurrentPlan(
   topology: FullBuildTopology,
   host: ColdLineageHost,
 ): Promise<CanonicalBuildPlan> {
-  const context = await host.buildIdentity(topology);
-  const deterministic = await identifyDeterministicDerivatives(topology);
-  return identifyBuildPlan(topology, {
-    ...context,
-    ...(deterministic === undefined
-      ? { deterministic: undefined }
-      : { deterministic }),
-  });
+  try {
+    const context = await host.buildIdentity(topology);
+    const deterministic = await identifyDeterministicDerivatives(topology);
+    return await identifyBuildPlan(topology, {
+      ...context,
+      ...(deterministic === undefined
+        ? { deterministic: undefined }
+        : { deterministic }),
+    });
+  } catch (error) {
+    if (error instanceof BuildPlanError && error.code === 'pin-invalid') {
+      throw new BuildPlanError(
+        'pin-invalid',
+        `${error.message}; restore the pin through the explicit compiled-artifact build-and-review flow before retrying`,
+      );
+    }
+    throw error;
+  }
 }
 
 async function identifyFreshPlan(
@@ -778,18 +793,7 @@ function assertManifestMatchesRecord(
 }
 
 async function readSource(path: string): Promise<Uint8Array> {
-  const handle = await open(
-    path,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-  );
-  try {
-    const info = await handle.stat();
-    if (!info.isFile())
-      throw new Error(`source is not a regular file: ${path}`);
-    return await handle.readFile();
-  } finally {
-    await handle.close();
-  }
+  return readRegularFileNoFollow(path);
 }
 
 function chainDefinitions(topology: FullBuildTopology): string[] {

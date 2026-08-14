@@ -7,8 +7,8 @@
  *
  * This module stages and seals candidate files, calculates the exact managed
  * overlay, and revalidates the accepted basis. It deliberately cannot promote
- * anything: journal ordering and recovery belong to the next transaction
- * layer, so an overlay bug cannot partially mutate canonical state.
+ * anything: rename ordering and recovery belong to the promotion layer, so
+ * an overlay bug cannot partially mutate canonical state.
  */
 
 import { constants } from 'node:fs';
@@ -100,7 +100,7 @@ export interface OverlayRetain {
   identity: Hash;
 }
 
-/** Immutable input to the later promotion journal. */
+/** Immutable input to the later promotion. */
 export interface OverlayManifest {
   replace: readonly OverlayReplace[];
   remove: readonly OverlayRemove[];
