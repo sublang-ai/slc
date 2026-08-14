@@ -22,12 +22,18 @@ import type {
   BuildIdentityContext,
   FullBuildTopology,
 } from '../src/build-plan.js';
+import {
+  BUILD_RECORD_FILE,
+  SOURCE_SNAPSHOT_FILE,
+} from '../src/build-record.js';
 import { declaredPlayers, emitEntryModule } from '../src/entry-module.js';
 import {
   createInterpretedExecutor,
   type AgentClient,
 } from '../src/interpreter.js';
 import { resolvesToPlaybook } from '../src/phase-runner.js';
+import { evaluatePins, hashTree } from '../src/pin-currency.js';
+import { generatePinRecord, writePinFile } from '../src/pin-generate.js';
 import { loadPipeline } from '../src/pipeline.js';
 import {
   createPipelineResolver,
@@ -78,9 +84,15 @@ const buildIdentity = (topology: FullBuildTopology): BuildIdentityContext => ({
   compatibility: [],
 });
 
+const unexpectedBuildIdentity: SlcDeps['buildIdentity'] = () => {
+  throw new Error('non-lineage invocation requested build identity');
+};
+
 /** A compiled artifact that resolves to the `playbook` format (DR-005). */
 const PLAYBOOK_MODULE =
   'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
+const BUILD_RECORD_SENTINEL = 'existing build record\n';
+const SOURCE_SNAPSHOT_SENTINEL = 'existing source snapshot\n';
 
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${sf} | ${se} |\n| target | ${tf} | ${te} |\n`;
@@ -247,6 +259,31 @@ const exists = (path: string): Promise<boolean> =>
     () => false,
   );
 
+async function expectNoLineage(artifactDir: string): Promise<void> {
+  expect(await exists(join(artifactDir, BUILD_RECORD_FILE))).toBe(false);
+  expect(await exists(join(artifactDir, SOURCE_SNAPSHOT_FILE))).toBe(false);
+}
+
+async function seedLineageSentinels(artifactDir: string): Promise<void> {
+  await mkdir(artifactDir, { recursive: true });
+  await Promise.all([
+    writeFile(join(artifactDir, BUILD_RECORD_FILE), BUILD_RECORD_SENTINEL),
+    writeFile(
+      join(artifactDir, SOURCE_SNAPSHOT_FILE),
+      SOURCE_SNAPSHOT_SENTINEL,
+    ),
+  ]);
+}
+
+async function expectLineageSentinels(artifactDir: string): Promise<void> {
+  expect(await readFile(join(artifactDir, BUILD_RECORD_FILE), 'utf8')).toBe(
+    BUILD_RECORD_SENTINEL,
+  );
+  expect(await readFile(join(artifactDir, SOURCE_SNAPSHOT_FILE), 'utf8')).toBe(
+    SOURCE_SNAPSHOT_SENTINEL,
+  );
+}
+
 // The reserved `slc` meta-pipeline run through the generic pipeline/link
 // machinery, emitting the `playbook` linked format (SELFHOST-4).
 describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
@@ -292,7 +329,10 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
   });
 
   it('compiles a definition to the fsm object under the invocation cwd (DR-014); `slc` supplies no default link target', async () => {
-    const result = await runSlc(['slc', source], deps());
+    const result = await runSlc(['slc', source], {
+      ...deps(),
+      buildIdentity: unexpectedBuildIdentity,
+    });
     expect(result.ok).toBe(true);
     // text -> gears -> fsm; the reserved `slc` full run stops at the fsm
     // object: only the `playbook` pipeline defaults a link target
@@ -300,6 +340,7 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
     expect(await exists(join(artDir, 'text2gears.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'text2gears.fsm.ts'))).toBe(true);
     expect(await exists(join(artDir, 'text2gears.playbook.ts'))).toBe(false);
+    await expectNoLineage(artDir);
   });
 
   it('places the artifact directory under a cwd that differs from the source directory (DR-014, PIPE-38)', async () => {
@@ -315,9 +356,10 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
   });
 
   it('links the fsm object to a playbook artifact that resolves to a createPlaybookRuntime factory', async () => {
+    await seedLineageSentinels(artDir);
     const result = await runSlc(
       ['slc', source, '--link', join(root, 'work', 'runtime.ts')],
-      deps(),
+      { ...deps(), buildIdentity: unexpectedBuildIdentity },
     );
     expect(result.ok).toBe(true);
     const playbookArtifact = join(artDir, 'text2gears.playbook.ts');
@@ -325,7 +367,69 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
     expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
       true,
     );
+    await expectLineageSentinels(artDir);
   });
+
+  it('reaches a stable reviewed-bundle and pin fixed point without lineage feedback (INCR-32)', async () => {
+    // The reviewed definition/output directory is deliberately not the
+    // meta-definition resolver directory: the second reserved build must not
+    // consume the pin generated from its own first output.
+    await writeFile(
+      source,
+      `${formats('text', '.md', 'gears', '.md')}\n## Pin Inputs\n`,
+    );
+    // Verification imports the generated FSM from the destination tree, where
+    // its bare xstate dependency must resolve independently of the source tree.
+    await symlink(join(repoRoot, 'node_modules'), join(work, 'node_modules'));
+    const argv = ['slc', source, '--link', join(work, 'runtime.ts')] as const;
+    const nonLineageDeps = {
+      ...deps(),
+      buildIdentity: unexpectedBuildIdentity,
+    };
+    const regeneratePin = async () => {
+      const record = await generatePinRecord(work, {
+        definition: 'text2gears.md',
+        artifact: 'text2gears.slc/text2gears.playbook.ts',
+        artifactBundle: 'text2gears.slc',
+        linkTarget: {
+          kind: 'file',
+          locator: 'runtime.ts',
+          provenance: 'fixture-runtime@1.0.0',
+        },
+      });
+      await writePinFile(work, { text2gears: record });
+      return {
+        tree: await hashTree(artDir, { rejectSymlinks: true }),
+        pin: await readFile(join(work, 'slc.pins.json')),
+        verdict: (await evaluatePins(work)).verdicts?.text2gears,
+      };
+    };
+
+    const firstBuild = await runSlc(argv, nonLineageDeps);
+    expect(firstBuild.ok, firstBuild.diagnostics.join('\n')).toBe(true);
+    expect(await readFile(join(artDir, 'text2gears.gears.md'), 'utf8')).toBe(
+      GEARS_ARTIFACT,
+    );
+    expect(await readFile(join(artDir, 'text2gears.fsm.ts'), 'utf8')).toBe(
+      FSM_ARTIFACT,
+    );
+    expect(await readFile(join(artDir, 'text2gears.playbook.ts'), 'utf8')).toBe(
+      PLAYBOOK_MODULE,
+    );
+    await expectNoLineage(artDir);
+    const first = await regeneratePin();
+    expect(first.verdict).toEqual({ status: 'current' });
+
+    const secondBuild = await runSlc(argv, nonLineageDeps);
+    expect(secondBuild.ok, secondBuild.diagnostics.join('\n')).toBe(true);
+    expect(secondBuild.outputs).toEqual(firstBuild.outputs);
+    await expectNoLineage(artDir);
+    expect(await readFile(join(work, 'slc.pins.json'))).toEqual(first.pin);
+    const second = await regeneratePin();
+    expect(second.verdict).toEqual({ status: 'current' });
+    expect(second.tree).toBe(first.tree);
+    expect(second.pin).toEqual(first.pin);
+  }, 20_000);
 
   it('reserves `slc` with no built-in default: an unresolved `slc` fails', async () => {
     const result = await runSlc(['slc', source], {
@@ -726,11 +830,15 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
 
   it('writes no entry module when -o relocates the linked artifact (SELFHOST-16)', async () => {
     const out = join(work, 'custom.playbook.ts');
-    const result = await runSlc(['playbook', source, '-o', out], deps());
+    const result = await runSlc(['playbook', source, '-o', out], {
+      ...deps(),
+      buildIdentity: unexpectedBuildIdentity,
+    });
     expect(result.ok).toBe(true);
     expect(await exists(out)).toBe(true);
     expect(await exists(join(work, 'code.ts'))).toBe(false);
     expect(result.outputs).not.toContain(join(work, 'code.ts'));
+    await expectNoLineage(artDir);
   });
 
   it('derives requiredRoleIds from the gears Players block, excluding alias declarations (SELFHOST-16)', () => {
