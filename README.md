@@ -116,6 +116,23 @@ tests — and `my-workflow.ts` is the runnable entry. Run it:
 playbook run ./my-workflow.ts "<your task>"
 ```
 
+A canonical full compile also records its source binding and accepted
+products in `my-workflow.playbook/.slc-source` and `.slc-build.json`. If
+the bundle belongs to another same-named source or a managed product was
+edited outside an accepted compile, `slc` refuses to overwrite it. To
+replace those compiler-managed products deliberately, run the complete
+pipeline with `--rebuild`:
+
+```bash
+slc playbook my-workflow.md --rebuild
+```
+
+A rebuild validates the current compiler pins first, executes every step
+normally, and publishes the replacement lineage only after the complete
+run succeeds and verifies. A failed rebuild leaves the previously accepted
+lineage in place. Because it replaces canonical lineage, `--rebuild` is
+available only for full or full-link runs without `-o`.
+
 Intermediates are first-class: edit one and re-run a single phase
 (`slc playbook.gears2fsm …`) and it lands in the same place.
 `slc --help` shows all invocation forms.

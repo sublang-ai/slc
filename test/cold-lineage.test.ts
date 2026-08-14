@@ -20,6 +20,8 @@ import {
   SOURCE_SNAPSHOT_FILE,
   canonicalJson,
   decodeBuildRecord,
+  encodeBuildRecord,
+  type BuildRecord,
   type ProductRecord,
 } from '../src/build-record.js';
 import type {
@@ -32,6 +34,7 @@ import type {
   PhaseExecutor,
 } from '../src/execution.js';
 import { hashBytes, hashFile } from '../src/hash.js';
+import { PINS_FILE } from '../src/pins.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
 import type { WorkspaceRecord } from '../src/workspace.js';
 
@@ -243,6 +246,40 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     ).toEqual([]);
   };
 
+  const readRecord = async (): Promise<BuildRecord> =>
+    decodeBuildRecord(await readFile(join(artifactDir, BUILD_RECORD_FILE)));
+
+  const seedLineage = async (linked = false): Promise<BuildRecord> => {
+    const seeding = executor();
+    const result = await runSlc(
+      linked
+        ? ['flow', sourcePath, '--link', runtimePath]
+        : ['flow', sourcePath],
+      deps(seeding),
+    );
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    return readRecord();
+  };
+
+  const acceptedBytes = async (linked = false) =>
+    new Map(
+      await Promise.all(
+        [
+          ...canonicalProducts(linked),
+          join(artifactDir, SOURCE_SNAPSHOT_FILE),
+          join(artifactDir, BUILD_RECORD_FILE),
+        ].map(async (path) => [path, await readFile(path)] as const),
+      ),
+    );
+
+  const expectAcceptedBytes = async (
+    accepted: ReadonlyMap<string, Uint8Array>,
+  ): Promise<void> => {
+    for (const [path, bytes] of accepted) {
+      expect(await readFile(path)).toEqual(bytes);
+    }
+  };
+
   it.each([
     { name: 'full', linked: false },
     { name: 'full-link', linked: true },
@@ -364,6 +401,175 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
       await assertNoPrivateResidue();
     },
   );
+
+  it.each([
+    { name: 'absent full', linked: false, seeded: false, generation: 1 },
+    { name: 'current full-link', linked: true, seeded: true, generation: 2 },
+  ] as const)(
+    'executes every $name rebuild step ordinarily (INCR-19, INCR-26)',
+    async ({ linked, seeded, generation }) => {
+      if (seeded) await seedLineage(linked);
+      const performing = executor();
+      const result = await runSlc(
+        linked
+          ? ['flow', sourcePath, '--link', runtimePath, '--rebuild']
+          : ['flow', sourcePath, '--rebuild'],
+        deps(performing),
+      );
+
+      expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+      expect(result.outputs).toEqual(canonicalProducts(linked));
+      expect(performing.calls).toHaveLength(linked ? 3 : 2);
+      const record = await readRecord();
+      expect(record.lineage).toEqual({ generation, transition: null });
+      expect(
+        record.plan.steps.every((step) => step.origin === 'ordinary'),
+      ).toBe(true);
+      expect(record.plan.steps.every((step) => step.trace === null)).toBe(true);
+      await assertNoPrivateResidue();
+    },
+  );
+
+  it.each([
+    { name: 'current lineage', mutate: async () => undefined },
+    {
+      name: 'manually edited semantic product',
+      mutate: async () =>
+        writeFile(join(artifactDir, 'workflow.out.ts'), 'manual edit\n'),
+    },
+    {
+      name: 'changed source bytes',
+      mutate: async () => writeFile(sourcePath, 'changed source bytes\n'),
+    },
+    {
+      name: 'changed declared input',
+      mutate: async () =>
+        writeFile(
+          join(pipelineDir, 'refs', 'shared.md'),
+          'changed shared input\n',
+        ),
+    },
+  ])('replaces $name only after a complete rebuild', async ({ mutate }) => {
+    await seedLineage();
+    await mutate();
+    const performing = executor();
+
+    const result = await runSlc(
+      ['flow', sourcePath, '--rebuild'],
+      deps(performing),
+    );
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(performing.calls).toHaveLength(2);
+    const record = await readRecord();
+    expect(record.lineage).toEqual({ generation: 2, transition: null });
+    expect(record.plan.steps.every((step) => step.origin === 'ordinary')).toBe(
+      true,
+    );
+    expect(record.plan.steps.every((step) => step.trace === null)).toBe(true);
+    expect(await readFile(join(artifactDir, SOURCE_SNAPSHOT_FILE))).toEqual(
+      await readFile(sourcePath),
+    );
+    expect(
+      await readFile(join(artifactDir, 'workflow.out.ts'), 'utf8'),
+    ).not.toBe('manual edit\n');
+    await assertNoPrivateResidue();
+  });
+
+  it('preserves the accepted lineage and unrecorded files after a failed rebuild', async () => {
+    await seedLineage();
+    const unrecordedPath = join(artifactDir, 'notes.txt');
+    await writeFile(unrecordedPath, 'keep me\n');
+    const accepted = await acceptedBytes();
+    const performing = executor('mid2out');
+
+    const result = await runSlc(
+      ['flow', sourcePath, '--rebuild'],
+      deps(performing),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.outputs).toEqual([]);
+    expect(result.diagnostics.join('\n')).toContain(
+      'fixture rejected before promotion',
+    );
+    expect(performing.calls).toHaveLength(2);
+    await expectAcceptedBytes(accepted);
+    expect(await readFile(unrecordedPath, 'utf8')).toBe('keep me\n');
+    await assertNoPrivateResidue();
+  });
+
+  it('resets generation when --rebuild explicitly rebinds the source locator', async () => {
+    const prior = await seedLineage();
+    const otherDir = join(root, 'other');
+    const otherSource = join(otherDir, 'workflow.md');
+    await mkdir(otherDir);
+    await writeFile(otherSource, 'rebound source bytes\n');
+    const performing = executor();
+
+    const result = await runSlc(
+      ['flow', otherSource, '--rebuild'],
+      deps(performing),
+    );
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(performing.calls).toHaveLength(2);
+    const record = await readRecord();
+    expect(record.source.locator).not.toBe(prior.source.locator);
+    expect(record.lineage).toEqual({ generation: 1, transition: null });
+    expect(await readFile(join(artifactDir, SOURCE_SNAPSHOT_FILE))).toEqual(
+      await readFile(otherSource),
+    );
+    expect(record.plan.steps.every((step) => step.origin === 'ordinary')).toBe(
+      true,
+    );
+    await assertNoPrivateResidue();
+  });
+
+  it('refuses same-binding generation overflow before executor work', async () => {
+    const record = await seedLineage();
+    record.lineage.generation = Number.MAX_SAFE_INTEGER;
+    await writeFile(
+      join(artifactDir, BUILD_RECORD_FILE),
+      encodeBuildRecord(record),
+    );
+    const accepted = await acceptedBytes();
+    const performing = executor();
+
+    const result = await runSlc(
+      ['flow', sourcePath, '--rebuild'],
+      deps(performing),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.outputs).toEqual([]);
+    expect(result.diagnostics.join('\n')).toMatch(/generation/i);
+    expect(performing.calls).toHaveLength(0);
+    await expectAcceptedBytes(accepted);
+    await assertNoPrivateResidue();
+  });
+
+  it('validates pins before --rebuild and preserves the accepted lineage', async () => {
+    await seedLineage();
+    const accepted = await acceptedBytes();
+    await writeFile(join(pipelineDir, PINS_FILE), '{malformed\n');
+    const performing = executor();
+
+    const result = await runSlc(
+      ['flow', sourcePath, '--rebuild'],
+      deps(performing),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.outputs).toEqual([]);
+    expect(result.diagnostics.join('\n')).toMatch(
+      /pin.*(parse|json|malformed)/i,
+    );
+    expect(result.diagnostics.join('\n')).toMatch(/build.*review/i);
+    expect(performing.calls).toHaveLength(0);
+    await expectAcceptedBytes(accepted);
+    await assertNoPrivateResidue();
+  });
 
   it('discards a failed staged run without publishing metadata or partial products', async () => {
     await mkdir(artifactDir);

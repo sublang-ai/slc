@@ -272,7 +272,7 @@ describe('conveniences (CLI-13, CLI-14)', () => {
       // paragraph anchors artifacts at the working directory, and -O states
       // that passes are the default.
       expect(help).toContain(
-        'slc <pipeline> <source> [--normalize] [--no-optimize] [--link <target>] [--link-option name=value]...',
+        'slc <pipeline> <source> [--normalize] [--no-optimize] [--link <target>] [--link-option name=value]... [--rebuild|--adopt]',
       );
       expect(help).toContain(
         'Artifacts land in the working directory (<cwd>/<basename>.<pipeline>/);',
@@ -282,6 +282,12 @@ describe('conveniences (CLI-13, CLI-14)', () => {
       );
       expect(help).toContain(
         '--no-optimize             run the chain without pass phases',
+      );
+      expect(help).toContain(
+        '--rebuild                 replace canonical lineage after a complete ordinary run',
+      );
+      expect(help).toContain(
+        '--adopt                   attest an unchanged current semantic lineage explicitly',
       );
     }
   });

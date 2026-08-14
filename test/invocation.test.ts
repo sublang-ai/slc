@@ -18,6 +18,49 @@ describe('parseInvocation full pipeline (PIPE-9)', () => {
     });
   });
 
+  it('accepts --rebuild only on canonical full and full-link runs (PIPE-9)', () => {
+    expect(
+      parseInvocation(['--rebuild', 'playbook', 'flows/onboarding.md']),
+    ).toMatchObject({ kind: 'full', rebuild: true });
+    expect(
+      parseInvocation([
+        'playbook',
+        'flows/onboarding.md',
+        '--link',
+        'runtime.ts',
+        '--rebuild',
+      ]),
+    ).toMatchObject({ kind: 'full-link', rebuild: true });
+  });
+
+  it('rejects duplicate and conflicting --rebuild forms (INCR-28)', () => {
+    expect(() =>
+      parseInvocation([
+        'playbook',
+        'flows/onboarding.md',
+        '--rebuild',
+        '--rebuild',
+      ]),
+    ).toThrow(expect.objectContaining({ code: 'duplicate-option' }));
+    expect(() =>
+      parseInvocation([
+        'playbook',
+        'flows/onboarding.md',
+        '--rebuild',
+        '--adopt',
+      ]),
+    ).toThrow(CliError);
+    expect(() =>
+      parseInvocation([
+        'playbook',
+        'flows/onboarding.md',
+        '-o',
+        'out.ts',
+        '--rebuild',
+      ]),
+    ).toThrow(CliError);
+  });
+
   it('captures --normalize and -O on a full run (DR-013)', () => {
     expect(
       parseInvocation(['playbook', 'src.md', '--normalize', '-O']),
@@ -55,6 +98,14 @@ describe('parseInvocation full pipeline (PIPE-9)', () => {
     expect(() =>
       parseInvocation(['playbook.link', 'a.ts', 'r.ts', '--normalize']),
     ).toThrow(expect.objectContaining({ code: 'unexpected-flag' }));
+  });
+
+  it.each([
+    ['playbook.text2gears', 'src.md', '--rebuild'],
+    ['playbook.optimize', 'src.ts', '--rebuild'],
+    ['playbook.link', 'object.ts', 'runtime.ts', '--rebuild'],
+  ])('rejects --rebuild on non-full form %s (INCR-28)', (...argv) => {
+    expect(() => parseInvocation(argv)).toThrow(CliError);
   });
 
   it('rejects --no-optimize on a single-phase run (DR-014)', () => {

@@ -227,7 +227,7 @@ export function usageText(): string {
   return [
     'Usage:',
     '  slc <pipeline>[.<phase>] <source> [-o <target>]',
-    '  slc <pipeline> <source> [--normalize] [--no-optimize] [--link <target>] [--link-option name=value]...',
+    '  slc <pipeline> <source> [--normalize] [--no-optimize] [--link <target>] [--link-option name=value]... [--rebuild|--adopt]',
     '  slc <pipeline>.link <object>... <target> [-o <linked>] [--link-option name=value]...',
     '',
     'Artifacts land in the working directory (<cwd>/<basename>.<pipeline>/);',
@@ -242,6 +242,8 @@ export function usageText(): string {
     "  --normalize               rewrite raw input to the entry phase's source form first",
     "  -O, --optimize            run the pipeline's pass phases (the default)",
     '  --no-optimize             run the chain without pass phases',
+    '  --rebuild                 replace canonical lineage after a complete ordinary run',
+    '  --adopt                   attest an unchanged current semantic lineage explicitly',
     '  --config <path>           load configuration from <path> (disables discovery)',
     '  -v, --version             print version and exit',
     '  -h, --help                print this help and exit',
