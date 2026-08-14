@@ -25,6 +25,7 @@ import {
 import { runColdLineage, type BuildIdentityProvider } from './cold-lineage.js';
 import { emitEntryModule } from './entry-module.js';
 import { unresolvableRelativeImports } from './emitted-imports.js';
+import { messageOf } from './errors.js';
 import {
   type PhaseExecutor,
   formatFailureReport,
@@ -711,8 +712,4 @@ async function revalidateChain(dir: string): Promise<void> {
 
 function failure(message: string): SlcResult {
   return { ok: false, outputs: [], diagnostics: [message] };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

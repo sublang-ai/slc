@@ -638,6 +638,8 @@ async function resolvesToDirectory(path: string): Promise<boolean> {
   }
 }
 
+// Local copy: this module's bytes are hashed into a deterministic identity
+// descriptor, so importing an unenumerated module would stop covering it.
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

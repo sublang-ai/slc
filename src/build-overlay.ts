@@ -30,6 +30,7 @@ import {
   isBuildRecordId,
   resolveManagedPath,
 } from './build-record.js';
+import { errorCode } from './errors.js';
 import { hashBytes, isHash, type Hash } from './hash.js';
 
 export type OverlayRole =
@@ -864,13 +865,4 @@ function unsafe(message: string): BuildOverlayError {
 
 function stateError(message: string): BuildOverlayError {
   return new BuildOverlayError('overlay-state', message);
-}
-
-function errorCode(error: unknown): string {
-  return typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    typeof error.code === 'string'
-    ? error.code
-    : 'unknown error';
 }

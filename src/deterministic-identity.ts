@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 import { canonicalJson } from './build-record.js';
 import type { DeterministicComponent } from './build-plan.js';
+import { isAbsentPathError } from './errors.js';
 import { hashBytes, hashFile, type Hash } from './hash.js';
 import { hashTree } from './pin-currency.js';
 
@@ -311,7 +312,7 @@ async function resolveInstalledPackage(
       }
       return candidate;
     } catch (error) {
-      if (!isMissing(error)) throw error;
+      if (!isAbsentPathError(error)) throw error;
     }
     const parent = dirname(current);
     if (parent === current || current === parse(current).root) return null;
@@ -341,15 +342,6 @@ function packageSegments(name: string): string[] {
     throw new Error(`invalid deterministic runtime package name: ${name}`);
   }
   return segments;
-}
-
-function isMissing(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error.code === 'ENOENT' || error.code === 'ENOTDIR')
-  );
 }
 
 function withoutSourceMapReference(content: string): string {

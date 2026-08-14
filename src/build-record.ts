@@ -14,6 +14,7 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 
+import { errorCode, messageOf } from './errors.js';
 import { hashBytes, isHash, type Hash } from './hash.js';
 
 export const BUILD_RECORD_FILE = '.slc-build.json';
@@ -1840,17 +1841,4 @@ async function nearestExistingRealPath(path: string): Promise<string> {
 
 function invalid(field: string, detail: string): BuildRecordError {
   return new BuildRecordError('record-invalid', `${field} ${detail}`);
-}
-
-function errorCode(error: unknown): string {
-  return typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    typeof error.code === 'string'
-    ? error.code
-    : 'unknown error';
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

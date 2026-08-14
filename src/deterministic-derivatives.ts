@@ -587,6 +587,8 @@ function basenameFromEntry(path: string): string {
   return path.slice(dirname(path).length + 1, -extension.length);
 }
 
+// Local copy: this module's bytes are hashed into a deterministic identity
+// descriptor, so importing an unenumerated module would stop covering it.
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

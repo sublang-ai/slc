@@ -25,6 +25,8 @@ import { fileURLToPath } from 'node:url';
 
 import { parse } from 'yaml';
 
+import { messageOf } from './errors.js';
+
 /**
  * Largest stall timeout that stays representable as a timer delay (DR-019).
  * Node clamps any `setTimeout` delay above 2^31-1 ms to 1 ms, so an
@@ -287,8 +289,4 @@ function requireStringArray(
     }
     return entry;
   });
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

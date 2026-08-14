@@ -33,6 +33,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { messageOf } from './errors.js';
 import type { LegacyPlaybookPorts } from './playbook-contract.js';
 
 import type {
@@ -654,8 +655,4 @@ function optionsRecord(
   return Object.fromEntries(
     options.map((option) => [option.name, option.value]),
   );
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
