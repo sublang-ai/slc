@@ -476,6 +476,47 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     await assertNoPrivateResidue();
   });
 
+  it('reports success when its own recovery finished the candidate forward', async () => {
+    const performing = executor();
+    let interrupted = false;
+    const result = await runSlc(['flow', sourcePath], {
+      ...deps(performing),
+      promotionCheckpoint: ({ name }) => {
+        if (name === 'record-committed' && !interrupted) {
+          interrupted = true;
+          throw new Error('fixture promotion interruption');
+        }
+      },
+    });
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(result.outputs).toEqual(canonicalProducts(false));
+    await readRecord();
+    await assertNoPrivateResidue();
+  });
+
+  it('normalizes a source living at its own canonical normalized path', async () => {
+    await mkdir(artifactDir);
+    const aliased = join(artifactDir, 'workflow.text.md');
+    await writeFile(aliased, 'aliased source bytes\n');
+    const performing = executor();
+
+    const result = await runSlc(
+      ['flow', aliased, '--normalize'],
+      deps(performing),
+    );
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    // The first step read the original source, not its own unwritten
+    // staged target.
+    expect(performing.calls[0]?.input).toBe('aliased source bytes\n');
+    expect(await readFile(aliased, 'utf8')).toBe(
+      'normalize:aliased source bytes\n',
+    );
+    await readRecord();
+    await assertNoPrivateResidue();
+  });
+
   it('preserves the accepted lineage and unrecorded files after a failed rebuild', async () => {
     await seedLineage();
     const unrecordedPath = join(artifactDir, 'notes.txt');

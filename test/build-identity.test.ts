@@ -112,7 +112,6 @@ describe('production build identity (INCR-7)', () => {
   const provider = (model = 'fixture-model') =>
     createBuildIdentityProvider({
       selection: { agent: 'codex', model, effort: 'high' },
-      stallTimeoutMs: 60_000,
       layout: {
         runtimeRoot,
         slcPackagePath,
@@ -143,7 +142,6 @@ describe('production build identity (INCR-7)', () => {
         effort: 'high',
         permissions: { mode: 'auto' },
         maxTurns: null,
-        stallTimeoutMs: 60_000,
       },
     });
     expect(JSON.parse(first.compiledExecutor.value)).toMatchObject({
@@ -272,7 +270,6 @@ describe('production build identity (INCR-7)', () => {
       await chmod(executable, 0o755);
       const cliProvider = createBuildIdentityProvider({
         selection: { agent, model: 'fixture-model', effort: 'high' },
-        stallTimeoutMs: 60_000,
         layout: {
           runtimeRoot,
           slcPackagePath,
@@ -365,7 +362,6 @@ describe('production build identity (INCR-7)', () => {
   it('discovers import-only production packages without package.json exports', async () => {
     const production = createBuildIdentityProvider({
       selection: { agent: 'codex' },
-      stallTimeoutMs: 600_000,
     });
     const identified = await production(topology('full'));
     expect(identified.interpretedExecutor).toMatchObject({

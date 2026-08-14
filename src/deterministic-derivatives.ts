@@ -166,7 +166,10 @@ export function describeDeterministicDerivatives(
         '..',
         `${topology.basename}.ts`,
       );
-      const productId = `entry:${topology.basename}`;
+      // The bundle has exactly one entry product, and the user-authored
+      // source basename is not constrained to the record ID grammar, so the
+      // ID is fixed; the path carries the basename.
+      const productId = 'entry';
       products.push({
         id: productId,
         kind: 'entry',

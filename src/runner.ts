@@ -22,6 +22,7 @@ import {
   phaseStep,
   planFullBuild,
 } from './build-plan.js';
+import type { PromotionCheckpointHandler } from './build-promotion.js';
 import { runColdLineage, type BuildIdentityProvider } from './cold-lineage.js';
 import { emitEntryModule } from './entry-module.js';
 import { unresolvableRelativeImports } from './emitted-imports.js';
@@ -84,6 +85,8 @@ export interface SlcDeps {
    * progresses (DR-019, CLI-32). Absent for hosts that want a quiet run.
    */
   progress?: ProgressSink;
+  /** Observes promotion checkpoints; the seam INCR-27 interruption acceptance drives. */
+  promotionCheckpoint?: PromotionCheckpointHandler;
 }
 
 /** The outcome of an `slc` run. */

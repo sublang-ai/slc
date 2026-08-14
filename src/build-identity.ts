@@ -81,7 +81,6 @@ export interface BuildIdentityLayout {
 
 export interface BuildIdentityOptions {
   selection: AgentSelection;
-  stallTimeoutMs: number;
   layout?: BuildIdentityLayout;
 }
 
@@ -204,13 +203,15 @@ function hostExecutorValue(
     schema: HOST_IDENTITY_SCHEMA,
     kind,
     implementation,
+    // Operational knobs with no bearing on output bytes — the stall
+    // watchdog window above all — stay out of this value: they must not
+    // invalidate a lineage (INCR-7 binds what shapes the outputs).
     configuration: {
       agent: options.selection.agent,
       model: options.selection.model ?? null,
       effort: options.selection.effort ?? null,
       permissions: { mode: 'auto' },
       maxTurns: null,
-      stallTimeoutMs: options.stallTimeoutMs,
     },
   });
 }

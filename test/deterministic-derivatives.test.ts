@@ -243,7 +243,7 @@ describe('deterministic derivative planning', () => {
         inputs: testInputs,
       })),
       {
-        id: 'entry:workflow',
+        id: 'entry',
         kind: 'entry',
         path: join(workDir, 'workflow.ts'),
         inputs: [LOAD_INTEGRITY_CHECKER_ID, ENTRY_GENERATOR_ID],
@@ -266,7 +266,7 @@ describe('deterministic derivative planning', () => {
       })),
     });
     expect(description.entry).toEqual({
-      productId: 'entry:workflow',
+      productId: 'entry',
       logicalPath: join(workDir, 'workflow.ts'),
       logicalBundlePath: artifactDir,
       logicalTextPath: source,
@@ -421,7 +421,7 @@ describe('deterministic derivative planning', () => {
     ).toHaveLength(11);
     expect(
       first.products.find((product) => product.kind === 'entry'),
-    ).toMatchObject({ id: 'entry:workflow', path: '../workflow.ts' });
+    ).toMatchObject({ id: 'entry', path: '../workflow.ts' });
     expect(
       first.products
         .filter((product) => product.kind === 'verification')
@@ -540,7 +540,7 @@ describe('deterministic derivative planning', () => {
     expect(result.written.map(({ id }) => id)).toEqual([
       ...VERIFIER_SUPPORT_FILES.map((file) => `verification:support.${file}`),
       'verification:test.gears-fsm.test.ts',
-      'entry:workflow',
+      'entry',
     ]);
     await expect(access(plannedTopology.artifactDir)).rejects.toThrow();
     await expect(access(entry.logicalPath)).rejects.toThrow();
