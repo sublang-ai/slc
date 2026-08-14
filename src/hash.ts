@@ -2,15 +2,16 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Exact-byte SHA-256 hashing for pin currency (PIN-2, PIN-3; DR-007).
+ * Exact-byte SHA-256 hashing for pin currency and build lineage
+ * (PIN-2, PIN-3, INCR-7; DR-007, DR-021).
  *
  * Hashes are SHA-256 over the exact file bytes — with no line-ending or other
  * text normalization — written as `sha256:` followed by 64 lowercase hexadecimal
  * characters. This is the conservative identity the pin validator compares
  * recorded hashes against, so any byte difference (including a line-ending
  * change) yields a different hash. The DR-003 write-scope snapshot in
- * `execution.ts` keeps its own raw-hex helper; this module owns the pin format.
- * See specs/dev/pinning.md.
+ * `execution.ts` keeps its own raw-hex helper; this module owns the shared
+ * `sha256:<hex>` wire format used by pins and incremental build records.
  */
 
 import { createHash } from 'node:crypto';
