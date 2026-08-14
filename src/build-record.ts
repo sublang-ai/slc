@@ -836,15 +836,25 @@ export function resolveReadLocator(
 export async function resolveManagedPath(
   artifactDir: string,
   path: string,
-  options: { entryBasename?: string; requireFile?: boolean } = {},
+  options: {
+    entryBasename?: string;
+    requireFile?: boolean;
+    allowMissingArtifactDir?: boolean;
+  } = {},
 ): Promise<string> {
   const artRoot = resolve(artifactDir);
   const artInfo = await optionalLstat(artRoot);
-  if (artInfo === null || !artInfo.isDirectory() || artInfo.isSymbolicLink()) {
+  if (
+    (artInfo === null && !options.allowMissingArtifactDir) ||
+    (artInfo !== null && (!artInfo.isDirectory() || artInfo.isSymbolicLink()))
+  ) {
     throw new BuildRecordError(
       'lineage-unsafe',
       `${artRoot} must be a regular non-symbolic-link directory`,
     );
+  }
+  if (artInfo === null) {
+    await rejectSymlinkComponents(artRoot, dirname(artRoot), false);
   }
   const productPath =
     options.entryBasename === undefined
@@ -865,7 +875,7 @@ export async function resolveManagedPath(
   }
   await rejectSymlinkComponents(
     resolved,
-    resolved === exactEntry ? dirname(artRoot) : artRoot,
+    resolved === exactEntry || artInfo === null ? dirname(artRoot) : artRoot,
     options.requireFile ?? false,
   );
   return resolved;
@@ -1624,13 +1634,20 @@ async function rejectSymlinkComponents(
       `${path} has no safe artifact-directory ancestor`,
     );
   }
-  for (const component of components.reverse()) {
+  const orderedComponents = components.reverse();
+  for (const [index, component] of orderedComponents.entries()) {
     const info = await optionalLstat(component);
     if (info === null) continue;
     if (info.isSymbolicLink()) {
       throw new BuildRecordError(
         'lineage-unsafe',
         `${component} is a symbolic link`,
+      );
+    }
+    if (index < orderedComponents.length - 1 && !info.isDirectory()) {
+      throw new BuildRecordError(
+        'lineage-unsafe',
+        `${component} is not a directory`,
       );
     }
   }
