@@ -33,13 +33,7 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
   Putting a record that identifies the selected pin inside that same tree would create a pin-to-output identity cycle, and the source snapshot would add a non-artifact entry to the closed reviewed bundle.
 - A full or full-link invocation with `-o` retains its existing non-incremental behavior and creates or advances neither a build record nor a source snapshot.
   This first design keeps one lineage inside one canonical artifact bundle rather than making it own an arbitrary external output.
-- The record is a regular, non-symbolic-link strict JSON file with schema `sublang.slc.build.v1`, hash algorithm `sha256`, and:
-  - a normalized relative POSIX locator from the resolved canonical artifact directory to the resolved invocation source path, the snapshot path, and exact SHA-256 identities for both current source and snapshot;
-  - the ordered pipeline plan and exact content identities for normalization, phase, pass, link, selected executor, declared semantic-input closure, link target, deterministic entry and verification generators/checkers, and semantic options that can affect the plan or output;
-  - producer package versions — including `slc` and the resolved pipeline and link-runtime packages such as `@sublang/playbook` — plus format-specific compatibility values such as Playbook `spec.compat`, as provenance or explicit compatibility gates rather than substitutes for content identity;
-  - for each scheduled step, its exact input key, definition/executor identity, target path and hash, an `origin` naming how the current bytes were most recently established — exactly `"ordinary"` for ordinary execution, `"updated"` for scoped update, or `"user-adopted"` for explicit adoption, with exact reuse preserving the recorded value — and any validated input-unit, target-scope, and dependency trace emitted under an update contract;
-  - a complete artifact-product inventory with hashes, including generated verification and the entry module outside the artifact directory but excluding the build record and source snapshot themselves; and
-  - the successful lineage generation and, when adoption changes build identity, the prior and replacement build identities, as provenance.
+- The record is a regular, non-symbolic-link strict JSON file whose exact `sublang.slc.build.v1` field model is defined below.
 - Hashes cover exact bytes without text normalization.
   Timestamps and generation counters never establish currentness.
 - Managed paths are relative POSIX paths confined to the artifact directory, except for the one exact canonical entry-module path [DR-014](014-cwd-output-invocation-defaults-entry-emission.md) owns; managed products and their parent path components are not symbolic links, and the read-only source locator may resolve outside that boundary but never authorizes an output write.
@@ -55,6 +49,72 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
   A concurrent managed change aborts promotion as a conflict and blocks reuse instead of being overwritten or rolled back; the rejected candidate itself changes no canonical byte, but the external edit remains.
 - The source snapshot deliberately makes the output bundle contain a copy of its source.
   Distribution and retention policy must therefore treat the bundle as at least as sensitive as that source.
+
+#### `sublang.slc.build.v1`
+
+The top-level object contains exactly these required fields; field omission, `null` outside a declared nullable branch, or an unknown field at any depth is invalid.
+
+| Field | Exact value |
+| --- | --- |
+| `schema` | `"sublang.slc.build.v1"` |
+| `hashAlgorithm` | `"sha256"` |
+| `source` | `SourceRecord` |
+| `plan` | `PlanRecord` |
+| `products` | `ProductRecord[]` |
+| `provenance` | `ProvenanceRecord` |
+| `lineage` | `LineageRecord` |
+
+`Hash` is a string matching `sha256:[0-9a-f]{64}` over exact bytes.
+Every `id` matches `[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9._-]*)*`, is unique in its containing array, and every ID reference resolves exactly once.
+
+| Type | Exact fields |
+| --- | --- |
+| `SourceRecord` | `locator: string`, `hash: Hash`, `snapshot: ".slc-source"`, `snapshotHash: Hash` |
+| `PlanRecord` | `identity: Hash`, `pipeline: string`, `invocation: InvocationRecord`, `inputs: PlanInput[]`, `deterministicInputs: string[]`, `steps: StepRecord[]` |
+| `InvocationRecord` | `kind: "full" \| "full-link"`, `normalize: boolean`, `optimize: boolean`, `link: null \| LinkRecord` |
+| `LinkRecord` | `target: string`, `options: LinkOptionRecord[]` |
+| `LinkOptionRecord` | `name: string`, `value: string` |
+| `PlanInput` | `id: string`, `kind: PlanInputKind`, `locator: null \| string`, `value: null \| string`, `identity: Hash` |
+| `StepRecord` | `id: string`, `kind: StepKind`, `name: string`, `source: FormatRecord`, `target: TargetRecord`, `inputKey: Hash`, `inputs: string[]`, `inputClosure: "closed" \| "open"`, `origin: Origin`, `trace: null \| UpdateTrace` |
+| `FormatRecord` | `format: string`, `ext: string` |
+| `TargetRecord` | `format: string`, `ext: string`, `path: string`, `product: string` |
+| `ProductRecord` | `id: string`, `kind: "semantic" \| "entry" \| "verification"`, `path: string`, `hash: Hash` |
+| `ProvenanceRecord` | `packages: PackageRecord[]`, `compatibility: CompatibilityRecord[]` |
+| `PackageRecord` | `role: "slc" \| "pipeline" \| "link-runtime"`, `name: string`, `version: null \| string` |
+| `CompatibilityRecord` | `name: string`, `value: string`, `currentness: "provenance" \| "gate"`, `input: null \| string` |
+| `LineageRecord` | `generation: number`, `transition: null \| IdentityTransition` |
+| `IdentityTransition` | `from: Hash`, `to: Hash` |
+
+`PlanInputKind` is exactly `"definition" | "executor" | "semantic-input" | "link-target" | "generator" | "checker" | "compatibility" | "option"`.
+`StepKind` is exactly `"normalize" | "phase" | "pass" | "link"`.
+`Origin` is exactly `"ordinary" | "updated" | "user-adopted"`.
+`UpdateTrace` is the schema-exact value governed by the [trace contract](#trace-contract); absence is represented by `null`, never by an omitted field.
+
+The following invariants make the object self-consistent and portable:
+
+- A relative POSIX path is a non-empty `/`-separated string with no NUL, backslash, empty, `.`, or trailing segment and no absolute or drive root.
+  `source.locator` and a full-link `invocation.link.target` use that encoding from the resolved canonical artifact directory to their resolved read-only paths and may contain `..` segments; managed product paths additionally contain no `..`, except that the sole entry product is exactly one `..` plus the canonical sibling entry basename.
+- `source.hash`, `source.snapshotHash`, and the exact bytes of the source and `.slc-source` are equal when the record is committed.
+- `invocation.kind` is `"full"` exactly when `invocation.link` is `null`; `"full-link"` requires a link object whose option order preserves invocation order.
+- A file-backed `plan.inputs` member — definition, semantic input, link target, or file/tree-backed executor, generator, or checker — has its normalized artifact-directory-relative read locator, `value: null`, and exact byte or deterministic tree hash as `identity`.
+  A value-backed executor, generator, checker, compatibility, option, or package-resolved link target has `locator: null`, an exact canonical string `value`, and `identity` equal to the hash of that value's UTF-8 bytes; exactly one representation is non-null.
+- `plan.inputs` is sorted by `id` and contains every output-affecting definition, selected executor, individual declared semantic input, link target, deterministic generator/checker, compatibility gate, and semantic option as a re-readable file/tree or exact value identity.
+  Every link target, invocation option, compatibility gate, and step executor has exactly one corresponding input ID used by its owning step or compatibility record; `plan.deterministicInputs` is a sorted unique list containing every and only `"generator"` and `"checker"` input ID used by entry or verification products.
+- `plan.steps` is in execution order; each step's `inputs` is a sorted unique list of `plan.inputs` IDs, `inputClosure` records whether its complete readable semantic closure was explicitly declared, and `target.product` names one unique `"semantic"` product with the same path.
+- A step's `inputKey` is the exact-byte hash of the canonical compact JSON array `[step.id, [<RequestInput>, ...]]`, where request inputs are in logical request order and each exact object is either `{ "kind": "source", "hash": <Hash> }` for the invocation source or `{ "kind": "product", "product": <id>, "hash": <Hash> }` for a predecessor semantic product; every product ID resolves exactly once and its recorded hash equals the entry hash.
+  Plan inputs already cover definitions, executors, semantic options, and other build identity, so they do not repeat in this result-specific key.
+- Canonical JSON uses the RFC 8259 compact form, escapes every control character plus `"` and `\\` with lowercase `\u00xx` where no two-character JSON escape exists, emits every other Unicode scalar as its UTF-8 character without escaping solidus or non-ASCII text, and orders object fields exactly as listed in this contract.
+  Every array described as sorted uses ascending lexicographic order over the named key's UTF-8 bytes; package roles instead use `"slc"`, `"pipeline"`, `"link-runtime"` order.
+- `plan.identity` is the exact-byte hash of the canonical JSON encoding of an object, in field order, containing `pipeline`, `invocation`, `inputs`, `deterministicInputs`, and `steps`; each projected step contains `id`, `kind`, `name`, `source`, `target`, `inputs`, and `inputClosure` in that order, while result-specific `inputKey`, `origin`, and `trace` do not enter it.
+- `products` is sorted by `path`, has unique IDs and paths, contains every accepted semantic, entry, and verification product and no lineage metadata, and records exact current bytes; semantic and verification paths remain within the artifact directory, while the sole `"entry"` product may use only the exact canonical sibling path derived under [DR-014](014-cwd-output-invocation-defaults-entry-emission.md).
+- `pipeline`, step names, format names, link-option names, package names, and compatibility names are non-empty; format extensions retain [DR-001](001-slc-pipeline-layout-naming-invocation.md)'s canonical form.
+- `provenance.packages` is sorted in the role order above with one `"slc"`, one `"pipeline"`, and exactly one `"link-runtime"` only for a full-link plan; `null` records that the resolved component has no package version.
+  `provenance.compatibility` is sorted by unique `name`; package versions and a `"provenance"` record have `input: null` and do not establish currentness, while a `"gate"` record's `input` names exactly one `"compatibility"` plan input whose `value` equals the record's value.
+- `lineage.generation` is a positive safe integer.
+  A cold or source-rebound lineage starts at `1`; every later accepted state-changing ordinary, update, rebuild, or adoption run records the prior generation plus one; a write-free no-op preserves it.
+  `lineage.transition` is non-null only when the most recent state-changing lineage action is explicit adoption and its prior and replacement `plan.identity` values differ; its `to` value equals the current `plan.identity`.
+- The build record is the promotion commit marker.
+  Recovery seeing the prior marker restores the complete prior record and inventory; recovery seeing the candidate marker finishes the complete candidate record and inventory; either branch removes private recovery state before currentness evaluation and never accepts mixed bytes.
 
 ### Exact reuse and conflicts
 
