@@ -17,6 +17,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { AgentAdapter } from '@sublang/cligent';
 
+import type {
+  BuildIdentityContext,
+  FullBuildTopology,
+} from '../src/build-plan.js';
 import {
   createConfiguredCompiledFactory,
   createConfiguredExecutor,
@@ -146,6 +150,40 @@ let srcDir: string;
 let source: string;
 let artDir: string;
 
+const buildIdentity = (topology: FullBuildTopology): BuildIdentityContext => ({
+  interpretedExecutor: {
+    kind: 'value',
+    value: 'sublang.slc.interpreted-executor.v1:cli-fixture',
+  },
+  compiledExecutor: {
+    kind: 'value',
+    value: 'sublang.slc.compiled-host.v1:cli-fixture',
+  },
+  compiledProfile: () => 'cli-fixture-v1',
+  ...(topology.invocation.kind === 'full-link'
+    ? {
+        linkTarget: {
+          kind: 'value' as const,
+          value: 'sublang.slc.link-target.v1:cli-fixture',
+        },
+      }
+    : {}),
+  packages: [
+    { role: 'slc', name: '@sublang/slc', version: '0.3.0-test' },
+    { role: 'pipeline', name: topology.pipelineName, version: null },
+    ...(topology.invocation.kind === 'full-link'
+      ? [
+          {
+            role: 'link-runtime' as const,
+            name: 'cli-link-runtime-fixture',
+            version: null,
+          },
+        ]
+      : []),
+  ],
+  compatibility: [],
+});
+
 /**
  * SlcDeps with a fake resolver and an interpreted executor over a fake agent.
  * Anchors artifact placement at the fixture source directory by default so the
@@ -158,6 +196,7 @@ const interpretedDeps = (
 ): SlcDeps => ({
   resolver: (reference) => (reference === 'flow' ? [pipelineDir] : []),
   executor: createInterpretedExecutor({ agent, config: {} }),
+  buildIdentity,
   cwd: cwd ?? srcDir,
   signal,
 });
@@ -616,6 +655,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
     );
 
     expect(deps.cwd).toBe(root);
+    expect(deps.buildIdentity).toEqual(expect.any(Function));
     expect(selected).toBe('claude-code');
     const seeded = join(root, 'slc', 'config.yaml');
     expect(await exists(seeded)).toBe(true);
@@ -690,6 +730,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
             agent: transports[selection.agent],
             config: { model: selection.model, cwd },
           }),
+          buildIdentity,
           cwd,
           signal,
         };
@@ -777,6 +818,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
           agent: transport,
           config: { model: cfg.selection.model, cwd },
         }),
+        buildIdentity,
         cwd,
         signal,
       };

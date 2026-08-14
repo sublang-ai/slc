@@ -121,6 +121,11 @@ export interface StepRecord {
   trace: UpdateTrace | null;
 }
 
+/** One exact logical operand in a step's result-specific input key. */
+export type StepInputOperand =
+  | { kind: 'source'; hash: Hash }
+  | { kind: 'product'; product: string; hash: Hash };
+
 export interface FormatRecord {
   format: string;
   ext: string;
@@ -332,6 +337,43 @@ export function planIdentity(plan: PlanIdentityProjection): Hash {
         })),
       }),
     ),
+  );
+}
+
+/** Derives the schema-exact result-specific key for one scheduled step. */
+export function stepInputKey(
+  stepId: string,
+  operands: readonly StepInputOperand[],
+): Hash {
+  if (!isBuildRecordId(stepId)) {
+    throw invalid('step input key', `has invalid step ID "${stepId}"`);
+  }
+  const normalized: StepInputOperand[] = [];
+  for (const [index, operand] of operands.entries()) {
+    if (operand.kind !== 'source' && operand.kind !== 'product') {
+      throw invalid(`step input key operand ${index}`, 'has an invalid kind');
+    }
+    if (!isHash(operand.hash)) {
+      throw invalid(`step input key operand ${index}`, 'has an invalid hash');
+    }
+    if (operand.kind === 'product' && !isBuildRecordId(operand.product)) {
+      throw invalid(
+        `step input key operand ${index}`,
+        `has invalid product ID "${operand.product}"`,
+      );
+    }
+    normalized.push(
+      operand.kind === 'source'
+        ? { kind: 'source', hash: operand.hash }
+        : {
+            kind: 'product',
+            product: operand.product,
+            hash: operand.hash,
+          },
+    );
+  }
+  return hashBytes(
+    new TextEncoder().encode(canonicalJson([stepId, normalized])),
   );
 }
 
@@ -1069,9 +1111,9 @@ function validateRecord(record: BuildRecord, path: string): void {
             hash: products.get(record.plan.steps[index - 1].target.product)
               ?.hash,
           };
-    const expectedInputKey = hashBytes(
-      new TextEncoder().encode(canonicalJson([step.id, [operand]])),
-    );
+    const expectedInputKey = stepInputKey(step.id, [
+      operand as StepInputOperand,
+    ]);
     if (step.inputKey !== expectedInputKey) {
       throw invalid(
         `${path}.plan.steps[${index}].inputKey`,

@@ -17,6 +17,7 @@
 
 import { createRequire } from 'node:module';
 
+import { createBuildIdentityProvider } from './build-identity.js';
 import {
   createConfiguredCompiledFactory,
   createConfiguredExecutor,
@@ -88,7 +89,9 @@ export type CompiledFactoryBuilder = typeof createConfiguredCompiledFactory;
  * search roots (CLI-6) — with the reserved `slc` reference routed to the
  * meta-pipeline definitions `@sublang/playbook` provides (SELFHOST-2) — an
  * interpreted executor for the resolved agent/model (CLI-7), and the
- * compiled-execution factory a current pinned phase selects (CLI-8, PHEXEC-27).
+ * compiled-execution factory a current pinned phase selects (CLI-8, PHEXEC-27),
+ * plus the exact host identity provider canonical lineage planning records
+ * (INCR-7).
  * Configuration is loaded from the config file (DR-006, CLI-20) and
  * then overridden per key by a non-blank environment variable, so existing
  * env-only runs are unchanged and the file fills any key the environment leaves
@@ -141,7 +144,19 @@ export async function buildSlcDeps(
         ? undefined
         : (line: string) => progress({ kind: 'status', text: line }),
   });
-  return { resolver, executor, compiled, cwd, signal, progress };
+  const buildIdentity = createBuildIdentityProvider({
+    selection,
+    stallTimeoutMs,
+  });
+  return {
+    resolver,
+    executor,
+    compiled,
+    buildIdentity,
+    cwd,
+    signal,
+    progress,
+  };
 }
 
 /** The cligent-invocation selection after merging environment over file (DR-006). */

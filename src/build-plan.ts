@@ -157,6 +157,11 @@ export interface CanonicalBuildPlan {
     compatibility: CompatibilityRecord[];
   };
   selections: PlannedExecutorSelection[];
+  /** Authored-order declared reads captured by the identified plan for execution. */
+  workspaceReads: Array<{
+    stepId: string;
+    semanticInputs: string[];
+  }>;
 }
 
 export type BuildPlanErrorCode =
@@ -356,6 +361,7 @@ export async function identifyBuildPlan(
   const identifiedSteps: PlanIdentityStep[] = [];
   const selections: PlannedExecutorSelection[] = [];
   const semanticProducts: PlannedProduct[] = [];
+  const workspaceReads: CanonicalBuildPlan['workspaceReads'] = [];
 
   for (const step of topology.steps) {
     const token = stepToken(step);
@@ -382,6 +388,13 @@ export async function identifyBuildPlan(
       definitionPath,
       boundary: pin === undefined ? undefined : loadedPins?.pathBoundary.path,
       references,
+    });
+    const referencePaths = new Set(references.map((path) => resolve(path)));
+    workspaceReads.push({
+      stepId: step.id,
+      semanticInputs: [...closure.inputs]
+        .map((path) => resolve(path))
+        .filter((path) => !referencePaths.has(path)),
     });
     const semanticPaths = [...closure.inputs].sort((left, right) =>
       compareUtf8(
@@ -466,17 +479,16 @@ export async function identifyBuildPlan(
         );
       }
       const targetId = 'link-target:link';
+      const resolvedTarget = resolveReadLocator(
+        topology.artifactDir,
+        topology.invocation.link.target,
+      );
       allInputs.push(
         await planInput(
           targetId,
           'link-target',
-          context.linkTarget ?? {
-            kind: 'file',
-            path: resolveReadLocator(
-              topology.artifactDir,
-              topology.invocation.link.target,
-            ),
-          },
+          context.linkTarget ??
+            (await filesystemIdentitySource(resolvedTarget)),
           topology.artifactDir,
         ),
       );
@@ -589,6 +601,7 @@ export async function identifyBuildPlan(
       compatibility: compatibility.records,
     },
     selections,
+    workspaceReads,
   };
 }
 
@@ -720,6 +733,23 @@ async function identityMaterial(
     value: null,
     identity,
   };
+}
+
+async function filesystemIdentitySource(path: string): Promise<IdentitySource> {
+  const resolved = resolve(path);
+  const info = await lstat(resolved);
+  if (info.isSymbolicLink()) {
+    throw new BuildPlanError(
+      'identity-invalid',
+      `link-target identity is a symbolic link: ${resolved}`,
+    );
+  }
+  if (info.isFile()) return { kind: 'file', path: resolved };
+  if (info.isDirectory()) return { kind: 'tree', path: resolved };
+  throw new BuildPlanError(
+    'identity-invalid',
+    `link-target identity has the wrong file type: ${resolved}`,
+  );
 }
 
 async function compiledExecutorSource(

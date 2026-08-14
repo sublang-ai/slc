@@ -225,7 +225,13 @@ export function createConfiguredCompiledFactory(
     });
 }
 
-function runtimeContractForPin(
+/**
+ * Exact compiled-runtime profile selected from one reviewed pin.
+ *
+ * Build-plan identity and executor construction both call this function so a
+ * pin can never be identified under one profile and executed under another.
+ */
+export function runtimeContractForPin(
   choice: CompiledSelection,
 ): 'legacy' | 'composed-v2' {
   const provenance = choice.record.linkTarget.provenance;

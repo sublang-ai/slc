@@ -14,6 +14,10 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type {
+  BuildIdentityContext,
+  FullBuildTopology,
+} from '../src/build-plan.js';
 import {
   createInterpretedExecutor,
   type AgentClient,
@@ -100,6 +104,40 @@ let srcDir: string;
 let source: string;
 let artDir: string;
 
+const buildIdentity = (topology: FullBuildTopology): BuildIdentityContext => ({
+  interpretedExecutor: {
+    kind: 'value',
+    value: 'sublang.slc.interpreted-executor.v1:integration-fixture',
+  },
+  compiledExecutor: {
+    kind: 'value',
+    value: 'sublang.slc.compiled-host.v1:integration-fixture',
+  },
+  compiledProfile: () => 'integration-fixture-v1',
+  ...(topology.invocation.kind === 'full-link'
+    ? {
+        linkTarget: {
+          kind: 'value' as const,
+          value: 'sublang.slc.link-target.v1:integration-fixture',
+        },
+      }
+    : {}),
+  packages: [
+    { role: 'slc', name: '@sublang/slc', version: '0.3.0-test' },
+    { role: 'pipeline', name: topology.pipelineName, version: null },
+    ...(topology.invocation.kind === 'full-link'
+      ? [
+          {
+            role: 'link-runtime' as const,
+            name: 'integration-link-runtime-fixture',
+            version: null,
+          },
+        ]
+      : []),
+  ],
+  compatibility: [],
+});
+
 const deps = (agent: AgentClient, model?: string): SlcDeps => ({
   resolver: (reference) => {
     if (reference === 'flow') return [pipelineDir];
@@ -110,6 +148,7 @@ const deps = (agent: AgentClient, model?: string): SlcDeps => ({
     agent,
     config: model ? { model } : undefined,
   }),
+  buildIdentity,
   // Artifact placement anchors to the invocation working directory (DR-014);
   // tests anchor to the fixture source directory unless they override it.
   cwd: srcDir,
@@ -229,12 +268,12 @@ describe('full pipeline run (PIPE-20, PIPE-38, PHEXEC-16)', () => {
     expect(
       workspace.reads.every((read) => read.identity.startsWith('sha256:')),
     ).toBe(true);
-    expect(workspace.write).toEqual({
+    expect(workspace.write).toMatchObject({
       role: 'target',
       logicalPath: join(artDir, 'onboarding.gears.md'),
-      physicalPath: join(artDir, 'onboarding.gears.md'),
       kind: 'file',
     });
+    expect(workspace.write.physicalPath).not.toBe(workspace.write.logicalPath);
   });
 });
 
