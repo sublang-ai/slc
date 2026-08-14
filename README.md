@@ -76,7 +76,7 @@ Requirements:
 - A POSIX platform — macOS or Linux; on Windows, use WSL (or Git
   Bash). Compiled script steps execute through `sh`, so native Windows
   is not supported.
-- Node.js >= 23.6 (compiled phase artifacts are imported as native
+- Node.js >= 24 (compiled phase artifacts are imported as native
   TypeScript at runtime).
 - One supported coding-agent CLI, installed and authenticated:
   [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview),

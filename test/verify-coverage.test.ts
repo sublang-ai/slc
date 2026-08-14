@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1263,6 +1263,56 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
       expect(content).toContain('}, fsmCoverageTestTimeout(fsm));');
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it('derives from an explicit candidate FSM and writes only the explicit output', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-verify-cov-stage-'));
+    const canonicalDir = join(root, 'canonical');
+    const candidateDir = join(root, 'candidate');
+    const candidateOutput = join(candidateDir, 'explicit-coverage.ts');
+    const fsmSource = [
+      "import { setup } from 'xstate';",
+      'export const machine = setup({}).createMachine({',
+      "  id: 'tiny',",
+      "  initial: 'ready',",
+      '  states: {',
+      '    ready: {},',
+      "    done: { type: 'final' },",
+      '  },',
+      '});',
+      '',
+    ].join('\n');
+    try {
+      await mkdir(canonicalDir, { recursive: true });
+      await mkdir(candidateDir, { recursive: true });
+      await writeFile(join(canonicalDir, 'code.fsm.ts'), fsmSource);
+      await writeFile(join(candidateDir, 'code.fsm.ts'), fsmSource);
+      const canonical = await emitFsmCoverageTest({
+        artifactDir: canonicalDir,
+        basename: 'code',
+      });
+      const candidate = await emitFsmCoverageTest({
+        basename: 'code',
+        layout: {
+          fsmPath: join(candidateDir, 'code.fsm.ts'),
+          outputPath: candidateOutput,
+          fsmModule: './code.fsm.js',
+          fsmSourceFile: './code.fsm.ts',
+        },
+      });
+
+      expect(candidate.diagnostics).toEqual(canonical.diagnostics);
+      expect(candidate.path).toBe(candidateOutput);
+      expect(await readFile(candidate.path, 'utf8')).toBe(
+        await readFile(canonical.path, 'utf8'),
+      );
+      await expect(
+        readFile(join(candidateDir, 'code.fsm.coverage.test.ts'), 'utf8'),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await readFile(candidate.path, 'utf8')).not.toContain(root);
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 

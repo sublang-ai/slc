@@ -20,7 +20,7 @@
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { createActor, fromPromise } from 'xstate';
 
@@ -37,6 +37,18 @@ import {
   type CaptainState,
   type MachineConfigLike,
 } from './verify.js';
+
+/** Explicit physical inputs/output and logical imports for coverage emission. */
+export interface FsmCoverageEmissionLayout {
+  /** Exact physical candidate FSM used for derivation and source checks. */
+  fsmPath: string;
+  /** Exact physical candidate path to write. */
+  outputPath: string;
+  /** Logical FSM import specifier to encode in the generated test. */
+  fsmModule: string;
+  /** Logical FSM source specifier to encode in the generated test. */
+  fsmSourceFile: string;
+}
 
 /** The `gears2fsm`-mandated captain actor name a machine declares. */
 export const CAPTAIN_ACTOR = 'captain';
@@ -2832,23 +2844,40 @@ describe(${suiteName}, () => {
  * @throws when the `fsm` artifact cannot be imported or exports no machine.
  */
 export async function emitFsmCoverageTest(opts: {
-  artifactDir: string;
+  /** Canonical artifact directory; omit only when `layout` is explicit. */
+  artifactDir?: string;
   basename: string;
   verifyModule?: string;
+  /** Explicit candidate inputs/output and logical imports. */
+  layout?: FsmCoverageEmissionLayout;
 }): Promise<{ path: string; diagnostics: string[] }> {
-  const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
+  if (opts.layout !== undefined && opts.artifactDir !== undefined) {
+    throw new Error(
+      'coverage emission accepts either artifactDir or an explicit layout, not both',
+    );
+  }
+  if (opts.layout === undefined && opts.artifactDir === undefined) {
+    throw new Error(
+      'coverage emission requires artifactDir or an explicit layout',
+    );
+  }
+  const fsmPath =
+    opts.layout?.fsmPath ??
+    join(opts.artifactDir as string, `${opts.basename}.fsm.ts`);
   const module = await loadFsmModule(fsmPath);
   const findings = await checkFsmCoverage(module, {
     sourceText: await readFile(fsmPath, 'utf8'),
   });
   const content = generateFsmCoverageTest({
     basename: opts.basename,
-    fsmModule: `./${opts.basename}.fsm.js`,
-    fsmSourceFile: `./${opts.basename}.fsm.ts`,
+    fsmModule: opts.layout?.fsmModule ?? `./${opts.basename}.fsm.js`,
+    fsmSourceFile: opts.layout?.fsmSourceFile ?? `./${opts.basename}.fsm.ts`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
   });
-  await mkdir(opts.artifactDir, { recursive: true });
-  const path = join(opts.artifactDir, `${opts.basename}.fsm.coverage.test.ts`);
+  const path =
+    opts.layout?.outputPath ??
+    join(opts.artifactDir as string, `${opts.basename}.fsm.coverage.test.ts`);
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content);
   return {
     path,

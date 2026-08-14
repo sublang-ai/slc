@@ -13,7 +13,7 @@ review raises no further findings.
 ## Quick start
 
 Prerequisites: macOS or Linux (on Windows, use WSL or Git Bash — the
-workflow's scripted step runs through `sh`), Node.js ≥ 23.6, `git`, and
+workflow's scripted step runs through `sh`), Node.js ≥ 24, `git`, and
 the [Claude Code CLI](https://www.anthropic.com/claude-code) installed
 and signed in so the `claude` command works. Other agents and models can
 be chosen per role — see [Role setup](#role-setup).

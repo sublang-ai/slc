@@ -2018,6 +2018,48 @@ function sourceString(value: string): string {
  */
 export const VERIFY_MODULE = '@sublang/slc/verify';
 
+/** Explicit physical output and logical import layout for conformance emission. */
+export interface GearsFsmConformanceEmissionLayout {
+  /** Exact physical candidate path to write. */
+  outputPath: string;
+  /** Logical FSM import specifier to encode in the generated test. */
+  fsmModule: string;
+  /** Logical GEARS file specifier to encode in the generated test. */
+  gearsFile: string;
+}
+
+/** Explicit physical inputs/output and logical import layout for introspection. */
+export interface FsmIntrospectionEmissionLayout {
+  /** Exact physical candidate FSM used to derive the pins. */
+  fsmPath: string;
+  /** Exact physical candidate path to write. */
+  outputPath: string;
+  /** Logical FSM import specifier to encode in the generated test. */
+  fsmModule: string;
+}
+
+/** One optional linked module in an explicit prompt-contract layout. */
+export interface PromptContractLinkedLayout {
+  /** Exact physical candidate linked module used for derivation. */
+  physicalPath: string;
+  /** Logical linked-module specifier to encode in the generated test. */
+  moduleSpecifier: string;
+  /** Logical FSM specifier authored inside the linked module. */
+  fsmModuleSpecifier: string;
+}
+
+/** Explicit physical inputs/output and logical imports for prompt emission. */
+export interface PromptContractEmissionLayout {
+  /** Exact physical candidate FSM used to derive the contract. */
+  fsmPath: string;
+  /** Exact physical candidate path to write. */
+  outputPath: string;
+  /** Logical FSM import specifier to encode in the generated test. */
+  fsmModule: string;
+  /** Optional candidate linked module and its logical import layout. */
+  linked?: PromptContractLinkedLayout;
+}
+
 /**
  * Finds the XState machine an `fsm` module exports — the export whose value has a
  * `.config.states` — so callers need not know its export name, and returns that
@@ -2093,23 +2135,28 @@ describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
  * [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
  */
 export async function emitGearsFsmConformanceTest(opts: {
-  /** The artifact directory (`<basename>.playbook/`) to emit the test into. */
-  artifactDir: string;
+  /** Canonical artifact directory; omit only when `layout` is explicit. */
+  artifactDir?: string;
   /** Basename shared by the artifacts (e.g. `code`). */
   basename: string;
   /** Checker import specifier; defaults to {@link VERIFY_MODULE}. */
   verifyModule?: string;
+  /** Explicit candidate output and logical imports. */
+  layout?: GearsFsmConformanceEmissionLayout;
 }): Promise<string> {
+  const canonicalDir = requireCanonicalDir(opts.artifactDir, opts.layout);
   const content = generateGearsFsmConformanceTest({
     basename: opts.basename,
     // NodeNext source imports the TypeScript artifact through its runtime
     // `.js` specifier; Vitest resolves that edge to the sibling source.
-    fsmModule: `./${opts.basename}.fsm.js`,
-    gearsFile: `./${opts.basename}.gears.md`,
+    fsmModule: opts.layout?.fsmModule ?? `./${opts.basename}.fsm.js`,
+    gearsFile: opts.layout?.gearsFile ?? `./${opts.basename}.gears.md`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
   });
-  await mkdir(opts.artifactDir, { recursive: true });
-  const path = join(opts.artifactDir, `${opts.basename}.gears-fsm.test.ts`);
+  const path =
+    opts.layout?.outputPath ??
+    join(canonicalDir, `${opts.basename}.gears-fsm.test.ts`);
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content);
   return path;
 }
@@ -2140,13 +2187,15 @@ export async function loadFsmModule(fsmPath: string): Promise<unknown> {
 async function loadLinkedModuleForVerification(opts: {
   linkedPath: string;
   fsmPath: string;
+  fsmModuleSpecifier?: string;
+  stagedPath?: string;
 }): Promise<unknown> {
   const linkedSource = await readFile(opts.linkedPath, 'utf8');
   const fsmStem = basename(opts.fsmPath, '.ts');
-  const runtimeSpecifier = `./${fsmStem}.js`;
-  const verificationSpecifier = `./${fsmStem}.ts?v=${await hashFile(
-    opts.fsmPath,
-  )}`;
+  const runtimeSpecifier = opts.fsmModuleSpecifier ?? `./${fsmStem}.js`;
+  const verificationUrl = pathToFileURL(resolve(opts.fsmPath));
+  verificationUrl.searchParams.set('v', await hashFile(opts.fsmPath));
+  const verificationSpecifier = verificationUrl.href;
   const stagedSource = linkedSource
     .replaceAll(
       sourceString(runtimeSpecifier),
@@ -2161,10 +2210,13 @@ async function loadLinkedModuleForVerification(opts: {
   }
 
   const linkedStem = basename(opts.linkedPath, '.ts');
-  const stagedPath = join(
-    dirname(opts.linkedPath),
-    `.${linkedStem}.slc-verify-${randomUUID()}.ts`,
-  );
+  const stagedPath =
+    opts.stagedPath ??
+    join(
+      dirname(opts.linkedPath),
+      `.${linkedStem}.slc-verify-${randomUUID()}.ts`,
+    );
+  await mkdir(dirname(stagedPath), { recursive: true });
   await writeFile(stagedPath, stagedSource, { flag: 'wx' });
   try {
     return await loadFsmModule(stagedPath);
@@ -2311,12 +2363,20 @@ ${composerBlock}});
  * @throws when the `fsm` artifact cannot be imported or exports no machine.
  */
 export async function emitPromptContractTest(opts: {
-  artifactDir: string;
+  /** Canonical artifact directory; omit only when `layout` is explicit. */
+  artifactDir?: string;
   basename: string;
   verifyModule?: string;
+  /** Explicit candidate inputs/output and logical imports. */
+  layout?: PromptContractEmissionLayout;
 }): Promise<{ path: string; diagnostics: string[] }> {
+  const canonicalDir = requireCanonicalDir(opts.artifactDir, opts.layout);
   const diagnostics: string[] = [];
-  const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
+  const path =
+    opts.layout?.outputPath ??
+    join(canonicalDir, `${opts.basename}.prompt-contract.test.ts`);
+  const fsmPath =
+    opts.layout?.fsmPath ?? join(canonicalDir, `${opts.basename}.fsm.ts`);
   const config = findMachineConfig(await loadFsmModule(fsmPath));
   const rows = capturePromptContract(config);
 
@@ -2327,12 +2387,17 @@ export async function emitPromptContractTest(opts: {
         player?: Record<string, string[]>;
       }
     | undefined;
-  const linkedPath = join(opts.artifactDir, `${opts.basename}.playbook.ts`);
-  if (existsSync(linkedPath)) {
+  const linkedPath =
+    opts.layout === undefined
+      ? join(canonicalDir, `${opts.basename}.playbook.ts`)
+      : opts.layout.linked?.physicalPath;
+  if (linkedPath !== undefined && existsSync(linkedPath)) {
     try {
       const linked = (await loadLinkedModuleForVerification({
         linkedPath,
         fsmPath,
+        fsmModuleSpecifier: opts.layout?.linked?.fsmModuleSpecifier,
+        stagedPath: opts.layout?.outputPath,
       })) as {
         _internal?: {
           composeCaptainPrompt?: unknown;
@@ -2373,7 +2438,9 @@ export async function emitPromptContractTest(opts: {
         substitutions.player !== undefined
       ) {
         composer = {
-          playbookModule: `./${opts.basename}.playbook.js`,
+          playbookModule:
+            opts.layout?.linked?.moduleSpecifier ??
+            `./${opts.basename}.playbook.js`,
           ...substitutions,
         };
       }
@@ -2386,16 +2453,12 @@ export async function emitPromptContractTest(opts: {
 
   const content = generatePromptContractTest({
     basename: opts.basename,
-    fsmModule: `./${opts.basename}.fsm.js`,
+    fsmModule: opts.layout?.fsmModule ?? `./${opts.basename}.fsm.js`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
     rows,
     composer,
   });
-  await mkdir(opts.artifactDir, { recursive: true });
-  const path = join(
-    opts.artifactDir,
-    `${opts.basename}.prompt-contract.test.ts`,
-  );
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content);
   return { path, diagnostics };
 }
@@ -2409,27 +2472,51 @@ export async function emitPromptContractTest(opts: {
  * @throws when the `fsm` artifact cannot be imported or exports no machine.
  */
 export async function emitFsmIntrospectionTest(opts: {
-  artifactDir: string;
+  /** Canonical artifact directory; omit only when `layout` is explicit. */
+  artifactDir?: string;
   basename: string;
   verifyModule?: string;
+  /** Explicit candidate inputs/output and logical imports. */
+  layout?: FsmIntrospectionEmissionLayout;
 }): Promise<string> {
-  const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
+  const canonicalDir = requireCanonicalDir(opts.artifactDir, opts.layout);
+  const fsmPath =
+    opts.layout?.fsmPath ?? join(canonicalDir, `${opts.basename}.fsm.ts`);
   const pins = pinIntrospection(
     findMachineConfig(await loadFsmModule(fsmPath)),
   );
   const content = generateFsmIntrospectionTest({
     basename: opts.basename,
-    fsmModule: `./${opts.basename}.fsm.js`,
+    fsmModule: opts.layout?.fsmModule ?? `./${opts.basename}.fsm.js`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
     pins,
   });
-  await mkdir(opts.artifactDir, { recursive: true });
-  const path = join(
-    opts.artifactDir,
-    `${opts.basename}.fsm.introspect.test.ts`,
-  );
+  const path =
+    opts.layout?.outputPath ??
+    join(canonicalDir, `${opts.basename}.fsm.introspect.test.ts`);
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content);
   return path;
+}
+
+function requireCanonicalDir(
+  artifactDir: string | undefined,
+  layout: unknown,
+): string {
+  if (layout !== undefined) {
+    if (artifactDir !== undefined) {
+      throw new Error(
+        'verification emission accepts either artifactDir or an explicit layout, not both',
+      );
+    }
+    return '';
+  }
+  if (artifactDir === undefined) {
+    throw new Error(
+      'verification emission requires artifactDir or an explicit layout',
+    );
+  }
+  return artifactDir;
 }
 
 // Transition-coverage verification (VERIFY-6) lives in its own module — it
