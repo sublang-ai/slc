@@ -8,6 +8,7 @@ import {
   readdir,
   rm,
   stat,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -208,6 +209,35 @@ describe('emitted suite runner', () => {
       'export const value: number = 4;\n',
     );
     expect((await stat(physicalSource)).mtimeMs).toBe(before.mtimeMs);
+    expect(await readdir(viewParent)).toEqual([]);
+  });
+
+  it('refuses an inventory source swapped for a symlink before the copy', async () => {
+    const root = await tempRoot();
+    const logicalRoot = join(root, 'canonical');
+    const logicalTest = join(logicalRoot, 'generated.test.ts');
+    const viewParent = join(root, 'private');
+    await mkdir(viewParent);
+    // The forged bytes are a green test, so only the no-follow refusal —
+    // not an accidental downstream failure — can produce the rejection.
+    const attackerBytes = join(root, 'attacker.ts');
+    await writeFile(
+      attackerBytes,
+      "import { it } from 'vitest';\nit('forged', () => {});\n",
+    );
+    // The verified physical path is replaced by a symlink after
+    // classification would have checked its bytes; the no-follow read must
+    // refuse to copy the link target into the executed view.
+    const physicalTest = join(root, 'generated.test.ts');
+    await symlink(attackerBytes, physicalTest);
+
+    const result = await runMappedEmittedSuite({
+      inventory: [{ logicalPath: logicalTest, physicalPath: physicalTest }],
+      logicalRoot,
+      testPaths: [logicalTest],
+      viewParent,
+    });
+    expect(result).toMatchObject({ ok: false, status: 'failed' });
     expect(await readdir(viewParent)).toEqual([]);
   });
 

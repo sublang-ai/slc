@@ -226,6 +226,35 @@ describe('candidate build overlays (INCR-8 foundation)', () => {
     await sealed.discard();
   });
 
+  it('refuses to seal through a symlinked staged directory component', async () => {
+    const outside = join(root, 'outside');
+    await mkdir(outside);
+    const overlay = await createCandidateOverlay({
+      artifactDir,
+      pipeline: 'fixture',
+      accepted: [],
+      candidate: [
+        ...coldCandidate(),
+        staged('check', 'verification', 'verify/check.ts'),
+      ],
+    });
+    for (const path of coldCandidate().map((member) => member.path)) {
+      await writeFile(overlay.stagePath(path), `candidate:${path}\n`);
+    }
+    // An escape swaps the intermediate staged directory for a symlink, so
+    // the staged leaf lstats as a plain regular file while its bytes live
+    // outside the private stage.
+    const stagedNested = join(overlay.root, 'workflow.fixture', 'verify');
+    await rm(stagedNested, { recursive: true, force: true });
+    await symlink(outside, stagedNested);
+    await writeFile(overlay.stagePath('verify/check.ts'), 'escaped bytes\n');
+
+    await expect(overlay.seal()).rejects.toMatchObject({
+      code: 'overlay-unsafe',
+    });
+    await overlay.discard();
+  });
+
   it('rejects symlink, hard-link, and wrong-type managed paths', async () => {
     await mkdir(artifactDir);
     await writeFile(join(artifactDir, '.slc-build.json'), 'old record\n');
