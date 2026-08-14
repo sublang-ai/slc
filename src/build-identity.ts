@@ -364,7 +364,14 @@ async function exactTreeHash(path: string): Promise<Hash> {
 async function runtimePackageClosureHash(packagePath: string): Promise<Hash> {
   const records: RuntimePackageRecord[] = [];
   const visited = new Set<string>();
-  await collectRuntimePackage(resolve(packagePath), [], records, visited);
+  // Identity is the resolved content: a link-based installer layout (pnpm)
+  // and a copied layout with identical bytes share one closure hash, and
+  // resolution for a package's own dependencies walks from where its bytes
+  // actually live. An absent path keeps its original error surface.
+  const entry = await realpath(resolve(packagePath)).catch(() =>
+    resolve(packagePath),
+  );
+  await collectRuntimePackage(entry, [], records, visited);
   records.sort((left, right) =>
     compareUtf8(canonicalJson(left.path), canonicalJson(right.path)),
   );
@@ -518,7 +525,9 @@ async function resolveInstalledPackage(
           `host runtime package manifest is not a regular file: ${dependency}`,
         );
       }
-      return candidate;
+      // Resolve the package boundary so hashing and the next walk both see
+      // the content directory, not an installer's symlink into its store.
+      return await realpath(candidate);
     } catch (error) {
       if (!isMissing(error)) throw error;
     }

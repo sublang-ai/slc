@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 
@@ -357,6 +364,79 @@ describe('production build identity (INCR-7)', () => {
         currentness: 'gate',
       },
     ]);
+  });
+
+  it('hashes one closure identity for copied and pnpm-linked layouts', async () => {
+    // One logical closure — entry package with a dependency and a peer —
+    // materialized twice with identical bytes: once flat (copied), once
+    // through a pnpm-style store of symlinked package boundaries.
+    const seed = async (base: string, name: string): Promise<string> => {
+      const dir = join(base, name);
+      await mkdir(dir, { recursive: true });
+      if (name === 'fixture-entry') {
+        await writeManifest(
+          join(dir, 'package.json'),
+          name,
+          '1.0.0',
+          { 'fixture-dependency': '1.0.0' },
+          { peerDependencies: { 'fixture-peer': '1.0.0' } },
+        );
+      } else {
+        await writeManifest(join(dir, 'package.json'), name, '1.0.0');
+      }
+      await writeFile(join(dir, 'index.js'), `export const ${name} = 1;\n`);
+      return dir;
+    };
+
+    const flatRoot = join(root, 'layout-flat', 'node_modules');
+    const flatEntry = await seed(flatRoot, 'fixture-entry');
+    await seed(flatRoot, 'fixture-dependency');
+    await seed(flatRoot, 'fixture-peer');
+
+    const store = join(root, 'layout-pnpm', 'node_modules', '.pnpm');
+    const entryStore = join(store, 'fixture-entry@1.0.0', 'node_modules');
+    const pnpmEntry = await seed(entryStore, 'fixture-entry');
+    const pnpmDependency = await seed(
+      join(store, 'fixture-dependency@1.0.0', 'node_modules'),
+      'fixture-dependency',
+    );
+    const pnpmPeer = await seed(
+      join(store, 'fixture-peer@1.0.0', 'node_modules'),
+      'fixture-peer',
+    );
+    // The entry's dependency and peer resolve through sibling symlinks in
+    // its own store directory; the public name is a symlink as well.
+    await symlink(pnpmDependency, join(entryStore, 'fixture-dependency'));
+    await symlink(pnpmPeer, join(entryStore, 'fixture-peer'));
+    const publicEntry = join(
+      root,
+      'layout-pnpm',
+      'node_modules',
+      'fixture-entry',
+    );
+    await symlink(pnpmEntry, publicEntry);
+
+    const identify = async (entryManifest: string) => {
+      const identified = await createBuildIdentityProvider({
+        selection: { agent: 'codex', model: 'fixture-model', effort: 'high' },
+        layout: {
+          runtimeRoot,
+          slcPackagePath,
+          cligentPackagePath: entryManifest,
+          typescriptPackagePath,
+          agentRuntimePackagePath: agentPackagePath,
+          nodeExecutablePath,
+        },
+      })(topology('full'));
+      if (identified.interpretedExecutor.kind !== 'value') {
+        throw new Error('fixture identity is not value-backed');
+      }
+      return identified.interpretedExecutor.value;
+    };
+
+    const copied = await identify(join(flatEntry, 'package.json'));
+    const linked = await identify(join(publicEntry, 'package.json'));
+    expect(linked).toBe(copied);
   });
 
   it('discovers import-only production packages without package.json exports', async () => {
