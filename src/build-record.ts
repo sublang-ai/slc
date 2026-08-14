@@ -15,7 +15,7 @@ import { lstat, open, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 
 import { errorCode, messageOf } from './errors.js';
-import { hashBytes, isHash, type Hash } from './hash.js';
+import { compareUtf8, hashBytes, isHash, type Hash } from './hash.js';
 
 export const BUILD_RECORD_FILE = '.slc-build.json';
 export const SOURCE_SNAPSHOT_FILE = '.slc-source';
@@ -981,7 +981,7 @@ function validateRecord(record: BuildRecord, path: string): void {
         .filter((product) => product.kind !== 'semantic')
         .flatMap((product) => product.inputs),
     ),
-  ].sort(compareStrings);
+  ].sort(compareUtf8);
   if (
     canonicalJson(productDeterministicInputs) !==
     canonicalJson(record.plan.deterministicInputs)
@@ -1538,17 +1538,16 @@ function orderedUnique<T>(
   key: (item: T) => string,
   path: string,
 ): void {
-  let previous: Uint8Array | undefined;
+  let previous: string | undefined;
   const seen = new Set<string>();
   for (const value of values) {
     const candidate = key(value);
     if (seen.has(candidate)) throw invalid(path, `duplicates "${candidate}"`);
-    const encoded = new TextEncoder().encode(candidate);
-    if (previous !== undefined && compareBytes(previous, encoded) >= 0) {
+    if (previous !== undefined && compareUtf8(previous, candidate) >= 0) {
       throw invalid(path, 'must be sorted by UTF-8 bytes');
     }
     seen.add(candidate);
-    previous = encoded;
+    previous = candidate;
   }
 }
 
@@ -1563,20 +1562,6 @@ function unique<T>(
     if (seen.has(candidate)) throw invalid(path, `duplicates "${candidate}"`);
     seen.add(candidate);
   }
-}
-
-function compareBytes(left: Uint8Array, right: Uint8Array): number {
-  for (let index = 0; index < Math.min(left.length, right.length); index++) {
-    if (left[index] !== right[index]) return left[index] - right[index];
-  }
-  return left.length - right.length;
-}
-
-function compareStrings(left: string, right: string): number {
-  return compareBytes(
-    new TextEncoder().encode(left),
-    new TextEncoder().encode(right),
-  );
 }
 
 function canonicalString(value: string): string {

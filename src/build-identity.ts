@@ -28,7 +28,7 @@ import {
 import type { BuildIdentityContext, FullBuildTopology } from './build-plan.js';
 import type { AgentSelection } from './config.js';
 import { runtimeContractForPin } from './config.js';
-import { hashBytes, hashFile, type Hash } from './hash.js';
+import { compareUtf8, hashBytes, hashFile, type Hash } from './hash.js';
 import { hashTree } from './pin-currency.js';
 import type { BuildIdentityProvider } from './runner.js';
 
@@ -653,10 +653,6 @@ function packageSegments(name: string): string[] {
     return [name];
   }
   throw new Error(`invalid runtime package name: ${name}`);
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
 }
 
 function isMissing(error: unknown): boolean {

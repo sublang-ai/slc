@@ -16,7 +16,6 @@ import {
 
 import type { CanonicalBuildPlan, PlannedProduct } from './build-plan.js';
 import {
-  BuildRecordError,
   canonicalJson,
   encodeReadLocator,
   loadLineagePair,
@@ -30,7 +29,7 @@ import {
 } from './build-record.js';
 import { VERIFICATION_TEST_FILES } from './deterministic-derivatives.js';
 import { errorCode, messageOf } from './errors.js';
-import { hashBytes, type Hash } from './hash.js';
+import { compareUtf8, hashBytes, type Hash } from './hash.js';
 import {
   VERIFIER_SUPPORT_DIR,
   VERIFIER_SUPPORT_FILES,
@@ -359,8 +358,7 @@ function incompatible(
 function issueFromLoad(error: unknown): LineageIssue {
   return {
     code: 'lineage-invalid',
-    detail:
-      error instanceof BuildRecordError ? error.message : messageOf(error),
+    detail: messageOf(error),
   };
 }
 
@@ -1338,8 +1336,4 @@ function sameStepIdentity(
     prior.inputClosure === current.inputClosure &&
     canonicalJson(prior.inputs) === canonicalJson(current.inputs)
   );
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
 }

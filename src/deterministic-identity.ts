@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './build-record.js';
 import type { DeterministicComponent } from './build-plan.js';
 import { isAbsentPathError } from './errors.js';
-import { hashBytes, hashFile, type Hash } from './hash.js';
+import { compareUtf8, hashBytes, hashFile, type Hash } from './hash.js';
 import { hashTree } from './pin-currency.js';
 
 const SCHEMA = 'sublang.slc.deterministic-identity.v1';
@@ -346,8 +346,4 @@ function packageSegments(name: string): string[] {
 
 function withoutSourceMapReference(content: string): string {
   return content.replace(/\n\/\/# sourceMappingURL=[^\n]+\n?$/u, '\n');
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left), Buffer.from(right));
 }

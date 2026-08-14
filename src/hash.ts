@@ -41,3 +41,15 @@ export async function hashFile(path: string): Promise<Hash> {
 export function isHash(value: string): value is Hash {
   return HASH_PATTERN.test(value);
 }
+
+/**
+ * Orders two strings by their exact UTF-8 bytes (DR-021).
+ *
+ * This is the ordering every hashed inventory, product list, and tree record
+ * is sorted and validated by, so it belongs beside the hashes themselves: a
+ * second implementation that disagreed on one code point would silently
+ * change identities.
+ */
+export function compareUtf8(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
+}

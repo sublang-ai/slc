@@ -31,7 +31,7 @@ import {
   resolveManagedPath,
 } from './build-record.js';
 import { errorCode } from './errors.js';
-import { hashBytes, isHash, type Hash } from './hash.js';
+import { compareUtf8, hashBytes, isHash, type Hash } from './hash.js';
 
 export type OverlayRole =
   | 'semantic'
@@ -809,10 +809,6 @@ function operationOrder(
   right: { path: string },
 ): number {
   return compareUtf8(left.path, right.path);
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
 }
 
 function deriveEntryBasename(artifactDir: string, pipeline: string): string {
