@@ -61,9 +61,9 @@ Verifies: [INCR-8](../dev/incremental-compilation.md#incr-8), [INCR-16](../dev/i
 Where a prior accepted bundle exists and executing phases honor their physical workspace bindings, when an incremental or `--rebuild` candidate is rejected or lineage promotion is interrupted before or after the build-record commit marker changes, the slc command shall preserve the accepted lineage for a staged rejection or finish exactly the complete candidate record and product inventory forward from the intact sealed stage after interrupted host promotion — reporting an ordinary conflict without one — remove the stage before currentness evaluation, and never treat mixed or unrecorded candidate bytes as current; a separately observed concurrent managed-file edit shall be detected without overwrite or rollback and shall block reuse as a conflict.
 
 ### INCR-28
-Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-19](../dev/incremental-compilation.md#incr-19), [PIPE-9](../dev/pipeline.md#pipe-9)
+Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-7](../dev/incremental-compilation.md#incr-7), [INCR-19](../dev/incremental-compilation.md#incr-19), [PIPE-9](../dev/pipeline.md#pipe-9)
 
-Where fixture invocations cover a full or full-link run with `-o` and every unsupported `--rebuild` form, when the slc command runs them, the slc command shall retain the overridden output behavior without creating or advancing a build record or source snapshot in the first case and shall refuse `--rebuild` combined with `--adopt`, `-o`, a single-phase, standalone-pass, or direct-link invocation.
+Where fixture invocations cover a full or full-link run with `-o`, a single-phase, standalone-pass, or direct-link run, and every unsupported `--rebuild` form, when the slc command runs them, the slc command shall retain the specified output behavior without requesting host build identity or creating or advancing a build record or source snapshot for the ordinary non-lineage forms and shall refuse `--rebuild` combined with `--adopt`, `-o`, a single-phase, standalone-pass, or direct-link invocation.
 
 ### INCR-29
 Verifies: [INCR-9](../dev/incremental-compilation.md#incr-9), [INCR-10](../dev/incremental-compilation.md#incr-10), [COMPILE-6](../user/compiler.md#compile-6)

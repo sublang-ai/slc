@@ -19,6 +19,10 @@ import type {
   FullBuildTopology,
 } from '../src/build-plan.js';
 import {
+  BUILD_RECORD_FILE,
+  SOURCE_SNAPSHOT_FILE,
+} from '../src/build-record.js';
+import {
   createInterpretedExecutor,
   type AgentClient,
 } from '../src/interpreter.js';
@@ -154,6 +158,33 @@ const deps = (agent: AgentClient, model?: string): SlcDeps => ({
   cwd: srcDir,
 });
 
+const nonLineageDeps = (agent: AgentClient): SlcDeps => ({
+  ...deps(agent),
+  buildIdentity: () => {
+    throw new Error('non-lineage invocation requested host build identity');
+  },
+});
+
+const RECORD_SENTINEL = 'existing build record\n';
+const SNAPSHOT_SENTINEL = 'existing source snapshot\n';
+
+const seedLineageSentinels = async (dir: string): Promise<void> => {
+  await mkdir(dir, { recursive: true });
+  await Promise.all([
+    writeFile(join(dir, BUILD_RECORD_FILE), RECORD_SENTINEL),
+    writeFile(join(dir, SOURCE_SNAPSHOT_FILE), SNAPSHOT_SENTINEL),
+  ]);
+};
+
+const expectLineageSentinelsUnchanged = async (dir: string): Promise<void> => {
+  expect(await readFile(join(dir, BUILD_RECORD_FILE), 'utf8')).toBe(
+    RECORD_SENTINEL,
+  );
+  expect(await readFile(join(dir, SOURCE_SNAPSHOT_FILE), 'utf8')).toBe(
+    SNAPSHOT_SENTINEL,
+  );
+};
+
 const exists = async (path: string): Promise<boolean> =>
   access(path).then(
     () => true,
@@ -200,14 +231,28 @@ describe('full pipeline run (PIPE-20, PIPE-38, PHEXEC-16)', () => {
   });
 
   it('lets -o override the output while keeping intermediates canonical (PIPE-28)', async () => {
-    const { agent } = makeAgent();
+    const { agent, calls } = makeAgent();
     const out = join(srcDir, 'custom.fsm.ts');
-    const result = await runSlc(['flow', source, '-o', out], deps(agent));
+    const result = await runSlc(
+      ['flow', source, '-o', out],
+      nonLineageDeps(agent),
+    );
 
     expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([join(artDir, 'onboarding.gears.md'), out]);
     expect(await exists(out)).toBe(true);
     expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(false);
+    expect(await exists(join(artDir, BUILD_RECORD_FILE))).toBe(false);
+    expect(await exists(join(artDir, SOURCE_SNAPSHOT_FILE))).toBe(false);
+    expect(
+      calls
+        .map(workspaceFromPrompt)
+        .every(
+          (workspace) =>
+            workspace.write.physicalPath === workspace.write.logicalPath,
+        ),
+    ).toBe(true);
   });
 
   it('creates the artifact directory under a cwd other than the source directory (PIPE-38)', async () => {
@@ -279,13 +324,20 @@ describe('full pipeline run (PIPE-20, PIPE-38, PHEXEC-16)', () => {
 
 describe('single-phase run (PIPE-24)', () => {
   it('writes only the named phase target', async () => {
+    await seedLineageSentinels(artDir);
     const { agent, calls } = makeAgent();
-    const result = await runSlc(['flow.text2gears', source], deps(agent));
+    const result = await runSlc(
+      ['flow.text2gears', source],
+      nonLineageDeps(agent),
+    );
 
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(1);
     expect(result.outputs).toEqual([join(artDir, 'onboarding.gears.md')]);
     expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(false);
+    await expectLineageSentinelsUnchanged(artDir);
+    const workspace = workspaceFromPrompt(calls[0]);
+    expect(workspace.write.physicalPath).toBe(workspace.write.logicalPath);
   });
 
   it('ignores -o for a non-terminal phase, keeping the canonical intermediate (DR-001)', async () => {
@@ -345,20 +397,24 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     await writeFile(join(srcDir, 'runner.ts'), 'runner');
     const outDir = join(root, 'link-out');
     await mkdir(outDir);
-    const { agent } = makeAgent();
+    const targetArtDir = join(outDir, 'onboarding.flow');
+    await seedLineageSentinels(targetArtDir);
+    const { agent, calls } = makeAgent();
 
     const result = await runSlc(
       ['flow.link', object, join(srcDir, 'runner.ts')],
       {
-        ...deps(agent),
+        ...nonLineageDeps(agent),
         cwd: outDir,
       },
     );
 
     expect(result.ok).toBe(true);
-    expect(
-      await exists(join(outDir, 'onboarding.flow', 'onboarding.run.ts')),
-    ).toBe(true);
+    expect(await exists(join(targetArtDir, 'onboarding.run.ts'))).toBe(true);
+    expect(result.outputs).toEqual([join(targetArtDir, 'onboarding.run.ts')]);
+    await expectLineageSentinelsUnchanged(targetArtDir);
+    const workspace = workspaceFromPrompt(calls[0]);
+    expect(workspace.write.physicalPath).toBe(workspace.write.logicalPath);
     // The object's own directory stays unwritten.
     expect(await exists(join(artDir, 'onboarding.run.ts'))).toBe(false);
   });
@@ -384,6 +440,38 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     expect(result.ok).toBe(true);
     expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(true); // object artifact
     expect(await exists(join(artDir, 'onboarding.run.ts'))).toBe(true); // linked artifact
+  });
+
+  it('keeps a full-link -o run non-lineage while preserving existing metadata (INCR-28)', async () => {
+    await seedLineageSentinels(artDir);
+    const runtime = join(srcDir, 'runner.ts');
+    const out = join(srcDir, 'custom.run.ts');
+    await writeFile(runtime, 'runner');
+    const { agent, calls } = makeAgent();
+
+    const result = await runSlc(
+      ['flow', source, '--link', runtime, '-o', out],
+      nonLineageDeps(agent),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([
+      join(artDir, 'onboarding.gears.md'),
+      join(artDir, 'onboarding.fsm.ts'),
+      out,
+    ]);
+    expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(true);
+    expect(await exists(join(artDir, 'onboarding.run.ts'))).toBe(false);
+    expect(await exists(out)).toBe(true);
+    await expectLineageSentinelsUnchanged(artDir);
+    expect(
+      calls
+        .map(workspaceFromPrompt)
+        .every(
+          (workspace) =>
+            workspace.write.physicalPath === workspace.write.logicalPath,
+        ),
+    ).toBe(true);
   });
 
   it('lets -o override the linked artifact for a .link run (PIPE-28)', async () => {
@@ -480,11 +568,18 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     await mkdir(artDir, { recursive: true });
     const intermediate = join(artDir, 'onboarding.gears.md');
     await writeFile(intermediate, 'gears');
-    const { agent } = makeAgent();
-    const result = await runSlc(['flow.optimize', intermediate], deps(agent));
+    await seedLineageSentinels(artDir);
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow.optimize', intermediate],
+      nonLineageDeps(agent),
+    );
     expect(result.ok).toBe(true);
     expect(result.outputs).toEqual([join(artDir, 'onboarding.gears.opt.md')]);
     expect(await exists(join(artDir, 'onboarding.gears.opt.md'))).toBe(true);
+    await expectLineageSentinelsUnchanged(artDir);
+    const workspace = workspaceFromPrompt(calls[0]);
+    expect(workspace.write.physicalPath).toBe(workspace.write.logicalPath);
   });
 
   it('schedules the generic normalize step ahead of the entry phase (PIPE-34, PHEXEC-33)', async () => {
