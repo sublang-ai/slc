@@ -109,9 +109,14 @@ receives the exact four traced-session ports through its minimal session, and
 
 `PhaseInput` carries workspace paths, not contents; the artifact performs no
 direct file I/O.
-Agentic phases reach the workspace through the coding agent (`callPlayer`),
-which reads the source and writes the `target` or `linked` output directly and
-runs any tool the definition calls for, as in interpreted execution
+Under [DR-021](021-incremental-build-records-scoped-updates.md#build-lineage),
+these remain canonical logical locators during staged execution; they grant no
+filesystem authority, and the host adapter separately binds the actual readable
+paths and one write sink supplied to the performing coding agent.
+Agentic phases reach the workspace through a transformation-performing coding
+agent (`callPlayer` or, under the final `composed-v2` profile, direct
+`callCaptain`), which reads and writes through that physical binding and runs
+any tool the definition calls for, as in interpreted execution
 ([DR-004](004-slc-interpreted-phase-execution.md)).
 Per-step model selection flows through Playbook player and judge bindings plus
 host configuration.
@@ -119,7 +124,8 @@ Playbook port semantics are source-owned; SLC defines only the phase input,
 the phase result, and the mapping to the [DR-003](003-slc-phase-execution.md)
 protocol.
 `slc` supplies a `PlaybookPorts` adapter.
-It backs the agent-facing ports (`callPlayer` and `callJudge`) with Cligent
+It backs the agent-facing ports (`callPlayer`, `callCaptain` where present, and
+`callJudge`) with Cligent
 (npm `@sublang/cligent` [[2]]) per
 [DR-004](004-slc-interpreted-phase-execution.md), and supplies status and
 telemetry sinks so diagnostics can be drained.
@@ -127,13 +133,18 @@ How a host maps Playbook ports to concrete agents, models, process limits,
 and diagnostic sinks is host-defined; portability holds over the Playbook
 contract and the SLC phase-runner facade, not the execution environment.
 
-The run is expected to write only the `target` or `linked` path from its input
-— the [DR-003](003-slc-phase-execution.md) write-scope invariant — through the
-Playbook-mediated coding agent.
+The run is expected to write only the host-bound physical sink corresponding to
+the logical `target` or `linked` path from its input — the
+[DR-003](003-slc-phase-execution.md) write-scope invariant as refined by
+[DR-021](021-incremental-build-records-scoped-updates.md#build-lineage) — through
+the Playbook-mediated coding agent.
 Compiled execution relies on the same DR-003 generic checks as interpreted
 execution ([DR-004](004-slc-interpreted-phase-execution.md)), which defend the
-protected inputs but do not prove the full write scope, and `slc` adds no
-host-side write-scope enforcement for compiled runs.
+protected inputs but do not prove the full write scope.
+For staged lineage runs, [DR-021](021-incremental-build-records-scoped-updates.md)
+also requires revalidation that detects a tracked canonical or managed mutation
+and prevents promotion; it still neither enforces an OS-level sandbox nor rolls
+back arbitrary out-of-binding writes.
 `slc` constructs the runtime, supplies the exact pin-selected profile boundary, drives it to that boundary, then maps the outcome onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; non-sensitive diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md#blocked-protocol), [DR-010](010-playbook-runtime-contract-evolution.md)).
 
 ### Strategy selection

@@ -76,7 +76,7 @@ When writing artifacts, the slc command shall write each intermediate to `<art-d
 
 ### PIPE-9
 
-When invoked, the slc command shall parse `slc <pipeline>[.<phase>] <source> [-o <target>]`, with `--rebuild` additionally accepted only by a full or full-link invocation without `-o`, running the pipeline end-to-end for `<pipeline>` and a single named phase for `<pipeline>.<phase>` ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts)).
+When invoked, the slc command shall parse `slc <pipeline>[.<phase>] <source> [-o <target>]`, with `--rebuild` additionally accepted only by a full or full-link invocation without `-o` or `--adopt` and `--adopt` accepted only by a canonical non-`slc` full or full-link invocation without `-o` or `--rebuild`, running the pipeline end-to-end for `<pipeline>` and a single named phase for `<pipeline>.<phase>` ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#explicit-adoption)).
 
 ## Link phases
 
@@ -116,7 +116,7 @@ When invoked as `slc <pipeline>.link` with exactly one object, the slc command s
 
 ### PIPE-32
 
-On a full or full-link invocation without `--no-optimize`, the slc command shall schedule every discovered pass phase after the chain phase producing its format, in pass-name order, executing or exactly reusing each scheduled step under [DR-021](../decisions/021-incremental-build-records-scoped-updates.md): execution of the producing phase writes `<art-dir>/<basename>.<format>.raw<ext>`, each non-final pass `<art-dir>/<basename>.<format>.opt<k><ext>`, and the final pass the format's canonical artifact path, so downstream phases and verification consume identical paths with or without optimization; when the invocation carries `--no-optimize`, the slc command shall run the chain with no passes, and `-O`/`--optimize` shall remain accepted as an explicit statement of the default ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+On a full or full-link invocation without `--no-optimize`, the slc command shall schedule every discovered pass phase after the chain phase producing its format, in pass-name order, executing, exactly reusing, or as part of the complete lineage explicitly adopting each scheduled step under [DR-021](../decisions/021-incremental-build-records-scoped-updates.md): execution of the producing phase writes `<art-dir>/<basename>.<format>.raw<ext>`, each non-final pass `<art-dir>/<basename>.<format>.opt<k><ext>`, and the final pass the format's canonical artifact path, so downstream phases and verification consume identical paths with or without optimization; when the invocation carries `--no-optimize`, the slc command shall run the chain with no passes, and `-O`/`--optimize` shall remain accepted as an explicit statement of the default ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### PIPE-33
 
@@ -124,7 +124,7 @@ When invoked as `slc <pipeline>.<pass> <source>`, the slc command shall run the 
 
 ### PIPE-34
 
-When a full or full-link invocation carries `--normalize` or its entry source is a raw input ([PIPE-6](#pipe-6)), the slc command shall schedule one generic normalization step ahead of the entry phase, driven by the pipeline-agnostic definition shipped with slc, executing it to write or exactly reusing `<art-dir>/<basename>.<entry-source-format><entry-source-ext>` as the entry phase's source and supplying the entry-phase definition as a protected read-only reference input ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md), [PHEXEC-33](phase-execution.md#phexec-33)).
+When a full or full-link invocation carries `--normalize` or its entry source is a raw input ([PIPE-6](#pipe-6)), the slc command shall schedule one generic normalization step ahead of the entry phase, driven by the pipeline-agnostic definition shipped with slc, executing it to write, exactly reusing, or as part of the complete lineage explicitly adopting `<art-dir>/<basename>.<entry-source-format><entry-source-ext>` as the entry phase's source and supplying the entry-phase definition as a protected read-only reference input ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md), [PHEXEC-33](phase-execution.md#phexec-33)).
 
 ### PIPE-37
 

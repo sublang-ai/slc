@@ -29,7 +29,7 @@ Where independent successful fixture builds with closed readable-input declarati
 ### INCR-22
 Verifies: [INCR-4](../user/incremental-compilation.md#incr-4), [INCR-10](../dev/incremental-compilation.md#incr-10), [INCR-11](../dev/incremental-compilation.md#incr-11)
 
-Where a recorded step becomes dirty because its definition, executor identity, options, or input changed and scoped update is unavailable, when the full pipeline runs, the slc command shall execute the earliest dirty step ordinarily and shall reuse a downstream step only when the candidate restores that step's exact recorded input key.
+Where a non-adopted lineage's recorded step becomes dirty because its definition, executor identity, options, or input changed and scoped update is unavailable, when the full pipeline runs, the slc command shall execute the earliest dirty step ordinarily and shall reuse a downstream step only when the candidate restores that step's exact recorded input key.
 
 ## Scoped updates
 
@@ -41,12 +41,12 @@ Where a fixture `## Update` contract and prior trace map a localized source edit
 ### INCR-24
 Verifies: [INCR-4](../user/incremental-compilation.md#incr-4), [INCR-11](../dev/incremental-compilation.md#incr-11), [INCR-14](../dev/incremental-compilation.md#incr-14), [INCR-18](../dev/incremental-compilation.md#incr-18)
 
-Where a source edit is mechanically unmapped or ambiguous under the prior trace, touches a recorded structural or global scope, crosses stable-unit boundaries, breaks recorded ordering, or reaches a phase without a complete `## Update` contract and trace, when the full pipeline runs, the slc command shall choose ordinary execution before any update or classification agent call.
+Where a non-adopted lineage's source edit is mechanically unmapped or ambiguous under the prior trace, touches a recorded structural or global scope, crosses stable-unit boundaries, breaks recorded ordering, or reaches a phase without a complete `## Update` contract and trace, when the full pipeline runs, the slc command shall choose ordinary execution before any update or classification agent call.
 
 ### INCR-25
 Verifies: [INCR-5](../user/incremental-compilation.md#incr-5), [INCR-13](../dev/incremental-compilation.md#incr-13), [INCR-15](../dev/incremental-compilation.md#incr-15), [INCR-16](../dev/incremental-compilation.md#incr-16)
 
-Where an update executor returns `BLOCKED`, changes a protected target scope, mutates an input, emits a replacement trace that splits, merges, reorders, reclassifies, or expands the provisional eligible closure, emits any other invalid trace, or produces a candidate whose downstream step or applicable verification fails, when the full pipeline runs, the slc command shall discard the complete staged run, leave the prior accepted bundle and build record byte-identical, exit non-zero with the reason and `--rebuild` guidance, and make no ordinary-phase retry.
+Where an update executor honors its physical workspace binding and returns `BLOCKED`, changes a protected target scope, emits a replacement trace that splits, merges, reorders, reclassifies, or expands the provisional eligible closure, emits any other invalid trace, or produces a candidate whose downstream step or applicable verification fails, when the full pipeline runs, the slc command shall discard the complete staged run, leave the prior accepted bundle, source snapshot, and build record byte-identical, exit non-zero with the reason and `--rebuild` guidance, and make no ordinary-phase retry; a companion executor that mutates a staged readable input shall fail as a scope violation without promoting any staged byte.
 
 ## Conflicts and rebuilds
 
@@ -58,17 +58,17 @@ Where paired fixture bundles have malformed or unsupported records, an orphan re
 ### INCR-27
 Verifies: [INCR-8](../dev/incremental-compilation.md#incr-8), [INCR-16](../dev/incremental-compilation.md#incr-16), [INCR-19](../dev/incremental-compilation.md#incr-19)
 
-Where a prior accepted bundle exists, when an incremental or `--rebuild` candidate is rejected, a managed file changes concurrently, or lineage promotion is interrupted, the slc command shall preserve or recover one complete accepted lineage before reuse and shall never treat mixed or unrecorded candidate bytes as current.
+Where a prior accepted bundle exists and executing phases honor their physical workspace bindings, when an incremental or `--rebuild` candidate is rejected or lineage promotion is interrupted, the slc command shall preserve the accepted lineage for a staged rejection or recover one complete accepted lineage after interrupted host promotion and shall never treat mixed or unrecorded candidate bytes as current; a separately observed concurrent managed-file edit shall be detected without overwrite or rollback and shall block reuse as a conflict.
 
 ### INCR-28
 Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-19](../dev/incremental-compilation.md#incr-19), [PIPE-9](../dev/pipeline.md#pipe-9)
 
-Where fixture invocations cover a full or full-link run with `-o` and every unsupported `--rebuild` form, when the slc command runs them, the slc command shall retain the overridden output behavior without creating or advancing a build record or source snapshot in the first case and shall refuse `--rebuild` combined with `-o`, a single-phase, standalone-pass, or direct-link invocation.
+Where fixture invocations cover a full or full-link run with `-o` and every unsupported `--rebuild` form, when the slc command runs them, the slc command shall retain the overridden output behavior without creating or advancing a build record or source snapshot in the first case and shall refuse `--rebuild` combined with `--adopt`, `-o`, a single-phase, standalone-pass, or direct-link invocation.
 
 ### INCR-29
 Verifies: [INCR-9](../dev/incremental-compilation.md#incr-9), [INCR-10](../dev/incremental-compilation.md#incr-10), [COMPILE-6](../user/compiler.md#compile-6)
 
-Where an otherwise-current fixture has either a stale or malformed phase pin or a phase without a closed content-identified readable-input declaration, when the same full pipeline runs, the slc command shall fail before reuse in the pin case and execute rather than reuse the unclosed phase in the declaration case.
+Where an otherwise-current non-adopted fixture has either a stale or malformed phase pin or a phase without a closed content-identified readable-input declaration, when the same full pipeline runs, the slc command shall fail before reuse in the pin case and execute rather than reuse the unclosed phase in the declaration case.
 
 ### INCR-30
 Verifies: [INCR-8](../dev/incremental-compilation.md#incr-8), [INCR-17](../dev/incremental-compilation.md#incr-17)
@@ -76,6 +76,18 @@ Verifies: [INCR-8](../dev/incremental-compilation.md#incr-8), [INCR-17](../dev/i
 Where a prior accepted bundle contains an unrecorded file that remains unchanged or is edited concurrently and a managed product absent from a changed successful plan, when the canonical full pipeline promotes the new lineage, the slc command shall preserve the latest unrecorded file byte-for-byte and remove the obsolete managed product.
 
 ### INCR-31
-Verifies: [INCR-8](../dev/incremental-compilation.md#incr-8), [PHEXEC-29](../dev/phase-execution.md#phexec-29), [PHEXEC-34](../dev/phase-execution.md#phexec-34)
+Verifies: [INCR-8](../dev/incremental-compilation.md#incr-8), [PHEXEC-3](../dev/phase-execution.md#phexec-3), [PHEXEC-6](../dev/phase-execution.md#phexec-6), [PHEXEC-25](../dev/phase-execution.md#phexec-25), [PHEXEC-29](../dev/phase-execution.md#phexec-29), [PHEXEC-34](../dev/phase-execution.md#phexec-34)
 
-Where interpreted and compiled fixture phases derive output bytes and trace identities from their supplied source and target locators, when canonical incremental candidates execute through staged state, the slc command shall keep the same canonical logical locators as a cold canonical run in phase semantics and the compiled Boss request, give each performing agent only the separate actual physical read paths — including staged candidate predecessors — and staged write sink in its host workspace contract, and accept bytes containing no staging locator.
+Where independent interpreted, compiled Player, and compiled direct-Captain fixture phases derive output bytes and trace identities from their supplied source and target locators, each reads both a changed candidate predecessor and an unchanged read-only input, and one fixture instead writes the canonical logical target while its staged sink differs, when canonical full or full-link candidates including a cold build execute through staged state, the slc command shall retain the canonical plan's logical locators in phase semantics and the compiled Boss request, bind each compliant performing agent to the staged predecessor, canonical unchanged read-only input, and staged write sink in its host workspace contract, accept compliant bytes containing no staging locator, and fail the direct canonical-path write as a scope violation without promoting its candidate, source snapshot, or record.
+
+## Explicit adoption
+
+### INCR-36
+Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-2](../user/incremental-compilation.md#incr-2), [INCR-7](../dev/incremental-compilation.md#incr-7), [INCR-33](../user/incremental-compilation.md#incr-33), [INCR-34](../dev/incremental-compilation.md#incr-34), [INCR-35](../dev/incremental-compilation.md#incr-35), [COMPILE-1](../user/compiler.md#compile-1), [COMPILE-7](../user/compiler.md#compile-7), [COMPILE-8](../user/compiler.md#compile-8), [PIPE-32](../dev/pipeline.md#pipe-32), [PIPE-34](../dev/pipeline.md#pipe-34), [SELFHOST-15](../dev/self-hosting.md#selfhost-15)
+
+Where paired current raw-source full-link fixture lineages have scheduled normalization and optimization-pass products, a manually refined intermediate, correspondingly refined downstream semantic products, at least one semantic step without a closed readable-input declaration, and respectively edited old verifier/entry products or one safe missing deterministic derivative, when each canonical command runs with `--adopt` under a semantic executor that fails if called and then repeats without an option under semantic-executor and filesystem-write observers that fail if called, the slc command shall during adoption invoke no semantic executor, leave every semantic product and the source snapshot byte-identical, replace or restore the deterministic verifier and entry from trusted current generators, pass the complete regenerated verification, record every scheduled semantic product including normalization and the pass with adopted provenance and no update trace, report those products, and shall on the repeat report up to date without an executor call or filesystem write.
+
+### INCR-37
+Verifies: [INCR-33](../user/incremental-compilation.md#incr-33), [INCR-34](../dev/incremental-compilation.md#incr-34), [INCR-35](../dev/incremental-compilation.md#incr-35), [COMPILE-6](../user/compiler.md#compile-6), [PIPE-9](../dev/pipeline.md#pipe-9), [PHEXEC-27](../dev/phase-execution.md#phexec-27)
+
+Where adoption fixtures respectively use `-o`, `--rebuild`, the reserved `slc` meta-pipeline, a single-phase, standalone-pass, or direct-link form, absent, malformed, or orphaned lineage, changed source or snapshot bytes, another source locator, build-identity or pin drift, a missing, wrong-typed, unsafe, or symbolic-link semantic product, or an otherwise-eligible product that fails a generic or load-integrity check, and separate otherwise-eligible fixtures have semantically inconsistent current products or successfully adopted lineages followed by source, snapshot, locator, build/pin-identity, or semantic-product drift, when each adoption or later automatic command runs, the slc command shall reject every case without a semantic executor call or source rebinding and name the ineligible form or conflict; for a binding-compliant adoption failure it shall write no candidate byte to a canonical path, each otherwise-eligible adoption candidate shall regenerate trusted verification in staged state, the inconsistent fixture shall refuse adoption on verification failure, and each post-adoption automatic conflict shall perform no write.

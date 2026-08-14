@@ -68,7 +68,7 @@ While `runSlc` is in progress, when the process receives an interrupt, the slc e
 
 ### CLI-11
 
-Where `runSlc` returns produced paths, an already-current status, or failure diagnostics, when the slc executable reports the result, the slc executable shall respectively write the paths to standard output and return zero, write the up-to-date report to standard output and return zero, or write the diagnostics to standard error and return non-zero ([DR-003](../decisions/003-slc-phase-execution.md#blocked-protocol), [INCR-2](../user/incremental-compilation.md#incr-2)).
+Where `runSlc` returns a non-adoption produced-path result, an adoption result distinguishing attested semantic paths from regenerated deterministic paths, an already-current status, or failure diagnostics, when the slc executable reports the result, the slc executable shall respectively write the produced-path report to standard output and return zero, write one adoption report that does not call the unchanged semantic files written and does name the regenerated paths as written and return zero, write the up-to-date report to standard output and return zero, or write the diagnostics to standard error and return non-zero ([DR-003](../decisions/003-slc-phase-execution.md#blocked-protocol), [INCR-2](../user/incremental-compilation.md#incr-2), [INCR-33](../user/incremental-compilation.md#incr-33)).
 
 ## References
 

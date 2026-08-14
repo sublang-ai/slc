@@ -38,6 +38,7 @@ Both strategies shall honor this boundary; the choice of strategy shall not chan
 Every executing phase, interpreted or compiled, shall write only its declared target or linked artifact.
 It shall not modify sources, phase or link definitions, specs, object artifacts, link targets, or unrelated files.
 Scratch space that does not persist past the run is not a write under this rule; ensuring it does not persist is the executing phase's responsibility.
+For staged canonical execution, [DR-021](021-incremental-build-records-scoped-updates.md#build-lineage) refines “target” into two addresses: the request retains the canonical logical locator as semantic input, while the phase's only authorized write target is the host-bound physical sink.
 
 ### `slc` responsibilities
 

@@ -18,7 +18,7 @@ The simplest executor — an agent following the definition — needs no prior t
 ### Interpreter
 
 `slc` shall be able to execute any phase by interpreting its definition directly.
-To interpret a phase, `slc` shall prompt a coding agent with the phase or link definition and the phase inputs, and the agent shall perform the transformation and write the target.
+To interpret a phase, `slc` shall prompt a coding agent with the phase or link definition and the phase inputs, and the agent shall perform the transformation and write the host-bound physical sink for the target.
 `slc` shall reach coding agents through Cligent (npm `@sublang/cligent` [[1]]), so any supported agent CLI can interpret; agent and model selection is `slc` configuration, not phase semantics.
 
 Interpreted execution shall not require compiling the definition, an FSM, or linking.
@@ -39,7 +39,7 @@ Equivalence is at the level of acceptable target and blocked conditions, not ide
 When interpreting a phase, the agent prompt shall establish this contract:
 
 - the phase or link definition is authoritative;
-- the agent writes only the requested target or linked artifact;
+- the agent writes only the host-bound physical sink for the requested target or linked artifact, which [DR-021](021-incremental-build-records-scoped-updates.md#build-lineage) distinguishes from the request's canonical logical locator during staged execution;
 - the agent does not edit sources, phase definitions, specs, link targets, object artifacts, or unrelated files;
 - the agent does not commit;
 - the agent produces a complete artifact, not a sketch;
