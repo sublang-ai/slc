@@ -12,7 +12,7 @@
 // reconstructed terminal states; a turn arriving at `failed` re-enters through
 // the interrupt classifier.
 
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +34,10 @@ import { createCompiledExecutor } from '../src/compiled-executor.js';
 import type { ExecuteRequest } from '../src/execution.js';
 import type { AgentClient } from '../src/interpreter.js';
 import type { CompatiblePlaybookRuntimeFactory } from '../src/playbook-contract.js';
+import {
+  createWorkspaceRecord,
+  encodeWorkspaceContract,
+} from '../src/workspace.js';
 
 const pipelineDir = fileURLToPath(
   new URL('../pipelines/playbook/', import.meta.url),
@@ -599,12 +603,8 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
     readonly factory: CompatiblePlaybookRuntimeFactory;
     /** Phase request with workspace-relative paths, resolved by the executor. */
     readonly request: (dir: string) => ExecuteRequest;
-    /** Workspace-relative target the fake Captain writes. */
-    readonly target: string;
     /** GEARS-derived body substring the composed prompt must retain. */
     readonly promptAnchor: string;
-    /** Host-contract substrings the transported prompt must carry. */
-    readonly workspaceAnchors: (dir: string) => string[];
     /** Judge replies: all three classify first and adjudicate last. */
     readonly judgeReply: (prompt: string, dir: string) => string;
   }
@@ -619,13 +619,7 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
         source: 'workflow.text.md',
         target: 'workflow.gears.raw.md',
       }),
-      target: 'workflow.gears.raw.md',
       promptAnchor: 'free-form natural-language procedure description',
-      workspaceAnchors: (dir) => [
-        `source to read: ${join(dir, 'workflow.text.md')}`,
-        `artifact to write: ${join(dir, 'workflow.gears.raw.md')}`,
-        `write only ${join(dir, 'workflow.gears.raw.md')}`,
-      ],
       judgeReply: (prompt) =>
         prompt.startsWith(CLASSIFICATION_ANCHOR)
           ? COMPILE_CLASSIFICATION
@@ -640,13 +634,7 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
         source: 'workflow.gears.md',
         target: 'workflow.fsm.ts',
       }),
-      target: 'workflow.fsm.ts',
       promptAnchor: 'XState v5 finite state machine',
-      workspaceAnchors: (dir) => [
-        `source to read: ${join(dir, 'workflow.gears.md')}`,
-        `artifact to write: ${join(dir, 'workflow.fsm.ts')}`,
-        `write only ${join(dir, 'workflow.fsm.ts')}`,
-      ],
       judgeReply: (prompt) =>
         prompt.startsWith(CLASSIFICATION_ANCHOR)
           ? COMPILE_CLASSIFICATION
@@ -663,18 +651,7 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
         options: [],
         linked: 'workflow.playbook.ts',
       }),
-      target: 'workflow.playbook.ts',
       promptAnchor: 'into a `PlaybookRuntime`',
-      workspaceAnchors: (dir) => [
-        // The paths reach the Captain only through the host transport's
-        // appended workspace contract (PHEXEC-34): the classified COMPILE
-        // carries no routing fields under the 2.0.0 thin artifact.
-        join(dir, 'workflow.fsm.ts'),
-        `object artifacts to read, in order: ${join(dir, 'workflow.fsm.ts')}`,
-        `link target module: ${join(dir, 'runtime.ts')}`,
-        `artifact to write: ${join(dir, 'workflow.playbook.ts')}`,
-        `write only ${join(dir, 'workflow.playbook.ts')}`,
-      ],
       judgeReply: (prompt) =>
         prompt.startsWith(CLASSIFICATION_ANCHOR)
           ? COMPILE_CLASSIFICATION
@@ -702,14 +679,20 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
         loadFactory: async () =>
           createText2Gears as CompatiblePlaybookRuntimeFactory,
       });
-
+      const request: ExecuteRequest = {
+        kind: 'compile',
+        definitionPath: join(root, 'text2gears.md'),
+        source: 'workflow.text.md',
+        target: 'workflow.gears.raw.md',
+      };
+      await writeFile(request.definitionPath, 'definition');
+      await writeFile(join(root, request.source), 'source');
+      const workspace = await createWorkspaceRecord(request, {
+        runRoot: root,
+      });
       const result = await executor.run(
-        {
-          kind: 'compile',
-          definitionPath: join(root, 'text2gears.md'),
-          source: 'workflow.text.md',
-          target: 'workflow.gears.raw.md',
-        },
+        request,
+        workspace,
         new AbortController().signal,
       );
 
@@ -722,14 +705,21 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
 
   it.each(cases)(
     '$name Captain transport names the absolute paths and a writing Captain maps to ok',
-    async ({
-      factory,
-      request,
-      target,
-      promptAnchor,
-      workspaceAnchors,
-      judgeReply,
-    }) => {
+    async ({ factory, request, promptAnchor, judgeReply }) => {
+      const semanticRequest = request(root);
+      await prepareRequestReads(root, semanticRequest);
+      const stagedDir = join(root, '.staged');
+      await mkdir(stagedDir);
+      const physicalSink = join(
+        stagedDir,
+        semanticRequest.kind === 'compile'
+          ? 'candidate-target'
+          : 'candidate-linked',
+      );
+      const workspace = await createWorkspaceRecord(semanticRequest, {
+        runRoot: root,
+        physicalWrite: physicalSink,
+      });
       const captainPrompts: string[] = [];
       const judgePrompts: string[] = [];
       // One shared Captain/judge transport, as in production (PHEXEC-25):
@@ -739,7 +729,10 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
         async run(call) {
           if (call.allowedTools === undefined) {
             captainPrompts.push(call.prompt);
-            await writeFile(join(root, target), 'produced artifact\n');
+            await writeFile(
+              workspace.write.physicalPath,
+              'produced artifact\n',
+            );
             return {
               status: 'success',
               text: 'Wrote and verified the target artifact.',
@@ -759,22 +752,59 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
       });
 
       const result = await executor.run(
-        request(root),
+        semanticRequest,
+        workspace,
         new AbortController().signal,
       );
 
       expect(result.status).toBe('ok');
+      expect(await readFile(physicalSink, 'utf8')).toBe('produced artifact\n');
+      await expect(
+        readFile(workspace.write.logicalPath, 'utf8'),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
       expect(captainPrompts).toHaveLength(1);
       // The GEARS-derived composed body survives unchanged ahead of the
       // appended host workspace contract.
       expect(captainPrompts[0]).toContain(promptAnchor);
-      for (const anchor of workspaceAnchors(root)) {
-        expect(captainPrompts[0]).toContain(anchor);
-      }
+      expect(
+        captainPrompts[0].endsWith(encodeWorkspaceContract(workspace)),
+      ).toBe(true);
+      const captainBody = captainPrompts[0].slice(
+        0,
+        captainPrompts[0].indexOf('SLC_WORKSPACE_BEGIN'),
+      );
+      expect(captainBody).not.toContain(physicalSink);
+      const bossPaths = [
+        ...workspace.reads
+          .filter((read) => read.role !== 'definition')
+          .map((read) => read.logicalPath),
+        workspace.write.logicalPath,
+      ];
+      const classification = judgePrompts.find((prompt) =>
+        prompt.includes('Request: '),
+      );
+      expect(classification).toBeDefined();
+      for (const path of bossPaths) expect(classification).toContain(path);
+      expect(classification).not.toContain(physicalSink);
       // Hidden judge prompts cross without the workspace contract.
       for (const prompt of judgePrompts) {
-        expect(prompt).not.toContain('Workspace contract');
+        expect(prompt).not.toContain('SLC_WORKSPACE_BEGIN');
       }
     },
   );
 });
+
+async function prepareRequestReads(
+  root: string,
+  request: ExecuteRequest,
+): Promise<void> {
+  await writeFile(request.definitionPath, 'definition\n');
+  if (request.kind === 'compile') {
+    await writeFile(join(root, request.source), 'source\n');
+    return;
+  }
+  for (const object of request.objects) {
+    await writeFile(join(root, object), 'object\n');
+  }
+  await writeFile(join(root, request.linkTarget), 'link target\n');
+}

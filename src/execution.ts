@@ -26,6 +26,14 @@ import type { Stats } from 'node:fs';
 import { lstat, readFile, readdir, readlink, stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
+import {
+  createWorkspaceRecord,
+  freezeWorkspaceRecord,
+  type CreateWorkspaceOptions,
+  type WorkspaceRecord,
+  validateWorkspaceRecord,
+} from './workspace.js';
+
 /** An opaque link option pair (PIPE-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
   name: string;
@@ -68,7 +76,11 @@ export interface ExecutorResult {
 
 /** Runs one phase or link execution; implemented by the interpreted/compiled executors. */
 export interface PhaseExecutor {
-  run(request: ExecuteRequest, signal: AbortSignal): Promise<ExecutorResult>;
+  run(
+    request: ExecuteRequest,
+    workspace: WorkspaceRecord,
+    signal: AbortSignal,
+  ): Promise<ExecutorResult>;
 }
 
 /** A failure naming the phase, target path, and reasons (PHEXEC-9). */
@@ -96,24 +108,40 @@ export async function runPhase(opts: {
   definitions?: readonly string[];
   /** Re-checks that the pipeline chain still infers; throws when it no longer does (PHEXEC-5). */
   revalidate?: () => void | Promise<void>;
+  /** Explicit physical binding; omitted callers receive the canonical binding. */
+  workspace?: WorkspaceRecord;
+  /** Inputs used only when deriving the default canonical binding. */
+  workspaceOptions?: CreateWorkspaceOptions;
   signal?: AbortSignal;
 }): Promise<PhaseResult> {
   const { request, phase, targetExt, executor } = opts;
   const signal = opts.signal ?? new AbortController().signal;
   const target = request.kind === 'compile' ? request.target : request.linked;
-  const inputs =
-    request.kind === 'compile'
-      ? [request.source, ...(request.references ?? [])]
-      : [...request.objects, request.linkTarget];
+  const derivedWorkspace =
+    opts.workspace ??
+    (await createWorkspaceRecord(request, opts.workspaceOptions ?? {}));
+  await validateWorkspaceRecord(derivedWorkspace, request, {
+    runRoot: opts.workspaceOptions?.runRoot,
+    semanticInputs: opts.workspaceOptions?.semanticInputs,
+  });
+  const workspace = freezeWorkspaceRecord(derivedWorkspace);
+  const inputs = workspace.reads.map((read) => read.physicalPath);
   const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
-  const protectedPaths = [...new Set([...inputs, ...definitions])];
+  const logicalProtection = [
+    ...workspace.reads.map((read) => read.logicalPath),
+    ...definitions,
+    ...(workspace.write.logicalPath === workspace.write.physicalPath
+      ? []
+      : [workspace.write.logicalPath]),
+  ];
+  const protectedPaths = [...new Set([...inputs, ...logicalProtection])];
 
   const before = await snapshot(protectedPaths);
 
   const reasons: string[] = [];
   let result: ExecutorResult | null = null;
   try {
-    result = await executor.run(request, signal);
+    result = await executor.run(request, workspace, signal);
   } catch (error) {
     reasons.push(`executor threw: ${messageOf(error)}`);
   }
@@ -123,13 +151,22 @@ export async function runPhase(opts: {
   }
 
   if (result?.status === 'ok') {
-    if (!(await exists(target))) {
+    if (!(await exists(workspace.write.physicalPath))) {
       reasons.push(`expected target "${target}" was not written`);
     } else if (extname(target) !== targetExt) {
       reasons.push(
         `target "${target}" extension does not match the declared "${targetExt}"`,
       );
     }
+  }
+
+  try {
+    await validateWorkspaceRecord(workspace, request, {
+      runRoot: opts.workspaceOptions?.runRoot,
+      semanticInputs: opts.workspaceOptions?.semanticInputs,
+    });
+  } catch (error) {
+    reasons.push(`physical workspace is no longer valid: ${messageOf(error)}`);
   }
 
   // Protected inputs and chain definitions are re-checked after any outcome, so

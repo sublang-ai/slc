@@ -19,6 +19,11 @@ import {
   type AgentClient,
 } from '../src/interpreter.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
+import {
+  WORKSPACE_BEGIN,
+  WORKSPACE_END,
+  type WorkspaceRecord,
+} from '../src/workspace.js';
 
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats
@@ -43,7 +48,30 @@ const linkDoc = `## Formats
 | <path>.ts | A runner module. |
 `;
 
-/** An agent that writes the prompt's declared target, with optional faults. */
+/** Parses the exact final host-owned workspace envelope from a performing prompt. */
+const workspaceFromPrompt = (prompt: string): WorkspaceRecord => {
+  const pattern = new RegExp(
+    `(?:^|\\n)${WORKSPACE_BEGIN}\\n([^\\r\\n]+)\\n${WORKSPACE_END}$`,
+  );
+  const match = pattern.exec(prompt);
+  if (
+    match === null ||
+    prompt.indexOf(WORKSPACE_BEGIN) !== prompt.lastIndexOf(WORKSPACE_BEGIN) ||
+    prompt.indexOf(WORKSPACE_END) !== prompt.lastIndexOf(WORKSPACE_END)
+  ) {
+    throw new Error('prompt has no exact single final SLC workspace envelope');
+  }
+  const record = JSON.parse(match[1]) as WorkspaceRecord;
+  if (
+    record.schema !== 'sublang.slc.workspace.v1' ||
+    typeof record.write?.physicalPath !== 'string'
+  ) {
+    throw new Error('prompt has an invalid SLC workspace record');
+  }
+  return record;
+};
+
+/** An agent that writes the prompt's physical sink, with optional faults. */
 const makeAgent = (
   opts: { block?: boolean; skip?: boolean; mutate?: string; add?: string } = {},
 ): { agent: AgentClient; calls: string[]; models: (string | undefined)[] } => {
@@ -55,8 +83,8 @@ const makeAgent = (
       models.push(model);
       if (opts.block)
         return { status: 'success', text: 'BLOCKED: the source is malformed' };
-      const match = /artifact to write: (.+)/.exec(prompt);
-      if (match && !opts.skip) await writeFile(match[1].trim(), 'output\n');
+      const workspace = workspaceFromPrompt(prompt);
+      if (!opts.skip) await writeFile(workspace.write.physicalPath, 'output\n');
       if (opts.mutate) await writeFile(opts.mutate, 'tampered');
       if (opts.add)
         await writeFile(opts.add, formats('text', '.md', 'foo', '.md'));
@@ -177,18 +205,36 @@ describe('full pipeline run (PIPE-20, PIPE-38, PHEXEC-16)', () => {
     expect(prompt).toContain(formats('text', '.md', 'gears', '.md'));
     // Every PHEXEC-14 contract clause (plus PHEXEC-15) appears.
     expect(prompt).toContain('authoritative');
-    expect(prompt).toContain('write only');
-    expect(prompt).toContain('not edit the sources');
+    expect(prompt).toContain('semantic identifier only');
+    expect(prompt).toContain('no filesystem authority');
+    expect(prompt).toContain('sole filesystem authority');
+    expect(prompt).toContain('host-bound physical sink');
+    expect(prompt).toContain('not edit sources');
     expect(prompt).toContain('not commit');
     expect(prompt).toContain('complete artifact');
     expect(prompt).toContain('add no domain semantics');
     expect(prompt).toContain('drop nothing');
     expect(prompt).toContain('preserve verbatim');
-    expect(prompt).toContain('run only the deterministic tools');
-    expect(prompt).toContain('read only the content it cites');
-    expect(prompt).toContain('verify the produced artifact');
+    expect(prompt).toContain('run the deterministic tools');
+    expect(prompt).toContain('read the content it cites');
+    expect(prompt).toContain('verify the complete produced artifact');
     expect(prompt).toContain('summary');
+    expect(prompt).toContain('diagnostics');
     expect(prompt).toContain('BLOCKED:');
+    const workspace = workspaceFromPrompt(prompt);
+    expect(workspace.reads.map((read) => read.role)).toEqual([
+      'definition',
+      'source',
+    ]);
+    expect(
+      workspace.reads.every((read) => read.identity.startsWith('sha256:')),
+    ).toBe(true);
+    expect(workspace.write).toEqual({
+      role: 'target',
+      logicalPath: join(artDir, 'onboarding.gears.md'),
+      physicalPath: join(artDir, 'onboarding.gears.md'),
+      kind: 'file',
+    });
   });
 });
 
@@ -363,7 +409,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
       `source to read: ${join(artDir, 'onboarding.gears.raw.md')}`,
     );
     expect(calls[1]).toContain(
-      `artifact to write: ${join(artDir, 'onboarding.gears.md')}`,
+      `artifact to produce: ${join(artDir, 'onboarding.gears.md')}`,
     );
     // The downstream phase consumes the canonical (optimized) intermediate.
     expect(calls[2]).toContain(
@@ -414,7 +460,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
       `reference to consult (read-only): ${join(pipelineDir, 'text2gears.md')}`,
     );
     expect(calls[0]).toContain(
-      `artifact to write: ${join(artDir, 'onboarding.text.md')}`,
+      `artifact to produce: ${join(artDir, 'onboarding.text.md')}`,
     );
     // The entry phase consumes the normalized source.
     expect(calls[1]).toContain(
@@ -433,7 +479,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     // name minus its actual extension, so artifacts land in onboarding.flow/.
     expect(calls[0]).toContain('# Input Normalization');
     expect(calls[0]).toContain(
-      `artifact to write: ${join(artDir, 'onboarding.text.md')}`,
+      `artifact to produce: ${join(artDir, 'onboarding.text.md')}`,
     );
     expect(calls[1]).toContain(
       `source to read: ${join(artDir, 'onboarding.text.md')}`,
@@ -506,12 +552,11 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     await writeFile(join(srcDir, 'runner.ts'), 'runner');
     const agent: AgentClient = {
       run: async ({ prompt }) => {
-        const match = /artifact to write: (.+)/.exec(prompt);
-        if (match)
-          await writeFile(
-            match[1].trim(),
-            "import './onboarding.fsm.js';\nexport default 1;\n",
-          );
+        const target = workspaceFromPrompt(prompt).write.physicalPath;
+        await writeFile(
+          target,
+          "import './onboarding.fsm.js';\nexport default 1;\n",
+        );
         return { status: 'success', text: 'wrote the artifact' };
       },
     };
@@ -524,18 +569,17 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     expect(result.diagnostics.join('\n')).toContain('VERIFY-18');
   });
 
-  it('fails the link when the emitted module cannot be read at all (VERIFY-18)', async () => {
-    // A directory at the linked path satisfies the DR-003 existence and
-    // extension checks, so the read is where it surfaces; it must fail the
-    // link rather than unwind past the phase's failure report.
+  it('fails when the agent makes the physical file sink a directory (PHEXEC-4, PHEXEC-6)', async () => {
+    // The workspace boundary rejects a directory before the linked-module
+    // reader: the authorized sink is exactly one independent regular file.
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
     await writeFile(join(srcDir, 'runner.ts'), 'runner');
     const agent: AgentClient = {
       run: async ({ prompt }) => {
-        const match = /artifact to write: (.+)/.exec(prompt);
-        if (match) await mkdir(match[1].trim(), { recursive: true });
+        const target = workspaceFromPrompt(prompt).write.physicalPath;
+        await mkdir(target, { recursive: true });
         return { status: 'success', text: 'wrote the artifact' };
       },
     };
@@ -545,8 +589,8 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     );
     expect(result.ok).toBe(false);
     const report = result.diagnostics.join('\n');
-    expect(report).toContain('could not be read');
-    expect(report).toContain('VERIFY-18');
+    expect(report).toContain('physical workspace is no longer valid');
+    expect(report).toContain('independent regular file');
   });
 
   it('accepts a link whose relative imports resolve beside the module (VERIFY-19)', async () => {
@@ -556,12 +600,9 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     await writeFile(join(srcDir, 'runner.ts'), 'runner');
     const agent: AgentClient = {
       run: async ({ prompt }) => {
-        const match = /artifact to write: (.+)/.exec(prompt);
-        if (match) {
-          const target = match[1].trim();
-          await writeFile(join(dirname(target), 'helper.ts'), 'export {};\n');
-          await writeFile(target, "import './helper.ts';\nexport default 1;\n");
-        }
+        const target = workspaceFromPrompt(prompt).write.physicalPath;
+        await writeFile(join(dirname(target), 'helper.ts'), 'export {};\n');
+        await writeFile(target, "import './helper.ts';\nexport default 1;\n");
         return { status: 'success', text: 'wrote the artifact' };
       },
     };

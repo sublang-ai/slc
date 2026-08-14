@@ -31,6 +31,11 @@ import {
   withReservedPipelines,
 } from '../src/resolver.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
+import {
+  WORKSPACE_BEGIN,
+  WORKSPACE_END,
+  type WorkspaceRecord,
+} from '../src/workspace.js';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -146,27 +151,57 @@ export const machine = setup({
 });
 `;
 
-// An agent that writes the prompt's declared target, emitting realistic
+// An agent that writes the prompt's host-bound physical sink, emitting realistic
 // artifacts per target kind — a gears package, a conformant machine, and a
 // real createPlaybookRuntime module — so verification emission runs end to end
 // (SELFHOST-3, VERIFY-8).
 const writingAgent = (): AgentClient => ({
   run: async ({ prompt }) => {
-    const match = /artifact to write: (.+)/.exec(prompt);
-    if (match) {
-      const target = match[1].trim();
-      const content = target.endsWith('.playbook.ts')
-        ? PLAYBOOK_MODULE
-        : target.endsWith('.fsm.ts')
-          ? FSM_ARTIFACT
-          : target.endsWith('.md')
-            ? GEARS_ARTIFACT
-            : 'export default 1;\n';
-      await writeFile(target, content);
-    }
+    const workspace = workspaceFromPrompt(prompt);
+    const logicalTarget = workspace.write.logicalPath;
+    const content = logicalTarget.endsWith('.playbook.ts')
+      ? PLAYBOOK_MODULE
+      : logicalTarget.endsWith('.fsm.ts')
+        ? FSM_ARTIFACT
+        : logicalTarget.endsWith('.md')
+          ? GEARS_ARTIFACT
+          : 'export default 1;\n';
+    await writeFile(workspace.write.physicalPath, content);
     return { status: 'success', text: 'wrote the artifact' };
   },
 });
+
+/** Decodes the exact final three-line host workspace envelope. */
+function workspaceFromPrompt(prompt: string): WorkspaceRecord {
+  const marker = `${WORKSPACE_BEGIN}\n`;
+  const start = prompt.lastIndexOf(marker);
+  if (start === -1 || prompt.indexOf(marker) !== start) {
+    throw new Error('agent prompt must contain exactly one workspace envelope');
+  }
+  const suffix = prompt.slice(start);
+  const lines = suffix.split('\n');
+  if (
+    lines.length !== 3 ||
+    lines[0] !== WORKSPACE_BEGIN ||
+    lines[2] !== WORKSPACE_END
+  ) {
+    throw new Error('workspace envelope must be the exact final three lines');
+  }
+  const parsed = JSON.parse(lines[1]) as unknown;
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    (parsed as { schema?: unknown }).schema !== 'sublang.slc.workspace.v1' ||
+    typeof (parsed as { write?: { logicalPath?: unknown } }).write
+      ?.logicalPath !== 'string' ||
+    typeof (parsed as { write?: { physicalPath?: unknown } }).write
+      ?.physicalPath !== 'string'
+  ) {
+    throw new Error('workspace envelope has no usable write binding');
+  }
+  return parsed as WorkspaceRecord;
+}
 
 const exists = (path: string): Promise<boolean> =>
   access(path).then(
@@ -561,16 +596,13 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
   it('degrades fsm-derived emissions to diagnostics when the produced fsm cannot be imported (VERIFY-8)', async () => {
     const junkAgent: AgentClient = {
       run: async ({ prompt }) => {
-        const match = /artifact to write: (.+)/.exec(prompt);
-        if (match) {
-          const target = match[1].trim();
-          await writeFile(
-            target,
-            target.endsWith('.gears.md')
-              ? GEARS_ARTIFACT
-              : 'not a module {{{\n',
-          );
-        }
+        const workspace = workspaceFromPrompt(prompt);
+        await writeFile(
+          workspace.write.physicalPath,
+          workspace.write.logicalPath.endsWith('.gears.md')
+            ? GEARS_ARTIFACT
+            : 'not a module {{{\n',
+        );
         return { status: 'success', text: 'wrote the artifact' };
       },
     };

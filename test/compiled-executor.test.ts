@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import {
+  mkdir,
   mkdtemp,
   readFile,
   rename,
@@ -12,16 +13,27 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { PlaybookPorts } from '@sublang/playbook/runtime';
 
 import { createCompiledExecutor } from '../src/compiled-executor.js';
-import type { ExecuteRequest } from '../src/execution.js';
+import {
+  runPhase,
+  type ExecuteRequest,
+  type PhaseExecutor,
+} from '../src/execution.js';
 import type { AgentClient } from '../src/interpreter.js';
 import { isPlaybookRunResult } from '../src/playbook-contract.js';
+import {
+  appendWorkspaceContract,
+  createWorkspaceRecord,
+  type CreateWorkspaceOptions,
+  type WorkspaceRecord,
+  WORKSPACE_SCHEMA,
+} from '../src/workspace.js';
 
 const fixture = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -29,11 +41,26 @@ const fixture = join(
   'phase-fixture.mjs',
 );
 
-// An agent transport that is never invoked by the fixture (it only does file IO),
-// present to satisfy the ports adapter.
+// An idle transport for runtimes whose focused test never calls an agent port.
 const idleAgent: AgentClient = {
   async run() {
     return { status: 'success', text: '' };
+  },
+};
+
+/** A performing fixture Player that obeys the exact physical binding. */
+const fixturePlayer: AgentClient = {
+  async run({ prompt }) {
+    const match = /\nSLC_WORKSPACE_BEGIN\n([^\r\n]+)\nSLC_WORKSPACE_END$/.exec(
+      prompt,
+    );
+    if (match === null) throw new Error('missing workspace contract');
+    const workspace = JSON.parse(match[1]) as WorkspaceRecord;
+    const source = workspace.reads.find((read) => read.role === 'source');
+    if (source === undefined) throw new Error('missing source binding');
+    const content = (await readFile(source.physicalPath, 'utf8')).trim();
+    await writeFile(workspace.write.physicalPath, `compiled:${content}`);
+    return { status: 'success', text: 'wrote the bound output' };
   },
 };
 
@@ -104,6 +131,12 @@ describe('structured PlaybookRunResult validation', () => {
   });
 });
 
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code: unknown }).code)
+    : undefined;
+}
+
 // Integration: a compiled `playbook` artifact driven non-interactively through
 // the executor over a fixture run root (PHEXEC-26).
 describe('createCompiledExecutor (PHEXEC-26)', () => {
@@ -117,12 +150,50 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  const runExecutor = async (
+    executor: PhaseExecutor,
+    request: ExecuteRequest,
+    signal = new AbortController().signal,
+    workspaceOptions: CreateWorkspaceOptions = {},
+  ) => {
+    await provisionWorkspaceReads(request);
+    const workspace = await createWorkspaceRecord(request, {
+      runRoot: root,
+      ...workspaceOptions,
+    });
+    return executor.run(request, workspace, signal);
+  };
+
+  const provisionWorkspaceReads = async (
+    request: ExecuteRequest,
+  ): Promise<void> => {
+    const reads =
+      request.kind === 'compile'
+        ? [
+            request.definitionPath,
+            request.source,
+            ...(request.references ?? []),
+          ]
+        : [request.definitionPath, ...request.objects, request.linkTarget];
+    for (const path of reads) {
+      const absolute = resolve(root, path);
+      await mkdir(dirname(absolute), { recursive: true });
+      try {
+        await writeFile(absolute, `fixture input: ${absolute}\n`, {
+          flag: 'wx',
+        });
+      } catch (error) {
+        if (errorCode(error) !== 'EEXIST') throw error;
+      }
+    }
+  };
+
   const runFixture = async (sourceContent: string) => {
     await writeFile(join(root, 'src.md'), sourceContent);
     const executor = createCompiledExecutor({
       artifactPath: fixture,
       runRoot: root,
-      player: idleAgent,
+      player: fixturePlayer,
       judge: idleAgent,
     });
     const request: ExecuteRequest = {
@@ -131,7 +202,7 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       source: 'src.md',
       target: 'out.ts',
     };
-    return executor.run(request, new AbortController().signal);
+    return runExecutor(executor, request);
   };
 
   it('drives the runtime, writes the target, and yields ok with drained diagnostics', async () => {
@@ -140,6 +211,177 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     // The runtime returns void; the only diagnostics are its drained status.
     expect(result.diagnostics).toEqual(['fixture wrote target']);
     expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe('compiled:hello');
+  });
+
+  it.each(['legacy', 'session-v1', 'composed-v2'] as const)(
+    'keeps %s Boss locators logical while Player work and output delta use the physical binding',
+    async (runtimeContract) => {
+      const definition = join(root, 'phase.md');
+      const logicalSource = join(root, 'canonical', 'source.md');
+      const physicalSource = join(root, 'staged', 'source.md');
+      const logicalTarget = join(root, 'canonical', 'out.ts');
+      const physicalSink = join(root, 'staged', 'out.ts');
+      await mkdir(dirname(logicalSource), { recursive: true });
+      await mkdir(dirname(physicalSource), { recursive: true });
+      await writeFile(definition, 'authoritative definition\n');
+      await writeFile(logicalSource, 'accepted source\n');
+      await writeFile(physicalSource, 'candidate source\n');
+      // A stale logical target makes this sensitive to the executor observing
+      // the wrong output path: only the physical sink changes during the turn.
+      await writeFile(logicalTarget, 'stale logical target\n');
+
+      const request: ExecuteRequest = {
+        kind: 'compile',
+        definitionPath: definition,
+        source: logicalSource,
+        target: logicalTarget,
+      };
+      const workspace = await createWorkspaceRecord(request, {
+        runRoot: root,
+        physicalReads: { source: physicalSource },
+        physicalWrite: physicalSink,
+      });
+      let bossTurn = '';
+      let runtimePorts:
+        | {
+            callPlayer(
+              playerId: string,
+              prompt: string,
+              signal: AbortSignal,
+              options?: { resume: false },
+            ): Promise<unknown>;
+          }
+        | undefined;
+      const playerPrompts: string[] = [];
+      const player: AgentClient = {
+        async run(call) {
+          playerPrompts.push(call.prompt);
+          await writeFile(physicalSink, 'compiled candidate\n');
+          return { status: 'success', text: 'wrote staged output' };
+        },
+      };
+      const executor = createCompiledExecutor({
+        artifactPath: 'ignored',
+        runRoot: root,
+        runtimeContract,
+        player,
+        judge: idleAgent,
+        loadFactory: async () => () =>
+          ({
+            async init(value: unknown) {
+              runtimePorts =
+                runtimeContract === 'legacy'
+                  ? (value as typeof runtimePorts)
+                  : (value as { ports: typeof runtimePorts }).ports;
+            },
+            async handleBossInput(turn: { text: string; signal: AbortSignal }) {
+              bossTurn = turn.text;
+              await runtimePorts?.callPlayer(
+                'writer',
+                'perform the transformation',
+                turn.signal,
+                runtimeContract === 'legacy' ? undefined : { resume: false },
+              );
+              return runtimeContract === 'composed-v2'
+                ? { outcome: 'terminal', state: structuredState }
+                : undefined;
+            },
+            async resumePlaybookCall() {
+              return { outcome: 'no-action', state: structuredState };
+            },
+            async dispose() {},
+          }) as never,
+      });
+
+      const result = await executor.run(
+        request,
+        workspace,
+        new AbortController().signal,
+      );
+
+      expect(result.status).toBe('ok');
+      expect(bossTurn).toContain(
+        `Request: ${JSON.stringify({
+          kind: 'compile',
+          source: logicalSource,
+          target: logicalTarget,
+        })}`,
+      );
+      expect(bossTurn).not.toContain(physicalSource);
+      expect(bossTurn).not.toContain(physicalSink);
+      expect(bossTurn).not.toContain(WORKSPACE_SCHEMA);
+      expect(playerPrompts).toEqual([
+        appendWorkspaceContract('perform the transformation', workspace),
+      ]);
+      expect(await readFile(physicalSink, 'utf8')).toBe('compiled candidate\n');
+      expect(await readFile(logicalTarget, 'utf8')).toBe(
+        'stale logical target\n',
+      );
+    },
+  );
+
+  it('rejects a compiled Player that writes both the bound sink and differing logical target', async () => {
+    const definition = join(root, 'phase.md');
+    const source = join(root, 'source.md');
+    const logicalTarget = join(root, 'canonical', 'out.ts');
+    const physicalTarget = join(root, 'candidate', 'out.ts');
+    await mkdir(dirname(logicalTarget), { recursive: true });
+    await mkdir(dirname(physicalTarget), { recursive: true });
+    await writeFile(definition, 'authoritative definition\n');
+    await writeFile(source, 'source\n');
+    const request: ExecuteRequest = {
+      kind: 'compile',
+      definitionPath: definition,
+      source,
+      target: logicalTarget,
+    };
+    const workspace = await createWorkspaceRecord(request, {
+      runRoot: root,
+      physicalWrite: physicalTarget,
+    });
+    let ports: PlaybookPorts | undefined;
+    const player: AgentClient = {
+      async run() {
+        await writeFile(physicalTarget, 'compiled candidate\n');
+        await writeFile(logicalTarget, 'out-of-binding output\n');
+        return { status: 'success', text: 'wrote output' };
+      },
+    };
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'legacy',
+      player,
+      judge: idleAgent,
+      loadFactory: async () => () => ({
+        async init(value: unknown) {
+          ports = value as PlaybookPorts;
+        },
+        async handleBossInput({ signal }: { signal: AbortSignal }) {
+          await ports?.callPlayer(
+            'writer',
+            'perform the transformation',
+            signal,
+          );
+        },
+        async dispose() {},
+      }),
+    });
+
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.ts',
+      executor,
+      workspace,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain(
+        `protected path "${logicalTarget}" changed during the run`,
+      );
+    }
   });
 
   it('streams status live to a configured sink without duplicating diagnostics (PHEXEC-37)', async () => {
@@ -175,7 +417,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       }),
     });
 
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -236,7 +479,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
         async dispose() {},
       }),
     });
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -271,7 +515,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
         async dispose() {},
       }),
     });
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -314,7 +559,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
         async dispose() {},
       }),
     });
-    await executor.run(
+    await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -353,7 +599,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
         async dispose() {},
       }),
     });
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -401,7 +648,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
         async dispose() {},
       }),
     });
-    await executor.run(
+    await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -492,7 +740,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       }),
     });
 
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -572,7 +821,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
             }) as never,
         });
 
-        const result = await executor.run(
+        const result = await runExecutor(
+          executor,
           {
             kind: 'compile',
             definitionPath: join(root, 'phase.md'),
@@ -617,7 +867,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       }),
     });
 
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -666,7 +917,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       }),
     });
 
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -708,7 +960,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
         }) as never,
     });
 
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -823,7 +1076,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
         }),
       });
 
-      const result = await executor.run(
+      const result = await runExecutor(
+        executor,
         {
           kind: 'compile',
           definitionPath: join(root, 'phase.md'),
@@ -862,7 +1116,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       }),
     });
 
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -900,7 +1155,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       }),
     });
 
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),
@@ -945,7 +1201,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       });
 
       await expect(
-        executor.run(
+        runExecutor(
+          executor,
           {
             kind: 'compile',
             definitionPath: join(root, 'phase.md'),
@@ -968,7 +1225,8 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       player: idleAgent,
       judge: idleAgent,
     });
-    const result = await executor.run(
+    const result = await runExecutor(
+      executor,
       {
         kind: 'compile',
         definitionPath: join(root, 'phase.md'),

@@ -9,6 +9,14 @@ import type {
   AgentRunResult,
 } from '../src/interpreter.js';
 import { createPlaybookPorts } from '../src/playbook-ports.js';
+import {
+  appendWorkspaceContract,
+  encodeWorkspaceContract,
+  WORKSPACE_BEGIN,
+  WORKSPACE_END,
+  WORKSPACE_SCHEMA,
+  type WorkspaceRecord,
+} from '../src/workspace.js';
 
 /** A fake agent transport that records its requests and returns a scripted result. */
 function fakeAgent(
@@ -30,11 +38,44 @@ const captainOptions = (visibility: 'visible' | 'hidden') => ({
   resume: false as const,
   allowedTools: [] as const,
 });
+const workspace: WorkspaceRecord = {
+  schema: WORKSPACE_SCHEMA,
+  reads: [
+    {
+      role: 'definition',
+      logicalPath: '/logical/phase.md',
+      physicalPath: '/physical/phase.md',
+      kind: 'file',
+      identity:
+        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    },
+    {
+      role: 'source',
+      logicalPath: '/logical/source.md',
+      physicalPath: '/physical/source.md',
+      kind: 'file',
+      identity:
+        'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    },
+  ],
+  write: {
+    role: 'target',
+    logicalPath: '/logical/output.md',
+    physicalPath: '/physical/output.md',
+    kind: 'file',
+  },
+};
+const workspaceSuffix = encodeWorkspaceContract(workspace);
+const performingPrompt = (prompt: string): string =>
+  appendWorkspaceContract(prompt, workspace);
+const createPorts = (
+  options: Omit<Parameters<typeof createPlaybookPorts>[0], 'workspace'>,
+) => createPlaybookPorts({ ...options, workspace });
 
 describe('createPlaybookPorts (PHEXEC-25)', () => {
   it('maps a successful agent run to an ok PlayerResult', async () => {
     const player = fakeAgent({ status: 'success', text: 'wrote artifact' });
-    const ports = createPlaybookPorts({ player, judge: player });
+    const ports = createPorts({ player, judge: player });
 
     const result = await ports.callPlayer('drafter', 'do it', notAborted);
     expect(result).toEqual({ status: 'ok', finalText: 'wrote artifact' });
@@ -46,7 +87,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
       text: 'Captain handled it',
       resumeToken: 'private-player-token',
     });
-    const ports = createPlaybookPorts({ player: captain, judge: captain });
+    const ports = createPorts({ player: captain, judge: captain });
 
     await expect(
       ports.callCaptain('handle it', notAborted, captainOptions('hidden')),
@@ -59,7 +100,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
   it('preserves direct Captain error and abort statuses', async () => {
     const errored = fakeAgent({ status: 'error', text: 'Captain failed' });
-    const errorPorts = createPlaybookPorts({
+    const errorPorts = createPorts({
       player: errored,
       judge: errored,
     });
@@ -80,7 +121,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
         return result;
       },
     };
-    const abortedPorts = createPlaybookPorts({
+    const abortedPorts = createPorts({
       player: aborting,
       judge: aborting,
     });
@@ -96,7 +137,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
   it('rejects an invalid direct Captain visibility before transport', async () => {
     const captain = fakeAgent({ status: 'success', text: 'unexpected' });
-    const ports = createPlaybookPorts({ player: captain, judge: captain });
+    const ports = createPorts({ player: captain, judge: captain });
 
     await expect(
       ports.callCaptain('handle it', notAborted, {
@@ -143,7 +184,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     ],
   ])('rejects %s before direct Captain transport', async (_label, options) => {
     const captain = fakeAgent({ status: 'success', text: 'unexpected' });
-    const ports = createPlaybookPorts({ player: captain, judge: captain });
+    const ports = createPorts({ player: captain, judge: captain });
 
     await expect(
       ports.callCaptain('route it', notAborted, options as never),
@@ -153,7 +194,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
   it('forwards fresh-session and empty-tool Captain isolation', async () => {
     const captain = fakeAgent({ status: 'success', text: 'route selected' });
-    const ports = createPlaybookPorts({ player: captain, judge: captain });
+    const ports = createPorts({ player: captain, judge: captain });
 
     await ports.callCaptain('route it', notAborted, captainOptions('visible'));
 
@@ -176,7 +217,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     ],
   ])('forwards no tool restriction for %s', async (_label, options) => {
     const captain = fakeAgent({ status: 'success', text: 'artifact written' });
-    const ports = createPlaybookPorts({ player: captain, judge: captain });
+    const ports = createPorts({ player: captain, judge: captain });
 
     await ports.callCaptain('compile it', notAborted, options as never);
 
@@ -184,19 +225,14 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     expect(captain.calls[0].allowedTools).toBeUndefined();
   });
 
-  // PHEXEC-34: the host workspace contract rides only on the
-  // transformation-performing Captain transport (absent source-owned tool
-  // restriction); routing-only Captain and judge prompts cross unchanged.
-  it('appends the workspace contract only to transformation-performing Captain calls', async () => {
+  // PHEXEC-34: every Player and a transformation-performing Captain receive
+  // the exact final host suffix; routing-only Captain and judge prompts cross
+  // byte-identically.
+  it('appends one final workspace suffix only to performing calls', async () => {
     const agent = fakeAgent({ status: 'success', text: 'ok' });
-    const contract =
-      'Host workspace (SubLang Compiler):\n- artifact to write: /abs/out.md';
-    const ports = createPlaybookPorts({
-      player: agent,
-      judge: agent,
-      captainWorkspace: contract,
-    });
+    const ports = createPorts({ player: agent, judge: agent });
 
+    await ports.callPlayer('writer', 'draft it', notAborted);
     await ports.callCaptain('compile it', notAborted, {
       visibility: 'visible',
       resume: false,
@@ -205,27 +241,25 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     await ports.callJudge('grade it', notAborted);
 
     expect(agent.calls.map((call) => call.prompt)).toEqual([
-      `compile it\n\n${contract}`,
+      performingPrompt('draft it'),
+      performingPrompt('compile it'),
       'route it',
       'grade it',
     ]);
-  });
-
-  it('transports the composed prompt unchanged without a workspace contract', async () => {
-    const agent = fakeAgent({ status: 'success', text: 'ok' });
-    const ports = createPlaybookPorts({ player: agent, judge: agent });
-
-    await ports.callCaptain('compile it', notAborted, {
-      visibility: 'visible',
-      resume: false,
-    });
-
-    expect(agent.calls[0].prompt).toBe('compile it');
+    for (const call of agent.calls.slice(0, 2)) {
+      expect(call.prompt.endsWith(workspaceSuffix)).toBe(true);
+      expect(call.prompt.split(WORKSPACE_BEGIN)).toHaveLength(2);
+      expect(call.prompt.split(WORKSPACE_END)).toHaveLength(2);
+    }
+    for (const call of agent.calls.slice(2)) {
+      expect(call.prompt).not.toContain(WORKSPACE_BEGIN);
+      expect(call.prompt).not.toContain(WORKSPACE_END);
+    }
   });
 
   it('snapshots Captain isolation before queued transport work', async () => {
     const captain = fakeAgent({ status: 'success', text: 'route selected' });
-    const ports = createPlaybookPorts({ player: captain, judge: captain });
+    const ports = createPorts({ player: captain, judge: captain });
     const options: {
       visibility: 'visible';
       resume: false | string;
@@ -248,7 +282,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
       text: 'continued',
       resumeToken: 'next-session',
     });
-    const ports = createPlaybookPorts({ player, judge: player });
+    const ports = createPorts({ player, judge: player });
 
     const fresh = await ports.callPlayer('drafter', 'first', notAborted, {
       resume: false,
@@ -267,7 +301,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
   it('maps an errored run to an error PlayerResult', async () => {
     const player = fakeAgent({ status: 'error', text: 'boom' });
-    const ports = createPlaybookPorts({ player, judge: player });
+    const ports = createPorts({ player, judge: player });
 
     expect(await ports.callPlayer('drafter', 'do it', notAborted)).toEqual({
       status: 'error',
@@ -277,7 +311,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
   it('maps an incomplete run to aborted or error by the signal', async () => {
     const player = fakeAgent({ status: 'incomplete', text: '' });
-    const ports = createPlaybookPorts({ player, judge: player });
+    const ports = createPorts({ player, judge: player });
 
     expect((await ports.callPlayer('drafter', 'x', notAborted)).status).toBe(
       'error',
@@ -291,7 +325,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
   it('applies the per-player model binding as configuration', async () => {
     const player = fakeAgent({ status: 'success', text: 'ok' });
-    const ports = createPlaybookPorts({
+    const ports = createPorts({
       player,
       judge: player,
       models: { drafter: 'fast-model' },
@@ -307,7 +341,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
   it('falls back to the default model for players the binding does not name', async () => {
     const player = fakeAgent({ status: 'success', text: 'ok' });
-    const ports = createPlaybookPorts({
+    const ports = createPorts({
       player,
       judge: player,
       models: { drafter: 'fast-model' },
@@ -323,7 +357,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
   it('builds one transport per player id from a player factory and reuses it', async () => {
     const built: Array<AgentClient & { calls: AgentRunRequest[] }> = [];
     const ids: string[] = [];
-    const ports = createPlaybookPorts({
+    const ports = createPorts({
       player: (playerId) => {
         ids.push(playerId);
         const client = fakeAgent({ status: 'success', text: 'ok' });
@@ -341,15 +375,17 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     // own agent session (a Cligent transport is single-flight and resuming).
     expect(ids).toEqual(['coder', 'reviewer']);
     expect(built[0].calls.map((call) => call.prompt)).toEqual([
-      'first',
-      'third',
+      performingPrompt('first'),
+      performingPrompt('third'),
     ]);
-    expect(built[1].calls.map((call) => call.prompt)).toEqual(['second']);
+    expect(built[1].calls.map((call) => call.prompt)).toEqual([
+      performingPrompt('second'),
+    ]);
   });
 
   it('returns judge text on success and throws otherwise', async () => {
     const judge = fakeAgent({ status: 'success', text: 'verdict: pass' });
-    const okPorts = createPlaybookPorts({ player: judge, judge });
+    const okPorts = createPorts({ player: judge, judge });
     expect(await okPorts.callJudge('grade', notAborted)).toBe('verdict: pass');
     expect(judge.calls[0]).toMatchObject({
       resume: false,
@@ -357,7 +393,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     });
 
     const badJudge = fakeAgent({ status: 'error', text: 'judge crashed' });
-    const badPorts = createPlaybookPorts({ player: badJudge, judge: badJudge });
+    const badPorts = createPorts({ player: badJudge, judge: badJudge });
     await expect(badPorts.callJudge('grade', notAborted)).rejects.toThrow(
       /judge crashed/,
     );
@@ -378,7 +414,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
         return { status: 'success', text: request.prompt };
       },
     };
-    const ports = createPlaybookPorts({ player: judge, judge });
+    const ports = createPorts({ player: judge, judge });
 
     const first = ports.callJudge('first', notAborted);
     const second = ports.callJudge('second', notAborted);
@@ -406,7 +442,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
         return { status: 'success', text: request.prompt };
       },
     };
-    const ports = createPlaybookPorts({ player: captain, judge: captain });
+    const ports = createPorts({ player: captain, judge: captain });
 
     const first = ports.callCaptain(
       'first',
@@ -447,7 +483,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
         return { status: 'success', text: request.prompt };
       },
     };
-    const ports = createPlaybookPorts({ player: judge, judge });
+    const ports = createPorts({ player: judge, judge });
     const queued = new AbortController();
 
     const first = ports.callJudge('first', notAborted);
@@ -466,7 +502,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
   it('settles nested calls as unsupported host errors', async () => {
     const agent = fakeAgent({ status: 'success', text: 'ok' });
-    const ports = createPlaybookPorts({ player: agent, judge: agent });
+    const ports = createPorts({ player: agent, judge: agent });
 
     await expect(
       ports.callPlaybook(
@@ -485,7 +521,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
   it('collects status and telemetry as drainable diagnostics', async () => {
     const agent = fakeAgent({ status: 'success', text: 'ok' });
-    const ports = createPlaybookPorts({ player: agent, judge: agent });
+    const ports = createPorts({ player: agent, judge: agent });
 
     await ports.emitStatus('drafting');
     await ports.emitStatus('progress', { turn: 2 });
@@ -511,7 +547,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
   it('streams status and telemetry live to a configured sink instead of buffering (DR-019)', async () => {
     const agent = fakeAgent({ status: 'success', text: 'ok' });
     const streamed: string[] = [];
-    const ports = createPlaybookPorts({
+    const ports = createPorts({
       player: agent,
       judge: agent,
       onStatus: (line) => streamed.push(line),
