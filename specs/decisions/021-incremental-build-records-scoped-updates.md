@@ -26,7 +26,7 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
 
 ### Build lineage
 
-- After a successful full or full-link invocation at canonical paths other than the reserved `slc` meta-pipeline that executes at least one scheduled step, `slc` records `<art-dir>/.slc-build.json` and a verbatim prior-source snapshot at `<art-dir>/.slc-source`.
+- After a successful full or full-link invocation at canonical paths other than the reserved `slc` meta-pipeline that executes at least one scheduled step or accepts an explicit adoption, `slc` records `<art-dir>/.slc-build.json` and a verbatim prior-source snapshot at `<art-dir>/.slc-source`.
   [DR-014](014-cwd-output-invocation-defaults-entry-emission.md)'s CWD placement and entry-module location do not change.
   The names are reserved host metadata rather than legal artifact-format names, so they cannot collide with `<basename>.<format><ext>`.
 - The reserved `slc` meta-pipeline remains non-incremental and writes no lineage metadata, because its canonical result is the reviewed bundle whose complete tree [DR-007](007-slc-phase-artifact-pinning.md) pins.
@@ -35,23 +35,24 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
   This first design keeps one lineage inside one canonical artifact bundle rather than making it own an arbitrary external output.
 - The record is a regular, non-symbolic-link strict JSON file with schema `sublang.slc.build.v1`, hash algorithm `sha256`, and:
   - a normalized relative POSIX locator from the resolved canonical artifact directory to the resolved invocation source path, the snapshot path, and exact SHA-256 identities for both current source and snapshot;
-  - the ordered pipeline plan and exact content identities for normalization, phase, pass, link, selected executor, declared semantic-input closure, link target, and semantic options that can affect the plan or output;
+  - the ordered pipeline plan and exact content identities for normalization, phase, pass, link, selected executor, declared semantic-input closure, link target, deterministic entry and verification generators/checkers, and semantic options that can affect the plan or output;
   - producer package versions — including `slc` and the resolved pipeline and link-runtime packages such as `@sublang/playbook` — plus format-specific compatibility values such as Playbook `spec.compat`, as provenance or explicit compatibility gates rather than substitutes for content identity;
   - for each scheduled step, its exact input key, definition/executor identity, target path and hash, and any validated input-unit, target-scope, and dependency trace emitted under an update contract;
   - a complete artifact-product inventory with hashes, including generated verification and the entry module outside the artifact directory but excluding the build record and source snapshot themselves; and
-  - the successful lineage generation and whether ordinary execution or scoped update produced it, as provenance.
+  - the successful lineage generation and whether ordinary execution, scoped update, or explicit user adoption accepted each scheduled semantic product, as provenance.
 - Hashes cover exact bytes without text normalization.
   Timestamps and generation counters never establish currentness.
 - Managed paths are relative POSIX paths confined to the artifact directory, except for the one exact canonical entry-module path [DR-014](014-cwd-output-invocation-defaults-entry-emission.md) owns; managed products and their parent path components are not symbolic links, and the read-only source locator may resolve outside that boundary but never authorizes an output write.
 - `slc` stages new state, completes the applicable verification, and promotes only the validated managed-path overlay plus any canonical entry module as one recoverable lineage transaction.
-  A rejected candidate leaves prior accepted managed and unmanaged files unchanged; an interrupted promotion is recovered to one complete accepted lineage before reuse, never accepted as a mixed state.
-- Phase execution carries two distinct address layers: definitions and the compiled Boss request receive canonical logical source and target locators, while the host gives the performing agent a separate physical workspace binding for reads and the one write sink.
+  Rejecting host-managed promotion or execution that honors the physical workspace binding writes no candidate byte to a canonical path; absent an external mutation the prior accepted bytes therefore remain unchanged, and an interrupted promotion is recovered to one complete accepted lineage before reuse, never accepted as a mixed state.
+- Phase execution carries two distinct address layers: definitions and the compiled Boss request receive canonical logical source and target locators as semantic identifiers that grant no filesystem authority, while the host gives the performing agent the sole authorized physical workspace binding for reads and the one write sink.
   In staged state that binding names candidate predecessors and the write sink in an equivalent staged layout while unchanged read-only inputs retain their canonical physical paths; without staging every physical path is canonical.
+  Writing a canonical logical path when its physical binding differs is a write-scope violation: detection fails the run and prevents promotion, but this design does not claim to roll back arbitrary writes made outside the binding by an unrestricted coding agent.
   Staging locators guide I/O only and never enter artifact content or trace identity.
 - The candidate overlays changed managed products and removes obsolete managed products without replacing the artifact directory, so every unrecorded file under it — including one changed concurrently — remains untouched.
   The snapshot and build record are committed with the candidate; the record is the lineage commit marker, not a promise that writing one file can atomically replace multiple paths.
 - Immediately before promotion, `slc` revalidates the source, build inputs, accepted record, and managed bytes it planned from.
-  A concurrent change aborts promotion as a conflict instead of being overwritten.
+  A concurrent managed change aborts promotion as a conflict and blocks reuse instead of being overwritten or rolled back; the rejected candidate itself changes no canonical byte, but the external edit remains.
 - The source snapshot deliberately makes the output bundle contain a copy of its source.
   Distribution and retention policy must therefore treat the bundle as at least as sensitive as that source.
 
@@ -64,17 +65,32 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
 - A recorded step is reusable only when its current input key, definition/executor identity, semantic options, and existing output bytes match the record exactly.
   The planner walks the ordered chain and recomputes downstream keys after every executed step; if an executed step reproduces its prior output bytes, still-current downstream steps remain reusable.
 - Reuse additionally requires an explicit closed, content-identified declaration of every output-affecting readable input, using the phase definition's existing semantic-input declaration where applicable.
-  A phase whose readable semantic closure is undeclared or incomplete remains executable but is never reusable or update-eligible.
+  Absent explicit whole-lineage adoption, a phase whose readable semantic closure is undeclared or incomplete remains executable but is never phase-result reusable or update-eligible.
 - For a pinned phase, currentness validation and executor selection under [DR-007](007-slc-phase-artifact-pinning.md) precede reuse.
   Cached user output never makes a stale or malformed pin runnable.
-- When the source locator, complete build identity, source bytes, snapshot bytes, and every scheduled output all match and every scheduled semantic step is reuse-eligible, `slc` reports the bundle up to date, exits successfully, invokes no agent, and rewrites nothing.
-- A changed source is expected input evolution.
+- When the source locator, complete build identity, source bytes, snapshot bytes, and every scheduled output all match and either every scheduled semantic step is reuse-eligible or the complete lineage is current under [explicit adoption](#explicit-adoption), `slc` reports the bundle up to date, exits successfully, invokes no agent, and rewrites nothing.
+- For a non-adopted lineage, a changed source is expected input evolution.
   A different source locator targeting the recorded bundle, a snapshot whose bytes do not match its recorded identity, or a managed artifact whose bytes changed outside the accepted recorded lineage is instead a conflict: automatic mode refuses to overwrite or adopt it.
-- `--rebuild` on a canonical full or full-link invocation without `-o` explicitly bypasses reuse and scoped update, authorizes replacement or source rebinding of the named bundle, and, for a lineage-eligible pipeline, writes a new record only after the complete run succeeds.
+- `--rebuild` on a canonical full or full-link invocation without `-o` or `--adopt` explicitly bypasses reuse and scoped update, authorizes replacement or source rebinding of the named bundle, and, for a lineage-eligible pipeline, writes a new record only after the complete run succeeds.
   It derives every replacement or removal path from the new canonical plan, never trusts an invalid prior inventory to delete a file, and replaces an invalid reserved metadata entry itself without following a symbolic link target.
   For the reserved `slc` meta-pipeline it still executes the complete ordinary plan but writes no lineage metadata.
 - Single-phase, standalone-pass, and direct-link invocations retain their existing explicit behavior and do not silently rebase a full-build record.
   If they change a recorded artifact, the next automatic full invocation reports the resulting conflict rather than erasing the refinement.
+
+### Explicit adoption
+
+- `--adopt` is a non-destructive, explicit user attestation for a complete manually refined lineage.
+  It is accepted only on a canonical non-`slc` full or full-link invocation without `-o` or `--rebuild`, and only when a schema-valid record and snapshot still name the same source locator and exact source bytes, the canonical plan and every definition, executor, declared semantic input, link target, compatibility value, semantic option, and applicable pin remain current, and all managed paths are safe.
+  Malformed or orphaned metadata, source or snapshot drift, source rebinding, build-identity drift, or an unsafe, missing, wrong-typed, or symbolic-link semantic product remains a conflict requiring `--rebuild`; a safe missing or changed deterministic entry or verification derivative is regenerated rather than adopted.
+- Adoption is not proof that the producing step emitted the current bytes.
+  The command makes the user the semantic authority for the complete current set of scheduled normalization, phase, pass, and link products; deterministic verification establishes only the consistency it actually checks, including Playbook's GEARS-to-FSM and linked-runtime invariants, not raw-source fidelity.
+- Adoption is whole-lineage rather than partial.
+  `slc` records exact current hashes for every scheduled semantic product with adopted provenance, clears all update traces, and does not invoke a semantic executor; unchanged products are attested together with changed products so an unclosed upstream phase cannot immediately disturb an adopted suffix.
+- Existing generated entry and verification products are not trusted as adoption evidence.
+  `slc` regenerates those deterministic derivatives from the current semantic products and trusted current generators in staged state, applies generic and load-integrity checks, and runs the complete applicable regenerated verification suite before promoting the derivatives and new record.
+  Failure writes no candidate byte to a canonical path within the [physical-binding transaction boundary](#build-lineage), while success leaves the semantic products and source snapshot byte-identical and reports what was adopted.
+- A current adopted lineage may take the exact whole-bundle no-op even when a phase lacks a closed readable-input declaration, because explicit user attestation rather than inferred phase derivation is its authority.
+  Any later source, snapshot, source-locator, build-identity, or semantic-product drift makes automatic execution conflict; unchanged-source refinements may be attested again with `--adopt`, while source or build evolution requires `--rebuild`.
 
 ### Deterministic update planning
 
@@ -85,6 +101,8 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
   Scoped update is provisionally eligible only when the build identity other than the source remains current, every changed span maps unambiguously to stable units, the declared dependency closure is complete, and no mechanically affected region is recorded as structural or global.
 - An evident unmapped insertion or deletion, cross-unit change, broken recorded ordering, definition/runtime/options drift, or incomplete trace selects ordinary execution of the earliest affected phase before any update agent is called.
   A semantic split, merge, reclassification, or new dependency that cannot be known from the old trace is instead detected from the update outcome and replacement trace and rejects that candidate with `--rebuild` guidance.
+- An adopted lineage does not enter automatic update or ordinary-execution planning.
+  Any drift first conflicts under [explicit adoption](#explicit-adoption), preserving the user-attested bundle until the user explicitly adopts another unchanged-source refinement or rebuilds it.
 - There is no change-ratio or generation threshold.
   Textual size cannot establish semantic locality, and a fresh nondeterministic generation is not intrinsically more correct than a verified update.
 
@@ -115,15 +133,16 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
   Semantic sufficiency remains definition-owned.
 - The replacement trace must preserve the eligible input-unit structure and classifications and must not expand the allowed dependency closure.
   A split, merge, reorder, new structural or global classification, or closure expansion rejects the scoped candidate rather than silently widening it after execution.
-- For every executed step, the canonical logical locators remain in the semantic request while the host's separate physical workspace binding directs the performing agent to corresponding staged reads and the staged write sink; later steps consume those staged bytes through the same binding, and canonical paths receive the new bytes only during promotion.
-  This preserves the one-target execution rule while making rejection non-destructive.
-- The complete requested run is transactional with respect to its prior accepted bundle: no staged candidate, deterministic derivative, source snapshot, or build record replaces accepted state until every required downstream step and verification succeeds and the host begins the recoverable lineage promotion.
+- For every executed step, the canonical logical locators remain in the semantic request while the host's separate, sole-authority physical workspace binding directs the performing agent to corresponding staged reads and the staged write sink; later steps consume those staged bytes through the same binding, and canonical paths receive the new bytes only during promotion.
+  This preserves the one-target execution rule and makes rejection non-destructive for binding-compliant execution; an out-of-binding write instead fails under [DR-003](003-slc-phase-execution.md) without an unsafe rollback promise.
+- Within that authority boundary, the complete requested run is transactional with respect to its prior accepted bundle: no staged candidate, deterministic derivative, source snapshot, or build record replaces accepted state until every required downstream step and verification succeeds and the host begins the recoverable lineage promotion.
 - After an accepted candidate, downstream planning uses its actual output hash.
   Link phases are not scoped-update-capable in this schema version, so a dirty link always executes in full; deterministic entry and verification products are regenerated when their inputs change; and the complete emitted verification suite runs before the new lineage is accepted.
-- A scoped-update violation, `BLOCKED` outcome, or verification failure discards the complete staged run, preserves the prior accepted bundle and record, and fails with a diagnostic recommending `--rebuild`.
+- A scoped-update violation, `BLOCKED` outcome, or verification failure during binding-compliant execution discards the complete staged run, writes no candidate bundle, source-snapshot, or record byte to a canonical path, and fails with a diagnostic recommending `--rebuild`.
+  A detected out-of-binding write also fails and prevents promotion, but arbitrary external mutation lies outside the transaction's rollback guarantee.
   It does not automatically spend a second agent invocation on ordinary execution, preserving [PHEXEC-12](../dev/phase-execution.md#phexec-12)'s one-invocation contract and avoiding a hidden double-cost retry.
 - A fresh nondeterministic generation is not periodic ground truth.
-  The source, authoritative definitions, protected-region equality, and full verification are the acceptance authority; lineage generation remains audit metadata only.
+  Absent explicit adoption, the source, authoritative definitions, protected-region equality, and full verification are the acceptance authority; lineage generation remains audit metadata only.
 
 ### Playbook traceability
 
@@ -132,7 +151,7 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
   Existing FSM `sourceItem` values provide only the GEARS-to-FSM edge, so all earlier edges remain an explicit definition coupling before automatic Playbook updates are eligible.
 - Exact reuse on the installed Playbook consumer path separately requires Playbook's published phase definitions to carry package-portable, closed semantic-input declarations.
   The repository-relative `## Pin Inputs` added to SLC's vendored definitions close its reviewed self-host pins only and cannot establish the installed package's consumer-build closure.
-  Until the published definitions provide that closure, the installed Playbook pipeline gains source association and conflict detection but its unclosed semantic steps execute and prevent a whole-bundle no-op.
+  Until the published definitions provide that closure, the installed Playbook pipeline gains source association and conflict detection but its unclosed semantic steps execute and prevent an automatically derived whole-bundle no-op; explicit whole-lineage adoption remains available as a separate user authority.
 - A local change whose complete dependency closure is mapped may preserve every reviewed GEARS item and FSM region outside that closure.
   Changes to declared global scopes such as players, results, identifiers, or control-flow topology select ordinary phase execution regardless of textual size.
 
@@ -140,8 +159,8 @@ The ordinary-build record also must not be confused with [DR-007](007-slc-phase-
 
 - For a pipeline whose scheduled semantic steps all declare closed content-identified readable-input closures, an unchanged full invocation becomes a deterministic no-op, while exact phase-level reuse remains available even when an earlier executed phase reproduces identical bytes.
 - A small, traceable source edit can revise only its semantic closure without re-gambling unrelated reviewed output; byte preservation is enforced by the host and semantic correctness by the definitions and verification.
-- Pipelines without complete update contracts and traces still benefit from exact reuse when their readable-input closures are closed, but a changed input follows ordinary phase execution; a pipeline with an unclosed semantic step gains association and conflict detection but cannot reuse that step or take the whole-bundle no-op.
+- Pipelines without complete update contracts and traces still benefit from exact reuse when their readable-input closures are closed, but a changed input follows ordinary phase execution; absent explicit whole-lineage adoption, a pipeline with an unclosed semantic step gains association and conflict detection but cannot reuse that step or take the whole-bundle no-op.
 - Reserved self-host builds remain ordinary so reviewed artifact bundles and their pins have no lineage feedback cycle.
-- Same-basename collisions and manual artifact edits become visible conflicts instead of silent overwrites.
+- Same-basename collisions and manual artifact edits become visible conflicts instead of silent overwrites, while `--adopt` lets the user attest a complete unchanged-source refinement without an expensive destructive rebuild.
 - Source snapshots enable deterministic pre-agent diffing and portable lineage at the cost of duplicating source content in the bundle.
-- The feature adds one explicit destructive override, `--rebuild`; automatic update failure remains fail-closed rather than retrying at potentially multi-hour cost.
+- The feature adds explicit recovery choices: destructive `--rebuild` re-establishes phase-produced lineage, while non-destructive `--adopt` records user-attested semantic bytes; automatic update failure remains fail-closed rather than retrying at potentially multi-hour cost.

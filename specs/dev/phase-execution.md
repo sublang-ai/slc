@@ -37,7 +37,7 @@ Where executing an ordinary compile phase, the slc command shall treat the phase
 
 ### PHEXEC-3
 
-While executing, the executing phase shall write only its declared target or linked artifact, and shall not modify sources, phase or link definitions, specs, object artifacts, link targets, or unrelated files; scratch space that does not persist past the run is not such a write ([DR-003](../decisions/003-slc-phase-execution.md#generic-vs-phase-specific)).
+While executing, the executing phase shall write only the one physical sink the host binds for its declared target or linked artifact, and shall not modify sources, phase or link definitions, specs, object artifacts, link targets, canonical logical target paths that differ from that sink, or unrelated files; scratch space that does not persist past the run is not such a write ([DR-003](../decisions/003-slc-phase-execution.md#generic-vs-phase-specific), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#build-lineage)).
 
 ## Generic checks
 
@@ -75,7 +75,7 @@ The slc command shall be able to execute any phase by interpreting its definitio
 
 ### PHEXEC-11
 
-When interpreting a phase, the slc command shall prompt a coding agent, reached through Cligent [[1]], with the phase or link definition and the phase inputs, and the agent shall perform the transformation and write the target ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter)).
+When interpreting a phase, the slc command shall prompt a coding agent, reached through Cligent [[1]], with the phase or link definition and the phase inputs, and the agent shall perform the transformation and write the host-bound physical sink for the target ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#build-lineage)).
 
 ### PHEXEC-12
 
@@ -90,7 +90,7 @@ Where slc configuration selects an agent CLI and model, the slc command shall ap
 When interpreting a phase, the slc command shall establish in the agent prompt a contract that ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#agent-contract)):
 
 - the phase or link definition is authoritative;
-- the agent writes only the requested target or linked artifact;
+- the agent writes only the host-supplied physical sink for the requested target or linked artifact;
 - the agent does not edit sources, phase or link definitions, specs, link targets, object artifacts, or unrelated files;
 - the agent does not commit;
 - the agent produces a complete artifact, not a sketch;
@@ -139,7 +139,7 @@ Where a compile execution request carries read-only reference documents — e.g.
 
 ### PHEXEC-34
 
-Where a `composed-v2` compiled phase makes a transformation-performing direct Captain call — one whose source-owned options carry no `allowedTools` property ([PHEXEC-31](#phexec-31)) — the slc command shall append the host workspace contract to the prompt it transports: the executor's host-owned physical workspace binding for readable inputs and the one artifact-to-write sink, each resolved to an absolute host path, plus the interpreted contract's write-scope rules ([PHEXEC-14](#phexec-14)); when an incremental run stages execution the binding shall name staged candidate predecessors and the staged write sink while unchanged read-only inputs retain canonical physical paths and the Boss request retains [PHEXEC-29](#phexec-29)'s canonical logical locators, and otherwise the physical and logical paths shall coincide; because the linked artifact composes only host-agnostic prompts while the host alone owns workspace specifics, the appended contract shall carry no guard names, result-property schema, or adjudicator instructions, and a routing-only Captain call (explicitly empty `allowedTools`) and every hidden judge call shall cross with their composed prompts unchanged ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-012](../decisions/012-playbook-routing-control-separation.md#routing-authority-and-presentation-ownership), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#build-lineage)).
+Where a compiled phase makes a Player call or a `composed-v2` transformation-performing direct Captain call — the latter carrying no source-owned `allowedTools` property ([PHEXEC-31](#phexec-31)) — the slc command shall append the host workspace contract to the prompt it transports: the executor's host-owned physical workspace binding as the sole authorized I/O map for readable inputs and the one artifact-to-write sink, each resolved to an absolute host path, plus the interpreted contract's write-scope rules ([PHEXEC-14](#phexec-14)); under execution staged by [INCR-8](incremental-compilation.md#incr-8) the binding shall name staged candidate predecessors and the staged write sink while unchanged read-only inputs retain canonical physical paths and the Boss request retains [PHEXEC-29](#phexec-29)'s canonical logical locators, writing a differing canonical logical path shall be a [PHEXEC-6](#phexec-6) scope violation, and otherwise the physical and logical paths shall coincide; because the linked artifact composes only host-agnostic prompts while the host alone owns workspace specifics, the appended contract shall carry no guard names, result-property schema, or adjudicator instructions, and a routing-only Captain call (explicitly empty `allowedTools`) and every hidden judge call shall cross with their composed prompts unchanged ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-012](../decisions/012-playbook-routing-control-separation.md#routing-authority-and-presentation-ownership), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#build-lineage)).
 
 ## Agent-call watchdog
 

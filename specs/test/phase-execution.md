@@ -88,9 +88,9 @@ Verifies: [PHEXEC-36](../dev/phase-execution.md#phexec-36), [PHEXEC-12](../dev/p
 Where a faked agent transport yields an initial event and then stalls under a short configured stall timeout, when a phase runs through the transport, the slc command shall abort the stalled call once the timeout elapses, map it to a failed call whose diagnostic carries the inactivity duration, and make no additional agent invocation; whereas where the aborted transport still yields a successful terminal event within the post-abort drain, the slc command shall report that success rather than a stall.
 
 ### PHEXEC-35
-Verifies: [PHEXEC-34](../dev/phase-execution.md#phexec-34)
+Verifies: [PHEXEC-25](../dev/phase-execution.md#phexec-25), [PHEXEC-34](../dev/phase-execution.md#phexec-34)
 
-Where a pinned `composed-v2` meta-phase artifact is driven through the compiled executor over a fake agent transport that captures transported prompts, when the seeded compile or link turn reaches the artifact's transformation-performing direct Captain call, the transported prompt shall carry the artifact's composed GEARS-derived body plus the host workspace contract naming the physical absolute readable inputs and artifact-to-write path, and a captain that writes exactly that artifact shall map the run to `ok`; whereas a routing-only Captain call carrying an explicitly empty `allowedTools` and every hidden judge call shall receive its composed prompt unchanged.
+Where pinned `legacy`, `session-v1`, and `composed-v2` meta-phase artifacts are driven through the compiled executor over a fake agent transport that captures transported prompts, when a seeded compile or link turn reaches a transformation-performing Player or direct Captain call, the transported prompt shall carry the artifact's composed GEARS-derived body plus the host workspace contract naming the sole authorized physical absolute readable inputs and artifact-to-write sink, and an agent that writes exactly that sink shall map the run to `ok`; whereas a routing-only Captain call carrying an explicitly empty `allowedTools` and every hidden judge call shall receive its composed prompt unchanged.
 
 ## Update metadata
 

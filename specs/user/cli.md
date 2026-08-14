@@ -25,13 +25,13 @@ When the user runs `slc` with `--version` or `-v`, the slc executable shall prin
 
 ### CLI-2
 
-When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, the full and full-link forms' `--rebuild` option, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli), [DR-006](../decisions/006-slc-configuration-sources.md#file-format-and-discovery), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts), [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7)).
+When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, the eligible full and full-link forms' `--rebuild` and `--adopt` options, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli), [DR-006](../decisions/006-slc-configuration-sources.md#file-format-and-discovery), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts), [DR-021](../decisions/021-incremental-build-records-scoped-updates.md#explicit-adoption), [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7)).
 
 ## Outcomes
 
 ### CLI-3
 
-Where a successful run either writes artifacts or finds an incremental full or full-link bundle already current, when the slc executable reports the outcome, the slc executable shall print the written artifact paths — including an `-o` path — in the first case or an up-to-date report in the second case to standard output and exit zero ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [COMPILE-1](compiler.md#compile-1), [COMPILE-3](compiler.md#compile-3), [INCR-2](incremental-compilation.md#incr-2)).
+Where a successful non-adoption run writes artifacts, an adoption run attests semantic products and regenerates deterministic derivatives, or a full or full-link bundle is already current, when the slc executable reports the outcome, the slc executable shall print respectively the written artifact paths — including an `-o` path — one adoption report distinguishing attested unchanged semantic paths from regenerated written paths, or an up-to-date report to standard output and exit zero ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [COMPILE-1](compiler.md#compile-1), [COMPILE-3](compiler.md#compile-3), [INCR-2](incremental-compilation.md#incr-2), [INCR-33](incremental-compilation.md#incr-33)).
 
 ### CLI-4
 

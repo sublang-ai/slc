@@ -27,7 +27,7 @@ Where no agent is configured, when the slc executable is run with `--version` or
 ### CLI-14
 Verifies: [CLI-2](../user/cli.md#cli-2), [CLI-9](../dev/cli.md#cli-9)
 
-Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, the full and full-link forms' `--rebuild` option, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero without resolving a pipeline or selecting an agent.
+Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, the eligible full and full-link forms' `--rebuild` and `--adopt` options, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero without resolving a pipeline or selecting an agent.
 
 ## Reporting
 
@@ -35,6 +35,11 @@ Where no agent is configured, when the slc executable is run with `--help` or `-
 Verifies: [CLI-3](../user/cli.md#cli-3), [CLI-11](../dev/cli.md#cli-11)
 
 Where the run succeeds, when the slc executable runs a documented invocation form with an `-o` override, the slc executable shall print the written artifact paths — including the `-o` path — to standard output and exit zero.
+
+### CLI-39
+Verifies: [CLI-3](../user/cli.md#cli-3), [CLI-11](../dev/cli.md#cli-11)
+
+Where `runSlc` returns explicit-adoption success with semantic product paths that were attested but not written and deterministic derivative paths regenerated during acceptance, when the slc executable reports the result, the slc executable shall print one adoption report naming the first set without calling it written and the second set as written to standard output, write nothing to standard error, and exit zero.
 
 ### CLI-16
 Verifies: [CLI-4](../user/cli.md#cli-4), [CLI-11](../dev/cli.md#cli-11)
