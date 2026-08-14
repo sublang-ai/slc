@@ -13,11 +13,11 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 
 ### INCR-1
 
-Where an invocation is a full or full-link pipeline run with canonical output or `-o`, when the run succeeds, the slc command shall for canonical output other than the reserved `slc` meta-pipeline leave a versioned build record and verbatim source snapshot in the invocation working directory's artifact directory — binding the accepted bundle to the source locator and bytes, pipeline build identity, invocation semantics, and artifact bytes without changing [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)'s placement — and shall for `-o` or the reserved meta-pipeline retain non-incremental behavior without creating or advancing a build record ([DR-021](../decisions/021-incremental-build-records-scoped-updates.md#build-lineage)).
+Where an invocation is a full or full-link pipeline run with canonical output or `-o`, when the run succeeds after executing at least one scheduled step, the slc command shall for canonical output other than the reserved `slc` meta-pipeline leave a versioned build record and verbatim source snapshot in the invocation working directory's artifact directory — binding the accepted bundle to the source locator and bytes, pipeline build identity, invocation semantics, and artifact bytes without changing [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)'s placement — and shall for `-o` or the reserved meta-pipeline retain non-incremental behavior without creating or advancing either lineage file ([DR-021](../decisions/021-incremental-build-records-scoped-updates.md#build-lineage)).
 
 ### INCR-2
 
-Where the source locator and bytes, build identity, invocation semantics, snapshot, and every scheduled output match a supported build record, when the user repeats the full or full-link invocation, the slc command shall report the bundle up to date, exit zero, invoke no agent, and rewrite no source, artifact, snapshot, or build record ([DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts)).
+Where the source locator and bytes, build identity, invocation semantics, snapshot, and every scheduled output match a supported build record and every scheduled semantic step has a closed content-identified readable-input declaration, when the user repeats the full or full-link invocation, the slc command shall report the bundle up to date, exit zero, invoke no agent, and rewrite no source, artifact, snapshot, or build record ([DR-021](../decisions/021-incremental-build-records-scoped-updates.md#exact-reuse-and-conflicts)).
 
 ## Changed sources
 

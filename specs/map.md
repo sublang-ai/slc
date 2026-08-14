@@ -92,7 +92,7 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, compiled-pin selection, raw-input normalization, and optimization passes |
+| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, build-lineage-aware execution and exact reuse, compiled-pin selection, raw-input normalization, and optimization passes |
 
 ### GIT
 
@@ -148,8 +148,8 @@ meta.md     The spec of specs
 | Group | File | Summary |
 | --- | --- | --- |
 | user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `playbook` artifact |
-| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format, shared-definition resolution, and atomic Playbook 2.0 definition/artifact/pin adoption |
-| test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name and `playbook`-pipeline resolution, compilation and linking, plus clean-install consistency of the adopted reviewed set |
+| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format and reusable entry emission, shared-definition resolution, and atomic Playbook 4.0 definition/artifact/pin adoption |
+| test | [self-hosting.md](test/self-hosting.md) | Acceptance: meta-pipeline lineage exclusion, reserved-name and `playbook`-pipeline resolution, compilation, linking and entry emission, plus clean-install consistency of the adopted reviewed set |
 
 ### VERIFY
 

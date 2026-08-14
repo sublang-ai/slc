@@ -27,7 +27,7 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 ### PHEXEC-16
 Verifies: [PHEXEC-8](../dev/phase-execution.md#phexec-8), [PHEXEC-10](../dev/phase-execution.md#phexec-10), [PHEXEC-11](../dev/phase-execution.md#phexec-11), [PHEXEC-12](../dev/phase-execution.md#phexec-12), [COMPILE-5](../user/compiler.md#compile-5)
 
-Where every phase is interpreted and no build record exists, when the slc command runs a full pipeline whose agent writes each declared target, the slc command shall complete with exactly one agent invocation per executed phase, the canonical artifacts present, and any ambiguity the agent reported surfaced in its diagnostics.
+Where every phase is interpreted and no lineage metadata exists, when the slc command runs a full pipeline whose agent writes each declared target, the slc command shall complete with exactly one agent invocation per executed phase, the canonical artifacts present, and any ambiguity the agent reported surfaced in its diagnostics.
 
 ### PHEXEC-17
 Verifies: [PHEXEC-4](../dev/phase-execution.md#phexec-4), [PHEXEC-9](../dev/phase-execution.md#phexec-9), [COMPILE-4](../user/compiler.md#compile-4)
@@ -90,7 +90,7 @@ Where a faked agent transport yields an initial event and then stalls under a sh
 ### PHEXEC-35
 Verifies: [PHEXEC-34](../dev/phase-execution.md#phexec-34)
 
-Where a pinned `composed-v2` meta-phase artifact is driven through the compiled executor over a fake agent transport that captures transported prompts, when the seeded compile or link turn reaches the artifact's transformation-performing direct Captain call, the transported prompt shall carry the artifact's composed GEARS-derived body plus the host workspace contract naming the request's absolute workspace inputs and the absolute artifact-to-write path, and a captain that writes exactly that artifact shall map the run to `ok`; whereas a routing-only Captain call carrying an explicitly empty `allowedTools` and every hidden judge call shall receive its composed prompt unchanged.
+Where a pinned `composed-v2` meta-phase artifact is driven through the compiled executor over a fake agent transport that captures transported prompts, when the seeded compile or link turn reaches the artifact's transformation-performing direct Captain call, the transported prompt shall carry the artifact's composed GEARS-derived body plus the host workspace contract naming the physical absolute readable inputs and artifact-to-write path, and a captain that writes exactly that artifact shall map the run to `ok`; whereas a routing-only Captain call carrying an explicitly empty `allowedTools` and every hidden judge call shall receive its composed prompt unchanged.
 
 ## Update metadata
 

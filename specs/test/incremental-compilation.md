@@ -12,9 +12,9 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 ## Build records and reuse
 
 ### INCR-20
-Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-7](../dev/incremental-compilation.md#incr-7), [INCR-8](../dev/incremental-compilation.md#incr-8), [INCR-13](../dev/incremental-compilation.md#incr-13)
+Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-7](../dev/incremental-compilation.md#incr-7), [INCR-8](../dev/incremental-compilation.md#incr-8), [INCR-13](../dev/incremental-compilation.md#incr-13), [PHEXEC-39](../dev/phase-execution.md#phexec-39)
 
-Where interpreted and compiled fixture pipelines return valid, absent, or malformed optional trace metadata through their respective host-result and protected-telemetry channels, when canonical full and full-link runs succeed, the slc command shall for each valid channel leave `.slc-source` as the verbatim source and a strict `sublang.slc.build.v1` `.slc-build.json` whose source, plan, step, managed intermediate, linked-product, verification-product, entry-product, generic trace, SLC and pipeline/runtime version provenance, and format compatibility match the accepted run without changing the compiled runtime's Playbook result or diagnostic mapping, and shall for absent or malformed metadata still accept an ordinary artifact with scoped update disabled and no trace sidecar.
+Where interpreted and compiled fixture pipelines return valid, absent, or malformed optional trace metadata through their respective host-result and protected-telemetry channels, when canonical full and full-link runs succeed, the slc command shall for each valid channel leave `.slc-source` as the verbatim source and a strict `sublang.slc.build.v1` `.slc-build.json` whose artifact-directory-relative source locator, source, plan, step, managed intermediate, linked-product, verification-product, entry-product, generic trace, SLC and pipeline/runtime version provenance, and format compatibility match the accepted run without changing the compiled runtime's Playbook result or diagnostic mapping, and shall for absent or malformed metadata still accept an ordinary artifact with scoped update disabled and no trace sidecar.
 
 ### INCR-32
 Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-7](../dev/incremental-compilation.md#incr-7), [SELFHOST-2](../dev/self-hosting.md#selfhost-2), [PIN-15](../dev/pinning.md#pin-15)
@@ -22,9 +22,9 @@ Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-7](../dev/i
 Where a deterministic fixture reserved `slc` meta-pipeline builds a reviewed phase-artifact bundle and its pin is regenerated, when the same self-host build and pin validation repeat, the slc command shall write no `.slc-build.json` or `.slc-source` inside the artifact bundle and the regenerated pin shall reach the same current artifact-tree identity rather than a lineage feedback cycle.
 
 ### INCR-21
-Verifies: [INCR-2](../user/incremental-compilation.md#incr-2), [INCR-9](../dev/incremental-compilation.md#incr-9), [INCR-10](../dev/incremental-compilation.md#incr-10)
+Verifies: [INCR-2](../user/incremental-compilation.md#incr-2), [INCR-9](../dev/incremental-compilation.md#incr-9), [INCR-10](../dev/incremental-compilation.md#incr-10), [COMPILE-7](../user/compiler.md#compile-7), [COMPILE-8](../user/compiler.md#compile-8), [PIPE-32](../dev/pipeline.md#pipe-32), [PIPE-34](../dev/pipeline.md#pipe-34), [SELFHOST-15](../dev/self-hosting.md#selfhost-15)
 
-Where a successful fixture build and every recorded input and output remain byte-identical, when the same full or full-link command runs with executors that fail if called, the slc command shall exit zero, report the bundle up to date, leave all recorded bytes unchanged, and make no executor call.
+Where independent successful fixture builds with closed readable-input declarations cover a reusable normalization step, discovered optimization pass, and canonical Playbook entry product and every recorded input and output remains byte-identical, when each full or full-link command repeats with executors and filesystem-write observers that fail if called, the slc command shall exit zero, report the bundle up to date, make no executor call, and perform no write to the source, managed artifacts including the entry, snapshot, or record.
 
 ### INCR-22
 Verifies: [INCR-4](../user/incremental-compilation.md#incr-4), [INCR-10](../dev/incremental-compilation.md#incr-10), [INCR-11](../dev/incremental-compilation.md#incr-11)
@@ -63,7 +63,7 @@ Where a prior accepted bundle exists, when an incremental or `--rebuild` candida
 ### INCR-28
 Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-19](../dev/incremental-compilation.md#incr-19), [PIPE-9](../dev/pipeline.md#pipe-9)
 
-Where fixture invocations cover a full or full-link run with `-o` and every unsupported `--rebuild` form, when the slc command runs them, the slc command shall retain the overridden output behavior without creating or advancing a build record in the first case and shall refuse `--rebuild` combined with `-o`, a single-phase, standalone-pass, or direct-link invocation.
+Where fixture invocations cover a full or full-link run with `-o` and every unsupported `--rebuild` form, when the slc command runs them, the slc command shall retain the overridden output behavior without creating or advancing a build record or source snapshot in the first case and shall refuse `--rebuild` combined with `-o`, a single-phase, standalone-pass, or direct-link invocation.
 
 ### INCR-29
 Verifies: [INCR-9](../dev/incremental-compilation.md#incr-9), [INCR-10](../dev/incremental-compilation.md#incr-10), [COMPILE-6](../user/compiler.md#compile-6)
@@ -76,6 +76,6 @@ Verifies: [INCR-8](../dev/incremental-compilation.md#incr-8), [INCR-17](../dev/i
 Where a prior accepted bundle contains an unrecorded file that remains unchanged or is edited concurrently and a managed product absent from a changed successful plan, when the canonical full pipeline promotes the new lineage, the slc command shall preserve the latest unrecorded file byte-for-byte and remove the obsolete managed product.
 
 ### INCR-31
-Verifies: [INCR-8](../dev/incremental-compilation.md#incr-8), [PHEXEC-34](../dev/phase-execution.md#phexec-34)
+Verifies: [INCR-8](../dev/incremental-compilation.md#incr-8), [PHEXEC-29](../dev/phase-execution.md#phexec-29), [PHEXEC-34](../dev/phase-execution.md#phexec-34)
 
-Where a fixture phase derives output bytes and trace identities from its supplied source and target locators, when a canonical incremental candidate executes through staged state, the slc command shall expose the same canonical logical locators as a cold canonical run, write only through the isolated staged sink, and accept bytes containing no staging locator.
+Where interpreted and compiled fixture phases derive output bytes and trace identities from their supplied source and target locators, when canonical incremental candidates execute through staged state, the slc command shall keep the same canonical logical locators as a cold canonical run in phase semantics and the compiled Boss request, give each performing agent only the separate actual physical read paths — including staged candidate predecessors — and staged write sink in its host workspace contract, and accept bytes containing no staging locator.
