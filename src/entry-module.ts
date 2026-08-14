@@ -18,7 +18,7 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 
 import { parseGearsItems } from './verify.js';
 
@@ -36,13 +36,68 @@ export interface EmitEntryModuleOptions {
   textPath: string;
 }
 
-/** Emits the entry module and returns its path. */
-export async function emitEntryModule(
-  opts: EmitEntryModuleOptions,
+/** Explicit physical and eventual logical paths for deterministic emission. */
+export interface EmitEntryModuleAtPathsOptions {
+  /** The DR-001 basename naming the registry entry and linked module. */
+  basename: string;
+  /** Physical optimized gears input to read. */
+  gearsPath: string;
+  /** Physical normalized (or entry-form) text input to read. */
+  textPath: string;
+  /** Sole physical entry path to write. */
+  outputPath: string;
+  /** Eventual logical entry path used to derive its module specifier. */
+  logicalEntryPath: string;
+  /** Eventual logical bundle directory containing the linked module. */
+  logicalBundlePath: string;
+}
+
+/** Emits the entry module at explicit physical and logical paths. */
+export async function emitEntryModuleAtPaths(
+  opts: EmitEntryModuleAtPathsOptions,
 ): Promise<string> {
   const gears = await readFile(opts.gearsPath, 'utf8');
   const text = await readFile(opts.textPath, 'utf8');
   const players = declaredPlayers(gears);
+  validatePlayerIdentities(players);
+  const hasScript = parseGearsItems(gears).some(
+    (item) => item.actor === 'script',
+  );
+  const intent = deriveIntent(text) ?? opts.basename;
+  const linkedPath = join(
+    opts.logicalBundlePath,
+    `${opts.basename}.playbook.ts`,
+  );
+  await writeFile(
+    opts.outputPath,
+    renderEntryModule({
+      basename: opts.basename,
+      linkedModule: moduleSpecifier(opts.logicalEntryPath, linkedPath),
+      players,
+      hasScript,
+      intent,
+    }),
+    'utf8',
+  );
+  return opts.outputPath;
+}
+
+/** Emits the entry module at its canonical DR-014 path and returns it. */
+export async function emitEntryModule(
+  opts: EmitEntryModuleOptions,
+): Promise<string> {
+  const outputPath = join(opts.cwd, `${opts.basename}.ts`);
+  return emitEntryModuleAtPaths({
+    basename: opts.basename,
+    gearsPath: opts.gearsPath,
+    textPath: opts.textPath,
+    outputPath,
+    logicalEntryPath: outputPath,
+    logicalBundlePath: join(opts.cwd, `${opts.basename}.${opts.pipeline}`),
+  });
+}
+
+function validatePlayerIdentities(players: readonly string[]): void {
   // The role-binding boundary keys declared ids by their lowercased form; a
   // case-insensitive collision would make the binding ambiguous (DR-017).
   const byLowered = new Map<string, string>();
@@ -55,23 +110,6 @@ export async function emitEntryModule(
     }
     byLowered.set(player.toLowerCase(), player);
   }
-  const hasScript = parseGearsItems(gears).some(
-    (item) => item.actor === 'script',
-  );
-  const intent = deriveIntent(text) ?? opts.basename;
-  const path = join(opts.cwd, `${opts.basename}.ts`);
-  await writeFile(
-    path,
-    renderEntryModule({
-      basename: opts.basename,
-      bundleLeaf: `${opts.basename}.${opts.pipeline}`,
-      players,
-      hasScript,
-      intent,
-    }),
-    'utf8',
-  );
-  return path;
 }
 
 /**
@@ -133,7 +171,7 @@ function deriveIntent(text: string): string | undefined {
 
 function renderEntryModule(spec: {
   basename: string;
-  bundleLeaf: string;
+  linkedModule: string;
   players: readonly string[];
   hasScript: boolean;
   intent: string;
@@ -150,7 +188,7 @@ function renderEntryModule(spec: {
 // bundle; recompiling regenerates it. The role-binding boundary (DR-017)
 // hands the host's \`callPlayer\` port only declared role ids.
 
-import createPlaybookRuntime from './${spec.bundleLeaf}/${spec.basename}.playbook.ts';
+import createPlaybookRuntime from ${sourceString(spec.linkedModule)};
 
 type RuntimeOptions = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
 
@@ -238,6 +276,13 @@ const entry = {
 
 export default entry;
 `;
+}
+
+function moduleSpecifier(fromModule: string, toModule: string): string {
+  const path = relative(dirname(fromModule), toModule).split(sep).join('/');
+  return path === '..' || path.startsWith('../') || path.startsWith('./')
+    ? path
+    : `./${path}`;
 }
 
 function sourceString(value: string): string {

@@ -3,7 +3,15 @@
 
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1452,6 +1460,54 @@ describe('generateFsmIntrospectionTest / emitFsmIntrospectionTest', () => {
     }
   });
 
+  it('emits identical introspection bytes to one explicit candidate output without deriving a canonical write', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-verify-intro-stage-'));
+    const canonicalDir = join(root, 'canonical');
+    const candidateDir = join(root, 'candidate');
+    const candidateOutput = join(candidateDir, 'explicit-introspection.ts');
+    const fsmSource = [
+      'export const machine = {',
+      '  config: {',
+      "    initial: 'ready',",
+      '    states: {',
+      '      ready: {},',
+      "      done: { type: 'final' },",
+      '    },',
+      '  },',
+      '};',
+      '',
+    ].join('\n');
+    try {
+      await mkdir(canonicalDir, { recursive: true });
+      await mkdir(candidateDir, { recursive: true });
+      await writeFile(join(canonicalDir, 'code.fsm.ts'), fsmSource);
+      await writeFile(join(candidateDir, 'code.fsm.ts'), fsmSource);
+      const canonical = await emitFsmIntrospectionTest({
+        artifactDir: canonicalDir,
+        basename: 'code',
+      });
+      const candidate = await emitFsmIntrospectionTest({
+        basename: 'code',
+        layout: {
+          fsmPath: join(candidateDir, 'code.fsm.ts'),
+          outputPath: candidateOutput,
+          fsmModule: './code.fsm.js',
+        },
+      });
+
+      expect(candidate).toBe(candidateOutput);
+      expect(await readFile(candidate, 'utf8')).toBe(
+        await readFile(canonical, 'utf8'),
+      );
+      await expect(
+        readFile(join(candidateDir, 'code.fsm.introspect.test.ts'), 'utf8'),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await readFile(candidate, 'utf8')).not.toContain(root);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('bakes drift detection: the generated pins differ when the machine changes', () => {
     const pins = pinIntrospection(introspectableConfig());
     const drifted = introspectableConfig();
@@ -2060,6 +2116,101 @@ describe('emitPromptContractTest (VERIFY-5)', () => {
     }
   });
 
+  it('derives from explicit candidate modules while preserving canonical prompt-test bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-verify-pc-stage-'));
+    const canonicalDir = join(root, 'canonical');
+    const candidateDir = join(root, 'candidate');
+    const candidateOutput = join(candidateDir, 'explicit-prompt-test.ts');
+    const linkedSource = [
+      'const compose = (input: any): string =>',
+      "  input.prompt.replaceAll('<audience>', input.audience);",
+      'export const _internal = { composePlayerPrompt: compose };',
+      'export default function createPlaybookRuntime() {',
+      '  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };',
+      '}',
+      '',
+    ].join('\n');
+    try {
+      for (const dir of [canonicalDir, candidateDir]) {
+        await mkdir(dir, { recursive: true });
+        await writeFile(join(dir, 'code.fsm.ts'), fsmFixture);
+        await writeFile(join(dir, 'code.playbook.ts'), linkedSource);
+      }
+      const canonical = await emitPromptContractTest({
+        artifactDir: canonicalDir,
+        basename: 'code',
+      });
+      const candidate = await emitPromptContractTest({
+        basename: 'code',
+        layout: {
+          fsmPath: join(candidateDir, 'code.fsm.ts'),
+          outputPath: candidateOutput,
+          fsmModule: './code.fsm.js',
+          linked: {
+            physicalPath: join(candidateDir, 'code.playbook.ts'),
+            moduleSpecifier: './code.playbook.js',
+            fsmModuleSpecifier: './code.fsm.js',
+          },
+        },
+      });
+
+      expect(candidate.diagnostics).toEqual(canonical.diagnostics);
+      expect(candidate.path).toBe(candidateOutput);
+      expect(await readFile(candidate.path, 'utf8')).toBe(
+        await readFile(canonical.path, 'utf8'),
+      );
+      await expect(
+        readFile(join(candidateDir, 'code.prompt-contract.test.ts'), 'utf8'),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await readFile(candidate.path, 'utf8')).not.toContain(root);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('uses only the bound candidate output for linked-module derivation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-verify-pc-retained-'));
+    const canonicalDir = join(root, 'canonical');
+    const candidateDir = join(root, 'candidate');
+    const fsmPath = join(candidateDir, 'code.fsm.ts');
+    const outputPath = join(candidateDir, 'prompt.test.ts');
+    const linkedPath = join(canonicalDir, 'code.playbook.ts');
+    const linkedSource = [
+      "import { machine } from './code.fsm.js';",
+      'void machine;',
+      'const compose = (input: any): string => input.prompt;',
+      'export const _internal = { composePlayerPrompt: compose };',
+      '',
+    ].join('\n');
+    try {
+      await mkdir(canonicalDir);
+      await mkdir(candidateDir);
+      await writeFile(fsmPath, fsmFixture);
+      await writeFile(linkedPath, linkedSource);
+
+      const result = await emitPromptContractTest({
+        basename: 'code',
+        layout: {
+          fsmPath,
+          outputPath,
+          fsmModule: './code.fsm.js',
+          linked: {
+            physicalPath: linkedPath,
+            moduleSpecifier: './code.playbook.js',
+            fsmModuleSpecifier: './code.fsm.js',
+          },
+        },
+      });
+
+      expect(result.path).toBe(outputPath);
+      expect(await readFile(linkedPath, 'utf8')).toBe(linkedSource);
+      expect(await readdir(canonicalDir)).toEqual(['code.playbook.ts']);
+      await access(outputPath);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('verifies a direct-Captain composer across a NodeNext .js FSM edge', async () => {
     const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-pc-captain-'));
     try {
@@ -2245,6 +2396,38 @@ describe('emitGearsFsmConformanceTest', () => {
       );
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it('writes only an explicit candidate path with canonical-equivalent bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-verify-emit-stage-'));
+    const canonicalDir = join(root, 'canonical');
+    const candidateDir = join(root, 'candidate');
+    const candidateOutput = join(candidateDir, 'explicit-conformance.ts');
+    try {
+      const canonical = await emitGearsFsmConformanceTest({
+        artifactDir: canonicalDir,
+        basename: 'code',
+      });
+      const candidate = await emitGearsFsmConformanceTest({
+        basename: 'code',
+        layout: {
+          outputPath: candidateOutput,
+          fsmModule: './code.fsm.js',
+          gearsFile: './code.gears.md',
+        },
+      });
+
+      expect(candidate).toBe(candidateOutput);
+      expect(await readFile(candidate, 'utf8')).toBe(
+        await readFile(canonical, 'utf8'),
+      );
+      await expect(
+        readFile(join(candidateDir, 'code.gears-fsm.test.ts'), 'utf8'),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await readFile(candidate, 'utf8')).not.toContain(root);
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

@@ -9,7 +9,7 @@
 
 ## 快速开始
 
-前置条件：macOS 或 Linux（Windows 请使用 WSL 或 Git Bash——工作流的脚本化步骤经由 `sh` 执行）、Node.js ≥ 23.6、`git`，以及已安装并登录的 [Claude Code CLI](https://www.anthropic.com/claude-code)（`claude` 命令可用）。也可以按角色改用其他 agent 或模型，参见[角色设置](#角色设置)。
+前置条件：macOS 或 Linux（Windows 请使用 WSL 或 Git Bash——工作流的脚本化步骤经由 `sh` 执行）、Node.js ≥ 24、`git`，以及已安装并登录的 [Claude Code CLI](https://www.anthropic.com/claude-code)（`claude` 命令可用）。也可以按角色改用其他 agent 或模型，参见[角色设置](#角色设置)。
 
 本目录是一个自包含的 npm 项目。在 `demo/` 下先安装，再运行：
 

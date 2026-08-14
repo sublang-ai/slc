@@ -62,3 +62,8 @@ that does not exist beside it, when the run completes, the slc command shall
 exit non-zero with a diagnostic naming the module and the unresolvable
 specifier; where every relative import resolves, the same run shall succeed
 unchanged.
+
+### VERIFY-21
+Verifies: [VERIFY-20](../dev/verification.md#verify-20)
+
+Where a reserved full-link topology has complete staged or retained candidate semantic inputs, an explicit physical destination for every deterministic derivative, and a caller-authorized private execution parent, when the deterministic facility emits and checks that candidate inventory, the slc command shall write the exact stable support, test, and entry inventory only to those destinations, preserve the eventual logical import layout without exposing candidate locators, report every mapped load-integrity failure, copy the exact staged and retained execution inventory into a removable private logical-layout mirror, run exactly the supplied emitted tests through its installed isolated test engine while ignoring other discoverable files, remove that mirror on every outcome, and leave all canonical product and lineage paths unchanged.
