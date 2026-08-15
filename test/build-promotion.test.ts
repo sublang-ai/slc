@@ -4,9 +4,11 @@
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   stat,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -59,7 +61,11 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
   /** Stages candidates and builds a minimal sealed overlay around them. */
   async function seal(
     products: Product[],
-    removals: { name: string; prior: string }[] = [],
+    removals: {
+      name: string;
+      prior: string;
+      role?: OverlayReplace['role'];
+    }[] = [],
     retained: { name: string; content: string }[] = [],
   ): Promise<SealedOverlay> {
     const replace: OverlayReplace[] = [];
@@ -91,11 +97,15 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
     }
     const remove: OverlayRemove[] = [];
     for (const [index, removal] of removals.entries()) {
-      const canonicalPath = join(artDir, removal.name);
+      const role = removal.role ?? 'semantic';
+      const canonicalPath =
+        role === 'entry'
+          ? join(root, removal.name)
+          : join(artDir, removal.name);
       await writeFile(canonicalPath, removal.prior);
       remove.push({
         id: `r${index}`,
-        role: 'semantic',
+        role,
         path: removal.name,
         canonicalPath,
         priorIdentity: hashBytes(new TextEncoder().encode(removal.prior)),
@@ -305,6 +315,7 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
         },
       ],
       remove: [],
+      retain: [],
     };
     await writeFile(join(stage, 'manifest.json'), JSON.stringify(manifest));
     await writeFile(join(stage, '.slc-build.json'), '{}');
@@ -405,6 +416,129 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
     expect(recovered).toBe('nothing-pending');
     expect(await exists(stage)).toBe(false);
     expect(await readFile(join(artDir, 'victim.md'), 'utf8')).toBe('accepted');
+  });
+
+  it('recovers an interrupted removal of the sibling entry module', async () => {
+    const obsoleteEntry = join(root, 'flow.ts');
+    const overlay = await seal(standardSet(), [
+      { name: 'flow.ts', prior: 'old entry', role: 'entry' },
+    ]);
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'replaces-applied') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'playbook',
+    });
+    expect(recovered).toBe('candidate-completed');
+    expect(await exists(obsoleteEntry)).toBe(false);
+    expect(await readFile(join(artDir, '.slc-build.json'), 'utf8')).toBe(
+      '{"v":2}',
+    );
+  });
+
+  it('voids a stage whose retained member became a symlink to equal bytes', async () => {
+    const overlay = await seal(
+      standardSet(),
+      [],
+      [{ name: 'kept.md', content: 'kept' }],
+    );
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'replaces-applied') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+    // The retained member is swapped for a symlink whose target carries the
+    // exact recorded bytes; the link itself is the managed edit.
+    const target = join(root, 'elsewhere.md');
+    await writeFile(target, 'kept');
+    await rm(join(artDir, 'kept.md'));
+    await symlink(target, join(artDir, 'kept.md'));
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
+  });
+
+  it('refuses recovery through a symlinked managed directory component', async () => {
+    const outside = join(root, 'outside');
+    await mkdir(outside);
+    const overlay = await seal([
+      { name: 'verify/check.ts', role: 'verification', candidate: 'check' },
+      { name: '.slc-build.json', role: 'build-record', candidate: '{"v":4}' },
+    ]);
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'manifest-published') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+    // The managed directory is swapped for a symlink pointing outside the
+    // bundle before recovery runs.
+    await rm(join(artDir, 'verify'), { recursive: true, force: true });
+    await symlink(outside, join(artDir, 'verify'));
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it('aborts without overwriting a destination edited after the manifest published', async () => {
+    const overlay = await seal(standardSet());
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: async ({ name }) => {
+          if (name === 'manifest-published') {
+            await writeFile(join(artDir, 'flow.gears.md'), 'user edit');
+          }
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+    expect(await readFile(join(artDir, 'flow.gears.md'), 'utf8')).toBe(
+      'user edit',
+    );
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
+  });
+
+  it('refuses to commit a record over a retained member edited mid-promotion', async () => {
+    const overlay = await seal(
+      standardSet(),
+      [],
+      [{ name: 'kept.md', content: 'kept' }],
+    );
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: async ({ name }) => {
+          if (name === 'removes-applied') {
+            await writeFile(join(artDir, 'kept.md'), 'edited');
+          }
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+    // The record never committed over the drifted inventory.
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
+    expect(await readFile(join(artDir, 'kept.md'), 'utf8')).toBe('edited');
   });
 
   it('rejects a sealed overlay without a build-record replacement', async () => {

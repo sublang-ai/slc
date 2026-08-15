@@ -23,7 +23,6 @@ import {
   readFile,
   rename,
   rm,
-  stat,
   writeFile,
 } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
@@ -94,6 +93,7 @@ interface ManifestReplace {
 interface ManifestRemove {
   readonly canonicalPath: string;
   readonly priorIdentity: Hash;
+  readonly role: string;
 }
 
 /** One unchanged accepted member the committed record will still describe. */
@@ -114,9 +114,11 @@ interface StageManifest {
 /**
  * Applies a sealed overlay to its canonical paths and commits the record
  * last. Ordering: durable manifest, non-metadata replaces (sorted), removes,
- * source snapshot, build record. A pre-mutation basis mismatch or a removal
- * whose current bytes differ from the recorded prior aborts as a conflict
- * with the stage retained for forward recovery.
+ * source snapshot, build record. Every destination is re-observed at the
+ * point of use and the whole resulting inventory is verified before the
+ * record commits, so a concurrent managed edit observed anywhere in that
+ * window aborts as a conflict instead of being overwritten or silently
+ * described by a stale record (INCR-8).
  */
 export async function promoteLineage(
   options: PromoteLineageOptions,
@@ -133,23 +135,25 @@ export async function promoteLineage(
 
   const { body, snapshot, record } = splitReplaces(manifest.replace);
   for (const entry of body) {
-    await applyReplace(entry);
+    await guardedReplace(manifest, entry);
   }
   await at(checkpoint, 'replaces-applied');
 
   for (const entry of manifest.remove) {
+    await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
     await applyRemove(entry);
   }
   await at(checkpoint, 'removes-applied');
 
-  if (snapshot !== undefined) await applyReplace(snapshot);
+  if (snapshot !== undefined) await guardedReplace(manifest, snapshot);
   if (record === undefined) {
     throw new BuildPromotionError(
       'invalid-stage',
       'sealed overlay carries no build-record replacement',
     );
   }
-  await applyReplace(record);
+  await assertInventoryReady(manifest, record);
+  await guardedReplace(manifest, record);
   await at(checkpoint, 'record-committed');
 
   const committed = await hashFile(record.canonicalPath);
@@ -160,6 +164,70 @@ export async function promoteLineage(
     );
   }
   await rm(overlay.root, { recursive: true, force: true });
+}
+
+/**
+ * Re-observes one destination immediately before installing: still at its
+ * recorded prior installs, already at the candidate is idempotent, and
+ * anything else is a concurrent managed edit that aborts without being
+ * overwritten. The path's components must be real directories so the
+ * rename cannot be redirected outside the bundle.
+ */
+async function guardedReplace(
+  manifest: StageManifest,
+  entry: ManifestReplace,
+): Promise<void> {
+  await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
+  const state = await classifyReplace(entry);
+  if (state === 'interference') {
+    throw new BuildPromotionError(
+      'conflict',
+      `managed path changed concurrently: ${entry.canonicalPath}`,
+    );
+  }
+  if (state === 'pending') await applyReplace(entry);
+}
+
+async function assertRealInstallPath(
+  manifest: StageManifest,
+  role: string,
+  canonicalPath: string,
+): Promise<void> {
+  if (!(await realComponents(entryBoundary(manifest, role), canonicalPath))) {
+    throw new BuildPromotionError(
+      'conflict',
+      `managed path traverses an unsafe component: ${canonicalPath}`,
+    );
+  }
+}
+
+/**
+ * Verifies the complete resulting inventory — every replaced destination at
+ * its candidate identity, every retained member still at its recorded
+ * identity — immediately before the record commits, so the marker never
+ * describes bytes that drifted during application.
+ */
+async function assertInventoryReady(
+  manifest: StageManifest,
+  record: ManifestReplace,
+): Promise<void> {
+  for (const entry of manifest.replace) {
+    if (entry === record) continue;
+    if ((await observeFile(entry.canonicalPath)) !== entry.candidateIdentity) {
+      throw new BuildPromotionError(
+        'conflict',
+        `managed path changed before the record commit: ${entry.canonicalPath}`,
+      );
+    }
+  }
+  for (const entry of manifest.retain) {
+    if ((await observeFile(entry.canonicalPath)) !== entry.identity) {
+      throw new BuildPromotionError(
+        'conflict',
+        `retained path changed before the record commit: ${entry.canonicalPath}`,
+      );
+    }
+  }
 }
 
 /**
@@ -251,19 +319,39 @@ async function finishForward(
     }
   }
 
-  for (const entry of pending.filter((e) => e !== record && e !== snapshot)) {
-    await applyReplace(entry);
-  }
-  await at(checkpoint, 'replaces-applied');
-  for (const entry of removals) {
-    await applyRemove(entry);
-  }
-  await at(checkpoint, 'removes-applied');
-  if (snapshot !== undefined && pending.includes(snapshot)) {
-    await applyReplace(snapshot);
-  }
-  if (pending.includes(record)) {
-    await applyReplace(record);
+  // Application mirrors the live path: unsafe components or drift observed
+  // at any point of use voids the stage rather than installing through it,
+  // and the whole inventory is verified before the record commits.
+  try {
+    for (const entry of pending.filter((e) => e !== record && e !== snapshot)) {
+      await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
+      await applyReplace(entry);
+    }
+    await at(checkpoint, 'replaces-applied');
+    for (const entry of removals) {
+      await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
+      await applyRemove(entry);
+    }
+    await at(checkpoint, 'removes-applied');
+    if (snapshot !== undefined && pending.includes(snapshot)) {
+      await assertRealInstallPath(
+        manifest,
+        snapshot.role,
+        snapshot.canonicalPath,
+      );
+      await applyReplace(snapshot);
+    }
+    await assertInventoryReady(manifest, record);
+    if (pending.includes(record)) {
+      await assertRealInstallPath(manifest, record.role, record.canonicalPath);
+      await applyReplace(record);
+    }
+  } catch (error) {
+    if (error instanceof BuildPromotionError) {
+      await rm(stageRoot, { recursive: true, force: true });
+      return false;
+    }
+    throw error;
   }
   await at(checkpoint, 'record-committed');
   await rm(stageRoot, { recursive: true, force: true });
@@ -285,6 +373,7 @@ function toStageManifest(overlay: SealedOverlay): StageManifest {
     remove: manifest.remove.map((entry) => ({
       canonicalPath: entry.canonicalPath,
       priorIdentity: entry.priorIdentity,
+      role: entry.role,
     })),
     retain: manifest.retain.map((entry) => ({
       canonicalPath: entry.canonicalPath,
@@ -445,8 +534,13 @@ function manifestConfined(
         confined(stageRoot, entry.stagedPath) &&
         canonicalAllowed(entry.role, entry.canonicalPath),
     ) &&
-    manifest.remove.every((entry) =>
-      confined(artifactDir, entry.canonicalPath),
+    // Promotion replaces lineage metadata but never removes it, so a remove
+    // entry may carry only a product or entry role.
+    manifest.remove.every(
+      (entry) =>
+        entry.role !== 'build-record' &&
+        entry.role !== 'source-snapshot' &&
+        canonicalAllowed(entry.role, entry.canonicalPath),
     ) &&
     manifest.retain.every((entry) =>
       canonicalAllowed(entry.role, entry.canonicalPath),
@@ -483,20 +577,63 @@ async function classifyRemove(entry: ManifestRemove): Promise<PathState> {
 }
 
 function matchesPrior(
-  current: Hash | undefined,
+  current: Hash | 'unsafe' | undefined,
   prior: OverlayObservation,
 ): boolean {
   if (prior.kind === 'absent') return current === undefined;
   return current === prior.identity;
 }
 
-async function observeFile(path: string): Promise<Hash | undefined> {
+/**
+ * Observes one canonical path without following a symbolic link at it: a
+ * link — even to byte-identical content — is a managed edit every
+ * classification must surface, never silently accept (INCR-27), so it
+ * observes as `unsafe`, which matches neither a prior nor a candidate.
+ */
+async function observeFile(path: string): Promise<Hash | 'unsafe' | undefined> {
+  let info;
   try {
-    if (!(await stat(path)).isFile()) return undefined;
+    info = await lstat(path);
   } catch {
     return undefined;
   }
+  if (!info.isFile() || info.isSymbolicLink()) return 'unsafe';
   return hashFile(path);
+}
+
+/**
+ * True when every path component strictly between `boundary` and the leaf
+ * is a real directory (or still absent): a symbolic-link component would
+ * redirect the installing rename outside the bundle.
+ */
+async function realComponents(
+  boundary: string,
+  path: string,
+): Promise<boolean> {
+  const components: string[] = [];
+  let cursor = dirname(path);
+  while (cursor !== boundary) {
+    components.push(cursor);
+    const parent = dirname(cursor);
+    if (parent === cursor) return false;
+    cursor = parent;
+  }
+  for (const component of components) {
+    let info;
+    try {
+      info = await lstat(component);
+    } catch {
+      continue; // absent: created later as a real directory
+    }
+    if (info.isSymbolicLink() || !info.isDirectory()) return false;
+  }
+  return true;
+}
+
+function entryBoundary(manifest: StageManifest, role: string): string {
+  return role === 'entry'
+    ? dirname(manifest.artifactDir)
+    : manifest.artifactDir;
 }
 
 async function pendingStages(artifactDir: string): Promise<string[]> {
@@ -579,6 +716,7 @@ function isManifestRemove(value: unknown): value is ManifestRemove {
   const entry = value as Record<string, unknown>;
   return (
     typeof entry.canonicalPath === 'string' &&
+    typeof entry.role === 'string' &&
     typeof entry.priorIdentity === 'string' &&
     isHash(entry.priorIdentity)
   );
