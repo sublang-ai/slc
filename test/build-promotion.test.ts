@@ -60,6 +60,7 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
   async function seal(
     products: Product[],
     removals: { name: string; prior: string }[] = [],
+    retained: { name: string; content: string }[] = [],
   ): Promise<SealedOverlay> {
     const replace: OverlayReplace[] = [];
     for (const [index, product] of products.entries()) {
@@ -100,9 +101,21 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
         priorIdentity: hashBytes(new TextEncoder().encode(removal.prior)),
       });
     }
+    const retain = [];
+    for (const [index, member] of retained.entries()) {
+      const canonicalPath = join(artDir, member.name);
+      await writeFile(canonicalPath, member.content);
+      retain.push({
+        id: `k${index}`,
+        role: 'semantic' as const,
+        path: member.name,
+        canonicalPath,
+        identity: hashBytes(new TextEncoder().encode(member.content)),
+      });
+    }
     return {
       root: stage,
-      manifest: { replace, remove, retain: [] },
+      manifest: { replace, remove, retain },
       assertReady: async () => {},
       discard: async () => rm(stage, { recursive: true, force: true }),
     };
@@ -311,6 +324,87 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
     await promoteLineage({ overlay: await seal(standardSet()) });
     expect(await readFile(bystander, 'utf8')).toBe('mine');
     expect(await readFile(join(artDir, 'flow.gears.md'), 'utf8')).toBe('new');
+  });
+
+  it('voids a stage when a retained member drifted before recovery', async () => {
+    const overlay = await seal(
+      standardSet(),
+      [],
+      [{ name: 'kept.md', content: 'kept' }],
+    );
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'replaces-applied') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+    // The retained member the candidate record still describes is edited
+    // between the crash and recovery.
+    await writeFile(join(artDir, 'kept.md'), 'edited');
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
+  });
+
+  it('finishes forward a product whose legal name begins with dots', async () => {
+    const overlay = await seal([
+      { name: '..gears.md', role: 'semantic', candidate: 'dotted' },
+      { name: '.slc-build.json', role: 'build-record', candidate: '{"v":3}' },
+    ]);
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'replaces-applied') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+    });
+    expect(recovered).toBe('candidate-completed');
+    expect(await readFile(join(artDir, '..gears.md'), 'utf8')).toBe('dotted');
+  });
+
+  it('refuses a manifest whose metadata role leaves its reserved path', async () => {
+    await writeFile(join(artDir, 'victim.md'), 'accepted');
+    const manifest = {
+      schema: 'sublang.slc.stage.v1',
+      artifactDir: artDir,
+      replace: [
+        {
+          role: 'build-record',
+          canonicalPath: join(artDir, 'victim.md'),
+          stagedPath: join(stage, 'victim.md'),
+          prior: {
+            kind: 'file',
+            identity: hashBytes(new TextEncoder().encode('accepted')),
+          },
+          candidateIdentity: hashBytes(new TextEncoder().encode('forged')),
+        },
+      ],
+      remove: [],
+      retain: [],
+    };
+    await writeFile(join(stage, 'manifest.json'), JSON.stringify(manifest));
+    await writeFile(join(stage, 'victim.md'), 'forged');
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    expect(await readFile(join(artDir, 'victim.md'), 'utf8')).toBe('accepted');
   });
 
   it('rejects a sealed overlay without a build-record replacement', async () => {

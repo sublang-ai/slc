@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -125,6 +132,74 @@ describe('deterministic generator/checker identities', () => {
       generatorXstatePackagePath: generatorXstatePackage,
       xstatePackagePath: xstatePackage,
     });
+
+  it('hashes one component identity for copied and pnpm-linked vitest', async () => {
+    const baseline = await identify();
+
+    // The same vitest closure, reached through pnpm-style store symlinks:
+    // the public package name and its runner and optional dependencies are
+    // all symlinked package boundaries with byte-identical content.
+    const store = join(root, 'pnpm', 'node_modules', '.pnpm');
+    const vitestContent = join(store, 'vitest@4.1.9', 'node_modules', 'vitest');
+    const runnerContent = join(
+      store,
+      '@vitest+runner@4.1.9',
+      'node_modules',
+      '@vitest',
+      'runner',
+    );
+    const optionalContent = join(
+      store,
+      'installed-optional@1.0.0',
+      'node_modules',
+      'installed-optional',
+    );
+    await mkdir(vitestContent, { recursive: true });
+    await mkdir(runnerContent, { recursive: true });
+    await mkdir(optionalContent, { recursive: true });
+    await writeFile(
+      join(vitestContent, 'package.json'),
+      await readFile(vitestPackage),
+    );
+    await writeFile(
+      join(vitestContent, 'runtime.js'),
+      await readFile(join(root, 'vitest', 'runtime.js')),
+    );
+    const runnerSource = join(root, 'node_modules', '@vitest', 'runner');
+    await writeFile(
+      join(runnerContent, 'package.json'),
+      await readFile(join(runnerSource, 'package.json')),
+    );
+    await writeFile(
+      join(runnerContent, 'index.js'),
+      await readFile(join(runnerSource, 'index.js')),
+    );
+    const optionalSource = join(root, 'node_modules', 'installed-optional');
+    await writeFile(
+      join(optionalContent, 'package.json'),
+      await readFile(join(optionalSource, 'package.json')),
+    );
+    await writeFile(
+      join(optionalContent, 'index.js'),
+      await readFile(join(optionalSource, 'index.js')),
+    );
+    const vitestSiblings = join(store, 'vitest@4.1.9', 'node_modules');
+    await mkdir(join(vitestSiblings, '@vitest'), { recursive: true });
+    await symlink(runnerContent, join(vitestSiblings, '@vitest', 'runner'));
+    await symlink(optionalContent, join(vitestSiblings, 'installed-optional'));
+    const publicVitest = join(root, 'pnpm', 'node_modules', 'vitest');
+    await symlink(vitestContent, publicVitest);
+
+    const linked = await deterministicIdentityComponents({
+      moduleRoot: modules,
+      moduleExtension: '.ts',
+      supportRoot: support,
+      vitestPackagePath: join(publicVitest, 'package.json'),
+      generatorXstatePackagePath: generatorXstatePackage,
+      xstatePackagePath: xstatePackage,
+    });
+    expect(linked).toEqual(baseline);
+  });
 
   it('returns the exact canonical component set and normalized support hashes', async () => {
     const components = await identify();
