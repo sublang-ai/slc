@@ -193,6 +193,25 @@ async function assertRealInstallPath(
   role: string,
   canonicalPath: string,
 ): Promise<void> {
+  // The artifact directory itself is a managed location: swapped for a
+  // symlink, it would redirect every direct-child install, so it must be a
+  // real directory (or still absent, for a cold promotion to create). The
+  // entry module's boundary is the user's project directory, which this
+  // transaction does not manage and therefore does not judge.
+  if (role !== 'entry') {
+    let info;
+    try {
+      info = await lstat(manifest.artifactDir);
+    } catch {
+      info = undefined; // absent: created as a real directory on install
+    }
+    if (info !== undefined && (info.isSymbolicLink() || !info.isDirectory())) {
+      throw new BuildPromotionError(
+        'conflict',
+        `artifact directory is not a real directory: ${manifest.artifactDir}`,
+      );
+    }
+  }
   if (!(await realComponents(entryBoundary(manifest, role), canonicalPath))) {
     throw new BuildPromotionError(
       'conflict',
@@ -211,8 +230,13 @@ async function assertInventoryReady(
   manifest: StageManifest,
   record: ManifestReplace,
 ): Promise<void> {
+  // Component validation precedes each hash observation: the leaf lstat
+  // does not follow the final component, but it does follow parents, so a
+  // parent symlink introduced after application could otherwise present
+  // matching bytes from outside the bundle.
   for (const entry of manifest.replace) {
     if (entry === record) continue;
+    await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
     if ((await observeFile(entry.canonicalPath)) !== entry.candidateIdentity) {
       throw new BuildPromotionError(
         'conflict',
@@ -221,6 +245,7 @@ async function assertInventoryReady(
     }
   }
   for (const entry of manifest.retain) {
+    await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
     if ((await observeFile(entry.canonicalPath)) !== entry.identity) {
       throw new BuildPromotionError(
         'conflict',
@@ -319,13 +344,14 @@ async function finishForward(
     }
   }
 
-  // Application mirrors the live path: unsafe components or drift observed
-  // at any point of use voids the stage rather than installing through it,
-  // and the whole inventory is verified before the record commits.
+  // Application mirrors the live path exactly — the same guardedReplace
+  // that re-observes each destination at its point of use — so drift or an
+  // unsafe component observed at any moment voids the stage rather than
+  // being overwritten, and the whole inventory is verified before the
+  // record commits.
   try {
     for (const entry of pending.filter((e) => e !== record && e !== snapshot)) {
-      await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
-      await applyReplace(entry);
+      await guardedReplace(manifest, entry);
     }
     await at(checkpoint, 'replaces-applied');
     for (const entry of removals) {
@@ -334,17 +360,11 @@ async function finishForward(
     }
     await at(checkpoint, 'removes-applied');
     if (snapshot !== undefined && pending.includes(snapshot)) {
-      await assertRealInstallPath(
-        manifest,
-        snapshot.role,
-        snapshot.canonicalPath,
-      );
-      await applyReplace(snapshot);
+      await guardedReplace(manifest, snapshot);
     }
     await assertInventoryReady(manifest, record);
     if (pending.includes(record)) {
-      await assertRealInstallPath(manifest, record.role, record.canonicalPath);
-      await applyReplace(record);
+      await guardedReplace(manifest, record);
     }
   } catch (error) {
     if (error instanceof BuildPromotionError) {
