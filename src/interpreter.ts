@@ -164,7 +164,11 @@ function updateInstructions(request: ExecuteRequest): string[] {
     '- every other byte of the prior target must survive exactly, including whitespace — the host compares them and rejects the run otherwise;',
     '- write the complete updated artifact to the sink, never a patch;',
     `- the scopes and dependencies you were given last time are: ${canonicalJson(update.priorTrace)};`,
-    '- reply with the reserved result suffix carrying replacement metadata whose input partition describes the current source and whose target partition describes exactly the bytes you wrote.',
+    '- finish your reply with exactly these three lines, and nothing after them, so the host can record what you changed:',
+    `    ${RESULT_BEGIN}`,
+    `    {"schema":"${INTERPRETED_RESULT_SCHEMA}","metadata":{"${UPDATE_TRACE_SCHEMA}":<trace>}}`,
+    `    ${RESULT_END}`,
+    '  where <trace> is one compact JSON object with keys schema, input, target, dependencies in that order: `schema` is the literal above; `input` and `target` are `{hash,byteLength,scopes}` with `hash` a `sha256:<64 lowercase hex>` of those exact bytes and `scopes` an ordered list of `{scope,start,end,classification}` covering every byte with no gap or overlap; `dependencies` lists `{input,targets}` once per input scope in the same order. The input partition describes the current source and the target partition describes exactly the bytes you wrote.',
   ];
 }
 

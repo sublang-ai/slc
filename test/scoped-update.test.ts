@@ -108,9 +108,18 @@ describe('exact byte diff (INCR-23; DR-021)', () => {
     ]);
   });
 
-  it('selects ordinary execution rather than an unbounded allocation', () => {
-    const huge = new Uint8Array(3000);
-    const other = new Uint8Array(3000).fill(1);
+  it('diffs a realistic prose-sized pair rather than refusing it', () => {
+    // ~6 KB against ~6 KB is well inside a workflow's size, and must not
+    // fall back to ordinary execution.
+    const prior = new Uint8Array(6000).fill(65);
+    const current = Uint8Array.from(prior);
+    current[3000] = 66;
+    expect(diffBytes(prior, current)).not.toBeNull();
+  });
+
+  it('refuses a pair beyond the diff budget rather than over-allocating', () => {
+    const huge = new Uint8Array(40_000);
+    const other = new Uint8Array(40_000).fill(1);
     expect(diffBytes(huge, other)).toBeNull();
   });
 });
@@ -322,6 +331,64 @@ describe('scoped candidate enforcement (INCR-15, INCR-16, INCR-25)', () => {
       accept({
         priorTargetBytes: bytes('abcxyz'),
         candidateBytes: bytes('abcXYZ'),
+      }),
+    ).toBe('protected-bytes-changed');
+  });
+
+  it('rejects a candidate that appended an unreferenced target scope', () => {
+    // A new scope the closure never allowed is arbitrary bytes bolted onto
+    // the artifact; walking only prior scopes would never see it.
+    expect(
+      accept({
+        replacement: replacement({
+          target: {
+            hash: `sha256:${'e'.repeat(64)}`,
+            byteLength: 9,
+            scopes: [
+              ...priorTrace.target.scopes,
+              { scope: 'extra', start: 6, end: 9, classification: 'local' },
+            ],
+          },
+        }),
+        candidateHash: `sha256:${'e'.repeat(64)}`,
+        candidateByteLength: 9,
+        priorTargetBytes: bytes('abcxyz'),
+        candidateBytes: bytes('abcxyzNEW'),
+      }),
+    ).toBe('target-partition-altered');
+  });
+
+  it('rejects a candidate that reordered two protected scopes', () => {
+    // Both 'x' and 'y' are protected here: each keeps its bytes, but they
+    // swap places, so the artifact's blocks moved outside the closure.
+    const threeScope = {
+      ...priorTrace,
+      target: {
+        hash: `sha256:${'b'.repeat(64)}`,
+        byteLength: 6,
+        scopes: [
+          { scope: 'x', start: 0, end: 3, classification: 'local' },
+          { scope: 'y', start: 3, end: 6, classification: 'local' },
+        ],
+      },
+    } as unknown as UpdateTrace;
+    expect(
+      accept({
+        priorTrace: threeScope,
+        dirtyInputScopes: [],
+        allowedTargetScopes: [],
+        replacement: replacement({
+          target: {
+            hash: `sha256:${'d'.repeat(64)}`,
+            byteLength: 6,
+            scopes: [
+              { scope: 'y', start: 0, end: 3, classification: 'local' },
+              { scope: 'x', start: 3, end: 6, classification: 'local' },
+            ],
+          },
+        }),
+        priorTargetBytes: bytes('abcxyz'),
+        candidateBytes: bytes('xyzabc'),
       }),
     ).toBe('protected-bytes-changed');
   });
