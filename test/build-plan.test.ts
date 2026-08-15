@@ -275,8 +275,10 @@ describe('canonical build planning (INCR-7, INCR-10)', () => {
       identityContext(true),
     );
 
+    // The SLC-owned normalizer declares its closure explicitly, so every
+    // scheduled step here is reuse-eligible.
     expect(planned.plan.steps.map((step) => step.inputClosure)).toEqual([
-      'open',
+      'closed',
       'closed',
       'closed',
       'closed',

@@ -519,6 +519,69 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     await assertNoPrivateResidue();
   });
 
+  it.each([
+    { name: 'full', linked: false },
+    { name: 'full-link', linked: true },
+  ])(
+    'returns an exact $name no-op without executing or writing (INCR-2, INCR-21)',
+    async ({ linked }) => {
+      await seedLineage(linked);
+      const unrecordedPath = join(artifactDir, 'notes.txt');
+      await writeFile(unrecordedPath, 'keep me\n');
+      const accepted = await acceptedBytes(linked);
+      const before = await Promise.all(
+        canonicalProducts(linked).map(async (path) => (await stat(path)).ino),
+      );
+      const refusing: PhaseExecutor = {
+        run: () => {
+          throw new Error('an exact no-op must invoke no executor');
+        },
+      };
+
+      const result = await runSlc(
+        linked
+          ? ['flow', sourcePath, '--link', runtimePath]
+          : ['flow', sourcePath],
+        deps(refusing),
+      );
+
+      expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+      expect(result.outcome).toBe('up-to-date');
+      expect(result.outputs).toEqual([]);
+      expect(result.diagnostics).toEqual([]);
+      // No write at all: accepted bytes, inodes, and the unrecorded file are
+      // untouched, and no staging directory was ever created.
+      await expectAcceptedBytes(accepted);
+      expect(
+        await Promise.all(
+          canonicalProducts(linked).map(async (path) => (await stat(path)).ino),
+        ),
+      ).toEqual(before);
+      expect(await readFile(unrecordedPath, 'utf8')).toBe('keep me\n');
+      await assertNoPrivateResidue();
+    },
+  );
+
+  it('normalizes a raw source and still reaches an exact no-op', async () => {
+    const rawSource = join(workDir, 'workflow.txt');
+    await writeFile(rawSource, 'raw bytes\n');
+    const seeded = await runSlc(['flow', rawSource], deps(executor()));
+    expect(seeded.ok, seeded.diagnostics.join('\n')).toBe(true);
+
+    const refusing: PhaseExecutor = {
+      run: () => {
+        throw new Error('an exact no-op must invoke no executor');
+      },
+    };
+    const result = await runSlc(['flow', rawSource], deps(refusing));
+
+    // The SLC-owned normalizer declares its closure, so a normalized chain
+    // is wholly reusable rather than perpetually re-running.
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(result.outcome).toBe('up-to-date');
+    await assertNoPrivateResidue();
+  });
+
   it('reuses unaffected steps and executes only the dirty one (INCR-10, INCR-11)', async () => {
     await seedLineage();
     const reusedPath = join(artifactDir, 'workflow.mid.md');

@@ -27,6 +27,13 @@ naming rules, structural conventions).
 The concrete target format token and extension are the entry phase's declared
 source format and extension; the driver supplies the exact target path.
 
+## Pin Inputs
+
+This definition cites no local file. Its output-affecting readable inputs are
+the raw compile operand and the entry-phase definition the driver supplies as
+an explicit read-only reference, both already recorded as semantic inputs, so
+the declaration below is deliberately empty.
+
 ## Fidelity
 
 Normalization restructures; it does not reinterpret:

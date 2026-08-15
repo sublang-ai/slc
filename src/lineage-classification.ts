@@ -338,14 +338,10 @@ export function formatLineageClassification(
       return [];
     case 'current':
       return [
-        classification.wholeLineageReusable
-          ? 'build lineage is current; exact no-op handling is not enabled yet'
-          : `build lineage is current, but steps with open input closure require execution: ${classification.openStepIds.join(', ')}`,
+        `build lineage is current, but steps with open input closure require execution: ${classification.openStepIds.join(', ')}`,
       ];
     case 'dirty-input':
-      return [
-        `build inputs changed; ordinary incremental execution is not enabled yet${formatIssues(classification.issues)}`,
-      ];
+      return [`build inputs changed${formatIssues(classification.issues)}`];
     case 'automatic-conflict':
       return [
         `build lineage conflicts with current bytes${formatIssues(classification.issues)}; recovery: --rebuild`,
