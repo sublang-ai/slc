@@ -432,7 +432,17 @@ async function adoptLineage(
       overlay,
       host.cwd,
       host.signal,
-      new Map(),
+      // Adoption retains its semantic products, so each binds to its own
+      // canonical path. An empty map would omit them from the emitted
+      // inventory entirely and the regenerated suite could not find them.
+      new Map(
+        identified.products
+          .filter((product) => product.kind === 'semantic')
+          .map((product) => {
+            const path = resolve(topology.artifactDir, product.path);
+            return [path, path] as const;
+          }),
+      ),
     );
     if (!deterministic.ok) {
       return {
@@ -466,10 +476,19 @@ async function adoptLineage(
     await writeFile(overlay.stagePath(BUILD_RECORD_FILE), encoded);
     const sealed = await overlay.seal();
     promoted = true;
-    await promoteLineage({
-      overlay: sealed,
-      checkpoint: host.promotionCheckpoint,
-    });
+    try {
+      await promoteLineage({
+        overlay: sealed,
+        checkpoint: host.promotionCheckpoint,
+      });
+    } catch (error) {
+      const recovered = await recoverLineagePromotion({
+        artifactDir: topology.artifactDir,
+        pipeline: topology.pipelineName,
+      });
+      await sealed.discard().catch(() => undefined);
+      if (recovered !== 'candidate-completed') throw error;
+    }
     return {
       ok: true,
       // Adoption attests the semantic products and *writes* the regenerated
@@ -666,6 +685,7 @@ async function acceptedProductBytes(
  */
 async function planStepUpdate(opts: {
   step: ScheduledStep;
+  compiled: boolean;
   recorded: StepRecord | undefined;
   reuse: ReuseBasis | undefined;
   identifiedStep: { inputClosure: StepRecord['inputClosure'] } | undefined;
@@ -673,6 +693,7 @@ async function planStepUpdate(opts: {
   priorSourceBytes: Uint8Array | undefined;
 }): Promise<ScopedUpdatePlan> {
   const { step, recorded, reuse, identifiedStep } = opts;
+  if (opts.compiled) return { mode: 'ordinary', reason: 'compiled-step' };
   if (reuse === undefined || recorded === undefined) {
     return { mode: 'ordinary', reason: 'identity-drift' };
   }
@@ -897,6 +918,10 @@ async function executeColdSteps(
     // replaces this fall-through with the update request itself.
     const updatePlan = await planStepUpdate({
       step,
+      // A compiled artifact has no transport for the update request in this
+      // schema version, so a pinned step executes ordinarily rather than
+      // being handed a request it cannot see.
+      compiled: selections.get(step.id)?.kind === 'compiled',
       recorded,
       reuse,
       identifiedStep,
@@ -1007,9 +1032,33 @@ async function executeColdSteps(
     diagnostics.push(...result.diagnostics);
     if (update !== undefined && updatePlan.mode === 'update') {
       const produced = await readRegularFileNoFollow(stagedTarget);
+      // The comparison reference must be the accepted artifact the request
+      // declared; an unreadable or concurrently edited one is a conflict,
+      // never an empty buffer to measure against.
       const priorTargetBytes = await readRegularFileNoFollow(target).catch(
-        () => new Uint8Array(),
+        () => undefined,
       );
+      if (
+        priorTargetBytes === undefined ||
+        hashBytes(priorTargetBytes) !== update.priorTarget.hash
+      ) {
+        failProgress();
+        return {
+          ok: false,
+          outputs: [],
+          origins,
+          diagnostics: [
+            ...diagnostics,
+            formatFailureReport({
+              phase: step.name,
+              target,
+              reasons: [
+                `accepted artifact changed during the run; recovery: --rebuild`,
+              ],
+            }),
+          ],
+        };
+      }
       const rejection = acceptUpdateCandidate({
         priorTrace: update.priorTrace,
         priorTargetBytes,

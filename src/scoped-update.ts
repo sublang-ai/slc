@@ -32,10 +32,13 @@ const CONTRACT_SECTIONS = [
  * Largest prior×current byte product the exact diff will attempt.
  *
  * The diff is a quadratic dynamic program, so an unbounded pair would try to
- * allocate gigabytes rather than run slowly. Beyond this budget the step
- * selects ordinary execution, which is always correct — just not incremental.
+ * allocate gigabytes rather than run slowly. The table holds subsequence
+ * lengths bounded by the shorter input, so 16-bit cells suffice for any
+ * source under 64 KB: this budget is 64M cells, a 128 MB peak, admitting
+ * roughly 8 KB against 8 KB. A larger pair selects ordinary execution, which
+ * is always correct — just not incremental.
  */
-const DIFF_CELL_BUDGET = 4_000_000;
+const DIFF_CELL_BUDGET = 64_000_000;
 
 /** One maximal run of non-matching bytes between prior and current input. */
 export interface DiffHunk {
@@ -48,6 +51,7 @@ export interface DiffHunk {
 /** Why a step cannot take the scoped-update path. */
 export type OrdinaryReason =
   | 'link-step'
+  | 'compiled-step'
   | 'no-contract'
   | 'no-trace'
   | 'open-closure'
@@ -144,11 +148,17 @@ export function diffBytes(
   prior: Uint8Array,
   current: Uint8Array,
 ): DiffHunk[] | null {
-  if (prior.length * current.length > DIFF_CELL_BUDGET) return null;
+  if (
+    prior.length * current.length > DIFF_CELL_BUDGET ||
+    prior.length >= 65_536 ||
+    current.length >= 65_536
+  ) {
+    return null;
+  }
 
   // Longest common subsequence over exact bytes; no text normalization.
   const width = current.length + 1;
-  const table = new Int32Array((prior.length + 1) * width);
+  const table = new Uint16Array((prior.length + 1) * width);
   for (let i = prior.length - 1; i >= 0; i--) {
     for (let j = current.length - 1; j >= 0; j--) {
       table[i * width + j] =
@@ -318,7 +328,8 @@ export type CandidateRejection =
   | 'scope-outside-closure'
   | 'unchanged-closure-altered'
   | 'input-partition-altered'
-  | 'protected-bytes-changed';
+  | 'protected-bytes-changed'
+  | 'target-partition-altered';
 
 /**
  * Checks a returned candidate against the invariants the request fixed.
@@ -376,9 +387,11 @@ export function acceptUpdateCandidate(opts: {
   const allowed = new Set(opts.allowedTargetScopes);
   const dirty = new Set(opts.dirtyInputScopes);
 
-  // Every target scope outside the allowed closure must be byte-identical.
-  // This is the invariant that makes a scoped update scoped: without it a
-  // full regeneration passes every other check.
+  // Every target scope outside the allowed closure must be byte-identical,
+  // and the protected scopes must keep their relative order. This is the
+  // invariant that makes a scoped update scoped: without it a full
+  // regeneration passes every other check.
+  let previousStart = -1;
   for (const scope of opts.priorTrace.target.scopes) {
     if (allowed.has(scope.scope)) continue;
     const next = replacement.target.scopes.find(
@@ -386,6 +399,7 @@ export function acceptUpdateCandidate(opts: {
     );
     if (
       next === undefined ||
+      next.start <= previousStart ||
       next.end - next.start !== scope.end - scope.start ||
       !sameBytes(
         opts.priorTargetBytes.subarray(scope.start, scope.end),
@@ -394,6 +408,23 @@ export function acceptUpdateCandidate(opts: {
     ) {
       return 'protected-bytes-changed';
     }
+    previousStart = next.start;
+  }
+
+  // The candidate may not introduce a target scope the prior partition did
+  // not have and the closure does not allow: an unreferenced new scope is
+  // arbitrary bytes appended to the artifact, which the loop above — walking
+  // only prior scopes — would never see.
+  const priorTargetNames = new Set(
+    opts.priorTrace.target.scopes.map((scope) => scope.scope),
+  );
+  if (
+    replacement.target.scopes.some(
+      (scope) =>
+        !priorTargetNames.has(scope.scope) && !allowed.has(scope.scope),
+    )
+  ) {
+    return 'target-partition-altered';
   }
   for (const dependency of replacement.dependencies) {
     if (dirty.has(dependency.input)) {

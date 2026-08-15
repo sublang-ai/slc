@@ -76,6 +76,11 @@ the changed input bytes from the supplied hunks. Leave every other byte of the
 prior target exactly as it stands, including whitespace. Emit the complete
 normalized document, never a patch.
 
+Every run — ordinary or scoped — finishes by reporting the trace the host
+asks for in its final reply, so a later edit can be scoped against this one.
+Without it the next run re-normalizes the whole document, which is correct but
+wasteful.
+
 ### Semantic verification
 
 Confirm the rewritten scopes carry the same meaning the changed source states,
