@@ -64,8 +64,16 @@ export interface CreateWorkspaceOptions {
   semanticInputs?: readonly WorkspaceSemanticInput[];
   /** The sole physical output sink; defaults to the canonical logical target. */
   physicalWrite?: string;
-  /** Canonical prior operand and target paths bound only by an update compile. */
-  priorReads?: { input: string; target: string };
+  /**
+   * Physical prior operand and target paths bound only by an update compile,
+   * with the canonical logical names they stand for.
+   */
+  priorReads?: {
+    input: string;
+    inputLogical: string;
+    target: string;
+    targetLogical: string;
+  };
 }
 
 export class WorkspaceError extends Error {
@@ -109,26 +117,29 @@ export async function createWorkspaceRecord(
     }
     add('link-target', request.linkTarget);
   }
-  // An update compile appends exactly one prior-input and one prior-target
-  // after the ordinary roles (DR-021 §Physical workspace binding).
-  if (request.kind === 'compile' && options.priorReads !== undefined) {
-    specifications.push({
-      role: 'prior-input',
-      logicalPath: logical(options.priorReads.input),
-      physicalPath: resolve(root, options.priorReads.input),
-    });
-    specifications.push({
-      role: 'prior-target',
-      logicalPath: logical(options.priorReads.target),
-      physicalPath: resolve(root, options.priorReads.target),
-    });
-  }
   for (const [index, input] of (options.semanticInputs ?? []).entries()) {
     const role = `semantic-input:${index}`;
     specifications.push({
       role,
       logicalPath: logical(input.logicalPath),
       physicalPath: resolve(root, input.physicalPath ?? input.logicalPath),
+    });
+  }
+
+  // An update compile appends exactly one prior-input and one prior-target
+  // after every ordinary role (DR-021 §Physical workspace binding). The
+  // logical names stay canonical while the physical paths carry the prior
+  // accepted bytes the request declares.
+  if (request.kind === 'compile' && options.priorReads !== undefined) {
+    specifications.push({
+      role: 'prior-input',
+      logicalPath: logical(options.priorReads.inputLogical),
+      physicalPath: resolve(root, options.priorReads.input),
+    });
+    specifications.push({
+      role: 'prior-target',
+      logicalPath: logical(options.priorReads.targetLogical),
+      physicalPath: resolve(root, options.priorReads.target),
     });
   }
 
@@ -157,6 +168,7 @@ export async function createWorkspaceRecord(
   await validateWorkspaceRecord(record, request, {
     runRoot: root,
     semanticInputs: options.semanticInputs,
+    priorReads: options.priorReads,
   });
   return freezeWorkspaceRecord(record);
 }
@@ -165,7 +177,10 @@ export async function createWorkspaceRecord(
 export async function validateWorkspaceRecord(
   record: WorkspaceRecord,
   request: ExecuteRequest,
-  options: Pick<CreateWorkspaceOptions, 'runRoot' | 'semanticInputs'> = {},
+  options: Pick<
+    CreateWorkspaceOptions,
+    'runRoot' | 'semanticInputs' | 'priorReads'
+  > = {},
 ): Promise<void> {
   requireExactKeys(record, ['schema', 'reads', 'write'], 'workspace');
   if (record.schema !== WORKSPACE_SCHEMA || !Array.isArray(record.reads)) {
@@ -178,6 +193,19 @@ export async function validateWorkspaceRecord(
       role: `semantic-input:${index}`,
       logicalPath: resolve(root, input.logicalPath),
     })),
+    // The update form appends exactly these two, last (DR-021).
+    ...(request.kind === 'compile' && options.priorReads !== undefined
+      ? [
+          {
+            role: 'prior-input',
+            logicalPath: resolve(root, options.priorReads.inputLogical),
+          },
+          {
+            role: 'prior-target',
+            logicalPath: resolve(root, options.priorReads.targetLogical),
+          },
+        ]
+      : []),
   ];
   if (record.reads.length !== expectedReads.length) {
     throw invalid('workspace does not carry the exact required read roles');

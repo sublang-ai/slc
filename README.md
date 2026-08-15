@@ -137,9 +137,19 @@ Reuse is always conservative: anything `slc` cannot prove is still exact
 falls back to ordinary execution. A wrong guess would cost you a correct
 artifact, so it never guesses.
 
+How much you get depends on what your pipeline declares. Reuse needs a
+phase to declare its readable inputs (a `## Pin Inputs` section), and
+scoped update additionally needs an `## Update` contract. The published
+`@sublang/playbook` definitions declare neither yet, so today a `playbook`
+re-run still executes its phases; what you get now is source association,
+conflict detection, `--rebuild`, and `--adopt`. The built-in normalizer
+declares both, and any pipeline you write can too.
+
 If the bundle belongs to another same-named source, or a managed product
 was edited outside an accepted compile, `slc` refuses to overwrite it and
-names your two choices.
+names the recovery choices valid for that state — `--adopt` only when the
+source is unchanged and the pipeline shape still matches, otherwise
+`--rebuild` alone.
 
 **`--rebuild`** replaces the compiler-managed products deliberately:
 

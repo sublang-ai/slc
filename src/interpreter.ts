@@ -133,11 +133,39 @@ export function buildPhasePrompt(opts: {
     '- run the deterministic tools or commands the definition calls for and read the content it cites or references as needed to follow it;',
     '- verify the complete produced artifact against the definition before finishing.',
     '',
+    ...updateInstructions(request),
     'When done, reply with a concise summary of what you produced, any ambiguity you resolved, and any diagnostics.',
     'If the inputs are malformed under the definition, or the definition is incompatible with them, do not guess: leave the artifact unwritten and reply with a line beginning "BLOCKED:" followed by the concrete reason(s).',
   ].join('\n');
 
   return appendWorkspaceContract(prompt, workspace);
+}
+
+/**
+ * Renders the scoped-update contract into the prompt when the request
+ * carries one: what changed, which target scopes may move, and the exact
+ * replacement metadata the host will check the candidate against
+ * (DR-021 §Update request).
+ */
+function updateInstructions(request: ExecuteRequest): string[] {
+  if (request.kind !== 'compile' || request.update === undefined) return [];
+  const update = request.update;
+  return [
+    '',
+    'Scoped update — this is not a fresh compile:',
+    '- the prior source is bound as the read named "prior-input" and the artifact you produced from it as "prior-target";',
+    `- exactly these half-open byte ranges of the source changed: ${update.changes
+      .map(
+        (hunk) =>
+          `prior[${hunk.priorStart},${hunk.priorEnd}) -> current[${hunk.currentStart},${hunk.currentEnd})`,
+      )
+      .join('; ')};`,
+    `- you may rewrite only these target scopes: ${update.allowedTargetScopes.join(', ')};`,
+    '- every other byte of the prior target must survive exactly, including whitespace — the host compares them and rejects the run otherwise;',
+    '- write the complete updated artifact to the sink, never a patch;',
+    `- the scopes and dependencies you were given last time are: ${canonicalJson(update.priorTrace)};`,
+    '- reply with the reserved result suffix carrying replacement metadata whose input partition describes the current source and whose target partition describes exactly the bytes you wrote.',
+  ];
 }
 
 function logicalRead(workspace: WorkspaceRecord, role: string): string {

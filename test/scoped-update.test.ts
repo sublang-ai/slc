@@ -306,11 +306,40 @@ describe('scoped candidate enforcement (INCR-15, INCR-16, INCR-25)', () => {
       currentInputByteLength: 9,
       candidateHash: `sha256:${'d'.repeat(64)}`,
       candidateByteLength: 6,
+      priorTargetBytes: bytes('abcxyz'),
+      candidateBytes: bytes('abcxyz'),
       ...overrides,
     } as Parameters<typeof acceptUpdateCandidate>[0]);
 
   it('accepts a candidate satisfying every invariant', () => {
     expect(accept()).toBeNull();
+  });
+
+  it('rejects a candidate that rewrote a protected target scope', () => {
+    // Scope 'y' is outside the allowed closure, so its bytes must survive
+    // exactly; a full regeneration passes every other check.
+    expect(
+      accept({
+        priorTargetBytes: bytes('abcxyz'),
+        candidateBytes: bytes('abcXYZ'),
+      }),
+    ).toBe('protected-bytes-changed');
+  });
+
+  it('rejects a candidate that altered the input partition', () => {
+    expect(
+      accept({
+        replacement: replacement({
+          input: {
+            hash: `sha256:${'c'.repeat(64)}`,
+            byteLength: 9,
+            scopes: [
+              { scope: 'merged', start: 0, end: 9, classification: 'local' },
+            ],
+          },
+        }),
+      }),
+    ).toBe('input-partition-altered');
   });
 
   it.each([

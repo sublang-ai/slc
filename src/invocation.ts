@@ -164,6 +164,15 @@ export function parseInvocation(argv: readonly string[]): Invocation {
     );
   }
 
+  // The reserved meta-pipeline is outside lineage, so --rebuild there is
+  // just an ordinary run (INCR-19). --adopt has no such reading: silently
+  // running a full compile is the opposite of attesting what is on disk.
+  if (adopt && pipeline === 'slc') {
+    throw new CliError(
+      'unexpected-flag',
+      '--adopt is not valid for the reserved slc meta-pipeline',
+    );
+  }
   if (adopt && output !== null) {
     throw new CliError(
       'unexpected-flag',
@@ -228,6 +237,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       noOptimize,
       normalize,
       ...(rebuild ? { rebuild: true as const } : {}),
+      ...(adopt ? { adopt: true as const } : {}),
     };
   }
   if (options.length > 0) {

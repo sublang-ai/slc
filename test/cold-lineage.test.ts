@@ -819,6 +819,112 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     expect(next.outcome).toBe('up-to-date');
   });
 
+  it('drives a real scoped update end to end (INCR-12, INCR-15, INCR-24)', async () => {
+    // A contract-bearing first phase, so the step is genuinely update-eligible.
+    const contract = [
+      '',
+      '## Update',
+      '',
+      '```json',
+      '{"schema":"sublang.slc.update-contract.v1","traceSchema":"sublang.slc.update.v1"}',
+      '```',
+      '',
+      ...[
+        'Stable input units',
+        'Target scopes',
+        'Dependency closure',
+        'Structural and global scopes',
+        'Update instructions',
+        'Semantic verification',
+      ].flatMap((title) => [`### ${title}`, '', 'content', '']),
+    ].join('\n');
+    await writeFile(
+      join(pipelineDir, 'text2mid.md'),
+      formatDoc('text', '.md', 'mid', '.md') + contract,
+    );
+    await writeFile(sourcePath, 'AAAA|BBBB\n');
+
+    // Seed with a trace whose units partition the source at the pipe.
+    const partitioned = (input: string, output: string) => ({
+      schema: 'sublang.slc.update.v1',
+      input: {
+        hash: hashBytes(new TextEncoder().encode(input)),
+        byteLength: new TextEncoder().encode(input).byteLength,
+        scopes: [
+          { scope: 'left', start: 0, end: 4, classification: 'local' },
+          {
+            scope: 'right',
+            start: 4,
+            end: new TextEncoder().encode(input).byteLength,
+            classification: 'local',
+          },
+        ],
+      },
+      target: {
+        hash: hashBytes(new TextEncoder().encode(output)),
+        byteLength: new TextEncoder().encode(output).byteLength,
+        // The fixture emits `<phase>:<input>`, so the left input unit lands
+        // after that prefix; the partition must follow the real bytes.
+        scopes: [
+          {
+            scope: 'head',
+            start: 0,
+            end: output.indexOf('|'),
+            classification: 'local',
+          },
+          {
+            scope: 'tail',
+            start: output.indexOf('|'),
+            end: new TextEncoder().encode(output).byteLength,
+            classification: 'local',
+          },
+        ],
+      },
+      dependencies: [
+        { input: 'left', targets: ['head'] },
+        { input: 'right', targets: ['tail'] },
+      ],
+    });
+    const seeded = await runSlc(
+      ['flow', sourcePath],
+      deps(tracingExecutor(partitioned)),
+    );
+    expect(seeded.ok, seeded.diagnostics.join('\n')).toBe(true);
+
+    // Edit only inside the first unit.
+    await writeFile(sourcePath, 'AAZA|BBBB\n');
+    let sawUpdate = false;
+    const updating: FixtureExecutor = (() => {
+      const base = tracingExecutor(partitioned);
+      return {
+        calls: base.calls,
+        async run(request, workspace, signal) {
+          if (request.kind === 'compile' && request.update !== undefined) {
+            sawUpdate = true;
+            // The request must carry the hunk and the allowed closure.
+            expect(request.update.allowedTargetScopes).toEqual(['head']);
+            expect(request.update.changes).toHaveLength(1);
+            // The prior operand is bound and readable.
+            const prior = workspace.reads.find((r) => r.role === 'prior-input');
+            expect(prior).toBeDefined();
+            expect(await readFile(prior!.physicalPath, 'utf8')).toBe(
+              'AAAA|BBBB\n',
+            );
+          }
+          return base.run(request, workspace, signal);
+        },
+      };
+    })();
+
+    const result = await runSlc(['flow', sourcePath], deps(updating));
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(sawUpdate).toBe(true);
+    const record = await readRecord();
+    expect(record.plan.steps[0].origin).toBe('updated');
+    await assertNoPrivateResidue();
+  });
+
   it('reuses unaffected steps and executes only the dirty one (INCR-10, INCR-11)', async () => {
     await seedLineage();
     const reusedPath = join(artifactDir, 'workflow.mid.md');
