@@ -738,6 +738,33 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     expect(link?.trace).toBeNull();
   });
 
+  it.each([
+    {
+      name: 'no accepted lineage',
+      setup: async () => {},
+      reason: /no accepted lineage/,
+    },
+    {
+      name: 'malformed record',
+      setup: async () => {
+        await seedLineage();
+        await writeFile(join(artifactDir, BUILD_RECORD_FILE), '{not json\n');
+      },
+      reason: /adoption is not cold-build repair/,
+    },
+  ])('refuses --adopt for $name', async ({ setup, reason }) => {
+    await setup();
+
+    const result = await runSlc(
+      ['flow', sourcePath, '--adopt'],
+      deps(executor()),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toMatch(reason);
+    await assertNoPrivateResidue();
+  });
+
   it('adopts a refined semantic product without an executor (INCR-34, INCR-35)', async () => {
     await seedLineage();
     const refined = join(artifactDir, 'workflow.mid.md');
@@ -922,6 +949,101 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     expect(sawUpdate).toBe(true);
     const record = await readRecord();
     expect(record.plan.steps[0].origin).toBe('updated');
+    await assertNoPrivateResidue();
+  });
+
+  it('discards a scoped run whose candidate rewrote protected bytes (INCR-16, INCR-25)', async () => {
+    const contract = [
+      '',
+      '## Update',
+      '',
+      '```json',
+      '{"schema":"sublang.slc.update-contract.v1","traceSchema":"sublang.slc.update.v1"}',
+      '```',
+      '',
+      ...[
+        'Stable input units',
+        'Target scopes',
+        'Dependency closure',
+        'Structural and global scopes',
+        'Update instructions',
+        'Semantic verification',
+      ].flatMap((title) => [`### ${title}`, '', 'content', '']),
+    ].join('\n');
+    await writeFile(
+      join(pipelineDir, 'text2mid.md'),
+      formatDoc('text', '.md', 'mid', '.md') + contract,
+    );
+    await writeFile(sourcePath, 'AAAA|BBBB\n');
+    const partitioned = (input: string, output: string) => ({
+      schema: 'sublang.slc.update.v1',
+      input: {
+        hash: hashBytes(new TextEncoder().encode(input)),
+        byteLength: new TextEncoder().encode(input).byteLength,
+        scopes: [
+          { scope: 'left', start: 0, end: 4, classification: 'local' },
+          {
+            scope: 'right',
+            start: 4,
+            end: new TextEncoder().encode(input).byteLength,
+            classification: 'local',
+          },
+        ],
+      },
+      target: {
+        hash: hashBytes(new TextEncoder().encode(output)),
+        byteLength: new TextEncoder().encode(output).byteLength,
+        scopes: [
+          {
+            scope: 'head',
+            start: 0,
+            end: output.indexOf('|'),
+            classification: 'local',
+          },
+          {
+            scope: 'tail',
+            start: output.indexOf('|'),
+            end: new TextEncoder().encode(output).byteLength,
+            classification: 'local',
+          },
+        ],
+      },
+      dependencies: [
+        { input: 'left', targets: ['head'] },
+        { input: 'right', targets: ['tail'] },
+      ],
+    });
+    expect(
+      (await runSlc(['flow', sourcePath], deps(tracingExecutor(partitioned))))
+        .ok,
+    ).toBe(true);
+    const accepted = await acceptedBytes();
+
+    // The edit is confined to the left unit, but the executor rewrites the
+    // protected tail as well.
+    await writeFile(sourcePath, 'AAZA|BBBB\n');
+    const overreaching = tracingExecutor((input, output) =>
+      partitioned(input, output),
+    );
+    const rewriting: FixtureExecutor = {
+      calls: overreaching.calls,
+      async run(request, workspace, signal) {
+        const result = await overreaching.run(request, workspace, signal);
+        if (request.kind === 'compile' && request.update !== undefined) {
+          await writeFile(workspace.write.physicalPath, 'text2mid:AAZA|ZZZZ\n');
+        }
+        return result;
+      },
+    };
+
+    const result = await runSlc(['flow', sourcePath], deps(rewriting));
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toMatch(
+      /scoped update candidate rejected/,
+    );
+    // Nothing accepted moved, and no stage was left behind.
+    await expectAcceptedBytes(accepted);
     await assertNoPrivateResidue();
   });
 
