@@ -28,6 +28,7 @@ import {
   BUILD_HASH_ALGORITHM,
   BUILD_RECORD_FILE,
   BUILD_RECORD_SCHEMA,
+  UPDATE_TRACE_SCHEMA,
   SOURCE_SNAPSHOT_FILE,
   encodeBuildRecord,
   encodeReadLocator,
@@ -75,6 +76,7 @@ import { messageOf } from './errors.js';
 import {
   formatFailureReport,
   runPhase,
+  type ExecutorMetadata,
   type PhaseExecutor,
 } from './execution.js';
 import { compareUtf8, hashBytes, hashFile, type Hash } from './hash.js';
@@ -223,6 +225,7 @@ export async function runColdLineage(
       overlay,
       host,
       sourceHash,
+      sourceBytes.byteLength,
       reuse,
     );
     if (!execution.ok) {
@@ -410,6 +413,34 @@ async function attestedIdentity(
   return hashBytes(await readRegularFileNoFollow(canonicalPath));
 }
 
+/**
+ * Accepts an ordinary step's reported trace only when it describes that
+ * step's own transformation: the recorded input must be the operand actually
+ * consumed and the recorded target the bytes actually produced.
+ *
+ * A link step never carries one. Anything unbound is dropped to `null` rather
+ * than recorded, because the record codec rejects a mis-bound trace outright
+ * and an otherwise-successful artifact must not fail over it — a missing
+ * trace only disables a later scoped update (INCR-13, INCR-20).
+ */
+function acceptedOrdinaryTrace(opts: {
+  step: ScheduledStep;
+  metadata: ExecutorMetadata | undefined;
+  operand: StepInputOperand;
+  operandByteLength: number;
+  targetHash: Hash;
+  targetByteLength: number;
+}): UpdateTrace | null {
+  const trace = opts.metadata?.[UPDATE_TRACE_SCHEMA];
+  if (opts.step.kind === 'link' || trace === undefined) return null;
+  const bound =
+    trace.input.hash === opts.operand.hash &&
+    trace.input.byteLength === opts.operandByteLength &&
+    trace.target.hash === opts.targetHash &&
+    trace.target.byteLength === opts.targetByteLength;
+  return bound ? trace : null;
+}
+
 /** Every scheduled step must have declared how it produced its output. */
 function requiredOrigin(
   origins: StepOrigins,
@@ -516,6 +547,7 @@ async function executeColdSteps(
   overlay: CandidateOverlay,
   host: ColdLineageHost,
   sourceHash: Hash,
+  sourceByteLength: number,
   reuse: ReuseBasis | undefined,
 ): Promise<ColdLineageResult & { origins: StepOrigins }> {
   const outputs: string[] = [];
@@ -525,6 +557,7 @@ async function executeColdSteps(
   // recomputed input key equals the recorded one exactly when the recorded
   // predecessor bytes are the bytes in hand (INCR-10).
   let operand: StepInputOperand = { kind: 'source', hash: sourceHash };
+  let operandByteLength = sourceByteLength;
   // Staged bindings cover executed predecessors only (INCR-8), so a source
   // that shares a step's canonical target path — a --normalize re-run over
   // the already-normalized intermediate — keeps its original binding for
@@ -581,6 +614,7 @@ async function executeColdSteps(
       });
       physical.set(resolve(target), stagedTarget);
       operand = { kind: 'product', product: planned.id, hash: identity };
+      operandByteLength = bytes.byteLength;
       continue;
     }
 
@@ -647,12 +681,21 @@ async function executeColdSteps(
     });
     outputs.push(target);
     physical.set(resolve(target), stagedTarget);
-    origins.set(step.id, { origin: 'ordinary', trace: null });
-    operand = {
-      kind: 'product',
-      product: planned.id,
-      hash: await hashFile(stagedTarget),
-    };
+    const produced = await readRegularFileNoFollow(stagedTarget);
+    const producedHash = hashBytes(produced);
+    origins.set(step.id, {
+      origin: 'ordinary',
+      trace: acceptedOrdinaryTrace({
+        step,
+        metadata: result.metadata,
+        operand,
+        operandByteLength,
+        targetHash: producedHash,
+        targetByteLength: produced.byteLength,
+      }),
+    });
+    operand = { kind: 'product', product: planned.id, hash: producedHash };
+    operandByteLength = produced.byteLength;
   }
   return { ok: true, outputs, origins, diagnostics };
 }

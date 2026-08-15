@@ -570,4 +570,34 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     // Streamed lines never repeat as drained diagnostics.
     expect(ports.drainDiagnostics()).toEqual([]);
   });
+
+  it.each([{ streamed: false }, { streamed: true }])(
+    'diverts the reserved update topic away from diagnostics (streamed=$streamed, PHEXEC-39)',
+    async ({ streamed }) => {
+      const agent = fakeAgent({ status: 'success', text: 'ok' });
+      const lines: string[] = [];
+      const ports = createPorts({
+        player: agent,
+        judge: agent,
+        ...(streamed ? { onStatus: (line: string) => lines.push(line) } : {}),
+      });
+
+      await ports.emitTelemetry({ topic: 'cost', payload: { tokens: 1 } });
+      await ports.emitTelemetry({
+        topic: 'sublang.slc.update.v1',
+        payload: { schema: 'sublang.slc.update.v1', marker: 'reserved' },
+      });
+
+      const reported = streamed ? lines : ports.drainDiagnostics();
+      expect(reported).toEqual(['[cost] {"tokens":1}']);
+      // Neither the topic nor its payload reaches any reported line.
+      expect(reported.join('\n')).not.toContain('sublang.slc.update');
+      expect(reported.join('\n')).not.toContain('reserved');
+      // The payload is available only through the protected sink.
+      expect(ports.drainUpdateMetadata()).toEqual([
+        { schema: 'sublang.slc.update.v1', marker: 'reserved' },
+      ]);
+      expect(ports.drainUpdateMetadata()).toEqual([]);
+    },
+  );
 });

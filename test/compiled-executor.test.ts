@@ -881,6 +881,99 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     expect(playerCalls).toBe(1);
   });
 
+  const validTrace = {
+    schema: 'sublang.slc.update.v1',
+    input: {
+      hash: `sha256:${'a'.repeat(64)}`,
+      byteLength: 4,
+      scopes: [{ scope: 'in', start: 0, end: 4, classification: 'local' }],
+    },
+    target: {
+      hash: `sha256:${'b'.repeat(64)}`,
+      byteLength: 5,
+      scopes: [{ scope: 'out', start: 0, end: 5, classification: 'local' }],
+    },
+    dependencies: [{ input: 'in', targets: ['out'] }],
+  };
+
+  const runWithReserved = async (
+    payloads: readonly unknown[],
+  ): Promise<{ status: string; diagnostics: string[]; metadata?: unknown }> => {
+    const target = join(root, 'out.ts');
+    let ports: { emitTelemetry(event: unknown): Promise<void> } | undefined;
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'composed-v2',
+      player: idleAgent,
+      judge: idleAgent,
+      loadFactory: async () => () => ({
+        async init(value: unknown) {
+          ports = (value as typeof value & { ports: typeof ports }).ports;
+        },
+        async handleBossInput() {
+          await writeFile(target, 'fresh');
+          for (const payload of payloads) {
+            await ports?.emitTelemetry({
+              topic: 'sublang.slc.update.v1',
+              payload,
+            });
+          }
+          return { outcome: 'quiescent', state: structuredState };
+        },
+        async resumePlaybookCall() {
+          return { outcome: 'no-action', state: structuredState };
+        },
+        async dispose() {},
+      }),
+    });
+    return runExecutor(
+      executor,
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: join(root, 'src.md'),
+        target,
+      },
+      new AbortController().signal,
+    );
+  };
+
+  it('captures one reserved update event as metadata (PHEXEC-39)', async () => {
+    const result = await runWithReserved([validTrace]);
+
+    expect(result.status).toBe('ok');
+    expect(result.metadata).toEqual({ 'sublang.slc.update.v1': validTrace });
+    // The reserved topic never surfaces as a diagnostic.
+    expect(result.diagnostics.join('\n')).not.toContain('sublang.slc.update');
+  });
+
+  it('records no trace when no reserved event is emitted', async () => {
+    const result = await runWithReserved([]);
+
+    expect(result.status).toBe('ok');
+    expect(result.metadata).toBeUndefined();
+  });
+
+  it.each([
+    { name: 'malformed', payloads: [{ schema: 'wrong' }] },
+    { name: 'duplicated', payloads: [validTrace, validTrace] },
+  ])(
+    'preserves ordinary success with one host diagnostic for a $name reserved event (INCR-20)',
+    async ({ payloads }) => {
+      const result = await runWithReserved(payloads);
+
+      expect(result.status).toBe('ok');
+      expect(result.metadata).toBeUndefined();
+      const reserved = result.diagnostics.filter((line) =>
+        line.includes('reserved update'),
+      );
+      expect(reserved).toHaveLength(1);
+      // The diagnostic names no reserved topic or payload.
+      expect(result.diagnostics.join('\n')).not.toContain('sublang.slc.update');
+    },
+  );
+
   it('maps structured outcomes directly instead of failed telemetry', async () => {
     const target = join(root, 'out.ts');
     let ports: { emitTelemetry(event: unknown): Promise<void> } | undefined;

@@ -582,6 +582,104 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     await assertNoPrivateResidue();
   });
 
+  const tracingExecutor = (
+    trace: (input: string, output: string) => unknown,
+  ): FixtureExecutor => {
+    const base = executor();
+    return {
+      calls: base.calls,
+      async run(request, workspace, signal) {
+        const result = await base.run(request, workspace, signal);
+        if (result.status !== 'ok') return result;
+        const input = await readFile(
+          workspace.reads.find((read) =>
+            request.kind === 'compile'
+              ? read.role === 'source'
+              : read.role === 'object:0',
+          )?.physicalPath ?? '',
+          'utf8',
+        );
+        const output = await readFile(workspace.write.physicalPath, 'utf8');
+        return {
+          ...result,
+          metadata: {
+            'sublang.slc.update.v1': trace(input, output),
+          } as never,
+        };
+      },
+    };
+  };
+
+  const boundTrace = (input: string, output: string) => ({
+    schema: 'sublang.slc.update.v1',
+    input: {
+      hash: hashBytes(new TextEncoder().encode(input)),
+      byteLength: new TextEncoder().encode(input).byteLength,
+      scopes: [
+        {
+          scope: 'whole',
+          start: 0,
+          end: new TextEncoder().encode(input).byteLength,
+          classification: 'local',
+        },
+      ],
+    },
+    target: {
+      hash: hashBytes(new TextEncoder().encode(output)),
+      byteLength: new TextEncoder().encode(output).byteLength,
+      scopes: [
+        {
+          scope: 'body',
+          start: 0,
+          end: new TextEncoder().encode(output).byteLength,
+          classification: 'local',
+        },
+      ],
+    },
+    dependencies: [{ input: 'whole', targets: ['body'] }],
+  });
+
+  it('records a bound ordinary trace and nulls an unbound one (INCR-13, INCR-20)', async () => {
+    const result = await runSlc(
+      ['flow', sourcePath],
+      deps(tracingExecutor(boundTrace)),
+    );
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    const record = await readRecord();
+    // Every ordinary step's trace describes that step's own transformation.
+    expect(record.plan.steps.map((step) => step.trace !== null)).toEqual([
+      true,
+      true,
+    ]);
+    expect(record.plan.steps[0].trace?.input.hash).toBe(record.source.hash);
+  });
+
+  it('nulls a trace that does not bind to its own step', async () => {
+    const misbound = tracingExecutor(() =>
+      boundTrace('unrelated input', 'unrelated output'),
+    );
+
+    const result = await runSlc(['flow', sourcePath], deps(misbound));
+
+    // The artifact is still accepted; only the unusable trace is dropped.
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    const record = await readRecord();
+    expect(record.plan.steps.every((step) => step.trace === null)).toBe(true);
+  });
+
+  it('never records a trace for a link step', async () => {
+    const result = await runSlc(
+      ['flow', sourcePath, '--link', runtimePath],
+      deps(tracingExecutor(boundTrace)),
+    );
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    const record = await readRecord();
+    const link = record.plan.steps.find((step) => step.kind === 'link');
+    expect(link?.trace).toBeNull();
+  });
+
   it('reuses unaffected steps and executes only the dirty one (INCR-10, INCR-11)', async () => {
     await seedLineage();
     const reusedPath = join(artifactDir, 'workflow.mid.md');

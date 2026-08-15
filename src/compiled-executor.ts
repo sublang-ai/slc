@@ -36,8 +36,10 @@ import { pathToFileURL } from 'node:url';
 import { messageOf } from './errors.js';
 import type { LegacyPlaybookPorts } from './playbook-contract.js';
 
+import { UPDATE_TRACE_SCHEMA, parseUpdateTrace } from './build-record.js';
 import type {
   ExecuteRequest,
+  ExecutorMetadata,
   ExecutorResult,
   LinkOptionPair,
   PhaseExecutor,
@@ -176,12 +178,53 @@ export function createCompiledExecutor(opts: {
         runtimeContract !== 'composed-v2',
       );
       const mapped = mapPhaseResult(result);
+      const update = acceptReservedMetadata(adapter.drainUpdateMetadata());
       return {
         status: mapped.status,
-        diagnostics: [...mapped.diagnostics, ...adapter.drainDiagnostics()],
+        diagnostics: [
+          ...mapped.diagnostics,
+          ...adapter.drainDiagnostics(),
+          ...update.diagnostics,
+        ],
+        ...(update.metadata === undefined ? {} : { metadata: update.metadata }),
       };
     },
   };
+}
+
+/**
+ * Resolves the diverted reserved payloads into at most one trace.
+ *
+ * More than one occurrence, or one that does not satisfy the frozen schema,
+ * supplies no metadata and one host diagnostic; the ordinary artifact and its
+ * status are untouched, because a missing trace disables a later scoped
+ * update rather than invalidating the run (INCR-20, PHEXEC-39). The reserved
+ * topic name never appears in that diagnostic.
+ */
+function acceptReservedMetadata(reserved: readonly unknown[]): {
+  metadata?: ExecutorMetadata;
+  diagnostics: string[];
+} {
+  if (reserved.length === 0) return { diagnostics: [] };
+  if (reserved.length > 1) {
+    return {
+      diagnostics: [
+        'slc: compiled runtime emitted more than one reserved update event; no update trace was recorded',
+      ],
+    };
+  }
+  try {
+    return {
+      metadata: { [UPDATE_TRACE_SCHEMA]: parseUpdateTrace(reserved[0]) },
+      diagnostics: [],
+    };
+  } catch {
+    return {
+      diagnostics: [
+        'slc: compiled runtime emitted a malformed reserved update payload; no update trace was recorded',
+      ],
+    };
+  }
 }
 
 /** Returns the destination carried by Playbook's standard FSM telemetry. */
