@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rename,
   rm,
   stat,
   symlink,
@@ -539,6 +540,93 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
     // The record never committed over the drifted inventory.
     expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
     expect(await readFile(join(artDir, 'kept.md'), 'utf8')).toBe('edited');
+  });
+
+  it('voids recovery instead of overwriting an edit made during recovery', async () => {
+    const overlay = await seal(standardSet());
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'manifest-published') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+
+    // The edit lands mid-recovery, after the body replaces applied but
+    // before the snapshot installs.
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+      checkpoint: async ({ name }) => {
+        if (name === 'replaces-applied') {
+          await writeFile(join(artDir, '.slc-source'), 'recovery edit');
+        }
+      },
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    expect(await readFile(join(artDir, '.slc-source'), 'utf8')).toBe(
+      'recovery edit',
+    );
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
+  });
+
+  it('refuses recovery through an artifact directory swapped for a symlink', async () => {
+    const overlay = await seal(standardSet());
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'manifest-published') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+    // The bundle root itself becomes a symlink to a byte-identical mirror.
+    const mirror = join(root, 'mirror');
+    await rename(artDir, mirror);
+    await symlink(mirror, artDir);
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    // Nothing was committed through the redirected root.
+    expect(await exists(join(mirror, '.slc-build.json'))).toBe(false);
+  });
+
+  it('refuses the record when an applied path is re-parented behind a symlink', async () => {
+    const outside = join(root, 'outside');
+    await mkdir(outside);
+    const overlay = await seal([
+      { name: 'verify/check.ts', role: 'verification', candidate: 'check' },
+      { name: '.slc-build.json', role: 'build-record', candidate: '{"v":5}' },
+    ]);
+    // Interrupt after the body applied: verify/check.ts already sits at its
+    // candidate identity.
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'replaces-applied') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+    // The applied directory is re-parented behind a symlink whose target
+    // carries the exact candidate bytes.
+    await writeFile(join(outside, 'check.ts'), 'check');
+    await rm(join(artDir, 'verify'), { recursive: true, force: true });
+    await symlink(outside, join(artDir, 'verify'));
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
   });
 
   it('rejects a sealed overlay without a build-record replacement', async () => {
