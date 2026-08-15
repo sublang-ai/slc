@@ -8,6 +8,7 @@ import {
   readFile,
   readdir,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -514,6 +515,95 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
       'normalize:aliased source bytes\n',
     );
     await readRecord();
+    await assertNoPrivateResidue();
+  });
+
+  it.each([
+    {
+      name: 'malformed record JSON',
+      corrupt: async () =>
+        writeFile(join(artifactDir, BUILD_RECORD_FILE), '{not json\n'),
+    },
+    {
+      name: 'orphaned pair',
+      corrupt: async () => rm(join(artifactDir, BUILD_RECORD_FILE)),
+    },
+    {
+      name: 'symbolic-link record',
+      corrupt: async () => {
+        const outside = join(root, 'outside-record.json');
+        await writeFile(outside, '{"schema":"forged"}\n');
+        await rm(join(artifactDir, BUILD_RECORD_FILE));
+        await symlink(outside, join(artifactDir, BUILD_RECORD_FILE));
+      },
+    },
+    {
+      name: 'wrong-typed snapshot',
+      corrupt: async () => {
+        await rm(join(artifactDir, SOURCE_SNAPSHOT_FILE));
+        await mkdir(join(artifactDir, SOURCE_SNAPSHOT_FILE));
+      },
+    },
+  ])(
+    'rebuilds over $name at generation 1 (INCR-19, INCR-26)',
+    async ({ corrupt }) => {
+      await seedLineage();
+      const unrecordedPath = join(artifactDir, 'notes.txt');
+      await writeFile(unrecordedPath, 'keep me\n');
+      await corrupt();
+      const performing = executor();
+
+      const result = await runSlc(
+        ['flow', sourcePath, '--rebuild'],
+        deps(performing),
+      );
+
+      expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+      const record = await readRecord();
+      // Untrusted metadata grants no inventory, so the lineage restarts.
+      expect(record.lineage).toEqual({ generation: 1, transition: null });
+      expect(await readFile(unrecordedPath, 'utf8')).toBe('keep me\n');
+      await assertNoPrivateResidue();
+    },
+  );
+
+  it('removes an obsolete product a rebuild no longer plans (INCR-30)', async () => {
+    await seedLineage(true);
+    const obsolete = join(artifactDir, 'workflow.run.ts');
+    const unrecordedPath = join(artifactDir, 'notes.txt');
+    await writeFile(unrecordedPath, 'keep me\n');
+    expect(await exists(obsolete)).toBe(true);
+
+    // The un-linked rebuild no longer plans the linked product.
+    const result = await runSlc(
+      ['flow', sourcePath, '--rebuild'],
+      deps(executor()),
+    );
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(await exists(obsolete)).toBe(false);
+    expect(await readFile(unrecordedPath, 'utf8')).toBe('keep me\n');
+    const record = await readRecord();
+    expect(record.products.map((product) => product.path)).not.toContain(
+      'workflow.run.ts',
+    );
+    await assertNoPrivateResidue();
+  });
+
+  it('preserves a drifted obsolete product instead of deleting it (INCR-8)', async () => {
+    await seedLineage(true);
+    const obsolete = join(artifactDir, 'workflow.run.ts');
+    // The recorded bytes no longer attest this leaf, so no deletion
+    // authority is derived for it and the user's edit survives.
+    await writeFile(obsolete, 'manual edit\n');
+
+    const result = await runSlc(
+      ['flow', sourcePath, '--rebuild'],
+      deps(executor()),
+    );
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(await readFile(obsolete, 'utf8')).toBe('manual edit\n');
     await assertNoPrivateResidue();
   });
 

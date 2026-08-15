@@ -56,6 +56,8 @@ export interface CandidateOverlayMember {
 
 export type OverlayObservation =
   | { kind: 'absent' }
+  /** A reserved metadata path whose current content is not to be trusted. */
+  | { kind: 'untrusted' }
   | { kind: 'file' | 'tree' | 'value'; identity: Hash };
 
 /** A source, build-input, or other exact basis identity supplied by planning. */
@@ -73,6 +75,14 @@ export interface CreateCandidateOverlayOptions {
   accepted: readonly AcceptedOverlayMember[];
   candidate: readonly CandidateOverlayMember[];
   guards?: readonly OverlayIdentityGuard[];
+  /**
+   * Set when the prior reserved metadata pair is untrusted — malformed,
+   * orphaned, wrong-typed, or a symbolic link. The two reserved paths then
+   * carry an `untrusted` basis, so a `--rebuild` replaces them whatever
+   * their current file type instead of failing the basis check, while every
+   * other managed path keeps its ordinary observation (INCR-19, INCR-26).
+   */
+  untrustedMetadata?: true;
 }
 
 export interface OverlayReplace {
@@ -179,6 +189,7 @@ export async function createCandidateOverlay(
     accepted,
     candidate,
     guards,
+    options.untrustedMetadata === true,
   );
   await basis.capture();
   await basis.assertCurrent();
@@ -220,6 +231,7 @@ class Basis {
     private readonly accepted: readonly ResolvedAccepted[],
     private readonly candidate: readonly ResolvedCandidate[],
     private readonly guards: readonly OverlayIdentityGuard[],
+    private readonly untrustedMetadata: boolean,
   ) {}
 
   async capture(): Promise<void> {
@@ -234,7 +246,9 @@ class Basis {
         this.expected.set(
           member.canonicalPath,
           member.role === 'build-record' || member.role === 'source-snapshot'
-            ? { kind: 'absent' }
+            ? this.untrustedMetadata
+              ? { kind: 'untrusted' }
+              : { kind: 'absent' }
             : await observeCanonicalFile(member.canonicalPath),
         );
       }
@@ -258,6 +272,9 @@ class Basis {
         member.role,
         relativeMemberPath(path, this.artifactDir),
       );
+      // An untrusted reserved path is replaced whatever it currently is, so
+      // observing it would both fail and follow a link this run must not trust.
+      if (expected.kind === 'untrusted') continue;
       const actual = await observeCanonicalFile(path);
       requireSameObservation(`managed path ${path}`, expected, actual);
     }
@@ -664,7 +681,10 @@ function requireSameObservation(
   if (
     expected.kind !== actual.kind ||
     (expected.kind !== 'absent' &&
-      (actual.kind === 'absent' || expected.identity !== actual.identity))
+      expected.kind !== 'untrusted' &&
+      (actual.kind === 'absent' ||
+        actual.kind === 'untrusted' ||
+        expected.identity !== actual.identity))
   ) {
     throw conflict(`${field} changed after planning`);
   }
