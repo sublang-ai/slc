@@ -20,6 +20,7 @@
  * ordinary diagnostics (DR-010, DR-011). See specs/dev/phase-execution.md.
  */
 
+import { UPDATE_TRACE_SCHEMA } from './build-record.js';
 import type { AgentClient, AgentRunResult } from './interpreter.js';
 import type {
   CaptainCallOptions,
@@ -36,6 +37,12 @@ import { appendWorkspaceContract, type WorkspaceRecord } from './workspace.js';
 export interface PlaybookPortsAdapter extends CompatiblePlaybookPorts {
   /** Returns collected status/operational telemetry and clears the buffer. */
   drainDiagnostics(): string[];
+  /**
+   * Returns payloads diverted from the reserved update-metadata topic and
+   * clears the buffer. The topic never reaches results, status, or ordinary
+   * diagnostics (PHEXEC-39).
+   */
+  drainUpdateMetadata(): unknown[];
 }
 
 /**
@@ -73,6 +80,7 @@ export function createPlaybookPorts(opts: {
   onStatus?: (line: string) => void;
 }): PlaybookPortsAdapter {
   const diagnostics: string[] = [];
+  const reserved: unknown[] = [];
   const players = new Map<string, AgentClient>();
   let captainGate: Promise<void> = Promise.resolve();
   const playerFor = (playerId: string): AgentClient => {
@@ -162,12 +170,23 @@ export function createPlaybookPorts(opts: {
       topic: string;
       payload: unknown;
     }): Promise<void> {
+      // The reserved update topic is diverted into a protected sink before
+      // any reporting, so neither its name nor its payload can reach status
+      // or ordinary diagnostics (PHEXEC-39).
+      if (event.topic === UPDATE_TRACE_SCHEMA) {
+        reserved.push(event.payload);
+        return;
+      }
       if (event.topic === 'playbook.trace') return;
       report(`[${event.topic}] ${stringify(event.payload)}`);
     },
 
     drainDiagnostics(): string[] {
       return diagnostics.splice(0);
+    },
+
+    drainUpdateMetadata(): unknown[] {
+      return reserved.splice(0);
     },
   };
 
