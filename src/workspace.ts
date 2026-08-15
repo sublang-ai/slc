@@ -64,6 +64,8 @@ export interface CreateWorkspaceOptions {
   semanticInputs?: readonly WorkspaceSemanticInput[];
   /** The sole physical output sink; defaults to the canonical logical target. */
   physicalWrite?: string;
+  /** Canonical prior operand and target paths bound only by an update compile. */
+  priorReads?: { input: string; target: string };
 }
 
 export class WorkspaceError extends Error {
@@ -106,6 +108,20 @@ export async function createWorkspaceRecord(
       add(`object:${index}`, path);
     }
     add('link-target', request.linkTarget);
+  }
+  // An update compile appends exactly one prior-input and one prior-target
+  // after the ordinary roles (DR-021 §Physical workspace binding).
+  if (request.kind === 'compile' && options.priorReads !== undefined) {
+    specifications.push({
+      role: 'prior-input',
+      logicalPath: logical(options.priorReads.input),
+      physicalPath: resolve(root, options.priorReads.input),
+    });
+    specifications.push({
+      role: 'prior-target',
+      logicalPath: logical(options.priorReads.target),
+      physicalPath: resolve(root, options.priorReads.target),
+    });
   }
   for (const [index, input] of (options.semanticInputs ?? []).entries()) {
     const role = `semantic-input:${index}`;

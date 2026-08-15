@@ -26,6 +26,7 @@ import type { Stats } from 'node:fs';
 import { lstat, readFile, readdir, readlink, stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
+import type { Hash } from './hash.js';
 import type { UpdateTrace } from './build-record.js';
 import {
   createWorkspaceRecord,
@@ -57,6 +58,12 @@ export type ExecuteRequest =
        * rewrites the source toward (DR-013). Protected like definitions.
        */
       references?: readonly string[];
+      /**
+       * Present only for an update-capable compile: the exact prior/current
+       * operands, prior target, recorded trace, byte hunks, and the allowed
+       * target closure the candidate may touch (DR-021 §Update request).
+       */
+      update?: UpdateRequest;
     }
   | {
       kind: 'link';
@@ -67,6 +74,32 @@ export type ExecuteRequest =
       options: LinkOptionPair[];
       linked: string;
     };
+
+/** One half-open byte hunk between the prior and current operand. */
+export interface ChangeRecord {
+  readonly priorStart: number;
+  readonly priorEnd: number;
+  readonly currentStart: number;
+  readonly currentEnd: number;
+}
+
+/** A named read plus the exact bytes bound to it. */
+export interface UpdateOperand {
+  readonly read: string;
+  readonly hash: Hash;
+  readonly byteLength: number;
+}
+
+/** The scoped-update request carried by an update-capable compile. */
+export interface UpdateRequest {
+  readonly schema: 'sublang.slc.update-request.v1';
+  readonly priorInput: UpdateOperand;
+  readonly currentInput: UpdateOperand;
+  readonly priorTarget: UpdateOperand;
+  readonly priorTrace: UpdateTrace;
+  readonly changes: readonly ChangeRecord[];
+  readonly allowedTargetScopes: readonly string[];
+}
 
 /** Terminal status an executor reports for a phase run. */
 export type ExecutorStatus = 'ok' | 'blocked' | 'error';
