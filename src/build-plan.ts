@@ -625,6 +625,18 @@ function buildCompileSteps(opts: {
       opts.artDir,
       `${opts.basename}.${entry.source.format}${entry.source.ext}`,
     );
+    // A source that already sits at its own canonical normalized path would
+    // have normalization read and then overwrite it. That destroys the user's
+    // raw input, which COMPILE-7 requires to survive, and leaves the record
+    // identifying bytes the file no longer holds — so the next run sees a
+    // changed source and normalizes the normalized text again, forever.
+    // Refusing is the only outcome that keeps the raw input intact.
+    if (resolve(previous) === resolve(normalized)) {
+      throw new BuildPlanError(
+        'plan-invalid',
+        `normalization would overwrite its own source ${normalized}; move the raw input outside the artifact directory, or drop --normalize`,
+      );
+    }
     steps.push({
       id: 'normalize:000000',
       kind: 'normalize',

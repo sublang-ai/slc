@@ -324,6 +324,55 @@ describe('scoped candidate enforcement (INCR-15, INCR-16, INCR-25)', () => {
     expect(accept()).toBeNull();
   });
 
+  it('rejects a prior trace covering only a prefix of its target', () => {
+    // A partition is checked for internal consistency when decoded, and its
+    // hash binds the whole artifact, but nothing compares its byteLength
+    // with the bytes it governs. A trace claiming 3 of 6 bytes would leave
+    // scope 'y' outside the protection walk entirely.
+    expect(
+      accept({
+        priorTrace: {
+          ...priorTrace,
+          target: {
+            ...priorTrace.target,
+            byteLength: 3,
+            scopes: [priorTrace.target.scopes[0]],
+          },
+        },
+      }),
+    ).toBe('prior-trace-not-whole-target');
+  });
+
+  it('rejects a candidate that reclassified a protected target scope', () => {
+    // Scope 'y' keeps its exact bytes and position but is relabelled
+    // `local`, which would widen what a later update may rewrite without
+    // changing a byte now. INCR-15 protects classification alongside bytes.
+    expect(
+      accept({
+        replacement: replacement({
+          target: {
+            hash: `sha256:${'d'.repeat(64)}`,
+            byteLength: 6,
+            scopes: [
+              { scope: 'x', start: 0, end: 3, classification: 'local' },
+              { scope: 'y', start: 3, end: 6, classification: 'global' },
+            ],
+          },
+        }),
+        priorTrace: {
+          ...priorTrace,
+          target: {
+            ...priorTrace.target,
+            scopes: [
+              { scope: 'x', start: 0, end: 3, classification: 'local' },
+              { scope: 'y', start: 3, end: 6, classification: 'local' },
+            ],
+          },
+        },
+      }),
+    ).toBe('protected-bytes-changed');
+  });
+
   it('rejects a candidate that rewrote a protected target scope', () => {
     // Scope 'y' is outside the allowed closure, so its bytes must survive
     // exactly; a full regeneration passes every other check.

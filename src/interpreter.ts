@@ -217,6 +217,17 @@ export function createInterpretedExecutor(opts: {
         signal,
       });
 
+      // The reserved suffix is stripped before any status or diagnostic
+      // parsing, so neither the markers nor the payload can reach either
+      // (PHEXEC-39). A malformed occurrence yields no metadata and one host
+      // diagnostic, never a failed phase.
+      //
+      // This decode precedes the transport-status branch: an aborted or
+      // errored turn can already carry the reserved suffix, and reporting
+      // its raw text leaked the markers and the whole trace payload into
+      // user-facing diagnostics.
+      const decoded = decodeInterpretedResult(response.text);
+
       if (response.status !== 'success') {
         const fallback =
           response.status === 'incomplete'
@@ -224,15 +235,13 @@ export function createInterpretedExecutor(opts: {
             : 'agent reported an error';
         return {
           status: 'error',
-          diagnostics: textLines(response.text, fallback),
+          diagnostics: [
+            ...textLines(decoded.text, fallback),
+            ...decoded.diagnostics,
+          ],
         };
       }
 
-      // The reserved suffix is stripped before any status or diagnostic
-      // parsing, so neither the markers nor the payload can reach either
-      // (PHEXEC-39). A malformed occurrence yields no metadata and one host
-      // diagnostic, never a failed phase.
-      const decoded = decodeInterpretedResult(response.text);
       const blocked = blockedReasons(decoded.text);
       if (blocked !== null) {
         return {

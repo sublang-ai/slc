@@ -51,6 +51,7 @@ import {
   type AcceptedOverlayMember,
   type CandidateOverlay,
   type CandidateOverlayMember,
+  type OverlayIdentityGuard,
   type OverlayManifest,
   type OverlayRole,
 } from './build-overlay.js';
@@ -94,6 +95,7 @@ import {
 import {
   classifyLineage,
   formatLineageClassification,
+  recordedInventoryIssue,
   sameAdoptionTopology,
 } from './lineage-classification.js';
 
@@ -157,7 +159,7 @@ export async function runColdLineage(
   let generation = 1;
   let reuse: ReuseBasis | undefined;
   if (options.rebuild === true) {
-    prior = await loadPriorLineage(topology.artifactDir);
+    prior = await loadPriorLineage(topology.artifactDir, identified);
     generation = nextGeneration(prior, topology);
   } else if (options.adopt === true) {
     const adoption = await adoptLineage(topology, identified, host);
@@ -216,24 +218,7 @@ export async function runColdLineage(
       accepted: await acceptedLineageMembers(prior, identified),
       ...(prior.state === 'untrusted' ? { untrustedMetadata: true } : {}),
       candidate,
-      guards: [
-        {
-          id: 'basis:source',
-          expected: { kind: 'file', identity: sourceHash },
-          observe: async () => ({
-            kind: 'file' as const,
-            identity: hashBytes(await readSource(topology.sourcePath)),
-          }),
-        },
-        {
-          id: 'basis:plan',
-          expected: { kind: 'value', identity: identified.plan.identity },
-          observe: async () => ({
-            kind: 'value' as const,
-            identity: (await identifyFreshPlan(topology, host)).plan.identity,
-          }),
-        },
-      ],
+      guards: basisGuards(topology, host, sourceHash, identified),
     });
     await writeFile(overlay.stagePath(SOURCE_SNAPSHOT_FILE), sourceBytes);
 
@@ -351,11 +336,25 @@ async function adoptLineage(
     return refusal('no accepted lineage to adopt; run the pipeline first');
   }
   const prior = loaded.record;
+  // Adoption attests the user's bytes against a recorded lineage, so that
+  // record must itself be derivable from the current plan. A schema-valid
+  // inventory naming a product the plan cannot produce is not a basis to
+  // attest against (INCR-8, INCR-34).
+  const inventory = recordedInventoryIssue(
+    topology.artifactDir,
+    prior,
+    identified,
+  );
+  if (inventory !== null) {
+    return refusal(`${inventory.detail}; use --rebuild`);
+  }
 
   const sourceBytes = await readSource(topology.sourcePath);
   const sourceHash = hashBytes(sourceBytes);
   if (sourceHash !== prior.source.hash) {
-    return refusal('source bytes changed; adoption never rebinds a source');
+    return refusal(
+      'source bytes changed; adoption never rebinds a source, use --rebuild',
+    );
   }
   const expectedLocator = encodeReadLocator(
     topology.artifactDir,
@@ -382,7 +381,7 @@ async function adoptLineage(
       attested.set(product.id, hashBytes(await readRegularFileNoFollow(path)));
     } catch (error) {
       return refusal(
-        `semantic product ${product.path} is missing or unsafe: ${messageOf(error)}`,
+        `semantic product ${product.path} is missing or unsafe: ${messageOf(error)}; use --rebuild`,
       );
     }
   }
@@ -405,11 +404,15 @@ async function adoptLineage(
           path: product.path,
           identity: attested.get(product.id)!,
         })),
-      ...reservedMembers({
-        state: 'present',
-        record: prior,
-        snapshot: loaded.snapshot,
-      }),
+      // The reserved pair, plus any product the prior lineage recorded that
+      // this plan no longer emits: obsolete under adoption exactly as it is
+      // under execution. Deriving both here instead of listing the reserved
+      // pair alone is what keeps a dropped entry or verifier from surviving
+      // as an unrecorded file no later run explains (INCR-8, INCR-30).
+      ...(await acceptedLineageMembers(
+        { state: 'present', record: prior, snapshot: loaded.snapshot },
+        identified,
+      )),
     ],
     candidate: [
       ...candidate,
@@ -422,6 +425,7 @@ async function adoptLineage(
           disposition: 'retain' as const,
         })),
     ],
+    guards: basisGuards(topology, host, sourceHash, identified),
   });
   let promoted = false;
   try {
@@ -465,7 +469,10 @@ async function adoptLineage(
       identified,
       overlay,
       sourceHash,
-      prior.lineage.generation + 1,
+      nextGeneration(
+        { state: 'present', record: prior, snapshot: loaded.snapshot },
+        topology,
+      ),
       origins,
       {
         from: prior.plan.identity,
@@ -764,6 +771,43 @@ function reservedMembers(
   ];
 }
 
+/**
+ * The basis every lineage transaction stands on: the exact source bytes and
+ * the exact plan identity it was derived from. The overlay re-observes these
+ * at creation, at each explicit check, at seal, and again before promotion,
+ * so a source edit or definition change landing mid-run voids the candidate
+ * rather than publishing a record that describes neither state.
+ *
+ * Ordinary execution, rebuild, and adoption share one definition because a
+ * mode-specific copy is exactly how adoption came to run without any basis
+ * guard at all (INCR-13, INCR-26).
+ */
+function basisGuards(
+  topology: FullBuildTopology,
+  host: ColdLineageHost,
+  sourceHash: Hash,
+  identified: CanonicalBuildPlan,
+): OverlayIdentityGuard[] {
+  return [
+    {
+      id: 'basis:source',
+      expected: { kind: 'file', identity: sourceHash },
+      observe: async () => ({
+        kind: 'file' as const,
+        identity: hashBytes(await readSource(topology.sourcePath)),
+      }),
+    },
+    {
+      id: 'basis:plan',
+      expected: { kind: 'value', identity: identified.plan.identity },
+      observe: async () => ({
+        kind: 'value' as const,
+        identity: (await identifyFreshPlan(topology, host)).plan.identity,
+      }),
+    },
+  ];
+}
+
 /** A prior lineage, plus the state where its reserved pair cannot be trusted. */
 type PriorLineage = LoadedLineage | { state: 'untrusted' };
 
@@ -772,14 +816,31 @@ type PriorLineage = LoadedLineage | { state: 'untrusted' };
  * symbolic-link metadata is not a failure here: `--rebuild` is exactly the
  * authority to replace it, so it becomes an untrusted prior that grants no
  * inventory and no deletion authority (INCR-19, INCR-26).
+ *
+ * A schema-valid record whose inventory is not derivable from the current
+ * canonical plan is downgraded the same way. Deletion authority comes from
+ * attestation, and an invented product entry attests nothing — trusting it
+ * would let a hand-edited record name any in-bundle file as obsolete and have
+ * the rebuild remove it (INCR-8, INCR-26).
  */
-async function loadPriorLineage(artifactDir: string): Promise<PriorLineage> {
+async function loadPriorLineage(
+  artifactDir: string,
+  currentPlan: CanonicalBuildPlan,
+): Promise<PriorLineage> {
+  let loaded: LoadedLineage;
   try {
-    return await loadLineagePair(artifactDir);
+    loaded = await loadLineagePair(artifactDir);
   } catch (error) {
     if (error instanceof BuildRecordError) return { state: 'untrusted' };
     throw error;
   }
+  if (
+    loaded.state === 'present' &&
+    recordedInventoryIssue(artifactDir, loaded.record, currentPlan) !== null
+  ) {
+    return { state: 'untrusted' };
+  }
+  return loaded;
 }
 
 function nextGeneration(
@@ -1022,11 +1083,21 @@ async function executeColdSteps(
     });
     if (!result.ok) {
       failProgress();
+      // A scoped update that is blocked or errors discards the whole staged
+      // run and is never retried ordinarily, so the user is left with the
+      // prior lineage and needs to be told the way forward (INCR-16).
+      const report =
+        update === undefined
+          ? result.report
+          : {
+              ...result.report,
+              reasons: [...result.report.reasons, 'recovery: --rebuild'],
+            };
       return {
         ok: false,
         outputs: [],
         origins,
-        diagnostics: [...diagnostics, formatFailureReport(result.report)],
+        diagnostics: [...diagnostics, formatFailureReport(report)],
       };
     }
     diagnostics.push(...result.diagnostics);

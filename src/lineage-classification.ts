@@ -803,6 +803,21 @@ function plannedProductUnsafe(
   };
 }
 
+/**
+ * Reports why a recorded inventory is not derivable from the current
+ * canonical plan, or `null` when it is. Automatic classification is not the
+ * only authority that needs this: `--rebuild` and `--adopt` load the pair
+ * themselves, and a schema-valid record naming an invented product must not
+ * carry deletion authority or serve as an attestation basis (INCR-8, INCR-26).
+ */
+export function recordedInventoryIssue(
+  artifactDir: string,
+  record: BuildRecord,
+  currentPlan: CanonicalBuildPlan,
+): LineageIssue | null {
+  return validateRecordedInventory(artifactDir, record, currentPlan);
+}
+
 function validateRecordedInventory(
   artifactDir: string,
   record: BuildRecord,

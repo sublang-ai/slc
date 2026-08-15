@@ -23,6 +23,7 @@ import {
   canonicalJson,
   decodeBuildRecord,
   encodeBuildRecord,
+  planIdentity,
   type BuildRecord,
   type ProductRecord,
 } from '../src/build-record.js';
@@ -246,6 +247,29 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
         name.startsWith('.workflow.flow.slc-'),
       ),
     ).toEqual([]);
+  };
+
+  /** A schema-valid record whose plan no longer matches the canonical layout. */
+  const nonDerivable = (record: BuildRecord): BuildRecord => {
+    const plan = {
+      ...record.plan,
+      steps: record.plan.steps.map((step, index) =>
+        index === 0
+          ? {
+              ...step,
+              id: 'phase:000009',
+              inputKey: expectedInputKey('phase:000009', {
+                kind: 'source',
+                hash: record.source.hash,
+              }),
+            }
+          : step,
+      ),
+    };
+    return {
+      ...record,
+      plan: { ...plan, identity: planIdentity(plan) },
+    } as BuildRecord;
   };
 
   const readRecord = async (): Promise<BuildRecord> =>
@@ -497,7 +521,7 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     await assertNoPrivateResidue();
   });
 
-  it('normalizes a source living at its own canonical normalized path', async () => {
+  it('refuses to normalize a source living at its own canonical normalized path', async () => {
     await mkdir(artifactDir);
     const aliased = join(artifactDir, 'workflow.text.md');
     await writeFile(aliased, 'aliased source bytes\n');
@@ -508,14 +532,15 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
       deps(performing),
     );
 
-    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
-    // The first step read the original source, not its own unwritten
-    // staged target.
-    expect(performing.calls[0]?.input).toBe('aliased source bytes\n');
-    expect(await readFile(aliased, 'utf8')).toBe(
-      'normalize:aliased source bytes\n',
+    // Normalizing in place would consume the user's raw input and record
+    // bytes the file no longer holds, so every later run would re-normalize
+    // its own output instead of reaching a no-op (COMPILE-7).
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toMatch(
+      /normalization would overwrite its own source/,
     );
-    await readRecord();
+    expect(performing.calls).toHaveLength(0);
+    expect(await readFile(aliased, 'utf8')).toBe('aliased source bytes\n');
     await assertNoPrivateResidue();
   });
 
@@ -1203,6 +1228,50 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     expect(record.products.map((product) => product.path)).not.toContain(
       'workflow.run.ts',
     );
+    await assertNoPrivateResidue();
+  });
+
+  it('grants a non-derivable recorded inventory no deletion authority (INCR-8, INCR-26)', async () => {
+    await seedLineage(true);
+    const obsolete = join(artifactDir, 'workflow.run.ts');
+    // A schema-valid record whose plan is not derivable: the step IDs are
+    // not the canonical ordinals. Automatic classification rejects this
+    // inventory; the explicit paths loaded it without that check, so a
+    // rebuild trusted its product list and deleted from it.
+    await writeFile(
+      join(artifactDir, BUILD_RECORD_FILE),
+      encodeBuildRecord(nonDerivable(await readRecord())),
+    );
+
+    const result = await runSlc(
+      ['flow', sourcePath, '--rebuild'],
+      deps(executor()),
+    );
+
+    // The rebuild succeeds on its own authority, but an untrusted record
+    // grants no deletion authority, so the formerly-linked product survives
+    // as an unrecorded file instead of being removed on its word.
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(await exists(obsolete)).toBe(true);
+    await assertNoPrivateResidue();
+  });
+
+  it('refuses --adopt on a non-derivable recorded inventory (INCR-34)', async () => {
+    await seedLineage(true);
+    await writeFile(
+      join(artifactDir, BUILD_RECORD_FILE),
+      encodeBuildRecord(nonDerivable(await readRecord())),
+    );
+    const accepted = await acceptedBytes(true);
+
+    const result = await runSlc(
+      ['flow', sourcePath, '--link', runtimePath, '--adopt'],
+      deps(executor()),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toMatch(/--rebuild/);
+    await expectAcceptedBytes(accepted);
     await assertNoPrivateResidue();
   });
 
