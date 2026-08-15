@@ -629,6 +629,53 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
     expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
   });
 
+  it('refuses the record when an obsolete path reappears mid-promotion', async () => {
+    const overlay = await seal(standardSet(), [
+      { name: 'stale.md', prior: 'x' },
+    ]);
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: async ({ name }) => {
+          if (name === 'removes-applied') {
+            await writeFile(join(artDir, 'stale.md'), 'restored');
+          }
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+    // The reappeared path is left in place, not deleted a second time.
+    expect(await readFile(join(artDir, 'stale.md'), 'utf8')).toBe('restored');
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
+  });
+
+  it('voids recovery when an obsolete path reappears during recovery', async () => {
+    const overlay = await seal(standardSet(), [
+      { name: 'stale.md', prior: 'x' },
+    ]);
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'manifest-published') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+      checkpoint: async ({ name }) => {
+        if (name === 'removes-applied') {
+          await writeFile(join(artDir, 'stale.md'), 'restored');
+        }
+      },
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    expect(await readFile(join(artDir, 'stale.md'), 'utf8')).toBe('restored');
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
+  });
+
   it('rejects a sealed overlay without a build-record replacement', async () => {
     const overlay = await seal([
       { name: 'flow.gears.md', role: 'semantic', candidate: 'new' },
