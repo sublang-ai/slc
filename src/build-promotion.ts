@@ -223,8 +223,9 @@ async function assertRealInstallPath(
 /**
  * Verifies the complete resulting inventory — every replaced destination at
  * its candidate identity, every retained member still at its recorded
- * identity — immediately before the record commits, so the marker never
- * describes bytes that drifted during application.
+ * identity, and every obsolete destination still absent — immediately
+ * before the record commits, so the marker never describes bytes that
+ * drifted during application.
  */
 async function assertInventoryReady(
   manifest: StageManifest,
@@ -250,6 +251,19 @@ async function assertInventoryReady(
       throw new BuildPromotionError(
         'conflict',
         `retained path changed before the record commit: ${entry.canonicalPath}`,
+      );
+    }
+  }
+  // An obsolete destination stays managed by the still-accepted prior
+  // lineage until the marker moves, so one recreated after its removal is a
+  // concurrent managed change: conflict and leave it in place rather than
+  // deleting it again or committing a record that silently drops it.
+  for (const entry of manifest.remove) {
+    await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
+    if ((await observeFile(entry.canonicalPath)) !== undefined) {
+      throw new BuildPromotionError(
+        'conflict',
+        `obsolete path reappeared before the record commit: ${entry.canonicalPath}`,
       );
     }
   }
