@@ -351,6 +351,8 @@ export async function run(
 
   if (result.ok) {
     if (result.outcome === 'up-to-date') stdout('up to date\n');
+    else if (result.outcome === 'adopted')
+      stdout(`adopted\n${result.outputs.join('\n')}\n`);
     else if (result.outputs.length > 0)
       stdout(`${result.outputs.join('\n')}\n`);
     // Surface any ambiguity the agent resolved without polluting the path output.

@@ -396,6 +396,48 @@ describe('progress (CLI-36, CLI-37)', () => {
     current = makeAgent();
   });
 
+  it('reports adopted paths distinctly from written ones (CLI-39)', async () => {
+    await writeFile(
+      join(pipelineDir, 'text2gears.md'),
+      `${formats('text', '.md', 'gears', '.md')}\n## Pin Inputs\n`,
+    );
+    await writeFile(
+      join(pipelineDir, 'gears2fsm.md'),
+      `${formats('gears', '.md', 'fsm', '.ts')}\n## Pin Inputs\n`,
+    );
+    expect(
+      await run(['flow', source], {
+        env: {},
+        stdout: () => {},
+        stderr: () => {},
+        buildDeps: progressDeps,
+      }),
+    ).toBe(0);
+    await writeFile(join(artDir, 'onboarding.gears.md'), 'refined by hand\n');
+
+    const out: string[] = [];
+    const code = await run(['flow', source, '--adopt'], {
+      env: {},
+      stdout: (t) => out.push(t),
+      stderr: () => {},
+      buildDeps: ({ signal, progress }) => ({
+        ...interpretedDeps(
+          {
+            run: () => {
+              throw new Error('adoption must invoke no agent');
+            },
+          },
+          signal,
+        ),
+        progress,
+      }),
+    });
+
+    expect(code).toBe(0);
+    expect(out.join('')).toContain('adopted');
+    expect(out.join('')).toContain(join(artDir, 'onboarding.gears.md'));
+  });
+
   it('reports up to date and runs no phase when nothing changed (CLI-38)', async () => {
     // Both phases must declare a closed input closure for the whole lineage
     // to be reusable.

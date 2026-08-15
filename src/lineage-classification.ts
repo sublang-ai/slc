@@ -381,7 +381,11 @@ function isWholeLineageAdopted(record: BuildRecord): boolean {
   );
 }
 
-function sameAdoptionTopology(
+/**
+ * The exact adoption-compatibility projection: ordered scheduled-step kind,
+ * formats, and canonical semantic-product target paths, and nothing else.
+ */
+export function sameAdoptionTopology(
   record: BuildRecord,
   currentPlan: CanonicalBuildPlan,
 ): boolean {

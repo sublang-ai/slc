@@ -94,6 +94,7 @@ import {
 import {
   classifyLineage,
   formatLineageClassification,
+  sameAdoptionTopology,
 } from './lineage-classification.js';
 
 /** Host identities are re-derived for both initial planning and final guards. */
@@ -118,13 +119,14 @@ export interface ColdLineageResult {
   ok: boolean;
   outputs: string[];
   diagnostics: string[];
-  /** Present when the accepted bundle already satisfied the invocation. */
-  outcome?: 'up-to-date';
+  /** Present when the run changed no semantic product. */
+  outcome?: 'up-to-date' | 'adopted';
 }
 
 /** Execution-control state excluded from the canonical plan identity. */
 export interface CanonicalLineageOptions {
   rebuild?: true;
+  adopt?: true;
 }
 
 /** One accepted record plus the steps drift already proved must re-execute. */
@@ -155,6 +157,9 @@ export async function runColdLineage(
   if (options.rebuild === true) {
     prior = await loadPriorLineage(topology.artifactDir);
     generation = nextGeneration(prior, topology);
+  } else if (options.adopt === true) {
+    const adoption = await adoptLineage(topology, identified, host);
+    return adoption;
   } else {
     const classification = await classifyLineage(identified);
     // A lineage whose steps are still exactly derivable is not a failure:
@@ -307,6 +312,172 @@ export async function runColdLineage(
     if (overlay !== undefined && !promotionStarted) {
       await overlay.discard();
     }
+  }
+}
+
+/**
+ * Adopts the accepted semantic products as user-attested.
+ *
+ * Explicit attestation — not regenerated verification — is the semantic
+ * authority here, so no semantic executor runs. Every scheduled product is
+ * hashed and recorded with `origin: "user-adopted"` under the *current*
+ * derived identity, traces are cleared, and a differing prior identity is
+ * recorded as an exact transition. Deterministic derivatives still regenerate
+ * and are checked in staged state, and nothing is promoted until they pass
+ * (INCR-34, INCR-35).
+ */
+async function adoptLineage(
+  topology: FullBuildTopology,
+  identified: CanonicalBuildPlan,
+  host: ColdLineageHost,
+): Promise<ColdLineageResult> {
+  const refusal = (reason: string): ColdLineageResult => ({
+    ok: false,
+    outputs: [],
+    diagnostics: [`slc: --adopt refused: ${reason}`],
+  });
+
+  let loaded: LoadedLineage;
+  try {
+    loaded = await loadLineagePair(topology.artifactDir);
+  } catch (error) {
+    return refusal(
+      `${messageOf(error)}; adoption is not cold-build repair, use --rebuild`,
+    );
+  }
+  if (loaded.state === 'absent') {
+    return refusal('no accepted lineage to adopt; run the pipeline first');
+  }
+  const prior = loaded.record;
+
+  const sourceBytes = await readSource(topology.sourcePath);
+  const sourceHash = hashBytes(sourceBytes);
+  if (sourceHash !== prior.source.hash) {
+    return refusal('source bytes changed; adoption never rebinds a source');
+  }
+  const expectedLocator = encodeReadLocator(
+    topology.artifactDir,
+    topology.sourcePath,
+  );
+  if (prior.source.locator !== expectedLocator) {
+    return refusal('recorded source locator differs; use --rebuild');
+  }
+  if (!sameAdoptionTopology(prior, identified)) {
+    return refusal('plan topology is incompatible; use --rebuild');
+  }
+
+  // Every scheduled semantic product must be present and safe; attestation
+  // covers the complete set or none of it.
+  const attested = new Map<string, Hash>();
+  for (const product of identified.products) {
+    if (product.kind !== 'semantic') continue;
+    try {
+      const path = await resolveManagedPath(
+        topology.artifactDir,
+        product.path,
+        { requireFile: true },
+      );
+      attested.set(product.id, hashBytes(await readRegularFileNoFollow(path)));
+    } catch (error) {
+      return refusal(
+        `semantic product ${product.path} is missing or unsafe: ${messageOf(error)}`,
+      );
+    }
+  }
+
+  const description = describeDeterministicDerivatives(topology);
+  const candidate = candidateMembers(identified).filter(
+    (member) => member.role !== 'semantic',
+  );
+  const overlay = await createCandidateOverlay({
+    artifactDir: topology.artifactDir,
+    pipeline: topology.pipelineName,
+    // Adoption's accepted basis is what the user attested, not what the
+    // record claims: each semantic product at the bytes now on disk.
+    accepted: [
+      ...identified.products
+        .filter((product) => product.kind === 'semantic')
+        .map((product) => ({
+          id: product.id,
+          role: 'semantic' as const,
+          path: product.path,
+          identity: attested.get(product.id)!,
+        })),
+      ...reservedMembers({
+        state: 'present',
+        record: prior,
+        snapshot: loaded.snapshot,
+      }),
+    ],
+    candidate: [
+      ...candidate,
+      ...identified.products
+        .filter((product) => product.kind === 'semantic')
+        .map((product) => ({
+          id: product.id,
+          role: 'semantic' as const,
+          path: product.path,
+          disposition: 'retain' as const,
+        })),
+    ],
+  });
+  let promoted = false;
+  try {
+    await writeFile(overlay.stagePath(SOURCE_SNAPSHOT_FILE), sourceBytes);
+    const deterministic = await acceptDeterministicProducts(
+      identified,
+      description,
+      overlay,
+      host.cwd,
+      host.signal,
+      new Map(),
+    );
+    if (!deterministic.ok) {
+      return {
+        ok: false,
+        outputs: [],
+        diagnostics: [
+          ...deterministic.diagnostics,
+          'slc: repair the semantic products before retrying --adopt, or use --rebuild',
+        ],
+      };
+    }
+
+    const origins: StepOrigins = new Map(
+      identified.topology.steps.map((step) => [
+        step.id,
+        { origin: 'user-adopted' as const, trace: null },
+      ]),
+    );
+    const record = await buildColdRecord(
+      identified,
+      overlay,
+      sourceHash,
+      prior.lineage.generation + 1,
+      origins,
+      {
+        from: prior.plan.identity,
+        to: identified.plan.identity,
+      },
+    );
+    const encoded = encodeBuildRecord(record);
+    await writeFile(overlay.stagePath(BUILD_RECORD_FILE), encoded);
+    const sealed = await overlay.seal();
+    promoted = true;
+    await promoteLineage({
+      overlay: sealed,
+      checkpoint: host.promotionCheckpoint,
+    });
+    return {
+      ok: true,
+      outputs: identified.products
+        .filter((product) => product.kind === 'semantic')
+        .map((product) => resolve(topology.artifactDir, product.path)),
+      diagnostics: [],
+      outcome: 'adopted',
+    };
+  } finally {
+    if (!promoted) await overlay.discard();
   }
 }
 
@@ -960,8 +1131,11 @@ async function acceptDeterministicProducts(
   overlay: CandidateOverlay,
   runRoot: string,
   signal: AbortSignal | undefined,
+  // Adoption retains its semantic products, so they are read from their
+  // canonical paths rather than from a staged predecessor.
+  semanticOverride?: ReadonlyMap<string, string>,
 ): Promise<{ ok: boolean; outputs: string[]; diagnostics: string[] }> {
-  const semantic = semanticPhysicalMap(plan, overlay);
+  const semantic = semanticOverride ?? semanticPhysicalMap(plan, overlay);
   const products = new Map(
     plan.products.map((product) => [product.id, product]),
   );
@@ -1186,6 +1360,7 @@ async function buildColdRecord(
   sourceHash: Hash,
   generation: number,
   origins: StepOrigins,
+  transition: { from: Hash; to: Hash } | undefined = undefined,
 ): Promise<BuildRecord> {
   const products: ProductRecord[] = await Promise.all(
     plan.products.map(async (product) => ({
@@ -1254,7 +1429,15 @@ async function buildColdRecord(
         ...value,
       })),
     },
-    lineage: { generation, transition: null },
+    lineage: {
+      generation,
+      // An adoption records the exact identity move, and only when the
+      // prior and current identities actually differ (INCR-35).
+      transition:
+        transition === undefined || transition.from === transition.to
+          ? null
+          : transition,
+    },
   };
 }
 
