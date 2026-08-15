@@ -4,7 +4,7 @@
 /** Stable identities for deterministic entry and verification products. */
 
 import { createRequire } from 'node:module';
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, readFile, realpath } from 'node:fs/promises';
 import { dirname, extname, join, parse, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -203,7 +203,13 @@ function resolveLayout(options: DeterministicIdentityOptions): ResolvedLayout {
 async function packageTreeHash(packagePath: string): Promise<Hash> {
   const records: RuntimePackageRecord[] = [];
   const visited = new Set<string>();
-  await collectRuntimePackage(resolve(packagePath), [], records, visited);
+  // Identity is the resolved content (DR-007): a link-based installer
+  // layout (pnpm) and a copied layout with identical bytes share one
+  // closure hash. An absent path keeps its original error surface.
+  const entry = await realpath(resolve(packagePath)).catch(() =>
+    resolve(packagePath),
+  );
+  await collectRuntimePackage(entry, [], records, visited);
   records.sort((left, right) =>
     compareUtf8(canonicalJson(left.path), canonicalJson(right.path)),
   );
@@ -310,7 +316,9 @@ async function resolveInstalledPackage(
           `deterministic runtime package manifest is not a regular file: ${dependency}`,
         );
       }
-      return candidate;
+      // Resolve the package boundary so hashing and the next walk both see
+      // the content directory, not an installer's symlink into its store.
+      return await realpath(candidate);
     } catch (error) {
       if (!isAbsentPathError(error)) throw error;
     }

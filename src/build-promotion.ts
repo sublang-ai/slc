@@ -26,13 +26,14 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 
 import type {
   OverlayManifest,
   OverlayObservation,
   SealedOverlay,
 } from './build-overlay.js';
+import { BUILD_RECORD_FILE, SOURCE_SNAPSHOT_FILE } from './build-record.js';
 import { type Hash, hashBytes, hashFile, isHash } from './hash.js';
 
 const MANIFEST_SCHEMA = 'sublang.slc.stage.v1' as const;
@@ -95,11 +96,19 @@ interface ManifestRemove {
   readonly priorIdentity: Hash;
 }
 
+/** One unchanged accepted member the committed record will still describe. */
+interface ManifestRetain {
+  readonly canonicalPath: string;
+  readonly identity: Hash;
+  readonly role: string;
+}
+
 interface StageManifest {
   readonly schema: typeof MANIFEST_SCHEMA;
   readonly artifactDir: string;
   readonly replace: readonly ManifestReplace[];
   readonly remove: readonly ManifestRemove[];
+  readonly retain: readonly ManifestRetain[];
 }
 
 /**
@@ -164,7 +173,7 @@ export async function promoteLineage(
 export async function recoverLineagePromotion(
   options: RecoverLineagePromotionOptions,
 ): Promise<PromotionRecoveryResult> {
-  const { artifactDir, checkpoint } = options;
+  const { artifactDir, pipeline, checkpoint } = options;
   let result: PromotionRecoveryResult = 'nothing-pending';
   for (const stageRoot of await pendingStages(artifactDir)) {
     const manifest = await readManifest(stageRoot);
@@ -172,7 +181,10 @@ export async function recoverLineagePromotion(
       // Another bundle's stage name collision: not this recovery's to touch.
       continue;
     }
-    if (manifest === undefined || !manifestConfined(manifest, stageRoot)) {
+    if (
+      manifest === undefined ||
+      !manifestConfined(manifest, stageRoot, pipeline)
+    ) {
       // Pre-promotion residue, or a manifest promoteLineage cannot have
       // written (every path it writes is confined to the stage and bundle):
       // no canonical mutation can have happened through it.
@@ -216,6 +228,16 @@ async function finishForward(
       return false;
     }
     if (state === 'pending') removals.push(entry);
+  }
+  // Retained members are part of the inventory the candidate record
+  // describes: one that drifted between interruption and recovery would
+  // survive beside a record carrying its old hash, so it voids the stage
+  // exactly like any other interference.
+  for (const entry of manifest.retain) {
+    if ((await observeFile(entry.canonicalPath)) !== entry.identity) {
+      await rm(stageRoot, { recursive: true, force: true });
+      return false;
+    }
   }
 
   // The stage counts as intact only while every still-pending candidate
@@ -263,6 +285,11 @@ function toStageManifest(overlay: SealedOverlay): StageManifest {
     remove: manifest.remove.map((entry) => ({
       canonicalPath: entry.canonicalPath,
       priorIdentity: entry.priorIdentity,
+    })),
+    retain: manifest.retain.map((entry) => ({
+      canonicalPath: entry.canonicalPath,
+      identity: entry.identity,
+      role: entry.role,
     })),
   };
 }
@@ -352,8 +379,10 @@ async function applyReplace(entry: ManifestReplace): Promise<void> {
     dir,
     `.${basename(entry.canonicalPath)}.${process.pid}-${tempSequence++}.slc-tmp`,
   );
+  // Cleanup only ever removes a temp this call created: a failed exclusive
+  // open owns nothing, so a colliding pre-existing file is never deleted.
+  const handle = await open(temp, 'wx');
   try {
-    const handle = await open(temp, 'wx');
     try {
       await handle.writeFile(bytes);
       await handle.sync();
@@ -370,27 +399,58 @@ async function applyReplace(entry: ManifestReplace): Promise<void> {
 /** True when `child` sits strictly inside `parent`. */
 function confined(parent: string, child: string): boolean {
   const rel = relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  if (rel === '' || isAbsolute(rel)) return false;
+  // Reject only a real parent traversal; a legal name such as `..foo`
+  // merely begins with two dots.
+  return rel !== '..' && !rel.startsWith(`..${sep}`);
 }
 
 /**
- * A manifest promoteLineage wrote stages only inside its own root and
- * targets only the bundle (plus the one entry module beside it). Anything
- * else cannot be this transaction's work and grants no replacement
- * authority.
+ * A manifest promoteLineage wrote stages only inside its own root, gives
+ * each role its exact shape — the two metadata roles their reserved paths,
+ * the entry role the one derived sibling path — and targets everything
+ * else inside the bundle. Anything looser cannot be this transaction's
+ * work and grants no replacement authority.
  */
-function manifestConfined(manifest: StageManifest, stageRoot: string): boolean {
+function manifestConfined(
+  manifest: StageManifest,
+  stageRoot: string,
+  pipeline: string,
+): boolean {
   const artifactDir = manifest.artifactDir;
   const parent = dirname(artifactDir);
+  const suffix = `.${pipeline}`;
+  const bundleName = basename(artifactDir);
+  const entryPath = bundleName.endsWith(suffix)
+    ? join(parent, `${bundleName.slice(0, -suffix.length)}.ts`)
+    : null;
+  const canonicalAllowed = (role: string, path: string): boolean => {
+    switch (role) {
+      case 'build-record':
+        return path === join(artifactDir, BUILD_RECORD_FILE);
+      case 'source-snapshot':
+        return path === join(artifactDir, SOURCE_SNAPSHOT_FILE);
+      case 'entry':
+        return entryPath !== null && path === entryPath;
+      case 'semantic':
+      case 'verification':
+        return confined(artifactDir, path);
+      default:
+        return false;
+    }
+  };
   return (
     manifest.replace.every(
       (entry) =>
         confined(stageRoot, entry.stagedPath) &&
-        (entry.role === 'entry'
-          ? dirname(entry.canonicalPath) === parent
-          : confined(artifactDir, entry.canonicalPath)),
+        canonicalAllowed(entry.role, entry.canonicalPath),
     ) &&
-    manifest.remove.every((entry) => confined(artifactDir, entry.canonicalPath))
+    manifest.remove.every((entry) =>
+      confined(artifactDir, entry.canonicalPath),
+    ) &&
+    manifest.retain.every((entry) =>
+      canonicalAllowed(entry.role, entry.canonicalPath),
+    )
   );
 }
 
@@ -476,12 +536,28 @@ function isStageManifest(value: unknown): value is StageManifest {
   const candidate = value as Record<string, unknown>;
   if (candidate.schema !== MANIFEST_SCHEMA) return false;
   if (typeof candidate.artifactDir !== 'string') return false;
-  if (!Array.isArray(candidate.replace) || !Array.isArray(candidate.remove)) {
+  if (
+    !Array.isArray(candidate.replace) ||
+    !Array.isArray(candidate.remove) ||
+    !Array.isArray(candidate.retain)
+  ) {
     return false;
   }
   return (
     candidate.replace.every(isManifestReplace) &&
-    candidate.remove.every(isManifestRemove)
+    candidate.remove.every(isManifestRemove) &&
+    candidate.retain.every(isManifestRetain)
+  );
+}
+
+function isManifestRetain(value: unknown): value is ManifestRetain {
+  if (typeof value !== 'object' || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.canonicalPath === 'string' &&
+    typeof entry.role === 'string' &&
+    typeof entry.identity === 'string' &&
+    isHash(entry.identity)
   );
 }
 
