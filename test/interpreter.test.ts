@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { canonicalJson } from '../src/build-record.js';
 import { runPhase, type ExecuteRequest } from '../src/execution.js';
 import {
   type AgentClient,
@@ -195,6 +196,108 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
     await executor.run(request, workspace, new AbortController().signal);
 
     expect(agent.calls[0]).toMatchObject({ model: 'some-model', cwd: '/work' });
+  });
+
+  // Adjacent scopes must cover the whole byte length, and each input scope
+  // needs exactly one ordered dependency entry.
+  const trace = {
+    schema: 'sublang.slc.update.v1',
+    input: {
+      hash: `sha256:${'a'.repeat(64)}`,
+      byteLength: 8,
+      scopes: [
+        { scope: 'in', start: 0, end: 8, classification: 'local' as const },
+      ],
+    },
+    target: {
+      hash: `sha256:${'b'.repeat(64)}`,
+      byteLength: 9,
+      scopes: [
+        { scope: 'out', start: 0, end: 9, classification: 'local' as const },
+      ],
+    },
+    dependencies: [{ input: 'in', targets: ['out'] }],
+  };
+  const envelope = (payload: string): string =>
+    ['SLC_RESULT_BEGIN', payload, 'SLC_RESULT_END'].join('\n');
+  const validPayload = canonicalJson({
+    schema: 'sublang.slc.interpreted-result.v1',
+    metadata: { 'sublang.slc.update.v1': trace },
+  });
+
+  const decode = async (text: string) => {
+    const agent = recordingAgent({ status: 'success', text });
+    return createInterpretedExecutor({ agent }).run(
+      request,
+      await createWorkspaceRecord(request),
+      new AbortController().signal,
+    );
+  };
+
+  it('extracts a valid reserved suffix and strips it from diagnostics (PHEXEC-39)', async () => {
+    const result = await decode(`wrote the gears\n${envelope(validPayload)}`);
+
+    expect(result.status).toBe('ok');
+    expect(result.metadata).toEqual({ 'sublang.slc.update.v1': trace });
+    // Neither the markers nor the payload reach diagnostics.
+    expect(result.diagnostics).toEqual(['wrote the gears']);
+    expect(result.diagnostics.join('\n')).not.toContain('SLC_RESULT');
+  });
+
+  it('accepts a CRLF-delimited reserved suffix', async () => {
+    const result = await decode(
+      `wrote the gears\r\n${envelope(validPayload).replace(/\n/g, '\r\n')}`,
+    );
+    expect(result.metadata).toEqual({ 'sublang.slc.update.v1': trace });
+  });
+
+  it.each([
+    { name: 'unterminated', text: `done\nSLC_RESULT_BEGIN\n${validPayload}` },
+    {
+      name: 'duplicated',
+      text: `done\n${envelope(validPayload)}\n${envelope(validPayload)}`,
+    },
+    {
+      name: 'misplaced',
+      text: `${envelope(validPayload)}\ntrailing prose`,
+    },
+    {
+      name: 'malformed JSON',
+      text: `done\n${envelope('{not json')}`,
+    },
+    {
+      name: 'noncanonical line',
+      text: `done\n${envelope(`{"metadata":{},"schema":"sublang.slc.interpreted-result.v1"}`)}`,
+    },
+    {
+      name: 'unknown envelope field',
+      text: `done\n${envelope(`${validPayload.slice(0, -1)},"extra":1}`)}`,
+    },
+  ])(
+    'preserves ordinary success with no metadata for a $name envelope (PHEXEC-40)',
+    async ({ text }) => {
+      const result = await decode(text);
+
+      expect(result.status).toBe('ok');
+      expect(result.metadata).toBeUndefined();
+      // Exactly one host diagnostic, and no reserved text anywhere.
+      expect(
+        result.diagnostics.filter((line) => line.includes('reserved result')),
+      ).toHaveLength(1);
+      expect(result.diagnostics.join('\n')).not.toContain('SLC_RESULT');
+      expect(result.diagnostics.join('\n')).not.toContain('sublang.slc.update');
+    },
+  );
+
+  it('keeps a blocked reply blocked when it carries a reserved suffix', async () => {
+    const result = await decode(
+      `BLOCKED: the source has no headings\n${envelope(validPayload)}`,
+    );
+
+    // A blocked candidate is discarded whole, so it carries no metadata.
+    expect(result.status).toBe('blocked');
+    expect(result.metadata).toBeUndefined();
+    expect(result.diagnostics).toEqual(['BLOCKED: the source has no headings']);
   });
 
   it('maps a BLOCKED reply to a blocked result (PHEXEC-7)', async () => {
