@@ -120,30 +120,37 @@ A canonical full compile also records its source binding and accepted
 products in `my-workflow.playbook/.slc-source` and `.slc-build.json`, so
 later runs can tell what is still current.
 
-**Compiling again is cheap.** Re-run the same command and `slc` compares
-the recorded lineage against the current source, definitions, and
-compiler identity:
+**Compiling again can be cheap — for pipelines that declare enough.**
+Re-run the same command and `slc` compares the recorded lineage against
+the current source, definitions, and compiler identity. What it can do
+with that comparison depends entirely on what your phase definitions
+declare, so read the next paragraph before expecting any of it:
 
-- nothing changed — it prints `up to date`, calls no agent, and writes
-  nothing at all;
+- nothing changed, and every phase declares its readable inputs — it
+  prints `up to date`, calls no agent, and writes nothing at all;
 - some steps changed — it reuses every step whose inputs still match and
   executes only the rest, so an edit late in a chain does not re-run the
-  phases before it;
-- one paragraph changed, and the phase declares an update contract — it
-  can rewrite just the affected part of the artifact instead of
-  regenerating the whole thing.
+  phases before it.
 
 Reuse is always conservative: anything `slc` cannot prove is still exact
 falls back to ordinary execution. A wrong guess would cost you a correct
 artifact, so it never guesses.
 
-How much you get depends on what your pipeline declares. Reuse needs a
-phase to declare its readable inputs (a `## Pin Inputs` section), and
-scoped update additionally needs an `## Update` contract. The published
-`@sublang/playbook` definitions declare neither yet, so today a `playbook`
-re-run still executes its phases; what you get now is source association,
-conflict detection, `--rebuild`, and `--adopt`. The built-in normalizer
-declares both, and any pipeline you write can too.
+Reuse needs a phase to declare its readable inputs (a `## Pin Inputs`
+section). The published `@sublang/playbook` definitions declare none yet,
+so today a `playbook` re-run still executes every phase — including when
+nothing changed. What you get on any pipeline right now is source
+association, conflict detection, `--rebuild`, and `--adopt`; the built-in
+normalizer declares its inputs, and any pipeline you write can too.
+
+Scoped update — rewriting only the affected part of an artifact from an
+`## Update` contract — is specified and implemented but **not yet
+reachable in a real run**, on any pipeline. Neither execution transport
+can carry it today: a compiled phase has no request field for it, and an
+interpreted phase is never asked for the trace that a later update would
+have to build on. Every run therefore takes ordinary execution, which is
+the safe direction. Treat it as unreleased and do not plan around it
+([IR-021 deferred work](specs/iterations/021-incremental-compilation.md#deferred)).
 
 If the bundle belongs to another same-named source, or a managed product
 was edited outside an accepted compile, `slc` refuses to overwrite it and

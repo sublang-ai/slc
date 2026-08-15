@@ -329,7 +329,8 @@ export type CandidateRejection =
   | 'unchanged-closure-altered'
   | 'input-partition-altered'
   | 'protected-bytes-changed'
-  | 'target-partition-altered';
+  | 'target-partition-altered'
+  | 'prior-trace-not-whole-target';
 
 /**
  * Checks a returned candidate against the invariants the request fixed.
@@ -356,6 +357,15 @@ export function acceptUpdateCandidate(opts: {
 }): CandidateRejection | null {
   const replacement = opts.replacement;
   if (replacement === undefined) return 'no-replacement-trace';
+  // The prior trace is the authority for which bytes are protected, and a
+  // partition is only checked for internal consistency when it is decoded:
+  // its `byteLength` is never compared against the artifact it describes.
+  // A trace covering a prefix therefore keeps a correct whole-file hash while
+  // leaving every trailing byte outside the protection loop below, so the
+  // span it claims must equal the bytes it governs.
+  if (opts.priorTrace.target.byteLength !== opts.priorTargetBytes.length) {
+    return 'prior-trace-not-whole-target';
+  }
   if (
     replacement.input.hash !== opts.currentInputHash ||
     replacement.input.byteLength !== opts.currentInputByteLength
@@ -401,6 +411,11 @@ export function acceptUpdateCandidate(opts: {
       next === undefined ||
       next.start <= previousStart ||
       next.end - next.start !== scope.end - scope.start ||
+      // INCR-15 protects the scope string, order, classification, and bytes.
+      // Classification is authority, not description: reclassifying a
+      // protected scope to `local` would widen what a later update may
+      // rewrite without changing a single byte now.
+      next.classification !== scope.classification ||
       !sameBytes(
         opts.priorTargetBytes.subarray(scope.start, scope.end),
         opts.candidateBytes.subarray(next.start, next.end),

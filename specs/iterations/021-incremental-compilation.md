@@ -13,7 +13,7 @@ Published Playbook semantic-input closures and update contracts are an unplanned
 
 - [x] Schema-exact source-bound build lineage with safe path handling and recoverable staged promotion.
 - [x] Conflict detection, explicit rebuild, exact step reuse, and a write-free whole-bundle no-op.
-- [x] Generic interpreted and compiled update-metadata transport plus deterministic scoped-update planning and enforcement.
+- [ ] Generic interpreted and compiled update-metadata transport plus deterministic scoped-update planning and enforcement. Planning and enforcement land; neither transport carries an update in a real run — see [Deferred](#deferred).
 - [x] Whole-lineage adoption with compatible build-identity rebaselining and regenerated deterministic derivatives.
 - [x] Coordinated specs, integration acceptance, user documentation, and a green deterministic release gate.
 
@@ -60,3 +60,36 @@ Each implementation task's commit shall include its focused unit or integration 
 - Valid trace contracts enable deterministic scoped update, protected bytes remain exact, dirty links execute in full, and any blocked, structurally widened, invalid, or unverified candidate is discarded without an automatic retry.
 - `--adopt` preserves the complete user-attested semantic lineage, permits only compatible identity rebaselining, regenerates trusted deterministic derivatives, clears traces, and establishes a subsequent exact no-op.
 - Fixture pipelines cover the generic engine without live model calls, and `npm run release:check` passes before the iteration closes.
+
+## Deferred
+
+Two acceptance criteria above are **not** met, and this record previously
+claimed otherwise. They are deferred rather than quietly closed.
+
+1. **Scoped update reaches no real execution transport.** A compiled step
+   is categorically routed to ordinary execution because the compiled Boss
+   request carries no `sublang.slc.update-request.v1` field, which
+   [PHEXEC-29](../dev/phase-execution.md#phexec-29) requires for an
+   update-capable compile. An interpreted step is asked for a replacement
+   trace only once an update is already selected, so an ordinary run — the
+   only kind that can happen first — never produces the trace a later
+   update must build on, and every subsequent run falls back to ordinary
+   again. The feature is therefore exercised only by fixtures with a
+   test executor, never end to end. Until both transports carry it, the
+   scoped-update acceptance criterion is unproven, and the deterministic
+   partition relation below cannot be validated against a real agent.
+
+2. **The candidate gate does not implement all of [INCR-15](../dev/incremental-compilation.md#incr-15).**
+   The replacement input partition is compared by scope name and
+   classification only; its boundaries are not translated through the
+   known byte diff, so a structurally shifted partition is accepted and
+   becomes authority for the next update. INCR-15 also permits target
+   scopes to be added inside the allowed closure, which the gate cannot
+   express because the closure holds only prior scope names. Protected
+   classification and whole-target trace coverage are now enforced; the
+   boundary relation and scope addition are not.
+
+Task 22-24 landed as one commit (`bd78e8e`) rather than one commit each,
+and later commits (`3b5299b`, `9e2924d`, `5216020`) repaired behavior
+those checkmarks already claimed. The one-commit-per-task criterion is
+recorded here as missed rather than restated as met.

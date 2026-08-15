@@ -328,6 +328,34 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
     expect(result.status).toBe('error');
   });
 
+  it('keeps the reserved envelope out of a failed run’s diagnostics (PHEXEC-39)', async () => {
+    // An aborted or errored turn can already carry the reserved suffix. The
+    // status branch used to report the raw text, publishing the markers and
+    // the whole trace payload as user-facing diagnostics.
+    const agent = recordingAgent({
+      status: 'incomplete',
+      text: [
+        'partial work',
+        'SLC_RESULT_BEGIN',
+        '{"schema":"sublang.slc.interpreted-result.v1","metadata":{"sublang.slc.update.v1":{"secret":"payload"}}}',
+        'SLC_RESULT_END',
+      ].join('\n'),
+    });
+    const workspace = await createWorkspaceRecord(request);
+    const result = await createInterpretedExecutor({ agent }).run(
+      request,
+      workspace,
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('error');
+    const joined = result.diagnostics.join('\n');
+    expect(joined).toContain('partial work');
+    expect(joined).not.toContain('SLC_RESULT_BEGIN');
+    expect(joined).not.toContain('SLC_RESULT_END');
+    expect(joined).not.toContain('secret');
+  });
+
   it('maps an unfinished agent run to an error result', async () => {
     const agent = recordingAgent({ status: 'incomplete', text: '' });
     const workspace = await createWorkspaceRecord(request);

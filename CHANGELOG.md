@@ -20,18 +20,20 @@ and this project adheres to
   definitions, and compiler identity, and does the least work it can
   prove correct: nothing changed prints `up to date`, calls no agent,
   and writes nothing; some steps changed reuses every step whose inputs
-  still match and executes only the rest; and a phase that declares an
-  update contract can rewrite just the affected scopes of its artifact
-  instead of regenerating it. Reuse is conservative by construction —
+  still match and executes only the rest. Reuse is conservative by construction —
   anything the compiler cannot prove is still exact falls back to
   ordinary execution, so an uncertain run costs time rather than a
   correct artifact. How much applies depends on what a pipeline
   declares: reuse needs a phase to declare its readable inputs
-  (`## Pin Inputs`) and scoped update additionally needs an `## Update`
-  contract. The published `@sublang/playbook` definitions declare
-  neither yet, so a `playbook` re-run still executes its phases today;
-  what it gains now is source association, conflict detection,
-  `--rebuild`, and `--adopt`. The built-in normalizer declares both
+  (`## Pin Inputs`). The published `@sublang/playbook` definitions
+  declare none yet, so a `playbook` re-run still executes every phase
+  today, including when nothing changed; what it gains now is source
+  association, conflict detection, `--rebuild`, and `--adopt`. The
+  built-in normalizer declares its inputs. Scoped update — rewriting
+  only the affected scopes from an `## Update` contract — is specified
+  and implemented but reaches no real execution transport in this
+  release and is not usable; it is recorded as deferred rather than
+  shipped
   ([DR-021](specs/decisions/021-incremental-build-records-scoped-updates.md),
   [IR-021](specs/iterations/021-incremental-compilation.md)).
 - **`--rebuild` and `--adopt` for a bundle the compiler will not
