@@ -528,6 +528,15 @@ async function applyReplace(entry: ManifestReplace): Promise<void> {
   const bytes = await readStagedCandidate(entry);
   const dir = dirname(entry.canonicalPath);
   await mkdir(dir, { recursive: true });
+  if (entry.prior.kind === 'untrusted') {
+    // rename replaces a symbolic link without following it, but fails
+    // EISDIR on a directory, so a wrong-typed reserved path is cleared
+    // first. rm never follows the final component either (INCR-26).
+    const info = await lstat(entry.canonicalPath).catch(() => undefined);
+    if (info !== undefined && !info.isFile()) {
+      await rm(entry.canonicalPath, { recursive: true, force: true });
+    }
+  }
   // A unique exclusive temp name cannot collide with an unrecorded file or
   // follow a planted symlink; the durable rename is the only touch on the
   // canonical path.
@@ -599,7 +608,14 @@ function manifestConfined(
     manifest.replace.every(
       (entry) =>
         confined(stageRoot, entry.stagedPath) &&
-        canonicalAllowed(entry.role, entry.canonicalPath),
+        canonicalAllowed(entry.role, entry.canonicalPath) &&
+        // An untrusted prior waives the byte check for its destination, so
+        // it is admissible only for the two reserved metadata paths a
+        // rebuild is entitled to replace whatever they now hold. Anywhere
+        // else it would be blanket replacement authority.
+        (entry.prior.kind !== 'untrusted' ||
+          entry.role === 'build-record' ||
+          entry.role === 'source-snapshot'),
     ) &&
     // Promotion replaces lineage metadata but never removes it, so a remove
     // entry may carry only a product or entry role.
@@ -684,6 +700,9 @@ function matchesPrior(
   prior: OverlayObservation,
 ): boolean {
   if (prior.kind === 'absent') return current === undefined;
+  // An untrusted reserved path is replaced whatever it currently holds; the
+  // role/path bound in manifestConfined is what keeps that narrow.
+  if (prior.kind === 'untrusted') return true;
   return current === prior.identity;
 }
 
@@ -839,7 +858,7 @@ function isManifestRemove(value: unknown): value is ManifestRemove {
 function isObservation(value: unknown): value is OverlayObservation {
   if (typeof value !== 'object' || value === null) return false;
   const entry = value as Record<string, unknown>;
-  if (entry.kind === 'absent') return true;
+  if (entry.kind === 'absent' || entry.kind === 'untrusted') return true;
   return (
     (entry.kind === 'file' ||
       entry.kind === 'tree' ||

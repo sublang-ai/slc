@@ -32,6 +32,8 @@ import {
   encodeBuildRecord,
   encodeReadLocator,
   loadLineagePair,
+  resolveManagedPath,
+  BuildRecordError,
   readRegularFileNoFollow,
   resolveReadLocator,
   stepInputKey,
@@ -122,10 +124,10 @@ export async function runColdLineage(
     pipeline: topology.pipelineName,
   });
   const identified = await identifyCurrentPlan(topology, host);
-  let prior: LoadedLineage = { state: 'absent' };
+  let prior: PriorLineage = { state: 'absent' };
   let generation = 1;
   if (options.rebuild === true) {
-    prior = await loadLineagePair(topology.artifactDir);
+    prior = await loadPriorLineage(topology.artifactDir);
     generation = nextRebuildGeneration(prior, topology);
   } else {
     const classification = await classifyLineage(identified);
@@ -148,7 +150,8 @@ export async function runColdLineage(
     overlay = await createCandidateOverlay({
       artifactDir: topology.artifactDir,
       pipeline: topology.pipelineName,
-      accepted: acceptedLineageMembers(prior),
+      accepted: await acceptedLineageMembers(prior, identified),
+      ...(prior.state === 'untrusted' ? { untrustedMetadata: true } : {}),
       candidate,
       guards: [
         {
@@ -302,10 +305,71 @@ function reconstructedInvocation(
   };
 }
 
-function acceptedLineageMembers(
-  lineage: LoadedLineage,
+/**
+ * The accepted basis a candidate overlay may reason from: the reserved pair,
+ * plus every recorded product the candidate plan no longer produces whose
+ * bytes still match the trusted record. Attestation is what grants deletion
+ * authority — a formerly-managed leaf that drifted, vanished, or sits behind
+ * an unsafe path is simply left out, so it survives as an unrecorded file
+ * rather than being deleted on a stale inventory's word (INCR-8, INCR-30).
+ */
+async function acceptedLineageMembers(
+  lineage: PriorLineage,
+  plan: CanonicalBuildPlan,
+): Promise<AcceptedOverlayMember[]> {
+  if (lineage.state === 'absent' || lineage.state === 'untrusted') return [];
+  const { artifactDir, basename } = plan.topology;
+  const planned = new Set(plan.products.map((product) => product.path));
+  const obsolete: AcceptedOverlayMember[] = [];
+  for (const product of lineage.record.products) {
+    if (planned.has(product.path)) continue;
+    const identity = await attestedIdentity(
+      artifactDir,
+      basename,
+      product,
+    ).catch(() => undefined);
+    if (identity === undefined || identity !== product.hash) continue;
+    obsolete.push({
+      id: product.id,
+      role: overlayRoleFor(product.kind),
+      path: product.path,
+      identity,
+    });
+  }
+  return [...obsoleteSorted(obsolete), ...reservedMembers(lineage)];
+}
+
+/** Reads one recorded product's current bytes without following a link. */
+async function attestedIdentity(
+  artifactDir: string,
+  basename: string,
+  product: ProductRecord,
+): Promise<Hash> {
+  const canonicalPath = await resolveManagedPath(artifactDir, product.path, {
+    // Only the entry product names a sibling outside the bundle.
+    ...(product.kind === 'entry' ? { entryBasename: `${basename}.ts` } : {}),
+    requireFile: true,
+  });
+  return hashBytes(await readRegularFileNoFollow(canonicalPath));
+}
+
+function overlayRoleFor(kind: ProductRecord['kind']): OverlayRole {
+  return kind === 'entry'
+    ? 'entry'
+    : kind === 'verification'
+      ? 'verification'
+      : 'semantic';
+}
+
+function obsoleteSorted(
+  members: AcceptedOverlayMember[],
 ): AcceptedOverlayMember[] {
-  if (lineage.state === 'absent') return [];
+  return [...members].sort((left, right) => compareUtf8(left.path, right.path));
+}
+
+function reservedMembers(
+  lineage: Extract<LoadedLineage, { state: 'present' }>,
+): AcceptedOverlayMember[] {
   return [
     {
       id: 'lineage:source-snapshot',
@@ -322,11 +386,29 @@ function acceptedLineageMembers(
   ];
 }
 
+/** A prior lineage, plus the state where its reserved pair cannot be trusted. */
+type PriorLineage = LoadedLineage | { state: 'untrusted' };
+
+/**
+ * Loads the prior pair for a rebuild. Malformed, orphaned, wrong-typed, or
+ * symbolic-link metadata is not a failure here: `--rebuild` is exactly the
+ * authority to replace it, so it becomes an untrusted prior that grants no
+ * inventory and no deletion authority (INCR-19, INCR-26).
+ */
+async function loadPriorLineage(artifactDir: string): Promise<PriorLineage> {
+  try {
+    return await loadLineagePair(artifactDir);
+  } catch (error) {
+    if (error instanceof BuildRecordError) return { state: 'untrusted' };
+    throw error;
+  }
+}
+
 function nextRebuildGeneration(
-  lineage: LoadedLineage,
+  lineage: PriorLineage,
   topology: FullBuildTopology,
 ): number {
-  if (lineage.state === 'absent') return 1;
+  if (lineage.state === 'absent' || lineage.state === 'untrusted') return 1;
   const locator = encodeReadLocator(topology.artifactDir, topology.sourcePath);
   if (locator !== lineage.record.source.locator) return 1;
   if (lineage.record.lineage.generation === Number.MAX_SAFE_INTEGER) {
@@ -848,9 +930,6 @@ function assertManifestMatchesRecord(
   }
   for (const retained of manifest.retain) {
     identities.set(retained.path, retained.identity);
-  }
-  if (manifest.remove.length !== 0) {
-    throw new Error('an ordinary lineage candidate cannot remove products');
   }
   const expectedPaths = new Set([
     ...record.products.map((product) => product.path),
