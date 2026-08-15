@@ -11,6 +11,45 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Incremental compilation.** A canonical full compile now records its
+  source binding and accepted products beside the artifacts, as a
+  verbatim `.slc-source` snapshot and a `.slc-build.json` record. A
+  later run compares that lineage against the current source,
+  definitions, and compiler identity, and does the least work it can
+  prove correct: nothing changed prints `up to date`, calls no agent,
+  and writes nothing; some steps changed reuses every step whose inputs
+  still match and executes only the rest; and a phase that declares an
+  update contract can rewrite just the affected scopes of its artifact
+  instead of regenerating it. Reuse is conservative by construction —
+  anything the compiler cannot prove is still exact falls back to
+  ordinary execution, so an uncertain run costs time rather than a
+  correct artifact. How much applies depends on what a pipeline
+  declares: reuse needs a phase to declare its readable inputs
+  (`## Pin Inputs`) and scoped update additionally needs an `## Update`
+  contract. The published `@sublang/playbook` definitions declare
+  neither yet, so a `playbook` re-run still executes its phases today;
+  what it gains now is source association, conflict detection,
+  `--rebuild`, and `--adopt`. The built-in normalizer declares both
+  ([DR-021](specs/decisions/021-incremental-build-records-scoped-updates.md),
+  [IR-021](specs/iterations/021-incremental-compilation.md)).
+- **`--rebuild` and `--adopt` for a bundle the compiler will not
+  overwrite on its own.** When a bundle belongs to another same-named
+  source, or a managed product was edited outside an accepted compile,
+  the run refuses and names the recovery choices valid for that state.
+  `--rebuild` validates the current pins, executes every step normally,
+  and publishes the replacement only after the whole run succeeds and
+  verifies, leaving the previously accepted lineage in place on
+  failure. `--adopt` goes the other way and accepts hand-edited
+  artifacts as authoritative: it calls no agent and rewrites no
+  artifact of yours, records the bytes present, regenerates only the
+  entry module and verification tests, and runs those tests before
+  accepting. It requires the source to be unchanged and the pipeline
+  shape to still match, so it attests deliberate work rather than
+  repairing a broken bundle. Both are available only for full and
+  full-link runs without `-o`, and are mutually exclusive.
+
 ## [0.3.0] - 2026-08-06
 
 ### Added
