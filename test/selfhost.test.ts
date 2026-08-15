@@ -739,6 +739,39 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     ).toContain('from "./.slc-verify/verify.js"');
   }, 20_000);
 
+  it('adopts a refined bundle on a pipeline that emits derivatives (INCR-35)', async () => {
+    const seeded = await runSlc(['playbook', source], deps());
+    expect(seeded.ok, seeded.diagnostics.join('\n')).toBe(true);
+
+    // Refine a semantic product by hand, then attest it. This is the case a
+    // fixture without deterministic derivatives cannot exercise: adoption
+    // must still regenerate and check the entry module, verification tests,
+    // and verifier support beside the attested products.
+    const gears = join(artDir, 'code.gears.md');
+    const refined = `${await readFile(gears, 'utf8')}\n<!-- refined by hand -->\n`;
+    await writeFile(gears, refined);
+
+    const result = await runSlc(['playbook', source, '--adopt'], {
+      ...deps(),
+      executor: {
+        run: () => {
+          throw new Error('adoption must invoke no semantic executor');
+        },
+      },
+    });
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(result.outcome).toBe('adopted');
+    // The hand-written bytes are attested, not regenerated.
+    expect(await readFile(gears, 'utf8')).toBe(refined);
+    expect(result.outputs).toContain(gears);
+    // The derivatives were regenerated and reported after the attested set.
+    expect(result.outputs.slice(result.attested ?? 0)).toContain(
+      join(artDir, 'code.gears-fsm.test.ts'),
+    );
+    expect(await exists(join(work, 'code.ts'))).toBe(true);
+  }, 20_000);
+
   it('runs generated verification in a project with no SLC installation', async () => {
     const result = await runSlc(['playbook', source], deps());
     expect(result.ok).toBe(true);
