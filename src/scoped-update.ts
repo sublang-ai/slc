@@ -309,3 +309,70 @@ function mappedScope(
 function scopeIndex(trace: UpdateTrace, name: string): number {
   return trace.input.scopes.findIndex((scope) => scope.scope === name);
 }
+
+/** Why a returned update candidate was rejected. */
+export type CandidateRejection =
+  | 'no-replacement-trace'
+  | 'input-not-current'
+  | 'target-not-candidate'
+  | 'scope-outside-closure'
+  | 'unchanged-closure-altered';
+
+/**
+ * Checks a returned candidate against the invariants the request fixed.
+ *
+ * The replacement trace must bind its input partition to the current operand
+ * and its target partition to the complete candidate bytes; every unchanged
+ * input scope must retain its exact recorded closure; and each dirty scope's
+ * replacement closure may name only allowed target scopes. A rejection is
+ * terminal — the staged run is discarded rather than silently retried
+ * ordinarily, so a rejected update never hides behind a passing build
+ * (INCR-15, INCR-16, INCR-25).
+ */
+export function acceptUpdateCandidate(opts: {
+  readonly priorTrace: UpdateTrace;
+  readonly replacement: UpdateTrace | undefined;
+  readonly dirtyInputScopes: readonly string[];
+  readonly allowedTargetScopes: readonly string[];
+  readonly currentInputHash: string;
+  readonly currentInputByteLength: number;
+  readonly candidateHash: string;
+  readonly candidateByteLength: number;
+}): CandidateRejection | null {
+  const replacement = opts.replacement;
+  if (replacement === undefined) return 'no-replacement-trace';
+  if (
+    replacement.input.hash !== opts.currentInputHash ||
+    replacement.input.byteLength !== opts.currentInputByteLength
+  ) {
+    return 'input-not-current';
+  }
+  if (
+    replacement.target.hash !== opts.candidateHash ||
+    replacement.target.byteLength !== opts.candidateByteLength
+  ) {
+    return 'target-not-candidate';
+  }
+  const allowed = new Set(opts.allowedTargetScopes);
+  const dirty = new Set(opts.dirtyInputScopes);
+  for (const dependency of replacement.dependencies) {
+    if (dirty.has(dependency.input)) {
+      if (dependency.targets.some((name) => !allowed.has(name))) {
+        return 'scope-outside-closure';
+      }
+      continue;
+    }
+    // An unchanged unit keeps exactly the closure the accepted trace recorded.
+    const prior = opts.priorTrace.dependencies.find(
+      (entry) => entry.input === dependency.input,
+    );
+    if (
+      prior === undefined ||
+      prior.targets.length !== dependency.targets.length ||
+      prior.targets.some((name, index) => dependency.targets[index] !== name)
+    ) {
+      return 'unchanged-closure-altered';
+    }
+  }
+  return null;
+}

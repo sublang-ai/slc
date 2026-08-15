@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { StepRecord, UpdateTrace } from '../src/build-record.js';
 import {
+  acceptUpdateCandidate,
   diffBytes,
   parseUpdateContract,
   planScopedUpdate,
@@ -249,5 +250,100 @@ describe('scoped update selection (INCR-14)', () => {
     expect(result.mode).toBe('ordinary');
     if (result.mode !== 'ordinary') return;
     expect(result.reason).toBe('ambiguous-insertion');
+  });
+});
+
+describe('scoped candidate enforcement (INCR-15, INCR-16, INCR-25)', () => {
+  const priorTrace = {
+    schema: 'sublang.slc.update.v1',
+    input: {
+      hash: `sha256:${'a'.repeat(64)}`,
+      byteLength: 9,
+      scopes: [
+        { scope: 'one', start: 0, end: 4, classification: 'local' },
+        { scope: 'two', start: 4, end: 9, classification: 'local' },
+      ],
+    },
+    target: {
+      hash: `sha256:${'b'.repeat(64)}`,
+      byteLength: 6,
+      scopes: [
+        { scope: 'x', start: 0, end: 3, classification: 'local' },
+        { scope: 'y', start: 3, end: 6, classification: 'local' },
+      ],
+    },
+    dependencies: [
+      { input: 'one', targets: ['x'] },
+      { input: 'two', targets: ['y'] },
+    ],
+  } as unknown as UpdateTrace;
+
+  const replacement = (overrides: Record<string, unknown> = {}): UpdateTrace =>
+    ({
+      ...priorTrace,
+      input: {
+        hash: `sha256:${'c'.repeat(64)}`,
+        byteLength: 9,
+        scopes: priorTrace.input.scopes,
+      },
+      target: {
+        hash: `sha256:${'d'.repeat(64)}`,
+        byteLength: 6,
+        scopes: priorTrace.target.scopes,
+      },
+      ...overrides,
+    }) as UpdateTrace;
+
+  const accept = (overrides: Record<string, unknown> = {}) =>
+    acceptUpdateCandidate({
+      priorTrace,
+      replacement: replacement(),
+      dirtyInputScopes: ['one'],
+      allowedTargetScopes: ['x'],
+      currentInputHash: `sha256:${'c'.repeat(64)}`,
+      currentInputByteLength: 9,
+      candidateHash: `sha256:${'d'.repeat(64)}`,
+      candidateByteLength: 6,
+      ...overrides,
+    } as Parameters<typeof acceptUpdateCandidate>[0]);
+
+  it('accepts a candidate satisfying every invariant', () => {
+    expect(accept()).toBeNull();
+  });
+
+  it.each([
+    { reason: 'no-replacement-trace', overrides: { replacement: undefined } },
+    {
+      reason: 'input-not-current',
+      overrides: { currentInputHash: `sha256:${'e'.repeat(64)}` },
+    },
+    {
+      reason: 'target-not-candidate',
+      overrides: { candidateHash: `sha256:${'f'.repeat(64)}` },
+    },
+    {
+      reason: 'scope-outside-closure',
+      overrides: {
+        replacement: replacement({
+          dependencies: [
+            { input: 'one', targets: ['x', 'y'] },
+            { input: 'two', targets: ['y'] },
+          ],
+        }),
+      },
+    },
+    {
+      reason: 'unchanged-closure-altered',
+      overrides: {
+        replacement: replacement({
+          dependencies: [
+            { input: 'one', targets: ['x'] },
+            { input: 'two', targets: ['x'] },
+          ],
+        }),
+      },
+    },
+  ])('rejects a candidate for $reason', ({ reason, overrides }) => {
+    expect(accept(overrides)).toBe(reason);
   });
 });

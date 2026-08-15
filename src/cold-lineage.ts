@@ -76,6 +76,7 @@ import { messageOf } from './errors.js';
 import {
   formatFailureReport,
   runPhase,
+  type ExecuteRequest,
   type ExecutorMetadata,
   type PhaseExecutor,
 } from './execution.js';
@@ -85,6 +86,7 @@ import { loadLinkFile } from './link.js';
 import { loadPipeline } from './pipeline.js';
 import type { ProgressSink } from './progress.js';
 import {
+  acceptUpdateCandidate,
   parseUpdateContract,
   planScopedUpdate,
   type ScopedUpdatePlan,
@@ -459,7 +461,6 @@ async function planStepUpdate(opts: {
   recorded: StepRecord | undefined;
   reuse: ReuseBasis | undefined;
   identifiedStep: { inputClosure: StepRecord['inputClosure'] } | undefined;
-  definitions: readonly string[];
   operandBytes: Uint8Array;
   priorSourceBytes: Uint8Array | undefined;
 }): Promise<ScopedUpdatePlan> {
@@ -671,16 +672,38 @@ async function executeColdSteps(
     // Scoped-update selection happens before any progress or executor work
     // and before any agent is asked to classify a change (INCR-14). Task 19
     // replaces this fall-through with the update request itself.
-    const plan_ = await planStepUpdate({
+    const updatePlan = await planStepUpdate({
       step,
       recorded,
       reuse,
       identifiedStep,
-      definitions,
       operandBytes,
       priorSourceBytes: reuse?.snapshot,
     });
-    void plan_;
+    const update =
+      updatePlan.mode === 'update' && recorded?.trace != null
+        ? {
+            schema: 'sublang.slc.update-request.v1' as const,
+            priorInput: {
+              read: 'prior-input',
+              hash: recorded.trace.input.hash,
+              byteLength: recorded.trace.input.byteLength,
+            },
+            currentInput: {
+              read: 'source',
+              hash: hashBytes(operandBytes),
+              byteLength: operandBytes.byteLength,
+            },
+            priorTarget: {
+              read: 'prior-target',
+              hash: recorded.trace.target.hash,
+              byteLength: recorded.trace.target.byteLength,
+            },
+            priorTrace: recorded.trace,
+            changes: updatePlan.hunks,
+            allowedTargetScopes: updatePlan.allowedTargetScopes,
+          }
+        : undefined;
 
     const startedAt = Date.now();
     host.progress?.({ kind: 'phase-start', phase: step.name, target });
@@ -711,8 +734,12 @@ async function executeColdSteps(
     }
     const semanticInputs = await workspaceSemanticInputs(step, plan, physical);
     const physicalReads = physicalReadOverrides(step, physical, host.cwd);
+    const request: ExecuteRequest =
+      update !== undefined && step.request.kind === 'compile'
+        ? { ...step.request, update }
+        : step.request;
     const result = await runPhase({
-      request: step.request,
+      request,
       phase: step.name,
       targetExt: step.targetExt,
       executor,
@@ -724,6 +751,16 @@ async function executeColdSteps(
         semanticInputs,
         physicalReads,
         physicalWrite: stagedTarget,
+        // The prior operand and prior target are canonical accepted bytes,
+        // deliberately outside the staged predecessor map.
+        ...(update === undefined
+          ? {}
+          : {
+              priorReads: {
+                input: plan.topology.sourcePath,
+                target,
+              },
+            }),
       },
       signal: host.signal,
     });
@@ -737,6 +774,39 @@ async function executeColdSteps(
       };
     }
     diagnostics.push(...result.diagnostics);
+    if (update !== undefined && updatePlan.mode === 'update') {
+      const produced = await readRegularFileNoFollow(stagedTarget);
+      const rejection = acceptUpdateCandidate({
+        priorTrace: update.priorTrace,
+        replacement: result.metadata?.[UPDATE_TRACE_SCHEMA],
+        dirtyInputScopes: updatePlan.dirtyInputScopes,
+        allowedTargetScopes: updatePlan.allowedTargetScopes,
+        currentInputHash: update.currentInput.hash,
+        currentInputByteLength: update.currentInput.byteLength,
+        candidateHash: hashBytes(produced),
+        candidateByteLength: produced.byteLength,
+      });
+      if (rejection !== null) {
+        // A rejected candidate discards the complete staged run; it is never
+        // silently retried ordinarily (INCR-15, INCR-16, INCR-25).
+        failProgress();
+        return {
+          ok: false,
+          outputs: [],
+          origins,
+          diagnostics: [
+            ...diagnostics,
+            formatFailureReport({
+              phase: step.name,
+              target,
+              reasons: [
+                `scoped update candidate rejected (${rejection}); recovery: --rebuild`,
+              ],
+            }),
+          ],
+        };
+      }
+    }
     host.progress?.({
       kind: 'phase-finish',
       phase: step.name,
@@ -748,7 +818,7 @@ async function executeColdSteps(
     const produced = await readRegularFileNoFollow(stagedTarget);
     const producedHash = hashBytes(produced);
     origins.set(step.id, {
-      origin: 'ordinary',
+      origin: update === undefined ? 'ordinary' : 'updated',
       trace: acceptedOrdinaryTrace({
         step,
         metadata: result.metadata,
