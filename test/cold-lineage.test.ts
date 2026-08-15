@@ -639,6 +639,64 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     dependencies: [{ input: 'whole', targets: ['body'] }],
   });
 
+  it('replans a downstream step from the actual upstream output (INCR-3, INCR-17)', async () => {
+    // Seed with traces so both steps are update-capable in principle.
+    await runSlc(['flow', sourcePath], deps(tracingExecutor(boundTrace)));
+    const before = await readRecord();
+    expect(before.plan.steps.every((step) => step.trace !== null)).toBe(true);
+
+    // The source changes, so step 0 re-derives; step 1's operand is then the
+    // new upstream output rather than the recorded one, and it must not be
+    // reused on the strength of the stale recorded key.
+    await writeFile(sourcePath, 'changed source\n');
+    const performing = tracingExecutor(boundTrace);
+    const result = await runSlc(['flow', sourcePath], deps(performing));
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(performing.calls).toHaveLength(2);
+    const record = await readRecord();
+    // The downstream step's recorded input key follows the actual bytes its
+    // predecessor produced in this run.
+    expect(record.plan.steps[1].inputKey).toBe(
+      expectedInputKey(record.plan.steps[1].id, {
+        kind: 'product',
+        product: record.plan.steps[0].target.product,
+        hash: record.products.find(
+          (product) => product.id === record.plan.steps[0].target.product,
+        )!.hash,
+      }),
+    );
+    await assertNoPrivateResidue();
+  });
+
+  it('promotes one lineage carrying reused and ordinary origins together (INCR-23)', async () => {
+    await seedLineage();
+    // Only the second phase definition drifts, so step 0 reuses and step 1
+    // re-executes — two origins decided independently in one promotion.
+    await writeFile(
+      join(pipelineDir, 'mid2out.md'),
+      `${formatDoc('mid', '.md', 'out', '.ts')}\n- \`refs/shared.md\`\n\nrevised\n`,
+    );
+    const performing = executor();
+
+    const result = await runSlc(['flow', sourcePath], deps(performing));
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(performing.calls).toHaveLength(1);
+    const record = await readRecord();
+    expect(record.plan.steps.map((step) => step.origin)).toEqual([
+      'ordinary',
+      'ordinary',
+    ]);
+    // Every product the record claims is present and attests, so the whole
+    // lineage promoted as one accepted unit.
+    for (const product of record.products) {
+      const path = join(artifactDir, ...product.path.split('/'));
+      expect(await hashFile(path)).toBe(product.hash);
+    }
+    await assertNoPrivateResidue();
+  });
+
   it('records a bound ordinary trace and nulls an unbound one (INCR-13, INCR-20)', async () => {
     const result = await runSlc(
       ['flow', sourcePath],

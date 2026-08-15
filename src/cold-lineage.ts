@@ -452,6 +452,32 @@ function acceptedOrdinaryTrace(opts: {
 }
 
 /**
+ * Returns the accepted bytes a recorded step produced, when they still
+ * attest the record. Anything else yields `undefined`, which simply makes
+ * the next step ineligible for update rather than failing the build.
+ */
+async function acceptedProductBytes(
+  artifactDir: string,
+  recorded: StepRecord | undefined,
+  reuse: ReuseBasis | undefined,
+): Promise<Uint8Array | undefined> {
+  if (recorded === undefined || reuse === undefined) return undefined;
+  const product = reuse.record.products.find(
+    (candidate) => candidate.id === recorded.target.product,
+  );
+  if (product === undefined) return undefined;
+  try {
+    const path = await resolveManagedPath(artifactDir, product.path, {
+      requireFile: true,
+    });
+    const bytes = await readRegularFileNoFollow(path);
+    return hashBytes(bytes) === product.hash ? bytes : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Decides whether one step can take the scoped-update path, reading the
  * current definition to look for the frozen contract. Every failure mode
  * returns ordinary execution, which is always correct.
@@ -607,6 +633,11 @@ async function executeColdSteps(
   // predecessor bytes are the bytes in hand (INCR-10).
   let operand: StepInputOperand = { kind: 'source', hash: sourceHash };
   let operandBytes = sourceBytes;
+  // The prior operand advances beside the current one: for step N it is the
+  // accepted bytes step N-1 produced in the recorded lineage, which is what
+  // makes a downstream step updatable after an upstream one changed
+  // (INCR-3, INCR-17).
+  let priorOperandBytes = reuse?.snapshot;
   let operandByteLength = sourceBytes.byteLength;
   // Staged bindings cover executed predecessors only (INCR-8), so a source
   // that shares a step's canonical target path — a --normalize re-run over
@@ -666,6 +697,9 @@ async function executeColdSteps(
       operand = { kind: 'product', product: planned.id, hash: identity };
       operandBytes = bytes;
       operandByteLength = bytes.byteLength;
+      // A reused product is byte-identical to the accepted one, so it is
+      // also the next step's prior operand.
+      priorOperandBytes = bytes;
       continue;
     }
 
@@ -678,7 +712,7 @@ async function executeColdSteps(
       reuse,
       identifiedStep,
       operandBytes,
-      priorSourceBytes: reuse?.snapshot,
+      priorSourceBytes: priorOperandBytes,
     });
     const update =
       updatePlan.mode === 'update' && recorded?.trace != null
@@ -831,6 +865,11 @@ async function executeColdSteps(
     operand = { kind: 'product', product: planned.id, hash: producedHash };
     operandBytes = produced;
     operandByteLength = produced.byteLength;
+    priorOperandBytes = await acceptedProductBytes(
+      plan.topology.artifactDir,
+      recorded,
+      reuse,
+    );
   }
   return { ok: true, outputs, origins, diagnostics };
 }
