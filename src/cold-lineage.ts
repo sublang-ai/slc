@@ -39,8 +39,11 @@ import {
   stepInputKey,
   type BuildRecord,
   type LoadedLineage,
+  type Origin,
   type ProductRecord,
+  type StepInputOperand,
   type StepRecord,
+  type UpdateTrace,
 } from './build-record.js';
 import {
   createCandidateOverlay,
@@ -113,6 +116,15 @@ export interface CanonicalLineageOptions {
   rebuild?: true;
 }
 
+/** One accepted record plus the steps drift already proved must re-execute. */
+interface ReuseBasis {
+  readonly record: BuildRecord;
+  readonly dirty: ReadonlySet<string>;
+}
+
+/** What each scheduled step contributed to the candidate record. */
+type StepOrigins = Map<string, { origin: Origin; trace: UpdateTrace | null }>;
+
 /** Executes or classifies one canonical source-bound lineage invocation. */
 export async function runColdLineage(
   topology: FullBuildTopology,
@@ -126,12 +138,35 @@ export async function runColdLineage(
   const identified = await identifyCurrentPlan(topology, host);
   let prior: PriorLineage = { state: 'absent' };
   let generation = 1;
+  let reuse: ReuseBasis | undefined;
   if (options.rebuild === true) {
     prior = await loadPriorLineage(topology.artifactDir);
-    generation = nextRebuildGeneration(prior, topology);
+    generation = nextGeneration(prior, topology);
   } else {
     const classification = await classifyLineage(identified);
-    if (classification.state !== 'cold') {
+    // A lineage whose steps are still exactly derivable is not a failure:
+    // its unaffected steps are reused and only the dirty ones execute
+    // (INCR-10, INCR-11). Conflicts and incompatibility still refuse.
+    if (
+      classification.state === 'dirty-input' ||
+      (classification.state === 'current' &&
+        !classification.wholeLineageReusable)
+    ) {
+      reuse = {
+        record: classification.basis.record,
+        dirty: new Set(
+          classification.state === 'dirty-input'
+            ? classification.ordinaryDirtySteps
+            : [],
+        ),
+      };
+      prior = {
+        state: 'present',
+        record: classification.basis.record,
+        snapshot: classification.basis.snapshot,
+      };
+      generation = nextGeneration(prior, topology);
+    } else if (classification.state !== 'cold') {
       return {
         ok: false,
         outputs: [],
@@ -174,8 +209,20 @@ export async function runColdLineage(
     });
     await writeFile(overlay.stagePath(SOURCE_SNAPSHOT_FILE), sourceBytes);
 
-    const execution = await executeColdSteps(identified, overlay, host);
-    if (!execution.ok) return execution;
+    const execution = await executeColdSteps(
+      identified,
+      overlay,
+      host,
+      sourceHash,
+      reuse,
+    );
+    if (!execution.ok) {
+      return {
+        ok: false,
+        outputs: execution.outputs,
+        diagnostics: execution.diagnostics,
+      };
+    }
 
     const deterministic = await acceptDeterministicProducts(
       identified,
@@ -197,6 +244,7 @@ export async function runColdLineage(
       overlay,
       sourceHash,
       generation,
+      execution.origins,
     );
     const encodedRecord = encodeBuildRecord(record);
     await writeFile(overlay.stagePath(BUILD_RECORD_FILE), encodedRecord);
@@ -353,6 +401,18 @@ async function attestedIdentity(
   return hashBytes(await readRegularFileNoFollow(canonicalPath));
 }
 
+/** Every scheduled step must have declared how it produced its output. */
+function requiredOrigin(
+  origins: StepOrigins,
+  stepId: string,
+): { origin: Origin; trace: UpdateTrace | null } {
+  const recorded = origins.get(stepId);
+  if (recorded === undefined) {
+    throw new Error(`scheduled step ${stepId} recorded no origin`);
+  }
+  return recorded;
+}
+
 function overlayRoleFor(kind: ProductRecord['kind']): OverlayRole {
   return kind === 'entry'
     ? 'entry'
@@ -404,7 +464,7 @@ async function loadPriorLineage(artifactDir: string): Promise<PriorLineage> {
   }
 }
 
-function nextRebuildGeneration(
+function nextGeneration(
   lineage: PriorLineage,
   topology: FullBuildTopology,
 ): number {
@@ -446,9 +506,16 @@ async function executeColdSteps(
   plan: CanonicalBuildPlan,
   overlay: CandidateOverlay,
   host: ColdLineageHost,
-): Promise<ColdLineageResult> {
+  sourceHash: Hash,
+  reuse: ReuseBasis | undefined,
+): Promise<ColdLineageResult & { origins: StepOrigins }> {
   const outputs: string[] = [];
   const diagnostics: string[] = [];
+  const origins: StepOrigins = new Map();
+  // The running operand is what the next step actually consumes, so a
+  // recomputed input key equals the recorded one exactly when the recorded
+  // predecessor bytes are the bytes in hand (INCR-10).
+  let operand: StepInputOperand = { kind: 'source', hash: sourceHash };
   // Staged bindings cover executed predecessors only (INCR-8), so a source
   // that shares a step's canonical target path — a --normalize re-run over
   // the already-normalized intermediate — keeps its original binding for
@@ -459,7 +526,7 @@ async function executeColdSteps(
     plan.selections.map((selection) => [selection.stepId, selection]),
   );
 
-  for (const step of plan.topology.steps) {
+  for (const [index, step] of plan.topology.steps.entries()) {
     await overlay.assertBasisCurrent();
     const target = targetOf(step);
     const planned = plan.products.find(
@@ -469,6 +536,45 @@ async function executeColdSteps(
       throw new Error(`canonical step ${step.id} has no planned product`);
     }
     const stagedTarget = overlay.stagePath(planned.path);
+
+    // Reuse is decided before any progress or executor work: a step whose
+    // declared inputs are closed, whose recorded product still holds its
+    // recorded bytes, and whose recomputed key matches the record has
+    // nothing to re-derive (INCR-10, INCR-11, INCR-29).
+    const identifiedStep = plan.plan.steps[index];
+    const recorded = reuse?.record.plan.steps[index];
+    const recordedProduct = reuse?.record.products.find(
+      (product) => product.id === recorded?.target.product,
+    );
+    if (
+      reuse !== undefined &&
+      recorded !== undefined &&
+      recordedProduct !== undefined &&
+      recorded.id === step.id &&
+      !reuse.dirty.has(step.id) &&
+      identifiedStep?.inputClosure === 'closed' &&
+      recordedProduct.path === planned.path &&
+      stepInputKey(step.id, [operand]) === recorded.inputKey
+    ) {
+      const bytes = await readRegularFileNoFollow(target);
+      const identity = hashBytes(bytes);
+      // Between classification and here the accepted bytes could have
+      // moved; staging them unchecked would bless an edit into the record.
+      if (identity !== recordedProduct.hash) {
+        throw new Error(
+          `accepted product ${planned.path} changed after classification`,
+        );
+      }
+      await writeFile(stagedTarget, bytes);
+      origins.set(step.id, {
+        origin: recorded.origin,
+        trace: recorded.trace === null ? null : structuredClone(recorded.trace),
+      });
+      physical.set(resolve(target), stagedTarget);
+      operand = { kind: 'product', product: planned.id, hash: identity };
+      continue;
+    }
+
     const startedAt = Date.now();
     host.progress?.({ kind: 'phase-start', phase: step.name, target });
     const failProgress = (): void =>
@@ -486,6 +592,7 @@ async function executeColdSteps(
       return {
         ok: false,
         outputs: [],
+        origins,
         diagnostics: [
           formatFailureReport({
             phase: step.name,
@@ -518,6 +625,7 @@ async function executeColdSteps(
       return {
         ok: false,
         outputs: [],
+        origins,
         diagnostics: [...diagnostics, formatFailureReport(result.report)],
       };
     }
@@ -530,8 +638,14 @@ async function executeColdSteps(
     });
     outputs.push(target);
     physical.set(resolve(target), stagedTarget);
+    origins.set(step.id, { origin: 'ordinary', trace: null });
+    operand = {
+      kind: 'product',
+      product: planned.id,
+      hash: await hashFile(stagedTarget),
+    };
   }
-  return { ok: true, outputs, diagnostics };
+  return { ok: true, outputs, origins, diagnostics };
 }
 
 function selectedExecutor(
@@ -845,6 +959,7 @@ async function buildColdRecord(
   overlay: CandidateOverlay,
   sourceHash: Hash,
   generation: number,
+  origins: StepOrigins,
 ): Promise<BuildRecord> {
   const products: ProductRecord[] = await Promise.all(
     plan.products.map(async (product) => ({
@@ -883,8 +998,7 @@ async function buildColdRecord(
       inputKey: stepInputKey(step.id, [operand]),
       inputs: [...step.inputs],
       inputClosure: step.inputClosure,
-      origin: 'ordinary',
-      trace: null,
+      ...requiredOrigin(origins, step.id),
     };
   });
   return {
