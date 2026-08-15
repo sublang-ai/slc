@@ -33,6 +33,7 @@ import type {
   SealedOverlay,
 } from './build-overlay.js';
 import { BUILD_RECORD_FILE, SOURCE_SNAPSHOT_FILE } from './build-record.js';
+import { errorCode } from './errors.js';
 import { type Hash, hashBytes, hashFile, isHash } from './hash.js';
 
 const MANIFEST_SCHEMA = 'sublang.slc.stage.v1' as const;
@@ -155,15 +156,23 @@ export async function promoteLineage(
   await assertInventoryReady(manifest, record);
   await guardedReplace(manifest, record);
   await at(checkpoint, 'record-committed');
+  await assertRecordCommitted(record);
+  await rm(overlay.root, { recursive: true, force: true });
+}
 
-  const committed = await hashFile(record.canonicalPath);
-  if (committed !== record.candidateIdentity) {
+/**
+ * Confirms the committed marker still carries the sealed candidate bytes.
+ * The last observation of the transaction, run after the final checkpoint
+ * on both the live and recovery paths so neither can conclude while the
+ * marker describes something else.
+ */
+async function assertRecordCommitted(record: ManifestReplace): Promise<void> {
+  if ((await observeFile(record.canonicalPath)) !== record.candidateIdentity) {
     throw new BuildPromotionError(
       'interference',
       `committed build record does not match the sealed candidate: ${record.canonicalPath}`,
     );
   }
-  await rm(overlay.root, { recursive: true, force: true });
 }
 
 /**
@@ -358,13 +367,13 @@ async function finishForward(
     }
   }
 
-  // Application mirrors the live path exactly — the same guardedReplace
-  // that re-observes each destination at its point of use — so drift or an
-  // unsafe component observed at any moment voids the stage rather than
-  // being overwritten, and the whole inventory is verified before the
-  // record commits.
+  // Application mirrors the live path exactly, member for member and in
+  // the same order. Every member goes through guardedReplace — which is a
+  // no-op for one already at its candidate — rather than being skipped on
+  // the strength of an earlier classification, so drift observed at any
+  // moment voids the stage instead of surviving the transaction.
   try {
-    for (const entry of pending.filter((e) => e !== record && e !== snapshot)) {
+    for (const entry of body) {
       await guardedReplace(manifest, entry);
     }
     await at(checkpoint, 'replaces-applied');
@@ -373,13 +382,13 @@ async function finishForward(
       await applyRemove(entry);
     }
     await at(checkpoint, 'removes-applied');
-    if (snapshot !== undefined && pending.includes(snapshot)) {
+    if (snapshot !== undefined) {
       await guardedReplace(manifest, snapshot);
     }
     await assertInventoryReady(manifest, record);
-    if (pending.includes(record)) {
-      await guardedReplace(manifest, record);
-    }
+    await guardedReplace(manifest, record);
+    await at(checkpoint, 'record-committed');
+    await assertRecordCommitted(record);
   } catch (error) {
     if (error instanceof BuildPromotionError) {
       await rm(stageRoot, { recursive: true, force: true });
@@ -387,7 +396,6 @@ async function finishForward(
     }
     throw error;
   }
-  await at(checkpoint, 'record-committed');
   await rm(stageRoot, { recursive: true, force: true });
   return true;
 }
@@ -624,15 +632,26 @@ function matchesPrior(
  * classification must surface, never silently accept (INCR-27), so it
  * observes as `unsafe`, which matches neither a prior nor a candidate.
  */
+/**
+ * Total observation of one canonical path. Only `ENOENT` reports absence;
+ * every other outcome — a symbolic link, a non-regular file, or an
+ * unreadable one (`EACCES`, `EIO`) — reports `unsafe`, which equals no
+ * prior, no candidate, and no absence, so every caller fails closed rather
+ * than reading a filesystem error as a benign state.
+ */
 async function observeFile(path: string): Promise<Hash | 'unsafe' | undefined> {
   let info;
   try {
     info = await lstat(path);
-  } catch {
-    return undefined;
+  } catch (error) {
+    return errorCode(error) === 'ENOENT' ? undefined : 'unsafe';
   }
   if (!info.isFile() || info.isSymbolicLink()) return 'unsafe';
-  return hashFile(path);
+  try {
+    return await hashFile(path);
+  } catch {
+    return 'unsafe';
+  }
 }
 
 /**

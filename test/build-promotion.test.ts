@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readdir,
@@ -673,6 +674,57 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
     expect(recovered).toBe('nothing-pending');
     expect(await exists(stage)).toBe(false);
     expect(await readFile(join(artDir, 'stale.md'), 'utf8')).toBe('restored');
+    expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
+  });
+
+  it('voids recovery when the committed record is edited during recovery', async () => {
+    const overlay = await seal(standardSet());
+    // Crash after the marker committed, so recovery starts with the record
+    // already at its candidate identity.
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'record-committed') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+      checkpoint: async ({ name }) => {
+        if (name === 'record-committed') {
+          await writeFile(join(artDir, '.slc-build.json'), '{"v":"edited"}');
+        }
+      },
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+    expect(await readFile(join(artDir, '.slc-build.json'), 'utf8')).toBe(
+      '{"v":"edited"}',
+    );
+  });
+
+  it('treats an unreadable obsolete path as present, not absent', async () => {
+    if (process.getuid?.() === 0) return; // root bypasses the mode bits
+    const guarded = join(artDir, 'sub');
+    await mkdir(guarded);
+    const overlay = await seal(standardSet(), [
+      { name: 'sub/stale.md', prior: 'x' },
+    ]);
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: async ({ name }) => {
+          // The removal succeeded; the directory then becomes unsearchable,
+          // so observing the obsolete path fails with EACCES rather than
+          // reporting it absent.
+          if (name === 'removes-applied') await chmod(guarded, 0o000);
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+    await chmod(guarded, 0o755);
     expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
   });
 
