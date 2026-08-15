@@ -809,6 +809,12 @@ async function executeColdSteps(
   // makes a downstream step updatable after an upstream one changed
   // (INCR-3, INCR-17).
   let priorOperandBytes = reuse?.snapshot;
+  // The physical path those prior bytes live at: the accepted snapshot for
+  // the first step, each predecessor's accepted product after that.
+  let priorInputPath: string | undefined =
+    reuse === undefined
+      ? undefined
+      : resolve(plan.topology.artifactDir, SOURCE_SNAPSHOT_FILE);
   let operandByteLength = sourceBytes.byteLength;
   // Staged bindings cover executed predecessors only (INCR-8), so a source
   // that shares a step's canonical target path — a --normalize re-run over
@@ -871,6 +877,7 @@ async function executeColdSteps(
       // A reused product is byte-identical to the accepted one, so it is
       // also the next step's prior operand.
       priorOperandBytes = bytes;
+      priorInputPath = target;
       continue;
     }
 
@@ -957,13 +964,21 @@ async function executeColdSteps(
         physicalReads,
         physicalWrite: stagedTarget,
         // The prior operand and prior target are canonical accepted bytes,
-        // deliberately outside the staged predecessor map.
-        ...(update === undefined
+        // deliberately outside the staged predecessor map. prior-input is
+        // the exact bytes the planner diffed — the accepted snapshot for
+        // the first step, the predecessor's accepted product after that —
+        // never the current source, which is what changed.
+        ...(update === undefined || priorInputPath === undefined
           ? {}
           : {
               priorReads: {
-                input: plan.topology.sourcePath,
+                input: priorInputPath,
+                inputLogical:
+                  step.request.kind === 'compile'
+                    ? step.request.source
+                    : target,
                 target,
+                targetLogical: target,
               },
             }),
       },
@@ -981,8 +996,13 @@ async function executeColdSteps(
     diagnostics.push(...result.diagnostics);
     if (update !== undefined && updatePlan.mode === 'update') {
       const produced = await readRegularFileNoFollow(stagedTarget);
+      const priorTargetBytes = await readRegularFileNoFollow(target).catch(
+        () => new Uint8Array(),
+      );
       const rejection = acceptUpdateCandidate({
         priorTrace: update.priorTrace,
+        priorTargetBytes,
+        candidateBytes: produced,
         replacement: result.metadata?.[UPDATE_TRACE_SCHEMA],
         dirtyInputScopes: updatePlan.dirtyInputScopes,
         allowedTargetScopes: updatePlan.allowedTargetScopes,
@@ -1041,6 +1061,7 @@ async function executeColdSteps(
       recorded,
       reuse,
     );
+    priorInputPath = priorOperandBytes === undefined ? undefined : target;
   }
   return { ok: true, outputs, origins, diagnostics };
 }

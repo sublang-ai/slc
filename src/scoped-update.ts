@@ -316,7 +316,9 @@ export type CandidateRejection =
   | 'input-not-current'
   | 'target-not-candidate'
   | 'scope-outside-closure'
-  | 'unchanged-closure-altered';
+  | 'unchanged-closure-altered'
+  | 'input-partition-altered'
+  | 'protected-bytes-changed';
 
 /**
  * Checks a returned candidate against the invariants the request fixed.
@@ -338,6 +340,8 @@ export function acceptUpdateCandidate(opts: {
   readonly currentInputByteLength: number;
   readonly candidateHash: string;
   readonly candidateByteLength: number;
+  readonly priorTargetBytes: Uint8Array;
+  readonly candidateBytes: Uint8Array;
 }): CandidateRejection | null {
   const replacement = opts.replacement;
   if (replacement === undefined) return 'no-replacement-trace';
@@ -353,8 +357,44 @@ export function acceptUpdateCandidate(opts: {
   ) {
     return 'target-not-candidate';
   }
+  // The input partition must survive intact: a split, merge, drop, reorder,
+  // or reclassification would silently redefine what a later update may
+  // touch, so the whole candidate is refused instead.
+  const priorInputScopes = opts.priorTrace.input.scopes;
+  const nextInputScopes = replacement.input.scopes;
+  if (
+    priorInputScopes.length !== nextInputScopes.length ||
+    priorInputScopes.some(
+      (scope, index) =>
+        nextInputScopes[index].scope !== scope.scope ||
+        nextInputScopes[index].classification !== scope.classification,
+    )
+  ) {
+    return 'input-partition-altered';
+  }
+
   const allowed = new Set(opts.allowedTargetScopes);
   const dirty = new Set(opts.dirtyInputScopes);
+
+  // Every target scope outside the allowed closure must be byte-identical.
+  // This is the invariant that makes a scoped update scoped: without it a
+  // full regeneration passes every other check.
+  for (const scope of opts.priorTrace.target.scopes) {
+    if (allowed.has(scope.scope)) continue;
+    const next = replacement.target.scopes.find(
+      (candidate) => candidate.scope === scope.scope,
+    );
+    if (
+      next === undefined ||
+      next.end - next.start !== scope.end - scope.start ||
+      !sameBytes(
+        opts.priorTargetBytes.subarray(scope.start, scope.end),
+        opts.candidateBytes.subarray(next.start, next.end),
+      )
+    ) {
+      return 'protected-bytes-changed';
+    }
+  }
   for (const dependency of replacement.dependencies) {
     if (dirty.has(dependency.input)) {
       if (dependency.targets.some((name) => !allowed.has(name))) {
@@ -375,4 +415,9 @@ export function acceptUpdateCandidate(opts: {
     }
   }
   return null;
+}
+
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((byte, index) => right[index] === byte);
 }

@@ -172,10 +172,12 @@ export async function runPhase(opts: {
   const derivedWorkspace =
     opts.workspace ??
     (await createWorkspaceRecord(request, opts.workspaceOptions ?? {}));
-  await validateWorkspaceRecord(derivedWorkspace, request, {
+  const validateOptions = {
     runRoot: opts.workspaceOptions?.runRoot,
     semanticInputs: opts.workspaceOptions?.semanticInputs,
-  });
+    priorReads: opts.workspaceOptions?.priorReads,
+  };
+  await validateWorkspaceRecord(derivedWorkspace, request, validateOptions);
   const workspace = freezeWorkspaceRecord(derivedWorkspace);
   const inputs = workspace.reads.map((read) => read.physicalPath);
   const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
@@ -213,10 +215,7 @@ export async function runPhase(opts: {
   }
 
   try {
-    await validateWorkspaceRecord(workspace, request, {
-      runRoot: opts.workspaceOptions?.runRoot,
-      semanticInputs: opts.workspaceOptions?.semanticInputs,
-    });
+    await validateWorkspaceRecord(workspace, request, validateOptions);
   } catch (error) {
     reasons.push(`physical workspace is no longer valid: ${messageOf(error)}`);
   }
