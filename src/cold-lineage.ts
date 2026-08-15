@@ -121,6 +121,8 @@ export interface ColdLineageResult {
   diagnostics: string[];
   /** Present when the run changed no semantic product. */
   outcome?: 'up-to-date' | 'adopted';
+  /** For an adoption: how many leading outputs were attested, not written. */
+  attested?: number;
 }
 
 /** Execution-control state excluded from the canonical plan identity. */
@@ -470,9 +472,18 @@ async function adoptLineage(
     });
     return {
       ok: true,
-      outputs: identified.products
-        .filter((product) => product.kind === 'semantic')
-        .map((product) => resolve(topology.artifactDir, product.path)),
+      // Adoption attests the semantic products and *writes* the regenerated
+      // derivatives; the report names both, so a user is never told only
+      // half of what the command touched (CLI-3, CLI-11).
+      outputs: [
+        ...identified.products
+          .filter((product) => product.kind === 'semantic')
+          .map((product) => resolve(topology.artifactDir, product.path)),
+        ...deterministic.outputs,
+      ],
+      attested: identified.products.filter(
+        (product) => product.kind === 'semantic',
+      ).length,
       diagnostics: [],
       outcome: 'adopted',
     };

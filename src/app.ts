@@ -351,9 +351,17 @@ export async function run(
 
   if (result.ok) {
     if (result.outcome === 'up-to-date') stdout('up to date\n');
-    else if (result.outcome === 'adopted')
-      stdout(`adopted\n${result.outputs.join('\n')}\n`);
-    else if (result.outputs.length > 0)
+    else if (result.outcome === 'adopted') {
+      const attested = result.outputs.slice(0, result.attested ?? 0);
+      const written = result.outputs.slice(result.attested ?? 0);
+      stdout(
+        [
+          ...(attested.length > 0 ? ['adopted', ...attested] : []),
+          ...(written.length > 0 ? ['regenerated', ...written] : []),
+          '',
+        ].join('\n'),
+      );
+    } else if (result.outputs.length > 0)
       stdout(`${result.outputs.join('\n')}\n`);
     // Surface any ambiguity the agent resolved without polluting the path output.
     if (result.diagnostics.length > 0)

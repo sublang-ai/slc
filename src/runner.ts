@@ -101,6 +101,8 @@ export interface SlcResult {
    * satisfied it. Absent means the run produced the listed paths.
    */
   outcome?: 'up-to-date' | 'adopted';
+  /** For an adoption: how many leading outputs were attested, not written. */
+  attested?: number;
 }
 
 /**
