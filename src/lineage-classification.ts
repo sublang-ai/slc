@@ -1231,11 +1231,11 @@ function deriveOrdinaryDirtySteps(options: {
   if (!options.topologyCompatible) {
     return options.currentPlan.plan.steps.map((step) => step.id);
   }
+  // Changed source bytes are deliberately NOT seeded here: INCR-11's dirty
+  // set is identity drift an agent need not classify, while a source edit is
+  // exactly the scoped-update candidate (INCR-12). The step still executes
+  // when it cannot be updated; it is simply not pre-condemned to ordinary.
   const dirty = new Set<string>();
-  if (options.sourceChanged) {
-    const first = options.currentPlan.plan.steps[0];
-    if (first !== undefined) dirty.add(first.id);
-  }
   const inputDrift = new Set(options.inputDriftIds);
   const priorInputs = new Map(
     options.record.plan.inputs.map((input) => [input.id, input]),

@@ -3,7 +3,7 @@
 
 /** Canonical build orchestration for source-bound lineage (DR-021). */
 
-import { lstat, readdir, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
 import {
   dirname,
   extname,
@@ -85,6 +85,11 @@ import { loadLinkFile } from './link.js';
 import { loadPipeline } from './pipeline.js';
 import type { ProgressSink } from './progress.js';
 import {
+  parseUpdateContract,
+  planScopedUpdate,
+  type ScopedUpdatePlan,
+} from './scoped-update.js';
+import {
   classifyLineage,
   formatLineageClassification,
 } from './lineage-classification.js';
@@ -124,6 +129,8 @@ export interface CanonicalLineageOptions {
 interface ReuseBasis {
   readonly record: BuildRecord;
   readonly dirty: ReadonlySet<string>;
+  /** The accepted source bytes, the first step's prior operand. */
+  readonly snapshot: Uint8Array;
 }
 
 /** What each scheduled step contributed to the candidate record. */
@@ -157,6 +164,7 @@ export async function runColdLineage(
         !classification.wholeLineageReusable)
     ) {
       reuse = {
+        snapshot: classification.basis.snapshot,
         record: classification.basis.record,
         dirty: new Set(
           classification.state === 'dirty-input'
@@ -225,7 +233,7 @@ export async function runColdLineage(
       overlay,
       host,
       sourceHash,
-      sourceBytes.byteLength,
+      sourceBytes,
       reuse,
     );
     if (!execution.ok) {
@@ -441,6 +449,46 @@ function acceptedOrdinaryTrace(opts: {
   return bound ? trace : null;
 }
 
+/**
+ * Decides whether one step can take the scoped-update path, reading the
+ * current definition to look for the frozen contract. Every failure mode
+ * returns ordinary execution, which is always correct.
+ */
+async function planStepUpdate(opts: {
+  step: ScheduledStep;
+  recorded: StepRecord | undefined;
+  reuse: ReuseBasis | undefined;
+  identifiedStep: { inputClosure: StepRecord['inputClosure'] } | undefined;
+  definitions: readonly string[];
+  operandBytes: Uint8Array;
+  priorSourceBytes: Uint8Array | undefined;
+}): Promise<ScopedUpdatePlan> {
+  const { step, recorded, reuse, identifiedStep } = opts;
+  if (reuse === undefined || recorded === undefined) {
+    return { mode: 'ordinary', reason: 'identity-drift' };
+  }
+  // Only the first step's prior operand is knowable without re-deriving the
+  // chain: it is the recorded source snapshot. Later steps take the update
+  // path once task 20 replans them from actual upstream output.
+  const priorInput = opts.priorSourceBytes;
+  if (priorInput === undefined) {
+    return { mode: 'ordinary', reason: 'unbound-trace' };
+  }
+  const definition = await readFile(step.request.definitionPath, 'utf8').catch(
+    () => '',
+  );
+  const contract = parseUpdateContract(definition);
+  return planScopedUpdate({
+    step: { kind: step.kind, id: step.id },
+    recorded,
+    contract,
+    identityDirty: reuse.dirty.has(step.id),
+    currentClosure: identifiedStep?.inputClosure ?? 'open',
+    priorInput,
+    currentInput: opts.operandBytes,
+  });
+}
+
 /** Every scheduled step must have declared how it produced its output. */
 function requiredOrigin(
   origins: StepOrigins,
@@ -547,7 +595,7 @@ async function executeColdSteps(
   overlay: CandidateOverlay,
   host: ColdLineageHost,
   sourceHash: Hash,
-  sourceByteLength: number,
+  sourceBytes: Uint8Array,
   reuse: ReuseBasis | undefined,
 ): Promise<ColdLineageResult & { origins: StepOrigins }> {
   const outputs: string[] = [];
@@ -557,7 +605,8 @@ async function executeColdSteps(
   // recomputed input key equals the recorded one exactly when the recorded
   // predecessor bytes are the bytes in hand (INCR-10).
   let operand: StepInputOperand = { kind: 'source', hash: sourceHash };
-  let operandByteLength = sourceByteLength;
+  let operandBytes = sourceBytes;
+  let operandByteLength = sourceBytes.byteLength;
   // Staged bindings cover executed predecessors only (INCR-8), so a source
   // that shares a step's canonical target path — a --normalize re-run over
   // the already-normalized intermediate — keeps its original binding for
@@ -614,9 +663,24 @@ async function executeColdSteps(
       });
       physical.set(resolve(target), stagedTarget);
       operand = { kind: 'product', product: planned.id, hash: identity };
+      operandBytes = bytes;
       operandByteLength = bytes.byteLength;
       continue;
     }
+
+    // Scoped-update selection happens before any progress or executor work
+    // and before any agent is asked to classify a change (INCR-14). Task 19
+    // replaces this fall-through with the update request itself.
+    const plan_ = await planStepUpdate({
+      step,
+      recorded,
+      reuse,
+      identifiedStep,
+      definitions,
+      operandBytes,
+      priorSourceBytes: reuse?.snapshot,
+    });
+    void plan_;
 
     const startedAt = Date.now();
     host.progress?.({ kind: 'phase-start', phase: step.name, target });
@@ -695,6 +759,7 @@ async function executeColdSteps(
       }),
     });
     operand = { kind: 'product', product: planned.id, hash: producedHash };
+    operandBytes = produced;
     operandByteLength = produced.byteLength;
   }
   return { ok: true, outputs, origins, diagnostics };
