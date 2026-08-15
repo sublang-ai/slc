@@ -434,8 +434,14 @@ describe('progress (CLI-36, CLI-37)', () => {
     });
 
     expect(code).toBe(0);
-    expect(out.join('')).toContain('adopted');
-    expect(out.join('')).toContain(join(artDir, 'onboarding.gears.md'));
+    const printed = out.join('');
+    // Attested and regenerated paths are reported as distinct groups, so a
+    // user is never told only half of what the command touched.
+    expect(printed).toContain('adopted');
+    expect(printed).toContain(join(artDir, 'onboarding.gears.md'));
+    // This fixture emits no deterministic derivatives, so the regenerated
+    // group is omitted rather than printed empty.
+    expect(printed).not.toContain('regenerated');
   });
 
   it('reports up to date and runs no phase when nothing changed (CLI-38)', async () => {
