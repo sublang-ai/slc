@@ -117,21 +117,58 @@ playbook run ./my-workflow.ts "<your task>"
 ```
 
 A canonical full compile also records its source binding and accepted
-products in `my-workflow.playbook/.slc-source` and `.slc-build.json`. If
-the bundle belongs to another same-named source or a managed product was
-edited outside an accepted compile, `slc` refuses to overwrite it. To
-replace those compiler-managed products deliberately, run the complete
-pipeline with `--rebuild`:
+products in `my-workflow.playbook/.slc-source` and `.slc-build.json`, so
+later runs can tell what is still current.
+
+**Compiling again is cheap.** Re-run the same command and `slc` compares
+the recorded lineage against the current source, definitions, and
+compiler identity:
+
+- nothing changed — it prints `up to date`, calls no agent, and writes
+  nothing at all;
+- some steps changed — it reuses every step whose inputs still match and
+  executes only the rest, so an edit late in a chain does not re-run the
+  phases before it;
+- one paragraph changed, and the phase declares an update contract — it
+  can rewrite just the affected part of the artifact instead of
+  regenerating the whole thing.
+
+Reuse is always conservative: anything `slc` cannot prove is still exact
+falls back to ordinary execution. A wrong guess would cost you a correct
+artifact, so it never guesses.
+
+If the bundle belongs to another same-named source, or a managed product
+was edited outside an accepted compile, `slc` refuses to overwrite it and
+names your two choices.
+
+**`--rebuild`** replaces the compiler-managed products deliberately:
 
 ```bash
 slc playbook my-workflow.md --rebuild
 ```
 
-A rebuild validates the current compiler pins first, executes every step
-normally, and publishes the replacement lineage only after the complete
-run succeeds and verifies. A failed rebuild leaves the previously accepted
-lineage in place. Because it replaces canonical lineage, `--rebuild` is
-available only for full or full-link runs without `-o`.
+It validates the current pins first, executes every step normally, and
+publishes the replacement only after the complete run succeeds and
+verifies. A failed rebuild leaves the previously accepted lineage in
+place.
+
+**`--adopt`** goes the other way: it accepts hand-edited artifacts as
+authoritative.
+
+```bash
+slc playbook my-workflow.md --adopt
+```
+
+Use it when you refined an intermediate by hand and want `slc` to treat
+your version as the accepted lineage. It calls no agent and rewrites no
+artifact of yours — it records the bytes you have, regenerates only the
+entry module and verification tests, and runs those tests before
+accepting. It requires the source to be unchanged and the pipeline shape
+to still match, so it can attest your work rather than repair a broken
+bundle. Afterwards the bundle is current, and the next run is a no-op.
+
+Both flags are available only for full or full-link runs without `-o`,
+and they are mutually exclusive.
 
 Intermediates are first-class: edit one and re-run a single phase
 (`slc playbook.gears2fsm …`) and it lands in the same place.

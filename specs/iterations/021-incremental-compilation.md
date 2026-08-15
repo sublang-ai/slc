@@ -11,11 +11,11 @@ Published Playbook semantic-input closures and update contracts are an unplanned
 
 ## Deliverables
 
-- [ ] Schema-exact source-bound build lineage with safe path handling and recoverable staged promotion.
-- [ ] Conflict detection, explicit rebuild, exact step reuse, and a write-free whole-bundle no-op.
-- [ ] Generic interpreted and compiled update-metadata transport plus deterministic scoped-update planning and enforcement.
-- [ ] Whole-lineage adoption with compatible build-identity rebaselining and regenerated deterministic derivatives.
-- [ ] Coordinated specs, integration acceptance, user documentation, and a green deterministic release gate.
+- [x] Schema-exact source-bound build lineage with safe path handling and recoverable staged promotion.
+- [x] Conflict detection, explicit rebuild, exact step reuse, and a write-free whole-bundle no-op.
+- [x] Generic interpreted and compiled update-metadata transport plus deterministic scoped-update planning and enforcement.
+- [x] Whole-lineage adoption with compatible build-identity rebaselining and regenerated deterministic derivatives.
+- [x] Coordinated specs, integration acceptance, user documentation, and a green deterministic release gate.
 
 ## Tasks
 
@@ -47,7 +47,7 @@ Each implementation task's commit shall include its focused unit or integration 
 22. [x] **Validate adoption requests.** Parse, validate, route, and document `--adopt`; require unchanged-source continuity, safe complete semantic products, valid current pins, and compatible topology; route eligible refinements/rebaselines and reject unsafe, drifted, incompatible, or unsupported forms without mutation; cover INCR-6/9/34, the adoption portions of INCR-28/37, and applicable PIPE/CLI help and diagnostics.
 23. [x] **Execute whole-lineage adoption.** Attest every semantic product without an executor, derive the current compatible build identity, clear traces, regenerate and check deterministic derivatives in staged state, record user-adopted origins and identity transitions, and promote/return the adopted result only after acceptance; cover INCR-33/35 and the adoption-success core of INCR-36.
 24. [x] **Enforce adopted currentness.** Return the exact adopted no-op, classify later source, topology, identity, and semantic-product drift, report adopted versus written paths through the CLI, and cover the final/rebaseline branches of INCR-36/37 plus CLI-3/11/39 and related COMPILE/PIPE/SELFHOST behavior.
-25. [ ] **Close the iteration.** Update user documentation and examples, explicitly retain the installed-Playbook limitation, run the complete deterministic release gate, apply only final traceability or map corrections, and mark the remaining deliverables complete in one docs-only commit; plan any future Playbook IR/release and atomic SLC adoption separately rather than consuming the sibling checkout.
+25. [x] **Close the iteration.** Update user documentation and examples, explicitly retain the installed-Playbook limitation, run the complete deterministic release gate, apply only final traceability or map corrections, and mark the remaining deliverables complete in one docs-only commit; plan any future Playbook IR/release and atomic SLC adoption separately rather than consuming the sibling checkout.
 
 ## Acceptance criteria
 
