@@ -141,8 +141,7 @@ export async function promoteLineage(
   await at(checkpoint, 'replaces-applied');
 
   for (const entry of manifest.remove) {
-    await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
-    await applyRemove(entry);
+    await applyRemove(manifest, entry);
   }
   await at(checkpoint, 'removes-applied');
 
@@ -156,7 +155,7 @@ export async function promoteLineage(
   await assertInventoryReady(manifest, record);
   await guardedReplace(manifest, record);
   await at(checkpoint, 'record-committed');
-  await assertRecordCommitted(record);
+  await assertRecordCommitted(manifest, record);
   await rm(overlay.root, { recursive: true, force: true });
 }
 
@@ -166,8 +165,16 @@ export async function promoteLineage(
  * on both the live and recovery paths so neither can conclude while the
  * marker describes something else.
  */
-async function assertRecordCommitted(record: ManifestReplace): Promise<void> {
-  if ((await observeFile(record.canonicalPath)) !== record.candidateIdentity) {
+async function assertRecordCommitted(
+  manifest: StageManifest,
+  record: ManifestReplace,
+): Promise<void> {
+  const observed = await observeManaged(
+    manifest,
+    record.role,
+    record.canonicalPath,
+  );
+  if (observed !== record.candidateIdentity) {
     throw new BuildPromotionError(
       'interference',
       `committed build record does not match the sealed candidate: ${record.canonicalPath}`,
@@ -186,8 +193,7 @@ async function guardedReplace(
   manifest: StageManifest,
   entry: ManifestReplace,
 ): Promise<void> {
-  await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
-  const state = await classifyReplace(entry);
+  const state = await classifyReplace(manifest, entry);
   if (state === 'interference') {
     throw new BuildPromotionError(
       'conflict',
@@ -246,8 +252,12 @@ async function assertInventoryReady(
   // matching bytes from outside the bundle.
   for (const entry of manifest.replace) {
     if (entry === record) continue;
-    await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
-    if ((await observeFile(entry.canonicalPath)) !== entry.candidateIdentity) {
+    const observed = await observeManaged(
+      manifest,
+      entry.role,
+      entry.canonicalPath,
+    );
+    if (observed !== entry.candidateIdentity) {
       throw new BuildPromotionError(
         'conflict',
         `managed path changed before the record commit: ${entry.canonicalPath}`,
@@ -255,8 +265,12 @@ async function assertInventoryReady(
     }
   }
   for (const entry of manifest.retain) {
-    await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
-    if ((await observeFile(entry.canonicalPath)) !== entry.identity) {
+    const observed = await observeManaged(
+      manifest,
+      entry.role,
+      entry.canonicalPath,
+    );
+    if (observed !== entry.identity) {
       throw new BuildPromotionError(
         'conflict',
         `retained path changed before the record commit: ${entry.canonicalPath}`,
@@ -268,8 +282,12 @@ async function assertInventoryReady(
   // concurrent managed change: conflict and leave it in place rather than
   // deleting it again or committing a record that silently drops it.
   for (const entry of manifest.remove) {
-    await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
-    if ((await observeFile(entry.canonicalPath)) !== undefined) {
+    const observed = await observeManaged(
+      manifest,
+      entry.role,
+      entry.canonicalPath,
+    );
+    if (observed !== undefined) {
       throw new BuildPromotionError(
         'conflict',
         `obsolete path reappeared before the record commit: ${entry.canonicalPath}`,
@@ -325,61 +343,68 @@ async function finishForward(
     return false;
   }
 
-  // Every path must sit at the recorded prior or already at the candidate;
-  // anything else is external interference and voids the stage.
-  const pending: ManifestReplace[] = [];
-  for (const entry of [...body, ...(snapshot ? [snapshot] : []), record]) {
-    const state = await classifyReplace(entry);
-    if (state === 'interference') {
-      await rm(stageRoot, { recursive: true, force: true });
-      return false;
-    }
-    if (state === 'pending') pending.push(entry);
-  }
-  const removals: ManifestRemove[] = [];
-  for (const entry of manifest.remove) {
-    const state = await classifyRemove(entry);
-    if (state === 'interference') {
-      await rm(stageRoot, { recursive: true, force: true });
-      return false;
-    }
-    if (state === 'pending') removals.push(entry);
-  }
-  // Retained members are part of the inventory the candidate record
-  // describes: one that drifted between interruption and recovery would
-  // survive beside a record carrying its old hash, so it voids the stage
-  // exactly like any other interference.
-  for (const entry of manifest.retain) {
-    if ((await observeFile(entry.canonicalPath)) !== entry.identity) {
-      await rm(stageRoot, { recursive: true, force: true });
-      return false;
-    }
-  }
-
-  // The stage counts as intact only while every still-pending candidate
-  // hashes to its sealed identity; a truncated or altered staged file voids
-  // the stage instead of being committed under a record that cannot
-  // describe it (INCR-8's "intact sealed stage").
-  for (const entry of pending) {
-    if (!(await stagedCandidateIntact(entry))) {
-      await rm(stageRoot, { recursive: true, force: true });
-      return false;
-    }
-  }
-
-  // Application mirrors the live path exactly, member for member and in
-  // the same order. Every member goes through guardedReplace — which is a
-  // no-op for one already at its candidate — rather than being skipped on
-  // the strength of an earlier classification, so drift observed at any
-  // moment voids the stage instead of surviving the transaction.
+  // One guarded region covers all of recovery: any conflict raised while
+  // classifying, checking stage intactness, or installing voids the stage
+  // and leaves the canonical state to ordinary conflict classification.
   try {
+    // Every path must sit at the recorded prior or already at the candidate;
+    // anything else is external interference and voids the stage.
+    const pending: ManifestReplace[] = [];
+    for (const entry of [...body, ...(snapshot ? [snapshot] : []), record]) {
+      const state = await classifyReplace(manifest, entry);
+      if (state === 'interference') {
+        await rm(stageRoot, { recursive: true, force: true });
+        return false;
+      }
+      if (state === 'pending') pending.push(entry);
+    }
+    const removals: ManifestRemove[] = [];
+    for (const entry of manifest.remove) {
+      const state = await classifyRemove(manifest, entry);
+      if (state === 'interference') {
+        await rm(stageRoot, { recursive: true, force: true });
+        return false;
+      }
+      if (state === 'pending') removals.push(entry);
+    }
+    // Retained members are part of the inventory the candidate record
+    // describes: one that drifted between interruption and recovery would
+    // survive beside a record carrying its old hash, so it voids the stage
+    // exactly like any other interference.
+    for (const entry of manifest.retain) {
+      const observed = await observeManaged(
+        manifest,
+        entry.role,
+        entry.canonicalPath,
+      );
+      if (observed !== entry.identity) {
+        await rm(stageRoot, { recursive: true, force: true });
+        return false;
+      }
+    }
+
+    // The stage counts as intact only while every still-pending candidate
+    // hashes to its sealed identity; a truncated or altered staged file voids
+    // the stage instead of being committed under a record that cannot
+    // describe it (INCR-8's "intact sealed stage").
+    for (const entry of pending) {
+      if (!(await stagedCandidateIntact(entry))) {
+        await rm(stageRoot, { recursive: true, force: true });
+        return false;
+      }
+    }
+
+    // Application mirrors the live path exactly, member for member and in
+    // the same order. Every member goes through guardedReplace — which is a
+    // no-op for one already at its candidate — rather than being skipped on
+    // the strength of an earlier classification, so drift observed at any
+    // moment voids the stage instead of surviving the transaction.
     for (const entry of body) {
       await guardedReplace(manifest, entry);
     }
     await at(checkpoint, 'replaces-applied');
     for (const entry of removals) {
-      await assertRealInstallPath(manifest, entry.role, entry.canonicalPath);
-      await applyRemove(entry);
+      await applyRemove(manifest, entry);
     }
     await at(checkpoint, 'removes-applied');
     if (snapshot !== undefined) {
@@ -388,7 +413,7 @@ async function finishForward(
     await assertInventoryReady(manifest, record);
     await guardedReplace(manifest, record);
     await at(checkpoint, 'record-committed');
-    await assertRecordCommitted(record);
+    await assertRecordCommitted(manifest, record);
   } catch (error) {
     if (error instanceof BuildPromotionError) {
       await rm(stageRoot, { recursive: true, force: true });
@@ -590,8 +615,30 @@ function manifestConfined(
   );
 }
 
-async function applyRemove(entry: ManifestRemove): Promise<void> {
-  const current = await observeFile(entry.canonicalPath);
+/**
+ * Observes one managed canonical path together with the components that
+ * lead to it. This is the only way this module observes a managed path, so
+ * no call site can check the bytes while trusting a parent directory that
+ * was swapped underneath it.
+ */
+async function observeManaged(
+  manifest: StageManifest,
+  role: string,
+  canonicalPath: string,
+): Promise<Hash | 'unsafe' | undefined> {
+  await assertRealInstallPath(manifest, role, canonicalPath);
+  return observeFile(canonicalPath);
+}
+
+async function applyRemove(
+  manifest: StageManifest,
+  entry: ManifestRemove,
+): Promise<void> {
+  const current = await observeManaged(
+    manifest,
+    entry.role,
+    entry.canonicalPath,
+  );
   if (current === undefined) return; // already removed
   if (current !== entry.priorIdentity) {
     throw new BuildPromotionError(
@@ -604,15 +651,29 @@ async function applyRemove(entry: ManifestRemove): Promise<void> {
 
 type PathState = 'done' | 'pending' | 'interference';
 
-async function classifyReplace(entry: ManifestReplace): Promise<PathState> {
-  const current = await observeFile(entry.canonicalPath);
+async function classifyReplace(
+  manifest: StageManifest,
+  entry: ManifestReplace,
+): Promise<PathState> {
+  const current = await observeManaged(
+    manifest,
+    entry.role,
+    entry.canonicalPath,
+  );
   if (current === entry.candidateIdentity) return 'done';
   if (matchesPrior(current, entry.prior)) return 'pending';
   return 'interference';
 }
 
-async function classifyRemove(entry: ManifestRemove): Promise<PathState> {
-  const current = await observeFile(entry.canonicalPath);
+async function classifyRemove(
+  manifest: StageManifest,
+  entry: ManifestRemove,
+): Promise<PathState> {
+  const current = await observeManaged(
+    manifest,
+    entry.role,
+    entry.canonicalPath,
+  );
   if (current === undefined) return 'done';
   if (current === entry.priorIdentity) return 'pending';
   return 'interference';
