@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it } from 'vitest';
 
 import type { StepRecord, UpdateTrace } from '../src/build-record.js';
@@ -345,5 +347,81 @@ describe('scoped candidate enforcement (INCR-15, INCR-16, INCR-25)', () => {
     },
   ])('rejects a candidate for $reason', ({ reason, overrides }) => {
     expect(accept(overrides)).toBe(reason);
+  });
+});
+
+describe('SLC-owned normalization contract (INCR-18, INCR-24)', () => {
+  it('ships a valid update contract on the built-in normalizer', async () => {
+    const definition = await readFile(
+      new URL('../src/normalize.md', import.meta.url),
+      'utf8',
+    );
+    expect(parseUpdateContract(definition)).toBe(true);
+  });
+
+  it('validates only structure, never scope meanings', () => {
+    // Scope names are opaque: the planner maps by range and classification
+    // and never interprets a normalized-step, GEARS-item, or FSM-state name.
+    const opaque = {
+      schema: 'sublang.slc.update.v1',
+      input: {
+        hash: `sha256:${'a'.repeat(64)}`,
+        byteLength: 4,
+        scopes: [
+          {
+            scope: 'fsm-state:Reviewing',
+            start: 0,
+            end: 4,
+            classification: 'local',
+          },
+        ],
+      },
+      target: {
+        hash: `sha256:${'b'.repeat(64)}`,
+        byteLength: 4,
+        scopes: [
+          {
+            scope: 'gears-item:SHALL-7',
+            start: 0,
+            end: 4,
+            classification: 'local',
+          },
+        ],
+      },
+      dependencies: [
+        { input: 'fsm-state:Reviewing', targets: ['gears-item:SHALL-7'] },
+      ],
+    } as unknown as UpdateTrace;
+
+    const result = planScopedUpdate({
+      step: { kind: 'phase', id: 'p:0' },
+      recorded: {
+        id: 'p:0',
+        kind: 'phase',
+        name: 'normalize',
+        source: { format: 'text', ext: '.md' },
+        target: {
+          format: 'text',
+          ext: '.md',
+          path: 'x.md',
+          product: 'semantic:0',
+        },
+        inputKey: `sha256:${'c'.repeat(64)}`,
+        inputs: [],
+        inputClosure: 'closed',
+        origin: 'ordinary',
+        trace: opaque,
+      } as unknown as StepRecord,
+      contract: true,
+      identityDirty: false,
+      currentClosure: 'closed',
+      priorInput: bytes('aaaa'),
+      currentInput: bytes('aZaa'),
+    });
+
+    expect(result.mode).toBe('update');
+    if (result.mode !== 'update') return;
+    expect(result.dirtyInputScopes).toEqual(['fsm-state:Reviewing']);
+    expect(result.allowedTargetScopes).toEqual(['gears-item:SHALL-7']);
   });
 });
