@@ -396,6 +396,54 @@ describe('progress (CLI-36, CLI-37)', () => {
     current = makeAgent();
   });
 
+  it('reports up to date and runs no phase when nothing changed (CLI-38)', async () => {
+    // Both phases must declare a closed input closure for the whole lineage
+    // to be reusable.
+    await writeFile(
+      join(pipelineDir, 'text2gears.md'),
+      `${formats('text', '.md', 'gears', '.md')}\n## Pin Inputs\n`,
+    );
+    await writeFile(
+      join(pipelineDir, 'gears2fsm.md'),
+      `${formats('gears', '.md', 'fsm', '.ts')}\n## Pin Inputs\n`,
+    );
+    const seeded = await run(['flow', source], {
+      env: {},
+      stdout: () => {},
+      stderr: () => {},
+      buildDeps: progressDeps,
+    });
+    expect(seeded).toBe(0);
+
+    const refusing = makeAgent();
+    current = refusing;
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await run(['flow', source], {
+      env: {},
+      stdout: (t) => out.push(t),
+      stderr: (t) => err.push(t),
+      buildDeps: ({ signal, progress }) => ({
+        ...interpretedDeps(
+          {
+            run: () => {
+              throw new Error('an up-to-date run must invoke no agent');
+            },
+          },
+          signal,
+        ),
+        progress,
+      }),
+    });
+
+    expect(code).toBe(0);
+    expect(out.join('')).toContain('up to date');
+    expect(out.join('')).not.toContain(artDir);
+    // No phase ran, so no progress line was emitted.
+    expect(err.join('')).not.toContain('→');
+    expect(err.join('')).not.toContain('✓');
+  });
+
   it('writes start and finish lines with elapsed times in order (CLI-36)', async () => {
     const out: string[] = [];
     const err: string[] = [];

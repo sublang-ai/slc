@@ -109,6 +109,8 @@ export interface ColdLineageResult {
   ok: boolean;
   outputs: string[];
   diagnostics: string[];
+  /** Present when the accepted bundle already satisfied the invocation. */
+  outcome?: 'up-to-date';
 }
 
 /** Execution-control state excluded from the canonical plan identity. */
@@ -166,6 +168,13 @@ export async function runColdLineage(
         snapshot: classification.basis.snapshot,
       };
       generation = nextGeneration(prior, topology);
+    } else if (
+      classification.state === 'current' &&
+      classification.wholeLineageReusable
+    ) {
+      // Exactly current: no executor call and no write at all, not even a
+      // staging directory (INCR-2, INCR-21).
+      return { ok: true, outputs: [], diagnostics: [], outcome: 'up-to-date' };
     } else if (classification.state !== 'cold') {
       return {
         ok: false,

@@ -96,6 +96,11 @@ export interface SlcResult {
   outputs: string[];
   /** Diagnostics: agent summaries on success, or the failure report. */
   diagnostics: string[];
+  /**
+   * Present when the run changed nothing because the accepted bundle already
+   * satisfied it. Absent means the run produced the listed paths.
+   */
+  outcome?: 'up-to-date';
 }
 
 /**
