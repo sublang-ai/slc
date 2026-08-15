@@ -34,6 +34,55 @@ the raw compile operand and the entry-phase definition the driver supplies as
 an explicit read-only reference, both already recorded as semantic inputs, so
 the declaration below is deliberately empty.
 
+## Update
+
+```json
+{"schema":"sublang.slc.update-contract.v1","traceSchema":"sublang.slc.update.v1"}
+```
+
+### Stable input units
+
+One unit per top-level block of the raw source, in source order: a paragraph,
+a list, a heading and the prose that follows it until the next heading, a
+fenced code block, or a table. A unit's name is stable across runs as long as
+the block survives; name it from its ordinal position among blocks of its own
+kind, so inserting a paragraph does not rename an unrelated list.
+
+### Target scopes
+
+One scope per emitted normalized block, in target order, named by the same
+rule as the input unit it came from. A block that merges several input units
+takes the name of the first, and is a structural scope.
+
+### Dependency closure
+
+Each input unit's closure is every target scope its content reaches. For an
+ordinary block that is the single scope emitted from it. For a unit whose
+content is referenced by later blocks — a heading that scopes the prose under
+it, or a list continued after an interruption — the closure additionally names
+each dependent scope, in target order.
+
+### Structural and global scopes
+
+The document's title and any front matter are global: a change to either can
+alter every emitted block, so classify them `global` and never `local`. A
+heading that establishes the section a later block belongs to is `structural`.
+Everything else is `local`.
+
+### Update instructions
+
+Rewrite only the target scopes named in the request's allowed closure, taking
+the changed input bytes from the supplied hunks. Leave every other byte of the
+prior target exactly as it stands, including whitespace. Emit the complete
+normalized document, never a patch.
+
+### Semantic verification
+
+Confirm the rewritten scopes carry the same meaning the changed source states,
+that no unchanged scope's bytes moved, and that the whole document still
+satisfies the fidelity, structure, and output rules below. If any of those
+fail, block rather than emitting a candidate.
+
 ## Fidelity
 
 Normalization restructures; it does not reinterpret:
