@@ -728,6 +728,49 @@ describe('forward-only lineage promotion (DR-021, INCR-8, INCR-27)', () => {
     expect(await exists(join(artDir, '.slc-build.json'))).toBe(false);
   });
 
+  it('refuses when the bundle root is swapped at the marker checkpoint', async () => {
+    const overlay = await seal(standardSet());
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: async ({ name }) => {
+          if (name === 'record-committed') {
+            // The record's own bytes are untouched; only its parent moves.
+            const mirror = join(root, 'mirror');
+            await rename(artDir, mirror);
+            await symlink(mirror, artDir);
+          }
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+  });
+
+  it('voids recovery when the bundle root is swapped at the marker checkpoint', async () => {
+    const overlay = await seal(standardSet());
+    await expect(
+      promoteLineage({
+        overlay,
+        checkpoint: ({ name }) => {
+          if (name === 'manifest-published') throw new Error('crash');
+        },
+      }),
+    ).rejects.toThrow('crash');
+
+    const recovered = await recoverLineagePromotion({
+      artifactDir: artDir,
+      pipeline: 'flow',
+      checkpoint: async ({ name }) => {
+        if (name === 'record-committed') {
+          const mirror = join(root, 'mirror');
+          await rename(artDir, mirror);
+          await symlink(mirror, artDir);
+        }
+      },
+    });
+    expect(recovered).toBe('nothing-pending');
+    expect(await exists(stage)).toBe(false);
+  });
+
   it('rejects a sealed overlay without a build-record replacement', async () => {
     const overlay = await seal([
       { name: 'flow.gears.md', role: 'semantic', candidate: 'new' },
