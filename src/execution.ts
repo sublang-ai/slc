@@ -26,6 +26,7 @@ import type { Stats } from 'node:fs';
 import { lstat, readFile, readdir, readlink, stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
+import type { UpdateTrace } from './build-record.js';
 import {
   createWorkspaceRecord,
   freezeWorkspaceRecord,
@@ -70,10 +71,21 @@ export type ExecuteRequest =
 /** Terminal status an executor reports for a phase run. */
 export type ExecutorStatus = 'ok' | 'blocked' | 'error';
 
+/**
+ * Reserved namespaced metadata an executor may carry beside its status: the
+ * sole field is the frozen `sublang.slc.update.v1` trace (PHEXEC-39; DR-021
+ * amends the host-owned result, not any Playbook turn-result variant). An
+ * absent member means no trace, which is ordinary success.
+ */
+export interface ExecutorMetadata {
+  readonly 'sublang.slc.update.v1': UpdateTrace;
+}
+
 /** The outcome an executor returns, with diagnostics drained for every status. */
 export interface ExecutorResult {
   status: ExecutorStatus;
   diagnostics: string[];
+  metadata?: ExecutorMetadata;
 }
 
 /** Runs one phase or link execution; implemented by the interpreted/compiled executors. */
@@ -94,7 +106,12 @@ export interface FailureReport {
 
 /** The result of a generic-checked phase run. */
 export type PhaseResult =
-  | { ok: true; target: string; diagnostics: string[] }
+  | {
+      ok: true;
+      target: string;
+      diagnostics: string[];
+      metadata?: ExecutorMetadata;
+    }
   | { ok: false; report: FailureReport };
 
 /**
@@ -192,7 +209,14 @@ export async function runPhase(opts: {
   if (reasons.length > 0) {
     return failure(phase, target, reasons);
   }
-  return { ok: true, target, diagnostics: result?.diagnostics ?? [] };
+  return {
+    ok: true,
+    target,
+    diagnostics: result?.diagnostics ?? [],
+    // Only a successful run carries a trace forward; a blocked or failed
+    // candidate is discarded whole, so its metadata has nothing to describe.
+    ...(result?.metadata === undefined ? {} : { metadata: result.metadata }),
+  };
 }
 
 /** Renders a failure report as a multi-line diagnostic string (PHEXEC-9). */

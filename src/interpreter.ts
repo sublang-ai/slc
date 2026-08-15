@@ -24,6 +24,12 @@ import type {
   PhaseExecutor,
 } from './execution.js';
 import {
+  UPDATE_TRACE_SCHEMA,
+  canonicalJson,
+  parseUpdateTrace,
+  type UpdateTrace,
+} from './build-record.js';
+import {
   appendWorkspaceContract,
   type WorkspaceReadBinding,
   type WorkspaceRecord,
@@ -190,11 +196,25 @@ export function createInterpretedExecutor(opts: {
         };
       }
 
-      const blocked = blockedReasons(response.text);
+      // The reserved suffix is stripped before any status or diagnostic
+      // parsing, so neither the markers nor the payload can reach either
+      // (PHEXEC-39). A malformed occurrence yields no metadata and one host
+      // diagnostic, never a failed phase.
+      const decoded = decodeInterpretedResult(response.text);
+      const blocked = blockedReasons(decoded.text);
       if (blocked !== null) {
-        return { status: 'blocked', diagnostics: blocked };
+        return {
+          status: 'blocked',
+          diagnostics: [...blocked, ...decoded.diagnostics],
+        };
       }
-      return { status: 'ok', diagnostics: textLines(response.text) };
+      return {
+        status: 'ok',
+        diagnostics: [...textLines(decoded.text), ...decoded.diagnostics],
+        ...(decoded.trace === null
+          ? {}
+          : { metadata: { [UPDATE_TRACE_SCHEMA]: decoded.trace } }),
+      };
     },
   };
 }
@@ -202,6 +222,84 @@ export function createInterpretedExecutor(opts: {
 function formatOptions(options: readonly LinkOptionPair[]): string {
   if (options.length === 0) return '(none)';
   return options.map((option) => `${option.name}=${option.value}`).join(', ');
+}
+
+/** Reserved markers delimiting the SLC-owned interpreted result envelope. */
+export const RESULT_BEGIN = 'SLC_RESULT_BEGIN';
+export const RESULT_END = 'SLC_RESULT_END';
+const INTERPRETED_RESULT_SCHEMA = 'sublang.slc.interpreted-result.v1';
+
+interface DecodedInterpretedResult {
+  /** The agent prose with every reserved block removed. */
+  readonly text: string;
+  readonly trace: UpdateTrace | null;
+  readonly diagnostics: string[];
+}
+
+/**
+ * Extracts the at-most-one reserved suffix from an agent's final text.
+ *
+ * A valid suffix is exactly BEGIN, one canonical-JSON line, END as the final
+ * nonblank lines. Anything else — duplicated, misplaced, unterminated, or
+ * malformed — withholds every reserved block from status and diagnostic
+ * parsing, supplies no metadata, and adds one host diagnostic; the agent's
+ * ordinary status still stands (DR-021, PHEXEC-39).
+ */
+function decodeInterpretedResult(text: string): DecodedInterpretedResult {
+  const lines = text.split(/\r?\n/);
+  const marked = lines
+    .map((line, index) => ({ line: line.trim(), index }))
+    .filter(
+      (entry) => entry.line === RESULT_BEGIN || entry.line === RESULT_END,
+    );
+  if (marked.length === 0) return { text, trace: null, diagnostics: [] };
+
+  // Strip from the first reserved marker so no marker or payload text can
+  // reach status parsing or diagnostics.
+  const withheld = (): DecodedInterpretedResult => ({
+    text: lines.slice(0, marked[0].index).join('\n'),
+    trace: null,
+    diagnostics: ['slc: ignored a malformed reserved result block'],
+  });
+
+  let lastNonblank = lines.length - 1;
+  while (lastNonblank >= 0 && lines[lastNonblank].trim() === '') lastNonblank--;
+  const [begin, end] = marked;
+  if (
+    marked.length !== 2 ||
+    begin.line !== RESULT_BEGIN ||
+    end.line !== RESULT_END ||
+    begin.index + 2 !== end.index ||
+    end.index !== lastNonblank
+  ) {
+    return withheld();
+  }
+
+  const payload = lines[begin.index + 1].trim();
+  let trace: UpdateTrace;
+  try {
+    const parsed = JSON.parse(payload) as {
+      metadata?: Record<string, unknown>;
+    };
+    trace = parseUpdateTrace(
+      parsed.metadata?.[UPDATE_TRACE_SCHEMA],
+      'metadata',
+    );
+    // One canonical line with exactly these fields in this order: the round
+    // trip subsumes every field, ordering, and encoding check.
+    const canonical = canonicalJson({
+      schema: INTERPRETED_RESULT_SCHEMA,
+      metadata: { [UPDATE_TRACE_SCHEMA]: trace },
+    });
+    if (canonical !== payload) return withheld();
+  } catch {
+    return withheld();
+  }
+  return {
+    text: lines.slice(0, begin.index).join('\n'),
+    trace,
+    diagnostics: [],
+  };
 }
 
 /** Returns the `BLOCKED:` diagnostic lines, or `null` when the agent did not block. */
