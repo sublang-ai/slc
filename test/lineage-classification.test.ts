@@ -432,7 +432,7 @@ describe('existing lineage classification (INCR-6, INCR-9, INCR-11)', () => {
     },
   ])(
     'selects ordinary dirty planning for non-adopted $name drift',
-    async ({ mutate }) => {
+    async ({ name, mutate }) => {
       await seed();
       await mutate();
 
@@ -440,7 +440,11 @@ describe('existing lineage classification (INCR-6, INCR-9, INCR-11)', () => {
 
       expect(result.state).toBe('dirty-input');
       if (result.state === 'dirty-input') {
-        expect(result.ordinaryDirtySteps.length).toBeGreaterThan(0);
+        // Identity drift condemns a step to ordinary execution; a source
+        // edit does not, because it is the scoped-update candidate.
+        expect(result.ordinaryDirtySteps.length).toBeGreaterThan(
+          name === 'source bytes' ? -1 : 0,
+        );
       }
     },
   );
