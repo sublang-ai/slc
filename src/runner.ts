@@ -100,7 +100,7 @@ export interface SlcResult {
    * Present when the run changed nothing because the accepted bundle already
    * satisfied it. Absent means the run produced the listed paths.
    */
-  outcome?: 'up-to-date';
+  outcome?: 'up-to-date' | 'adopted';
 }
 
 /**
@@ -168,7 +168,11 @@ async function runFull(
     return runColdLineage(
       topology,
       { ...deps, cwd: runCwd(deps) },
-      invocation.rebuild === true ? { rebuild: true } : {},
+      invocation.rebuild === true
+        ? { rebuild: true }
+        : invocation.adopt === true
+          ? { adopt: true }
+          : {},
     );
   }
   await mkdir(topology.artifactDir, { recursive: true });
@@ -298,7 +302,11 @@ async function runFullLink(
     return runColdLineage(
       topology,
       { ...deps, cwd: runCwd(deps) },
-      invocation.rebuild === true ? { rebuild: true } : {},
+      invocation.rebuild === true
+        ? { rebuild: true }
+        : invocation.adopt === true
+          ? { adopt: true }
+          : {},
     );
   }
   await mkdir(topology.artifactDir, { recursive: true });

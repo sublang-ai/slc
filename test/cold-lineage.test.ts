@@ -738,6 +738,87 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     expect(link?.trace).toBeNull();
   });
 
+  it('adopts a refined semantic product without an executor (INCR-34, INCR-35)', async () => {
+    await seedLineage();
+    const refined = join(artifactDir, 'workflow.mid.md');
+    await writeFile(refined, 'manual refinement\n');
+    const refusing: PhaseExecutor = {
+      run: () => {
+        throw new Error('adoption must invoke no semantic executor');
+      },
+    };
+
+    const result = await runSlc(
+      ['flow', sourcePath, '--adopt'],
+      deps(refusing),
+    );
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(result.outcome).toBe('adopted');
+    // The attested bytes are recorded as-is and left untouched.
+    expect(await readFile(refined, 'utf8')).toBe('manual refinement\n');
+    const record = await readRecord();
+    expect(record.plan.steps.every((s) => s.origin === 'user-adopted')).toBe(
+      true,
+    );
+    expect(record.plan.steps.every((s) => s.trace === null)).toBe(true);
+    expect(
+      record.products.find((p) => p.path === 'workflow.mid.md')?.hash,
+    ).toBe(hashBytes(new TextEncoder().encode('manual refinement\n')));
+    await assertNoPrivateResidue();
+  });
+
+  it.each([
+    {
+      name: 'changed source',
+      mutate: async () => writeFile(sourcePath, 'changed\n'),
+      reason: /source bytes changed/,
+    },
+    {
+      name: 'missing semantic product',
+      mutate: async () => rm(join(artifactDir, 'workflow.mid.md')),
+      reason: /missing or unsafe/,
+    },
+  ])(
+    'refuses --adopt for $name without mutation',
+    async ({ mutate, reason }) => {
+      await seedLineage();
+      await mutate();
+      const before = await readRecord();
+
+      const result = await runSlc(
+        ['flow', sourcePath, '--adopt'],
+        deps(executor()),
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.diagnostics.join('\n')).toMatch(reason);
+      // The refusal changed nothing.
+      expect(await readRecord()).toEqual(before);
+      await assertNoPrivateResidue();
+    },
+  );
+
+  it('reuses an adopted lineage exactly on the next run (INCR-35)', async () => {
+    await seedLineage();
+    await writeFile(join(artifactDir, 'workflow.mid.md'), 'refined\n');
+    const adopted = await runSlc(
+      ['flow', sourcePath, '--adopt'],
+      deps(executor()),
+    );
+    expect(adopted.ok, adopted.diagnostics.join('\n')).toBe(true);
+
+    const refusing: PhaseExecutor = {
+      run: () => {
+        throw new Error('an adopted lineage must reuse without executing');
+      },
+    };
+    const next = await runSlc(['flow', sourcePath], deps(refusing));
+
+    expect(next.ok, next.diagnostics.join('\n')).toBe(true);
+    expect(next.outcome).toBe('up-to-date');
+  });
+
   it('reuses unaffected steps and executes only the dirty one (INCR-10, INCR-11)', async () => {
     await seedLineage();
     const reusedPath = join(artifactDir, 'workflow.mid.md');
