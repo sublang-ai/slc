@@ -34,6 +34,53 @@ export interface LinkOptionPair {
   value: string;
 }
 
+/**
+ * Host-supplied update-mode context for a compile step (DR-021, INCR-14).
+ *
+ * The existing target file is the previously accepted output; the executor is
+ * asked to update it rather than regenerate from scratch. Purely an
+ * optimization hint: acceptance authority is identical to a fresh compile.
+ */
+export interface UpdateContext {
+  /** Absolute path of the prior accepted input, a read-only history copy. */
+  priorInput: string;
+  /**
+   * Unified line diff of prior to current input; the empty string when the
+   * chained input is byte-identical (another input changed), `null` when the
+   * inputs exceeded the diff budget.
+   */
+  diff: string | null;
+}
+
+/**
+ * Renders the host-owned update instruction shared by interpreted prompts and
+ * compiled performing prompts (INCR-15).
+ */
+export function updateContextLines(update: UpdateContext): string[] {
+  const diff =
+    update.diff === null
+      ? [
+          '- the input changed too extensively to render a diff; compare the prior and current inputs directly;',
+        ]
+      : update.diff === ''
+        ? [
+            '- the input file is byte-identical to the prior input; the definition or another declared input changed instead;',
+          ]
+        : [
+            '- the input changes, as a unified diff of prior to current input:',
+            '--- BEGIN INPUT DIFF ---',
+            update.diff,
+            '--- END INPUT DIFF ---',
+          ];
+  return [
+    'Incremental update — the artifact to write already holds the accepted output of a previous run (possibly with deliberate manual refinements):',
+    `- the prior input is available read-only at: ${update.priorInput};`,
+    ...diff,
+    '- update the existing artifact under the definition: apply what the input changes imply, preserve everything unaffected including refinements, and keep the artifact complete and consistent;',
+    '- if the existing artifact is missing or unusable under the definition, produce a fresh complete artifact instead.',
+  ];
+}
+
 /** What a phase execution is asked to produce: a compile target or a linked artifact. */
 export type ExecuteRequest =
   | {
@@ -48,6 +95,8 @@ export type ExecuteRequest =
        * rewrites the source toward (DR-013). Protected like definitions.
        */
       references?: readonly string[];
+      /** Update-mode context; absent for a fresh compile (DR-021, INCR-14). */
+      update?: UpdateContext;
     }
   | {
       kind: 'link';
@@ -105,7 +154,11 @@ export async function runPhase(opts: {
   const target = request.kind === 'compile' ? request.target : request.linked;
   const inputs =
     request.kind === 'compile'
-      ? [request.source, ...(request.references ?? [])]
+      ? [
+          request.source,
+          ...(request.references ?? []),
+          ...(request.update === undefined ? [] : [request.update.priorInput]),
+        ]
       : [...request.objects, request.linkTarget];
   const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
   const protectedPaths = [...new Set([...inputs, ...definitions])];

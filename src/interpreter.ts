@@ -17,11 +17,12 @@
 
 import { readFile } from 'node:fs/promises';
 
-import type {
-  ExecuteRequest,
-  ExecutorResult,
-  LinkOptionPair,
-  PhaseExecutor,
+import {
+  updateContextLines,
+  type ExecuteRequest,
+  type ExecutorResult,
+  type LinkOptionPair,
+  type PhaseExecutor,
 } from './execution.js';
 
 /** A single agent invocation: a prompt plus per-run configuration. */
@@ -74,6 +75,9 @@ export function buildPhasePrompt(opts: {
           ...(request.references ?? []).map(
             (path) => `reference to consult (read-only): ${path}`,
           ),
+          ...(request.update === undefined
+            ? []
+            : [`prior input to consult (read-only): ${request.update.priorInput}`]),
         ]
       : [
           `object artifacts to read, in order: ${request.objects.join(', ')}`,
@@ -103,6 +107,9 @@ export function buildPhasePrompt(opts: {
     '- run only the deterministic tools or commands the definition calls for, and read only the content it cites or references;',
     '- verify the produced artifact against the definition before finishing.',
     '',
+    ...(request.kind === 'compile' && request.update !== undefined
+      ? [...updateContextLines(request.update), '']
+      : []),
     'When done, reply with a concise summary of what you produced and any ambiguity you resolved.',
     'If the inputs are malformed under the definition, or the definition is incompatible with them, do not guess: leave the artifact unwritten and reply with a line beginning "BLOCKED:" followed by the concrete reason(s).',
   ].join('\n');

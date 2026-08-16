@@ -211,6 +211,36 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     ]);
   });
 
+  // INCR-15: the host update context rides every Player prompt and the
+  // transformation-performing Captain transport; routing-only Captain and
+  // judge prompts cross unchanged.
+  it('appends the update context to player and performing Captain calls only', async () => {
+    const agent = fakeAgent({ status: 'success', text: 'ok' });
+    const contract = 'Host workspace (SubLang Compiler): write /abs/out.md';
+    const update = 'Incremental update — the artifact to write already holds…';
+    const ports = createPlaybookPorts({
+      player: agent,
+      judge: agent,
+      captainWorkspace: contract,
+      updateContext: update,
+    });
+
+    await ports.callPlayer('writer', 'produce the section', notAborted);
+    await ports.callCaptain('compile it', notAborted, {
+      visibility: 'visible',
+      resume: false,
+    });
+    await ports.callCaptain('route it', notAborted, captainOptions('visible'));
+    await ports.callJudge('grade it', notAborted);
+
+    expect(agent.calls.map((call) => call.prompt)).toEqual([
+      `produce the section\n\n${update}`,
+      `compile it\n\n${contract}\n\n${update}`,
+      'route it',
+      'grade it',
+    ]);
+  });
+
   it('transports the composed prompt unchanged without a workspace contract', async () => {
     const agent = fakeAgent({ status: 'success', text: 'ok' });
     const ports = createPlaybookPorts({ player: agent, judge: agent });
