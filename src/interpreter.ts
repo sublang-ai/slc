@@ -18,6 +18,7 @@
 import { readFile } from 'node:fs/promises';
 
 import {
+  assertScopedUpdateAvailable,
   scopedUpdateWithheld,
   SCOPED_UPDATE_WITHHELD,
 } from './scoped-update.js';
@@ -82,6 +83,7 @@ export function buildPhasePrompt(opts: {
   workspace: WorkspaceRecord;
 }): string {
   const { request, definition, workspace } = opts;
+  assertScopedUpdateAvailable(request);
   const target = workspace.write.logicalPath;
   const inputs =
     request.kind === 'compile'
