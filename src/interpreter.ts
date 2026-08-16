@@ -77,7 +77,9 @@ export function buildPhasePrompt(opts: {
           ),
           ...(request.update === undefined
             ? []
-            : [`prior input to consult (read-only): ${request.update.priorInput}`]),
+            : [
+                `prior input to consult (read-only): ${request.update.priorInput}`,
+              ]),
         ]
       : [
           `object artifacts to read, in order: ${request.objects.join(', ')}`,

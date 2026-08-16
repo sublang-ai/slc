@@ -33,13 +33,19 @@ describe('unifiedLineDiff (INCR-14)', () => {
     const changedNear = [...base];
     changedNear[4] = 'edited5';
     changedNear[8] = 'edited9';
-    const near = unifiedLineDiff(`${base.join('\n')}\n`, `${changedNear.join('\n')}\n`);
+    const near = unifiedLineDiff(
+      `${base.join('\n')}\n`,
+      `${changedNear.join('\n')}\n`,
+    );
     expect(near?.match(/@@/g)).toHaveLength(2); // one hunk, one @@ pair marker per hunk header
 
     const changedFar = [...base];
     changedFar[1] = 'editedA';
     changedFar[28] = 'editedB';
-    const far = unifiedLineDiff(`${base.join('\n')}\n`, `${changedFar.join('\n')}\n`);
+    const far = unifiedLineDiff(
+      `${base.join('\n')}\n`,
+      `${changedFar.join('\n')}\n`,
+    );
     expect(far?.match(/@@ /g)).toHaveLength(2); // two hunk headers
   });
 
@@ -77,7 +83,10 @@ describe('unifiedLineDiff (INCR-14)', () => {
     const lines = Array.from({ length: 50_000 }, (_, i) => `line ${i}`);
     const edited = [...lines];
     edited[25_000] = 'edited';
-    const diff = unifiedLineDiff(`${lines.join('\n')}\n`, `${edited.join('\n')}\n`);
+    const diff = unifiedLineDiff(
+      `${lines.join('\n')}\n`,
+      `${edited.join('\n')}\n`,
+    );
     expect(diff).toContain('-line 25000');
     expect(diff).toContain('+edited');
   });

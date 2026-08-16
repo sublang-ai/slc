@@ -27,6 +27,8 @@ export type Invocation =
       optimize: boolean;
       noOptimize: boolean;
       normalize: boolean;
+      /** Bypass reuse and update, then record fresh history (DR-021). */
+      rebuild?: true;
     }
   | {
       kind: 'phase';
@@ -45,6 +47,8 @@ export type Invocation =
       optimize: boolean;
       noOptimize: boolean;
       normalize: boolean;
+      /** Bypass reuse and update, then record fresh history (DR-021). */
+      rebuild?: true;
     }
   | {
       kind: 'link';
@@ -93,6 +97,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
   let optimize = false;
   let noOptimize = false;
   let normalize = false;
+  let rebuild = false;
   const options: LinkOption[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -113,6 +118,9 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       noOptimize = true;
     } else if (arg === '--normalize') {
       normalize = true;
+    } else if (arg === '--rebuild') {
+      if (rebuild) throw new CliError('duplicate-option', 'repeated --rebuild');
+      rebuild = true;
     } else if (arg.startsWith('-') && arg !== '-') {
       throw new CliError('unknown-option', `unknown option "${arg}"`);
     } else {
@@ -139,11 +147,16 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       '-O/--optimize conflicts with --no-optimize',
     );
   }
-  if (phase !== null && (optimize || noOptimize || normalize)) {
+  if (phase !== null && (optimize || noOptimize || normalize || rebuild)) {
     throw new CliError(
       'unexpected-flag',
-      `${optimize ? '-O' : noOptimize ? '--no-optimize' : '--normalize'} is only valid for a full-pipeline invocation`,
+      `${optimize ? '-O' : noOptimize ? '--no-optimize' : normalize ? '--normalize' : '--rebuild'} is only valid for a full-pipeline invocation`,
     );
+  }
+  // History lives in the canonical bundle only (INCR-8), so --rebuild has
+  // nothing to bypass or record under -o.
+  if (rebuild && output !== null) {
+    throw new CliError('unexpected-flag', '--rebuild is not valid with -o');
   }
 
   if (phase === 'link') {
@@ -199,6 +212,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
       optimize,
       noOptimize,
       normalize,
+      ...(rebuild ? { rebuild: true as const } : {}),
     };
   }
   if (options.length > 0) {
@@ -215,6 +229,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
     optimize,
     noOptimize,
     normalize,
+    ...(rebuild ? { rebuild: true as const } : {}),
   };
 }
 

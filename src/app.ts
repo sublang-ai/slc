@@ -228,6 +228,7 @@ export function usageText(): string {
     "  --normalize               rewrite raw input to the entry phase's source form first",
     "  -O, --optimize            run the pipeline's pass phases (the default)",
     '  --no-optimize             run the chain without pass phases',
+    '  --rebuild                 recompile every step, ignoring recorded build history',
     '  --config <path>           load configuration from <path> (disables discovery)',
     '  -v, --version             print version and exit',
     '  -h, --help                print this help and exit',
@@ -336,7 +337,11 @@ export async function run(
   }
 
   if (result.ok) {
-    if (result.outputs.length > 0) stdout(`${result.outputs.join('\n')}\n`);
+    // A current bundle reports itself instead of re-listing paths it did not
+    // write (CLI-3, INCR-2).
+    if (result.outcome === 'up-to-date') stdout('up to date\n');
+    else if (result.outputs.length > 0)
+      stdout(`${result.outputs.join('\n')}\n`);
     // Surface any ambiguity the agent resolved without polluting the path output.
     if (result.diagnostics.length > 0)
       stderr(`${result.diagnostics.join('\n')}\n`);

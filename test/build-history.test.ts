@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -69,7 +76,10 @@ describe('recordBuild + loadBuildHistory (INCR-9, INCR-11, INCR-18)', () => {
     expect(history?.manifest).toEqual({
       schema: BUILD_MANIFEST_SCHEMA,
       pipeline: 'playbook',
-      source: { path: '../wf.md', hash: hashBytes(Buffer.from('the source\n')) },
+      source: {
+        path: '../wf.md',
+        hash: hashBytes(Buffer.from('the source\n')),
+      },
       steps: [
         {
           kind: 'phase',
@@ -132,10 +142,7 @@ describe('loadBuildHistory leniency (INCR-10, INCR-22)', () => {
   it.each([
     ['non-numeric latest', async () => write('wf.playbook/.slc/latest', 'x')],
     ['zero latest', async () => write('wf.playbook/.slc/latest', '0')],
-    [
-      'missing manifest',
-      async () => write('wf.playbook/.slc/latest', '3'),
-    ],
+    ['missing manifest', async () => write('wf.playbook/.slc/latest', '3')],
     [
       'garbage manifest',
       async () => {
