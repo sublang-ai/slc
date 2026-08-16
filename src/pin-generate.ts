@@ -19,6 +19,7 @@
 import { writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
+import { messageOf } from './errors.js';
 import { hashFile } from './hash.js';
 import { deriveClosure } from './pin-closure.js';
 import { artifactBundleLayoutIssue, hashTree } from './pin-currency.js';
@@ -240,8 +241,4 @@ export async function writePinFile(
 
 function toPosix(path: string): string {
   return path.split(sep).join('/');
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
