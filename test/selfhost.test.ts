@@ -226,6 +226,9 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
     expect(await exists(join(artDir, 'text2gears.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'text2gears.fsm.ts'))).toBe(true);
     expect(await exists(join(artDir, 'text2gears.playbook.ts'))).toBe(false);
+    // The reserved meta-pipeline stays outside build history, keeping the
+    // reviewed bundle free of host metadata (DR-021, INCR-25).
+    expect(await exists(join(artDir, '.slc'))).toBe(false);
   });
 
   it('places the artifact directory under a cwd that differs from the source directory (DR-014, PIPE-38)', async () => {
