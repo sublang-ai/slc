@@ -3,8 +3,15 @@
 
 /** Canonical build orchestration for source-bound lineage (DR-021). */
 
-import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
 import {
+  lstat,
+  readFile,
+  readdir,
+  realpath,
+  writeFile,
+} from 'node:fs/promises';
+import {
+  basename,
   dirname,
   extname,
   isAbsolute,
@@ -155,6 +162,10 @@ export async function runColdLineage(
     pipeline: topology.pipelineName,
   });
   const identified = await identifyCurrentPlan(topology, host);
+  const alias = await normalizeSelfAlias(identified);
+  if (alias !== null) {
+    return { ok: false, outputs: [], diagnostics: [alias] };
+  }
   let prior: PriorLineage = { state: 'absent' };
   let generation = 1;
   let reuse: ReuseBasis | undefined;
@@ -260,15 +271,7 @@ export async function runColdLineage(
       generation,
       execution.origins,
     );
-    const encodedRecord = encodeBuildRecord(record);
-    await writeFile(overlay.stagePath(BUILD_RECORD_FILE), encodedRecord);
-    const sealed = await overlay.seal();
-    assertManifestMatchesRecord(
-      sealed.manifest,
-      record,
-      sourceHash,
-      hashBytes(encodedRecord),
-    );
+    const sealed = await sealWithRecord(overlay, record, sourceHash);
 
     const completed: ColdLineageResult = {
       ok: true,
@@ -479,9 +482,7 @@ async function adoptLineage(
         to: identified.plan.identity,
       },
     );
-    const encoded = encodeBuildRecord(record);
-    await writeFile(overlay.stagePath(BUILD_RECORD_FILE), encoded);
-    const sealed = await overlay.seal();
+    const sealed = await sealWithRecord(overlay, record, sourceHash);
     promoted = true;
     try {
       await promoteLineage({
@@ -516,6 +517,36 @@ async function adoptLineage(
   } finally {
     if (!promoted) await overlay.discard();
   }
+}
+
+/**
+ * Reports the diagnostic for a normalization step whose target is its own
+ * source, or `null` when there is none.
+ *
+ * The plan refuses the lexical case, but `resolve()` does not follow
+ * symbolic links: a source reached through a symlinked parent is a
+ * different string naming the same file, and normalizing it would consume
+ * the user's raw input and leave the record describing bytes the file no
+ * longer holds. Physical identity is the only comparison that settles it,
+ * so it is made here where the filesystem can be read (COMPILE-7).
+ */
+async function normalizeSelfAlias(
+  plan: CanonicalBuildPlan,
+): Promise<string | null> {
+  for (const step of plan.topology.steps) {
+    if (step.kind !== 'normalize' || step.request.kind !== 'compile') continue;
+    const source = await realpath(step.request.source).catch(() => undefined);
+    if (source === undefined) continue;
+    // The target does not exist yet, so its directory carries the identity.
+    const targetDir = await realpath(dirname(step.request.target)).catch(
+      () => undefined,
+    );
+    if (targetDir === undefined) continue;
+    if (source === resolve(targetDir, basename(step.request.target))) {
+      return `slc: normalization would overwrite its own source ${step.request.target}; move the raw input outside the artifact directory, or drop --normalize`;
+    }
+  }
+  return null;
 }
 
 async function identifyCurrentPlan(
@@ -686,6 +717,26 @@ async function acceptedProductBytes(
 }
 
 /**
+ * Scoped update is withheld from release, not merely unimplemented.
+ *
+ * Its candidate gate does not yet enforce all of INCR-15 — the replacement
+ * input partition's boundaries are not translated through the known diff,
+ * target scopes added inside the allowed closure cannot be expressed, and
+ * protected ordering is checked only among protected scopes — and no
+ * acceptance path exercises it over a real transport. It is nonetheless
+ * selectable: an ordinary interpreted reply is always decoded, a bound
+ * trace in its metadata is recorded like any other, and a definition that
+ * tells its agent to emit the reserved envelope can therefore seed the
+ * trace a later run would update from.
+ *
+ * Documenting that as deferred left the incomplete boundary reachable, so
+ * selection is closed here instead. Deleting this constant is the single
+ * change that re-enables it, once the invariants above are complete and one
+ * real transport is covered (INCR-15, IR-021 deferred work).
+ */
+const SCOPED_UPDATE_ENABLED = false;
+
+/**
  * Decides whether one step can take the scoped-update path, reading the
  * current definition to look for the frozen contract. Every failure mode
  * returns ordinary execution, which is always correct.
@@ -700,6 +751,9 @@ async function planStepUpdate(opts: {
   priorSourceBytes: Uint8Array | undefined;
 }): Promise<ScopedUpdatePlan> {
   const { step, recorded, reuse, identifiedStep } = opts;
+  if (!SCOPED_UPDATE_ENABLED) {
+    return { mode: 'ordinary', reason: 'feature-disabled' };
+  }
   if (opts.compiled) return { mode: 'ordinary', reason: 'compiled-step' };
   if (reuse === undefined || recorded === undefined) {
     return { mode: 'ordinary', reason: 'identity-drift' };
@@ -1591,6 +1645,32 @@ async function buildColdRecord(
           : transition,
     },
   };
+}
+
+/**
+ * The one way a record reaches a sealed stage. Encoding, staging, sealing,
+ * and proving the sealed manifest describes exactly the record's inventory
+ * belong together: adoption previously sealed and promoted without the
+ * correspondence check, so a derivative or record changed between record
+ * construction and sealing could be promoted while `.slc-build.json`
+ * described different bytes. Every record-producing path calls this
+ * (INCR-20, INCR-31).
+ */
+async function sealWithRecord(
+  overlay: CandidateOverlay,
+  record: BuildRecord,
+  snapshotHash: Hash,
+): Promise<Awaited<ReturnType<CandidateOverlay['seal']>>> {
+  const encoded = encodeBuildRecord(record);
+  await writeFile(overlay.stagePath(BUILD_RECORD_FILE), encoded);
+  const sealed = await overlay.seal();
+  assertManifestMatchesRecord(
+    sealed.manifest,
+    record,
+    snapshotHash,
+    hashBytes(encoded),
+  );
+  return sealed;
 }
 
 function assertManifestMatchesRecord(

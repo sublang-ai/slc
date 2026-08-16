@@ -50,6 +50,7 @@ export interface DiffHunk {
 
 /** Why a step cannot take the scoped-update path. */
 export type OrdinaryReason =
+  | 'feature-disabled'
   | 'link-step'
   | 'compiled-step'
   | 'no-contract'

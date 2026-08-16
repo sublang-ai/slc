@@ -30,10 +30,10 @@ and this project adheres to
   today, including when nothing changed; what it gains now is source
   association, conflict detection, `--rebuild`, and `--adopt`. The
   built-in normalizer declares its inputs. Scoped update — rewriting
-  only the affected scopes from an `## Update` contract — is specified
-  and implemented but reaches no real execution transport in this
-  release and is not usable; it is recorded as deferred rather than
-  shipped
+  only the affected scopes from an `## Update` contract — is withheld
+  from this release: its candidate gate does not yet enforce the whole
+  contract and no acceptance path covers it over a real agent, so
+  selecting it is disabled in code and an `## Update` section is inert
   ([DR-021](specs/decisions/021-incremental-build-records-scoped-updates.md),
   [IR-021](specs/iterations/021-incremental-compilation.md)).
 - **`--rebuild` and `--adopt` for a bundle the compiler will not

@@ -521,6 +521,31 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     await assertNoPrivateResidue();
   });
 
+  it('refuses a normalize source aliased through a symlinked parent', async () => {
+    // resolve() does not follow symbolic links, so the lexical refusal in the
+    // plan sees two different strings naming one file and lets the run
+    // proceed to overwrite the raw input through its alias.
+    await mkdir(artifactDir);
+    const aliasDir = join(workDir, 'alias');
+    await symlink(artifactDir, aliasDir);
+    const aliased = join(aliasDir, 'workflow.text.md');
+    await writeFile(aliased, 'aliased source bytes\n');
+    const performing = executor();
+
+    const result = await runSlc(
+      ['flow', aliased, '--normalize'],
+      deps(performing),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toMatch(
+      /normalization would overwrite its own source/,
+    );
+    expect(performing.calls).toHaveLength(0);
+    expect(await readFile(aliased, 'utf8')).toBe('aliased source bytes\n');
+    await assertNoPrivateResidue();
+  });
+
   it('refuses to normalize a source living at its own canonical normalized path', async () => {
     await mkdir(artifactDir);
     const aliased = join(artifactDir, 'workflow.text.md');
@@ -790,6 +815,38 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     await assertNoPrivateResidue();
   });
 
+  it('voids an adoption whose source changes mid-run (INCR-13, INCR-34)', async () => {
+    await seedLineage();
+    const refined = join(artifactDir, 'workflow.mid.md');
+    await writeFile(refined, 'manual refinement\n');
+    const accepted = await acceptedBytes();
+    const refusing: PhaseExecutor = {
+      run: () => {
+        throw new Error('adoption must invoke no semantic executor');
+      },
+    };
+    // The plan guard re-derives identity through buildIdentity, so the guard's
+    // own re-observation is the seam: the source is edited underneath the run
+    // after adoption has already read and attested it.
+    let derivations = 0;
+    const drifting: LineageDeps = {
+      ...deps(refusing),
+      async buildIdentity(topology) {
+        derivations += 1;
+        if (derivations > 1) await writeFile(sourcePath, 'edited mid-run\n');
+        return identityContext(topology);
+      },
+    };
+
+    const result = await runSlc(['flow', sourcePath, '--adopt'], drifting);
+
+    // Adoption used to carry no basis guard at all, so a concurrent edit
+    // produced an accepted record describing a source that no longer existed.
+    expect(result.ok).toBe(false);
+    await expectAcceptedBytes(accepted);
+    await assertNoPrivateResidue();
+  });
+
   it('adopts a refined semantic product without an executor (INCR-34, INCR-35)', async () => {
     await seedLineage();
     const refined = join(artifactDir, 'workflow.mid.md');
@@ -871,8 +928,12 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     expect(next.outcome).toBe('up-to-date');
   });
 
-  it('drives a real scoped update end to end (INCR-12, INCR-15, INCR-24)', async () => {
-    // A contract-bearing first phase, so the step is genuinely update-eligible.
+  it('never selects a scoped update while the feature is withheld (INCR-15)', async () => {
+    // The reachable seeding path: a contract-bearing definition whose agent
+    // emits a bound trace on an ordinary run. The trace is recorded like any
+    // other, so a later edit inside one input unit is exactly the case that
+    // would select the update path. Selection is closed until the candidate
+    // gate enforces all of INCR-15 over a real transport.
     const contract = [
       '',
       '## Update',
@@ -896,7 +957,6 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     );
     await writeFile(sourcePath, 'AAAA|BBBB\n');
 
-    // Seed with a trace whose units partition the source at the pipe.
     const partitioned = (input: string, output: string) => ({
       schema: 'sublang.slc.update.v1',
       input: {
@@ -915,18 +975,10 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
       target: {
         hash: hashBytes(new TextEncoder().encode(output)),
         byteLength: new TextEncoder().encode(output).byteLength,
-        // The fixture emits `<phase>:<input>`, so the left input unit lands
-        // after that prefix; the partition must follow the real bytes.
         scopes: [
           {
             scope: 'head',
             start: 0,
-            end: output.indexOf('|'),
-            classification: 'local',
-          },
-          {
-            scope: 'tail',
-            start: output.indexOf('|'),
             end: new TextEncoder().encode(output).byteLength,
             classification: 'local',
           },
@@ -934,141 +986,37 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
       },
       dependencies: [
         { input: 'left', targets: ['head'] },
-        { input: 'right', targets: ['tail'] },
+        { input: 'right', targets: ['head'] },
       ],
     });
+
     const seeded = await runSlc(
       ['flow', sourcePath],
       deps(tracingExecutor(partitioned)),
     );
     expect(seeded.ok, seeded.diagnostics.join('\n')).toBe(true);
+    // The ordinary run does record the agent-supplied trace: this is the
+    // reachability the quarantine exists for, not a hypothetical.
+    expect((await readRecord()).plan.steps[0].trace).not.toBeNull();
 
-    // Edit only inside the first unit.
     await writeFile(sourcePath, 'AAZA|BBBB\n');
     let sawUpdate = false;
-    const updating: FixtureExecutor = (() => {
-      const base = tracingExecutor(partitioned);
-      return {
-        calls: base.calls,
-        async run(request, workspace, signal) {
-          if (request.kind === 'compile' && request.update !== undefined) {
-            sawUpdate = true;
-            // The request must carry the hunk and the allowed closure.
-            expect(request.update.allowedTargetScopes).toEqual(['head']);
-            expect(request.update.changes).toHaveLength(1);
-            // The prior operand is bound and readable.
-            const prior = workspace.reads.find((r) => r.role === 'prior-input');
-            expect(prior).toBeDefined();
-            expect(await readFile(prior!.physicalPath, 'utf8')).toBe(
-              'AAAA|BBBB\n',
-            );
-          }
-          return base.run(request, workspace, signal);
-        },
-      };
-    })();
-
-    const result = await runSlc(['flow', sourcePath], deps(updating));
-
-    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
-    expect(sawUpdate).toBe(true);
-    const record = await readRecord();
-    expect(record.plan.steps[0].origin).toBe('updated');
-    await assertNoPrivateResidue();
-  });
-
-  it('discards a scoped run whose candidate rewrote protected bytes (INCR-16, INCR-25)', async () => {
-    const contract = [
-      '',
-      '## Update',
-      '',
-      '```json',
-      '{"schema":"sublang.slc.update-contract.v1","traceSchema":"sublang.slc.update.v1"}',
-      '```',
-      '',
-      ...[
-        'Stable input units',
-        'Target scopes',
-        'Dependency closure',
-        'Structural and global scopes',
-        'Update instructions',
-        'Semantic verification',
-      ].flatMap((title) => [`### ${title}`, '', 'content', '']),
-    ].join('\n');
-    await writeFile(
-      join(pipelineDir, 'text2mid.md'),
-      formatDoc('text', '.md', 'mid', '.md') + contract,
-    );
-    await writeFile(sourcePath, 'AAAA|BBBB\n');
-    const partitioned = (input: string, output: string) => ({
-      schema: 'sublang.slc.update.v1',
-      input: {
-        hash: hashBytes(new TextEncoder().encode(input)),
-        byteLength: new TextEncoder().encode(input).byteLength,
-        scopes: [
-          { scope: 'left', start: 0, end: 4, classification: 'local' },
-          {
-            scope: 'right',
-            start: 4,
-            end: new TextEncoder().encode(input).byteLength,
-            classification: 'local',
-          },
-        ],
-      },
-      target: {
-        hash: hashBytes(new TextEncoder().encode(output)),
-        byteLength: new TextEncoder().encode(output).byteLength,
-        scopes: [
-          {
-            scope: 'head',
-            start: 0,
-            end: output.indexOf('|'),
-            classification: 'local',
-          },
-          {
-            scope: 'tail',
-            start: output.indexOf('|'),
-            end: new TextEncoder().encode(output).byteLength,
-            classification: 'local',
-          },
-        ],
-      },
-      dependencies: [
-        { input: 'left', targets: ['head'] },
-        { input: 'right', targets: ['tail'] },
-      ],
-    });
-    expect(
-      (await runSlc(['flow', sourcePath], deps(tracingExecutor(partitioned))))
-        .ok,
-    ).toBe(true);
-    const accepted = await acceptedBytes();
-
-    // The edit is confined to the left unit, but the executor rewrites the
-    // protected tail as well.
-    await writeFile(sourcePath, 'AAZA|BBBB\n');
-    const overreaching = tracingExecutor((input, output) =>
-      partitioned(input, output),
-    );
-    const rewriting: FixtureExecutor = {
-      calls: overreaching.calls,
+    const base = tracingExecutor(partitioned);
+    const watching: FixtureExecutor = {
+      calls: base.calls,
       async run(request, workspace, signal) {
-        const result = await overreaching.run(request, workspace, signal);
         if (request.kind === 'compile' && request.update !== undefined) {
-          await writeFile(workspace.write.physicalPath, 'text2mid:AAZA|ZZZZ\n');
+          sawUpdate = true;
         }
-        return result;
+        return base.run(request, workspace, signal);
       },
     };
 
-    const result = await runSlc(['flow', sourcePath], deps(rewriting));
+    const result = await runSlc(['flow', sourcePath], deps(watching));
 
-    expect(result.ok).toBe(false);
-    expect(result.diagnostics.join('\n')).toMatch(
-      /scoped update candidate rejected/,
-    );
-    // Nothing accepted moved, and no stage was left behind.
-    await expectAcceptedBytes(accepted);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(sawUpdate).toBe(false);
+    expect((await readRecord()).plan.steps[0].origin).toBe('ordinary');
     await assertNoPrivateResidue();
   });
 
