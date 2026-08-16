@@ -1,0 +1,66 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
+
+# INCR: Incremental Compilation
+
+## Intent
+
+This package specifies integration acceptance for incremental compilation using fixture pipelines and counting fixture executors, without live agent calls.
+
+Essential project-specific reference: `slc`, this project's compiler CLI.
+
+## Acceptance
+
+### INCR-18
+
+Verifies: [INCR-1](../user/incremental-compilation.md#incr-1), [INCR-9](../dev/incremental-compilation.md#incr-9)
+
+Where a fixture pipeline compiles at canonical output, when a first full run succeeds, the artifact directory shall contain `.slc/latest` naming build `1` and a build directory whose manifest records the pipeline, source, and every step with input identities and output hashes matching the on-disk bytes, plus byte-identical copies of the source and each step output.
+
+### INCR-19
+
+Verifies: [INCR-2](../user/incremental-compilation.md#incr-2)
+
+While a recorded build matches the current source and artifacts, when the same invocation repeats, the slc command shall exit zero, print `up to date`, invoke zero executors, and leave every file's bytes and the history unchanged.
+
+### INCR-20
+
+Verifies: [INCR-4](../user/incremental-compilation.md#incr-4), [INCR-5](../user/incremental-compilation.md#incr-5), [INCR-14](../dev/incremental-compilation.md#incr-14)
+
+While a recorded build exists, when the source changes and the run repeats, the first affected step's executor shall receive the prior-input copy path holding the recorded bytes and a diff naming the change while its target file still holds the prior output, and downstream steps whose executed predecessors reproduce byte-identical output shall be skipped.
+
+### INCR-21
+
+Verifies: [INCR-4](../user/incremental-compilation.md#incr-4), [INCR-12](../dev/incremental-compilation.md#incr-12)
+
+While a recorded build exists and the user hand-edits an intermediate artifact, when the full run repeats with an unchanged source, steps upstream of the edit shall be skipped, and the first step consuming the edited artifact shall execute in update mode with the edited bytes as its current chained input and its own existing target as the prior output.
+
+### INCR-22
+
+Verifies: [INCR-3](../user/incremental-compilation.md#incr-3), [INCR-10](../dev/incremental-compilation.md#incr-10)
+
+Where `.slc/` holds a garbage manifest, a missing copy, a wrong-schema record, or an orphaned build directory, when the full run repeats, the run shall succeed as a first compile, not report the bad history as an error, and record a fresh build.
+
+### INCR-23
+
+Verifies: [INCR-6](../user/incremental-compilation.md#incr-6), [INCR-16](../dev/incremental-compilation.md#incr-16)
+
+While a recorded build exists, when a repeat run's executor fails at a later step after earlier steps completed, the recorded history shall contain fresh records for the completed steps and carried-forward records for the rest, and the next repeat shall skip the completed steps.
+
+### INCR-24
+
+Verifies: [INCR-7](../user/incremental-compilation.md#incr-7), [INCR-13](../dev/incremental-compilation.md#incr-13)
+
+While a current recorded build exists, when the user repeats the invocation with `--rebuild`, every step shall execute ordinarily without update context and a fresh build shall be recorded; where a scheduled step's pin is stale, the same invocation shall fail closed before executing that step.
+
+### INCR-25
+
+Verifies: [INCR-8](../user/incremental-compilation.md#incr-8)
+
+Where an invocation uses `-o`, the reserved `slc` meta-pipeline, or a single-phase form, when it runs to success, no `.slc/` entry shall be created or consulted, and the reserved meta-pipeline's reviewed bundle shall remain byte-identical to its pinned tree.
+
+### INCR-26
+
+Verifies: [INCR-17](../dev/incremental-compilation.md#incr-17), [INCR-5](../user/incremental-compilation.md#incr-5)
+
+While recorded history names a different source path, when a full run compiles another source with the same basename into the same artifact directory, the run shall succeed as a first compile, report the rebind in diagnostics, and record a fresh build; when a link step's recorded inputs differ on repeat, the link step shall execute in full without update context.
