@@ -75,6 +75,38 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
       executor: executorImpl,
     });
 
+  it('refuses an update-bearing request while the feature is withheld (INCR-15)', async () => {
+    // runPhase is a published export, so the CLI planner gate is not the
+    // whole quarantine: a library caller can hand an update straight to this
+    // boundary. It must fail closed rather than execute ordinarily, so no
+    // caller mistakes a dropped update for an applied one.
+    let ran = false;
+    const result = await runPhase({
+      request: {
+        ...request,
+        update: {
+          schema: 'sublang.slc.update-request.v1',
+        } as unknown as NonNullable<
+          Extract<typeof request, { kind: 'compile' }>['update']
+        >,
+      },
+      phase: 'text2gears',
+      targetExt: '.md',
+      executor: {
+        run: async () => {
+          ran = true;
+          return { status: 'ok', diagnostics: [] };
+        },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(ran).toBe(false);
+    expect(result.ok === false && result.report.reasons.join('\n')).toMatch(
+      /scoped update is withheld/,
+    );
+  });
+
   it('passes when the target is written and inputs are unchanged', async () => {
     const result = await run(
       writingExecutor('gears', ['resolved a benign ambiguity']),

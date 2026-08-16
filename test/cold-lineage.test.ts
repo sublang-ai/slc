@@ -521,6 +521,46 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     await assertNoPrivateResidue();
   });
 
+  it('voids a run whose normalize source is aliased mid-run', async () => {
+    // The collision can be created after the one-time check: rebinding the
+    // link leaves the source bytes and the plan identity both unchanged, so
+    // only a guarded basis fact catches it before promotion.
+    const outside = join(root, 'outside');
+    await mkdir(outside);
+    const realSource = join(outside, 'workflow.text.md');
+    await writeFile(realSource, 'raw input bytes\n');
+    const aliasDir = join(workDir, 'alias');
+    await symlink(outside, aliasDir);
+    const aliased = join(aliasDir, 'workflow.text.md');
+    await mkdir(artifactDir);
+
+    let derivations = 0;
+    const drifting: LineageDeps = {
+      ...deps(executor()),
+      async buildIdentity(topology) {
+        derivations += 1;
+        if (derivations === 2) {
+          // Re-point the alias at the artifact directory, so the source path
+          // now names the normalization target itself.
+          await rm(aliasDir);
+          await symlink(artifactDir, aliasDir);
+          await writeFile(aliased, 'raw input bytes\n');
+        }
+        return identityContext(topology);
+      },
+    };
+
+    const result = await runSlc(['flow', aliased, '--normalize'], drifting);
+
+    expect(result.ok).toBe(false);
+    // The named guard is what refuses it. Without that basis fact the run
+    // still fails, but only incidentally through generic workspace checks —
+    // never through PIPE-34's collision behavior.
+    expect(result.diagnostics.join('\n')).toMatch(/basis:normalize-alias/);
+    expect(await readFile(aliased, 'utf8')).toBe('raw input bytes\n');
+    await assertNoPrivateResidue();
+  });
+
   it('refuses a normalize source aliased through a symlinked parent', async () => {
     // resolve() does not follow symbolic links, so the lexical refusal in the
     // plan sees two different strings naming one file and lets the run

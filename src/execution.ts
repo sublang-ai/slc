@@ -37,6 +37,7 @@ import {
 } from './workspace.js';
 
 import { errorCode, isAbsentPathError, messageOf } from './errors.js';
+import { SCOPED_UPDATE_ENABLED } from './scoped-update.js';
 
 /** An opaque link option pair (PIPE-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
@@ -169,6 +170,27 @@ export async function runPhase(opts: {
   const { request, phase, targetExt, executor } = opts;
   const signal = opts.signal ?? new AbortController().signal;
   const target = request.kind === 'compile' ? request.target : request.linked;
+  // This boundary is exported, so the CLI's planner gate is not the whole
+  // quarantine: a library caller can hand an update-bearing request straight
+  // to it. Refusing here is what makes "withheld" true for every consumer,
+  // and it fails closed rather than silently executing ordinarily, so no
+  // caller mistakes a dropped update for an applied one (INCR-15).
+  if (
+    !SCOPED_UPDATE_ENABLED &&
+    request.kind === 'compile' &&
+    request.update !== undefined
+  ) {
+    return {
+      ok: false,
+      report: {
+        phase,
+        target,
+        reasons: [
+          'scoped update is withheld from this release; omit request.update',
+        ],
+      },
+    };
+  }
   const derivedWorkspace =
     opts.workspace ??
     (await createWorkspaceRecord(request, opts.workspaceOptions ?? {}));
