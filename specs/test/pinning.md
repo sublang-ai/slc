@@ -27,7 +27,7 @@ Where a fixture pipeline directory has no `slc.pins.json`, when the validator ev
 ### PIN-8
 Verifies: [PIN-2](../dev/pinning.md#pin-2)
 
-Where a fixture pipeline directory's `slc.pins.json` records a phase whose map key matches its canonical definition, artifact-bundle, and artifact paths, whose definition, compiled `.playbook.ts` artifact, artifact-bundle tree directly containing that entry plus its canonical local FSM, GEARS, and four verification files, semantic inputs, runtime dependencies, link-target identity, semantic-input closure, and external inputs all match the committed files, and whose compiled artifact resolves to the linked `playbook` format, when the validator evaluates it, the validator shall report that phase current.
+Where fixture pipeline directories' `slc.pins.json` records respectively a transform phase and an arbitrarily named portable format-preserving pass such as `quality_check` whose map key matches its canonical definition basename, artifact-bundle, and artifact paths, whose definition, compiled `.playbook.ts` artifact, artifact-bundle tree directly containing that entry plus its canonical local FSM, GEARS, and four verification files, semantic inputs, runtime dependencies, link-target identity, semantic-input closure, and external inputs all match the committed files, and whose compiled artifact resolves to the linked `playbook` format, when the validator evaluates each, the validator shall report that phase or pass current.
 
 ### PIN-9
 Verifies: [PIN-3](../dev/pinning.md#pin-3)
@@ -49,7 +49,7 @@ Where a fixture phase's pinned artifact matches its recorded hash but its bytes 
 ### PIN-11
 Verifies: [PIN-5](../dev/pinning.md#pin-5)
 
-Where a fixture `slc.pins.json` is a symbolic link or other non-regular file, is not JSON, declares an unsupported schema or hash algorithm, carries an unknown or wrong-typed field, uses an invalid phase-map key, maps a phase key to another phase's canonical definition, bundle, or artifact paths, records an empty, backslash-containing, absolute, or boundary-escaping path including a symbolic-link escape, omits or misstates a package runtime dependency's bare import specifier, or records a file hash, tree hash, or link-target identity that is not a well-formed content-addressed digest, when the validator evaluates it, the validator shall report the pin malformed, naming the field, and report no phase current.
+Where a fixture `slc.pins.json` is a symbolic link or other non-regular file, is not JSON, declares an unsupported schema or hash algorithm, carries an unknown or wrong-typed field, uses a key outside `link` and non-empty portable phase/pass names, maps a phase key to another phase's canonical definition, bundle, or artifact paths, records an empty, backslash-containing, absolute, or boundary-escaping path including a symbolic-link escape, omits or misstates a package runtime dependency's bare import specifier, or records a file hash, tree hash, or link-target identity that is not a well-formed content-addressed digest, when the validator evaluates it, the validator shall report the pin malformed, naming the field, and report no phase current.
 
 ### PIN-12
 Verifies: [PIN-6](../dev/pinning.md#pin-6)

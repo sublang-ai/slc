@@ -105,6 +105,8 @@ Tree entry names shall be valid UTF-8 and shall be rejected rather than decoded 
 
 Artifact-bundle tree hashing shall reject every symbolic link and other non-file/non-directory entry.
 Directory and package link targets or runtime dependencies shall record symbolic-link targets with the canonical symlink record rather than ignore or reject them.
+Host runtime package closures resolve symbolic links at package boundaries and hash the resolved content, so a link-based installer layout (such as pnpm's store) and a copied layout with identical bytes share one closure identity.
+Inside a resolved package directory, symbolic links remain rejected: a published package tarball cannot carry them, so one there is an anomaly, not a layout.
 
 A repository or workspace that commits pins shall enforce stable checkout bytes for pinnable text inputs and artifacts, normally with `.gitattributes`.
 This portability requirement prevents routine checkout policy differences from making every pinned text artifact stale while preserving exact-byte identity for validation.
@@ -123,6 +125,9 @@ Hosts may still reject a pin whose recorded boundary violates host policy, but t
 The artifact path shall identify the canonical `.playbook.ts` linked `playbook` entry module produced by the reserved `slc.link` phase.
 It shall resolve to the `playbook` linked format declared by the reserved meta-pipeline link phase.
 The artifact-bundle path shall identify the reviewed artifact directory directly containing that entry module and its canonical local FSM, GEARS, GEARS↔FSM, FSM-introspection, prompt-contract, and FSM-coverage files, so changing a runtime dependency beside the entry module makes the pin stale even when the entry module's own bytes do not change.
+
+Pin-map keys use the phase or pass's non-empty portable definition basename, without a path separator and other than `.` or `..`, with `link` reserved for the link phase.
+This admits format-preserving pass names such as `optimize` in addition to transform names such as `text2gears`.
 
 ### Semantic input closure
 

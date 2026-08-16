@@ -38,7 +38,7 @@ When loading a phase file, the slc command shall refuse it unless its `<source-f
 
 ### PIPE-30
 
-Where a phase file's `## Formats` table declares equal source and target formats, the slc command shall load it as a pass phase named by its filename without `.md` ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+Where a phase file's `## Formats` table declares equal source and target formats and its filename without `.md` is a non-empty portable direct-child name other than `.` or `..`, the slc command shall load it as a pass phase with that name, and shall otherwise refuse it ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
 
 ### PIPE-3
 
