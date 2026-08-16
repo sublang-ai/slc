@@ -41,13 +41,13 @@ Each implementation task's commit shall include its focused unit or integration 
 16. [x] **Decode interpreted update metadata.** Reuse the exact trace codec from task 3, extend the host phase result with optional namespaced metadata, extract task 2's SLC-owned interpreted response envelope, and preserve ordinary success when metadata is absent or malformed; cover the interpreted branches of PHEXEC-39/40 and INCR-13 with focused tests.
 17. [x] **Capture compiled update metadata.** Divert the reserved compiled telemetry topic into the protected metadata sink, exclude it from Playbook results/status/diagnostics, and persist only valid ordinary interpreted or compiled traces in the build record; cover the compiled branches of PHEXEC-39/40 and complete INCR-13/20's valid, absent, and malformed trace acceptance.
 18. [x] **Plan generic scoped updates.** Parse the exact `## Update` contract, compute source-byte diffs and opaque dependency closures, and select ordinary execution before an agent call for unmapped, ambiguous, structural, global, or incomplete cases; cover INCR-12/14 and fixture-based INCR-24 without adding a real pipeline definition yet.
-19. [x] **Enforce scoped candidates.** Supply prior/current inputs, exact diff, prior target, and allowed closure; enforce replacement-trace, protected-input, protected-byte, and scope invariants; and reject blocked or invalid candidates without a hidden ordinary retry; cover INCR-5/13/15/16 and INCR-25.
+19. [ ] **Enforce scoped candidates.** Supply prior/current inputs, exact diff, prior target, and allowed closure; enforce replacement-trace, protected-input, protected-byte, and scope invariants; and reject blocked or invalid candidates without a hidden ordinary retry; cover INCR-5/13/15/16 and INCR-25.
 20. [x] **Accept scoped build lineages.** Replan downstream steps from actual output hashes, execute dirty links in full, regenerate and verify deterministic derivatives, record updated/reused/ordinary origins, and promote only the complete accepted lineage; cover INCR-3/17 and INCR-23 with any affected VERIFY spec correction in this commit.
-21. [x] **Enable SLC normalization updates.** Add the SLC-owned normalization update/trace contract and exercise its raw-source scope mapping through the generic engine; cover the normalization side of INCR-18/24 while retaining the documented absence of published Playbook-owned closures and later mappings.
+21. [ ] **Enable SLC normalization updates.** Add the SLC-owned normalization update/trace contract and exercise its raw-source scope mapping through the generic engine; cover the normalization side of INCR-18/24 while retaining the documented absence of published Playbook-owned closures and later mappings.
 22. [x] **Validate adoption requests.** Parse, validate, route, and document `--adopt`; require unchanged-source continuity, safe complete semantic products, valid current pins, and compatible topology; route eligible refinements/rebaselines and reject unsafe, drifted, incompatible, or unsupported forms without mutation; cover INCR-6/9/34, the adoption portions of INCR-28/37, and applicable PIPE/CLI help and diagnostics.
 23. [x] **Execute whole-lineage adoption.** Attest every semantic product without an executor, derive the current compatible build identity, clear traces, regenerate and check deterministic derivatives in staged state, record user-adopted origins and identity transitions, and promote/return the adopted result only after acceptance; cover INCR-33/35 and the adoption-success core of INCR-36.
 24. [x] **Enforce adopted currentness.** Return the exact adopted no-op, classify later source, topology, identity, and semantic-product drift, report adopted versus written paths through the CLI, and cover the final/rebaseline branches of INCR-36/37 plus CLI-3/11/39 and related COMPILE/PIPE/SELFHOST behavior.
-25. [x] **Close the iteration.** Update user documentation and examples, explicitly retain the installed-Playbook limitation, run the complete deterministic release gate, apply only final traceability or map corrections, and mark the remaining deliverables complete in one docs-only commit; plan any future Playbook IR/release and atomic SLC adoption separately rather than consuming the sibling checkout.
+25. [ ] **Close the iteration.** Update user documentation and examples, explicitly retain the installed-Playbook limitation, run the complete deterministic release gate, apply only final traceability or map corrections, and mark the remaining deliverables complete in one docs-only commit; plan any future Playbook IR/release and atomic SLC adoption separately rather than consuming the sibling checkout.
 
 ## Acceptance criteria
 
@@ -57,7 +57,7 @@ Each implementation task's commit shall include its focused unit or integration 
 - Malformed, unsafe, orphaned, rebound, manually changed, concurrently changed, and stale-pin states fail closed with only the recovery choices valid for that state; `--rebuild` never bypasses pin validation.
 - Candidate execution and deterministic derivatives remain staged until complete verification, preserve unrecorded paths, remove only obsolete managed paths, and recover interrupted promotion to one accepted lineage.
 - Interpreted, compiled Player, and compiled Captain execution receive canonical semantic locators and the sole authorized physical workspace binding without leaking staging locators into products or trace identity.
-- Valid trace contracts enable deterministic scoped update, protected bytes remain exact, dirty links execute in full, and any blocked, structurally widened, invalid, or unverified candidate is discarded without an automatic retry.
+- Valid trace contracts enable deterministic scoped update, protected bytes remain exact, dirty links execute in full, and any blocked, structurally widened, invalid, or unverified candidate is discarded without an automatic retry. **Not met** — see [Deferred](#deferred); selection is withheld in code.
 - `--adopt` preserves the complete user-attested semantic lineage, permits only compatible identity rebaselining, regenerates trusted deterministic derivatives, clears traces, and establishes a subsequent exact no-op.
 - Fixture pipelines cover the generic engine without live model calls, and `npm run release:check` passes before the iteration closes.
 
@@ -66,17 +66,22 @@ Each implementation task's commit shall include its focused unit or integration 
 Two acceptance criteria above are **not** met, and this record previously
 claimed otherwise. They are deferred rather than quietly closed.
 
-1. **Scoped update reaches no real execution transport.** A compiled step
+1. **Scoped update is withheld in code, not merely unimplemented.**
+   Selection is disabled at its planner entry; deleting that one constant
+   re-enables it. Documenting the gaps below as deferred was not enough,
+   because the path is reachable: an ordinary interpreted reply is always
+   decoded and a bound trace in its metadata is recorded like any other,
+   so a definition that tells its agent to emit the reserved envelope
+   seeds the trace a later run would update from. A compiled step
    is categorically routed to ordinary execution because the compiled Boss
    request carries no `sublang.slc.update-request.v1` field, which
    [PHEXEC-29](../dev/phase-execution.md#phexec-29) requires for an
    update-capable compile. An interpreted step is asked for a replacement
    trace only once an update is already selected, so an ordinary run — the
    only kind that can happen first — never produces the trace a later
-   update must build on, and every subsequent run falls back to ordinary
-   again. The feature is therefore exercised only by fixtures with a
-   test executor, never end to end. Until both transports carry it, the
-   scoped-update acceptance criterion is unproven, and the deterministic
+   update must build on. The feature is exercised only by fixtures with a
+   test executor, never end to end. Until a real transport carries it,
+   the scoped-update acceptance criterion is unproven, and the
    partition relation below cannot be validated against a real agent.
 
 2. **The candidate gate does not implement all of [INCR-15](../dev/incremental-compilation.md#incr-15).**

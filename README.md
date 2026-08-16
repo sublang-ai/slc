@@ -144,12 +144,13 @@ association, conflict detection, `--rebuild`, and `--adopt`; the built-in
 normalizer declares its inputs, and any pipeline you write can too.
 
 Scoped update — rewriting only the affected part of an artifact from an
-`## Update` contract — is specified and implemented but **not yet
-reachable in a real run**, on any pipeline. Neither execution transport
-can carry it today: a compiled phase has no request field for it, and an
-interpreted phase is never asked for the trace that a later update would
-have to build on. Every run therefore takes ordinary execution, which is
-the safe direction. Treat it as unreleased and do not plan around it
+`## Update` contract — is **withheld from this release**. Its planner and
+candidate checks are written, but they do not yet enforce the whole
+contract, and no acceptance path covers them over a real agent, so
+selecting it is disabled in code: every run takes ordinary execution.
+Writing an `## Update` section is therefore inert today, and a compiled
+phase has no request field for it at all. Treat it as unreleased and do
+not plan around it
 ([IR-021 deferred work](specs/iterations/021-incremental-compilation.md#deferred)).
 
 If the bundle belongs to another same-named source, or a managed product
