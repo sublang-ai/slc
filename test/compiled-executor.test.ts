@@ -215,15 +215,23 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
       player: fixturePlayer,
       judge: idleAgent,
     });
-    const request = {
+    const ordinary: ExecuteRequest = {
       kind: 'compile',
       definitionPath: join(root, 'phase.md'),
       source: 'src.md',
       target: 'out.ts',
-      update: {},
-    } as unknown as ExecuteRequest;
+    };
+    // The workspace is built from the ordinary request, since binding one for
+    // an update-bearing request is itself refused; this isolates the
+    // executor's own gate.
+    await provisionWorkspaceReads(ordinary);
+    const workspace = await createWorkspaceRecord(ordinary, { runRoot: root });
 
-    const result = await runExecutor(executor, request);
+    const result = await executor.run(
+      { ...ordinary, update: {} } as unknown as ExecuteRequest,
+      workspace,
+      new AbortController().signal,
+    );
 
     expect(result.status).toBe('error');
     expect(result.diagnostics.join('\n')).toMatch(/withheld from this release/);

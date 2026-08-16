@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { ExecuteRequest } from '../src/execution.js';
+import { buildPhasePrompt } from '../src/interpreter.js';
 import {
   appendWorkspaceContract,
   createWorkspaceRecord,
@@ -50,6 +51,28 @@ describe('physical workspace binding (PHEXEC-11, PHEXEC-34)', () => {
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('refuses to bind or certify an update-bearing request (INCR-39)', async () => {
+    // These helpers are exported, so a caller can obtain and certify the
+    // withheld workspace without entering a guarded executor. While the
+    // feature is withheld, no public consumer may act on or attest one.
+    const updating = { ...request, update: {} } as unknown as ExecuteRequest;
+    const ordinary = await createWorkspaceRecord(request);
+
+    await expect(createWorkspaceRecord(updating)).rejects.toThrow(
+      /withheld from this release/,
+    );
+    await expect(validateWorkspaceRecord(ordinary, updating)).rejects.toThrow(
+      /withheld from this release/,
+    );
+    expect(() =>
+      buildPhasePrompt({
+        request: updating,
+        definition: '## Formats',
+        workspace: ordinary,
+      }),
+    ).toThrow(/withheld from this release/);
   });
 
   it('builds the exact ordered compile record and canonical final suffix', async () => {

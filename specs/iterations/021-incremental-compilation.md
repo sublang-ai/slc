@@ -67,10 +67,12 @@ Two acceptance criteria above are **not** met, and this record previously
 claimed otherwise. They are deferred rather than quietly closed.
 
 1. **Scoped update is withheld in code, not merely unimplemented.**
-   The CLI never selects an update and the exported execution boundary
-   refuses one it is handed directly, so the withholding also holds for
-   library consumers of `runPhase`; one constant and its two guards
-   re-enable it. Documenting the gaps below as deferred was not enough,
+   The CLI never selects an update, and every exported consumer that could
+   act on or certify one refuses it independently: the phase execution
+   boundary, both executors, the prompt builder, and workspace binding and
+   validation. The withholding is therefore a property of the package, not
+   of one code path; one constant and the guards reading it re-enable them
+   all. Documenting the gaps below as deferred was not enough,
    because the path is reachable: an ordinary interpreted reply is always
    decoded and a bound trace in its metadata is recorded like any other,
    so a definition that tells its agent to emit the reserved envelope
@@ -82,9 +84,10 @@ claimed otherwise. They are deferred rather than quietly closed.
    replacement trace only once an update is already selected, so the host
    never solicits the first trace itself — but a definition can, which is
    the reachability above. The feature is exercised only by fixtures with a
-   test executor, never end to end. Until a real transport carries it,
-   the scoped-update acceptance criterion is unproven, and the
-   partition relation below cannot be validated against a real agent.
+   test executor, never against a real agent. Interpreted transport
+   exists; what remains is completing the enforcement below, carrying an
+   update in the compiled Boss request ([PHEXEC-29](../dev/phase-execution.md#phexec-29)),
+   and proving the whole path against a real agent.
 
 2. **The candidate gate does not implement all of [INCR-15](../dev/incremental-compilation.md#incr-15).**
    The replacement input partition is compared by scope name and

@@ -11,6 +11,7 @@ import { canonicalJson } from './build-record.js';
 import type { ExecuteRequest } from './execution.js';
 import { hashBytes, isHash, type Hash } from './hash.js';
 import { hashTree } from './pin-currency.js';
+import { assertScopedUpdateAvailable } from './scoped-update.js';
 
 export const WORKSPACE_SCHEMA = 'sublang.slc.workspace.v1' as const;
 export const WORKSPACE_BEGIN = 'SLC_WORKSPACE_BEGIN';
@@ -88,6 +89,7 @@ export async function createWorkspaceRecord(
   request: ExecuteRequest,
   options: CreateWorkspaceOptions = {},
 ): Promise<WorkspaceRecord> {
+  assertScopedUpdateAvailable(request);
   const root = resolve(options.runRoot ?? process.cwd());
   const logical = (path: string): string => resolve(root, path);
   const physical = (role: string, path: string): string =>
@@ -182,6 +184,7 @@ export async function validateWorkspaceRecord(
     'runRoot' | 'semanticInputs' | 'priorReads'
   > = {},
 ): Promise<void> {
+  assertScopedUpdateAvailable(request);
   requireExactKeys(record, ['schema', 'reads', 'write'], 'workspace');
   if (record.schema !== WORKSPACE_SCHEMA || !Array.isArray(record.reads)) {
     throw invalid('workspace schema or reads are invalid');

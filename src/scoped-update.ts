@@ -91,6 +91,20 @@ export function scopedUpdateWithheld(request: {
   );
 }
 
+/**
+ * The same refusal for a public helper that returns no result shape of its
+ * own. Prompt rendering and workspace binding/validation are exported too,
+ * and each is a way to obtain or certify the withheld artifacts without
+ * entering a guarded executor; making every public consumer refuse is what
+ * keeps "withheld" a property of the package rather than of one code path.
+ */
+export function assertScopedUpdateAvailable(request: {
+  readonly kind: string;
+  readonly update?: unknown;
+}): void {
+  if (scopedUpdateWithheld(request)) throw new Error(SCOPED_UPDATE_WITHHELD);
+}
+
 export type OrdinaryReason =
   | 'feature-disabled'
   | 'link-step'
