@@ -11,6 +11,8 @@ import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { createRequire, isBuiltin } from 'node:module';
 import { isAbsolute, join, relative, sep } from 'node:path';
 
+import { isAbsentPathError, messageOf } from './errors.js';
+
 export interface ResolvedRuntimePackage {
   root: string;
   version: string;
@@ -54,7 +56,7 @@ export function resolveRuntimePackage(
     try {
       source = readFileSync(manifestPath, 'utf8');
     } catch (error) {
-      if (isAbsent(error)) {
+      if (isAbsentPathError(error)) {
         throw new Error(
           `selected runtime dependency has no package manifest (${root})`,
           { cause: error },
@@ -105,7 +107,7 @@ function firstExistingPackagePath(root: string): string | undefined {
       lstatSync(candidate);
       return candidate;
     } catch (error) {
-      if (!isAbsent(error)) throw error;
+      if (!isAbsentPathError(error)) throw error;
     }
   }
   return undefined;
@@ -154,17 +156,4 @@ function isInside(root: string, path: string): boolean {
     !rel.startsWith(`..${sep}`) &&
     !isAbsolute(rel)
   );
-}
-
-function isAbsent(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error.code === 'ENOENT' || error.code === 'ENOTDIR')
-  );
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
