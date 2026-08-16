@@ -152,9 +152,7 @@ export async function recordBuild(opts: {
 
   let next = 1;
   try {
-    const latest = (
-      await readFile(join(historyDir, 'latest'), 'utf8')
-    ).trim();
+    const latest = (await readFile(join(historyDir, 'latest'), 'utf8')).trim();
     if (/^\d{1,15}$/.test(latest)) next = Number(latest) + 1;
   } catch {
     // No committed build yet.
