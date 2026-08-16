@@ -24,7 +24,7 @@ Tasks are ordered; each numbered task shall land as exactly one commit that also
 4. [x] **Add the build-history store and line diff.** New `src/build-history.ts` (lenient load, hash-verified copies, atomic `latest` recording) and `src/line-diff.ts` (unified line diff with a size budget), with unit tests covering INCR-9/10/11.
 5. [x] **Carry update context to executors.** Extend the compile `ExecuteRequest` with optional prior-input path and diff, protect the prior input, render the interpreted update block, and append the same text to compiled performing prompts; cover INCR-14/15 with executor-level tests.
 6. [x] **Reuse, update, and record in the runner.** Wire step selection (INCR-12/13), recording with carry-forward and rebind diagnostics (INCR-16/17), the `up to date` outcome, and `--rebuild` parsing/reporting through `runFull`/`runFullLink`, with the small CLI spec updates for the flag and outcome.
-7. [ ] **Land integration acceptance.** Fixture-pipeline coverage for INCR-18 through INCR-26.
+7. [x] **Land integration acceptance.** Fixture-pipeline coverage for INCR-18 through INCR-26.
 8. [ ] **Close the iteration.** README and changelog, final map/traceability corrections, deliverables checked, `npm run release:check` green, in one docs-only commit.
 
 ## Acceptance criteria
