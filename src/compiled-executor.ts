@@ -61,6 +61,10 @@ import {
   type SessionV1PlaybookPorts,
 } from './playbook-contract.js';
 import { createPlaybookPorts, type PlayerTransport } from './playbook-ports.js';
+import {
+  scopedUpdateWithheld,
+  SCOPED_UPDATE_WITHHELD,
+} from './scoped-update.js';
 import type { WorkspaceRecord } from './workspace.js';
 
 /**
@@ -130,6 +134,12 @@ export function createCompiledExecutor(opts: {
       workspace: WorkspaceRecord,
       signal: AbortSignal,
     ): Promise<ExecutorResult> {
+      // Exported like the interpreted factory, and this transport drops an
+      // update silently rather than acting on it — which is worse than
+      // refusing, because the caller cannot tell (INCR-39).
+      if (scopedUpdateWithheld(request)) {
+        return { status: 'error', diagnostics: [SCOPED_UPDATE_WITHHELD] };
+      }
       let lastFsmState: string | undefined;
       const input = phaseInput(request, workspace);
       const adapter = createPlaybookPorts({

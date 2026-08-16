@@ -17,6 +17,10 @@
 
 import { readFile } from 'node:fs/promises';
 
+import {
+  scopedUpdateWithheld,
+  SCOPED_UPDATE_WITHHELD,
+} from './scoped-update.js';
 import type {
   ExecuteRequest,
   ExecutorResult,
@@ -205,6 +209,12 @@ export function createInterpretedExecutor(opts: {
       workspace: WorkspaceRecord,
       signal: AbortSignal,
     ): Promise<ExecutorResult> {
+      // This factory is exported, so a caller can drive the executor without
+      // the phase boundary that also refuses. Rendering the update prompt is
+      // exactly the unfinished behavior being withheld (INCR-39).
+      if (scopedUpdateWithheld(request)) {
+        return { status: 'error', diagnostics: [SCOPED_UPDATE_WITHHELD] };
+      }
       const definition = await readFile(
         requiredRead(workspace, 'definition').physicalPath,
         'utf8',
