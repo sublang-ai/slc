@@ -178,7 +178,7 @@ export async function runPhase(opts: {
   // to it. Refusing here is what makes "withheld" true for every consumer,
   // and it fails closed rather than silently executing ordinarily, so no
   // caller mistakes a dropped update for an applied one (INCR-15).
-  if (scopedUpdateWithheld(request)) {
+  if (scopedUpdateWithheld(request, opts.workspaceOptions)) {
     return {
       ok: false,
       report: { phase, target, reasons: [SCOPED_UPDATE_WITHHELD] },

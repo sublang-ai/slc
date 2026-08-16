@@ -105,6 +105,14 @@ claimed otherwise. They are deferred rather than quietly closed.
    which binds hashes only; and the `## Update` parser, which reads three
    nonblank lines and tolerates prose after the declaration fence.
 
+None of the remaining work above is owned by an unchecked task here, and
+none should be: this iteration is scoped to fixtures and explicitly does not
+consume the sibling checkout, so completing the enforcement, adding the
+compiled update request, and proving the path against a real agent belong to
+a later iteration that can budget live runs. Tasks 19, 20, 21, and 25 stay
+unchecked because their own criteria are unmet, not because they own that
+future work.
+
 Task 22-24 landed as one commit (`bd78e8e`) rather than one commit each,
 and later commits (`3b5299b`, `9e2924d`, `5216020`) repaired behavior
 those checkmarks already claimed. The one-commit-per-task criterion is

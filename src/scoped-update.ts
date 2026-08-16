@@ -59,11 +59,12 @@ export interface DiffHunk {
  * acceptance path exercises it over a real transport.
  *
  * The constant lives here, beside the feature, because the gate has to hold
- * at more than one place: the CLI never selects an update, and the exported
- * execution boundary refuses one it is handed directly. Gating only the
- * planner left `runPhase` — a published export — carrying update-bearing
- * requests straight into the unfinished path. Deleting this constant and its
- * two guards is what re-enables the feature (INCR-15, IR-021 deferred work).
+ * at every public entry: the CLI never selects an update, and each exported
+ * consumer that could act on or certify one refuses it. Gating only the
+ * planner left `runPhase` carrying update-bearing requests into the
+ * unfinished path; gating only requests left `priorReads` reaching the same
+ * workspace without one. Deleting this constant releases every guard reading
+ * it (INCR-15, INCR-39, IR-021 deferred work).
  */
 export const SCOPED_UPDATE_ENABLED = false;
 
@@ -80,15 +81,21 @@ export const SCOPED_UPDATE_WITHHELD =
  * The parameter is structural so the feature's own module never has to
  * import the execution types that import it.
  */
-export function scopedUpdateWithheld(request: {
-  readonly kind: string;
-  readonly update?: unknown;
-}): boolean {
-  return (
-    !SCOPED_UPDATE_ENABLED &&
-    request.kind === 'compile' &&
-    request.update !== undefined
-  );
+export function scopedUpdateWithheld(
+  request: { readonly kind: string; readonly update?: unknown },
+  options?: { readonly priorReads?: unknown },
+): boolean {
+  if (SCOPED_UPDATE_ENABLED) return false;
+  // Not restricted to a compile: a request of any kind carrying `update` is
+  // refused rather than silently dropped, so no caller infers from success
+  // that the field was honored.
+  if (request.update !== undefined) return true;
+  // `priorReads` is a public workspace option independent of `request.update`,
+  // so an ordinary request plus that option binds `prior-input`/`prior-target`
+  // and reaches the deferred update workspace with no `update` anywhere. That
+  // independence is itself one of the recorded gaps, so while the feature is
+  // withheld the option is refused with it.
+  return options?.priorReads !== undefined;
 }
 
 /**
@@ -98,11 +105,13 @@ export function scopedUpdateWithheld(request: {
  * entering a guarded executor; making every public consumer refuse is what
  * keeps "withheld" a property of the package rather than of one code path.
  */
-export function assertScopedUpdateAvailable(request: {
-  readonly kind: string;
-  readonly update?: unknown;
-}): void {
-  if (scopedUpdateWithheld(request)) throw new Error(SCOPED_UPDATE_WITHHELD);
+export function assertScopedUpdateAvailable(
+  request: { readonly kind: string; readonly update?: unknown },
+  options?: { readonly priorReads?: unknown },
+): void {
+  if (scopedUpdateWithheld(request, options)) {
+    throw new Error(SCOPED_UPDATE_WITHHELD);
+  }
 }
 
 export type OrdinaryReason =

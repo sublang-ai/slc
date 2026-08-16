@@ -73,6 +73,37 @@ describe('physical workspace binding (PHEXEC-11, PHEXEC-34)', () => {
         workspace: ordinary,
       }),
     ).toThrow(/withheld from this release/);
+
+    // `priorReads` binds prior-input/prior-target on its own, so an ordinary
+    // request plus that option reaches the same deferred workspace with no
+    // `update` anywhere. It is refused with the feature.
+    const priorReads = {
+      input: 'prior.md',
+      inputLogical: 'prior.md',
+      target: 'out.md',
+      targetLogical: 'out.md',
+    };
+    await expect(
+      createWorkspaceRecord(request, { priorReads }),
+    ).rejects.toThrow(/withheld from this release/);
+    await expect(
+      validateWorkspaceRecord(ordinary, request, { priorReads }),
+    ).rejects.toThrow(/withheld from this release/);
+
+    // A link request carrying the field is refused too, rather than dropping
+    // it and reporting success.
+    const linkUpdate = {
+      kind: 'link',
+      definitionPath: request.definitionPath,
+      objects: [],
+      linkTarget: 'runtime.ts',
+      options: [],
+      linked: 'app.ts',
+      update: {},
+    } as unknown as ExecuteRequest;
+    await expect(createWorkspaceRecord(linkUpdate)).rejects.toThrow(
+      /withheld from this release/,
+    );
   });
 
   it('builds the exact ordered compile record and canonical final suffix', async () => {
