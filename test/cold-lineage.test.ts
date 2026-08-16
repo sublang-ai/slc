@@ -502,6 +502,37 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     await assertNoPrivateResidue();
   });
 
+  it('completes forward when the source is aliased after authorization', async () => {
+    // Past authorization promotion is deliberately forward-only, and the
+    // rebind is harmless: relinking a parent directory does not modify the
+    // original file, which keeps its own bytes at its own inode. This pins
+    // the boundary the specs now draw, so the absent durable non-alias fact
+    // is a recorded decision rather than an untested assumption.
+    const outside = join(root, 'outside');
+    await mkdir(outside);
+    const realSource = join(outside, 'workflow.text.md');
+    await writeFile(realSource, 'raw input bytes\n');
+    const aliasDir = join(workDir, 'alias');
+    await symlink(outside, aliasDir);
+    const aliased = join(aliasDir, 'workflow.text.md');
+
+    const result = await runSlc(['flow', aliased, '--normalize'], {
+      ...deps(executor()),
+      promotionCheckpoint: async ({ name }) => {
+        if (name !== 'manifest-published') return;
+        await rm(aliasDir);
+        await symlink(join(workDir, 'workflow.flow'), aliasDir);
+      },
+    });
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    // The raw input survives at its own path, which is why no durable fact
+    // is required to detect the rebind.
+    expect(await readFile(realSource, 'utf8')).toBe('raw input bytes\n');
+    await readRecord();
+    await assertNoPrivateResidue();
+  });
+
   it('reports success when its own recovery finished the candidate forward', async () => {
     const performing = executor();
     let interrupted = false;

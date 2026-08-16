@@ -89,7 +89,7 @@ export async function createWorkspaceRecord(
   request: ExecuteRequest,
   options: CreateWorkspaceOptions = {},
 ): Promise<WorkspaceRecord> {
-  assertScopedUpdateAvailable(request);
+  assertScopedUpdateAvailable(request, options);
   const root = resolve(options.runRoot ?? process.cwd());
   const logical = (path: string): string => resolve(root, path);
   const physical = (role: string, path: string): string =>
@@ -184,7 +184,7 @@ export async function validateWorkspaceRecord(
     'runRoot' | 'semanticInputs' | 'priorReads'
   > = {},
 ): Promise<void> {
-  assertScopedUpdateAvailable(request);
+  assertScopedUpdateAvailable(request, options);
   requireExactKeys(record, ['schema', 'reads', 'write'], 'workspace');
   if (record.schema !== WORKSPACE_SCHEMA || !Array.isArray(record.reads)) {
     throw invalid('workspace schema or reads are invalid');
