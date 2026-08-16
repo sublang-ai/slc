@@ -49,6 +49,24 @@ export interface DiffHunk {
 }
 
 /** Why a step cannot take the scoped-update path. */
+/**
+ * Scoped update is withheld from release, not merely unimplemented.
+ *
+ * Its candidate gate does not yet enforce all of INCR-15 — the replacement
+ * input partition's boundaries are not translated through the known diff,
+ * target scopes added inside the allowed closure cannot be expressed, and
+ * protected ordering is checked only among protected scopes — and no
+ * acceptance path exercises it over a real transport.
+ *
+ * The constant lives here, beside the feature, because the gate has to hold
+ * at more than one place: the CLI never selects an update, and the exported
+ * execution boundary refuses one it is handed directly. Gating only the
+ * planner left `runPhase` — a published export — carrying update-bearing
+ * requests straight into the unfinished path. Deleting this constant and its
+ * two guards is what re-enables the feature (INCR-15, IR-021 deferred work).
+ */
+export const SCOPED_UPDATE_ENABLED = false;
+
 export type OrdinaryReason =
   | 'feature-disabled'
   | 'link-step'

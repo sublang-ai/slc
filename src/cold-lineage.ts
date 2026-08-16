@@ -97,6 +97,7 @@ import {
   acceptUpdateCandidate,
   parseUpdateContract,
   planScopedUpdate,
+  SCOPED_UPDATE_ENABLED,
   type ScopedUpdatePlan,
 } from './scoped-update.js';
 import {
@@ -529,6 +530,11 @@ async function adoptLineage(
  * the user's raw input and leave the record describing bytes the file no
  * longer holds. Physical identity is the only comparison that settles it,
  * so it is made here where the filesystem can be read (COMPILE-7).
+ *
+ * Non-aliasing is a property of the candidate's basis, not a precondition:
+ * a link rebound mid-run recreates the collision while the source bytes and
+ * plan identity both still match, so {@link basisGuards} re-observes this
+ * with them rather than trusting one observation taken before execution.
  */
 async function normalizeSelfAlias(
   plan: CanonicalBuildPlan,
@@ -537,16 +543,28 @@ async function normalizeSelfAlias(
     if (step.kind !== 'normalize' || step.request.kind !== 'compile') continue;
     const source = await realpath(step.request.source).catch(() => undefined);
     if (source === undefined) continue;
-    // The target does not exist yet, so its directory carries the identity.
+    // An existing target may itself be a link to the source.
+    const targetLeaf = await realpath(step.request.target).catch(
+      () => undefined,
+    );
+    if (targetLeaf !== undefined && targetLeaf === source) {
+      return aliasDiagnostic(step.request.target);
+    }
+    // Otherwise the target does not exist yet and its directory carries the
+    // identity that decides where the write will land.
     const targetDir = await realpath(dirname(step.request.target)).catch(
       () => undefined,
     );
     if (targetDir === undefined) continue;
     if (source === resolve(targetDir, basename(step.request.target))) {
-      return `slc: normalization would overwrite its own source ${step.request.target}; move the raw input outside the artifact directory, or drop --normalize`;
+      return aliasDiagnostic(step.request.target);
     }
   }
   return null;
+}
+
+function aliasDiagnostic(target: string): string {
+  return `slc: normalization would overwrite its own source ${target}; move the raw input outside the artifact directory, or drop --normalize`;
 }
 
 async function identifyCurrentPlan(
@@ -717,26 +735,6 @@ async function acceptedProductBytes(
 }
 
 /**
- * Scoped update is withheld from release, not merely unimplemented.
- *
- * Its candidate gate does not yet enforce all of INCR-15 — the replacement
- * input partition's boundaries are not translated through the known diff,
- * target scopes added inside the allowed closure cannot be expressed, and
- * protected ordering is checked only among protected scopes — and no
- * acceptance path exercises it over a real transport. It is nonetheless
- * selectable: an ordinary interpreted reply is always decoded, a bound
- * trace in its metadata is recorded like any other, and a definition that
- * tells its agent to emit the reserved envelope can therefore seed the
- * trace a later run would update from.
- *
- * Documenting that as deferred left the incomplete boundary reachable, so
- * selection is closed here instead. Deleting this constant is the single
- * change that re-enables it, once the invariants above are complete and one
- * real transport is covered (INCR-15, IR-021 deferred work).
- */
-const SCOPED_UPDATE_ENABLED = false;
-
-/**
  * Decides whether one step can take the scoped-update path, reading the
  * current definition to look for the frozen contract. Every failure mode
  * returns ordinary execution, which is always correct.
@@ -859,8 +857,25 @@ function basisGuards(
         identity: (await identifyFreshPlan(topology, host)).plan.identity,
       }),
     },
+    {
+      // Source bytes and plan identity can both still match while a rebound
+      // link makes the normalization target the source itself, so the
+      // absence of that collision is guarded like any other basis fact.
+      id: 'basis:normalize-alias',
+      expected: { kind: 'value', identity: hashBytes(EMPTY_BYTES) },
+      observe: async () => ({
+        kind: 'value' as const,
+        identity: hashBytes(
+          new TextEncoder().encode(
+            (await normalizeSelfAlias(identified)) ?? '',
+          ),
+        ),
+      }),
+    },
   ];
 }
+
+const EMPTY_BYTES = new TextEncoder().encode('');
 
 /** A prior lineage, plus the state where its reserved pair cannot be trusted. */
 type PriorLineage = LoadedLineage | { state: 'untrusted' };

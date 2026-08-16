@@ -32,8 +32,10 @@ and this project adheres to
   built-in normalizer declares its inputs. Scoped update — rewriting
   only the affected scopes from an `## Update` contract — is withheld
   from this release: its candidate gate does not yet enforce the whole
-  contract and no acceptance path covers it over a real agent, so
-  selecting it is disabled in code and an `## Update` section is inert
+  contract and no acceptance path covers it over a real agent, so no run
+  selects one and the execution boundary refuses an update handed to it
+  directly. An `## Update` section still instructs the agent; only the
+  selection is inert
   ([DR-021](specs/decisions/021-incremental-build-records-scoped-updates.md),
   [IR-021](specs/iterations/021-incremental-compilation.md)).
 - **`--rebuild` and `--adopt` for a bundle the compiler will not

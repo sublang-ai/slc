@@ -147,9 +147,12 @@ Scoped update — rewriting only the affected part of an artifact from an
 `## Update` contract — is **withheld from this release**. Its planner and
 candidate checks are written, but they do not yet enforce the whole
 contract, and no acceptance path covers them over a real agent, so
-selecting it is disabled in code: every run takes ordinary execution.
-Writing an `## Update` section is therefore inert today, and a compiled
-phase has no request field for it at all. Treat it as unreleased and do
+selecting it is disabled in code: every run takes ordinary execution,
+and handing an update to the library's own execution entry point is
+refused rather than quietly dropped. An `## Update` section still
+instructs your agent like any other part of a definition — what is inert
+is the selection, not the prose — so a run may still record the trace a
+future release would update from. Treat the feature as unreleased and do
 not plan around it
 ([IR-021 deferred work](specs/iterations/021-incremental-compilation.md#deferred)).
 
