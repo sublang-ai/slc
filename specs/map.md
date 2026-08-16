@@ -44,6 +44,7 @@ meta.md     The spec of specs
 | DR-018 | [018-playbook-3-1-adoption.md](decisions/018-playbook-3-1-adoption.md) | Playbook 3.1 adoption: 3.1.0 provenance to `composed-v2`, link.md judge-envelope and compat-stamping re-sync, full bundle rebuild, coupled demo manifest, and the global-first consumption model |
 | DR-019 | [019-compile-progress-stall-watchdog.md](decisions/019-compile-progress-stall-watchdog.md) | In-run progress on stderr: per-phase lines with elapsed times, live compiled-status streaming, a 30 s silence-bounded heartbeat, a configurable agent-inactivity watchdog, and measured time estimates |
 | DR-020 | [020-playbook-4-0-adoption.md](decisions/020-playbook-4-0-adoption.md) | Playbook 4.0 adoption: 4.0.0 provenance to `composed-v2` on a byte-identical runtime, retained bundles with regenerated pins, cligent 0.18 as runtime-version authority, SDKs as devDependencies and demo-named vendors |
+| DR-021 | [021-incremental-compilation.md](decisions/021-incremental-compilation.md) | Incremental compilation: versioned advisory build history, exact step reuse, agent-performed updates from prior input/diff/prior output, and `--rebuild` |
 
 ## Iterations
 
@@ -70,6 +71,7 @@ meta.md     The spec of specs
 | IR-018 | [018-playbook-3-1-adoption.md](iterations/018-playbook-3-1-adoption.md) | Adopt Playbook 3.1 atomically, regenerate the zh demo reference as end-user acceptance, and prepare 0.2.0 |
 | IR-019 | [019-compile-progress-stall-watchdog.md](iterations/019-compile-progress-stall-watchdog.md) | Implement DR-019: progress sink and stderr reporter, live status streaming, silence heartbeat, agent-stall watchdog, measured-time docs |
 | IR-020 | [020-playbook-4-0-adoption.md](iterations/020-playbook-4-0-adoption.md) | Adopt Playbook 4.0 and cligent 0.18 atomically with retained bundles, regenerated pins, and prepare 0.3.0 |
+| IR-021 | [021-incremental-compilation.md](iterations/021-incremental-compilation.md) | Implement DR-021: build history, step reuse, update-mode execution, `--rebuild`, and fixture acceptance |
 
 ## Packages
 
@@ -98,6 +100,14 @@ meta.md     The spec of specs
 | Group | File | Summary |
 | --- | --- | --- |
 | dev | [git.md](dev/git.md) | Commit message format and AI co-authorship trailers |
+
+### INCR
+
+| Group | File | Summary |
+| --- | --- | --- |
+| user | [incremental-compilation.md](user/incremental-compilation.md) | User-visible build history, up-to-date no-op, step reuse and update, failure carry-forward, `--rebuild`, and exclusions |
+| dev | [incremental-compilation.md](dev/incremental-compilation.md) | History store format and lenient loading, step selection identities, update context and prompts, recording mechanics |
+| test | [incremental-compilation.md](test/incremental-compilation.md) | Fixture acceptance: recording, no-op, update context, refinement absorption, corruption tolerance, carry-forward, rebuild, exclusions |
 
 ### LIC
 
@@ -139,7 +149,7 @@ meta.md     The spec of specs
 | Group | File | Summary |
 | --- | --- | --- |
 | user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `playbook` artifact |
-| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format, shared-definition resolution, and atomic Playbook 2.0 definition/artifact/pin adoption |
+| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format, shared-definition resolution, and atomic Playbook 4.0 definition/artifact/pin adoption |
 | test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name and `playbook`-pipeline resolution, compilation and linking, plus clean-install consistency of the adopted reviewed set |
 
 ### VERIFY
