@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
 import { emitEntryModule } from './entry-module.js';
 import { unresolvableRelativeImports } from './emitted-imports.js';
+import { messageOf } from './errors.js';
 import {
   type ExecuteRequest,
   type PhaseExecutor,
@@ -800,8 +801,4 @@ async function revalidateChain(dir: string): Promise<void> {
 
 function failure(message: string): SlcResult {
   return { ok: false, outputs: [], diagnostics: [message] };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

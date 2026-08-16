@@ -26,6 +26,8 @@ import type { Stats } from 'node:fs';
 import { lstat, readFile, readdir, readlink, stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
+import { errorCode, isAbsentPathError, messageOf } from './errors.js';
+
 /** An opaque link option pair (PIPE-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
   name: string;
@@ -204,7 +206,7 @@ async function pathIdentity(path: string): Promise<string> {
     }
     return identityForInfo(path, rootInfo);
   } catch (error) {
-    if (isMissing(error)) return 'missing';
+    if (isAbsentPathError(error)) return 'missing';
     return `unreadable:${errorCode(error)}`;
   }
 }
@@ -213,7 +215,7 @@ async function followedPathIdentity(path: string): Promise<string> {
   try {
     return await identityForInfo(path, await stat(path));
   } catch (error) {
-    if (isMissing(error)) return 'missing';
+    if (isAbsentPathError(error)) return 'missing';
     return `unreadable:${errorCode(error)}`;
   }
 }
@@ -273,23 +275,6 @@ function compareNames(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function isMissing(error: unknown): boolean {
-  const code = errorCode(error);
-  return code === 'ENOENT' || code === 'ENOTDIR';
-}
-
-function errorCode(error: unknown): string {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    typeof error.code === 'string'
-  ) {
-    return error.code;
-  }
-  return 'unknown';
-}
-
 async function exists(path: string): Promise<boolean> {
   try {
     await stat(path);
@@ -297,8 +282,4 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

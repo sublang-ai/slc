@@ -12,6 +12,7 @@
  * `run`/`interruptSignal`; see app.ts.
  */
 
+import { messageOf } from './errors.js';
 import { interruptSignal, run } from './index.js';
 
 const { signal, dispose } = interruptSignal(process);
@@ -23,7 +24,7 @@ run(process.argv.slice(2), { signal })
   })
   .catch((error: unknown) => {
     dispose();
-    const message = error instanceof Error ? error.message : String(error);
+    const message = messageOf(error);
     process.stderr.write(`slc: ${message}\n`);
     process.exit(1);
   });

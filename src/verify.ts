@@ -2001,6 +2001,8 @@ function bodyIndex(
   );
 }
 
+// Local copy: this module is copied verbatim beside the artifact (VERIFY-12),
+// so it may not import a sibling module.
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

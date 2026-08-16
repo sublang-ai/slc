@@ -32,7 +32,13 @@ import {
   sep,
 } from 'node:path';
 
-import { hashBytes, hashFile, isHash } from './hash.js';
+import {
+  hashFile,
+  hashTreeRecords,
+  isHash,
+  serializeTreeRecord,
+  type TreeEntryRecord,
+} from './hash.js';
 import { resolvesToPlaybook } from './phase-runner.js';
 import { closureMatchesRecord } from './pin-closure.js';
 import { resolvePinPath } from './pin-paths.js';
@@ -527,44 +533,12 @@ export interface TreeHashOptions {
   rejectSymlinks?: boolean;
 }
 
-interface TreeRecord {
-  path: string;
-  serialized: string;
-}
-
-function canonicalJsonString(value: string): string {
-  let serialized = '"';
-  for (const character of value) {
-    const codePoint = character.codePointAt(0);
-    if (codePoint === undefined) continue;
-    if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
-      throw new Error('tree entry contains an unpaired Unicode surrogate');
-    }
-    if (character === '"' || character === '\\') {
-      serialized += `\\${character}`;
-    } else if (codePoint <= 0x1f) {
-      serialized += `\\u${codePoint.toString(16).padStart(4, '0')}`;
-    } else {
-      serialized += character;
-    }
-  }
-  return `${serialized}"`;
-}
-
-function serializeTreeRecord(
-  kind: 'file' | 'symlink',
-  path: string,
-  identity: string,
-): string {
-  return `[${canonicalJsonString(kind)},${canonicalJsonString(path)},${canonicalJsonString(identity)}]`;
-}
-
 export async function hashTree(
   root: string,
   opts: TreeHashOptions = {},
 ): Promise<string> {
   const rootInfo = await lstat(root);
-  const records: TreeRecord[] = [];
+  const records: TreeEntryRecord[] = [];
   if (rootInfo.isSymbolicLink()) {
     if (opts.rejectSymlinks === true) {
       throw new Error('tree root is a symbolic link');
@@ -574,17 +548,7 @@ export async function hashTree(
     throw new Error('tree root is not a real directory');
   }
   await collectTreeRecords(root, '', records, opts);
-  records.sort((left, right) =>
-    Buffer.compare(
-      Buffer.from(left.path, 'utf8'),
-      Buffer.from(right.path, 'utf8'),
-    ),
-  );
-  return hashBytes(
-    new TextEncoder().encode(
-      records.map((record) => record.serialized).join('\n'),
-    ),
-  );
+  return hashTreeRecords(records);
 }
 
 async function hashTreeOrNull(root: string): Promise<string | null> {
@@ -598,7 +562,7 @@ async function hashTreeOrNull(root: string): Promise<string | null> {
 async function collectTreeRecords(
   root: string,
   prefix: string,
-  records: TreeRecord[],
+  records: TreeEntryRecord[],
   opts: TreeHashOptions,
 ): Promise<void> {
   const here = prefix ? join(root, ...prefix.split('/')) : root;
@@ -638,7 +602,7 @@ async function collectTreeRecords(
 async function symlinkRecord(
   path: string,
   relativePath: string,
-): Promise<TreeRecord> {
+): Promise<TreeEntryRecord> {
   const target = await readlink(path, { encoding: 'buffer' });
   return {
     path: relativePath,
