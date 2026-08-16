@@ -43,7 +43,7 @@ describe('parsePhase (PIPE-1, PIPE-2)', () => {
     });
   });
 
-  it('accepts a freely named format-preserving pass phase (DR-013)', () => {
+  it('accepts a freely named portable format-preserving pass phase (DR-013)', () => {
     const optimize = `## Formats
 
 | Role | Format | Extension |
@@ -52,14 +52,30 @@ describe('parsePhase (PIPE-1, PIPE-2)', () => {
 | target | gears | .md |
 `;
     expect(
-      parsePhase({ name: 'optimize.md', content: optimize }),
+      parsePhase({ name: 'quality_check.md', content: optimize }),
     ).toEqual<Phase>({
-      name: 'optimize',
+      name: 'quality_check',
       source: { format: 'gears', ext: '.md' },
       target: { format: 'gears', ext: '.md' },
       pass: true,
     });
   });
+
+  it.each(['.md', '..md', 'bad\\name.md', 'not-markdown.txt'])(
+    'refuses the non-portable pass filename %s',
+    (name) => {
+      const content = `## Formats
+
+| Role | Format | Extension |
+| --- | --- | --- |
+| source | gears | .md |
+| target | gears | .md |
+`;
+      expect(() => parsePhase({ name, content })).toThrow(
+        expect.objectContaining({ code: 'filename-mismatch' }),
+      );
+    },
+  );
 
   it('supports differing source and target extensions', () => {
     const phase = parsePhase({ name: 'gears2fsm.md', content: gears2fsm });
