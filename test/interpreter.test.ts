@@ -41,6 +41,55 @@ describe('buildPhasePrompt (PHEXEC-11, PHEXEC-14, PHEXEC-15)', () => {
     expect(prompt).toContain('BLOCKED:');
   });
 
+  it('renders the update block with the prior input and diff (INCR-14, INCR-15)', () => {
+    const prompt = buildPhasePrompt({
+      request: compileRequest({
+        update: {
+          priorInput: '/hist/builds/3/source',
+          diff: '@@ -1,1 +1,1 @@\n-old\n+new',
+        },
+      }),
+      definition: '## Formats',
+    });
+    expect(prompt).toContain(
+      'prior input to consult (read-only): /hist/builds/3/source',
+    );
+    expect(prompt).toContain('Incremental update —');
+    expect(prompt).toContain('--- BEGIN INPUT DIFF ---');
+    expect(prompt).toContain('-old');
+    expect(prompt).toContain('+new');
+    expect(prompt).toContain('preserve everything unaffected');
+  });
+
+  it('names the diffless variants for identical and over-budget inputs', () => {
+    const identical = buildPhasePrompt({
+      request: compileRequest({
+        update: { priorInput: '/hist/source', diff: '' },
+      }),
+      definition: '## Formats',
+    });
+    expect(identical).toContain('byte-identical');
+    expect(identical).not.toContain('BEGIN INPUT DIFF');
+
+    const overBudget = buildPhasePrompt({
+      request: compileRequest({
+        update: { priorInput: '/hist/source', diff: null },
+      }),
+      definition: '## Formats',
+    });
+    expect(overBudget).toContain('too extensively to render a diff');
+    expect(overBudget).not.toContain('BEGIN INPUT DIFF');
+  });
+
+  it('renders no update block for a fresh compile', () => {
+    const prompt = buildPhasePrompt({
+      request: compileRequest(),
+      definition: '## Formats',
+    });
+    expect(prompt).not.toContain('Incremental update');
+    expect(prompt).not.toContain('prior input');
+  });
+
   it('lists ordered objects, the link target, and options for a link phase', () => {
     const prompt = buildPhasePrompt({
       request: {
