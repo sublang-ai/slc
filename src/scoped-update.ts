@@ -67,6 +67,30 @@ export interface DiffHunk {
  */
 export const SCOPED_UPDATE_ENABLED = false;
 
+/** The one refusal wording every withheld boundary reports. */
+export const SCOPED_UPDATE_WITHHELD =
+  'scoped update is withheld from this release; omit request.update';
+
+/**
+ * Whether this request must be refused rather than executed.
+ *
+ * Every exported surface that consumes a request shares this predicate:
+ * `runPhase`, and each executor's own `run`, since the executor factories
+ * are published too and a caller can drive one without the phase boundary.
+ * The parameter is structural so the feature's own module never has to
+ * import the execution types that import it.
+ */
+export function scopedUpdateWithheld(request: {
+  readonly kind: string;
+  readonly update?: unknown;
+}): boolean {
+  return (
+    !SCOPED_UPDATE_ENABLED &&
+    request.kind === 'compile' &&
+    request.update !== undefined
+  );
+}
+
 export type OrdinaryReason =
   | 'feature-disabled'
   | 'link-step'

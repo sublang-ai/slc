@@ -37,7 +37,10 @@ import {
 } from './workspace.js';
 
 import { errorCode, isAbsentPathError, messageOf } from './errors.js';
-import { SCOPED_UPDATE_ENABLED } from './scoped-update.js';
+import {
+  scopedUpdateWithheld,
+  SCOPED_UPDATE_WITHHELD,
+} from './scoped-update.js';
 
 /** An opaque link option pair (PIPE-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
@@ -175,20 +178,10 @@ export async function runPhase(opts: {
   // to it. Refusing here is what makes "withheld" true for every consumer,
   // and it fails closed rather than silently executing ordinarily, so no
   // caller mistakes a dropped update for an applied one (INCR-15).
-  if (
-    !SCOPED_UPDATE_ENABLED &&
-    request.kind === 'compile' &&
-    request.update !== undefined
-  ) {
+  if (scopedUpdateWithheld(request)) {
     return {
       ok: false,
-      report: {
-        phase,
-        target,
-        reasons: [
-          'scoped update is withheld from this release; omit request.update',
-        ],
-      },
+      report: { phase, target, reasons: [SCOPED_UPDATE_WITHHELD] },
     };
   }
   const derivedWorkspace =

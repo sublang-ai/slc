@@ -205,6 +205,31 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     return runExecutor(executor, request);
   };
 
+  it('refuses an update-bearing request rather than dropping it (INCR-39)', async () => {
+    // This transport has no field for an update, so without the gate it
+    // executes ordinarily and the caller cannot tell the update was ignored.
+    await writeFile(join(root, 'src.md'), 'hello');
+    const executor = createCompiledExecutor({
+      artifactPath: fixture,
+      runRoot: root,
+      player: fixturePlayer,
+      judge: idleAgent,
+    });
+    const request = {
+      kind: 'compile',
+      definitionPath: join(root, 'phase.md'),
+      source: 'src.md',
+      target: 'out.ts',
+      update: {},
+    } as unknown as ExecuteRequest;
+
+    const result = await runExecutor(executor, request);
+
+    expect(result.status).toBe('error');
+    expect(result.diagnostics.join('\n')).toMatch(/withheld from this release/);
+    await expect(readFile(join(root, 'out.ts'))).rejects.toThrow();
+  });
+
   it('drives the runtime, writes the target, and yields ok with drained diagnostics', async () => {
     const result = await runFixture('hello');
     expect(result.status).toBe('ok');

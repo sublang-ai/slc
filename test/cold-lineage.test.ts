@@ -535,8 +535,9 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     await mkdir(artifactDir);
 
     let derivations = 0;
+    const performing = executor();
     const drifting: LineageDeps = {
-      ...deps(executor()),
+      ...deps(performing),
       async buildIdentity(topology) {
         derivations += 1;
         if (derivations === 2) {
@@ -558,6 +559,10 @@ describe('cold build lineage (INCR-7, INCR-8, INCR-20, INCR-31)', () => {
     // never through PIPE-34's collision behavior.
     expect(result.diagnostics.join('\n')).toMatch(/basis:normalize-alias/);
     expect(await readFile(aliased, 'utf8')).toBe('raw input bytes\n');
+    // PIPE-36: the rebind is only observable after planning, so the run is
+    // rejected before promotion rather than before execution — but the raw
+    // input still survives byte-for-byte and nothing is published.
+    expect(await exists(join(artifactDir, 'workflow.mid.md'))).toBe(false);
     await assertNoPrivateResidue();
   });
 

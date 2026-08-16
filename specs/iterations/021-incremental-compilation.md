@@ -13,7 +13,7 @@ Published Playbook semantic-input closures and update contracts are an unplanned
 
 - [x] Schema-exact source-bound build lineage with safe path handling and recoverable staged promotion.
 - [x] Conflict detection, explicit rebuild, exact step reuse, and a write-free whole-bundle no-op.
-- [ ] Generic interpreted and compiled update-metadata transport plus deterministic scoped-update planning and enforcement. Planning and enforcement land; neither transport carries an update in a real run — see [Deferred](#deferred).
+- [ ] Generic interpreted and compiled update-metadata transport plus deterministic scoped-update planning and enforcement. Metadata transport and planning land; enforcement is incomplete and selection is withheld, so tasks 19 and 20 stay open — see [Deferred](#deferred).
 - [x] Whole-lineage adoption with compatible build-identity rebaselining and regenerated deterministic derivatives.
 - [x] Coordinated specs, integration acceptance, user documentation, and a green deterministic release gate.
 

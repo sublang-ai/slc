@@ -328,6 +328,29 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
     expect(result.status).toBe('error');
   });
 
+  it('refuses an update-bearing request without calling the agent (INCR-39)', async () => {
+    // The factory is exported, so a caller can drive this executor without
+    // the phase boundary. Rendering the update prompt is the withheld
+    // behavior, so the refusal must precede the agent call entirely.
+    let called = false;
+    const agent = {
+      run: async () => {
+        called = true;
+        return { status: 'success' as const, text: 'done' };
+      },
+    };
+    const workspace = await createWorkspaceRecord(request);
+    const result = await createInterpretedExecutor({ agent }).run(
+      { ...request, update: {} } as unknown as ExecuteRequest,
+      workspace,
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.diagnostics.join('\n')).toMatch(/withheld from this release/);
+    expect(called).toBe(false);
+  });
+
   it('keeps the reserved envelope out of a failed run’s diagnostics (PHEXEC-39)', async () => {
     // An aborted or errored turn can already carry the reserved suffix. The
     // status branch used to report the raw text, publishing the markers and
