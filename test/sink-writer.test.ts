@@ -43,6 +43,14 @@ describe('writeFileNoFollow (PHEXEC-39)', () => {
     expect(await readFile(victim, 'utf8')).toBe('victim bytes');
   });
 
+  it('refuses a FIFO leaf without hanging', async () => {
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const path = join(dir, 'out.txt');
+    await promisify(execFile)('mkfifo', [path]);
+    await expect(writeFileNoFollow(path, 'data')).rejects.toThrow();
+  });
+
   it('refuses a hard-linked leaf and leaves the other name unchanged', async () => {
     const victim = join(dir, 'victim.txt');
     await writeFile(victim, 'victim bytes');

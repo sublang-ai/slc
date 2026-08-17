@@ -683,6 +683,127 @@ describe('PHEXEC-39: output boundary', () => {
   });
 });
 
+describe('PHEXEC-39: plan-wide protection and canonical cwd', () => {
+  it('refuses -o naming a declared semantic input, with zero executor calls', async () => {
+    await mkdir(join(pipelineDir, 'reference'));
+    await writeFile(join(pipelineDir, 'reference/rules.md'), 'rules v1\n');
+    await writeFile(
+      join(pipelineDir, 'text2gears.md'),
+      `${formats('text', '.md', 'gears', '.md')}\n## Pin Inputs\n\n- \`reference/rules.md\`\n`,
+    );
+
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', source, '-o', join(pipelineDir, 'reference/rules.md')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('protected input');
+    expect(
+      await readFile(join(pipelineDir, 'reference/rules.md'), 'utf8'),
+    ).toBe('rules v1\n');
+  });
+
+  it('refuses hard-linked planned outputs before any executor', async () => {
+    const { link } = await import('node:fs/promises');
+    await mkdir(artDir, { recursive: true });
+    await writeFile(join(artDir, 'onboarding.gears.md'), 'existing\n');
+    await link(
+      join(artDir, 'onboarding.gears.md'),
+      join(artDir, 'onboarding.fsm.ts'),
+    );
+
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(agent));
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('same file');
+  });
+
+  it('canonicalizes a relative injected cwd and relative --link operand', async () => {
+    const { relative } = await import('node:path');
+    const runner = join(srcDir, 'runner.ts');
+    await writeFile(runner, 'export default {};\n');
+    // The injected cwd resolves against the process cwd; operands resolve
+    // against the invocation cwd — the documented DR-014 anchor.
+    const relCwd = relative(process.cwd(), srcDir);
+    const relSource = 'onboarding.md';
+    const relLink = 'runner.ts';
+    const { agent } = makeAgent({
+      content: { 'onboarding.run.ts': 'export {};\n' },
+    });
+    const result = await runSlc(['flow', relSource, '--link', relLink], {
+      ...deps(agent),
+      cwd: relCwd,
+    });
+    expect(result.ok).toBe(true);
+    for (const output of result.outputs) {
+      expect(output.startsWith('/')).toBe(true);
+    }
+    // The repeat under the same relative wiring is a clean no-op: identity
+    // and history agree on the canonical paths.
+    const { agent: second, calls } = makeAgent();
+    const repeat = await runSlc(['flow', relSource, '--link', relLink], {
+      ...deps(second),
+      cwd: relCwd,
+    });
+    expect(repeat.outcome).toBe('up-to-date');
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('INCR-30: malformed markers read as absent; active ones fail closed', () => {
+  it.each([
+    [
+      '.slc is a file',
+      async (): Promise<void> => {
+        await writeFile(join(artDir, '.slc'), 'not a directory');
+      },
+    ],
+    [
+      'latest is a directory',
+      async (): Promise<void> => {
+        await mkdir(join(artDir, '.slc/latest'), { recursive: true });
+      },
+    ],
+    [
+      'latest is a symlink',
+      async (): Promise<void> => {
+        const { symlink } = await import('node:fs/promises');
+        await mkdir(join(artDir, '.slc'), { recursive: true });
+        await writeFile(join(artDir, '.slc/decoy'), '1\n');
+        await symlink(join(artDir, '.slc/decoy'), join(artDir, '.slc/latest'));
+      },
+    ],
+  ])('compiles fresh when %s', async (_name, arrange) => {
+    await mkdir(artDir, { recursive: true });
+    await arrange();
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(agent));
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('fails closed with zero executor calls when an active marker cannot be removed', async () => {
+    const { chmod } = await import('node:fs/promises');
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    await chmod(join(artDir, '.slc'), 0o555);
+    try {
+      const { agent: second, calls } = makeAgent();
+      const result = await runSlc(['flow', source], deps(second));
+      expect(result.ok).toBe(false);
+      expect(calls).toHaveLength(0);
+      expect(result.diagnostics.join('\n')).toContain('invalidated');
+    } finally {
+      await chmod(join(artDir, '.slc'), 0o755);
+    }
+  });
+});
+
 describe('INCR-24: --rebuild bypasses reuse but not pin validation', () => {
   it('executes every step ordinarily and records a fresh build', async () => {
     const { agent } = makeAgent();

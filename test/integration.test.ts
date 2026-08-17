@@ -547,7 +547,7 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     const report = result.diagnostics.join('\n');
     // The regular-file postcondition now catches this before the VERIFY-18
     // read: a directory can never satisfy the produced-artifact check.
-    expect(report).toContain('is not a regular file');
+    expect(report).toContain('is not a private regular file');
   });
 
   it('accepts a link whose relative imports resolve beside the module (VERIFY-19)', async () => {

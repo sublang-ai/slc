@@ -19,7 +19,7 @@ The host therefore does not need to understand a change semantically; it needs t
 
 ### Build history
 
-- After a full or full-link run at canonical output of a pipeline other than the reserved `slc` meta-pipeline executes at least one step, `slc` records build `N` under `<art-dir>/.slc/`:
+- After a full or full-link run at canonical output of a pipeline other than the reserved `slc` meta-pipeline executes at least one step, `slc` publishes at most one new build `N` under `<art-dir>/.slc/` — none when nothing recordable survived the run:
 
 | Path | Content |
 | --- | --- |

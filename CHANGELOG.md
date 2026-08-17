@@ -19,7 +19,7 @@ and this project adheres to
   source and every phase output. An
   unchanged repeat prints `up to date` and calls no agent; after a
   source edit, each affected phase's agent receives the prior input, a
-  unified diff, and the existing output to update in place, while
+  best-effort unified diff, and the existing output to update in place, while
   phases whose inputs still match are reused byte-for-byte — including
   hand-refined artifacts, which become the baseline of the next update.
   A failed run keeps its completed phases and forgets any phase an

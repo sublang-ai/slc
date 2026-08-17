@@ -13,7 +13,7 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 
 ### INCR-1
 
-Where a full or full-link invocation targets canonical output of a pipeline other than the reserved `slc` meta-pipeline, when the run executes at least one step, the slc command shall record a new numbered build under `<art-dir>/.slc/` — a manifest plus verbatim copies of the source and every recorded step output — and shall name it in `.slc/latest` only after the build directory is complete.
+Where a full or full-link invocation targets canonical output of a pipeline other than the reserved `slc` meta-pipeline, when the run executes at least one step, the slc command shall publish at most one new numbered build under `<art-dir>/.slc/` — a manifest plus verbatim copies of the source and every recorded step output, named in `.slc/latest` only after the build directory is complete — and shall leave history absent when nothing is recordable.
 
 ### INCR-2
 
@@ -31,7 +31,7 @@ While a step's recorded input identities match its current input bytes and its t
 
 ### INCR-5
 
-While, on a history-eligible run ([INCR-8](#incr-8)), a compile step's recorded input identities differ from its current input bytes, and the recorded prior-input copy and the step's target file both exist, when the step executes, the slc command shall supply the executor the current definition, the prior input, and a diff of prior to current input, leave the existing target in place to be updated into a complete artifact, and apply the same generic checks as an ordinary run; a link step whose recorded inputs differ shall instead execute in full without update context.
+While, on a history-eligible run ([INCR-8](#incr-8)), a compile step's recorded input identities differ from its current input bytes, and the recorded prior-input copy and the step's target file both exist, when the step executes, the slc command shall supply the executor the current definition, the prior input, and — when renderable — a best-effort diff of prior to current input, leave the existing target in place to be updated into a complete artifact, and apply the same generic checks as an ordinary run; a link step whose recorded inputs differ shall instead execute in full without update context.
 
 ### INCR-6
 

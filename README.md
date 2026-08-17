@@ -124,7 +124,7 @@ Re-runs are incremental. A full compile at its canonical output that
 runs any phase records a numbered snapshot of the source and every
 phase output under `my-workflow.playbook/.slc/`. Repeating the unchanged invocation
 prints `up to date` and calls no agent; after a small source edit, each
-affected phase's agent gets the previous input, a diff, and the
+affected phase's agent gets the previous input, a best-effort diff, and the
 existing output to update in place — asked to preserve what earlier
 runs (or your own hand edits) already got right — while unaffected
 phases are reused as they are. A run that fails partway keeps the

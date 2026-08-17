@@ -207,7 +207,9 @@ export async function runPhase(opts: {
     if (produced === 'absent') {
       reasons.push(`expected target "${target}" was not written`);
     } else if (produced !== 'file') {
-      reasons.push(`target "${target}" is not a regular file`);
+      reasons.push(
+        `target "${target}" is not a private regular file (symbolic link, non-regular, or hard-linked)`,
+      );
     } else if (extname(target) !== targetExt) {
       reasons.push(
         `target "${target}" extension does not match the declared "${targetExt}"`,
@@ -254,15 +256,17 @@ export type RegularFileState = 'absent' | 'file' | 'unsafe';
 
 /**
  * Observes a path without following a leaf symlink: `file` only for a
- * regular file — a directory, FIFO, socket, or symlink is `unsafe`, so
- * neither reuse nor a postcondition can accept it (PHEXEC-39).
+ * private regular file with a single link — a directory, FIFO, socket,
+ * symlink, or hard-linked file is `unsafe`, so neither reuse nor a
+ * postcondition can accept a leaf whose write would land elsewhere or whose
+ * bytes another name shares (PHEXEC-39).
  */
 export async function regularFileState(
   path: string,
 ): Promise<RegularFileState> {
   try {
     const info = await lstat(path);
-    return info.isFile() ? 'file' : 'unsafe';
+    return info.isFile() && info.nlink === 1 ? 'file' : 'unsafe';
   } catch (error) {
     return isAbsentPathError(error) ? 'absent' : 'unsafe';
   }
@@ -289,6 +293,9 @@ async function unsafeSinkReason(
     }
     if (!info.isFile()) {
       return `target "${target}" exists and is not a regular file; refusing to write it`;
+    }
+    if (info.nlink > 1) {
+      return `target "${target}" is hard-linked; refusing to write through it`;
     }
   } catch {
     // Absent target: fine, it will be created.
