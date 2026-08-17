@@ -13,7 +13,14 @@
  * orphaned build directory ignored. See specs/dev/incremental-compilation.md.
  */
 
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 
 import { hashBytes, isHash, type Hash } from './hash.js';
@@ -99,6 +106,20 @@ export async function loadBuildHistory(
     return null;
   }
   return { build, dir, manifest };
+}
+
+/**
+ * Invalidates the history by removing `.slc/latest` — absence is the durable
+ * statement that nothing is vouched for. Absence already counts as success;
+ * any other failure propagates, because proceeding with an active marker
+ * could let a later run reuse bytes a failed executor left behind (INCR-30).
+ */
+export async function invalidateBuildHistory(artDir: string): Promise<void> {
+  try {
+    await unlink(join(artDir, HISTORY_DIR, 'latest'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
 }
 
 /**

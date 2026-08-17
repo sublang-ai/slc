@@ -15,12 +15,12 @@
 const CELL_BUDGET = 4_000_000;
 
 /**
- * Cap on total changed-middle lines. The cell budget alone never trips for a
- * one-sided change (one side of the product is zero), so a pure mass
- * insertion or deletion must hit its own line bound rather than render an
- * unbounded diff into an agent prompt.
+ * Cap on the rendered diff itself. The cell budget cannot bound a one-sided
+ * mass change or a single enormous line, and the budget's whole purpose is
+ * prompt size, so the final artifact is what gets measured; everything else
+ * is transient work over inputs the caller already holds in memory.
  */
-const CHANGED_LINE_BUDGET = 10_000;
+const RENDERED_BUDGET = 1_000_000;
 
 const CONTEXT = 3;
 
@@ -56,7 +56,7 @@ export function unifiedLineDiff(prior: string, current: string): string | null {
 
   const n = endBefore - start;
   const m = endAfter - start;
-  if (n * m > CELL_BUDGET || n + m > CHANGED_LINE_BUDGET) return null;
+  if (n * m > CELL_BUDGET) return null;
 
   const ops = middleOps(
     before.slice(start, endBefore),
@@ -69,7 +69,8 @@ export function unifiedLineDiff(prior: string, current: string): string | null {
     ...ops,
     ...before.slice(endBefore).map((line): Op => ({ tag: ' ', line })),
   ];
-  return renderHunks(all);
+  const rendered = renderHunks(all);
+  return rendered.length > RENDERED_BUDGET ? null : rendered;
 }
 
 interface Op {

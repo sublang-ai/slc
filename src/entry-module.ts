@@ -17,10 +17,10 @@
  * consumes it unchanged (SELFHOST-14). See specs/dev/self-hosting.md.
  */
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { parseGearsItems } from './verify.js';
+import { parseGearsItems, writeFileNoFollow } from './verify.js';
 
 /** Options for {@link emitEntryModule}. */
 export interface EmitEntryModuleOptions {
@@ -60,7 +60,7 @@ export async function emitEntryModule(
   );
   const intent = deriveIntent(text) ?? opts.basename;
   const path = join(opts.cwd, `${opts.basename}.ts`);
-  await writeFile(
+  await writeFileNoFollow(
     path,
     renderEntryModule({
       basename: opts.basename,
@@ -69,7 +69,6 @@ export async function emitEntryModule(
       hasScript,
       intent,
     }),
-    'utf8',
   );
   return path;
 }

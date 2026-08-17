@@ -23,8 +23,15 @@
 
 import { createHash } from 'node:crypto';
 import type { Stats } from 'node:fs';
-import { lstat, readFile, readdir, readlink, stat } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import {
+  lstat,
+  readFile,
+  readdir,
+  readlink,
+  realpath,
+  stat,
+} from 'node:fs/promises';
+import { basename, dirname, extname, join } from 'node:path';
 
 import { errorCode, isAbsentPathError, messageOf } from './errors.js';
 
@@ -47,7 +54,8 @@ export interface UpdateContext {
   /**
    * Unified line diff of prior to current input; the empty string when the
    * chained input is byte-identical (another input changed), `null` when the
-   * inputs exceeded the diff budget.
+   * diff exceeded the host budget or cannot faithfully render the byte
+   * change.
    */
   diff: string | null;
 }
@@ -60,7 +68,7 @@ export function updateContextLines(update: UpdateContext): string[] {
   const diff =
     update.diff === null
       ? [
-          '- the input changed too extensively to render a diff; compare the prior and current inputs directly;',
+          '- the input changes could not be rendered as a line diff (too large, or below line resolution); compare the prior and current inputs directly;',
         ]
       : update.diff === ''
         ? [
@@ -145,6 +153,11 @@ export async function runPhase(opts: {
   executor: PhaseExecutor;
   /** Other chain definition files to protect; the executing phase's is always protected. */
   definitions?: readonly string[];
+  /**
+   * Additional protected read-only paths — the definition's declared
+   * semantic inputs, which the request does not carry (PHEXEC-39).
+   */
+  protect?: readonly string[];
   /** Re-checks that the pipeline chain still infers; throws when it no longer does (PHEXEC-5). */
   revalidate?: () => void | Promise<void>;
   signal?: AbortSignal;
@@ -161,9 +174,21 @@ export async function runPhase(opts: {
         ]
       : [...request.objects, request.linkTarget];
   const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
-  const protectedPaths = [...new Set([...inputs, ...definitions])];
+  const protectedPaths = [
+    ...new Set([...inputs, ...definitions, ...(opts.protect ?? [])]),
+  ];
+
+  // A target that is physically the same file as a protected input — the
+  // same resolved path, a symbolic-link alias, or a hard link — would let
+  // the executor destroy the input before the after-run check could notice
+  // (DR-003, PHEXEC-39). Refuse before any executor write.
+  const unsafe = await unsafeSinkReason(target, protectedPaths);
+  if (unsafe !== null) {
+    return failure(phase, target, [unsafe]);
+  }
 
   const before = await snapshot(protectedPaths);
+  const targetBefore = await writeEvidence(target);
 
   const reasons: string[] = [];
   let result: ExecutorResult | null = null;
@@ -178,11 +203,24 @@ export async function runPhase(opts: {
   }
 
   if (result?.status === 'ok') {
-    if (!(await exists(target))) {
+    const produced = await regularFileState(target);
+    if (produced === 'absent') {
       reasons.push(`expected target "${target}" was not written`);
+    } else if (produced !== 'file') {
+      reasons.push(`target "${target}" is not a regular file`);
     } else if (extname(target) !== targetExt) {
       reasons.push(
         `target "${target}" extension does not match the declared "${targetExt}"`,
+      );
+    } else if (
+      targetBefore !== null &&
+      targetBefore === (await writeEvidence(target))
+    ) {
+      // A pre-existing target the executor never rewrote is a textual
+      // success without production — the compiled transport already detects
+      // this, and update mode makes it reachable for every phase (PHEXEC-4).
+      reasons.push(
+        `target "${target}" already existed and was not written by this run`,
       );
     }
   }
@@ -209,6 +247,106 @@ export async function runPhase(opts: {
     return failure(phase, target, reasons);
   }
   return { ok: true, target, diagnostics: result?.diagnostics ?? [] };
+}
+
+/** One no-follow view of a target path (PHEXEC-39). */
+export type RegularFileState = 'absent' | 'file' | 'unsafe';
+
+/**
+ * Observes a path without following a leaf symlink: `file` only for a
+ * regular file — a directory, FIFO, socket, or symlink is `unsafe`, so
+ * neither reuse nor a postcondition can accept it (PHEXEC-39).
+ */
+export async function regularFileState(
+  path: string,
+): Promise<RegularFileState> {
+  try {
+    const info = await lstat(path);
+    return info.isFile() ? 'file' : 'unsafe';
+  } catch (error) {
+    return isAbsentPathError(error) ? 'absent' : 'unsafe';
+  }
+}
+
+/**
+ * Returns the reason a target is an unsafe sink, or `null`.
+ *
+ * A symbolic-link target is refused outright — writing through it lands on an
+ * arbitrary file the checks cannot see. An existing target compares by
+ * device and inode against every protected input, which also catches hard
+ * links; a not-yet-created target compares its parent-resolved path against
+ * each input's resolved path; and a target inside a protected directory
+ * (a directory link target) is refused by containment (PHEXEC-39).
+ */
+async function unsafeSinkReason(
+  target: string,
+  protectedPaths: readonly string[],
+): Promise<string | null> {
+  try {
+    const info = await lstat(target);
+    if (info.isSymbolicLink()) {
+      return `target "${target}" is a symbolic link; refusing to write through it`;
+    }
+    if (!info.isFile()) {
+      return `target "${target}" exists and is not a regular file; refusing to write it`;
+    }
+  } catch {
+    // Absent target: fine, it will be created.
+  }
+  let targetInode: string | null = null;
+  let plannedPath: string | null = null;
+  try {
+    const info = await stat(target);
+    targetInode = `${info.dev}:${info.ino}`;
+  } catch {
+    // Not yet created.
+  }
+  try {
+    plannedPath = join(await realpath(dirname(target)), basename(target));
+  } catch {
+    // The parent does not resolve; the write itself will fail.
+  }
+  if (targetInode === null && plannedPath === null) return null;
+  for (const path of protectedPaths) {
+    let info: Stats;
+    try {
+      info = await stat(path);
+    } catch {
+      // An absent input cannot be destroyed.
+      continue;
+    }
+    if (targetInode !== null && `${info.dev}:${info.ino}` === targetInode) {
+      return `target "${target}" is the same file as protected input "${path}"; refusing to overwrite it`;
+    }
+    if (plannedPath !== null) {
+      try {
+        const resolved = await realpath(path);
+        if (targetInode === null && resolved === plannedPath) {
+          return `target "${target}" is the same file as protected input "${path}"; refusing to overwrite it`;
+        }
+        if (info.isDirectory() && plannedPath.startsWith(`${resolved}/`)) {
+          return `target "${target}" is inside protected directory "${path}"; refusing to write into it`;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * A change-detection identity for the target: inode, size, and nanosecond
+ * mtime. Identical before and after an `ok` run means the executor produced
+ * nothing (PHEXEC-4); `null` means the target did not exist.
+ */
+async function writeEvidence(path: string): Promise<string | null> {
+  try {
+    const info = await stat(path, { bigint: true });
+    return `${info.ino}:${info.size}:${info.mtimeNs}`;
+  } catch {
+    return null;
+  }
 }
 
 /** Renders a failure report as a multi-line diagnostic string (PHEXEC-9). */
@@ -326,13 +464,4 @@ async function collectTreeRecords(
 
 function compareNames(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
 }

@@ -523,6 +523,63 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     ).toContain('from "./.slc-verify/verify.js"');
   });
 
+  it('leaves a raw source untouched when it is the entry-module path (COMPILE-7)', async () => {
+    // A raw `.ts` source named like the entry module: emission would
+    // overwrite the input, so it is skipped and reported.
+    const rawEntry = join(work, 'flow.ts');
+    await writeFile(rawEntry, 'a prose workflow, not a module\n');
+    const result = await runSlc(['playbook', rawEntry], deps());
+
+    expect(result.ok).toBe(true);
+    expect(
+      result.diagnostics.some((line) => line.includes('not emitted')),
+    ).toBe(true);
+    expect(await readFile(rawEntry, 'utf8')).toBe(
+      'a prose workflow, not a module\n',
+    );
+  });
+
+  it('refuses to re-derive through a symlinked derivative (PHEXEC-39)', async () => {
+    expect((await runSlc(['playbook', source], deps())).ok).toBe(true);
+
+    // A derivative replaced by a symbolic link must not redirect the
+    // mandatory re-derivation onto another file.
+    const innocent = join(work, 'innocent.txt');
+    await writeFile(innocent, 'innocent bytes\n');
+    await rm(join(artDir, 'code.gears-fsm.test.ts'));
+    await symlink(innocent, join(artDir, 'code.gears-fsm.test.ts'));
+
+    const result = await runSlc(['playbook', source], deps());
+    expect(result.ok).toBe(false);
+    expect(await readFile(innocent, 'utf8')).toBe('innocent bytes\n');
+  });
+
+  it('restores deleted deterministic derivatives on an all-reuse repeat (INCR-2)', async () => {
+    expect((await runSlc(['playbook', source], deps())).ok).toBe(true);
+
+    // The runnable entry and a verification test vanish; the chain is
+    // untouched, so the repeat reuses every step yet re-derives both.
+    await rm(join(work, 'code.ts'));
+    await rm(join(artDir, 'code.gears-fsm.test.ts'));
+    const calls: string[] = [];
+    const countingDeps: SlcDeps = {
+      ...deps(),
+      executor: {
+        run: async () => {
+          calls.push('executed');
+          return { status: 'error', diagnostics: ['must not execute'] };
+        },
+      },
+    };
+    const result = await runSlc(['playbook', source], countingDeps);
+
+    expect(result.ok).toBe(true);
+    expect(result.outcome).toBe('up-to-date');
+    expect(calls).toHaveLength(0);
+    expect(await exists(join(work, 'code.ts'))).toBe(true);
+    expect(await exists(join(artDir, 'code.gears-fsm.test.ts'))).toBe(true);
+  });
+
   it('runs generated verification in a project with no SLC installation', async () => {
     const result = await runSlc(['playbook', source], deps());
     expect(result.ok).toBe(true);

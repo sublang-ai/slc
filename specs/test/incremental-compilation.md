@@ -39,13 +39,13 @@ While a recorded build exists and the user hand-edits an intermediate artifact, 
 
 Verifies: [INCR-3](../user/incremental-compilation.md#incr-3), [INCR-10](../dev/incremental-compilation.md#incr-10)
 
-Where `.slc/` holds a garbage manifest, a missing copy, a wrong-schema record, or an orphaned build directory, when the full run repeats, the run shall succeed as a first compile, not report the bad history as an error, and record a fresh build.
+Where `.slc/` holds a garbage manifest, a wrong-schema record, or an orphaned build directory, when the full run repeats, the run shall succeed as a first compile, not report the bad history as an error, and record a fresh build; where only a recorded copy is missing or tampered, the repeat shall instead execute the affected step ordinarily while the rest of the history stands.
 
 ### INCR-23
 
 Verifies: [INCR-6](../user/incremental-compilation.md#incr-6), [INCR-16](../dev/incremental-compilation.md#incr-16)
 
-While a recorded build exists, when a repeat run's executor fails at a later step after earlier steps completed, the recorded history shall contain fresh records for the completed steps and carried-forward records for the rest, and the next repeat shall skip the completed steps.
+While a recorded build exists, when a repeat run's executor fails at a later step after earlier steps completed, the recorded history shall contain fresh records for the completed steps and no record for the failed step, and the next repeat shall skip the completed steps and re-execute the failed one — including when the failed executor wrote its target before failing.
 
 ### INCR-24
 
@@ -58,6 +58,24 @@ While a current recorded build exists, when the user repeats the invocation with
 Verifies: [INCR-8](../user/incremental-compilation.md#incr-8)
 
 Where an invocation uses `-o`, the reserved `slc` meta-pipeline, or a single-phase form, when it runs to success, no `.slc/` entry shall be created or consulted, and the reserved meta-pipeline's reviewed bundle shall remain byte-identical to its pinned tree.
+
+### INCR-28
+
+Verifies: [INCR-12](../dev/incremental-compilation.md#incr-12)
+
+Where a recorded build exists, when any single result-affecting input changes — a declared semantic input resolved through a widened pin path boundary, the link definition, the link target's bytes or its location with identical bytes, an option list another list could alias under a naive encoding, or a normalization reference — the repeat shall execute the affected step rather than reuse it, and a mixed run's result shall list only written paths ([CLI-3](../user/cli.md#cli-3)).
+
+### INCR-29
+
+Verifies: [INCR-6](../user/incremental-compilation.md#incr-6), [INCR-30](../dev/incremental-compilation.md#incr-30)
+
+While a recorded build exists, when a run that will execute begins its first executor, the history shall already be absent — observable mid-run — and when a failure leaves zero recordable steps, including a `--rebuild` or a rebound-source run failing its first step, history shall remain absent so the retry re-executes instead of reusing what the failed executor left.
+
+### INCR-27
+
+Verifies: [INCR-2](../user/incremental-compilation.md#incr-2)
+
+While a recorded build matches the current source and artifacts of a `playbook` full-link bundle, when the user deletes the emitted entry module or a verification file and repeats the invocation, the run shall reuse every step with zero executor calls, re-derive the deleted files, and exit zero.
 
 ### INCR-26
 

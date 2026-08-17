@@ -21,12 +21,43 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { constants, existsSync } from 'node:fs';
+import { mkdir, open, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { hashFile } from './hash.js';
+
+/**
+ * The one safe writer for host-owned deterministic outputs (PHEXEC-39): it
+ * opens without following a leaf symlink and without truncating, validates
+ * through the handle that the leaf is a private regular file — newly created
+ * or with a single link — and only then truncates and writes, so a
+ * derivative replaced by a symlink or hard link can never redirect the
+ * write. It lives in this module because the artifact-local `.slc-verify/`
+ * checker closure ships it with a fixed file list.
+ */
+export async function writeFileNoFollow(
+  path: string,
+  data: string,
+): Promise<void> {
+  const handle = await open(
+    path,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW,
+  );
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.nlink > 1) {
+      throw new Error(
+        `refusing to write "${path}": not a private regular file`,
+      );
+    }
+    await handle.truncate(0);
+    await handle.writeFile(data);
+  } finally {
+    await handle.close();
+  }
+}
 
 /** A GEARS spec item with its acting prompt and optional source-owned results. */
 export interface GearsItem {
@@ -2112,7 +2143,7 @@ export async function emitGearsFsmConformanceTest(opts: {
   });
   await mkdir(opts.artifactDir, { recursive: true });
   const path = join(opts.artifactDir, `${opts.basename}.gears-fsm.test.ts`);
-  await writeFile(path, content);
+  await writeFileNoFollow(path, content);
   return path;
 }
 
@@ -2398,7 +2429,7 @@ export async function emitPromptContractTest(opts: {
     opts.artifactDir,
     `${opts.basename}.prompt-contract.test.ts`,
   );
-  await writeFile(path, content);
+  await writeFileNoFollow(path, content);
   return { path, diagnostics };
 }
 
@@ -2430,7 +2461,7 @@ export async function emitFsmIntrospectionTest(opts: {
     opts.artifactDir,
     `${opts.basename}.fsm.introspect.test.ts`,
   );
-  await writeFile(path, content);
+  await writeFileNoFollow(path, content);
   return path;
 }
 

@@ -23,4 +23,4 @@ When the user runs the reserved `slc` pipeline on a phase or link definition, th
 
 ### SELFHOST-14
 
-When the user runs the `playbook` pipeline on a source without `--link` or `-o`, the slc command shall additionally produce a runnable entry module `<basename>.ts` beside the artifact directory, such that `playbook run ./<basename>.ts "<task>"` performs the compiled workflow with no hand-written wiring ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+When the user runs the `playbook` pipeline on a source without `--link` or `-o`, the slc command shall additionally produce a runnable entry module `<basename>.ts` beside the artifact directory, such that `playbook run ./<basename>.ts "<task>"` performs the compiled workflow with no hand-written wiring; where that path is physically the invocation source itself (a raw `.ts` source named like the entry), the slc command shall skip the emission with a diagnostic and leave the source unchanged ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).

@@ -67,7 +67,7 @@ Supersedes the "registry entry" item of [DR-009](009-slc-playbook-pipeline-compi
 
 - The module is erasable TypeScript and imports the linked module by the source-only relative specifier `./<basename>.<pipeline>/<basename>.playbook.ts`, so the pair is relocatable together.
 - `<basename>.ts` is a deliberate carve-out from the `<art-dir>/<basename>.<format><ext>` scheme: the entry module is the pipeline's runnable product beside the bundle, mirroring a compiler emitting the executable beside its build directory.
-- Emission is skipped when `-o` relocates the linked artifact, like verification emission.
+- Emission is skipped when `-o` relocates the linked artifact, like verification emission, and — reported as a diagnostic — when the emission path is physically the invocation source itself (a raw `.ts` source named like the entry), which is left byte-for-byte unchanged.
 
 ## Consequences
 

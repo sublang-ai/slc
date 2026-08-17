@@ -77,7 +77,7 @@ describe('buildPhasePrompt (PHEXEC-11, PHEXEC-14, PHEXEC-15)', () => {
       }),
       definition: '## Formats',
     });
-    expect(overBudget).toContain('too extensively to render a diff');
+    expect(overBudget).toContain('could not be rendered as a line diff');
     expect(overBudget).not.toContain('BEGIN INPUT DIFF');
   });
 

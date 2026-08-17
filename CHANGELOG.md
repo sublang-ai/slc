@@ -13,24 +13,42 @@ and this project adheres to
 
 ### Added
 
-- **Incremental compilation.** A successful full or full-link compile
-  records a numbered build under `<artifact-dir>/.slc/` — a manifest
-  plus verbatim copies of the source and every phase output. An
+- **Incremental compilation.** A full or full-link compile at its
+  canonical output that runs any phase records a numbered build under
+  `<artifact-dir>/.slc/` — a manifest plus verbatim copies of the
+  source and every phase output. An
   unchanged repeat prints `up to date` and calls no agent; after a
   source edit, each affected phase's agent receives the prior input, a
   unified diff, and the existing output to update in place, while
   phases whose inputs still match are reused byte-for-byte — including
   hand-refined artifacts, which become the baseline of the next update.
-  A failed run keeps its completed phases, so the retry resumes rather
-  than restarts. History is advisory memory: corrupt or deleted `.slc/`
-  state means a fresh compile, never an error, and the new `--rebuild`
-  flag recompiles everything while still enforcing pin validation.
+  A failed run keeps its completed phases and forgets any phase an
+  executor may have touched — the history marker is removed durably
+  before the first executor runs — so a retry resumes there and never
+  trusts what a failed executor left behind; an abruptly interrupted
+  run compiles fresh next time. An all-reuse repeat also re-derives the entry module and
+  verification files, restoring them if deleted. History is advisory
+  memory: corrupt or deleted `.slc/` state means a fresh compile, never
+  an error, and the new `--rebuild` flag recompiles everything while
+  still enforcing pin validation.
   `-o` outputs, the reserved `slc` meta-pipeline, and single-phase,
   standalone-pass, and direct-link runs stay outside history.
   ([DR-021](specs/decisions/021-incremental-compilation.md))
 
 ### Fixed
 
+- **A compile target can no longer destroy its own input.** A target
+  that is a symbolic link, physically the same file as a protected
+  input — the same path or a hard link — or inside a protected
+  directory is refused before the executor runs, instead of being
+  detected only after the input was overwritten; deterministic
+  derivatives refuse to write through symbolic links, and a raw `.ts`
+  source named like the runnable entry is reported and left untouched
+  instead of being overwritten by entry emission.
+- **A phase cannot succeed without producing its artifact.** A
+  textually successful executor that left a pre-existing target
+  untouched now fails the phase on both transports, so update mode can
+  never record stale output as current.
 - **Pass phases can be pinned.** `slc.pins.json` keys now accept any
   portable phase or pass name, so pinning a format-preserving pass such
   as `optimize` no longer makes the whole pin index unloadable.

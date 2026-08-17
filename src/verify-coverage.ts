@@ -19,7 +19,7 @@
  * test runs it beside the artifacts. See specs/dev/verification.md.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { createActor, fromPromise } from 'xstate';
@@ -36,6 +36,7 @@ import {
   normalizeArms,
   type CaptainState,
   type MachineConfigLike,
+  writeFileNoFollow,
 } from './verify.js';
 
 /** The `gears2fsm`-mandated captain actor name a machine declares. */
@@ -2851,7 +2852,7 @@ export async function emitFsmCoverageTest(opts: {
   });
   await mkdir(opts.artifactDir, { recursive: true });
   const path = join(opts.artifactDir, `${opts.basename}.fsm.coverage.test.ts`);
-  await writeFile(path, content);
+  await writeFileNoFollow(path, content);
   return {
     path,
     diagnostics: findings.map((finding) => `fsm coverage: ${finding}`),

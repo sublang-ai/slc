@@ -64,10 +64,38 @@ describe('unifiedLineDiff (INCR-14)', () => {
     expect(diff).toBe(['@@ -1,2 +1,2 @@', ' a', '-b', '+c'].join('\n'));
   });
 
-  it('returns null for an unbounded one-sided change', () => {
-    const added = Array.from({ length: 10_001 }, (_, i) => `new ${i}`).join(
-      '\n',
+  it('returns null when the rendered diff itself exceeds the budget', () => {
+    // One changed multi-megabyte line passes the cell and line budgets but
+    // must not become a multi-megabyte prompt.
+    const huge = 'x'.repeat(2_000_000);
+    expect(unifiedLineDiff(`a\n${huge}\nb\n`, 'a\nreplaced\nb\n')).toBeNull();
+  });
+
+  it('returns the empty string when only the trailing newline differs', () => {
+    // Below line resolution: the caller supplies no rendered diff instead of
+    // claiming the inputs are byte-identical.
+    expect(unifiedLineDiff('a\nb\n', 'a\nb')).toBe('');
+  });
+
+  it('renders large inputs that differ by little', () => {
+    // A big mostly-common pair must still get its tiny diff: the budgets
+    // measure the rendered artifact, not the input size.
+    const common = Array.from({ length: 100_000 }, (_, i) => `line ${i}`);
+    const edited = [...common];
+    edited[50_000] = 'edited';
+    const diff = unifiedLineDiff(
+      `${common.join('\n')}\n`,
+      `${edited.join('\n')}\n`,
     );
+    expect(diff).toContain('-line 50000');
+    expect(diff).toContain('+edited');
+  });
+
+  it('returns null for an unbounded one-sided change', () => {
+    const added = Array.from(
+      { length: 150_000 },
+      (_, i) => `new line ${i}`,
+    ).join('\n');
     expect(unifiedLineDiff('', added)).toBeNull();
     expect(unifiedLineDiff(`a\n${added}\nb\n`, 'a\nb\n')).toBeNull();
   });
