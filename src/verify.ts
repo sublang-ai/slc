@@ -43,7 +43,10 @@ export async function writeFileNoFollow(
 ): Promise<void> {
   const handle = await open(
     path,
-    constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW,
+    constants.O_WRONLY |
+      constants.O_CREAT |
+      constants.O_NOFOLLOW |
+      constants.O_NONBLOCK,
   );
   try {
     const info = await handle.stat();

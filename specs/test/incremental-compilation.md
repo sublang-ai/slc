@@ -69,7 +69,13 @@ Where a recorded build exists, when any single result-affecting input changes �
 
 Verifies: [INCR-6](../user/incremental-compilation.md#incr-6), [INCR-30](../dev/incremental-compilation.md#incr-30)
 
-While a recorded build exists, when a run that will execute begins its first executor, the history shall already be absent — observable mid-run — and when a failure leaves zero recordable steps, including a `--rebuild` or a rebound-source run failing its first step, history shall remain absent so the retry re-executes instead of reusing what the failed executor left.
+While a recorded build exists, when a run that will execute begins its first executor, the history shall already be absent, observable mid-run.
+
+### INCR-31
+
+Verifies: [INCR-16](../dev/incremental-compilation.md#incr-16), [INCR-30](../dev/incremental-compilation.md#incr-30)
+
+When a failure leaves zero recordable steps — including a `--rebuild` or a rebound-source run failing its first step — history shall remain absent so the retry re-executes instead of reusing what the failed executor left; when `.slc` is a file or `.slc/latest` is a directory or symbolic link, the run shall compile fresh; and when a recognized active marker cannot be removed, the run shall fail with zero executor calls.
 
 ### INCR-27
 

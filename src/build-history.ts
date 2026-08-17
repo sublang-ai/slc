@@ -13,17 +13,46 @@
  * orphaned build directory ignored. See specs/dev/incremental-compilation.md.
  */
 
+import { constants } from 'node:fs';
 import {
+  lstat,
   mkdir,
-  readFile,
+  open,
   readdir,
+  readFile,
   rename,
   unlink,
   writeFile,
 } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 
+import { errorCode } from './errors.js';
 import { hashBytes, isHash, type Hash } from './hash.js';
+
+/**
+ * Reads a store member as a no-follow, nonblocking regular file, or `null`
+ * for anything else — a symlink, directory, or FIFO in the store must read
+ * as absent, never redirect a read or hang the compile (INCR-10).
+ */
+async function readStoreFile(path: string): Promise<Buffer | null> {
+  let handle;
+  try {
+    handle = await open(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+  } catch {
+    return null;
+  }
+  try {
+    if (!(await handle.stat()).isFile()) return null;
+    return await handle.readFile();
+  } catch {
+    return null;
+  } finally {
+    await handle.close();
+  }
+}
 
 /** Reserved history directory name inside an artifact directory (DR-021). */
 export const HISTORY_DIR = '.slc';
@@ -84,22 +113,20 @@ export async function loadBuildHistory(
   artDir: string,
 ): Promise<BuildHistory | null> {
   const historyDir = join(artDir, HISTORY_DIR);
-  let build: number;
-  try {
-    const latest = (await readFile(join(historyDir, 'latest'), 'utf8')).trim();
-    if (!/^\d{1,15}$/.test(latest)) return null;
-    build = Number(latest);
-  } catch {
-    return null;
-  }
+  const marker = await readStoreFile(join(historyDir, 'latest'));
+  if (marker === null) return null;
+  const latest = marker.toString('utf8').trim();
+  if (!/^\d{1,15}$/.test(latest)) return null;
+  const build = Number(latest);
   if (build < 1) return null;
   const dir = join(historyDir, 'builds', String(build));
+  const rawManifest = await readStoreFile(join(dir, 'manifest.json'));
+  if (rawManifest === null) return null;
   let manifest: BuildManifest;
   try {
-    const raw: unknown = JSON.parse(
-      await readFile(join(dir, 'manifest.json'), 'utf8'),
+    const parsed = parseManifest(
+      JSON.parse(rawManifest.toString('utf8')) as unknown,
     );
-    const parsed = parseManifest(raw);
     if (parsed === null) return null;
     manifest = parsed;
   } catch {
@@ -110,15 +137,27 @@ export async function loadBuildHistory(
 
 /**
  * Invalidates the history by removing `.slc/latest` — absence is the durable
- * statement that nothing is vouched for. Absence already counts as success;
- * any other failure propagates, because proceeding with an active marker
- * could let a later run reuse bytes a failed executor left behind (INCR-30).
+ * statement that nothing is vouched for. Only a regular file can be an
+ * active marker, so absence, a `.slc` that is not a directory, or a
+ * directory or other non-regular entry at the marker path all count as
+ * success — they already read as absent history. A recognized active marker
+ * that cannot be removed propagates, because proceeding could let a later
+ * run reuse bytes a failed executor left behind (INCR-30).
  */
 export async function invalidateBuildHistory(artDir: string): Promise<void> {
+  const marker = join(artDir, HISTORY_DIR, 'latest');
   try {
-    await unlink(join(artDir, HISTORY_DIR, 'latest'));
+    await unlink(marker);
+    return;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    const code = errorCode(error);
+    if (code === 'ENOENT' || code === 'ENOTDIR') return;
+    try {
+      if (!(await lstat(marker)).isFile()) return;
+    } catch {
+      return;
+    }
+    throw error;
   }
 }
 
@@ -132,12 +171,9 @@ export async function verifiedCopyPath(
   hash: Hash,
 ): Promise<string | null> {
   const path = join(history.dir, ...copy.split('/'));
-  try {
-    const bytes = await readFile(path);
-    return hashBytes(bytes) === hash ? path : null;
-  } catch {
-    return null;
-  }
+  const bytes = await readStoreFile(path);
+  if (bytes === null) return null;
+  return hashBytes(bytes) === hash ? path : null;
 }
 
 /** What `recordBuild` stores for one step. */

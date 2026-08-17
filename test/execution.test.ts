@@ -160,6 +160,42 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     },
   );
 
+  it('fails when the executor hard-links its target to an input (PHEXEC-39)', async () => {
+    const result = await run(
+      executor(async (req) => {
+        if (req.kind === 'compile') {
+          const { link } = await import('node:fs/promises');
+          await link(req.source, req.target);
+        }
+        return { status: 'ok', diagnostics: [] };
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(
+        result.report.reasons.some((r) =>
+          r.includes('not a private regular file'),
+        ),
+      ).toBe(true);
+  });
+
+  it('refuses a target hard-linked to an unrelated file (PHEXEC-39)', async () => {
+    const unrelated = join(dir, 'unrelated.txt');
+    await writeFile(unrelated, 'unrelated bytes');
+    await link(unrelated, join(dir, 'onboarding.gears.md'));
+    let invoked = false;
+    const result = await run(
+      executor(() => {
+        invoked = true;
+        return { status: 'ok', diagnostics: [] };
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.report.reasons[0]).toContain('hard-linked');
+    expect(invoked).toBe(false);
+    expect(await readFile(unrelated, 'utf8')).toBe('unrelated bytes');
+  });
+
   it('fails when a pre-existing target is not rewritten (PHEXEC-4, PHEXEC-17)', async () => {
     await writeFile(request.target, 'stale output');
     const result = await run(

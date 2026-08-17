@@ -472,12 +472,13 @@ function immutableInputs(steps: readonly PhaseStep[]): string[] {
 }
 
 /**
- * Rejects a plan whose outputs collide with each other or physically alias
- * an immutable input (PHEXEC-39). Paths are canonical, so equality plus a
- * device-and-inode check covers aliases.
+ * Rejects a plan whose outputs collide with each other — lexically or as
+ * pre-existing hard links — or physically alias a protected input from the
+ * plan-wide immutable union (PHEXEC-39), before any executor runs.
  */
 async function plannedOutputConflict(
   steps: readonly PhaseStep[],
+  immutable: readonly string[],
 ): Promise<string | null> {
   const targets = steps.map((step) =>
     step.request.kind === 'compile' ? step.request.target : step.request.linked,
@@ -489,10 +490,17 @@ async function plannedOutputConflict(
     }
     seen.add(target);
   }
-  for (const input of immutableInputs(steps)) {
+  for (let i = 0; i < targets.length; i++) {
+    for (let j = i + 1; j < targets.length; j++) {
+      if (await samePhysicalFile(targets[i], targets[j])) {
+        return `slc: planned outputs "${targets[i]}" and "${targets[j]}" are the same file; refusing to run`;
+      }
+    }
+  }
+  for (const input of immutable) {
     for (const target of targets) {
       if (target === input || (await samePhysicalFile(target, input))) {
-        return `slc: planned output "${target}" is the invocation input "${input}"; refusing to overwrite it`;
+        return `slc: planned output "${target}" is the protected input "${input}"; refusing to overwrite it`;
       }
     }
   }
@@ -536,7 +544,9 @@ async function samePhysicalFile(left: string, right: string): Promise<boolean> {
 
 /** The invocation working directory anchoring artifact placement (DR-014). */
 function runCwd(deps: SlcDeps): string {
-  return deps.cwd ?? process.cwd();
+  // Resolved once: a relative injected cwd would otherwise mix relative
+  // planned outputs with the absolute canonical operands (PHEXEC-39).
+  return resolve(deps.cwd ?? process.cwd());
 }
 
 /**
@@ -838,14 +848,37 @@ async function executeSteps(
   const outputs: string[] = [];
   const diagnostics: string[] = [];
 
-  // One plan-level output check (PHEXEC-39): planned outputs must be unique
-  // and must not physically alias an immutable input — e.g. `-o` naming the
-  // original source would let a later step destroy it.
-  const planConflict = await plannedOutputConflict(steps);
+  // Declared closures derive once per definition; `null` marks a definition
+  // whose closure cannot be derived, so its steps stay unidentifiable
+  // rather than silently under-keyed (INCR-12).
+  const closureByDefinition = new Map<string, string[] | null>();
+  for (const step of steps) {
+    const definition = step.request.definitionPath;
+    if (closureByDefinition.has(definition)) continue;
+    try {
+      closureByDefinition.set(
+        definition,
+        await declaredInputs(pipeline, definition, boundary),
+      );
+    } catch {
+      closureByDefinition.set(definition, null);
+    }
+  }
+  // One plan-wide immutable union (PHEXEC-39): external operands, chain
+  // definitions, and every derivable declared input. Plan validation and
+  // every phase's protection use the same set, so `-o` can no longer name
+  // a file only a later closure would have protected.
+  const immutable = [
+    ...new Set([
+      ...immutableInputs(steps),
+      ...definitions,
+      ...[...closureByDefinition.values()].flatMap((closure) => closure ?? []),
+    ]),
+  ];
+  const planConflict = await plannedOutputConflict(steps, immutable);
   if (planConflict !== null) {
     return { ok: false, outputs, diagnostics: [planConflict] };
   }
-  const immutable = immutableInputs(steps);
   const produced: string[] = [];
 
   const state =
@@ -869,20 +902,9 @@ async function executeSteps(
     // Reuse/update selection is tentative until the pin gate below confirms
     // the step may run at all: recorded output never makes a stale pin
     // runnable (INCR-13).
-    // The declared closure is derived once per step: it keys the identity
-    // and is protected during execution (INCR-12, PHEXEC-39). A derivation
-    // error makes the step unidentifiable — never a silently smaller key.
-    let declared: string[] | null;
-    try {
-      declared = await declaredInputs(
-        pipeline,
-        step.request.definitionPath,
-        boundary,
-      );
-    } catch {
-      declared = null;
-    }
-    const protect = [...(declared ?? []), ...immutable, ...produced];
+    const declared =
+      closureByDefinition.get(step.request.definitionPath) ?? null;
+    const protect = [...immutable, ...produced];
     const first = step === steps[0];
     const inputs =
       state === undefined || declared === null
