@@ -11,14 +11,15 @@
  * tests supply fakes. See specs/dev/pipeline.md and specs/dev/phase-execution.md.
  */
 
-import { mkdir, readFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { mkdir, readFile, stat } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
 import {
   SOURCE_COPY,
   encodeLocator,
+  invalidateBuildHistory,
   loadBuildHistory,
   recordBuild,
   resolveLocator,
@@ -29,11 +30,12 @@ import {
 } from './build-history.js';
 import { emitEntryModule } from './entry-module.js';
 import { unresolvableRelativeImports } from './emitted-imports.js';
-import { messageOf } from './errors.js';
+import { errorCode, messageOf } from './errors.js';
 import {
   type ExecuteRequest,
   type PhaseExecutor,
   formatFailureReport,
+  regularFileState,
   runPhase,
 } from './execution.js';
 import { hashBytes, hashFile, type Hash } from './hash.js';
@@ -42,7 +44,7 @@ import { unifiedLineDiff } from './line-diff.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
 import { deriveClosure } from './pin-closure.js';
 import type { ProgressSink } from './progress.js';
-import { evaluatePin, evaluatePinFile } from './pin-currency.js';
+import { evaluatePin, evaluatePinFile, hashTree } from './pin-currency.js';
 import { PinError, loadPinFile, type PinFile, type PinRecord } from './pins.js';
 import type { Phase } from './phase.js';
 import {
@@ -104,7 +106,8 @@ export interface SlcResult {
   diagnostics: string[];
   /**
    * `up-to-date` when a full run reused every step: no agent was invoked and
-   * no file was written (DR-021, INCR-2).
+   * no chain artifact or history was rewritten; deterministic derivatives
+   * are still re-derived (DR-021, INCR-2).
    */
   outcome?: 'up-to-date';
 }
@@ -124,6 +127,10 @@ export async function runSlc(
   } catch (error) {
     return failure(messageOf(error));
   }
+  // One canonical path boundary (PHEXEC-39): every filesystem operand is
+  // resolved against the invocation working directory once, so identity,
+  // protection, prompts, and history all speak the same absolute paths.
+  invocation = canonicalInvocation(invocation, runCwd(deps));
 
   try {
     switch (invocation.kind) {
@@ -191,11 +198,10 @@ async function runFull(
     steps,
     pipeline,
     deps,
-    incrementalRun(invocation, artDir, deps),
+    incrementalRun(invocation, artDir),
   );
-  // A current bundle regenerates nothing, deterministic derivatives included
-  // (INCR-2).
-  if (result.outcome === 'up-to-date') return result;
+  // Deterministic derivation runs on every successful invocation, so an
+  // all-reuse run restores a missing or drifted derivative (INCR-2).
   return emitVerification(result, {
     pipeline: invocation.pipeline,
     plan,
@@ -205,21 +211,20 @@ async function runFull(
 }
 
 /**
- * Build history covers canonical full and full-link runs of non-reserved
- * pipelines (DR-021): `-o` and the reserved `slc` meta-pipeline neither
- * consult nor write it (INCR-8).
+ * Build history covers canonical full and full-link runs of every pipeline
+ * except the reserved `slc` meta-pipeline (DR-021): `-o` and that
+ * meta-pipeline neither consult nor write it (INCR-8).
  */
 function incrementalRun(
   invocation: Extract<Invocation, { kind: 'full' | 'full-link' }>,
   artDir: string,
-  deps: SlcDeps,
 ): IncrementalRun | undefined {
   if (invocation.output !== null || invocation.pipeline === 'slc') {
     return undefined;
   }
   return {
     artDir,
-    source: resolve(runCwd(deps), invocation.source),
+    source: invocation.source,
     pipelineName: invocation.pipeline,
     rebuild: invocation.rebuild === true,
   };
@@ -371,11 +376,11 @@ async function runFullLink(
     [...compileSteps, linkStep],
     pipeline,
     deps,
-    incrementalRun(invocation, artDir, deps),
+    incrementalRun(invocation, artDir),
   );
-  // A current bundle regenerates nothing: deterministic derivatives and the
-  // entry module stand as recorded (INCR-2).
-  if (result.outcome === 'up-to-date') return result;
+  // Deterministic derivation and entry emission run on every successful
+  // invocation, so an all-reuse run restores a missing or drifted
+  // derivative (INCR-2).
   const verified = await emitVerification(result, {
     pipeline: invocation.pipeline,
     plan,
@@ -397,6 +402,23 @@ async function runFullLink(
       const textPath = normalize
         ? join(artDir, `${basename}.${entry.source.format}${entry.source.ext}`)
         : invocation.source;
+      // A raw `.ts` source named like the entry module would be its own
+      // emission path; leave the input untouched and report why the entry
+      // was not produced (COMPILE-7, DR-014).
+      if (
+        await samePhysicalFile(
+          join(runCwd(deps), `${basename}.ts`),
+          invocation.source,
+        )
+      ) {
+        return {
+          ...verified,
+          diagnostics: [
+            ...verified.diagnostics,
+            `entry module ${basename}.ts not emitted: its path is the invocation source; rename the source to emit a runnable entry`,
+          ],
+        };
+      }
       const entryPath = await emitEntryModule({
         cwd: runCwd(deps),
         basename,
@@ -420,6 +442,96 @@ async function runFullLink(
     }
   }
   return verified;
+}
+
+/**
+ * The request inputs that are not produced by an earlier step — the
+ * external source, link targets, references, and direct-link objects. A
+ * planned output aliasing one of these would destroy user input; the check
+ * is order-aware so `-o <source>` cannot launder the source into a "chain
+ * artifact" (PHEXEC-39).
+ */
+function immutableInputs(steps: readonly PhaseStep[]): string[] {
+  const producedBefore = new Set<string>();
+  const inputs = new Set<string>();
+  for (const step of steps) {
+    const stepInputsList =
+      step.request.kind === 'compile'
+        ? [step.request.source, ...(step.request.references ?? [])]
+        : [...step.request.objects, step.request.linkTarget];
+    for (const input of stepInputsList) {
+      if (!producedBefore.has(input)) inputs.add(input);
+    }
+    producedBefore.add(
+      step.request.kind === 'compile'
+        ? step.request.target
+        : step.request.linked,
+    );
+  }
+  return [...inputs];
+}
+
+/**
+ * Rejects a plan whose outputs collide with each other or physically alias
+ * an immutable input (PHEXEC-39). Paths are canonical, so equality plus a
+ * device-and-inode check covers aliases.
+ */
+async function plannedOutputConflict(
+  steps: readonly PhaseStep[],
+): Promise<string | null> {
+  const targets = steps.map((step) =>
+    step.request.kind === 'compile' ? step.request.target : step.request.linked,
+  );
+  const seen = new Set<string>();
+  for (const target of targets) {
+    if (seen.has(target)) {
+      return `slc: planned outputs collide at "${target}"; adjust -o`;
+    }
+    seen.add(target);
+  }
+  for (const input of immutableInputs(steps)) {
+    for (const target of targets) {
+      if (target === input || (await samePhysicalFile(target, input))) {
+        return `slc: planned output "${target}" is the invocation input "${input}"; refusing to overwrite it`;
+      }
+    }
+  }
+  return null;
+}
+
+/** Resolves every filesystem operand of an invocation against `cwd`. */
+function canonicalInvocation(invocation: Invocation, cwd: string): Invocation {
+  const abs = (path: string): string => resolve(cwd, path);
+  const output = invocation.output === null ? null : abs(invocation.output);
+  switch (invocation.kind) {
+    case 'full':
+    case 'phase':
+      return { ...invocation, source: abs(invocation.source), output };
+    case 'full-link':
+      return {
+        ...invocation,
+        source: abs(invocation.source),
+        linkTarget: abs(invocation.linkTarget),
+        output,
+      };
+    case 'link':
+      return {
+        ...invocation,
+        objects: invocation.objects.map(abs),
+        linkTarget: abs(invocation.linkTarget),
+        output,
+      };
+  }
+}
+
+/** Whether two paths name the same physical file (device and inode). */
+async function samePhysicalFile(left: string, right: string): Promise<boolean> {
+  try {
+    const [a, b] = await Promise.all([stat(left), stat(right)]);
+    return a.dev === b.dev && a.ino === b.ino;
+  } catch {
+    return false;
+  }
 }
 
 /** The invocation working directory anchoring artifact placement (DR-014). */
@@ -655,6 +767,20 @@ interface IncrementalState extends IncrementalRun {
   completed: { step: PhaseStep; inputs: Hash[]; target: string }[];
   /** Steps that ran an executor to completion (not reused). */
   executed: number;
+  /**
+   * Steps whose executor was invoked. A touched step that did not complete
+   * with a recordable identity — it failed, or its inputs were
+   * unidentifiable — gets no record, so no later run can reuse whatever the
+   * executor left at its target (INCR-6).
+   */
+  touched: Set<PhaseStep>;
+  /**
+   * Whether `.slc/latest` was removed. Before the first executor may write,
+   * the marker is gone, so a crash, kill, rebind, or later recording
+   * failure can never leave a stale record vouching for a mutated target;
+   * one final build publishes on an orderly finish (INCR-30).
+   */
+  invalidated: boolean;
 }
 
 /** How one step proceeds under the loaded history (DR-021, INCR-13). */
@@ -705,8 +831,22 @@ async function executeSteps(
   }
 
   const definitions = chainDefinitions(pipeline);
+  // Declared-input closures resolve within the pin file's validated path
+  // boundary — the vendored playbook pipeline records `../..` — falling back
+  // to the pipeline directory without pins (DR-007, INCR-12).
+  const boundary = pinFile?.pathBoundary.path ?? '.';
   const outputs: string[] = [];
   const diagnostics: string[] = [];
+
+  // One plan-level output check (PHEXEC-39): planned outputs must be unique
+  // and must not physically alias an immutable input — e.g. `-o` naming the
+  // original source would let a later step destroy it.
+  const planConflict = await plannedOutputConflict(steps);
+  if (planConflict !== null) {
+    return { ok: false, outputs, diagnostics: [planConflict] };
+  }
+  const immutable = immutableInputs(steps);
+  const produced: string[] = [];
 
   const state =
     incr === undefined ? undefined : await loadIncremental(incr, diagnostics);
@@ -729,11 +869,25 @@ async function executeSteps(
     // Reuse/update selection is tentative until the pin gate below confirms
     // the step may run at all: recorded output never makes a stale pin
     // runnable (INCR-13).
+    // The declared closure is derived once per step: it keys the identity
+    // and is protected during execution (INCR-12, PHEXEC-39). A derivation
+    // error makes the step unidentifiable — never a silently smaller key.
+    let declared: string[] | null;
+    try {
+      declared = await declaredInputs(
+        pipeline,
+        step.request.definitionPath,
+        boundary,
+      );
+    } catch {
+      declared = null;
+    }
+    const protect = [...(declared ?? []), ...immutable, ...produced];
     const first = step === steps[0];
     const inputs =
-      state === undefined
+      state === undefined || declared === null
         ? null
-        : await stepInputs(step, pipeline, first ? state.source : undefined);
+        : await stepInputs(step, { artDir: state.artDir, declared });
     const mode: StepMode =
       state === undefined || inputs === null
         ? { mode: 'ordinary' }
@@ -787,8 +941,11 @@ async function executeSteps(
         kind: 'status',
         text: `reusing ${step.phase} → ${target}`,
       });
+      // A reused target was not written, so it stays out of `outputs`:
+      // CLI-3 reports the paths a run wrote, and reuse is reported through
+      // the status line above.
       state?.completed.push({ step, inputs, target });
-      outputs.push(target);
+      produced.push(target);
       continue;
     }
     if (mode.mode === 'update') {
@@ -797,6 +954,31 @@ async function executeSteps(
         text: `updating ${step.phase} → ${target}`,
       });
     }
+    // Durable invalidation by absence (INCR-30): before any executor may
+    // write, `.slc/latest` is removed, so no interruption — failure, crash,
+    // rebind, or recording failure — leaves an active record vouching for a
+    // target this run may change. The loaded history keeps serving reuse and
+    // update context from memory. An unremovable active marker fails closed:
+    // proceeding could let a retry reuse rejected bytes.
+    if (state !== undefined && !state.invalidated) {
+      try {
+        await invalidateBuildHistory(state.artDir);
+        state.invalidated = true;
+      } catch (error) {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons: [
+              `build history could not be invalidated before execution: ${messageOf(error)}`,
+            ],
+          }),
+        );
+        return finish({ ok: false, outputs, diagnostics });
+      }
+    }
+    state?.touched.add(step);
 
     const request: ExecuteRequest =
       mode.mode === 'update' && step.request.kind === 'compile'
@@ -811,6 +993,7 @@ async function executeSteps(
       targetExt: step.targetExt,
       executor: selection.executor,
       definitions,
+      protect,
       revalidate: () => revalidateChain(pipeline.dir),
       signal: deps.signal,
     });
@@ -861,6 +1044,7 @@ async function executeSteps(
       elapsedMs: Date.now() - startedAt,
     });
     outputs.push(target);
+    produced.push(target);
     if (state !== undefined) {
       state.executed++;
       if (inputs !== null) state.completed.push({ step, inputs, target });
@@ -906,7 +1090,14 @@ async function loadIncremental(
       }
     }
   }
-  return { ...incr, history, completed: [], executed: 0 };
+  return {
+    ...incr,
+    history,
+    completed: [],
+    executed: 0,
+    touched: new Set(),
+    invalidated: false,
+  };
 }
 
 /**
@@ -917,35 +1108,43 @@ async function loadIncremental(
  */
 async function stepInputs(
   step: PhaseStep,
-  pipeline: Pipeline,
-  /**
-   * Resolved chained-input path for the first scheduled step. Request paths
-   * are carried verbatim, so a relative invocation source must be hashed at
-   * its resolved location, not against the process working directory.
-   */
-  chainedOverride?: string,
+  paths: {
+    /** Artifact directory anchoring the link-target locator (INCR-12). */
+    artDir: string;
+    /** The definition's derived declared-input closure (INCR-12). */
+    declared: readonly string[];
+  },
 ): Promise<Hash[] | null> {
+  const declared = paths.declared;
   try {
     if (step.request.kind === 'compile') {
-      const declared = await declaredInputs(
-        pipeline,
-        step.request.definitionPath,
-      );
       return [
-        await hashFile(chainedOverride ?? step.request.source),
+        await hashFile(step.request.source),
         await hashFile(step.request.definitionPath),
         ...(await Promise.all((step.request.references ?? []).map(hashFile))),
         ...(await Promise.all(declared.map(hashFile))),
       ];
     }
+    // The link target's identity is its locator plus its content: the same
+    // bytes at a different path resolve imports differently, and the
+    // artifact-directory-relative locator stays portable when the bundle and
+    // target move together — the same encoding the manifest's source locator
+    // uses (INCR-12, INCR-17).
     return [
       ...(await Promise.all(step.request.objects.map(hashFile))),
-      await hashFile(step.request.linkTarget),
+      await hashFile(step.request.definitionPath),
+      ...(await Promise.all(declared.map(hashFile))),
       hashBytes(
         new TextEncoder().encode(
-          step.request.options
-            .map((option) => `${option.name}=${option.value}`)
-            .join('\n'),
+          encodeLocator(paths.artDir, step.request.linkTarget),
+        ),
+      ),
+      await hashFileOrTree(step.request.linkTarget),
+      hashBytes(
+        new TextEncoder().encode(
+          JSON.stringify(
+            step.request.options.map((option) => [option.name, option.value]),
+          ),
         ),
       ),
     ];
@@ -954,23 +1153,39 @@ async function stepInputs(
   }
 }
 
+/** Content identity for a link target: file bytes, or a deterministic tree. */
+async function hashFileOrTree(path: string): Promise<Hash> {
+  try {
+    return await hashFile(path);
+  } catch (error) {
+    if (errorCode(error) === 'EISDIR') return (await hashTree(path)) as Hash;
+    throw error;
+  }
+}
+
 /**
  * The definition's declared semantic inputs (`## Pin Inputs`), or none.
  * `deriveClosure` takes pipeline-relative locators; the built-in normalize
  * definition lives outside the pipeline directory and declares nothing.
+ * A derivation error propagates so `stepInputs` reports the step
+ * unidentifiable and it executes ordinarily — the identity never silently
+ * shrinks (INCR-12).
  */
 async function declaredInputs(
   pipeline: Pipeline,
   definitionPath: string,
+  boundary: string,
 ): Promise<string[]> {
   const locator = relative(pipeline.dir, definitionPath);
-  if (locator.startsWith('..') || isAbsolute(locator)) return [];
-  try {
-    const closure = await deriveClosure(pipeline.dir, '.', locator);
-    return [...closure].filter((path) => path !== definitionPath);
-  } catch {
+  if (
+    locator === '..' ||
+    locator.startsWith(`..${sep}`) ||
+    isAbsolute(locator)
+  ) {
     return [];
   }
+  const closure = await deriveClosure(pipeline.dir, boundary, locator);
+  return [...closure].filter((path) => path !== definitionPath);
 }
 
 /**
@@ -996,9 +1211,9 @@ async function selectStepMode(
       candidate.target === rel,
   );
   if (record === undefined) return { mode: 'ordinary' };
-  try {
-    await readFile(target);
-  } catch {
+  // Reuse and update both stand on the existing target being a safe regular
+  // file — a symlink, directory, or FIFO never satisfies them (PHEXEC-39).
+  if ((await regularFileState(target)) !== 'file') {
     return { mode: 'ordinary' };
   }
   if (
@@ -1013,7 +1228,7 @@ async function selectStepMode(
   // chained input is the invocation source by construction, read at its
   // resolved location — otherwise the predecessor's recorded output copy;
   // both must still hash to the recorded chained-input identity (INCR-14).
-  const chained = first ? state.source : step.request.source;
+  const chained = step.request.source;
   const copy = first
     ? SOURCE_COPY
     : `outputs/${encodeLocator(state.artDir, chained)}`;
@@ -1030,6 +1245,10 @@ async function selectStepMode(
     } catch {
       diff = null;
     }
+    // The bytes differ, so an empty rendering means the change is below
+    // line resolution (an EOF newline, or bytes UTF-8 decoding collapses):
+    // supply no diff rather than a false "byte-identical" claim (INCR-14).
+    if (diff === '') diff = null;
   }
   return { mode: 'update', priorInput, diff };
 }
@@ -1044,10 +1263,18 @@ async function recordIncremental(
   steps: readonly PhaseStep[],
   diagnostics: string[],
 ): Promise<void> {
-  if (state.executed === 0) return;
+  // A run that never invalidated changed nothing; the loaded history still
+  // holds. After invalidation, `latest` is absent, so publishing is purely
+  // additive: with nothing recordable, absence itself is the durable
+  // statement that nothing is vouched for.
+  if (!state.invalidated) return;
   const toRecord: StepToRecord[] = [];
   for (const step of steps) {
     const done = state.completed.find((candidate) => candidate.step === step);
+    // A touched step without a recordable completion — failed, or
+    // unidentifiable inputs — gets no record, so nothing can vouch for
+    // whatever its executor left at the target (INCR-6).
+    if (done === undefined && state.touched.has(step)) continue;
     if (done !== undefined) {
       toRecord.push({
         kind: step.kind,
@@ -1074,6 +1301,7 @@ async function recordIncremental(
       copyFrom,
     });
   }
+  if (toRecord.length === 0) return;
   try {
     await recordBuild({
       artDir: state.artDir,

@@ -545,8 +545,9 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     );
     expect(result.ok).toBe(false);
     const report = result.diagnostics.join('\n');
-    expect(report).toContain('could not be read');
-    expect(report).toContain('VERIFY-18');
+    // The regular-file postcondition now catches this before the VERIFY-18
+    // read: a directory can never satisfy the produced-artifact check.
+    expect(report).toContain('is not a regular file');
   });
 
   it('accepts a link whose relative imports resolve beside the module (VERIFY-19)', async () => {

@@ -13,35 +13,35 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 
 ### INCR-1
 
-Where a full or full-link invocation targets canonical output of a non-reserved pipeline, when the run executes at least one step, the slc command shall record a new numbered build under `<art-dir>/.slc/` — a manifest plus verbatim copies of the source and every recorded step output — and shall name it in `.slc/latest` only after the build directory is complete.
+Where a full or full-link invocation targets canonical output of a pipeline other than the reserved `slc` meta-pipeline, when the run executes at least one step, the slc command shall record a new numbered build under `<art-dir>/.slc/` — a manifest plus verbatim copies of the source and every recorded step output — and shall name it in `.slc/latest` only after the build directory is complete.
 
 ### INCR-2
 
-Where recorded history exists whose step records all match their current input bytes, while every step's target file exists, when the user repeats the invocation, the slc command shall report `up to date`, exit zero, invoke no agent, and write no file.
+Where a history-eligible invocation ([INCR-8](#incr-8)) finds recorded history whose step records all match their current input bytes, while every step's target file exists, when the user repeats the invocation, the slc command shall report `up to date`, exit zero, invoke no agent, rewrite no chain artifact, and advance no history; deterministic entry and verification derivatives are re-derived, restoring any missing or drifted derivative.
 
 ### INCR-3
 
-Where history is missing, malformed, or inconsistent with the files it names, when the user runs the full pipeline, the slc command shall execute as a first compile without failing on the bad history, and shall record fresh history on success.
+Where the history store is missing or malformed, when the user runs a history-eligible full pipeline ([INCR-8](#incr-8)), the slc command shall execute as a first compile without failing on the bad history and shall record fresh history on success; a recorded copy that no longer matches its hash shall disable only the update that depended on it.
 
 ## Reuse and update
 
 ### INCR-4
 
-While a step's recorded input identities match its current input bytes and its target file exists, when a full run executes, the slc command shall skip that step and preserve its on-disk output byte-for-byte, including output the user has refined by hand.
+While a step's recorded input identities match its current input bytes and its target file exists, when a history-eligible full run ([INCR-8](#incr-8)) executes, the slc command shall skip that step and preserve its on-disk output byte-for-byte, including output the user has refined by hand.
 
 ### INCR-5
 
-While a compile step's recorded input identities differ from its current input bytes, and the recorded prior-input copy and the step's target file both exist, when the step executes, the slc command shall supply the executor the current definition, the prior input, and a diff of prior to current input, leave the existing target in place to be updated into a complete artifact, and apply the same generic checks as an ordinary run; a link step whose recorded inputs differ shall instead execute in full without update context.
+While, on a history-eligible run ([INCR-8](#incr-8)), a compile step's recorded input identities differ from its current input bytes, and the recorded prior-input copy and the step's target file both exist, when the step executes, the slc command shall supply the executor the current definition, the prior input, and a diff of prior to current input, leave the existing target in place to be updated into a complete artifact, and apply the same generic checks as an ordinary run; a link step whose recorded inputs differ shall instead execute in full without update context.
 
 ### INCR-6
 
-When a full run fails after executing at least one step, the slc command shall record the completed steps and carry forward the prior records of the rest, so that a repeat invocation reuses the completed work instead of re-executing it.
+When a history-eligible full run's ([INCR-8](#incr-8)) executor work fails or is interrupted, the slc command shall leave no active record for any step whose target an executor may have changed — recording completed steps, dropping the failed or unidentifiable ones, and carrying forward only the steps it did not reach — so that a repeat invocation reuses the completed work and re-executes the rest rather than reusing whatever a failed executor left behind.
 
 ## Rebuilds and exclusions
 
 ### INCR-7
 
-When the user passes `--rebuild` on a full or full-link invocation without `-o`, the slc command shall execute every step ordinarily — bypassing reuse and update but not pin validation — and shall record fresh history from the steps it completed, carrying no prior records forward.
+Where a full or full-link invocation targets canonical output of a pipeline other than the reserved `slc` meta-pipeline, when the user passes `--rebuild` without `-o`, the slc command shall execute every step ordinarily — bypassing reuse and update but not pin validation — and shall record fresh history from the steps it completed, carrying no prior records forward.
 
 ### INCR-8
 

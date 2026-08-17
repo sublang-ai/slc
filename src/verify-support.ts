@@ -11,7 +11,9 @@
  * the compiled FSM already requires the destination project to provide it.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
+
+import { writeFileNoFollow } from './verify.js';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -55,7 +57,7 @@ export async function emitVerifierSupport(
     SUPPORT_FILES.map(async (file) => {
       const path = join(targetDir, file);
       const content = await readFile(join(sourceDir, file), 'utf8');
-      await writeFile(path, withoutSourceMapReference(content));
+      await writeFileNoFollow(path, withoutSourceMapReference(content));
       return path;
     }),
   );

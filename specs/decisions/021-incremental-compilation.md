@@ -19,7 +19,7 @@ The host therefore does not need to understand a change semantically; it needs t
 
 ### Build history
 
-- After a full or full-link run at canonical output of a non-reserved pipeline executes at least one step, `slc` records build `N` under `<art-dir>/.slc/`:
+- After a full or full-link run at canonical output of a pipeline other than the reserved `slc` meta-pipeline executes at least one step, `slc` records build `N` under `<art-dir>/.slc/`:
 
 | Path | Content |
 | --- | --- |
@@ -28,12 +28,14 @@ The host therefore does not need to understand a change semantically; it needs t
 | `.slc/latest` | the decimal `N` of the last recorded build, committed last via rename |
 
 - A step record carries the step's kind, name, target path, input identities, output hash, and copy location.
-  Input identities are SHA-256 over exact bytes: the chained input plus the definition and declared semantic inputs for a compile step; the objects, link target, and options for a link step.
+  Input identities are SHA-256 over exact bytes: the chained input plus the definition, references, and declared semantic inputs — resolved within the pin file's validated path boundary — for a compile step; the objects plus the link definition, its declared semantic inputs, the link target's artifact-directory-relative locator and content identity, and the unambiguously encoded options for a link step.
   Recorded paths are POSIX locators relative to `<art-dir>`.
 - `N` starts at 1 and increases with each recording run; prior builds are retained, versioning the lineage and doubling as recovery copies.
 - History is memory, never authority.
   A missing, malformed, or inconsistent `.slc/` never fails or degrades a run: the run behaves as a first compile and re-records, so deleting `.slc/` is always safe.
-- A run that fails after executing at least one step still records: completed steps get fresh records and the rest carry their previous records forward, so a late failure does not forfeit hours of earlier phases.
+- `.slc/latest` is the sole currentness marker: it names the last accepted build and is removed before a run's first executor may write, failing the run closed when an active marker cannot be removed.
+  On an orderly finish, exactly one new build publishes: completed steps get fresh records, unreached steps carry their previous records forward, and a touched step without a recordable completion gets none — a retry re-executes it instead of reusing rejected bytes, and a late handled failure still does not forfeit hours of earlier phases.
+  An abrupt interruption leaves no marker, so the next run compiles fresh; crash-resume of partial progress is deliberately not promised.
 - The reserved `slc` meta-pipeline and `-o` invocations neither consult nor write history (reviewed-bundle purity under [DR-007](007-slc-phase-artifact-pinning.md); [DR-014](014-cwd-output-invocation-defaults-entry-emission.md)'s `-o` carve-outs).
   Single-phase, standalone-pass, and direct-link invocations are likewise outside history; the next full run absorbs whatever they changed through ordinary input comparison.
 - The source copy makes the bundle at least as sensitive as its source; distribution and retention policy must treat it so.
@@ -52,7 +54,7 @@ On a full or full-link run, `slc` walks the scheduled chain in order, matching h
 - Link steps reuse or run in full; they take no update context.
 - Pin validation ([DR-007](007-slc-phase-artifact-pinning.md)) precedes selection; recorded output never makes a stale or malformed pin runnable.
 - Executor provenance — interpreted versus compiled, package versions — selects how a step runs, never whether: it does not enter input identity.
-- When every step is reused, `slc` reports the bundle up to date, invokes no agent, and writes nothing; entry and verification derivation run only on runs that execute a step.
+- When every step is reused, `slc` reports the bundle up to date, invokes no agent, and rewrites no chain artifact or history; deterministic entry and verification derivation still runs on every successful invocation, so an all-reuse run restores a missing or drifted derivative.
 
 ### Update execution
 
@@ -63,7 +65,7 @@ On a full or full-link run, `slc` walks the scheduled chain in order, matching h
   There is no update contract in definitions, no trace, no protected-region enforcement, and no metadata beyond the ordinary result: update context is an optimization hint, and acceptance authority is identical to ordinary execution.
 - Interpreted execution renders the context in its prompt.
   Compiled execution receives the same text appended to transformation-performing Player and Captain prompts; the Boss request and the Playbook runtime contract are unchanged, and an artifact that ignores the hint still produces a valid fresh output.
-- When either side exceeds the host's diff budget, the context supplies the prior-input path without a rendered diff.
+- When the rendered diff would exceed the host's budget, or the byte change sits below line resolution, the context supplies the prior-input path without a rendered diff.
 
 ### Rebuild
 
@@ -75,11 +77,11 @@ On a full or full-link run, `slc` walks the scheduled chain in order, matching h
 
 ## Consequences
 
-- An unchanged repeat invocation is a no-op: `up to date`, no agent cost, no writes.
+- An unchanged repeat invocation reports `up to date` with no agent cost and no chain-artifact or history writes.
 - A small source edit updates only its affected phases; steps whose recomputed inputs still match are reused, and manual refinements survive as the baseline the agent updates.
 - Byte stability outside changed regions is the agent's responsibility, not host-enforced: deterministic scoped-update machinery — per-definition update contracts, trace partitions, protected-byte enforcement — is rejected as disproportionate.
   `--rebuild` and the retained build copies are the recovery path.
 - An input the identities do not cover (content a definition reads beyond its declared semantic inputs) can change without invalidating reuse; `--rebuild` is the documented remedy.
 - History grows the bundle by one source-plus-artifacts copy set per recorded build; users may prune old builds or delete `.slc/` freely.
 - A same-basename source collision rebinds history with a diagnostic instead of conflicting; the prior lineage remains under `.slc/builds/`.
-- An interrupted run leaves ordinary partial outputs exactly as full compilation always has; `latest` still names the prior complete build.
+- An interrupted run leaves ordinary partial outputs exactly as full compilation always has, and no `latest`: the next run compiles fresh rather than resuming interrupted progress.

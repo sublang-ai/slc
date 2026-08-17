@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Integration acceptance for incremental compilation (INCR-18..26), driven by
+ * Integration acceptance for incremental compilation (INCR-18..27), driven by
  * fixture pipelines and counting fixture agents — no live model calls.
  */
 
@@ -218,7 +218,7 @@ describe('INCR-20: a changed source updates the affected step and reuses the res
     expect(call.prompt).toContain('+prose v2');
     // The target still held the previously accepted output when the agent ran.
     expect(call.priorTarget).toBe('output\n');
-    // The run recorded build 2 with both steps.
+    // One final build per orderly run: 1 then 2.
     const history = await loadBuildHistory(artDir);
     expect(history?.build).toBe(2);
     expect(history?.manifest.steps).toHaveLength(2);
@@ -385,12 +385,13 @@ describe('INCR-23: a failed run keeps completed work', () => {
     expect(failed.ok).toBe(false);
     expect(failingCalls).toHaveLength(2);
 
-    // The failed run still recorded: fresh text2gears, carried gears2fsm.
+    // The failed run still recorded the completed step; the failed step's
+    // record is dropped so nothing vouches for what its executor may have
+    // left at the target.
     const history = await loadBuildHistory(artDir);
     expect(history?.build).toBe(2);
     expect(history?.manifest.steps.map((step) => step.name)).toEqual([
       'text2gears',
-      'gears2fsm',
     ]);
     expect(history?.manifest.steps[0].output).toBe(
       hashBytes(Buffer.from('gears v2\n')),
@@ -402,6 +403,283 @@ describe('INCR-23: a failed run keeps completed work', () => {
     expect(resumed.ok).toBe(true);
     expect(thirdCalls).toHaveLength(1);
     expect(thirdCalls[0].prompt).toContain('onboarding.fsm.ts');
+  });
+
+  it('re-executes a step whose failed run wrote its target (INCR-6)', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // The fsm target vanishes, so the step executes despite matching inputs;
+    // its executor writes rejected bytes and then fails.
+    await rm(join(artDir, 'onboarding.fsm.ts'));
+    const failing: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match) await writeFile(match[1].trim(), 'rejected bytes\n');
+        return { status: 'error', text: 'agent failed after writing' };
+      },
+    };
+    const failed = await runSlc(['flow', source], deps(failing));
+    expect(failed.ok).toBe(false);
+
+    // The retry must re-execute the step instead of reusing the rejected
+    // bytes and reporting up to date.
+    const { agent: third, calls } = makeAgent();
+    const resumed = await runSlc(['flow', source], deps(third));
+    expect(resumed.ok).toBe(true);
+    expect(resumed.outcome).toBeUndefined();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].prompt).toContain('onboarding.fsm.ts');
+    expect(await readFile(join(artDir, 'onboarding.fsm.ts'), 'utf8')).toBe(
+      'output\n',
+    );
+  });
+});
+
+describe('INCR-29: no interruption leaves a record for a touched step', () => {
+  it('leaves history absent when the only step fails after writing', async () => {
+    // A single-phase pipeline: the failure leaves zero recordable steps.
+    await rm(join(pipelineDir, 'gears2fsm.md'));
+    await rm(join(pipelineDir, 'link.md'));
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await rm(join(artDir, 'onboarding.gears.md'));
+    const failing: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match) await writeFile(match[1].trim(), 'rejected bytes\n');
+        return { status: 'error', text: 'agent failed after writing' };
+      },
+    };
+    expect((await runSlc(['flow', source], deps(failing))).ok).toBe(false);
+
+    // The failed run must not leave the old record active: with nothing
+    // recordable, absence itself says nothing is vouched for.
+    expect(await loadBuildHistory(artDir)).toBeNull();
+    const { agent: third, calls } = makeAgent();
+    const resumed = await runSlc(['flow', source], deps(third));
+    expect(resumed.ok).toBe(true);
+    expect(resumed.outcome).toBeUndefined();
+    expect(calls).toHaveLength(1);
+    expect(await readFile(join(artDir, 'onboarding.gears.md'), 'utf8')).toBe(
+      'output\n',
+    );
+  });
+
+  it('drops every record when a --rebuild fails at its first step', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    const failing: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match) await writeFile(match[1].trim(), 'rejected bytes\n');
+        return { status: 'error', text: 'agent failed after writing' };
+      },
+    };
+    expect(
+      (await runSlc(['flow', source, '--rebuild'], deps(failing))).ok,
+    ).toBe(false);
+
+    expect(await loadBuildHistory(artDir)).toBeNull();
+    const { agent: third, calls } = makeAgent();
+    const resumed = await runSlc(['flow', source], deps(third));
+    expect(resumed.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('leaves history absent after a rebound run fails', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // Compiling a different same-basename source into the same bundle and
+    // failing must not leave the old source's records active: a later run
+    // with the original source would otherwise reuse the rebound leavings.
+    const otherDir = join(root, 'other');
+    await mkdir(otherDir);
+    const other = join(otherDir, 'onboarding.md');
+    await writeFile(other, 'different prose\n');
+    const failing: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match) await writeFile(match[1].trim(), 'rejected bytes\n');
+        return { status: 'error', text: 'agent failed after writing' };
+      },
+    };
+    expect((await runSlc(['flow', other], deps(failing))).ok).toBe(false);
+
+    expect(await loadBuildHistory(artDir)).toBeNull();
+    const { agent: third, calls } = makeAgent();
+    const resumed = await runSlc(['flow', source], deps(third));
+    expect(resumed.ok).toBe(true);
+    expect(resumed.outcome).toBeUndefined();
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it('invalidates durably before the first executor runs', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    // The executing agent inspects the published history mid-flight: the
+    // durable state must already vouch for nothing this run may change.
+    const seen: boolean[] = [];
+    const inspecting: AgentClient = {
+      run: async ({ prompt }) => {
+        seen.push((await loadBuildHistory(artDir)) === null);
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match) await writeFile(match[1].trim(), 'output\n');
+        return { status: 'success', text: 'wrote the artifact' };
+      },
+    };
+    expect((await runSlc(['flow', source], deps(inspecting))).ok).toBe(true);
+    expect(seen[0]).toBe(true);
+  });
+});
+
+describe('INCR-28: every result-affecting input enters the identity', () => {
+  it('derives declared inputs through the recorded pin path boundary', async () => {
+    await writeFile(join(root, 'shared-rules.md'), 'rules v1\n');
+    await writeFile(
+      join(pipelineDir, 'text2gears.md'),
+      `${formats('text', '.md', 'gears', '.md')}\n## Pin Inputs\n\n- \`../shared-rules.md\`\n`,
+    );
+    await writeFile(
+      join(pipelineDir, PINS_FILE),
+      JSON.stringify({
+        schema: PIN_SCHEMA,
+        hashAlgorithm: PIN_HASH_ALGORITHM,
+        pathBoundary: { path: '..' },
+        pins: {},
+      }),
+    );
+
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+    const history = await loadBuildHistory(artDir);
+    // Chained input + definition + the boundary-resolved declared input.
+    expect(history?.manifest.steps[0].inputs).toHaveLength(3);
+
+    await writeFile(join(root, 'shared-rules.md'), 'rules v2\n');
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+    expect(result.ok).toBe(true);
+    expect(result.outcome).toBeUndefined();
+    expect(calls[0].prompt).toContain('Incremental update');
+  });
+
+  it('re-links when the link target relocates with identical bytes', async () => {
+    const runner = join(srcDir, 'runner.ts');
+    await writeFile(runner, 'export default {};\n');
+    const first = makeAgent({
+      content: { 'onboarding.run.ts': 'export {};\n' },
+    });
+    expect(
+      (await runSlc(['flow', source, '--link', runner], deps(first.agent))).ok,
+    ).toBe(true);
+
+    const moved = join(srcDir, 'moved', 'runner.ts');
+    await mkdir(join(srcDir, 'moved'));
+    await writeFile(moved, 'export default {};\n');
+    await rm(runner);
+    const { agent: second, calls } = makeAgent({
+      content: { 'onboarding.run.ts': 'export {};\n' },
+    });
+    const result = await runSlc(
+      ['flow', source, '--link', moved],
+      deps(second),
+    );
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].prompt).toContain('link target module');
+  });
+
+  it('distinguishes option lists no value can make ambiguous', async () => {
+    const runner = join(srcDir, 'runner.ts');
+    await writeFile(runner, 'export default {};\n');
+    const first = makeAgent({
+      content: { 'onboarding.run.ts': 'export {};\n' },
+    });
+    expect(
+      (
+        await runSlc(
+          ['flow', source, '--link', runner, '--link-option', 'a=1\nb=2'],
+          deps(first.agent),
+        )
+      ).ok,
+    ).toBe(true);
+
+    // Under a newline-joined encoding this second list collides with the
+    // first; the link must execute, not reuse.
+    const { agent: second, calls } = makeAgent({
+      content: { 'onboarding.run.ts': 'export {};\n' },
+    });
+    const result = await runSlc(
+      [
+        'flow',
+        source,
+        '--link',
+        runner,
+        '--link-option',
+        'a=1',
+        '--link-option',
+        'b=2',
+      ],
+      deps(second),
+    );
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].prompt).toContain('link target module');
+  });
+
+  it('re-runs normalization when its reference definition changes', async () => {
+    const raw = join(srcDir, 'onboarding.txt');
+    await writeFile(raw, 'prose\n');
+    const { agent } = makeAgent();
+    const first = await runSlc(['flow', raw], deps(agent));
+    expect(first.ok).toBe(true);
+
+    await writeFile(
+      join(pipelineDir, 'text2gears.md'),
+      `${formats('text', '.md', 'gears', '.md')}\nRewrite tersely.\n`,
+    );
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(['flow', raw], deps(second));
+    expect(result.ok).toBe(true);
+    // Normalization re-runs because its reference (the entry definition)
+    // changed, even though its own chained input did not.
+    expect(calls[0].prompt).toContain('onboarding.text.md');
+    expect(calls[0].prompt).toContain('byte-identical');
+  });
+});
+
+describe('PHEXEC-39: output boundary', () => {
+  it('refuses a plan whose -o output is the invocation source', async () => {
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', source, '-o', source], deps(agent));
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('refusing to overwrite it');
+    expect(await readFile(source, 'utf8')).toBe('prose\n');
+  });
+
+  it('never reuses or overwrites a target replaced by a symlink', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    const innocent = join(srcDir, 'innocent.txt');
+    await writeFile(innocent, 'innocent bytes\n');
+    await rm(join(artDir, 'onboarding.gears.md'));
+    const { symlink } = await import('node:fs/promises');
+    await symlink(innocent, join(artDir, 'onboarding.gears.md'));
+
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('symbolic link');
+    expect(await readFile(innocent, 'utf8')).toBe('innocent bytes\n');
   });
 });
 
@@ -555,6 +833,80 @@ describe('INCR-26: source rebinding and changed link inputs', () => {
     const history = await loadBuildHistory(artDir);
     expect(history?.build).toBe(2);
     expect(history?.manifest.source.path).toBe('../../other/onboarding.md');
+  });
+
+  it('re-links when the link definition changes (INCR-12)', async () => {
+    const runner = join(srcDir, 'runner.ts');
+    await writeFile(runner, 'export default {};\n');
+    const first = makeAgent({
+      content: { 'onboarding.run.ts': 'export {};\n' },
+    });
+    expect(
+      (await runSlc(['flow', source, '--link', runner], deps(first.agent))).ok,
+    ).toBe(true);
+
+    await writeFile(
+      join(pipelineDir, 'link.md'),
+      `${linkDoc}\nLink objects in reverse order.\n`,
+    );
+    const { agent: second, calls } = makeAgent({
+      content: { 'onboarding.run.ts': 'export {};\n' },
+    });
+    const result = await runSlc(
+      ['flow', source, '--link', runner],
+      deps(second),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].prompt).toContain('link target module');
+  });
+
+  it('reports only written paths for a mixed run (CLI-3)', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    const { agent: second } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+
+    expect(result.ok).toBe(true);
+    // text2gears re-executed and was written; gears2fsm was reused and is
+    // not reported as written.
+    expect(result.outputs).toEqual([join(artDir, 'onboarding.gears.md')]);
+  });
+
+  it('never reuses a phase whose declared closure cannot be derived (INCR-12)', async () => {
+    await writeFile(
+      join(pipelineDir, 'text2gears.md'),
+      `${formats('text', '.md', 'gears', '.md')}\n## Pin Inputs\n\n- \`/absolute/escape.md\`\n`,
+    );
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // The malformed declaration keeps the phase unidentifiable: it executes
+    // ordinarily on every run instead of silently shrinking its identity.
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+    expect(result.ok).toBe(true);
+    expect(result.outcome).toBeUndefined();
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls[0].prompt).not.toContain('Incremental update');
+  });
+
+  it('supplies no rendered diff for a change below line resolution (INCR-14)', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // Remove only the trailing newline: bytes differ, lines do not.
+    await writeFile(source, 'prose');
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+
+    expect(result.ok).toBe(true);
+    expect(calls[0].prompt).toContain('could not be rendered as a line diff');
+    expect(calls[0].prompt).not.toContain('byte-identical');
+    expect(calls[0].prompt).not.toContain('BEGIN INPUT DIFF');
   });
 
   it('runs a link step in full when its inputs changed', async () => {

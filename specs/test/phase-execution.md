@@ -32,7 +32,7 @@ Where every phase is interpreted, when the slc command runs a full pipeline whos
 ### PHEXEC-17
 Verifies: [PHEXEC-4](../dev/phase-execution.md#phexec-4), [PHEXEC-9](../dev/phase-execution.md#phexec-9), [COMPILE-4](../user/compiler.md#compile-4)
 
-While interpreting a phase, when the agent finishes without writing the declared target or writes a file whose extension differs from the declared one, the slc command shall stop the pipeline and emit a failure report naming the phase and target.
+While interpreting a phase, when the agent finishes without writing the declared target — including a pre-existing target it left untouched — or writes a file whose extension differs from the declared one, the slc command shall stop the pipeline and emit a failure report naming the phase and target, whereas a byte-identical rewrite of a pre-existing target shall pass.
 
 ### PHEXEC-18
 Verifies: [PHEXEC-3](../dev/phase-execution.md#phexec-3), [PHEXEC-5](../dev/phase-execution.md#phexec-5), [PHEXEC-6](../dev/phase-execution.md#phexec-6), [COMPILE-4](../user/compiler.md#compile-4)
@@ -86,6 +86,11 @@ Where a compiled fixture runtime emits status and operational telemetry mid-turn
 Verifies: [PHEXEC-36](../dev/phase-execution.md#phexec-36), [PHEXEC-12](../dev/phase-execution.md#phexec-12)
 
 Where a faked agent transport yields an initial event and then stalls under a short configured stall timeout, when a phase runs through the transport, the slc command shall abort the stalled call once the timeout elapses, map it to a failed call whose diagnostic carries the inactivity duration, and make no additional agent invocation; whereas where the aborted transport still yields a successful terminal event within the post-abort drain, the slc command shall report that success rather than a stall.
+
+### PHEXEC-40
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
+
+Where a compile target is the source path itself, a symbolic link, or a hard link of the source, or `-o` names the invocation source, when the run starts, the slc command shall fail before invoking any executor with a reason naming the conflict and shall leave the source bytes unchanged; where a phase reports success but its target is a directory or other non-regular file, the run shall fail; where a recorded target was replaced by a symbolic link, the run shall neither reuse it nor write through it; and where a deterministic derivative's output path was replaced by a symbolic link or hard link, re-derivation shall refuse the write and leave the destination unchanged.
 
 ### PHEXEC-35
 Verifies: [PHEXEC-34](../dev/phase-execution.md#phexec-34)

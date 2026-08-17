@@ -27,17 +27,17 @@ When the slc command records a build, it shall choose a build number greater tha
 
 ### INCR-12
 
-When a full or full-link run walks its scheduled steps, the slc command shall compute each compile step's input identities as the exact bytes of its chained input (the invocation source for the first step, the predecessor's current target otherwise), its definition file, and its declared semantic inputs in declaration order, and each link step's as its object artifacts in order, its link target identity, and its options as canonical `name=value` pairs.
+When a history-eligible full or full-link run ([INCR-8](../user/incremental-compilation.md#incr-8)) walks its scheduled steps, the slc command shall compute, over the invocation's canonical absolute paths, each compile step's input identities as the exact bytes of its chained input (the invocation source for the first step, the predecessor's current target otherwise), its definition file, its references, and its declared semantic inputs in declaration order, and each link step's as its object artifacts in order, its link definition and declared semantic inputs, its link target's artifact-directory-relative locator and content identity (file bytes, or the deterministic tree for a directory), and its options under an encoding no option values can make ambiguous; declared closures shall resolve within the pin file's validated path boundary when one exists, and a step whose declared closure cannot be derived shall execute ordinarily rather than shrink its identity.
 
 ### INCR-13
 
-When selecting a step's mode, the slc command shall match records by kind, name, and target path, and shall select reuse only when every recorded input identity equals the current identity and the target file exists; update only for a compile step whose matched record has an intact prior-input copy while the target file exists; and ordinary execution otherwise or under `--rebuild`, with pin validation preceding every mode so a stale or malformed pin fails closed regardless of history.
+When selecting a step's mode on a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)), the slc command shall match records by kind, name, and target path, and shall select reuse only when every recorded input identity equals the current identity and the target file exists; update only for a compile step whose matched record has an intact prior-input copy while the target file exists; and ordinary execution otherwise or under `--rebuild`, with pin validation preceding every mode so a stale or malformed pin fails closed regardless of history.
 
 ## Update context
 
 ### INCR-14
 
-When a compile step executes in update mode, the slc command shall extend the execution request with the prior-input copy path and a host-computed unified line diff of prior to current input — omitting the rendered diff when either side exceeds the host's size budget — and shall protect the prior-input copy from executor writes like a reference input.
+When a compile step executes in update mode, the slc command shall extend the execution request with the prior-input copy path and a host-computed best-effort unified line diff of prior to current input — omitted when the host cannot produce a useful rendering, the current and prior files remaining authoritative — and shall protect the prior-input copy from executor writes like a reference input.
 
 ### INCR-15
 
@@ -47,8 +47,12 @@ Where a step executes in update mode, when the executor prompt is built, interpr
 
 ### INCR-16
 
-When a full or full-link run at canonical output of a non-reserved pipeline finishes having executed at least one step, the slc command shall record every scheduled step — executed steps and reused steps from their current on-disk bytes, and, on failure, steps not completed from their prior records carried forward, except under `--rebuild`, which consults no prior records and records only completed steps — and shall copy the source and each recorded step's output into the build directory.
+When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) finishes in an orderly way after invalidating ([INCR-30](#incr-30)), the slc command shall publish at most one new build — executed and reused steps recorded from their current on-disk bytes, unreached steps carried forward from the in-memory prior records (none under `--rebuild`), and no record for a touched step without a recordable completion — copying the source and each recorded step's output into the build directory; with nothing recordable it shall leave history absent.
+
+### INCR-30
+
+When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) is about to run its first executor, the slc command shall have removed `.slc/latest`, treating absence as success and failing the run before that executor when an active marker cannot be removed, so that an interruption at any later point leaves history absent rather than a record vouching for a target an executor may have changed.
 
 ### INCR-17
 
-While recorded history names a source path other than the invocation's, when a full run starts, the slc command shall report the rebind as a diagnostic, treat history as absent, and record a fresh build on success.
+While recorded history names a source path other than the invocation's, when a history-eligible full run ([INCR-8](../user/incremental-compilation.md#incr-8)) starts, the slc command shall report the rebind as a diagnostic, treat history as absent, and record a fresh build on success.

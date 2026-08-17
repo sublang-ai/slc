@@ -43,7 +43,7 @@ While executing, the executing phase shall write only its declared target or lin
 
 ### PHEXEC-4
 
-When a phase finishes, the slc command shall verify that the expected target artifact exists and that its extension matches the declared target extension ([DR-003](../decisions/003-slc-phase-execution.md#generic-checks)).
+When a phase finishes, the slc command shall verify that the expected target artifact exists, that its extension matches the declared target extension, and that the executor wrote it during this run — a pre-existing target left untouched by a textually successful executor fails, on either transport ([DR-003](../decisions/003-slc-phase-execution.md#generic-checks)).
 
 ### PHEXEC-5
 
@@ -140,6 +140,10 @@ Where a compile execution request carries read-only reference documents — e.g.
 ### PHEXEC-34
 
 Where a `composed-v2` compiled phase makes a transformation-performing direct Captain call — one whose source-owned options carry no `allowedTools` property ([PHEXEC-31](#phexec-31)) — the slc command shall append the host workspace contract to the prompt it transports: the request's workspace inputs and artifact-to-write path resolved to absolute host paths ([PHEXEC-29](#phexec-29)) and the interpreted contract's write-scope rules ([PHEXEC-14](#phexec-14)), because the linked artifact composes only host-agnostic prompts while the host alone owns workspace specifics; the appended contract shall carry no guard names, result-property schema, or adjudicator instructions, and a routing-only Captain call (explicitly empty `allowedTools`) and every hidden judge call shall cross with their composed prompts unchanged ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract), [DR-012](../decisions/012-playbook-routing-control-separation.md#routing-authority-and-presentation-ownership)).
+
+### PHEXEC-39
+
+When a run is planned, the slc command shall resolve every filesystem operand against the invocation working directory once and use those canonical paths for identity, protection, prompts, and history; shall refuse a plan whose outputs collide or physically alias an input no earlier step produces; and shall refuse to invoke an executor while the target is a symbolic link or other non-regular file, is physically the same file as any protected path — the request's inputs, the chain definitions, the declared semantic inputs, the plan's immutable inputs, and every earlier product — or lies inside a protected directory, failing with a reason naming the conflict; reuse likewise accepts only a safe regular target, and every host-owned deterministic write goes through one writer that refuses a symbolic-link or multi-link leaf before truncating ([DR-003](../decisions/003-slc-phase-execution.md), [DR-021](../decisions/021-incremental-compilation.md)).
 
 ## Agent-call watchdog
 

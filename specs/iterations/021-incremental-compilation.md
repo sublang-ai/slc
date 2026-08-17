@@ -30,8 +30,14 @@ Tasks are ordered; each numbered task shall land as exactly one commit that also
 ## Acceptance criteria
 
 - Every task is one commit, and no implementation commit precedes the spec contract it implements.
-- A repeated unchanged invocation reports `up to date` with zero executor invocations and zero writes.
+- A repeated unchanged invocation reports `up to date` with zero executor invocations, rewriting nothing beyond re-derived deterministic derivatives.
 - A changed source triggers update-mode execution whose request carries the prior input and diff; unaffected steps are reused byte-for-byte, including hand-refined outputs.
 - Corrupt or missing history never fails a run; failed runs keep completed-step progress; `--rebuild` bypasses reuse but never pin validation.
 - `-o`, reserved `slc`, and partial invocation forms stay outside history, and the reviewed self-host bundle keeps its pinned fixed point.
 - Fixture pipelines cover the acceptance without live model calls, and `npm run release:check` passes before the iteration closes.
+
+## Review
+
+A post-close review (reviewer: GPT-5.6 Sol) converged on two foundational corrections, landed as two hardening commits over the eight-commit rewrite.
+The first hardens history and identity: `.slc/latest` is the sole currentness marker, removed before the first executor and republished once per orderly run, so no failure, crash, rebind, or recording fault can leave a record vouching for touched targets; identities cover declared closures through the pin path boundary, link definitions, link-target locator and content, references, and unambiguous options; the diff is best-effort and bounded by its rendered size.
+The second establishes one canonical-path, regular-file output boundary: every operand resolves once against the invocation directory, plans refuse colliding or input-aliasing outputs, executors must produce a regular file they actually wrote, reuse accepts only safe regular targets, and all deterministic writes go through one no-follow, no-hard-link writer, with the raw-`.ts` entry/source collision skipped and reported.

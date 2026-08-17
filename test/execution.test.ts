@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import {
+  link,
   mkdir,
   mkdtemp,
   readFile,
@@ -112,6 +113,71 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
       expect(
         result.report.reasons.some((r) => r.includes('changed during the run')),
       ).toBe(true);
+  });
+
+  it.each([
+    [
+      'a symbolic-link alias of the source',
+      async (): Promise<string> => {
+        const target = join(dir, 'onboarding.gears.md');
+        await symlink(join(dir, 'onboarding.md'), target);
+        return target;
+      },
+    ],
+    [
+      'a hard-link alias of the source',
+      async (): Promise<string> => {
+        const target = join(dir, 'onboarding.gears.md');
+        await link(join(dir, 'onboarding.md'), target);
+        return target;
+      },
+    ],
+    [
+      'the source path itself',
+      async (): Promise<string> => join(dir, 'onboarding.md'),
+    ],
+  ])(
+    'refuses %s as a target before the executor runs (PHEXEC-39)',
+    async (_name, arrange) => {
+      const aliasTarget = await arrange();
+      let invoked = false;
+      const result = await runPhase({
+        request: { ...request, target: aliasTarget },
+        phase: 'text2gears',
+        targetExt: '.md',
+        executor: executor(() => {
+          invoked = true;
+          return { status: 'ok', diagnostics: [] };
+        }),
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.report.reasons[0]).toContain('refusing to');
+      }
+      expect(invoked).toBe(false);
+      // The source survives byte-for-byte.
+      expect(await readFile(join(dir, 'onboarding.md'), 'utf8')).toBe('source');
+    },
+  );
+
+  it('fails when a pre-existing target is not rewritten (PHEXEC-4, PHEXEC-17)', async () => {
+    await writeFile(request.target, 'stale output');
+    const result = await run(
+      executor(() => ({ status: 'ok', diagnostics: [] })),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(
+        result.report.reasons.some((r) =>
+          r.includes('was not written by this run'),
+        ),
+      ).toBe(true);
+  });
+
+  it('accepts a byte-identical rewrite of a pre-existing target', async () => {
+    await writeFile(request.target, 'output');
+    const result = await run(writingExecutor('output'));
+    expect(result.ok).toBe(true);
   });
 
   it('protects the update-mode prior input like a reference (INCR-14)', async () => {
