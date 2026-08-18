@@ -45,7 +45,11 @@ and this project adheres to
   detected only after the input was overwritten; deterministic
   derivatives refuse to write through symbolic links, and a raw `.ts`
   source named like the runnable entry is reported and left untouched
-  instead of being overwritten by entry emission.
+  instead of being overwritten by entry emission. The refusal covers
+  everything the run writes and reads — the runnable entry, the
+  emitted verification files, the pin index, and the reserved
+  `.slc`/`.slc-verify` directories — and a phase that swaps a
+  protected file for byte-identical content still fails.
 - **A phase cannot succeed without producing its artifact.** A
   textually successful executor that left a pre-existing target
   untouched now fails the phase on both transports, so update mode can

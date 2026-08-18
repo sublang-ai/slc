@@ -27,7 +27,7 @@ While a recorded build matches the current source and artifacts, when the same i
 
 Verifies: [INCR-4](../user/incremental-compilation.md#incr-4), [INCR-5](../user/incremental-compilation.md#incr-5), [INCR-14](../dev/incremental-compilation.md#incr-14)
 
-While a recorded build exists, when the source changes and the run repeats, the first affected step's executor shall receive the prior-input copy path holding the recorded bytes and a diff naming the change while its target file still holds the prior output, and downstream steps whose executed predecessors reproduce byte-identical output shall be skipped.
+While a recorded build exists, when the source changes and the run repeats, the first affected step's executor shall receive the prior-input copy path holding the recorded bytes and a best-effort diff naming the change while its target file still holds the prior output, and downstream steps whose executed predecessors reproduce byte-identical output shall be skipped.
 
 ### INCR-21
 
@@ -81,7 +81,7 @@ When a failure leaves zero recordable steps — including a `--rebuild` or a reb
 
 Verifies: [INCR-3](../user/incremental-compilation.md#incr-3), [INCR-30](../dev/incremental-compilation.md#incr-30)
 
-When `.slc` is a file or `.slc/latest` is a directory or symbolic link, the run shall compile fresh and succeed, reporting the blocked recording as an actionable diagnostic rather than an error.
+When `.slc` is a file or `.slc/latest` is a directory, the run shall compile fresh and succeed, reporting the blocked recording as an actionable diagnostic rather than an error; when `.slc/latest` is a symbolic link, the run shall remove it as a stale marker and record fresh history.
 
 ### INCR-33
 

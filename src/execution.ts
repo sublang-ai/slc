@@ -135,6 +135,11 @@ export interface FailureReport {
   phase: string;
   target: string;
   reasons: string[];
+  /**
+   * Protected paths observed changed during the run — rejected work whose
+   * results must never be recorded or carried as trusted (INCR-34).
+   */
+  changedPaths?: string[];
 }
 
 /** The result of a generic-checked phase run. */
@@ -231,8 +236,10 @@ export async function runPhase(opts: {
   // a mutation is caught even when the executor blocks, errors, or throws
   // (PHEXEC-5, PHEXEC-6).
   const after = await snapshot(protectedPaths);
+  const changedPaths: string[] = [];
   for (const path of protectedPaths) {
     if (before.get(path) !== after.get(path)) {
+      changedPaths.push(path);
       reasons.push(`protected path "${path}" changed during the run`);
     }
   }
@@ -246,7 +253,11 @@ export async function runPhase(opts: {
   }
 
   if (reasons.length > 0) {
-    return failure(phase, target, reasons);
+    const report = failure(phase, target, reasons);
+    if (!report.ok && changedPaths.length > 0) {
+      report.report.changedPaths = changedPaths;
+    }
+    return report;
   }
   return { ok: true, target, diagnostics: result?.diagnostics ?? [] };
 }
@@ -419,7 +430,12 @@ async function followedPathIdentity(path: string): Promise<string> {
 }
 
 async function identityForInfo(path: string, info: Stats): Promise<string> {
-  if (info.isFile()) return `file:${await fileDigest(path)}`;
+  if (info.isFile()) {
+    // Content alone is not identity: a hard-link swap to byte-identical
+    // content changes what the path IS without changing what it says
+    // (PHEXEC-39).
+    return `file:${info.ino}:${info.nlink}:${await fileDigest(path)}`;
+  }
   if (info.isDirectory()) return `directory:${await treeDigest(path)}`;
   return `other:${info.mode}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
 }

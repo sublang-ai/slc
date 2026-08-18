@@ -21,7 +21,7 @@ Where a history-eligible invocation ([INCR-8](#incr-8)) finds recorded history w
 
 ### INCR-3
 
-Where the history store is missing or malformed, when the user runs a history-eligible full pipeline ([INCR-8](#incr-8)), the slc command shall execute as a first compile without failing on the bad history and shall record fresh history on success; a recorded copy that no longer matches its hash shall disable only the update that depended on it.
+Where the history store is missing or malformed, when the user runs a history-eligible full pipeline ([INCR-8](#incr-8)), the slc command shall execute as a first compile without failing on the bad history and shall record fresh history on success where the reserved `.slc` path permits recording, reporting a blocked path as a diagnostic; a recorded copy that no longer matches its hash shall disable only the update that depended on it.
 
 ## Reuse and update
 
