@@ -16,7 +16,8 @@ and this project adheres to
 - **Incremental compilation.** A full or full-link compile at its
   canonical output that runs any phase records a numbered build under
   `<artifact-dir>/.slc/` — a manifest plus verbatim copies of the
-  source and every phase output. An
+  source and the phase outputs it accepted; failed or rejected work is
+  never recorded. An
   unchanged repeat prints `up to date` and calls no agent; after a
   source edit, each affected phase's agent receives the prior input, a
   best-effort unified diff, and the existing output to update in place, while

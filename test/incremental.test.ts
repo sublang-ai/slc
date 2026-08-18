@@ -683,6 +683,60 @@ describe('PHEXEC-39: output boundary', () => {
   });
 });
 
+describe('INCR-34: rejected mutations never publish', () => {
+  it('omits a completed target a later failing executor changed', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    // gears updates cleanly; the fsm executor mutates the completed gears
+    // product and is rejected — the mutated bytes must not publish under
+    // the gears step's accepted inputs.
+    const sabotaging: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        const target = match ? match[1].trim() : '';
+        await writeFile(target, 'fresh output\n');
+        if (target.endsWith('onboarding.fsm.ts')) {
+          await writeFile(join(artDir, 'onboarding.gears.md'), 'mutated\n');
+        }
+        return { status: 'success', text: 'wrote' };
+      },
+    };
+    const failed = await runSlc(['flow', source], deps(sabotaging));
+    expect(failed.ok).toBe(false);
+    expect(failed.diagnostics.join('\n')).toContain('changed during the run');
+
+    // Nothing recordable survived: the mutated completed target is omitted
+    // at publication and the failing step never records, so no step is
+    // vouched for and the retry re-executes both.
+    const history = await loadBuildHistory(artDir);
+    expect(history?.manifest.steps ?? []).toEqual([]);
+    const { agent: third, calls } = makeAgent();
+    expect((await runSlc(['flow', source], deps(third))).ok).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('rejects an executor that writes a future planned target', async () => {
+    const greedy: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        const target = match ? match[1].trim() : '';
+        await writeFile(target, 'output\n');
+        if (target.endsWith('onboarding.gears.md')) {
+          await writeFile(join(artDir, 'onboarding.fsm.ts'), 'premature\n');
+        }
+        return { status: 'success', text: 'wrote' };
+      },
+    };
+    const result = await runSlc(['flow', source], deps(greedy));
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('changed during the run');
+    // The prematurely written future target has no record to vouch for it.
+    expect(await loadBuildHistory(artDir)).toBeNull();
+  });
+});
+
 describe('PHEXEC-39: plan-wide protection and canonical cwd', () => {
   it('refuses -o naming a declared semantic input, with zero executor calls', async () => {
     await mkdir(join(pipelineDir, 'reference'));
@@ -721,6 +775,100 @@ describe('PHEXEC-39: plan-wide protection and canonical cwd', () => {
     expect(result.diagnostics.join('\n')).toContain('same file');
   });
 
+  it('refuses -o naming the built-in normalize definition, with zero calls', async () => {
+    const { normalizeDefinitionPath } = await import('../src/runner.js');
+    const raw = join(srcDir, 'onboarding.txt');
+    await writeFile(raw, 'prose\n');
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', raw, '-o', normalizeDefinitionPath()],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('protected input');
+  });
+
+  it('refuses -o naming a pinned compiled artifact, with zero calls', async () => {
+    const bundleDir = join(pipelineDir, 'text2gears.slc');
+    await mkdir(bundleDir);
+    for (const name of [
+      'text2gears.playbook.ts',
+      'text2gears.fsm.ts',
+      'text2gears.gears.md',
+      'text2gears.gears-fsm.test.ts',
+      'text2gears.fsm.introspect.test.ts',
+      'text2gears.prompt-contract.test.ts',
+      'text2gears.fsm.coverage.test.ts',
+    ]) {
+      await writeFile(join(bundleDir, name), `fixture: ${name}\n`);
+    }
+    await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target bytes\n');
+    const record: PinRecord = {
+      definition: {
+        path: 'text2gears.md',
+        hash: await hashFile(join(pipelineDir, 'text2gears.md')),
+      },
+      artifact: {
+        path: 'text2gears.slc/text2gears.playbook.ts',
+        hash: await hashFile(join(bundleDir, 'text2gears.playbook.ts')),
+      },
+      artifactBundle: {
+        path: 'text2gears.slc',
+        hash: await hashTree(bundleDir),
+      },
+      semanticInputs: [],
+      externalInputs: [],
+      runtimeDependencies: [],
+      linkTarget: {
+        kind: 'file',
+        locator: 'linktarget.ts',
+        identity: await hashFile(join(pipelineDir, 'linktarget.ts')),
+      },
+    };
+    await writeFile(
+      join(pipelineDir, PINS_FILE),
+      JSON.stringify({
+        schema: PIN_SCHEMA,
+        hashAlgorithm: PIN_HASH_ALGORITHM,
+        pathBoundary: { path: '.' },
+        pins: { text2gears: record },
+      }),
+    );
+
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', source, '-o', join(bundleDir, 'text2gears.playbook.ts')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('protected input');
+    expect(
+      await readFile(join(bundleDir, 'text2gears.playbook.ts'), 'utf8'),
+    ).toBe('fixture: text2gears.playbook.ts\n');
+  });
+
+  it('refuses an unsafe later destination before any executor', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    const innocent = join(srcDir, 'innocent.txt');
+    await writeFile(innocent, 'innocent bytes\n');
+    await rm(join(artDir, 'onboarding.fsm.ts'));
+    const { symlink } = await import('node:fs/promises');
+    await symlink(innocent, join(artDir, 'onboarding.fsm.ts'));
+
+    // The first phase is dirty and would run, but the later destination is
+    // unsafe: refusal must come before any agent call burns.
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('symbolic link');
+  });
+
   it('canonicalizes a relative injected cwd and relative --link operand', async () => {
     const { relative } = await import('node:path');
     const runner = join(srcDir, 'runner.ts');
@@ -757,18 +905,21 @@ describe('INCR-30: malformed markers read as absent; active ones fail closed', (
   it.each([
     [
       '.slc is a file',
+      true,
       async (): Promise<void> => {
         await writeFile(join(artDir, '.slc'), 'not a directory');
       },
     ],
     [
       'latest is a directory',
+      true,
       async (): Promise<void> => {
         await mkdir(join(artDir, '.slc/latest'), { recursive: true });
       },
     ],
     [
       'latest is a symlink',
+      false,
       async (): Promise<void> => {
         const { symlink } = await import('node:fs/promises');
         await mkdir(join(artDir, '.slc'), { recursive: true });
@@ -776,13 +927,44 @@ describe('INCR-30: malformed markers read as absent; active ones fail closed', (
         await symlink(join(artDir, '.slc/decoy'), join(artDir, '.slc/latest'));
       },
     ],
-  ])('compiles fresh when %s', async (_name, arrange) => {
+  ])('compiles fresh when %s', async (_name, blocked, arrange) => {
     await mkdir(artDir, { recursive: true });
     await arrange();
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(2);
+    if (blocked) {
+      // A reserved path blocked by foreign content cannot re-record: the
+      // run still succeeds and says so (INCR-32).
+      expect(
+        result.diagnostics.some((line) => line.includes('not recorded')),
+      ).toBe(true);
+    } else {
+      // A removable stray (a symlinked marker) self-heals: invalidation
+      // unlinks it and recording publishes a real marker.
+      expect(await loadBuildHistory(artDir)).not.toBeNull();
+    }
+  });
+
+  it('fails closed when the marker can neither be removed nor observed (INCR-33)', async () => {
+    const { chmod } = await import('node:fs/promises');
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    // No execute permission: unlink and lstat both fail, so the marker is
+    // indeterminate — possibly active — and the run must not proceed.
+    await chmod(join(artDir, '.slc'), 0o600);
+    try {
+      const { agent: second, calls } = makeAgent();
+      const result = await runSlc(['flow', source], deps(second));
+      expect(result.ok).toBe(false);
+      expect(calls).toHaveLength(0);
+      expect(result.diagnostics.join('\n')).toContain('invalidated');
+    } finally {
+      await chmod(join(artDir, '.slc'), 0o755);
+    }
   });
 
   it('fails closed with zero executor calls when an active marker cannot be removed', async () => {

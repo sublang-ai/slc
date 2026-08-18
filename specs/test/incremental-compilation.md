@@ -75,7 +75,25 @@ While a recorded build exists, when a run that will execute begins its first exe
 
 Verifies: [INCR-16](../dev/incremental-compilation.md#incr-16), [INCR-30](../dev/incremental-compilation.md#incr-30)
 
-When a failure leaves zero recordable steps — including a `--rebuild` or a rebound-source run failing its first step — history shall remain absent so the retry re-executes instead of reusing what the failed executor left; when `.slc` is a file or `.slc/latest` is a directory or symbolic link, the run shall compile fresh; and when a recognized active marker cannot be removed, the run shall fail with zero executor calls.
+When a failure leaves zero recordable steps — including a `--rebuild` or a rebound-source run failing its first step — history shall remain absent so the retry re-executes instead of reusing what the failed executor left.
+
+### INCR-32
+
+Verifies: [INCR-3](../user/incremental-compilation.md#incr-3), [INCR-30](../dev/incremental-compilation.md#incr-30)
+
+When `.slc` is a file or `.slc/latest` is a directory or symbolic link, the run shall compile fresh and succeed, reporting the blocked recording as an actionable diagnostic rather than an error.
+
+### INCR-33
+
+Verifies: [INCR-30](../dev/incremental-compilation.md#incr-30)
+
+When an active marker can neither be removed nor observed, the run shall fail with zero executor calls.
+
+### INCR-34
+
+Verifies: [INCR-16](../dev/incremental-compilation.md#incr-16)
+
+When a later executor changes an earlier completed target or a future planned target, the run shall fail that executor's step, and the published history shall carry no record for the changed target, so the retry re-executes it.
 
 ### INCR-27
 

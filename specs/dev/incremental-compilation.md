@@ -31,7 +31,7 @@ When a history-eligible full or full-link run ([INCR-8](../user/incremental-comp
 
 ### INCR-13
 
-When selecting a step's mode on a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)), the slc command shall match records by kind, name, and target path, and shall select reuse only when every recorded input identity equals the current identity and the target file exists; update only for a compile step whose matched record has an intact prior-input copy while the target file exists; and ordinary execution otherwise or under `--rebuild`, with pin validation preceding every mode so a stale or malformed pin fails closed regardless of history.
+When selecting a step's mode on a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)), the slc command shall match records by kind, name, and target path, and shall select reuse only when every recorded input identity equals the current identity and the target is a safe regular file; update only for a compile step whose matched record has an intact prior-input copy while the target is a safe regular file; and ordinary execution otherwise or under `--rebuild`, with pin validation preceding every mode so a stale or malformed pin fails closed regardless of history.
 
 ## Update context
 
@@ -47,7 +47,7 @@ Where a step executes in update mode, when the executor prompt is built, interpr
 
 ### INCR-16
 
-When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) finishes in an orderly way after invalidating ([INCR-30](#incr-30)), the slc command shall publish at most one new build — executed and reused steps recorded from their current on-disk bytes, unreached steps carried forward from the in-memory prior records (none under `--rebuild`), and no record for a touched step without a recordable completion — copying the source and each recorded step's output into the build directory; with nothing recordable it shall leave history absent.
+When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) finishes in an orderly way after invalidating ([INCR-30](#incr-30)), the slc command shall publish at most one new build — executed and reused steps republished through a no-follow, nonblocking read only when their bytes still match the output identity captured at acceptance, unreached steps carried forward from the in-memory prior records (none under `--rebuild`), and no record for a touched step without a recordable completion or for a completed target whose bytes drifted — copying the source and each recorded step's output into the build directory; with nothing recordable it shall leave history absent.
 
 ### INCR-30
 
