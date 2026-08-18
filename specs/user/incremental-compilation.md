@@ -17,7 +17,7 @@ Where a full or full-link invocation targets canonical output of a pipeline othe
 
 ### INCR-2
 
-Where a history-eligible invocation ([INCR-8](#incr-8)) finds recorded history whose step records all match their current input bytes, while every step's target file exists, when the user repeats the invocation, the slc command shall report `up to date`, exit zero, invoke no agent, rewrite no chain artifact, and advance no history; deterministic entry and verification derivatives are re-derived, restoring any missing or drifted derivative.
+Where a history-eligible invocation ([INCR-8](#incr-8)) finds recorded history whose step records all match their current input bytes, while every step's target is a safe regular file, when the user repeats the invocation, the slc command shall report `up to date`, exit zero, invoke no agent, rewrite no chain artifact, and advance no history; deterministic entry and verification derivatives are re-derived, restoring any missing or drifted derivative.
 
 ### INCR-3
 
@@ -27,11 +27,11 @@ Where the history store is missing or malformed, when the user runs a history-el
 
 ### INCR-4
 
-While a step's recorded input identities match its current input bytes and its target file exists, when a history-eligible full run ([INCR-8](#incr-8)) executes, the slc command shall skip that step and preserve its on-disk output byte-for-byte, including output the user has refined by hand.
+While a step's recorded input identities match its current input bytes and its target is a safe regular file, when a history-eligible full run ([INCR-8](#incr-8)) executes, the slc command shall skip that step and preserve its on-disk output byte-for-byte, including output the user has refined by hand.
 
 ### INCR-5
 
-While, on a history-eligible run ([INCR-8](#incr-8)), a compile step's recorded input identities differ from its current input bytes, and the recorded prior-input copy and the step's target file both exist, when the step executes, the slc command shall supply the executor the current definition, the prior input, and — when renderable — a best-effort diff of prior to current input, leave the existing target in place to be updated into a complete artifact, and apply the same generic checks as an ordinary run; a link step whose recorded inputs differ shall instead execute in full without update context.
+While, on a history-eligible run ([INCR-8](#incr-8)), a compile step's recorded input identities differ from its current input bytes, and the recorded prior-input copy is intact while the step's target is a safe regular file, when the step executes, the slc command shall supply the executor the current definition, the prior input, and — when renderable — a best-effort diff of prior to current input, leave the existing target in place to be updated into a complete artifact, and apply the same generic checks as an ordinary run; a link step whose recorded inputs differ shall instead execute in full without update context.
 
 ### INCR-6
 

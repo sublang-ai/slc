@@ -152,11 +152,16 @@ export async function invalidateBuildHistory(artDir: string): Promise<void> {
   } catch (error) {
     const code = errorCode(error);
     if (code === 'ENOENT' || code === 'ENOTDIR') return;
+    // Only a confirmed non-regular entry counts as absence. An observation
+    // that fails is indeterminate: the marker may still be active, so the
+    // caller must fail closed rather than proceed under it.
+    let observed;
     try {
-      if (!(await lstat(marker)).isFile()) return;
-    } catch {
-      return;
+      observed = await lstat(marker);
+    } catch (observation) {
+      throw errorCode(observation) === 'ENOENT' ? error : observation;
     }
+    if (!observed.isFile()) return;
     throw error;
   }
 }
@@ -189,6 +194,12 @@ export interface StepToRecord {
    * forward past a failure (INCR-16).
    */
   copyFrom: string;
+  /**
+   * The accepted output identity captured at completion or reuse. A copy
+   * whose bytes no longer match is omitted from the build: rejected work
+   * must never publish under accepted inputs (INCR-16).
+   */
+  output?: Hash;
 }
 
 /**
@@ -208,11 +219,10 @@ export async function recordBuild(opts: {
   await mkdir(buildsDir, { recursive: true });
 
   let next = 1;
-  try {
-    const latest = (await readFile(join(historyDir, 'latest'), 'utf8')).trim();
+  const marker = await readStoreFile(join(historyDir, 'latest'));
+  if (marker !== null) {
+    const latest = marker.toString('utf8').trim();
     if (/^\d{1,15}$/.test(latest)) next = Number(latest) + 1;
-  } catch {
-    // No committed build yet.
   }
   for (const entry of await readdir(buildsDir)) {
     if (/^\d{1,15}$/.test(entry)) next = Math.max(next, Number(entry) + 1);
@@ -226,7 +236,14 @@ export async function recordBuild(opts: {
 
   const steps: StepHistoryRecord[] = [];
   for (const step of opts.steps) {
-    const bytes = await readFile(step.copyFrom);
+    // Publication rereads through the safe reader and only under the
+    // accepted identity: a copy source that vanished, stopped being a
+    // regular file, or drifted from what the run accepted is omitted.
+    const bytes = await readStoreFile(step.copyFrom);
+    if (bytes === null) continue;
+    if (step.output !== undefined && hashBytes(bytes) !== step.output) {
+      continue;
+    }
     const target = encodeLocator(opts.artDir, step.target);
     const copy = `outputs/${target}`;
     await writeFile(join(dir, 'outputs', ...target.split('/')), bytes);

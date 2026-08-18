@@ -11,8 +11,17 @@
  * tests supply fakes. See specs/dev/pipeline.md and specs/dev/phase-execution.md.
  */
 
-import { mkdir, readFile, stat } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { mkdir, readFile, realpath, stat } from 'node:fs/promises';
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from 'node:path';
+import type { Stats } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
@@ -43,6 +52,7 @@ import { type Invocation, parseInvocation } from './invocation.js';
 import { unifiedLineDiff } from './line-diff.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
 import { deriveClosure } from './pin-closure.js';
+import { resolvePinPath } from './pin-paths.js';
 import type { ProgressSink } from './progress.js';
 import { evaluatePin, evaluatePinFile, hashTree } from './pin-currency.js';
 import { PinError, loadPinFile, type PinFile, type PinRecord } from './pins.js';
@@ -497,10 +507,35 @@ async function plannedOutputConflict(
       }
     }
   }
+  for (const target of targets) {
+    if ((await regularFileState(target)) === 'unsafe') {
+      return `slc: planned output "${target}" is not writable as a private regular file (symbolic link, non-regular, or hard-linked); refusing to run`;
+    }
+  }
   for (const input of immutable) {
+    let inputInfo: Stats | null;
+    try {
+      inputInfo = await stat(input);
+    } catch {
+      inputInfo = null;
+    }
     for (const target of targets) {
       if (target === input || (await samePhysicalFile(target, input))) {
         return `slc: planned output "${target}" is the protected input "${input}"; refusing to overwrite it`;
+      }
+      if (inputInfo?.isDirectory() === true) {
+        try {
+          const root = await realpath(input);
+          const parent = await realpath(dirname(target));
+          if (
+            join(parent, basename(target)) === root ||
+            join(parent, basename(target)).startsWith(`${root}${sep}`)
+          ) {
+            return `slc: planned output "${target}" is inside protected directory "${input}"; refusing to run`;
+          }
+        } catch {
+          // An unresolvable pair cannot be shown to collide.
+        }
       }
     }
   }
@@ -773,8 +808,14 @@ interface IncrementalRun {
 /** Live incremental state threaded through one run of `executeSteps`. */
 interface IncrementalState extends IncrementalRun {
   history: BuildHistory | null;
-  /** Steps completed this run — executed or reused — with their identities. */
-  completed: { step: PhaseStep; inputs: Hash[]; target: string }[];
+  /** Steps completed this run — executed or reused — with their input and
+   * accepted-output identities. */
+  completed: {
+    step: PhaseStep;
+    inputs: Hash[];
+    target: string;
+    output: Hash;
+  }[];
   /** Steps that ran an executor to completion (not reused). */
   executed: number;
   /**
@@ -864,22 +905,51 @@ async function executeSteps(
       closureByDefinition.set(definition, null);
     }
   }
-  // One plan-wide immutable union (PHEXEC-39): external operands, chain
-  // definitions, and every derivable declared input. Plan validation and
-  // every phase's protection use the same set, so `-o` can no longer name
-  // a file only a later closure would have protected.
+  // One plan-wide immutable union (PHEXEC-39): external operands, every
+  // scheduled definition (the built-in normalize definition included), the
+  // chain definitions, every derivable declared input, and every
+  // pin-selected compiled artifact and bundle. Plan validation and every
+  // phase's protection use the same set, so `-o` can no longer name a file
+  // only a later closure — or a reviewed executable — would have needed.
+  const pinnedInputs: string[] = [];
+  for (const step of steps) {
+    const record = pinFile?.pins[step.phase];
+    if (record === undefined) continue;
+    try {
+      pinnedInputs.push(
+        resolvePinPath(
+          pipeline.dir,
+          boundary,
+          record.artifact.path,
+          'artifact',
+        ),
+        resolvePinPath(
+          pipeline.dir,
+          boundary,
+          record.artifactBundle.path,
+          'artifactBundle',
+        ),
+      );
+    } catch {
+      // A malformed pin fails closed at selection; nothing to protect here.
+    }
+  }
   const immutable = [
     ...new Set([
       ...immutableInputs(steps),
+      ...steps.map((step) => step.request.definitionPath),
       ...definitions,
       ...[...closureByDefinition.values()].flatMap((closure) => closure ?? []),
+      ...pinnedInputs,
     ]),
   ];
   const planConflict = await plannedOutputConflict(steps, immutable);
   if (planConflict !== null) {
     return { ok: false, outputs, diagnostics: [planConflict] };
   }
-  const produced: string[] = [];
+  const allTargets = steps.map((step) =>
+    step.request.kind === 'compile' ? step.request.target : step.request.linked,
+  );
 
   const state =
     incr === undefined ? undefined : await loadIncremental(incr, diagnostics);
@@ -904,7 +974,13 @@ async function executeSteps(
     // runnable (INCR-13).
     const declared =
       closureByDefinition.get(step.request.definitionPath) ?? null;
-    const protect = [...immutable, ...produced];
+    // Every other planned target is protected while this phase runs: a
+    // write to an earlier product or a future destination is rejected, and
+    // publication then omits it (INCR-16, PHEXEC-39).
+    const protect = [
+      ...immutable,
+      ...allTargets.filter((planned) => planned !== target),
+    ];
     const first = step === steps[0];
     const inputs =
       state === undefined || declared === null
@@ -965,9 +1041,14 @@ async function executeSteps(
       });
       // A reused target was not written, so it stays out of `outputs`:
       // CLI-3 reports the paths a run wrote, and reuse is reported through
-      // the status line above.
-      state?.completed.push({ step, inputs, target });
-      produced.push(target);
+      // the status line above. Its identity is captured now so publication
+      // can prove no later, rejected work changed it (INCR-16).
+      state?.completed.push({
+        step,
+        inputs,
+        target,
+        output: await hashFile(target),
+      });
       continue;
     }
     if (mode.mode === 'update') {
@@ -1066,10 +1147,16 @@ async function executeSteps(
       elapsedMs: Date.now() - startedAt,
     });
     outputs.push(target);
-    produced.push(target);
     if (state !== undefined) {
       state.executed++;
-      if (inputs !== null) state.completed.push({ step, inputs, target });
+      if (inputs !== null) {
+        state.completed.push({
+          step,
+          inputs,
+          target,
+          output: await hashFile(target),
+        });
+      }
     }
   }
 
@@ -1304,6 +1391,7 @@ async function recordIncremental(
         target: done.target,
         inputs: done.inputs,
         copyFrom: done.target,
+        output: done.output,
       });
       continue;
     }
@@ -1321,6 +1409,7 @@ async function recordIncremental(
       target: resolveLocator(state.artDir, prior.target),
       inputs: prior.inputs,
       copyFrom,
+      output: prior.output,
     });
   }
   if (toRecord.length === 0) return;
