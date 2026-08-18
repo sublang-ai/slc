@@ -6,7 +6,7 @@
  *
  * The store is memory, never authority: `loadBuildHistory` returns `null` on
  * any structural problem instead of throwing, and a copy is trusted only
- * after `verifiedCopyPath` re-hashes it. Recording writes a complete numbered
+ * after `verifiedCopy` re-hashes it. Recording writes a complete numbered
  * build directory — manifest plus verbatim copies of the source and every
  * recorded step output — before renaming a temporary file over `.slc/latest`,
  * so an interrupted recording leaves the prior build authoritative and an
@@ -19,7 +19,6 @@ import {
   mkdir,
   open,
   readdir,
-  readFile,
   rename,
   unlink,
   writeFile,
@@ -34,13 +33,36 @@ import { hashBytes, isHash, type Hash } from './hash.js';
  * for anything else — a symlink, directory, or FIFO in the store must read
  * as absent, never redirect a read or hang the compile (INCR-10).
  */
-async function readStoreFile(path: string): Promise<Buffer | null> {
+export async function readStoreFile(path: string): Promise<Buffer | null> {
   let handle;
   try {
     handle = await open(
       path,
       constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     );
+  } catch {
+    return null;
+  }
+  try {
+    if (!(await handle.stat()).isFile()) return null;
+    return await handle.readFile();
+  } catch {
+    return null;
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Reads an external input as a nonblocking regular file, following symbolic
+ * links — sources may legitimately be symlinks — or `null` when the path is
+ * not a readable regular file, so a FIFO swapped in by rejected work can
+ * never hang publication (INCR-16).
+ */
+export async function readSourceBytes(path: string): Promise<Buffer | null> {
+  let handle;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch {
     return null;
   }
@@ -167,18 +189,18 @@ export async function invalidateBuildHistory(artDir: string): Promise<void> {
 }
 
 /**
- * Returns the absolute path of a recorded copy after re-hashing its bytes, or
- * `null` when the copy is missing or no longer matches (INCR-10).
+ * Returns the absolute path and bytes of a recorded copy after re-hashing,
+ * or `null` when the copy is missing or no longer matches (INCR-10).
  */
-export async function verifiedCopyPath(
+export async function verifiedCopy(
   history: BuildHistory,
   copy: string,
   hash: Hash,
-): Promise<string | null> {
+): Promise<{ path: string; bytes: Buffer } | null> {
   const path = join(history.dir, ...copy.split('/'));
   const bytes = await readStoreFile(path);
   if (bytes === null) return null;
-  return hashBytes(bytes) === hash ? path : null;
+  return hashBytes(bytes) === hash ? { path, bytes } : null;
 }
 
 /** What `recordBuild` stores for one step. */
@@ -189,17 +211,11 @@ export interface StepToRecord {
   target: string;
   inputs: Hash[];
   /**
-   * Absolute path whose bytes become the recorded copy: the live target for
-   * an executed or reused step, or the prior build's copy for a step carried
-   * forward past a failure (INCR-16).
+   * The accepted bytes, materialized by the caller through the safe reader
+   * and already verified against the identity captured at completion or
+   * reuse — publication never rereads live paths (INCR-16).
    */
-  copyFrom: string;
-  /**
-   * The accepted output identity captured at completion or reuse. A copy
-   * whose bytes no longer match is omitted from the build: rejected work
-   * must never publish under accepted inputs (INCR-16).
-   */
-  output?: Hash;
+  bytes: Buffer;
 }
 
 /**
@@ -210,10 +226,15 @@ export interface StepToRecord {
 export async function recordBuild(opts: {
   artDir: string;
   pipeline: string;
-  /** Absolute source path; its bytes are copied verbatim. */
+  /** Absolute source path, recorded as the manifest locator. */
   sourcePath: string;
+  /** The source bytes, materialized by the caller. */
+  sourceBytes: Buffer;
   steps: readonly StepToRecord[];
 }): Promise<void> {
+  // With nothing recordable, absence is the statement: no build directory,
+  // no marker, no numbering churn (INCR-16).
+  if (opts.steps.length === 0) return;
   const historyDir = join(opts.artDir, HISTORY_DIR);
   const buildsDir = join(historyDir, 'builds');
   await mkdir(buildsDir, { recursive: true });
@@ -231,19 +252,11 @@ export async function recordBuild(opts: {
   const dir = join(buildsDir, String(next));
   await mkdir(join(dir, 'outputs'), { recursive: true });
 
-  const sourceBytes = await readFile(opts.sourcePath);
-  await writeFile(join(dir, SOURCE_COPY), sourceBytes);
+  await writeFile(join(dir, SOURCE_COPY), opts.sourceBytes);
 
   const steps: StepHistoryRecord[] = [];
   for (const step of opts.steps) {
-    // Publication rereads through the safe reader and only under the
-    // accepted identity: a copy source that vanished, stopped being a
-    // regular file, or drifted from what the run accepted is omitted.
-    const bytes = await readStoreFile(step.copyFrom);
-    if (bytes === null) continue;
-    if (step.output !== undefined && hashBytes(bytes) !== step.output) {
-      continue;
-    }
+    const bytes = step.bytes;
     const target = encodeLocator(opts.artDir, step.target);
     const copy = `outputs/${target}`;
     await writeFile(join(dir, 'outputs', ...target.split('/')), bytes);
@@ -262,7 +275,7 @@ export async function recordBuild(opts: {
     pipeline: opts.pipeline,
     source: {
       path: encodeLocator(opts.artDir, opts.sourcePath),
-      hash: hashBytes(sourceBytes),
+      hash: hashBytes(opts.sourceBytes),
     },
     steps,
   };

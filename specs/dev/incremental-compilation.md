@@ -47,7 +47,7 @@ Where a step executes in update mode, when the executor prompt is built, interpr
 
 ### INCR-16
 
-When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) finishes in an orderly way after invalidating ([INCR-30](#incr-30)), the slc command shall publish at most one new build — executed and reused steps republished through a no-follow, nonblocking read only when their bytes still match the output identity captured at acceptance, unreached steps carried forward from the in-memory prior records (none under `--rebuild`), and no record for a touched step without a recordable completion or for a completed target whose bytes drifted — copying the source and each recorded step's output into the build directory; with nothing recordable it shall leave history absent.
+When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) finishes in an orderly way after invalidating ([INCR-30](#incr-30)), the slc command shall publish at most one new build — executed and reused steps republished through a no-follow, nonblocking read only when their bytes still match the output identity captured at acceptance, unreached steps carried forward from the in-memory prior records except under `--rebuild` or when a failed executor changed their target, and no record for a touched step without a recordable completion or for a completed target whose bytes drifted — copying each recorded step's output and the source, read as a nonblocking regular file, into the build directory; with nothing recordable, or an unreadable source, it shall leave history absent, an unreadable source with a diagnostic.
 
 ### INCR-30
 

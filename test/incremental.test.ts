@@ -708,13 +708,81 @@ describe('INCR-34: rejected mutations never publish', () => {
     expect(failed.diagnostics.join('\n')).toContain('changed during the run');
 
     // Nothing recordable survived: the mutated completed target is omitted
-    // at publication and the failing step never records, so no step is
-    // vouched for and the retry re-executes both.
-    const history = await loadBuildHistory(artDir);
-    expect(history?.manifest.steps ?? []).toEqual([]);
+    // at publication and the failing step never records, so no build is
+    // committed at all and the retry re-executes both.
+    expect(await loadBuildHistory(artDir)).toBeNull();
     const { agent: third, calls } = makeAgent();
     expect((await runSlc(['flow', source], deps(third))).ok).toBe(true);
     expect(calls).toHaveLength(2);
+  });
+
+  it('drops the carried record of a future target a failed executor changed', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    // The gears executor scribbles over the future fsm target and is
+    // rejected. The fsm step stays unreached, but its prior record must not
+    // be carried: after the retry re-runs gears back to its old bytes, that
+    // record would vouch for the scribbled fsm as reusable.
+    const sabotaging: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        const target = match ? match[1].trim() : '';
+        await writeFile(target, 'output\n');
+        if (target.endsWith('onboarding.gears.md')) {
+          await writeFile(join(artDir, 'onboarding.fsm.ts'), 'sabotage\n');
+        }
+        return { status: 'success', text: 'wrote' };
+      },
+    };
+    const failed = await runSlc(['flow', source], deps(sabotaging));
+    expect(failed.ok).toBe(false);
+    expect(failed.diagnostics.join('\n')).toContain('changed during the run');
+    expect(await loadBuildHistory(artDir)).toBeNull();
+
+    const { agent: third, calls } = makeAgent();
+    expect((await runSlc(['flow', source], deps(third))).ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(await readFile(join(artDir, 'onboarding.fsm.ts'), 'utf8')).toBe(
+      'output\n',
+    );
+  });
+
+  it('detects a hard-link swap to byte-identical content (PHEXEC-40)', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    const { link } = await import('node:fs/promises');
+    // The fsm executor replaces the completed gears product with a hard
+    // link to byte-identical content: a digest alone cannot see the swap,
+    // but the structural identity (inode, link count) can.
+    const swapping: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        const target = match ? match[1].trim() : '';
+        await writeFile(target, 'fresh output\n');
+        if (target.endsWith('onboarding.fsm.ts')) {
+          const gears = join(artDir, 'onboarding.gears.md');
+          const bytes = await readFile(gears);
+          const alias = join(srcDir, 'alias.md');
+          await rm(gears);
+          await writeFile(alias, bytes);
+          await link(alias, gears);
+        }
+        return { status: 'success', text: 'wrote' };
+      },
+    };
+    const result = await runSlc(['flow', source], deps(swapping));
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('changed during the run');
+    // The gears bytes still match their accepted identity, so that step
+    // publishes; the failing fsm step does not.
+    const history = await loadBuildHistory(artDir);
+    expect(history?.manifest.steps.map((step) => step.name)).toEqual([
+      'text2gears',
+    ]);
   });
 
   it('rejects an executor that writes a future planned target', async () => {
@@ -733,6 +801,40 @@ describe('INCR-34: rejected mutations never publish', () => {
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('changed during the run');
     // The prematurely written future target has no record to vouch for it.
+    expect(await loadBuildHistory(artDir)).toBeNull();
+  });
+});
+
+describe('INCR-16: publication never reads unsafe bytes', () => {
+  it('skips recording without hanging when the source becomes a FIFO', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    // The gears executor replaces the source with a writerless FIFO and is
+    // rejected for changing a protected path. Publication then has carried
+    // records to write but no readable source: it must decline with a
+    // diagnostic, not block on the FIFO or embed non-file bytes.
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const piping: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        const target = match ? match[1].trim() : '';
+        await writeFile(target, 'fresh output\n');
+        if (target.endsWith('onboarding.gears.md')) {
+          await rm(source);
+          await promisify(execFile)('mkfifo', [source]);
+        }
+        return { status: 'success', text: 'wrote' };
+      },
+    };
+    const result = await runSlc(['flow', source], deps(piping));
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('changed during the run');
+    expect(result.diagnostics.join('\n')).toContain(
+      'build history not recorded',
+    );
     expect(await loadBuildHistory(artDir)).toBeNull();
   });
 });
@@ -867,6 +969,44 @@ describe('PHEXEC-39: plan-wide protection and canonical cwd', () => {
     expect(result.ok).toBe(false);
     expect(calls).toHaveLength(0);
     expect(result.diagnostics.join('\n')).toContain('symbolic link');
+  });
+
+  it('refuses -o naming the pipeline pin index, with zero calls', async () => {
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', source, '-o', join(pipelineDir, PINS_FILE)],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('protected input');
+  });
+
+  it('refuses -o inside the reserved history directory, with zero calls', async () => {
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', source, '-o', join(artDir, '.slc/latest')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('reserved directory');
+  });
+
+  it('refuses --link naming the runnable entry path, with zero calls', async () => {
+    // Only the playbook pipeline emits the entry module, so the fixture
+    // must answer to that name for the host write to be planned (DR-014).
+    const entry = join(srcDir, 'onboarding.ts');
+    await writeFile(entry, 'runner target\n');
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['playbook', source, '--link', entry], {
+      ...deps(agent),
+      resolver: (reference) => (reference === 'playbook' ? [pipelineDir] : []),
+    });
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('refusing to overwrite');
+    expect(await readFile(entry, 'utf8')).toBe('runner target\n');
   });
 
   it('canonicalizes a relative injected cwd and relative --link operand', async () => {

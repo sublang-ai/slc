@@ -21,7 +21,7 @@ import {
   loadBuildHistory,
   recordBuild,
   resolveLocator,
-  verifiedCopyPath,
+  verifiedCopy,
   type BuildHistory,
 } from '../src/build-history.js';
 import { hashBytes } from '../src/hash.js';
@@ -50,18 +50,19 @@ const record = async (over?: {
   steps?: Parameters<typeof recordBuild>[0]['steps'];
 }): Promise<void> => {
   const source = await write('wf.md', 'the source\n');
-  const gears = await write('wf.playbook/wf.gears.md', 'gears bytes\n');
+  const gears = join(artDir, 'wf.gears.md');
   await recordBuild({
     artDir,
     pipeline: 'playbook',
     sourcePath: source,
+    sourceBytes: Buffer.from('the source\n'),
     steps: over?.steps ?? [
       {
         kind: 'phase',
         name: 'text2gears',
         target: gears,
         inputs: [hashBytes(Buffer.from('the source\n'))],
-        copyFrom: gears,
+        bytes: Buffer.from('gears bytes\n'),
       },
     ],
   });
@@ -109,8 +110,7 @@ describe('recordBuild + loadBuildHistory (INCR-9, INCR-11, INCR-18)', () => {
     expect(history?.build).toBe(8);
   });
 
-  it('records a carried-forward copy from another file', async () => {
-    const prior = await write('elsewhere/prior-copy', 'accepted bytes\n');
+  it('records the bytes it is handed, never the live target', async () => {
     const gears = join(artDir, 'wf.gears.md');
     await write('wf.playbook/wf.gears.md', 'live bytes differ\n');
     await record({
@@ -120,7 +120,7 @@ describe('recordBuild + loadBuildHistory (INCR-9, INCR-11, INCR-18)', () => {
           name: 'text2gears',
           target: gears,
           inputs: [],
-          copyFrom: prior,
+          bytes: Buffer.from('accepted bytes\n'),
         },
       ],
     });
@@ -131,6 +131,11 @@ describe('recordBuild + loadBuildHistory (INCR-9, INCR-11, INCR-18)', () => {
     expect(
       await readFile(join(artDir, '.slc/builds/1/outputs/wf.gears.md'), 'utf8'),
     ).toBe('accepted bytes\n');
+  });
+
+  it('commits nothing when no step survived (INCR-16)', async () => {
+    await record({ steps: [] });
+    expect(await loadBuildHistory(artDir)).toBeNull();
   });
 });
 
@@ -234,7 +239,7 @@ describe('loadBuildHistory leniency (INCR-10, INCR-22)', () => {
   });
 });
 
-describe('verifiedCopyPath (INCR-10)', () => {
+describe('verifiedCopy (INCR-10)', () => {
   const loaded = async (): Promise<BuildHistory> => {
     await record();
     const history = await loadBuildHistory(artDir);
@@ -242,11 +247,12 @@ describe('verifiedCopyPath (INCR-10)', () => {
     return history;
   };
 
-  it('returns the absolute path when bytes match', async () => {
+  it('returns the absolute path and bytes when they match', async () => {
     const history = await loaded();
     const step = history.manifest.steps[0];
-    const path = await verifiedCopyPath(history, step.copy, step.output);
-    expect(path).toBe(join(artDir, '.slc/builds/1/outputs/wf.gears.md'));
+    const copy = await verifiedCopy(history, step.copy, step.output);
+    expect(copy?.path).toBe(join(artDir, '.slc/builds/1/outputs/wf.gears.md'));
+    expect(copy?.bytes.toString('utf8')).toBe('gears bytes\n');
   });
 
   it('returns null when the copy is missing or tampered', async () => {
@@ -256,9 +262,9 @@ describe('verifiedCopyPath (INCR-10)', () => {
       join(artDir, '.slc/builds/1/outputs/wf.gears.md'),
       'tampered\n',
     );
-    expect(await verifiedCopyPath(history, step.copy, step.output)).toBeNull();
+    expect(await verifiedCopy(history, step.copy, step.output)).toBeNull();
     expect(
-      await verifiedCopyPath(history, 'outputs/absent', step.output),
+      await verifiedCopy(history, 'outputs/absent', step.output),
     ).toBeNull();
   });
 });

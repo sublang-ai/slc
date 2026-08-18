@@ -26,13 +26,16 @@ import { fileURLToPath } from 'node:url';
 
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
 import {
+  HISTORY_DIR,
   SOURCE_COPY,
   encodeLocator,
   invalidateBuildHistory,
   loadBuildHistory,
+  readSourceBytes,
+  readStoreFile,
   recordBuild,
   resolveLocator,
-  verifiedCopyPath,
+  verifiedCopy,
   type BuildHistory,
   type StepHistoryRecord,
   type StepToRecord,
@@ -55,7 +58,13 @@ import { deriveClosure } from './pin-closure.js';
 import { resolvePinPath } from './pin-paths.js';
 import type { ProgressSink } from './progress.js';
 import { evaluatePin, evaluatePinFile, hashTree } from './pin-currency.js';
-import { PinError, loadPinFile, type PinFile, type PinRecord } from './pins.js';
+import {
+  PINS_FILE,
+  PinError,
+  loadPinFile,
+  type PinFile,
+  type PinRecord,
+} from './pins.js';
 import type { Phase } from './phase.js';
 import {
   type Pipeline,
@@ -71,6 +80,7 @@ import {
   emitPromptContractTest,
 } from './verify.js';
 import {
+  VERIFIER_SUPPORT_DIR,
   VERIFIER_SUPPORT_MODULE,
   emitVerifierSupport,
 } from './verify-support.js';
@@ -209,6 +219,7 @@ async function runFull(
     pipeline,
     deps,
     incrementalRun(invocation, artDir),
+    hostPlan({ artDir, basename, pipeline: invocation.pipeline }),
   );
   // Deterministic derivation runs on every successful invocation, so an
   // all-reuse run restores a missing or drifted derivative (INCR-2).
@@ -279,7 +290,13 @@ async function runSinglePhase(
       invocation.output ??
       join(artDir, `${basename}.${phase.target.format}.opt${phase.target.ext}`);
     const step = compileStep(pipeline, phase, invocation.source, target);
-    return executeSteps([step], pipeline, deps);
+    return executeSteps(
+      [step],
+      pipeline,
+      deps,
+      undefined,
+      hostPlan({ artDir, basename, pipeline: invocation.pipeline }),
+    );
   }
 
   // Plan over the whole chain so the named phase keeps its pipeline role: a
@@ -293,7 +310,13 @@ async function runSinglePhase(
   });
   const artifact = plan[pipeline.phases.indexOf(phase)];
   const step = compileStep(pipeline, phase, invocation.source, artifact.path);
-  return executeSteps([step], pipeline, deps);
+  return executeSteps(
+    [step],
+    pipeline,
+    deps,
+    undefined,
+    hostPlan({ artDir, basename, pipeline: invocation.pipeline }),
+  );
 }
 
 async function runDirectLink(
@@ -313,7 +336,6 @@ async function runDirectLink(
     output: invocation.output,
     cwd: runCwd(deps),
   });
-  await mkdir(dirname(linked), { recursive: true });
 
   const step: PhaseStep = {
     request: {
@@ -328,7 +350,11 @@ async function runDirectLink(
     targetExt: link.target.ext,
     kind: 'link',
   };
-  return executeSteps([step], pipeline, deps);
+  // The linked path's parent is created only after plan validation (PHEXEC-39).
+  return executeSteps([step], pipeline, deps, undefined, {
+    ...EMPTY_HOST_PLAN,
+    ensureDirs: [dirname(linked)],
+  });
 }
 
 async function runFullLink(
@@ -382,11 +408,25 @@ async function runFullLink(
     targetExt: link.target.ext,
     kind: 'link',
   };
+  // The runnable entry is a planned host write (DR-014) — except when the
+  // invocation source already sits at its path, where emission is skipped
+  // with a diagnostic below rather than refused (COMPILE-7).
+  const entryPath = join(runCwd(deps), `${basename}.ts`);
+  const emitsEntry =
+    invocation.pipeline === 'playbook' &&
+    invocation.output === null &&
+    entryPath !== invocation.source;
   const result = await executeSteps(
     [...compileSteps, linkStep],
     pipeline,
     deps,
     incrementalRun(invocation, artDir),
+    hostPlan({
+      artDir,
+      basename,
+      pipeline: invocation.pipeline,
+      entry: emitsEntry ? entryPath : undefined,
+    }),
   );
   // Deterministic derivation and entry emission run on every successful
   // invocation, so an all-reuse run restores a missing or drifted
@@ -455,6 +495,57 @@ async function runFullLink(
 }
 
 /**
+ * The run's writes beyond the chain targets, and the directories it
+ * reserves (PHEXEC-39): the verification tests and the runnable entry are
+ * planned outputs like any target, and no operand may name or enter the
+ * `.slc` history or `.slc-verify` support directories.
+ */
+interface HostPlan {
+  /** Files the host itself writes after the chain. */
+  writes: readonly string[];
+  /** Reserved directories no operand or target may name or enter. */
+  reserved: readonly string[];
+  /** Parent directories created only once plan validation has passed. */
+  ensureDirs: readonly string[];
+}
+
+const EMPTY_HOST_PLAN: HostPlan = { writes: [], reserved: [], ensureDirs: [] };
+
+/**
+ * The host plan for a run anchored at an artifact directory: a reserved
+ * pipeline emits the four verification tests beside the artifact, and every
+ * such run owns `.slc` and `.slc-verify` under it (PHEXEC-39). The runnable
+ * entry joins the writes only when the invocation will emit it (DR-014).
+ */
+function hostPlan(opts: {
+  artDir: string;
+  basename: string;
+  pipeline: string;
+  entry?: string;
+}): HostPlan {
+  const writes: string[] = [];
+  if (isReservedPipeline(opts.pipeline)) {
+    for (const suffix of [
+      'gears-fsm.test.ts',
+      'fsm.introspect.test.ts',
+      'prompt-contract.test.ts',
+      'fsm.coverage.test.ts',
+    ]) {
+      writes.push(join(opts.artDir, `${opts.basename}.${suffix}`));
+    }
+  }
+  if (opts.entry !== undefined) writes.push(opts.entry);
+  return {
+    writes,
+    reserved: [
+      join(opts.artDir, HISTORY_DIR),
+      join(opts.artDir, VERIFIER_SUPPORT_DIR),
+    ],
+    ensureDirs: [],
+  };
+}
+
+/**
  * The request inputs that are not produced by an earlier step — the
  * external source, link targets, references, and direct-link objects. A
  * planned output aliasing one of these would destroy user input; the check
@@ -482,13 +573,17 @@ function immutableInputs(steps: readonly PhaseStep[]): string[] {
 }
 
 /**
- * Rejects a plan whose outputs collide with each other — lexically or as
- * pre-existing hard links — or physically alias a protected input from the
- * plan-wide immutable union (PHEXEC-39), before any executor runs.
+ * Rejects a plan whose outputs — chain targets and host writes — collide
+ * with each other, physically alias a protected input from the plan-wide
+ * immutable union, or touch a reserved directory (PHEXEC-39), before any
+ * executor runs. Containment is checked lexically on the canonical paths
+ * first — a missing parent must not defeat it — with physical resolution as
+ * a supplement.
  */
 async function plannedOutputConflict(
   steps: readonly PhaseStep[],
   immutable: readonly string[],
+  host: HostPlan,
 ): Promise<string | null> {
   const targets = steps.map((step) =>
     step.request.kind === 'compile' ? step.request.target : step.request.linked,
@@ -499,6 +594,25 @@ async function plannedOutputConflict(
       return `slc: planned outputs collide at "${target}"; adjust -o`;
     }
     seen.add(target);
+  }
+  for (const write of host.writes) {
+    if (seen.has(write)) {
+      return `slc: planned output "${write}" is also written by the run itself; adjust -o`;
+    }
+  }
+  for (const dir of host.reserved) {
+    for (const path of [...targets, ...host.writes, ...immutable]) {
+      if (await pathInsideDir(path, dir)) {
+        return `slc: "${path}" names or enters the reserved directory "${dir}"; refusing to run`;
+      }
+    }
+  }
+  for (const write of host.writes) {
+    for (const input of immutable) {
+      if (write === input || (await samePhysicalFile(write, input))) {
+        return `slc: the run would write "${write}", which is the protected input "${input}"; refusing to overwrite it`;
+      }
+    }
   }
   for (let i = 0; i < targets.length; i++) {
     for (let j = i + 1; j < targets.length; j++) {
@@ -523,19 +637,11 @@ async function plannedOutputConflict(
       if (target === input || (await samePhysicalFile(target, input))) {
         return `slc: planned output "${target}" is the protected input "${input}"; refusing to overwrite it`;
       }
-      if (inputInfo?.isDirectory() === true) {
-        try {
-          const root = await realpath(input);
-          const parent = await realpath(dirname(target));
-          if (
-            join(parent, basename(target)) === root ||
-            join(parent, basename(target)).startsWith(`${root}${sep}`)
-          ) {
-            return `slc: planned output "${target}" is inside protected directory "${input}"; refusing to run`;
-          }
-        } catch {
-          // An unresolvable pair cannot be shown to collide.
-        }
+      if (
+        inputInfo?.isDirectory() === true &&
+        (await pathInsideDir(target, input))
+      ) {
+        return `slc: planned output "${target}" is inside protected directory "${input}"; refusing to run`;
       }
     }
   }
@@ -564,6 +670,23 @@ function canonicalInvocation(invocation: Invocation, cwd: string): Invocation {
         linkTarget: abs(invocation.linkTarget),
         output,
       };
+  }
+}
+
+/**
+ * Whether `path` names `dir` or lives inside it. The lexical check on the
+ * canonical paths is primary — it holds even when neither exists yet — and
+ * physical resolution supplements it so a symlinked ancestor cannot hide
+ * the containment (PHEXEC-39).
+ */
+async function pathInsideDir(path: string, dir: string): Promise<boolean> {
+  if (path === dir || path.startsWith(`${dir}${sep}`)) return true;
+  try {
+    const root = await realpath(dir);
+    const resolved = join(await realpath(dirname(path)), basename(path));
+    return resolved === root || resolved.startsWith(`${root}${sep}`);
+  } catch {
+    return false;
   }
 }
 
@@ -826,6 +949,12 @@ interface IncrementalState extends IncrementalRun {
    */
   touched: Set<PhaseStep>;
   /**
+   * Canonical paths a failed executor changed while protected (PHEXEC-39).
+   * A prior record for such a path must not be carried forward: the target
+   * is no longer what that record vouched for (INCR-34).
+   */
+  mutated: Set<string>;
+  /**
    * Whether `.slc/latest` was removed. Before the first executor may write,
    * the marker is gone, so a crash, kill, rebind, or later recording
    * failure can never leave a stale record vouching for a mutated target;
@@ -851,6 +980,7 @@ async function executeSteps(
   pipeline: Pipeline,
   deps: SlcDeps,
   incr?: IncrementalRun,
+  host: HostPlan = EMPTY_HOST_PLAN,
 ): Promise<SlcResult> {
   let pinFile: PinFile | undefined;
   try {
@@ -933,6 +1063,18 @@ async function executeSteps(
     } catch {
       // A malformed pin fails closed at selection; nothing to protect here.
     }
+    // The pinned link target and runtime dependencies are read inputs too;
+    // only the path-shaped kinds resolve to files (PHEXEC-39).
+    for (const ref of [record.linkTarget, ...record.runtimeDependencies]) {
+      if (ref.kind !== 'file' && ref.kind !== 'directory') continue;
+      try {
+        pinnedInputs.push(
+          resolvePinPath(pipeline.dir, boundary, ref.locator, 'locator'),
+        );
+      } catch {
+        // Same fail-closed family as above.
+      }
+    }
   }
   const immutable = [
     ...new Set([
@@ -941,11 +1083,18 @@ async function executeSteps(
       ...definitions,
       ...[...closureByDefinition.values()].flatMap((closure) => closure ?? []),
       ...pinnedInputs,
+      // The pin index itself is a read input of every selection (PHEXEC-39).
+      join(pipeline.dir, PINS_FILE),
     ]),
   ];
-  const planConflict = await plannedOutputConflict(steps, immutable);
+  const planConflict = await plannedOutputConflict(steps, immutable, host);
   if (planConflict !== null) {
     return { ok: false, outputs, diagnostics: [planConflict] };
+  }
+  // Only a validated plan may create directories: a refused `-o` must leave
+  // no trace of its parent path (PHEXEC-39).
+  for (const dir of host.ensureDirs) {
+    await mkdir(dir, { recursive: true });
   }
   const allTargets = steps.map((step) =>
     step.request.kind === 'compile' ? step.request.target : step.request.linked,
@@ -1041,14 +1190,20 @@ async function executeSteps(
       });
       // A reused target was not written, so it stays out of `outputs`:
       // CLI-3 reports the paths a run wrote, and reuse is reported through
-      // the status line above. Its identity is captured now so publication
-      // can prove no later, rejected work changed it (INCR-16).
-      state?.completed.push({
-        step,
-        inputs,
-        target,
-        output: await hashFile(target),
-      });
+      // the status line above. Its identity is captured through the safe
+      // reader so publication can prove no later, rejected work changed it;
+      // a target it cannot read stays uncaptured and unrecorded (INCR-16).
+      if (state !== undefined) {
+        const bytes = await readStoreFile(target);
+        if (bytes !== null) {
+          state.completed.push({
+            step,
+            inputs,
+            target,
+            output: hashBytes(bytes),
+          });
+        }
+      }
       continue;
     }
     if (mode.mode === 'update') {
@@ -1101,6 +1256,9 @@ async function executeSteps(
       signal: deps.signal,
     });
     if (!result.ok) {
+      for (const path of result.report.changedPaths ?? []) {
+        state?.mutated.add(path);
+      }
       fail();
       diagnostics.push(formatFailureReport(result.report));
       return finish({ ok: false, outputs, diagnostics });
@@ -1150,12 +1308,18 @@ async function executeSteps(
     if (state !== undefined) {
       state.executed++;
       if (inputs !== null) {
-        state.completed.push({
-          step,
-          inputs,
-          target,
-          output: await hashFile(target),
-        });
+        // Completion identity comes through the safe reader: a target that
+        // is no longer a plain regular file is uncapturable, so the step
+        // stays touched-without-completion and gets no record (INCR-16).
+        const bytes = await readStoreFile(target);
+        if (bytes !== null) {
+          state.completed.push({
+            step,
+            inputs,
+            target,
+            output: hashBytes(bytes),
+          });
+        }
       }
     }
   }
@@ -1205,6 +1369,7 @@ async function loadIncremental(
     completed: [],
     executed: 0,
     touched: new Set(),
+    mutated: new Set(),
     invalidated: false,
   };
 }
@@ -1341,14 +1506,14 @@ async function selectStepMode(
   const copy = first
     ? SOURCE_COPY
     : `outputs/${encodeLocator(state.artDir, chained)}`;
-  const priorInput = await verifiedCopyPath(history, copy, record.inputs[0]);
-  if (priorInput === null) return { mode: 'ordinary' };
+  const prior = await verifiedCopy(history, copy, record.inputs[0]);
+  if (prior === null) return { mode: 'ordinary' };
 
   let diff: string | null = '';
   if (record.inputs[0] !== inputs[0]) {
     try {
       diff = unifiedLineDiff(
-        await readFile(priorInput, 'utf8'),
+        prior.bytes.toString('utf8'),
         await readFile(chained, 'utf8'),
       );
     } catch {
@@ -1359,13 +1524,15 @@ async function selectStepMode(
     // supply no diff rather than a false "byte-identical" claim (INCR-14).
     if (diff === '') diff = null;
   }
-  return { mode: 'update', priorInput, diff };
+  return { mode: 'update', priorInput: prior.path, diff };
 }
 
 /**
- * Records the run when any executor completed a step (INCR-16): completed
- * steps from their live bytes, the rest carried forward from intact prior
- * records. Recording failures degrade to diagnostics — history is advisory.
+ * Records the run when any executor ran (INCR-16): completed steps republish
+ * their live bytes only under the identity accepted at completion, the rest
+ * carry forward from intact prior records — unless a failed executor changed
+ * their target (INCR-34). Recording failures degrade to diagnostics —
+ * history is advisory.
  */
 async function recordIncremental(
   state: IncrementalState,
@@ -1385,39 +1552,54 @@ async function recordIncremental(
     // whatever its executor left at the target (INCR-6).
     if (done === undefined && state.touched.has(step)) continue;
     if (done !== undefined) {
+      // Publication rereads the live target through the safe reader and
+      // publishes only bytes that still match the accepted identity: what a
+      // later, failed executor left behind is never recorded (INCR-16).
+      const bytes = await readStoreFile(done.target);
+      if (bytes === null || hashBytes(bytes) !== done.output) continue;
       toRecord.push({
         kind: step.kind,
         name: step.phase,
         target: done.target,
         inputs: done.inputs,
-        copyFrom: done.target,
-        output: done.output,
+        bytes,
       });
       continue;
     }
     const prior = priorRecordFor(state, step);
     if (prior === null) continue;
-    const copyFrom = await verifiedCopyPath(
+    const target = resolveLocator(state.artDir, prior.target);
+    // An unreached step whose target a failed executor changed is not
+    // "unreached" at all — its record must die with the failure (INCR-34).
+    if (state.mutated.has(target)) continue;
+    const copy = await verifiedCopy(
       state.history as BuildHistory,
       prior.copy,
       prior.output,
     );
-    if (copyFrom === null) continue;
+    if (copy === null) continue;
     toRecord.push({
       kind: prior.kind,
       name: prior.name,
-      target: resolveLocator(state.artDir, prior.target),
+      target,
       inputs: prior.inputs,
-      copyFrom,
-      output: prior.output,
+      bytes: copy.bytes,
     });
   }
   if (toRecord.length === 0) return;
+  const sourceBytes = await readSourceBytes(state.source);
+  if (sourceBytes === null) {
+    diagnostics.push(
+      `slc: build history not recorded: source "${state.source}" is not a readable regular file`,
+    );
+    return;
+  }
   try {
     await recordBuild({
       artDir: state.artDir,
       pipeline: state.pipelineName,
       sourcePath: state.source,
+      sourceBytes,
       steps: toRecord,
     });
   } catch (error) {
