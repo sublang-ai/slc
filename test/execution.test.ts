@@ -98,6 +98,34 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     if (!result.ok) expect(result.report.reasons[0]).toContain('extension');
   });
 
+  it('fails closed before the executor when a protected path is unobservable (PHEXEC-43)', async () => {
+    const { chmod } = await import('node:fs/promises');
+    const shadowed = join(dir, 'shadowed.md');
+    await writeFile(shadowed, 'cannot be read\n');
+    await chmod(shadowed, 0o000);
+    let invoked = false;
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      executor: executor(async (req) => {
+        invoked = true;
+        if (req.kind === 'compile') await writeFile(req.target, 'out');
+        return { status: 'ok', diagnostics: [] };
+      }),
+      protect: [shadowed],
+    });
+    expect(invoked).toBe(false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.report.reasons.some((r) =>
+          r.includes('cannot be fully observed'),
+        ),
+      ).toBe(true);
+    }
+  });
+
   it('fails when the executor mutates a protected input (PHEXEC-5, PHEXEC-6)', async () => {
     const result = await run(
       executor(async (req) => {
@@ -543,6 +571,49 @@ describe('runPhase link execution', () => {
       targetExt: '.ts',
       executor: executor(async () => {
         await writeFile(nested, 'tampered runner');
+        await writeFile(linked, 'linked');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain(
+        `protected path "${linkTarget}" changed during the run`,
+      );
+    }
+  });
+
+  it('detects a nested hard-link swap to byte-identical content (PHEXEC-41)', async () => {
+    const definition = join(dir, 'link.md');
+    const object = join(dir, 'onboarding.fsm.ts');
+    const linkTarget = join(dir, 'runtime');
+    const nested = join(linkTarget, 'runner.ts');
+    const linked = join(dir, 'onboarding.playbook.ts');
+    await mkdir(linkTarget, { recursive: true });
+    await writeFile(definition, '# link');
+    await writeFile(object, 'fsm');
+    await writeFile(nested, 'runner');
+
+    const result = await runPhase({
+      request: {
+        kind: 'link',
+        definitionPath: definition,
+        objects: [object],
+        linkTarget,
+        options: [],
+        linked,
+      },
+      phase: 'link',
+      targetExt: '.ts',
+      executor: executor(async () => {
+        // Replace the nested file with a hard link to byte-identical
+        // content elsewhere: the digest alone cannot see the swap.
+        const { link, rm: remove } = await import('node:fs/promises');
+        const alias = join(dir, 'alias.ts');
+        await writeFile(alias, 'runner');
+        await remove(nested);
+        await link(alias, nested);
         await writeFile(linked, 'linked');
         return { status: 'ok', diagnostics: [] };
       }),

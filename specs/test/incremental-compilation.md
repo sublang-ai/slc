@@ -81,7 +81,7 @@ When a failure leaves zero recordable steps — including a `--rebuild` or a reb
 
 Verifies: [INCR-3](../user/incremental-compilation.md#incr-3), [INCR-30](../dev/incremental-compilation.md#incr-30)
 
-When `.slc` is a file or `.slc/latest` is a directory, the run shall compile fresh and succeed, reporting the blocked recording as an actionable diagnostic rather than an error; when `.slc/latest` is a symbolic link, the run shall remove it as a stale marker and record fresh history.
+When `.slc` is a file or `.slc/latest` is a directory, the run shall compile fresh and succeed, reporting the blocked recording as an actionable diagnostic rather than an error.
 
 ### INCR-33
 
@@ -93,7 +93,25 @@ When an active marker can neither be removed nor observed, the run shall fail wi
 
 Verifies: [INCR-16](../dev/incremental-compilation.md#incr-16)
 
-When a later executor changes an earlier completed target or a future planned target, the run shall fail that executor's step, and the published history shall carry no record for the changed target, so the retry re-executes it.
+When a later executor changes an earlier completed target or a future planned target, the run shall fail that executor's step, publish no record for the future target, and keep the completed target's record only while its live bytes still match the identity accepted at completion, so the retry re-executes every step left without a record.
+
+### INCR-36
+
+Verifies: [INCR-30](../dev/incremental-compilation.md#incr-30)
+
+When `.slc/latest` is a symbolic link, the run shall remove it as a stale marker and record fresh history.
+
+### INCR-37
+
+Verifies: [INCR-10](../dev/incremental-compilation.md#incr-10), [INCR-30](../dev/incremental-compilation.md#incr-30)
+
+Where `.slc` is a symbolic link to another directory, when a full run executes, the run shall compile fresh, leave the linked directory's marker and builds untouched, and report the blocked recording as a diagnostic.
+
+### INCR-38
+
+Verifies: [INCR-16](../dev/incremental-compilation.md#incr-16)
+
+While a recorded build exists, when a failing executor rewrites or replaces the invocation source during a repeat run, the published build shall embed the source bytes captured before any executor ran — never the rejected rewrite, and never blocking on a non-regular replacement.
 
 ### INCR-27
 

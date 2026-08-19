@@ -35,7 +35,11 @@ While, on a history-eligible run ([INCR-8](#incr-8)), a compile step's recorded 
 
 ### INCR-6
 
-When a history-eligible full run's ([INCR-8](#incr-8)) executor work fails or is interrupted, the slc command shall leave no active record for any step whose target an executor may have changed — recording completed steps, dropping the failed or unidentifiable ones, and carrying forward only the steps it did not reach — so that a repeat invocation reuses the completed work and re-executes the rest rather than reusing whatever a failed executor left behind.
+When a history-eligible full run's ([INCR-8](#incr-8)) executor work fails, the slc command shall leave no active record for any step whose target an executor changed — recording completed steps, dropping the failed or unidentifiable ones, and carrying forward only unreached steps whose targets the failure did not touch — so that a repeat invocation reuses the completed work and re-executes the rest rather than reusing whatever a failed executor left behind.
+
+### INCR-35
+
+While a history-eligible run's ([INCR-8](#incr-8)) executor work has begun, when the run is interrupted abruptly, the slc command shall leave history absent so the next invocation compiles fresh; resuming interrupted partial progress is not promised.
 
 ## Rebuilds and exclusions
 

@@ -20,7 +20,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadBuildHistory } from '../src/build-history.js';
+import { SOURCE_COPY, loadBuildHistory } from '../src/build-history.js';
 import { hashBytes, hashFile } from '../src/hash.js';
 import {
   createInterpretedExecutor,
@@ -662,6 +662,8 @@ describe('PHEXEC-39: output boundary', () => {
     expect(calls).toHaveLength(0);
     expect(result.diagnostics.join('\n')).toContain('refusing to overwrite it');
     expect(await readFile(source, 'utf8')).toBe('prose\n');
+    // A refused plan creates nothing — not even the artifact directory.
+    expect(await exists(artDir)).toBe(false);
   });
 
   it('never reuses or overwrites a target replaced by a symlink', async () => {
@@ -716,6 +718,23 @@ describe('INCR-34: rejected mutations never publish', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('fails closed with zero calls when a protected target is unobservable (PHEXEC-43)', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // The future fsm target is made unreadable: its before/after digests
+    // would compare as equally unknown, so the run must refuse to execute
+    // over it rather than let a mutation pass unobserved.
+    const { chmod } = await import('node:fs/promises');
+    await chmod(join(artDir, 'onboarding.fsm.ts'), 0o000);
+    await writeFile(source, 'prose v2\n');
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('cannot be fully observed');
+  });
+
   it('drops the carried record of a future target a failed executor changed', async () => {
     const { agent } = makeAgent();
     expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
@@ -749,7 +768,7 @@ describe('INCR-34: rejected mutations never publish', () => {
     );
   });
 
-  it('detects a hard-link swap to byte-identical content (PHEXEC-40)', async () => {
+  it('detects a hard-link swap to byte-identical content (PHEXEC-41)', async () => {
     const { agent } = makeAgent();
     expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
 
@@ -805,16 +824,17 @@ describe('INCR-34: rejected mutations never publish', () => {
   });
 });
 
-describe('INCR-16: publication never reads unsafe bytes', () => {
-  it('skips recording without hanging when the source becomes a FIFO', async () => {
+describe('INCR-16: publication embeds only pre-captured source bytes', () => {
+  it('publishes the pre-run source without hanging when a FIFO replaces it', async () => {
     const { agent } = makeAgent();
     expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
 
     await writeFile(source, 'prose v2\n');
     // The gears executor replaces the source with a writerless FIFO and is
-    // rejected for changing a protected path. Publication then has carried
-    // records to write but no readable source: it must decline with a
-    // diagnostic, not block on the FIFO or embed non-file bytes.
+    // rejected for changing a protected path. The source was captured
+    // before any executor ran, so publication embeds those bytes — it never
+    // rereads the live path, so the FIFO can neither hang the compile nor
+    // enter the build.
     const { execFile } = await import('node:child_process');
     const { promisify } = await import('node:util');
     const piping: AgentClient = {
@@ -832,10 +852,70 @@ describe('INCR-16: publication never reads unsafe bytes', () => {
     const result = await runSlc(['flow', source], deps(piping));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('changed during the run');
-    expect(result.diagnostics.join('\n')).toContain(
-      'build history not recorded',
+    const history = await loadBuildHistory(artDir);
+    // The failed gears step records nothing; the unreached fsm step carries.
+    expect(history?.manifest.steps.map((step) => step.name)).toEqual([
+      'gears2fsm',
+    ]);
+    expect(await readFile(join(history?.dir ?? '', SOURCE_COPY), 'utf8')).toBe(
+      'prose v2\n',
     );
-    expect(await loadBuildHistory(artDir)).toBeNull();
+  });
+
+  it('refuses a planted symlink at the predictable temp-marker path', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // A misbehaving executor can predict the commit's temp name — the host
+    // pid and the next build number — and plant a symlink there aimed at
+    // user data. The no-follow commit write must refuse it, degrading to a
+    // "not recorded" diagnostic with the victim intact.
+    const victim = join(srcDir, 'victim.txt');
+    await writeFile(victim, 'precious bytes\n');
+    const { symlink } = await import('node:fs/promises');
+    await symlink(victim, join(artDir, `.slc/latest.${process.pid}.2`));
+
+    await writeFile(source, 'prose v2\n');
+    const { agent: second } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+    expect(result.ok).toBe(true);
+    expect(
+      result.diagnostics.some((line) => line.includes('not recorded')),
+    ).toBe(true);
+    expect(await readFile(victim, 'utf8')).toBe('precious bytes\n');
+  });
+
+  it('never publishes source bytes a rejected executor wrote', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    await writeFile(source, 'prose v2\n');
+    // The gears executor overwrites the source itself and is rejected. The
+    // published build must embed the bytes captured before the run — the
+    // input the surviving records actually describe — never the rejected
+    // rewrite.
+    const hijacking: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        const target = match ? match[1].trim() : '';
+        await writeFile(target, 'fresh output\n');
+        if (target.endsWith('onboarding.gears.md')) {
+          await writeFile(source, 'hijacked\n');
+        }
+        return { status: 'success', text: 'wrote' };
+      },
+    };
+    const result = await runSlc(['flow', source], deps(hijacking));
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('changed during the run');
+    const history = await loadBuildHistory(artDir);
+    expect(history).not.toBeNull();
+    expect(await readFile(join(history?.dir ?? '', SOURCE_COPY), 'utf8')).toBe(
+      'prose v2\n',
+    );
+    expect(history?.manifest.source.hash).toBe(
+      hashBytes(Buffer.from('prose v2\n')),
+    );
   });
 });
 
@@ -1009,6 +1089,132 @@ describe('PHEXEC-39: plan-wide protection and canonical cwd', () => {
     expect(await readFile(entry, 'utf8')).toBe('runner target\n');
   });
 
+  it('refuses -o naming an unscheduled pin record\u2019s files, with zero calls', async () => {
+    // A structurally valid record under a key no step schedules: currency
+    // validation still reads every file it names, so the plan protects them.
+    const bundleDir = join(pipelineDir, 'phantom.slc');
+    await mkdir(bundleDir);
+    await writeFile(join(bundleDir, 'phantom.playbook.ts'), 'artifact\n');
+    // A valid pass definition, left unscheduled by `--no-optimize`.
+    await writeFile(
+      join(pipelineDir, 'phantom.md'),
+      formats('gears', '.md', 'gears', '.md'),
+    );
+    await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target\n');
+    const packageDir = join(pipelineDir, 'deps/pkg');
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(join(packageDir, 'index.js'), 'module\n');
+    const record: PinRecord = {
+      definition: {
+        path: 'phantom.md',
+        hash: await hashFile(join(pipelineDir, 'phantom.md')),
+      },
+      artifact: {
+        path: 'phantom.slc/phantom.playbook.ts',
+        hash: await hashFile(join(bundleDir, 'phantom.playbook.ts')),
+      },
+      artifactBundle: { path: 'phantom.slc', hash: await hashTree(bundleDir) },
+      semanticInputs: [],
+      externalInputs: [],
+      runtimeDependencies: [
+        {
+          kind: 'package',
+          locator: 'deps/pkg',
+          identity: await hashTree(packageDir),
+          specifier: 'pkg',
+        },
+      ],
+      linkTarget: {
+        kind: 'file',
+        locator: 'linktarget.ts',
+        identity: await hashFile(join(pipelineDir, 'linktarget.ts')),
+      },
+    };
+    await writeFile(
+      join(pipelineDir, PINS_FILE),
+      JSON.stringify({
+        schema: PIN_SCHEMA,
+        hashAlgorithm: PIN_HASH_ALGORITHM,
+        pathBoundary: { path: '.' },
+        pins: { phantom: record },
+      }),
+    );
+
+    // The unscheduled record's artifact, and a path inside its package
+    // runtime dependency, are both files this invocation read.
+    for (const [output, reason] of [
+      [join(bundleDir, 'phantom.playbook.ts'), 'protected input'],
+      [join(packageDir, 'generated.md'), 'inside protected directory'],
+    ]) {
+      const { agent, calls } = makeAgent();
+      const result = await runSlc(
+        ['flow', source, '--no-optimize', '-o', output],
+        deps(agent),
+      );
+      expect(result.ok).toBe(false);
+      expect(calls).toHaveLength(0);
+      expect(result.diagnostics.join('\n')).toContain(reason);
+    }
+    expect(await readFile(join(bundleDir, 'phantom.playbook.ts'), 'utf8')).toBe(
+      'artifact\n',
+    );
+
+    // A merely stale record — here an unreadable file inside its package
+    // directory — shields against outputs but never vetoes phases that do
+    // not use it: the full run still compiles.
+    const { chmod } = await import('node:fs/promises');
+    await chmod(join(packageDir, 'index.js'), 0o000);
+    const { agent: tolerant, calls: tolerated } = makeAgent();
+    const run = await runSlc(['flow', source, '--no-optimize'], deps(tolerant));
+    expect(run.ok).toBe(true);
+    expect(tolerated).toHaveLength(2);
+  });
+
+  it('refuses -o entering a reserved directory through a symlinked alias with missing parents', async () => {
+    // alias -> artDir, and `.slc/deep` does not exist: lexical containment
+    // cannot see it and a parent-only physical check dies on the missing
+    // intermediate, so containment must resolve the nearest existing
+    // ancestor prospectively.
+    const { symlink } = await import('node:fs/promises');
+    await mkdir(artDir, { recursive: true });
+    const alias = join(srcDir, 'alias');
+    await symlink(artDir, alias);
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', source, '-o', join(alias, '.slc/deep/out.md')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('reserved directory');
+    expect(await exists(join(artDir, '.slc'))).toBe(false);
+  });
+
+  it('allows a single-phase -o at a would-be verification path (exact writes)', async () => {
+    // A single-phase run emits no verification, so a plan claiming those
+    // writes anyway would refuse a valid relocation for a collision that
+    // never occurs — even under the reserved pipeline name.
+    const gears = join(srcDir, 'onboarding.gears.md');
+    await writeFile(gears, 'gears bytes\n');
+    // The exact canonical verification path a full run would claim — the
+    // single-phase plan must not claim it.
+    const out = join(
+      srcDir,
+      'onboarding.playbook',
+      'onboarding.gears-fsm.test.ts',
+    );
+    const { agent, calls } = makeAgent({
+      content: { 'onboarding.gears-fsm.test.ts': 'fsm bytes\n' },
+    });
+    const result = await runSlc(['playbook.gears2fsm', gears, '-o', out], {
+      ...deps(agent),
+      resolver: (reference) => (reference === 'playbook' ? [pipelineDir] : []),
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(await readFile(out, 'utf8')).toBe('fsm bytes\n');
+  });
+
   it('canonicalizes a relative injected cwd and relative --link operand', async () => {
     const { relative } = await import('node:path');
     const runner = join(srcDir, 'runner.ts');
@@ -1085,6 +1291,32 @@ describe('INCR-30: malformed markers read as absent; active ones fail closed', (
       // unlinks it and recording publishes a real marker.
       expect(await loadBuildHistory(artDir)).not.toBeNull();
     }
+  });
+
+  it('treats a symlinked .slc as foreign: no reuse, no unlink, no publish', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // The whole store is moved elsewhere and `.slc` becomes a symlink to
+    // it. The run must not read it as this bundle's history, must not
+    // unlink the foreign marker through it, and must not publish through it.
+    const { rename, symlink } = await import('node:fs/promises');
+    const foreign = join(root, 'foreign-store');
+    await rename(join(artDir, '.slc'), foreign);
+    await symlink(foreign, join(artDir, '.slc'));
+
+    await writeFile(source, 'prose v2\n');
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+    expect(result.ok).toBe(true);
+    // Fresh compile: the symlinked store served no reuse or update.
+    expect(calls).toHaveLength(2);
+    expect(
+      result.diagnostics.some((line) => line.includes('not recorded')),
+    ).toBe(true);
+    // The foreign store is untouched: marker intact, no new build inside.
+    expect(await readFile(join(foreign, 'latest'), 'utf8')).toBe('1\n');
+    expect(await readdir(join(foreign, 'builds'))).toEqual(['1']);
   });
 
   it('fails closed when the marker can neither be removed nor observed (INCR-33)', async () => {

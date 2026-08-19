@@ -11,8 +11,9 @@
  * the compiled FSM already requires the destination project to provide it.
  */
 
-import { mkdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 
+import { ensureRealDir } from './build-history.js';
 import { writeFileNoFollow } from './verify.js';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +29,15 @@ const SUPPORT_FILES = [
   'verify-coverage.js',
   'verify-coverage.d.ts',
 ] as const;
+
+/**
+ * The installed compiled files `emitVerifierSupport` reads — part of the
+ * run's read inventory, so no planned output may overwrite them (PHEXEC-39).
+ */
+export function verifierSupportSources(): string[] {
+  const sourceDir = compiledModuleDir();
+  return SUPPORT_FILES.map((file) => join(sourceDir, file));
+}
 
 function compiledModuleDir(): string {
   const modulePath = fileURLToPath(import.meta.url);
@@ -52,7 +62,9 @@ export async function emitVerifierSupport(
 ): Promise<string[]> {
   const sourceDir = compiledModuleDir();
   const targetDir = join(artifactDir, VERIFIER_SUPPORT_DIR);
-  await mkdir(targetDir, { recursive: true });
+  // A symlinked `.slc-verify` would route these writes into an arbitrary
+  // directory — including the very files being read (PHEXEC-39).
+  await ensureRealDir(targetDir);
   return Promise.all(
     SUPPORT_FILES.map(async (file) => {
       const path = join(targetDir, file);

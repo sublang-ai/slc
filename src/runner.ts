@@ -11,16 +11,8 @@
  * tests supply fakes. See specs/dev/pipeline.md and specs/dev/phase-execution.md.
  */
 
-import { mkdir, readFile, realpath, stat } from 'node:fs/promises';
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-  sep,
-} from 'node:path';
+import { mkdir, readFile, stat } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Stats } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -55,7 +47,7 @@ import { type Invocation, parseInvocation } from './invocation.js';
 import { unifiedLineDiff } from './line-diff.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
 import { deriveClosure } from './pin-closure.js';
-import { resolvePinPath } from './pin-paths.js';
+import { prospectiveRealPath, resolvePinPath } from './pin-paths.js';
 import type { ProgressSink } from './progress.js';
 import { evaluatePin, evaluatePinFile, hashTree } from './pin-currency.js';
 import {
@@ -83,6 +75,7 @@ import {
   VERIFIER_SUPPORT_DIR,
   VERIFIER_SUPPORT_MODULE,
   emitVerifierSupport,
+  verifierSupportSources,
 } from './verify-support.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
@@ -197,7 +190,6 @@ async function runFull(
     entry: true,
   });
   const artDir = artifactDir(runCwd(deps), basename, invocation.pipeline);
-  await mkdir(artDir, { recursive: true });
 
   const plan = planArtifacts({
     phases: pipeline.phases,
@@ -219,7 +211,15 @@ async function runFull(
     pipeline,
     deps,
     incrementalRun(invocation, artDir),
-    hostPlan({ artDir, basename, pipeline: invocation.pipeline }),
+    hostPlan({
+      artDir,
+      verification: plannedVerification({
+        pipeline: invocation.pipeline,
+        plan,
+        artDir,
+        basename,
+      }),
+    }),
   );
   // Deterministic derivation runs on every successful invocation, so an
   // all-reuse run restores a missing or drifted derivative (INCR-2).
@@ -281,7 +281,6 @@ async function runSinglePhase(
     );
   }
   const artDir = artifactDir(runCwd(deps), basename, invocation.pipeline);
-  await mkdir(artDir, { recursive: true });
 
   if (phase.pass) {
     // A standalone pass run cannot overwrite its own source: it writes the
@@ -290,12 +289,14 @@ async function runSinglePhase(
       invocation.output ??
       join(artDir, `${basename}.${phase.target.format}.opt${phase.target.ext}`);
     const step = compileStep(pipeline, phase, invocation.source, target);
+    // A single-phase run emits no verification and no entry: its host plan
+    // claims exactly nothing beyond the reserved directories (PHEXEC-39).
     return executeSteps(
       [step],
       pipeline,
       deps,
       undefined,
-      hostPlan({ artDir, basename, pipeline: invocation.pipeline }),
+      hostPlan({ artDir, verification: null }),
     );
   }
 
@@ -315,7 +316,7 @@ async function runSinglePhase(
     pipeline,
     deps,
     undefined,
-    hostPlan({ artDir, basename, pipeline: invocation.pipeline }),
+    hostPlan({ artDir, verification: null }),
   );
 }
 
@@ -374,7 +375,6 @@ async function runFullLink(
   });
   const normalize = invocation.normalize || raw;
   const artDir = artifactDir(runCwd(deps), basename, invocation.pipeline);
-  await mkdir(artDir, { recursive: true });
 
   // Compile chain: the exit artifact becomes the object artifact (PIPE-15).
   const plan = planArtifacts({ phases: pipeline.phases, basename, artDir });
@@ -423,8 +423,12 @@ async function runFullLink(
     incrementalRun(invocation, artDir),
     hostPlan({
       artDir,
-      basename,
-      pipeline: invocation.pipeline,
+      verification: plannedVerification({
+        pipeline: invocation.pipeline,
+        plan,
+        artDir,
+        basename,
+      }),
       entry: emitsEntry ? entryPath : undefined,
     }),
   );
@@ -495,53 +499,91 @@ async function runFullLink(
 }
 
 /**
- * The run's writes beyond the chain targets, and the directories it
- * reserves (PHEXEC-39): the verification tests and the runnable entry are
- * planned outputs like any target, and no operand may name or enter the
- * `.slc` history or `.slc-verify` support directories.
+ * The run's writes beyond the chain targets, its host-side reads, and the
+ * directories it reserves (PHEXEC-39): the plan must be the exact set of
+ * reads and writes this invocation performs — no invented write may refuse
+ * a valid request, and no actual read may go unprotected.
  */
 interface HostPlan {
-  /** Files the host itself writes after the chain. */
+  /** Files this invocation's host will actually write after the chain. */
   writes: readonly string[];
+  /** Files the host itself reads (the installed verifier-support sources). */
+  reads: readonly string[];
   /** Reserved directories no operand or target may name or enter. */
   reserved: readonly string[];
-  /** Parent directories created only once plan validation has passed. */
+  /** Directories created only once plan validation has passed. */
   ensureDirs: readonly string[];
 }
 
-const EMPTY_HOST_PLAN: HostPlan = { writes: [], reserved: [], ensureDirs: [] };
+const EMPTY_HOST_PLAN: HostPlan = {
+  writes: [],
+  reads: [],
+  reserved: [],
+  ensureDirs: [],
+};
 
 /**
- * The host plan for a run anchored at an artifact directory: a reserved
- * pipeline emits the four verification tests beside the artifact, and every
- * such run owns `.slc` and `.slc-verify` under it (PHEXEC-39). The runnable
- * entry joins the writes only when the invocation will emit it (DR-014).
+ * The verification emission a run will perform, or `null` when it emits
+ * none: only a reserved pipeline whose plan produces a `gears` intermediate
+ * and an `fsm` at its canonical sibling path (VERIFY-2, VERIFY-4). This one
+ * predicate gates both the plan's inventory and the emission itself, so the
+ * two can never disagree (PHEXEC-39).
  */
-function hostPlan(opts: {
+function plannedVerification(ctx: {
+  pipeline: string;
+  plan: readonly {
+    path: string;
+    phase: { target: { format: string; ext: string } };
+  }[];
   artDir: string;
   basename: string;
-  pipeline: string;
-  entry?: string;
-}): HostPlan {
-  const writes: string[] = [];
-  if (isReservedPipeline(opts.pipeline)) {
-    for (const suffix of [
+}): { writes: string[]; reads: string[] } | null {
+  if (!isReservedPipeline(ctx.pipeline)) return null;
+  const fsm = ctx.plan.find(
+    (artifact) => artifact.phase.target.format === 'fsm',
+  );
+  const hasGears = ctx.plan.some(
+    (artifact) => artifact.phase.target.format === 'gears',
+  );
+  if (fsm === undefined || !hasGears) return null;
+  if (
+    fsm.path !== join(ctx.artDir, `${ctx.basename}.fsm${fsm.phase.target.ext}`)
+  ) {
+    return null;
+  }
+  return {
+    writes: [
       'gears-fsm.test.ts',
       'fsm.introspect.test.ts',
       'prompt-contract.test.ts',
       'fsm.coverage.test.ts',
-    ]) {
-      writes.push(join(opts.artDir, `${opts.basename}.${suffix}`));
-    }
-  }
+    ].map((suffix) => join(ctx.artDir, `${ctx.basename}.${suffix}`)),
+    reads: verifierSupportSources(),
+  };
+}
+
+/**
+ * The host plan for a run anchored at an artifact directory: exactly the
+ * verification emission this invocation performs, the runnable entry when
+ * it will emit one (DR-014), and the reserved `.slc` and `.slc-verify`
+ * directories every such run owns (PHEXEC-39). The artifact directory is
+ * created only after the plan validates.
+ */
+function hostPlan(opts: {
+  artDir: string;
+  verification: { writes: string[]; reads: string[] } | null;
+  entry?: string;
+}): HostPlan {
+  const writes = [...(opts.verification?.writes ?? [])];
   if (opts.entry !== undefined) writes.push(opts.entry);
   return {
     writes,
+    reads: opts.verification?.reads ?? [],
     reserved: [
       join(opts.artDir, HISTORY_DIR),
       join(opts.artDir, VERIFIER_SUPPORT_DIR),
     ],
-    ensureDirs: [],
+    ensureDirs: [opts.artDir],
   };
 }
 
@@ -682,8 +724,8 @@ function canonicalInvocation(invocation: Invocation, cwd: string): Invocation {
 async function pathInsideDir(path: string, dir: string): Promise<boolean> {
   if (path === dir || path.startsWith(`${dir}${sep}`)) return true;
   try {
-    const root = await realpath(dir);
-    const resolved = join(await realpath(dirname(path)), basename(path));
+    const root = prospectiveRealPath(dir);
+    const resolved = prospectiveRealPath(path);
     return resolved === root || resolved.startsWith(`${root}${sep}`);
   } catch {
     return false;
@@ -733,22 +775,11 @@ async function emitVerification(
     basename: string;
   },
 ): Promise<SlcResult> {
-  if (!result.ok || !isReservedPipeline(ctx.pipeline)) return result;
-  const fsm = ctx.plan.find(
-    (artifact) => artifact.phase.target.format === 'fsm',
-  );
-  const hasGears = ctx.plan.some(
-    (artifact) => artifact.phase.target.format === 'gears',
-  );
-  if (fsm === undefined || !hasGears) return result;
-  // The emitted tests import the canonical sibling FSM through the NodeNext
-  // `./<basename>.fsm.js` specifier; skip when `-o` relocated the physical FSM
-  // elsewhere (PIPE-8), so that edge never targets a missing sibling artifact.
-  const canonicalFsm = join(
-    ctx.artDir,
-    `${ctx.basename}.fsm${fsm.phase.target.ext}`,
-  );
-  if (fsm.path !== canonicalFsm) return result;
+  // One predicate decides emission and the plan inventory alike: skip when
+  // the pipeline is not reserved, the plan lacks the gears+fsm pair, or
+  // `-o` relocated the FSM away from the canonical sibling the emitted
+  // tests import (PIPE-8, PHEXEC-39).
+  if (!result.ok || plannedVerification(ctx) === null) return result;
   const outputs = [...result.outputs];
   const diagnostics = [...result.diagnostics];
   outputs.push(...(await emitVerifierSupport(ctx.artDir)));
@@ -931,6 +962,14 @@ interface IncrementalRun {
 /** Live incremental state threaded through one run of `executeSteps`. */
 interface IncrementalState extends IncrementalRun {
   history: BuildHistory | null;
+  /**
+   * The source bytes captured before any executor may write (INCR-16).
+   * Publication embeds these, never a post-run reread: a rejected executor
+   * that changed the source must not smuggle its bytes into the build as
+   * the input the surviving steps supposedly consumed. `null` when the
+   * source was not a readable regular file at capture.
+   */
+  sourceBytes: Buffer | null;
   /** Steps completed this run — executed or reused — with their input and
    * accepted-output identities. */
   completed: {
@@ -1037,56 +1076,48 @@ async function executeSteps(
   }
   // One plan-wide immutable union (PHEXEC-39): external operands, every
   // scheduled definition (the built-in normalize definition included), the
-  // chain definitions, every derivable declared input, and every
-  // pin-selected compiled artifact and bundle. Plan validation and every
-  // phase's protection use the same set, so `-o` can no longer name a file
-  // only a later closure — or a reviewed executable — would have needed.
+  // chain definitions, every derivable declared input, and every local path
+  // any pin record names. Currency validation reads every record —
+  // scheduled or not — hashing its definition, artifact, bundle, semantic
+  // inputs, link target, and runtime dependencies, package locators
+  // included, so all of them are files this invocation read (PHEXEC-39).
   const pinnedInputs: string[] = [];
-  for (const step of steps) {
-    const record = pinFile?.pins[step.phase];
-    if (record === undefined) continue;
-    try {
-      pinnedInputs.push(
-        resolvePinPath(
-          pipeline.dir,
-          boundary,
-          record.artifact.path,
-          'artifact',
-        ),
-        resolvePinPath(
-          pipeline.dir,
-          boundary,
-          record.artifactBundle.path,
-          'artifactBundle',
-        ),
-      );
-    } catch {
-      // A malformed pin fails closed at selection; nothing to protect here.
-    }
-    // The pinned link target and runtime dependencies are read inputs too;
-    // only the path-shaped kinds resolve to files (PHEXEC-39).
-    for (const ref of [record.linkTarget, ...record.runtimeDependencies]) {
-      if (ref.kind !== 'file' && ref.kind !== 'directory') continue;
+  for (const record of Object.values(pinFile?.pins ?? {})) {
+    const locals = [
+      record.definition.path,
+      record.artifact.path,
+      record.artifactBundle.path,
+      ...record.semanticInputs.map((input) => input.path),
+      record.linkTarget.locator,
+      ...record.runtimeDependencies.map((dependency) => dependency.locator),
+    ];
+    for (const local of locals) {
       try {
-        pinnedInputs.push(
-          resolvePinPath(pipeline.dir, boundary, ref.locator, 'locator'),
-        );
+        pinnedInputs.push(resolvePinPath(pipeline.dir, boundary, local, 'pin'));
       } catch {
-        // Same fail-closed family as above.
+        // A malformed pin fails closed at selection; nothing to protect here.
       }
     }
   }
-  const immutable = [
+  // Paths whose unchanged-ness this run itself vouches for: operands,
+  // definitions, derivable closures, the pin index, and the host's own
+  // reads. These are snapshotted around every phase, and one that cannot be
+  // fully observed fails the phase closed (PHEXEC-39, PHEXEC-43).
+  const observed = [
     ...new Set([
       ...immutableInputs(steps),
       ...steps.map((step) => step.request.definitionPath),
       ...definitions,
       ...[...closureByDefinition.values()].flatMap((closure) => closure ?? []),
-      ...pinnedInputs,
-      // The pin index itself is a read input of every selection (PHEXEC-39).
       join(pipeline.dir, PINS_FILE),
+      ...host.reads,
     ]),
   ];
+  // Pin-named paths join them for plan validation only: no planned output
+  // may alias what currency validation read, but their runtime integrity is
+  // the per-phase pin re-evaluation's to enforce — a merely stale record,
+  // readable or not, must never veto phases that do not use it (PHEXEC-39).
+  const immutable = [...new Set([...observed, ...pinnedInputs])];
   const planConflict = await plannedOutputConflict(steps, immutable, host);
   if (planConflict !== null) {
     return { ok: false, outputs, diagnostics: [planConflict] };
@@ -1127,7 +1158,7 @@ async function executeSteps(
     // write to an earlier product or a future destination is rejected, and
     // publication then omits it (INCR-16, PHEXEC-39).
     const protect = [
-      ...immutable,
+      ...observed,
       ...allTargets.filter((planned) => planned !== target),
     ];
     const first = step === steps[0];
@@ -1366,6 +1397,9 @@ async function loadIncremental(
   return {
     ...incr,
     history,
+    // Captured now — before any executor runs — following symlinks, since a
+    // symlinked source is legitimate input (INCR-16).
+    sourceBytes: await readSourceBytes(incr.source),
     completed: [],
     executed: 0,
     touched: new Set(),
@@ -1587,10 +1621,9 @@ async function recordIncremental(
     });
   }
   if (toRecord.length === 0) return;
-  const sourceBytes = await readSourceBytes(state.source);
-  if (sourceBytes === null) {
+  if (state.sourceBytes === null) {
     diagnostics.push(
-      `slc: build history not recorded: source "${state.source}" is not a readable regular file`,
+      `slc: build history not recorded: source "${state.source}" was not a readable regular file when the run started`,
     );
     return;
   }
@@ -1599,7 +1632,7 @@ async function recordIncremental(
       artDir: state.artDir,
       pipeline: state.pipelineName,
       sourcePath: state.source,
-      sourceBytes,
+      sourceBytes: state.sourceBytes,
       steps: toRecord,
     });
   } catch (error) {

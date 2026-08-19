@@ -16,7 +16,8 @@ and this project adheres to
 - **Incremental compilation.** A full or full-link compile at its
   canonical output that runs any phase records a numbered build under
   `<artifact-dir>/.slc/` — a manifest plus verbatim copies of the
-  source and the phase outputs it accepted; failed or rejected work is
+  source and the phase outputs it accepted, and no build at all when
+  no accepted work survives; failed or rejected work is
   never recorded. An
   unchanged repeat prints `up to date` and calls no agent; after a
   source edit, each affected phase's agent receives the prior input, a
@@ -46,10 +47,19 @@ and this project adheres to
   derivatives refuse to write through symbolic links, and a raw `.ts`
   source named like the runnable entry is reported and left untouched
   instead of being overwritten by entry emission. The refusal covers
-  everything the run writes and reads — the runnable entry, the
-  emitted verification files, the pin index, and the reserved
-  `.slc`/`.slc-verify` directories — and a phase that swaps a
-  protected file for byte-identical content still fails.
+  everything the run writes and reads — exactly the files this
+  invocation will emit, the pin index, every local path any pin
+  record names (package locators included), the installed
+  verifier-support sources, and the reserved `.slc`/`.slc-verify`
+  directories, resolved prospectively so a symlinked alias with
+  missing parents cannot slip through, with no directory created for
+  a refused plan. A phase that swaps a
+  protected file for byte-identical content still fails, a protected
+  file the run cannot fully observe fails the phase before its
+  executor runs, the published source is captured before any executor
+  can touch it, and `.slc`/`.slc-verify` are only ever used as real
+  directories — a symlinked store is foreign: never read as this
+  bundle's history, never unlinked through, never written through.
 - **A phase cannot succeed without producing its artifact.** A
   textually successful executor that left a pre-existing target
   untouched now fails the phase on both transports, so update mode can
