@@ -120,6 +120,43 @@ Intermediates are first-class: edit one and re-run a single phase
 (`slc playbook.gears2fsm …`) and it lands in the same place.
 `slc --help` shows all invocation forms.
 
+### Incremental recompiles
+
+Canonical full and full-link runs of ordinary pipelines remember successful
+builds under `<artifact-dir>/.slc/`. Each numbered, private snapshot contains
+one manifest plus verbatim copies of the source and every accepted phase
+output. The active marker is committed last. If that build is missing,
+deleted, or corrupt in any part, `slc` treats the whole snapshot as absent and
+compiles ordinarily.
+
+On a re-run, `slc` walks the phases in order and chooses one mode for each:
+
+- **Reuse** when every input is byte-identical and the live target is readable:
+  no agent runs, and the on-disk output stays exactly as it is, including manual
+  refinements.
+- **Update** when a compile phase's inputs changed and its prior input and live
+  output are available: the ordinary executor also receives the recorded old
+  input, a bounded best-effort diff, and one instruction to update the complete
+  artifact while preserving unaffected work.
+- **Ordinary** when no usable record exists, for a changed link phase, or when
+  `--rebuild` is given.
+
+Update is only a hint to the usual executor. The phase definition remains the
+sole authority, needs no update section, and uses the same acceptance rules as
+a fresh compile. A run that only reuses reports `up to date` and records
+nothing new. Before the first executor in an eligible run may write, `slc`
+removes the active marker; only a wholly successful run, including required
+deterministic post-processing, publishes a new marker. Once the marker is
+removed, a failed or interrupted run therefore leaves the next run to compile
+ordinarily. `--rebuild` forces every phase through Ordinary mode and records a
+fresh successful build while retaining older numbered snapshots.
+
+History selection and publication do not apply to `-o`, the reserved `slc`
+meta-pipeline, single-phase or standalone-pass runs, or direct-link runs. If one
+of those excluded forms is about to overwrite an artifact named by a usable
+active build, `slc` clears that marker first so it cannot describe the new
+bytes.
+
 While a compile runs, `slc` reports progress on stderr: each phase as it
 starts, each artifact as it lands with the elapsed time, the compiled
 runtime's own state transitions, and a heartbeat so the terminal is

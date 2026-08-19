@@ -21,7 +21,7 @@ While a usable active build matches every scheduled phase's current inputs and e
 
 ### INCR-3
 
-While the active history names another pipeline or source, or its marker, manifest, source copy, or any recorded output copy is missing, malformed, or hash-inconsistent, when the user runs an eligible invocation, the slc command shall treat the whole active build as absent, execute ordinarily without reporting history corruption as the run failure, and publish fresh history on success.
+While the active history names another pipeline or source, or its history directory, marker, manifest, source copy, or any recorded output copy is missing, malformed, or hash-inconsistent, when the user runs an eligible invocation, the slc command shall treat the whole active build as absent, execute ordinarily without reporting history corruption as the run failure, and treat any inability to publish fresh history as an advisory diagnostic.
 
 ### INCR-4
 

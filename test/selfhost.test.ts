@@ -150,8 +150,11 @@ export const machine = setup({
 // artifacts per target kind — a gears package, a conformant machine, and a
 // real createPlaybookRuntime module — so verification emission runs end to end
 // (SELFHOST-3, VERIFY-8).
-const writingAgent = (): AgentClient => ({
+const writingAgent = (
+  opts: { prompts?: string[]; gears?: string } = {},
+): AgentClient => ({
   run: async ({ prompt }) => {
+    opts.prompts?.push(prompt);
     const match = /artifact to write: (.+)/.exec(prompt);
     if (match) {
       const target = match[1].trim();
@@ -160,7 +163,7 @@ const writingAgent = (): AgentClient => ({
         : target.endsWith('.fsm.ts')
           ? FSM_ARTIFACT
           : target.endsWith('.md')
-            ? GEARS_ARTIFACT
+            ? (opts.gears ?? GEARS_ARTIFACT)
             : 'export default 1;\n';
       await writeFile(target, content);
     }
@@ -518,6 +521,150 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     expect(
       await readFile(join(artDir, 'code.gears-fsm.test.ts'), 'utf8'),
     ).toContain('from "./.slc-verify/verify.js"');
+  });
+
+  it('compiles a raw .ts source without replacing it with the deterministic entry (PHEXEC-44)', async () => {
+    const rawSource = join(work, 'raw.ts');
+    const rawBytes =
+      'export const workflowIntent = "compile this raw workflow";\n';
+    await writeFile(rawSource, rawBytes);
+
+    const result = await runSlc(['playbook', rawSource], deps());
+
+    expect(result.ok).toBe(true);
+    expect(await readFile(rawSource, 'utf8')).toBe(rawBytes);
+    expect(await exists(join(work, 'raw.playbook', 'raw.playbook.ts'))).toBe(
+      true,
+    );
+    expect(result.outputs).not.toContain(rawSource);
+    expect(result.diagnostics.join('\n')).toContain(
+      `entry module ${rawSource} not emitted because it aliases the invocation source`,
+    );
+  });
+
+  it('refuses an entry that aliases the link target before any phase executes (PHEXEC-43)', async () => {
+    const entryAndLinkTarget = join(work, 'code.ts');
+    const original = 'export const protectedRuntime = true;\n';
+    await writeFile(entryAndLinkTarget, original);
+    const prompts: string[] = [];
+
+    const result = await runSlc(
+      ['playbook', source, '--link', entryAndLinkTarget],
+      {
+        resolver: withReservedPipelines(() => []),
+        executor: createInterpretedExecutor({
+          agent: writingAgent({ prompts }),
+        }),
+        cwd: work,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(prompts).toEqual([]);
+    expect(await readFile(entryAndLinkTarget, 'utf8')).toBe(original);
+    expect(result.diagnostics.join('\n')).toContain(
+      `target "${entryAndLinkTarget}" aliases protected input "${entryAndLinkTarget}"`,
+    );
+  });
+
+  it('refuses a verifier output that aliases the link target before any phase executes (PHEXEC-43)', async () => {
+    await mkdir(artDir);
+    const verifierAndLinkTarget = join(artDir, 'code.gears-fsm.test.ts');
+    const original = 'export const protectedRuntime = true;\n';
+    await writeFile(verifierAndLinkTarget, original);
+    const prompts: string[] = [];
+
+    const result = await runSlc(
+      ['playbook', source, '--link', verifierAndLinkTarget],
+      {
+        resolver: withReservedPipelines(() => []),
+        executor: createInterpretedExecutor({
+          agent: writingAgent({ prompts }),
+        }),
+        cwd: work,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(prompts).toEqual([]);
+    expect(await readFile(verifierAndLinkTarget, 'utf8')).toBe(original);
+    expect(result.diagnostics.join('\n')).toContain(
+      `target "${verifierAndLinkTarget}" aliases protected input "${verifierAndLinkTarget}"`,
+    );
+  });
+
+  it('restores deterministic verifier and entry outputs after all phases Reuse', async () => {
+    const initial = await runSlc(['playbook', source], deps());
+    expect(initial.ok).toBe(true);
+    const latest = join(artDir, '.slc', 'latest');
+    const historyBefore = await readFile(latest, 'utf8');
+    const deterministicOutputs = [
+      join(work, 'code.ts'),
+      join(artDir, 'code.gears-fsm.test.ts'),
+      join(artDir, 'code.fsm.introspect.test.ts'),
+      join(artDir, 'code.prompt-contract.test.ts'),
+      join(artDir, 'code.fsm.coverage.test.ts'),
+    ];
+    await rm(join(artDir, '.slc-verify'), { recursive: true, force: true });
+    for (const output of deterministicOutputs)
+      await rm(output, { force: true });
+
+    const prompts: string[] = [];
+    const repeated = await runSlc(['playbook', source], {
+      resolver: withReservedPipelines(() => []),
+      executor: createInterpretedExecutor({
+        agent: writingAgent({ prompts }),
+      }),
+      cwd: work,
+    });
+
+    expect(repeated).toMatchObject({ ok: true, outcome: 'up-to-date' });
+    expect(prompts).toEqual([]);
+    expect(await readFile(latest, 'utf8')).toBe(historyBefore);
+    expect(await exists(join(artDir, '.slc-verify', 'verify.js'))).toBe(true);
+    for (const output of deterministicOutputs) {
+      expect(await exists(output)).toBe(true);
+    }
+  });
+
+  it('leaves history inactive after entry failure and retries every phase ordinarily', async () => {
+    const initial = await runSlc(['playbook', source], deps());
+    expect(initial.ok).toBe(true);
+    await writeFile(source, `${await readFile(source, 'utf8')}\nChanged.\n`);
+    const collidingGears = GEARS_ARTIFACT.replace(
+      '- Writer\n',
+      '- Writer\n- writer\n',
+    );
+    const failedPrompts: string[] = [];
+
+    const failed = await runSlc(['playbook', source], {
+      resolver: withReservedPipelines(() => []),
+      executor: createInterpretedExecutor({
+        agent: writingAgent({ prompts: failedPrompts, gears: collidingGears }),
+      }),
+      cwd: work,
+    });
+
+    expect(failed.ok).toBe(false);
+    expect(failedPrompts.length).toBeGreaterThan(0);
+    expect(failed.diagnostics.join('\n')).toMatch(/collide case-insensitively/);
+    expect(await exists(join(artDir, '.slc', 'latest'))).toBe(false);
+
+    const retryPrompts: string[] = [];
+    const retry = await runSlc(['playbook', source], {
+      resolver: withReservedPipelines(() => []),
+      executor: createInterpretedExecutor({
+        agent: writingAgent({ prompts: retryPrompts }),
+      }),
+      cwd: work,
+    });
+
+    expect(retry.ok).toBe(true);
+    expect(retryPrompts).toHaveLength(4);
+    expect(
+      retryPrompts.every((prompt) => !prompt.includes('Incremental update')),
+    ).toBe(true);
+    expect(await exists(join(artDir, '.slc', 'latest'))).toBe(true);
   });
 
   it('runs generated verification in a project with no SLC installation', async () => {

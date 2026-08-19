@@ -35,7 +35,27 @@ const phase = (
 | target | ${target} | ${targetExt} |
 `;
 
-describe('success-only incremental runner (INCR-18..24)', () => {
+const linkPhase = `## Formats
+
+| Role | Format | Extension |
+| --- | --- | --- |
+| source | final | .md |
+| target | run | .ts |
+
+## Link Targets
+
+| Target form | Meaning |
+| --- | --- |
+| <path>.ts | A runtime module. |
+
+Options:
+
+| Name | Meaning |
+| --- | --- |
+| seed | Fixture seed. |
+`;
+
+describe('success-only incremental runner (INCR-18..25, INCR-27..28)', () => {
   let root: string;
   let pipelineDir: string;
   let workDir: string;
@@ -152,14 +172,192 @@ describe('success-only incremental runner (INCR-18..24)', () => {
     expect((await loadBuildHistory(artDir))?.build).toBe(2);
   });
 
+  it('reuses a refined producer and updates its consumer from recorded input', async () => {
+    await runSlc(['flow', source], deps(fake([])));
+    const middle = join(artDir, 'case.middle.md');
+    const final = join(artDir, 'case.final.md');
+    await writeFile(middle, 'reviewed middle\n');
+    const calls: ExecuteRequest[] = [];
+    let priorOutput = '';
+
+    const result = await runSlc(
+      ['flow', source],
+      deps(
+        fake(calls, async (request) => {
+          const target =
+            request.kind === 'compile' ? request.target : request.linked;
+          priorOutput = await readFile(target, 'utf8');
+          await writeFile(target, 'updated final\n');
+          return { status: 'ok', diagnostics: [] };
+        }),
+      ),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    const request = calls[0];
+    expect(request.kind).toBe('compile');
+    if (request.kind === 'compile') {
+      expect(request.source).toBe(middle);
+      expect(request.update?.priorInput).toContain('/.slc/builds/1/outputs/0');
+      expect(request.update?.diff).toContain('-middle');
+      expect(request.update?.diff).toContain('+reviewed middle');
+    }
+    expect(priorOutput).toBe('final\n');
+    expect(await readFile(middle, 'utf8')).toBe('reviewed middle\n');
+    expect(await readFile(final, 'utf8')).toBe('updated final\n');
+    expect((await loadBuildHistory(artDir))?.build).toBe(2);
+  });
+
+  it('treats one corrupt active-build copy as whole-build absence', async () => {
+    await runSlc(['flow', source], deps(fake([])));
+    const first = await loadBuildHistory(artDir);
+    await writeFile(join(first!.dir, 'outputs', '1'), 'corrupt copy\n');
+    expect(await loadBuildHistory(artDir)).toBeNull();
+    const calls: ExecuteRequest[] = [];
+
+    const result = await runSlc(['flow', source], deps(fake(calls)));
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(
+      calls.every(
+        (request) => request.kind !== 'compile' || request.update === undefined,
+      ),
+    ).toBe(true);
+    const fresh = await loadBuildHistory(artDir);
+    expect(fresh?.build).toBe(2);
+    expect(fresh?.manifest.steps).toHaveLength(2);
+    expect(await readFile(join(fresh!.dir, 'outputs', '0'), 'utf8')).toBe(
+      'middle\n',
+    );
+    expect(await readFile(join(fresh!.dir, 'outputs', '1'), 'utf8')).toBe(
+      'final\n',
+    );
+  });
+
+  it('keeps malformed history diagnostic-only when it blocks recording', async () => {
+    await mkdir(artDir);
+    await writeFile(join(artDir, '.slc'), 'not a directory\n');
+    const calls: ExecuteRequest[] = [];
+
+    const result = await runSlc(['flow', source], deps(fake(calls)));
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(result.diagnostics.join('\n')).toContain(
+      'slc: build history not recorded:',
+    );
+    expect(await loadBuildHistory(artDir)).toBeNull();
+  });
+
+  it('includes definition and declared Pin Input bytes in compile identity', async () => {
+    const references = join(pipelineDir, 'references');
+    const grammar = join(references, 'grammar.md');
+    const definition = join(pipelineDir, 'text2middle.md');
+    await mkdir(references);
+    await writeFile(grammar, 'grammar one\n');
+    await writeFile(
+      definition,
+      `${phase('text', '.md', 'middle', '.md')}\nDefinition rule one.\n\n## Pin Inputs\n\n- \`references/grammar.md\`\n`,
+    );
+    await runSlc(['flow', source], deps(fake([])));
+
+    await writeFile(
+      definition,
+      `${phase('text', '.md', 'middle', '.md')}\nDefinition rule two.\n\n## Pin Inputs\n\n- \`references/grammar.md\`\n`,
+    );
+    const definitionCalls: ExecuteRequest[] = [];
+    await runSlc(['flow', source], deps(fake(definitionCalls)));
+    expect(definitionCalls).toHaveLength(1);
+    expect(definitionCalls[0]).toMatchObject({
+      kind: 'compile',
+      update: expect.any(Object) as object,
+    });
+
+    await writeFile(grammar, 'grammar two\n');
+    const grammarCalls: ExecuteRequest[] = [];
+    await runSlc(['flow', source], deps(fake(grammarCalls)));
+    expect(grammarCalls).toHaveLength(1);
+    expect(grammarCalls[0]).toMatchObject({
+      kind: 'compile',
+      update: expect.any(Object) as object,
+    });
+    expect((await loadBuildHistory(artDir))?.build).toBe(3);
+  });
+
+  it('includes an explicit normalization reference in compile identity', async () => {
+    await runSlc(['flow', source, '--normalize'], deps(fake([])));
+    await writeFile(
+      join(pipelineDir, 'text2middle.md'),
+      `${phase('text', '.md', 'middle', '.md')}\nCurrent definition rule.\n`,
+    );
+    const calls: ExecuteRequest[] = [];
+
+    const result = await runSlc(
+      ['flow', source, '--normalize'],
+      deps(fake(calls)),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    const normalize = calls[0];
+    expect(normalize.kind).toBe('compile');
+    if (normalize.kind === 'compile') {
+      expect(normalize.references).toEqual([
+        join(pipelineDir, 'text2middle.md'),
+      ]);
+      expect(normalize.update).toBeDefined();
+    }
+    expect(calls[1]).toMatchObject({
+      kind: 'compile',
+      update: expect.any(Object) as object,
+    });
+  });
+
+  it('includes link-target content and ordered options in link identity', async () => {
+    const target = join(workDir, 'runtime.ts');
+    await writeFile(join(pipelineDir, 'link.md'), linkPhase);
+    await writeFile(target, 'runtime one\n');
+    const args = [
+      'flow',
+      source,
+      '--link',
+      target,
+      '--link-option',
+      'seed=one',
+    ];
+    await runSlc(args, deps(fake([])));
+
+    await writeFile(target, 'runtime two\n');
+    const targetCalls: ExecuteRequest[] = [];
+    await runSlc(args, deps(fake(targetCalls)));
+    expect(targetCalls).toHaveLength(1);
+    expect(targetCalls[0]).toMatchObject({
+      kind: 'link',
+      options: [{ name: 'seed', value: 'one' }],
+    });
+
+    const optionCalls: ExecuteRequest[] = [];
+    await runSlc([...args.slice(0, -1), 'seed=two'], deps(fake(optionCalls)));
+    expect(optionCalls).toHaveLength(1);
+    expect(optionCalls[0]).toMatchObject({
+      kind: 'link',
+      options: [{ name: 'seed', value: 'two' }],
+    });
+    expect((await loadBuildHistory(artDir))?.build).toBe(3);
+  });
+
   it('leaves no marker after failure and retries every phase ordinarily', async () => {
     await runSlc(['flow', source], deps(fake([])));
     await writeFile(source, 'source two\n');
     const failedCalls: ExecuteRequest[] = [];
+    let markerSeenByExecutor = true;
     const failed = await runSlc(
       ['flow', source],
       deps(
         fake(failedCalls, async (request) => {
+          markerSeenByExecutor = await exists(join(artDir, '.slc', 'latest'));
           const target =
             request.kind === 'compile' ? request.target : request.linked;
           await writeFile(target, 'rejected\n');
@@ -170,6 +368,7 @@ describe('success-only incremental runner (INCR-18..24)', () => {
 
     expect(failed.ok).toBe(false);
     expect(failedCalls).toHaveLength(1);
+    expect(markerSeenByExecutor).toBe(false);
     expect(await exists(join(artDir, '.slc', 'latest'))).toBe(false);
     expect(await exists(join(artDir, '.slc', 'builds', '1'))).toBe(true);
 
@@ -233,5 +432,98 @@ describe('success-only incremental runner (INCR-18..24)', () => {
         (request) => request.kind !== 'compile' || request.update === undefined,
       ),
     ).toBe(true);
+  });
+
+  it('keeps every excluded form outside history when no recorded target is overwritten', async () => {
+    await runSlc(['flow', source], deps(fake([])));
+    const marker = join(artDir, '.slc', 'latest');
+    const sibling = join(artDir, 'case.unrecorded.md');
+    const calls: ExecuteRequest[] = [];
+
+    const phaseResult = await runSlc(
+      ['flow.middle2final', join(artDir, 'case.middle.md'), '-o', sibling],
+      deps(fake(calls)),
+    );
+    expect(phaseResult.ok).toBe(true);
+
+    await writeFile(
+      join(pipelineDir, 'optimize.md'),
+      phase('middle', '.md', 'middle', '.md'),
+    );
+    const passResult = await runSlc(
+      ['flow.optimize', join(artDir, 'case.middle.md')],
+      deps(fake(calls)),
+    );
+    expect(passResult.ok).toBe(true);
+
+    const runtime = join(workDir, 'runtime.ts');
+    await writeFile(join(pipelineDir, 'link.md'), linkPhase);
+    await writeFile(runtime, 'export default {};\n');
+    const directResult = await runSlc(
+      [
+        'flow.link',
+        join(artDir, 'case.final.md'),
+        runtime,
+        '-o',
+        join(artDir, 'case.direct.ts'),
+      ],
+      deps(fake(calls)),
+    );
+    expect(directResult.ok).toBe(true);
+
+    const otherSource = join(workDir, 'other.md');
+    await writeFile(otherSource, 'other source\n');
+    const outputResult = await runSlc(
+      ['flow', otherSource, '-o', join(workDir, 'other-output.md')],
+      deps(fake(calls)),
+    );
+    expect(outputResult.ok).toBe(true);
+    expect(await exists(join(workDir, 'other.flow', '.slc'))).toBe(false);
+
+    const reservedResult = await runSlc(['slc', source], {
+      ...deps(fake(calls)),
+      resolver: (reference) =>
+        reference === 'flow' || reference === 'slc' ? [pipelineDir] : [],
+    });
+    expect(reservedResult.ok).toBe(true);
+    expect(await exists(join(workDir, 'case.slc', '.slc'))).toBe(false);
+
+    expect(calls).toHaveLength(9);
+    expect(
+      calls.every(
+        (request) => request.kind !== 'compile' || request.update === undefined,
+      ),
+    ).toBe(true);
+    expect(await exists(marker)).toBe(true);
+    expect((await loadBuildHistory(artDir))?.build).toBe(1);
+  });
+
+  it('delays excluded-run invalidation until a later recorded target', async () => {
+    await runSlc(['flow', source], deps(fake([])));
+    const marker = join(artDir, '.slc', 'latest');
+    const output = join(artDir, 'case.unrecorded-final.md');
+    const calls: ExecuteRequest[] = [];
+    const markerSeen: boolean[] = [];
+
+    const result = await runSlc(
+      ['flow', source, '--normalize', '-o', output],
+      deps(
+        fake(calls, async (request) => {
+          markerSeen.push(await exists(marker));
+          const target =
+            request.kind === 'compile' ? request.target : request.linked;
+          await writeFile(
+            target,
+            target.endsWith('.middle.md') ? 'middle\n' : 'final\n',
+          );
+          return { status: 'ok', diagnostics: [] };
+        }),
+      ),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(3);
+    expect(markerSeen).toEqual([true, false, false]);
+    expect(await exists(marker)).toBe(false);
   });
 });
