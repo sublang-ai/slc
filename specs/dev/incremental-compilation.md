@@ -17,7 +17,7 @@ Where a build is recorded, the slc command shall write `manifest.json` as strict
 
 ### INCR-10
 
-When the slc command loads history, it shall read the build named by `.slc/latest`, traversing `.slc`, `builds`, the build directory, and every intermediate copy component only as real directories — a symbolic link at any of them reads as another directory's store, so it makes history absent; a missing pair, unparsable manifest, wrong schema, structurally invalid field, or a copy whose bytes do not match its recorded hash shall likewise make history absent for the affected use rather than raise an error.
+When the slc command loads history, it shall read the build named by `.slc/latest`, traversing `.slc`, `builds`, and the build directory only as real directories — a symbolic link at any of them reads as another directory's store, so it makes history absent; a missing pair, unparsable manifest, wrong schema, or structurally invalid field shall likewise make history absent rather than raise an error, while a recorded copy is validated — its intermediate components as real directories, its bytes against the recorded hash — only when that copy is read, a failure degrading only the use that depended on it ([INCR-3](../user/incremental-compilation.md#incr-3)).
 
 ### INCR-11
 
@@ -31,7 +31,7 @@ When a history-eligible full or full-link run ([INCR-8](../user/incremental-comp
 
 ### INCR-13
 
-When selecting a step's mode on a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)), the slc command shall match records by kind, name, and target path, and shall select reuse only when every recorded input identity equals the current identity and the target is a safe regular file; update only for a compile step whose matched record has an intact prior-input copy while the target is a safe regular file; and ordinary execution otherwise or under `--rebuild`, with pin validation preceding every mode so a stale or malformed pin fails closed regardless of history.
+When selecting a step's mode on a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)), the slc command shall match records by kind, name, and target path, observe the matched target once and atomically — type, link count, and bytes off a single no-follow, nonblocking descriptor — and shall select reuse only when every recorded input identity equals the current identity and the observation yielded a private regular file, recording that observation's bytes as the reused step's accepted identity; update only for a compile step whose matched record has an intact prior-input copy under the same observation; ordinary execution otherwise — genuine absence, an unsafe leaf, no matching record, a link step's mismatched inputs, a compile step's failed prior-input copy, or `--rebuild`; and shall fail the run before the step's executor when the observation is indeterminate — a recorded target is never silently skipped or rebuilt over. Pin validation precedes every mode so a stale or malformed pin fails closed regardless of history.
 
 ## Update context
 

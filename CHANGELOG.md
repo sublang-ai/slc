@@ -60,6 +60,13 @@ and this project adheres to
   can touch it, and `.slc`/`.slc-verify` are only ever used as real
   directories — a symlinked store is foreign: never read as this
   bundle's history, never unlinked through, never written through.
+  Planned writes — the directories a run creates included — are
+  compared as prospective physical files, so aliased parents cannot
+  make two absent writes coincide, and a source aliasing the runnable
+  entry compiles with emission skipped instead of being refused.
+  Reuse observes a recorded target atomically — the bytes it reads
+  are the identity it records — and a recorded target that cannot be
+  observed fails the run instead of being silently skipped.
 - **A phase cannot succeed without producing its artifact.** A
   textually successful executor that left a pre-existing target
   untouched now fails the phase on both transports, so update mode can

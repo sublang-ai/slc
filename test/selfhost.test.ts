@@ -539,6 +539,24 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     );
   });
 
+  it('compiles and skips emission when the source physically aliases the entry path (COMPILE-7)', async () => {
+    // The .md source hard-linked at the runnable entry path: emission would
+    // destroy the input through its other name. The plan decides this with
+    // the same physical relation as the emission guard, so the compile
+    // proceeds and only the entry is skipped, with a diagnostic — the run
+    // is never refused outright.
+    const { link } = await import('node:fs/promises');
+    await link(source, join(work, 'code.ts'));
+    const result = await runSlc(['playbook', source], deps());
+    expect(result.ok).toBe(true);
+    expect(
+      result.diagnostics.some((line) => line.includes('not emitted')),
+    ).toBe(true);
+    expect(await readFile(join(work, 'code.ts'), 'utf8')).toBe(
+      await readFile(source, 'utf8'),
+    );
+  });
+
   it('refuses to re-derive through a symlinked derivative (PHEXEC-39)', async () => {
     expect((await runSlc(['playbook', source], deps())).ok).toBe(true);
 

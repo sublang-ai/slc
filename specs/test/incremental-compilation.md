@@ -67,7 +67,7 @@ Where a recorded build exists, when any single result-affecting input changes �
 
 ### INCR-29
 
-Verifies: [INCR-6](../user/incremental-compilation.md#incr-6), [INCR-30](../dev/incremental-compilation.md#incr-30)
+Verifies: [INCR-30](../dev/incremental-compilation.md#incr-30), [INCR-35](../user/incremental-compilation.md#incr-35)
 
 While a recorded build exists, when a run that will execute begins its first executor, the history shall already be absent, observable mid-run.
 
@@ -111,7 +111,13 @@ Where `.slc` is a symbolic link to another directory, when a full run executes, 
 
 Verifies: [INCR-16](../dev/incremental-compilation.md#incr-16)
 
-While a recorded build exists, when a failing executor rewrites or replaces the invocation source during a repeat run, the published build shall embed the source bytes captured before any executor ran — never the rejected rewrite, and never blocking on a non-regular replacement.
+While a recorded build exists and a prior record survives the failure, when a failing executor rewrites or replaces the invocation source during a repeat run, the published build shall embed the source bytes captured before any executor ran — never the rejected rewrite, and never blocking on a non-regular replacement.
+
+### INCR-39
+
+Verifies: [INCR-13](../dev/incremental-compilation.md#incr-13)
+
+While a recorded build exists and every earlier step reuses under it, when a repeat run finds a recorded target that cannot be observed as a private regular file, the run shall fail before invoking any executor — naming the target — rather than reuse, skip, or rebuild over it, and shall leave the recorded history standing.
 
 ### INCR-27
 
