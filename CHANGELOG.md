@@ -66,7 +66,12 @@ and this project adheres to
   entry compiles with emission skipped instead of being refused.
   Reuse observes a recorded target atomically — the bytes it reads
   are the identity it records — and a recorded target that cannot be
-  observed fails the run instead of being silently skipped.
+  observed fails the run instead of being silently skipped. The
+  `.slc`/`.slc-verify` namespaces are refused as write destinations
+  everywhere — another bundle's superseded history marker cannot be
+  resurrected through `-o` or a direct link — and a plan must be
+  possible topology: a write below a file anchor, or a planned file
+  containing another planned write, is refused before any agent runs.
 - **A phase cannot succeed without producing its artifact.** A
   textually successful executor that left a pre-existing target
   untouched now fails the phase on both transports, so update mode can

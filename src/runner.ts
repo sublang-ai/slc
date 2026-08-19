@@ -619,12 +619,14 @@ function immutableInputs(steps: readonly PhaseStep[]): string[] {
 
 /**
  * Rejects a conflicting plan before any executor runs (PHEXEC-39). One
- * prospective physical-path relation ({@link samePlannedFile}) decides every
- * conflict — pairwise across all planned writes (chain targets, host file
- * writes, and the directories the run creates) and against every protected
- * input — so two absent paths reached through aliased parents can never name
- * the same file. Containment is lexical on the canonical paths first, with
- * the prospective form as a supplement.
+ * typed prospective physical-path relation decides every conflict: each
+ * planned write (chain targets, host file writes, and the directories the
+ * run creates) must resolve to a possible location — its nearest existing
+ * anchor a directory — may not enter any reserved `.slc` or `.slc-verify`
+ * namespace anywhere on the filesystem, may not coincide with or contain
+ * another planned write, and may not alias a protected input. Containment
+ * is lexical on the canonical paths first, with the prospective form as a
+ * supplement.
  */
 async function plannedOutputConflict(
   steps: readonly PhaseStep[],
@@ -635,13 +637,36 @@ async function plannedOutputConflict(
     step.request.kind === 'compile' ? step.request.target : step.request.linked,
   );
   // Everything this run will place on disk. `file: false` marks a created
-  // directory: it may legitimately already exist as a directory, but must
-  // never coincide with a file write or overwrite a protected file.
+  // directory: it may legitimately already exist as a directory and contain
+  // planned files, but must never coincide with a file write or overwrite a
+  // protected file.
   const planned = [
     ...targets.map((path) => ({ path, file: true })),
     ...host.writes.map((path) => ({ path, file: true })),
     ...host.ensureDirs.map((path) => ({ path, file: false })),
   ];
+  // Every planned write must be a possible location: a nearest existing
+  // anchor that is not a directory can never gain children (PHEXEC-39).
+  const resolved: string[] = [];
+  for (const { path, file } of planned) {
+    try {
+      resolved.push(prospectiveRealPath(path, { anchorMustBeDir: true }));
+    } catch (error) {
+      return `slc: planned ${file ? 'output' : 'directory'} "${path}" cannot exist: ${messageOf(error)}`;
+    }
+  }
+  // Reserved namespaces are global, not anchor-local (DR-021): a write into
+  // ANY `.slc` or `.slc-verify` — this bundle's, a foreign bundle's, or a
+  // direct link's destination — could forge another compile's currentness
+  // marker or verifier closure. Judged on the canonical and prospective
+  // forms alike.
+  for (let i = 0; i < planned.length; i++) {
+    const hit =
+      reservedNamespace(planned[i].path) ?? reservedNamespace(resolved[i]);
+    if (hit !== null) {
+      return `slc: planned write "${planned[i].path}" names or enters the reserved directory namespace "${hit}"; refusing to run`;
+    }
+  }
   for (let i = 0; i < planned.length; i++) {
     for (let j = i + 1; j < planned.length; j++) {
       if (await samePlannedFile(planned[i].path, planned[j].path)) {
@@ -649,8 +674,22 @@ async function plannedOutputConflict(
           ? `slc: planned outputs collide at "${planned[i].path}"; adjust -o`
           : `slc: planned outputs "${planned[i].path}" and "${planned[j].path}" are the same file; refusing to run`;
       }
+      // A planned file can never contain another planned write: whichever
+      // lands first makes the other impossible — or worse, an executor
+      // could replace the file to make it possible (PHEXEC-39).
+      const fileOver =
+        (planned[i].file && resolved[j].startsWith(`${resolved[i]}${sep}`)) ||
+        (planned[j].file && resolved[i].startsWith(`${resolved[j]}${sep}`));
+      if (fileOver) {
+        return `slc: planned output "${planned[i].path}" and planned write "${planned[j].path}" cannot both exist; refusing to run`;
+      }
     }
   }
+  // The bundle's own reserved directories additionally admit no planned
+  // write — even when the reserved directory itself is a symlink whose
+  // destination carries no reserved component — and no protected input:
+  // nothing this run reads or writes may live in what it manages
+  // (PHEXEC-39).
   for (const dir of host.reserved) {
     for (const path of [...targets, ...host.writes, ...immutable]) {
       if (await pathInsideDir(path, dir)) {
@@ -727,6 +766,20 @@ async function pathInsideDir(path: string, dir: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * The reserved directory name a path names or crosses, or `null`. `.slc`
+ * and `.slc-verify` are slc-owned namespaces wherever they appear: writing
+ * through one — own bundle or foreign — could resurrect a superseded
+ * currentness marker or corrupt a verifier closure (DR-021, PHEXEC-39).
+ */
+function reservedNamespace(path: string): string | null {
+  const parts = path.split(sep);
+  for (const name of [HISTORY_DIR, VERIFIER_SUPPORT_DIR]) {
+    if (parts.includes(name)) return name;
+  }
+  return null;
 }
 
 /**

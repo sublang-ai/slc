@@ -1233,6 +1233,116 @@ describe('PHEXEC-39: plan-wide protection and canonical cwd', () => {
     expect(await readFile(out, 'utf8')).toBe('fsm bytes\n');
   });
 
+  it('keeps a file-anchored pin path stale, never a run-wide veto', async () => {
+    // The recorded bundle directory replaced by a regular file: the pinned
+    // artifact path is unresolvable, which is currency damage (stale) for
+    // that one phase — a possible-location rule for planned writes must not
+    // reclassify it as a structural defect that vetoes unrelated phases.
+    const bundleDir = join(pipelineDir, 'text2gears.slc');
+    await mkdir(bundleDir);
+    await writeFile(join(bundleDir, 'text2gears.playbook.ts'), 'artifact\n');
+    await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target\n');
+    const record: PinRecord = {
+      definition: {
+        path: 'text2gears.md',
+        hash: await hashFile(join(pipelineDir, 'text2gears.md')),
+      },
+      artifact: {
+        path: 'text2gears.slc/text2gears.playbook.ts',
+        hash: await hashFile(join(bundleDir, 'text2gears.playbook.ts')),
+      },
+      artifactBundle: {
+        path: 'text2gears.slc',
+        hash: await hashTree(bundleDir),
+      },
+      semanticInputs: [],
+      externalInputs: [],
+      runtimeDependencies: [],
+      linkTarget: {
+        kind: 'file',
+        locator: 'linktarget.ts',
+        identity: await hashFile(join(pipelineDir, 'linktarget.ts')),
+      },
+    };
+    await writeFile(
+      join(pipelineDir, PINS_FILE),
+      JSON.stringify({
+        schema: PIN_SCHEMA,
+        hashAlgorithm: PIN_HASH_ALGORITHM,
+        pathBoundary: { path: '.' },
+        pins: { text2gears: record },
+      }),
+    );
+    await rm(bundleDir, { recursive: true });
+    await writeFile(bundleDir, 'a file where the bundle was\n');
+
+    // A phase that never uses the damaged pin runs interpreted, untouched.
+    const gears = join(srcDir, 'onboarding.gears.md');
+    await writeFile(gears, 'gears bytes\n');
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow.gears2fsm', gears], deps(agent));
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+
+    // The damaged phase itself fails closed as stale, not malformed.
+    const { agent: gated, calls: gatedCalls } = makeAgent();
+    const pinned = await runSlc(['flow', source], deps(gated));
+    expect(pinned.ok).toBe(false);
+    expect(gatedCalls).toHaveLength(0);
+    expect(pinned.diagnostics.join('\n')).toContain('stale');
+    expect(pinned.diagnostics.join('\n')).not.toContain('malformed');
+  });
+
+  it('refuses a write into its own reserved store behind a symlink', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // `.slc` moved elsewhere and symlinked back: an -o at the destination
+    // carries no reserved component, but the bundle's own reserved
+    // directory still resolves there — containment must see through it.
+    const { rename, symlink } = await import('node:fs/promises');
+    const store = join(root, 'store');
+    await rename(join(artDir, '.slc'), store);
+    await symlink(store, join(artDir, '.slc'));
+
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', source, '-o', join(store, 'latest')],
+      deps(second),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('reserved directory');
+    expect(await readFile(join(store, 'latest'), 'utf8')).toBe('1\n');
+  });
+
+  it('refuses -o whose nearest existing anchor is a file, with zero calls', async () => {
+    const anchor = join(srcDir, 'anchor.md');
+    await writeFile(anchor, 'a file, not a directory\n');
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', source, '-o', join(anchor, 'missing/out.ts')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('cannot exist');
+    expect(await readFile(anchor, 'utf8')).toBe('a file, not a directory\n');
+  });
+
+  it('refuses -o nesting the terminal under an earlier intermediate', async () => {
+    // Both paths are absent when planned; phase one would create the
+    // intermediate as a file, making phase two's target impossible.
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', source, '-o', join(artDir, 'onboarding.gears.md/final.ts')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('cannot both exist');
+  });
+
   it('refuses -o reaching a planned verification write through an alias', async () => {
     // alias -> the playbook artifact directory: the linked output and the
     // coverage test the run will emit are two absent paths naming the same
@@ -1271,7 +1381,9 @@ describe('PHEXEC-39: plan-wide protection and canonical cwd', () => {
     const result = await runSlc(['flow', source, '-o', artDir], deps(agent));
     expect(result.ok).toBe(false);
     expect(calls).toHaveLength(0);
-    expect(result.diagnostics.join('\n')).toContain('collide');
+    // The intermediate would live inside the -o'd terminal file: impossible
+    // topology, named as such.
+    expect(result.diagnostics.join('\n')).toContain('cannot both exist');
   });
 
   it('canonicalizes a relative injected cwd and relative --link operand', async () => {
@@ -1376,6 +1488,59 @@ describe('INCR-30: malformed markers read as absent; active ones fail closed', (
     // The foreign store is untouched: marker intact, no new build inside.
     expect(await readFile(join(foreign, 'latest'), 'utf8')).toBe('1\n');
     expect(await readdir(join(foreign, 'builds'))).toEqual(['1']);
+  });
+
+  it('refuses to resurrect a superseded marker from any anchor (INCR-40)', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // A rebuild removes the marker, writes rejected bytes at the gears
+    // target, then fails: correct state is marker-absent, fresh compile
+    // next time.
+    const sabotaged: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        const target = match ? match[1].trim() : '';
+        await writeFile(target, 'rejected\n');
+        return { status: 'error', text: 'failed after writing' };
+      },
+    };
+    const failed = await runSlc(['flow', source, '--rebuild'], deps(sabotaged));
+    expect(failed.ok).toBe(false);
+    expect(await loadBuildHistory(artDir)).toBeNull();
+
+    // Any invocation aiming a write at that bundle's `.slc` — a foreign
+    // full run or a direct link, neither anchored there — must be refused:
+    // a written `1\n` would resurrect build 1 and bless the rejected bytes.
+    const marker = join(artDir, '.slc/latest');
+    const otherSource = join(srcDir, 'other.md');
+    await writeFile(otherSource, 'other prose\n');
+    const object = join(srcDir, 'other.fsm.ts');
+    await writeFile(object, 'object\n');
+    const runtime = join(srcDir, 'runtime.ts');
+    await writeFile(runtime, 'runtime\n');
+    for (const argv of [
+      ['flow', otherSource, '-o', marker],
+      ['flow.link', object, runtime, '-o', marker],
+    ]) {
+      const { agent: writer, calls } = makeAgent({
+        content: { latest: '1\n' },
+      });
+      const attempt = await runSlc(argv, deps(writer));
+      expect(attempt.ok).toBe(false);
+      expect(calls).toHaveLength(0);
+      expect(attempt.diagnostics.join('\n')).toContain('reserved directory');
+    }
+    expect(await exists(marker)).toBe(false);
+
+    // With the marker still absent, the bundle compiles fresh: the
+    // rejected bytes are re-executed, never reused.
+    const { agent: third, calls } = makeAgent();
+    expect((await runSlc(['flow', source], deps(third))).ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(await readFile(join(artDir, 'onboarding.gears.md'), 'utf8')).toBe(
+      'output\n',
+    );
   });
 
   it('fails closed when the marker can neither be removed nor observed (INCR-33)', async () => {

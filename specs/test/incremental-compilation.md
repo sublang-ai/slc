@@ -119,6 +119,12 @@ Verifies: [INCR-13](../dev/incremental-compilation.md#incr-13)
 
 While a recorded build exists and every earlier step reuses under it, when a repeat run finds a recorded target that cannot be observed as a private regular file, the run shall fail before invoking any executor — naming the target — rather than reuse, skip, or rebuild over it, and shall leave the recorded history standing.
 
+### INCR-40
+
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39), [INCR-30](../dev/incremental-compilation.md#incr-30)
+
+Where a bundle's failed run left its marker absent and rejected bytes at a recorded target, when any other invocation — another bundle's compile or a direct link — plans a write into that bundle's `.slc`, the plan shall be refused with zero executor calls, so the superseded marker is never resurrected and the bundle's next run re-executes the rejected bytes instead of reusing them.
+
 ### INCR-27
 
 Verifies: [INCR-2](../user/incremental-compilation.md#incr-2)

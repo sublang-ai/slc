@@ -14,7 +14,7 @@
  * the currency engine maps to a malformed verdict. See specs/dev/pinning.md.
  */
 
-import { realpathSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
 import {
   basename,
   dirname,
@@ -90,22 +90,45 @@ function canonicalProspectivePath(path: string, field: string): string {
  * The physical form a path will take once created: the nearest existing
  * ancestor resolved through every symlink, with the missing components
  * appended lexically. Containment decided on this form cannot be defeated by
- * a missing intermediate directory (PHEXEC-39).
+ * a missing intermediate directory. With `anchorMustBeDir`, missing
+ * components below a non-directory anchor are impossible topology and
+ * throw — the planner's possible-location rule (PHEXEC-39); without it the
+ * form is still returned, which is what comparison and pin-boundary
+ * containment need — a pin path below a file anchor is merely stale, never
+ * a run-wide structural defect.
  *
- * @throws when an existing ancestor cannot be resolved (not merely absent).
+ * @throws when an existing ancestor cannot be resolved (not merely absent),
+ *   or — with `anchorMustBeDir` — when missing components remain below a
+ *   non-directory anchor.
  */
-export function prospectiveRealPath(path: string): string {
+export function prospectiveRealPath(
+  path: string,
+  opts: { anchorMustBeDir?: boolean } = {},
+): string {
   const suffix: string[] = [];
   let cursor = path;
   while (true) {
+    let anchor: string | null = null;
     try {
-      return resolve(realpathSync.native(cursor), ...suffix.reverse());
+      anchor = realpathSync.native(cursor);
     } catch (error) {
       if (!isAbsentPathError(error)) {
         throw new Error(`"${cursor}" cannot be resolved: ${errorCode(error)}`, {
           cause: error,
         });
       }
+    }
+    if (anchor !== null) {
+      if (
+        opts.anchorMustBeDir === true &&
+        suffix.length > 0 &&
+        !statSync(anchor).isDirectory()
+      ) {
+        throw new Error(
+          `"${cursor}" is not a directory, so "${path}" cannot exist`,
+        );
+      }
+      return resolve(anchor, ...suffix.reverse());
     }
 
     const parent = dirname(cursor);
