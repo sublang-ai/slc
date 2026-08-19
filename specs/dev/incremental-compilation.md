@@ -31,7 +31,7 @@ While an eligible run has a valid active marker, when its first phase is selecte
 
 ### INCR-13
 
-When an eligible run computes a compile phase's current identities, the slc command shall hash exact bytes in this order: chained input, definition, explicit references, then the definition's declared local `## Pin Inputs`; for a link phase it shall hash ordered object locators and bytes, the link definition, link-target locator and content, and ordered option pairs with unambiguous framing.
+When an eligible run computes a compile phase's current identities, the slc command shall hash exact bytes in this order: chained input, definition, explicit references, then the definitions' and Markdown references' declared local `## Pin Inputs` closures; for a link phase it shall hash ordered object locators and bytes, the link definition and its declared local closure, link-target locator and content, and ordered option pairs with unambiguous framing.
 
 ### INCR-14
 
@@ -50,3 +50,7 @@ Where a compile phase executes in Update mode, when its interpreted or compiled 
 ### INCR-17
 
 When an eligible invocation finishes successfully after executing at least one phase and completing required deterministic post-processing, the slc command shall materialize the current source and every scheduled live phase output into one complete build and publish it once.
+
+### INCR-26
+
+Where a history-excluded invocation is about to execute a target named by a usable active build in that target's parent directory, when execution begins, the slc command shall remove that build's marker before invoking the executor without otherwise using or republishing the build.

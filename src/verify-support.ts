@@ -27,12 +27,30 @@ const SUPPORT_FILES = [
   'verify-coverage.d.ts',
 ] as const;
 
+/** One installed verifier source and its deterministic artifact-local copy. */
+export interface VerifierSupportFile {
+  source: string;
+  target: string;
+}
+
 function compiledModuleDir(): string {
   const modulePath = fileURLToPath(import.meta.url);
   const moduleDir = dirname(modulePath);
   return extname(modulePath) === '.js'
     ? moduleDir
     : resolve(moduleDir, '../dist');
+}
+
+/** Exact verifier-support copy inventory for one artifact directory. */
+export function verifierSupportFiles(
+  artifactDir: string,
+): VerifierSupportFile[] {
+  const sourceDir = compiledModuleDir();
+  const targetDir = join(artifactDir, VERIFIER_SUPPORT_DIR);
+  return SUPPORT_FILES.map((file) => ({
+    source: join(sourceDir, file),
+    target: join(targetDir, file),
+  }));
 }
 
 function withoutSourceMapReference(content: string): string {
@@ -48,15 +66,13 @@ function withoutSourceMapReference(content: string): string {
 export async function emitVerifierSupport(
   artifactDir: string,
 ): Promise<string[]> {
-  const sourceDir = compiledModuleDir();
   const targetDir = join(artifactDir, VERIFIER_SUPPORT_DIR);
   await mkdir(targetDir, { recursive: true });
   return Promise.all(
-    SUPPORT_FILES.map(async (file) => {
-      const path = join(targetDir, file);
-      const content = await readFile(join(sourceDir, file), 'utf8');
-      await writeFile(path, withoutSourceMapReference(content));
-      return path;
+    verifierSupportFiles(artifactDir).map(async ({ source, target }) => {
+      const content = await readFile(source, 'utf8');
+      await writeFile(target, withoutSourceMapReference(content));
+      return target;
     }),
   );
 }

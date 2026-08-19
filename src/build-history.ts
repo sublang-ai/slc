@@ -26,6 +26,8 @@ export const SOURCE_COPY = 'source';
 const OUTPUTS_DIR = 'outputs';
 const MAX_BUILD_NUMBER = 999_999_999_999_999;
 const BUILD_NUMBER = /^[1-9]\d{0,14}$/;
+const PRIVATE_DIRECTORY_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
 
 export interface StepHistoryRecord {
   kind: 'compile' | 'link';
@@ -195,7 +197,7 @@ export async function recordBuild(opts: {
   while (next <= MAX_BUILD_NUMBER) {
     const candidate = join(buildsDir, String(next));
     try {
-      await mkdir(candidate);
+      await mkdir(candidate, { mode: PRIVATE_DIRECTORY_MODE });
       dir = candidate;
       break;
     } catch (error) {
@@ -205,8 +207,11 @@ export async function recordBuild(opts: {
   }
   if (dir === null) throw new Error('build history number space is exhausted');
 
-  await mkdir(join(dir, OUTPUTS_DIR));
-  await writeFile(join(dir, SOURCE_COPY), opts.sourceBytes, { flag: 'wx' });
+  await mkdir(join(dir, OUTPUTS_DIR), { mode: PRIVATE_DIRECTORY_MODE });
+  await writeFile(join(dir, SOURCE_COPY), opts.sourceBytes, {
+    flag: 'wx',
+    mode: PRIVATE_FILE_MODE,
+  });
 
   const steps: StepHistoryRecord[] = [];
   for (let index = 0; index < opts.steps.length; index++) {
@@ -224,6 +229,7 @@ export async function recordBuild(opts: {
     }
     await writeFile(join(dir, OUTPUTS_DIR, String(index)), step.bytes, {
       flag: 'wx',
+      mode: PRIVATE_FILE_MODE,
     });
     steps.push({
       kind: step.kind,
@@ -247,12 +253,15 @@ export async function recordBuild(opts: {
   await writeFile(
     join(dir, 'manifest.json'),
     `${JSON.stringify(manifest, null, 2)}\n`,
-    { flag: 'wx' },
+    { flag: 'wx', mode: PRIVATE_FILE_MODE },
   );
 
   const marker = join(historyDir, `latest.${process.pid}.${randomUUID()}`);
   try {
-    await writeFile(marker, `${next}\n`, { flag: 'wx' });
+    await writeFile(marker, `${next}\n`, {
+      flag: 'wx',
+      mode: PRIVATE_FILE_MODE,
+    });
     await rename(marker, join(historyDir, 'latest'));
   } catch (error) {
     try {
@@ -266,7 +275,7 @@ export async function recordBuild(opts: {
 
 async function ensureRealDirectory(path: string): Promise<void> {
   try {
-    await mkdir(path);
+    await mkdir(path, { mode: PRIVATE_DIRECTORY_MODE });
   } catch (error) {
     if (errorCode(error) !== 'EEXIST') throw error;
   }
