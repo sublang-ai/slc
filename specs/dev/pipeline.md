@@ -76,7 +76,7 @@ When writing artifacts, the slc command shall write each intermediate to `<art-d
 
 ### PIPE-9
 
-When invoked, the slc command shall parse `slc <pipeline>[.<phase>] <source> [-o <target>]`, running the pipeline end-to-end for `<pipeline>` and a single named phase for `<pipeline>.<phase>` ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli)).
+When invoked, the slc command shall parse `slc <pipeline>[.<phase>] <source> [-o <target>] [--rebuild]`, running the pipeline end-to-end for `<pipeline>`, a single named phase for `<pipeline>.<phase>`, and accepting `--rebuild` only for a full or full-link invocation without `-o` ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-021](../decisions/021-incremental-compilation.md)).
 
 ## Link phases
 

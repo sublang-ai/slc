@@ -32,11 +32,11 @@ When a run cannot complete — because the invocation or pipeline is rejected, o
 
 ### COMPILE-5
 
-The slc command shall carry out each phase with a coding agent that follows the phase's definition, so the user supplies only the source and the phase definitions and writes no transformation code ([DR-004](../decisions/004-slc-interpreted-phase-execution.md)).
+When a phase is selected for execution rather than incremental reuse, the slc command shall carry it out with a coding agent that follows the phase's definition, so the user supplies only the source and the phase definitions and writes no transformation code ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-021](../decisions/021-incremental-compilation.md)).
 
 ### COMPILE-6
 
-Where a pipeline pins a phase to a reviewed compiled artifact, when the user runs the pipeline, the slc command shall run that artifact for a current pin and shall stop the run with a diagnostic — rather than silently interpreting the phase — when the pin is stale or malformed or the pin file is unreadable ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md)).
+Where a pipeline pins a phase to a reviewed compiled artifact, when the user runs the pipeline, the slc command shall require the pin to be current before reuse or execution, shall run that artifact when execution is selected, and shall stop with a diagnostic — rather than silently interpreting — when the pin is stale or malformed or the pin file is unreadable ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md), [DR-021](../decisions/021-incremental-compilation.md)).
 
 ### COMPILE-7
 

@@ -25,13 +25,13 @@ When the user runs `slc` with `--version` or `-v`, the slc executable shall prin
 
 ### CLI-2
 
-When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli), [DR-006](../decisions/006-slc-configuration-sources.md#file-format-and-discovery), [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7)).
+When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--rebuild`, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli), [DR-006](../decisions/006-slc-configuration-sources.md#file-format-and-discovery), [DR-021](../decisions/021-incremental-compilation.md), [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7)).
 
 ## Outcomes
 
 ### CLI-3
 
-When a run completes successfully, the slc executable shall print the paths of the artifacts it wrote — including the `-o` output path when one was given — to standard output and exit zero ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [COMPILE-1](compiler.md#compile-1), [COMPILE-3](compiler.md#compile-3)).
+When a run completes successfully, the slc executable shall print the paths of the artifacts it wrote — including the `-o` output path when one was given — or `up to date` when incremental selection invoked no phase executor, and shall exit zero ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [DR-021](../decisions/021-incremental-compilation.md), [COMPILE-1](compiler.md#compile-1), [COMPILE-3](compiler.md#compile-3)).
 
 ### CLI-4
 
