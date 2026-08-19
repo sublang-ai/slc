@@ -16,7 +16,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -34,6 +34,7 @@ import {
   type PinRecord,
 } from '../src/pins.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
+import { verifierSupportSources } from '../src/verify-support.js';
 
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats
@@ -1314,6 +1315,103 @@ describe('PHEXEC-39: plan-wide protection and canonical cwd', () => {
     expect(calls).toHaveLength(0);
     expect(result.diagnostics.join('\n')).toContain('reserved directory');
     expect(await readFile(join(store, 'latest'), 'utf8')).toBe('1\n');
+  });
+
+  it('refuses a plan below a dangling symlink, leaving the destination untouched', async () => {
+    // alias -> foreignBundle/.slc/forged, dangling: the prospective walk
+    // used to lexicalize it (no reserved component visible), passing
+    // planning and leaving the failure to an untyped mid-run mkdir error;
+    // strict resolution refuses it as impossible topology up front.
+    const { symlink } = await import('node:fs/promises');
+    const foreignStore = join(root, 'foreign.playbook/.slc');
+    await mkdir(foreignStore, { recursive: true });
+    const alias = join(srcDir, 'alias');
+    await symlink(join(foreignStore, 'forged'), alias);
+
+    const object = join(srcDir, 'x.fsm.ts');
+    await writeFile(object, 'object\n');
+    const runtime = join(srcDir, 'runtime.ts');
+    await writeFile(runtime, 'runtime\n');
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow.link', object, runtime, '-o', join(alias, 'sub/out.ts')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('cannot exist');
+    expect(await readdir(foreignStore)).toEqual([]);
+  });
+
+  it('refuses a single-phase run whose artifact directory is a file', async () => {
+    await writeFile(artDir, 'a file where the artifact directory goes\n');
+    const gears = join(srcDir, 'onboarding.gears.md');
+    await writeFile(gears, 'gears bytes\n');
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow.gears2fsm', gears, '-o', join(srcDir, 'out.fsm.ts')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('a file is in its place');
+    expect(await readFile(artDir, 'utf8')).toBe(
+      'a file where the artifact directory goes\n',
+    );
+  });
+
+  it('refuses -o into a .slc-verify namespace, with zero calls', async () => {
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow', source, '-o', join(artDir, '.slc-verify/verify.js')],
+      deps(agent),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain(
+      'reserved directory namespace',
+    );
+  });
+
+  it('refuses -o aliasing an installed verifier-support source', async () => {
+    // The alias points at the slc checkout root; the -o path resolves to
+    // dist/hash.js — a file a planned verification emission reads.
+    const { symlink } = await import('node:fs/promises');
+    const supportRoot = dirname(dirname(verifierSupportSources()[0]));
+    const alias = join(srcDir, 'toolchain');
+    await symlink(supportRoot, alias);
+    const entry = join(srcDir, 'onboarding.ts');
+    await writeFile(entry, 'link runtime\n');
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['playbook', source, '--link', entry, '-o', join(alias, 'dist/hash.js')],
+      {
+        ...deps(agent),
+        resolver: (reference) =>
+          reference === 'playbook' ? [pipelineDir] : [],
+      },
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('protected input');
+  });
+
+  it('refuses a blocked .slc-verify root before any agent runs', async () => {
+    // Pre-fix this surfaced only after the whole agent pipeline, when
+    // emitVerifierSupport finally touched the blocked root.
+    const playbookArtDir = join(srcDir, 'onboarding.playbook');
+    await mkdir(playbookArtDir, { recursive: true });
+    await writeFile(join(playbookArtDir, '.slc-verify'), 'not a directory\n');
+    const runtime = join(srcDir, 'runtime.ts');
+    await writeFile(runtime, 'link runtime\n');
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['playbook', source, '--link', runtime], {
+      ...deps(agent),
+      resolver: (reference) => (reference === 'playbook' ? [pipelineDir] : []),
+    });
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('managed directory');
   });
 
   it('refuses -o whose nearest existing anchor is a file, with zero calls', async () => {

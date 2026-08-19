@@ -30,9 +30,11 @@ and this project adheres to
   trusts what a failed executor left behind; an abruptly interrupted
   run compiles fresh next time. An all-reuse repeat also re-derives the entry module and
   verification files, restoring them if deleted. History is advisory
-  memory: corrupt or deleted `.slc/` state means a fresh compile, never
-  an error, and the new `--rebuild` flag recompiles everything while
-  still enforcing pin validation.
+  memory: a corrupt or deleted `.slc/` store means a fresh compile,
+  never an error, while a single damaged copy inside an otherwise
+  intact store — every copy is re-verified before use — disables only
+  the update that depended on it, and the new `--rebuild` flag
+  recompiles everything while still enforcing pin validation.
   `-o` outputs, the reserved `slc` meta-pipeline, and single-phase,
   standalone-pass, and direct-link runs stay outside history.
   ([DR-021](specs/decisions/021-incremental-compilation.md))

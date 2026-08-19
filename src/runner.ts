@@ -25,6 +25,7 @@ import {
   loadBuildHistory,
   readSourceBytes,
   readStoreFile,
+  realDirState,
   recordBuild,
   resolveLocator,
   verifiedCopy,
@@ -41,6 +42,7 @@ import {
   formatFailureReport,
   observeTarget,
   regularFileState,
+  reservedNamespace,
   runPhase,
 } from './execution.js';
 import { hashBytes, hashFile, type Hash } from './hash.js';
@@ -77,6 +79,7 @@ import {
   VERIFIER_SUPPORT_MODULE,
   emitVerifierSupport,
   verifierSupportSources,
+  verifierSupportWrites,
 } from './verify-support.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
@@ -516,6 +519,17 @@ interface HostPlan {
   reserved: readonly string[];
   /** Directories created only once plan validation has passed. */
   ensureDirs: readonly string[];
+  /**
+   * Managed roots the host itself populates inside its reserved namespaces
+   * (`.slc-verify`); must be absent or real directories at plan time.
+   */
+  managedDirs: readonly string[];
+  /**
+   * Managed files the host itself writes inside those roots (the verifier
+   * support closure); each must be absent or a safe regular leaf at plan
+   * time — exempt from the external reserved-name ban, preflighted instead.
+   */
+  managedWrites: readonly string[];
 }
 
 const EMPTY_HOST_PLAN: HostPlan = {
@@ -523,6 +537,8 @@ const EMPTY_HOST_PLAN: HostPlan = {
   reads: [],
   reserved: [],
   ensureDirs: [],
+  managedDirs: [],
+  managedWrites: [],
 };
 
 /**
@@ -579,6 +595,7 @@ function hostPlan(opts: {
 }): HostPlan {
   const writes = [...(opts.verification?.writes ?? [])];
   if (opts.entry !== undefined) writes.push(opts.entry);
+  const emitsVerification = opts.verification !== null;
   return {
     writes,
     reads: opts.verification?.reads ?? [],
@@ -587,6 +604,12 @@ function hostPlan(opts: {
       join(opts.artDir, VERIFIER_SUPPORT_DIR),
     ],
     ensureDirs: [opts.artDir],
+    // The support closure the emission itself will write: managed, not
+    // external, and preflighted at plan time (PHEXEC-39).
+    managedDirs: emitsVerification
+      ? [join(opts.artDir, VERIFIER_SUPPORT_DIR)]
+      : [],
+    managedWrites: emitsVerification ? verifierSupportWrites(opts.artDir) : [],
   };
 }
 
@@ -701,6 +724,35 @@ async function plannedOutputConflict(
     if (file && (await regularFileState(path)) === 'unsafe') {
       return `slc: planned output "${path}" is not writable as a private regular file (symbolic link, non-regular, or hard-linked); refusing to run`;
     }
+    // A planned directory must already be a directory or be absent beneath
+    // one — a file or dangling link in its place is discovered here, not by
+    // a mid-run mkdir failure (PHEXEC-39).
+    if (!file) {
+      try {
+        if (!(await stat(path)).isDirectory()) {
+          return `slc: planned directory "${path}" cannot exist: a file is in its place; refusing to run`;
+        }
+      } catch {
+        // Absent is fine — possible-location resolution above vetted the
+        // ancestry, and an existing-but-dangling leaf failed there too.
+      }
+    }
+  }
+  // Managed writes are the host's own, inside its reserved namespaces:
+  // exempt from the external reserved-name ban, but preflighted here so a
+  // blocked `.slc-verify` root or an unsafe support leaf refuses the plan
+  // instead of surfacing after the agent pipeline (PHEXEC-39). The store's
+  // `.slc` writes stay the managed carve-out its own no-follow,
+  // real-directory primitives enforce at recording time.
+  for (const dir of host.managedDirs) {
+    if ((await realDirState(dir)) === 'blocked') {
+      return `slc: managed directory "${dir}" is not a real directory; remove it to let slc manage the path`;
+    }
+  }
+  for (const write of host.managedWrites) {
+    if ((await regularFileState(write)) === 'unsafe') {
+      return `slc: managed write "${write}" is not writable as a private regular file (symbolic link, non-regular, or hard-linked); refusing to run`;
+    }
   }
   for (const input of immutable) {
     let inputInfo: Stats | null;
@@ -766,20 +818,6 @@ async function pathInsideDir(path: string, dir: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/**
- * The reserved directory name a path names or crosses, or `null`. `.slc`
- * and `.slc-verify` are slc-owned namespaces wherever they appear: writing
- * through one — own bundle or foreign — could resurrect a superseded
- * currentness marker or corrupt a verifier closure (DR-021, PHEXEC-39).
- */
-function reservedNamespace(path: string): string | null {
-  const parts = path.split(sep);
-  for (const name of [HISTORY_DIR, VERIFIER_SUPPORT_DIR]) {
-    if (parts.includes(name)) return name;
-  }
-  return null;
 }
 
 /**
