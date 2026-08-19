@@ -25,7 +25,8 @@ import {
 } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 
-import { errorCode } from './errors.js';
+import { errorCode, isAbsentPathError } from './errors.js';
+import { writeFileNoFollow } from './verify.js';
 import { hashBytes, isHash, type Hash } from './hash.js';
 
 /**
@@ -78,6 +79,38 @@ export async function readSourceBytes(path: string): Promise<Buffer | null> {
 
 /** Reserved history directory name inside an artifact directory (DR-021). */
 export const HISTORY_DIR = '.slc';
+
+/**
+ * Observes one host-managed directory component without following symlinks:
+ * `dir` only for a real directory. A symbolic link at `.slc`, `builds`, a
+ * build directory, or `.slc-verify` would route every read, unlink, and
+ * write somewhere the host never chose (INCR-10, PHEXEC-39).
+ */
+export async function realDirState(
+  path: string,
+): Promise<'absent' | 'dir' | 'blocked'> {
+  try {
+    return (await lstat(path)).isDirectory() ? 'dir' : 'blocked';
+  } catch (error) {
+    return isAbsentPathError(error) ? 'absent' : 'blocked';
+  }
+}
+
+/**
+ * Ensures a host-managed directory exists as a real directory, creating it
+ * when absent and refusing anything else — a file or symbolic link at the
+ * path must never be traversed or replaced (PHEXEC-39).
+ */
+export async function ensureRealDir(path: string): Promise<void> {
+  const state = await realDirState(path);
+  if (state === 'dir') return;
+  if (state === 'blocked') {
+    throw new Error(
+      `"${path}" is not a real directory; remove it to let slc manage the path`,
+    );
+  }
+  await mkdir(path);
+}
 
 export const BUILD_MANIFEST_SCHEMA = 'sublang.slc.build.v1';
 
@@ -135,13 +168,19 @@ export async function loadBuildHistory(
   artDir: string,
 ): Promise<BuildHistory | null> {
   const historyDir = join(artDir, HISTORY_DIR);
+  // Every fixed store component must be a real directory: a symlinked
+  // `.slc`, `builds`, or build directory would read another bundle's
+  // history as this one's (INCR-10).
+  if ((await realDirState(historyDir)) !== 'dir') return null;
   const marker = await readStoreFile(join(historyDir, 'latest'));
   if (marker === null) return null;
   const latest = marker.toString('utf8').trim();
   if (!/^\d{1,15}$/.test(latest)) return null;
   const build = Number(latest);
   if (build < 1) return null;
+  if ((await realDirState(join(historyDir, 'builds'))) !== 'dir') return null;
   const dir = join(historyDir, 'builds', String(build));
+  if ((await realDirState(dir)) !== 'dir') return null;
   const rawManifest = await readStoreFile(join(dir, 'manifest.json'));
   if (rawManifest === null) return null;
   let manifest: BuildManifest;
@@ -167,6 +206,10 @@ export async function loadBuildHistory(
  * run reuse bytes a failed executor left behind (INCR-30).
  */
 export async function invalidateBuildHistory(artDir: string): Promise<void> {
+  // A `.slc` that is not a real directory holds no marker of this bundle's
+  // own: loading already reads it as absent, and unlinking through a
+  // symlink would destroy another directory's marker (PHEXEC-39).
+  if ((await realDirState(join(artDir, HISTORY_DIR))) !== 'dir') return;
   const marker = join(artDir, HISTORY_DIR, 'latest');
   try {
     await unlink(marker);
@@ -197,7 +240,15 @@ export async function verifiedCopy(
   copy: string,
   hash: Hash,
 ): Promise<{ path: string; bytes: Buffer } | null> {
-  const path = join(history.dir, ...copy.split('/'));
+  const parts = copy.split('/');
+  // The store's intermediate components are host-managed like its roots: a
+  // symlinked `outputs` reads as an absent copy, never a redirect (INCR-10).
+  let cursor = history.dir;
+  for (const part of parts.slice(0, -1)) {
+    cursor = join(cursor, part);
+    if ((await realDirState(cursor)) !== 'dir') return null;
+  }
+  const path = join(history.dir, ...parts);
   const bytes = await readStoreFile(path);
   if (bytes === null) return null;
   return hashBytes(bytes) === hash ? { path, bytes } : null;
@@ -237,7 +288,8 @@ export async function recordBuild(opts: {
   if (opts.steps.length === 0) return;
   const historyDir = join(opts.artDir, HISTORY_DIR);
   const buildsDir = join(historyDir, 'builds');
-  await mkdir(buildsDir, { recursive: true });
+  await ensureRealDir(historyDir);
+  await ensureRealDir(buildsDir);
 
   let next = 1;
   const marker = await readStoreFile(join(historyDir, 'latest'));
@@ -284,8 +336,12 @@ export async function recordBuild(opts: {
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
 
+  // The temp marker is the one leaf written into a pre-existing directory,
+  // and its name is predictable — the no-follow writer refuses a planted
+  // symlink instead of truncating whatever it points at (PHEXEC-39). The
+  // rename itself never follows its final component.
   const temp = join(historyDir, `latest.${process.pid}.${next}`);
-  await writeFile(temp, `${next}\n`);
+  await writeFileNoFollow(temp, `${next}\n`);
   await rename(temp, join(historyDir, 'latest'));
 }
 

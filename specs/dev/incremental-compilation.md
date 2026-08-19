@@ -17,7 +17,7 @@ Where a build is recorded, the slc command shall write `manifest.json` as strict
 
 ### INCR-10
 
-When the slc command loads history, it shall read the build named by `.slc/latest`; a missing pair, unparsable manifest, wrong schema, structurally invalid field, or a copy whose bytes do not match its recorded hash shall make history absent for the affected use rather than raise an error.
+When the slc command loads history, it shall read the build named by `.slc/latest`, traversing `.slc`, `builds`, the build directory, and every intermediate copy component only as real directories — a symbolic link at any of them reads as another directory's store, so it makes history absent; a missing pair, unparsable manifest, wrong schema, structurally invalid field, or a copy whose bytes do not match its recorded hash shall likewise make history absent for the affected use rather than raise an error.
 
 ### INCR-11
 
@@ -47,11 +47,11 @@ Where a step executes in update mode, when the executor prompt is built, interpr
 
 ### INCR-16
 
-When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) finishes in an orderly way after invalidating ([INCR-30](#incr-30)), the slc command shall publish at most one new build — executed and reused steps republished through a no-follow, nonblocking read only when their bytes still match the output identity captured at acceptance, unreached steps carried forward from the in-memory prior records except under `--rebuild` or when a failed executor changed their target, and no record for a touched step without a recordable completion or for a completed target whose bytes drifted — copying each recorded step's output and the source, read as a nonblocking regular file, into the build directory; with nothing recordable, or an unreadable source, it shall leave history absent, an unreadable source with a diagnostic.
+When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) finishes in an orderly way after invalidating ([INCR-30](#incr-30)), the slc command shall publish at most one new build — executed and reused steps republished through a no-follow, nonblocking read only when their bytes still match the output identity captured at acceptance, unreached steps carried forward from the in-memory prior records except under `--rebuild` or when a failed executor changed their target, and no record for a touched step without a recordable completion or for a completed target whose bytes drifted — copying each recorded step's output and the source bytes captured before the first executor could write — read following symbolic links, as a nonblocking regular file — into the build directory, so a rejected executor's rewrite of the source can never enter a build; with nothing recordable, or a source that was not readable at capture, it shall leave history absent, the unreadable source with a diagnostic.
 
 ### INCR-30
 
-When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) is about to run its first executor, the slc command shall have removed `.slc/latest`, treating absence as success and failing the run before that executor when an active marker cannot be removed, so that an interruption at any later point leaves history absent rather than a record vouching for a target an executor may have changed.
+When a history-eligible run ([INCR-8](../user/incremental-compilation.md#incr-8)) is about to run its first executor, the slc command shall have removed `.slc/latest`, treating absence as success, leaving a `.slc` that is not a real directory untouched — it holds no marker of this bundle's own, and unlinking through a symbolic link would destroy another directory's — and failing the run before that executor when an active marker cannot be removed, so that an interruption at any later point leaves history absent rather than a record vouching for a target an executor may have changed.
 
 ### INCR-17
 

@@ -90,7 +90,27 @@ Where a faked agent transport yields an initial event and then stalls under a sh
 ### PHEXEC-40
 Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
 
-Where a compile target is the source path itself, a symbolic link, a hard link of the source or of an unrelated file, or `-o` names the invocation source, a declared semantic input of any phase, the built-in normalize definition, a pin-selected compiled artifact, the pipeline pin index, or a path inside the reserved `.slc` directory, or the link target names the runnable entry path the run would emit, or two planned outputs are pre-existing hard links of one file, when the run starts — including under a relative injected working directory with relative operands — the slc command shall fail before invoking any executor with a reason naming the conflict and shall leave every named input unchanged; where a phase reports success but its target is a directory, another non-regular file, or a hard link the executor created to an input, or it replaced a protected path with a hard link to byte-identical content, the run shall fail; where a recorded target was replaced by a symbolic link, the run shall neither reuse it nor write through it; where a deterministic derivative's output path was replaced by a symbolic link or hard link, re-derivation shall refuse the write and leave the destination unchanged; and where a conflict-free plan runs under a relative injected working directory with relative operands, the run shall succeed reporting canonical absolute outputs and repeat up to date.
+Where a compile target is the source path itself, a symbolic link, a hard link of the source or of an unrelated file, or `-o` names the invocation source, a declared semantic input of any phase, the built-in normalize definition, any local path a pin record names — an unscheduled record's artifact or a path inside a package runtime dependency's directory included — the pipeline pin index, or a path inside the reserved `.slc` directory, even through a symlinked alias with missing intermediate directories, or the link target names the runnable entry path the run would emit, or two planned outputs are pre-existing hard links of one file, when the run starts, the slc command shall fail before invoking any executor with a reason naming the conflict, leave every named input unchanged, and create no directory; whereas a single-phase `-o` at a path the invocation will never write — a would-be verification file — shall be accepted.
+
+### PHEXEC-41
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
+
+When a phase reports success but its target is a directory, another non-regular file, or a hard link the executor created to an input, or the executor replaced a protected path with a hard link to byte-identical content, the run shall fail that phase.
+
+### PHEXEC-42
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
+
+When a recorded target or a deterministic derivative's output path was replaced by a symbolic link — or, for a derivative, a hard link — the run shall neither reuse it nor write through it, leaving the destination unchanged.
+
+### PHEXEC-43
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
+
+While a protected path cannot be fully observed — an unreadable planned target included — when a phase would otherwise invoke its executor, the slc command shall fail the phase before the executor runs with zero executor calls, naming the unobservable path.
+
+### PHEXEC-44
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
+
+Where the injected working directory and every operand are relative and the plan is conflict-free, while a first run succeeded reporting canonical absolute outputs, when the invocation repeats unchanged, the slc command shall report up to date.
 
 ### PHEXEC-35
 Verifies: [PHEXEC-34](../dev/phase-execution.md#phexec-34)

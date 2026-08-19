@@ -193,6 +193,23 @@ export async function runPhase(opts: {
   }
 
   const before = await snapshot(protectedPaths);
+  // Every protected path must be fully observable before the executor may
+  // run: two indeterminate observations compare equal without proving
+  // anything, so an unobservable input or planned target fails closed here
+  // rather than letting a mutation pass unseen (PHEXEC-39).
+  const unobservable = protectedPaths.filter(
+    (path) => before.get(path)?.indeterminate === true,
+  );
+  if (unobservable.length > 0) {
+    return failure(
+      phase,
+      target,
+      unobservable.map(
+        (path) =>
+          `protected path "${path}" cannot be fully observed (${before.get(path)?.id}); refusing to run the executor`,
+      ),
+    );
+  }
   const targetBefore = await writeEvidence(target);
 
   const reasons: string[] = [];
@@ -238,7 +255,10 @@ export async function runPhase(opts: {
   const after = await snapshot(protectedPaths);
   const changedPaths: string[] = [];
   for (const path of protectedPaths) {
-    if (before.get(path) !== after.get(path)) {
+    // A complete before-observation against an indeterminate after is a
+    // change: the ids differ, so a path an executor made unobservable is
+    // treated as mutated, never as unchanged (PHEXEC-39).
+    if (before.get(path)?.id !== after.get(path)?.id) {
       changedPaths.push(path);
       reasons.push(`protected path "${path}" changed during the run`);
     }
@@ -391,9 +411,20 @@ function failure(
   return { ok: false, report: { phase, target, reasons } };
 }
 
+/**
+ * One observation of a protected path: its identity string, and whether the
+ * observation is complete. An identity whose bytes could not be read is
+ * `indeterminate` — comparing two indeterminate observations proves nothing,
+ * so the phase must fail closed rather than run over it (PHEXEC-39).
+ */
+interface PathObservation {
+  id: string;
+  indeterminate: boolean;
+}
+
 async function snapshot(
   paths: readonly string[],
-): Promise<Map<string, string>> {
+): Promise<Map<string, PathObservation>> {
   const entries = await Promise.all(
     paths.map(async (path) => [path, await pathIdentity(path)] as const),
   );
@@ -404,40 +435,76 @@ async function snapshot(
  * Returns a deterministic identity for one protected path. The kind prefix
  * keeps a missing path, a file, and a directory distinct; directory identities
  * cover every nested entry so modifying a directory link target cannot pass the
- * DR-003 before/after check merely because `readFile(directory)` fails.
+ * DR-003 before/after check merely because `readFile(directory)` fails. An
+ * observation failure keeps the structure already seen — inode, link count —
+ * but marks the whole observation indeterminate.
  */
-async function pathIdentity(path: string): Promise<string> {
+async function pathIdentity(path: string): Promise<PathObservation> {
   try {
     const rootInfo = await lstat(path);
     if (rootInfo.isSymbolicLink()) {
       const target = await readlink(path);
-      return `symlink:${JSON.stringify(target)}:${await followedPathIdentity(path)}`;
+      const followed = await followedPathIdentity(path);
+      return {
+        id: `symlink:${JSON.stringify(target)}:${followed.id}`,
+        indeterminate: followed.indeterminate,
+      };
     }
-    return identityForInfo(path, rootInfo);
+    return await identityForInfo(path, rootInfo);
   } catch (error) {
-    if (isAbsentPathError(error)) return 'missing';
-    return `unreadable:${errorCode(error)}`;
+    if (isAbsentPathError(error))
+      return { id: 'missing', indeterminate: false };
+    return { id: `unreadable:${errorCode(error)}`, indeterminate: true };
   }
 }
 
-async function followedPathIdentity(path: string): Promise<string> {
+async function followedPathIdentity(path: string): Promise<PathObservation> {
   try {
     return await identityForInfo(path, await stat(path));
   } catch (error) {
-    if (isAbsentPathError(error)) return 'missing';
-    return `unreadable:${errorCode(error)}`;
+    if (isAbsentPathError(error))
+      return { id: 'missing', indeterminate: false };
+    return { id: `unreadable:${errorCode(error)}`, indeterminate: true };
   }
 }
 
-async function identityForInfo(path: string, info: Stats): Promise<string> {
+async function identityForInfo(
+  path: string,
+  info: Stats,
+): Promise<PathObservation> {
   if (info.isFile()) {
     // Content alone is not identity: a hard-link swap to byte-identical
     // content changes what the path IS without changing what it says
     // (PHEXEC-39).
-    return `file:${info.ino}:${info.nlink}:${await fileDigest(path)}`;
+    try {
+      return {
+        id: `file:${info.ino}:${info.nlink}:${await fileDigest(path)}`,
+        indeterminate: false,
+      };
+    } catch (error) {
+      return {
+        id: `file:${info.ino}:${info.nlink}:unreadable:${errorCode(error)}`,
+        indeterminate: true,
+      };
+    }
   }
-  if (info.isDirectory()) return `directory:${await treeDigest(path)}`;
-  return `other:${info.mode}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+  if (info.isDirectory()) {
+    try {
+      return {
+        id: `directory:${await treeDigest(path)}`,
+        indeterminate: false,
+      };
+    } catch (error) {
+      return {
+        id: `directory:unreadable:${errorCode(error)}`,
+        indeterminate: true,
+      };
+    }
+  }
+  return {
+    id: `other:${info.mode}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`,
+    indeterminate: false,
+  };
 }
 
 async function fileDigest(path: string): Promise<string> {
@@ -468,7 +535,14 @@ async function collectTreeRecords(
       records.push(['directory', relative]);
       await collectTreeRecords(path, relative, records);
     } else if (entry.isFile()) {
-      records.push(['file', relative, await fileDigest(path)]);
+      // Structural like the top-level file identity: a nested hard-link
+      // swap to byte-identical content must change the record (PHEXEC-39).
+      const info = await lstat(path);
+      records.push([
+        'file',
+        relative,
+        `${info.ino}:${info.nlink}:${await fileDigest(path)}`,
+      ]);
     } else if (entry.isSymbolicLink()) {
       records.push(['symlink', relative, await readlink(path)]);
     } else {

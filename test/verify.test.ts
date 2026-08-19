@@ -3,7 +3,7 @@
 
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -366,6 +366,29 @@ const structuredConfig = (): MachineConfigLike => ({
       { target: '#reviewCall', guard: () => true },
     ],
   },
+});
+
+describe('emitVerifierSupport (PHEXEC-39)', () => {
+  it('refuses a symlinked .slc-verify instead of writing through it', async () => {
+    const { mkdir, symlink } = await import('node:fs/promises');
+    const { emitVerifierSupport } = await import('../src/verify-support.js');
+    const dir = await mkdtemp(join(tmpdir(), 'slc-verify-dir-'));
+    try {
+      // `.slc-verify` pointing at another directory would let the emitter
+      // rewrite arbitrary files — including the installed sources it reads.
+      const elsewhere = join(dir, 'elsewhere');
+      await mkdir(elsewhere);
+      const artifactDir = join(dir, 'wf.playbook');
+      await mkdir(artifactDir);
+      await symlink(elsewhere, join(artifactDir, '.slc-verify'));
+      await expect(emitVerifierSupport(artifactDir)).rejects.toThrow(
+        'not a real directory',
+      );
+      expect(await readdir(elsewhere)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('parseGearsItems', () => {

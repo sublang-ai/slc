@@ -25,7 +25,7 @@ import {
 } from 'node:path';
 import { isAbsolute as posixIsAbsolute } from 'node:path/posix';
 
-import { errorCode, isAbsentPathError } from './errors.js';
+import { errorCode, isAbsentPathError, messageOf } from './errors.js';
 import { PinError } from './pins.js';
 
 /**
@@ -76,6 +76,25 @@ export function resolvePinPath(
  * must still be rejected as a symlink escape rather than misreported stale.
  */
 function canonicalProspectivePath(path: string, field: string): string {
+  try {
+    return prospectiveRealPath(path);
+  } catch (error) {
+    throw new PinError(
+      'pin-invalid',
+      `${field} cannot be resolved safely: ${messageOf(error)}`,
+    );
+  }
+}
+
+/**
+ * The physical form a path will take once created: the nearest existing
+ * ancestor resolved through every symlink, with the missing components
+ * appended lexically. Containment decided on this form cannot be defeated by
+ * a missing intermediate directory (PHEXEC-39).
+ *
+ * @throws when an existing ancestor cannot be resolved (not merely absent).
+ */
+export function prospectiveRealPath(path: string): string {
   const suffix: string[] = [];
   let cursor = path;
   while (true) {
@@ -83,19 +102,15 @@ function canonicalProspectivePath(path: string, field: string): string {
       return resolve(realpathSync.native(cursor), ...suffix.reverse());
     } catch (error) {
       if (!isAbsentPathError(error)) {
-        throw new PinError(
-          'pin-invalid',
-          `${field} cannot be resolved safely: ${errorCode(error)}`,
-        );
+        throw new Error(`"${cursor}" cannot be resolved: ${errorCode(error)}`, {
+          cause: error,
+        });
       }
     }
 
     const parent = dirname(cursor);
     if (parent === cursor) {
-      throw new PinError(
-        'pin-invalid',
-        `${field} cannot be resolved safely: no existing ancestor`,
-      );
+      throw new Error(`"${path}" has no existing ancestor`);
     }
     suffix.push(basename(cursor));
     cursor = parent;
