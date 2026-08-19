@@ -216,11 +216,37 @@ describe('conveniences (CLI-13, CLI-14)', () => {
       expect(help).toContain(
         '--no-optimize             run the chain without pass phases',
       );
+      expect(help).toContain(
+        '--rebuild                 recompile every phase, ignoring recorded build history',
+      );
     }
   });
 });
 
 describe('reporting (CLI-15, CLI-16)', () => {
+  it('prints `up to date` for a fully reused repeat (CLI-38)', async () => {
+    const { agent } = makeAgent();
+    expect(
+      await run(['flow', source], {
+        env: {},
+        stdout: () => {},
+        buildDeps: ({ signal }) => interpretedDeps(agent, signal),
+      }),
+    ).toBe(0);
+
+    const { agent: repeatAgent, calls } = makeAgent();
+    const out: string[] = [];
+    const code = await run(['flow', source], {
+      env: {},
+      stdout: (text) => out.push(text),
+      buildDeps: ({ signal }) => interpretedDeps(repeatAgent, signal),
+    });
+
+    expect(code).toBe(0);
+    expect(calls).toHaveLength(0);
+    expect(out.join('')).toBe('up to date\n');
+  });
+
   it('prints written paths including the -o path and exits 0 (CLI-15)', async () => {
     const { agent } = makeAgent();
     const out: string[] = [];

@@ -43,4 +43,4 @@ When the user passes `--rebuild` to a canonical full or full-link invocation, th
 
 ### INCR-8
 
-Where an invocation uses `-o`, the reserved `slc` meta-pipeline, a single-phase or standalone-pass form, or a direct-link form, when it runs, the slc command shall neither consult nor modify build history.
+Where an invocation uses `-o`, the reserved `slc` meta-pipeline, a single-phase or standalone-pass form, or a direct-link form, when it runs, the slc command shall neither select execution from nor publish build history, but shall remove a usable active marker before overwriting a target recorded by that build.
