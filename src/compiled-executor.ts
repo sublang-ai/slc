@@ -37,11 +37,12 @@ import { pathToFileURL } from 'node:url';
 import { messageOf } from './errors.js';
 import type { LegacyPlaybookPorts } from './playbook-contract.js';
 
-import type {
-  ExecuteRequest,
-  ExecutorResult,
-  LinkOptionPair,
-  PhaseExecutor,
+import {
+  updateContextLines,
+  type ExecuteRequest,
+  type ExecutorResult,
+  type LinkOptionPair,
+  type PhaseExecutor,
 } from './execution.js';
 import type { AgentClient } from './interpreter.js';
 import {
@@ -143,6 +144,17 @@ export function createCompiledExecutor(opts: {
         // transported prompt carries the request's absolute paths and
         // write-scope rules (PHEXEC-34).
         captainWorkspace: composeWorkspaceContract(input),
+        // The compiled artifact knows nothing about incremental updates, so
+        // the host appends the update context to performing prompts
+        // (DR-021, INCR-16).
+        ...(request.kind === 'compile' && request.update !== undefined
+          ? {
+              updateContext: updateContextLines(
+                request.update,
+                request.target,
+              ).join('\n'),
+            }
+          : {}),
         onStatus: opts.onStatus,
       });
       // Hand the runtime only Playbook's ports — never the host-only

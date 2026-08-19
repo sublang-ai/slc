@@ -21,7 +21,7 @@ Tasks are ordered; each task shall land as one commit with its focused tests and
 1. [x] **Specify the minimal design.** Add DR-021, the INCR user/dev/test package, this iteration, the map rows, and the small compiler/pipeline/CLI amendments.
 2. [x] **Share the needed host helpers.** Reuse the archived error and exact-byte hash helpers without carrying incremental policy.
 3. [x] **Add complete-snapshot history and a best-effort diff.** Implement strict whole-build loading, exclusive numbered-directory creation, marker-last publication, and a bounded line diff.
-4. [ ] **Carry update context through both executors.** Extend compile requests and interpreted/compiled performing prompts while keeping ordinary acceptance and the compiled Boss contract unchanged.
+4. [x] **Carry update context through both executors.** Extend compile requests and interpreted/compiled performing prompts while keeping ordinary acceptance and the compiled Boss contract unchanged.
 5. [ ] **Implement the three-mode runner.** Add live input identities, Reuse/Update/Ordinary selection, marker removal before the first executor, success-only final publication, `up to date`, exclusions, and `--rebuild`.
 6. [ ] **Land acceptance and close.** Cover the complete state machine with fixture executors, update README and CHANGELOG, reconcile traceability, and pass `npm run release:check`.
 
