@@ -42,6 +42,34 @@ describe('parseInvocation full pipeline (PIPE-9)', () => {
     ).toMatchObject({ kind: 'full-link', optimize: false, noOptimize: true });
   });
 
+  it('captures --rebuild on full and full-link runs (DR-021)', () => {
+    expect(parseInvocation(['playbook', 'src.md', '--rebuild'])).toMatchObject({
+      kind: 'full',
+      rebuild: true,
+    });
+    expect(
+      parseInvocation(['playbook', 'src.md', '--link', 'r.ts', '--rebuild']),
+    ).toMatchObject({ kind: 'full-link', rebuild: true });
+    expect(parseInvocation(['playbook', 'src.md'])).not.toHaveProperty(
+      'rebuild',
+    );
+  });
+
+  it('rejects --rebuild outside canonical full forms', () => {
+    expect(() =>
+      parseInvocation(['playbook.text2gears', 'src.md', '--rebuild']),
+    ).toThrow(expect.objectContaining({ code: 'unexpected-flag' }));
+    expect(() =>
+      parseInvocation(['playbook.link', 'a.ts', 'r.ts', '--rebuild']),
+    ).toThrow(expect.objectContaining({ code: 'unexpected-flag' }));
+    expect(() =>
+      parseInvocation(['playbook', 'src.md', '-o', 'x.ts', '--rebuild']),
+    ).toThrow(expect.objectContaining({ code: 'unexpected-flag' }));
+    expect(() =>
+      parseInvocation(['playbook', 'src.md', '--rebuild', '--rebuild']),
+    ).toThrow(expect.objectContaining({ code: 'duplicate-option' }));
+  });
+
   it('rejects -O combined with --no-optimize (DR-014)', () => {
     expect(() =>
       parseInvocation(['playbook', 'src.md', '-O', '--no-optimize']),

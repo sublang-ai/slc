@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import {
+  link,
   mkdir,
   mkdtemp,
   readFile,
@@ -86,6 +87,69 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
       expect(result.report.reasons[0]).toContain('was not written');
   });
 
+  it('accepts an ok executor that leaves a complete target unchanged', async () => {
+    await writeFile(request.target, 'accepted prior output');
+    const result = await run(
+      executor(() => ({ status: 'ok', diagnostics: [] })),
+    );
+    expect(result.ok).toBe(true);
+    expect(await readFile(request.target, 'utf8')).toBe(
+      'accepted prior output',
+    );
+  });
+
+  it('accepts a byte-identical rewrite of a pre-existing target', async () => {
+    await writeFile(request.target, 'same bytes');
+    const result = await run(writingExecutor('same bytes'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuses a target that aliases a protected input before execution', async () => {
+    let calls = 0;
+    const result = await runPhase({
+      request: { ...request, target: request.source },
+      phase: 'text2gears',
+      targetExt: '.md',
+      executor: executor(() => {
+        calls++;
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(calls).toBe(0);
+    expect(await readFile(request.source, 'utf8')).toBe('source');
+  });
+
+  it('refuses hard-linked and host-owned targets before execution', async () => {
+    const other = join(dir, 'other.md');
+    const hardLinked = join(dir, 'hard-linked.md');
+    await writeFile(other, 'user file');
+    await link(other, hardLinked);
+    let calls = 0;
+    const guarded = executor(() => {
+      calls++;
+      return { status: 'ok', diagnostics: [] };
+    });
+
+    const hardLinkResult = await runPhase({
+      request: { ...request, target: hardLinked },
+      phase: 'text2gears',
+      targetExt: '.md',
+      executor: guarded,
+    });
+    const historyResult = await runPhase({
+      request: { ...request, target: join(dir, '.slc', 'latest.md') },
+      phase: 'text2gears',
+      targetExt: '.md',
+      executor: guarded,
+    });
+
+    expect(hardLinkResult.ok).toBe(false);
+    expect(historyResult.ok).toBe(false);
+    expect(calls).toBe(0);
+    expect(await readFile(other, 'utf8')).toBe('user file');
+  });
+
   it('fails when the target extension does not match the declared one (PHEXEC-4)', async () => {
     const result = await runPhase({
       request: { ...request, target: join(dir, 'onboarding.gears.txt') },
@@ -132,6 +196,31 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
       expect(
         result.report.reasons.some((r) => r.includes('changed during the run')),
       ).toBe(true);
+  });
+
+  it('protects host-supplied declared semantic inputs', async () => {
+    const semanticInput = join(dir, 'grammar.md');
+    await writeFile(semanticInput, 'grammar');
+    const result = await runPhase({
+      request,
+      phase: 'text2gears',
+      targetExt: '.md',
+      protectedInputs: [semanticInput],
+      executor: executor(async (req) => {
+        await writeFile(
+          req.kind === 'compile' ? req.target : req.linked,
+          'out',
+        );
+        await writeFile(semanticInput, 'tampered');
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.report.reasons).toContain(
+        `protected path "${semanticInput}" changed during the run`,
+      );
+    }
   });
 
   it('fails when the executor mutates the phase definition (chain validity, PHEXEC-5)', async () => {

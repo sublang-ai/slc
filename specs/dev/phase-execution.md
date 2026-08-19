@@ -53,6 +53,14 @@ When a phase finishes, the slc command shall verify that the source, any object 
 
 When a write-scope violation is detected by any means, the slc command shall fail it like a failed generic check ([DR-003](../decisions/003-slc-phase-execution.md#generic-checks)).
 
+### PHEXEC-39
+
+When a phase is selected for execution, the slc command shall refuse before invoking its executor unless the declared target is outside exact `.slc` and `.slc-verify` path components, is absent or a private regular file, and does not alias the source, objects, link target, definitions, references, prior update input, declared local semantic-input closure, or an installed verifier-support source the invocation will copy during deterministic completion; after an `ok` executor result, it shall require the target to be a private regular file at the physical location accepted before execution.
+
+### PHEXEC-42
+
+Where a full or full-link invocation will write a required deterministic entry, verifier-support, or conformance file after its phases, when the slc command plans the invocation, it shall refuse before invoking an executor unless each such output is absent or a private regular file and does not physically alias an invocation input, definition, declared local semantic input, phase target, or another deterministic output; SLC's own fixed verifier-support files may enter the managed `.slc-verify` directory but shall not alias their installed sources, an entry path that aliases the invocation's raw source shall be omitted with a diagnostic while the bundle compiles, and an unsafe optional introspection, prompt-contract, or coverage-test output shall be omitted through its existing diagnostic-only path.
+
 ## Blocked protocol
 
 ### PHEXEC-7

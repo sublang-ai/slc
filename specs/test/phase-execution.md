@@ -59,6 +59,26 @@ Verifies: [PHEXEC-5](../dev/phase-execution.md#phexec-5), [COMPILE-4](../user/co
 
 While interpreting a phase, when the agent adds, removes, or renames a phase file so the pipeline chain no longer infers, the slc command shall fail the run with a diagnostic rather than report success.
 
+### PHEXEC-40
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39), [COMPILE-4](../user/compiler.md#compile-4)
+
+Where a phase target aliases a source, installed verifier-support source, or other protected input, has multiple hard links, or enters an exact `.slc` or `.slc-verify` component, when the slc command runs the phase, it shall refuse before invoking the executor and leave the protected bytes unchanged.
+
+### PHEXEC-41
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39), [PHEXEC-4](../dev/phase-execution.md#phexec-4)
+
+While a phase target is absent or a private regular file, when its executor reports `ok`, the slc command shall accept an unchanged existing target or a byte-identical rewrite, but shall fail the phase when the target remains absent, becomes non-regular, or changes physical location.
+
+### PHEXEC-43
+Verifies: [PHEXEC-42](../dev/phase-execution.md#phexec-42), [COMPILE-4](../user/compiler.md#compile-4)
+
+Where a required planned playbook entry, verifier-support file, or conformance test physically aliases the source, link target, a declared semantic input, a phase target, another deterministic output, or an installed verifier-support source, when the user runs the full or full-link invocation, the slc command shall refuse before invoking an executor and shall leave the protected bytes unchanged.
+
+### PHEXEC-44
+Verifies: [PHEXEC-42](../dev/phase-execution.md#phexec-42), [COMPILE-7](../user/compiler.md#compile-7)
+
+Where a raw playbook source physically aliases the deterministic `<basename>.ts` entry path, when the user runs the full-link invocation, the slc command shall compile the bundle, leave the raw source unchanged, omit the entry module, and report that omission as a diagnostic.
+
 ## Compiled runs
 
 ### PHEXEC-26

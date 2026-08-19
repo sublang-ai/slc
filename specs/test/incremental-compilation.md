@@ -49,4 +49,9 @@ While a usable active build exists, when the user repeats the canonical invocati
 ### INCR-25
 Verifies: [INCR-8](../user/incremental-compilation.md#incr-8)
 
-Where an invocation uses `-o`, the reserved `slc` meta-pipeline, a single-phase or standalone-pass form, or a direct-link form, when it runs, no `.slc/` path shall be read, created, removed, or replaced.
+Where an invocation uses `-o`, the reserved `slc` meta-pipeline, a single-phase or standalone-pass form, or a direct-link form and none of its targets matches a usable active build record, when it runs, the invocation shall execute ordinarily without update context, shall publish no build history, and shall leave that active marker unchanged.
+
+### INCR-27
+Verifies: [INCR-8](../user/incremental-compilation.md#incr-8), [INCR-26](../dev/incremental-compilation.md#incr-26)
+
+While a usable active build exists, when a history-excluded invocation fails after writing one of that build's targets, `.slc/latest` shall already be absent and the next eligible invocation shall execute every phase ordinarily.

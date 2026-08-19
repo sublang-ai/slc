@@ -20,7 +20,7 @@ The host therefore needs versioned memory and a per-phase execution choice, not 
 ### Scope and history
 
 - Canonical full and full-link runs use incremental history, except for the reserved `slc` meta-pipeline.
-  Invocations with `-o`, single-phase or standalone-pass invocations, and direct-link invocations neither read nor write history.
+  Invocations with `-o`, single-phase or standalone-pass invocations, and direct-link invocations never select from or publish history; immediately before such an invocation overwrites a target recorded by a usable active build in that target's parent directory, it removes that build's marker solely to keep rejected bytes from inheriting its authority.
 - A successful eligible run that executes at least one phase publishes one complete numbered build under `<art-dir>/.slc/`:
 
 | Path | Content |
@@ -31,7 +31,7 @@ The host therefore needs versioned memory and a per-phase execution choice, not 
 | `.slc/latest` | decimal `N`, committed after the complete build |
 
 - Each phase record contains its kind, name, canonical target locator, ordered input identities, and output hash.
-  Compile identities cover the current chained input, definition, explicit references, and declared local `## Pin Inputs`; link identities cover ordered objects, the link definition, link-target locator and content, and ordered options.
+  Compile identities cover the current chained input, definition, explicit references, and the declared local `## Pin Inputs` closures of those Markdown documents; link identities cover ordered object locators and content, the link definition and its declared local closure, link-target locator and content, and ordered options.
 - The active build is usable only as a whole and only for the same pipeline and source locator.
   A missing marker, malformed manifest, mismatched pipeline or source, missing copy, or copy/hash mismatch makes history absent for that invocation; the run compiles ordinarily and may publish a fresh build.
   Older numbered builds are never consulted automatically and remain available for manual recovery.
@@ -66,6 +66,7 @@ The host walks the current schedule in order and compares it with the active bui
 
 ### Honest publication
 
+- Before an executor or deterministic completion writer runs, the host refuses its target when that target aliases an invocation input, declared local semantic input, definition, another phase target, or another planned host output; SLC's verifier files remain confined to their managed `.slc-verify` directory.
 - `.slc/latest` is the only active-history marker.
   It remains while phases only Reuse and is removed immediately before the first Update or Ordinary executor may write.
 - If that run fails, is cancelled, or is interrupted, it publishes no build and leaves no active marker.

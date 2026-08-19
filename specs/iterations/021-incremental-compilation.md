@@ -22,7 +22,7 @@ Tasks are ordered; each task shall land as one commit with its focused tests and
 2. [x] **Share the needed host helpers.** Reuse the archived error and exact-byte hash helpers without carrying incremental policy.
 3. [x] **Add complete-snapshot history and a best-effort diff.** Implement strict whole-build loading, exclusive numbered-directory creation, marker-last publication, and a bounded line diff.
 4. [x] **Carry update context through both executors.** Extend compile requests and interpreted/compiled performing prompts while keeping ordinary acceptance and the compiled Boss contract unchanged.
-5. [ ] **Implement the three-mode runner.** Add live input identities, Reuse/Update/Ordinary selection, marker removal before the first executor, success-only final publication, `up to date`, exclusions, and `--rebuild`.
+5. [x] **Implement the three-mode runner.** Add live input identities, Reuse/Update/Ordinary selection, marker removal before the first executor, success-only final publication, `up to date`, exclusions, and `--rebuild`.
 6. [ ] **Land acceptance and close.** Cover the complete state machine with fixture executors, update README and CHANGELOG, reconcile traceability, and pass `npm run release:check`.
 
 ## Acceptance criteria
@@ -32,5 +32,5 @@ Tasks are ordered; each task shall land as one commit with its focused tests and
 - Manual artifact refinements are reused and later become the update baseline.
 - Any unusable active build causes one ordinary compile, while any failed execution leaves no active marker and the next invocation runs ordinarily.
 - A successful run that executed a phase publishes exactly one complete build after the complete invocation; a failed run publishes none.
-- `--rebuild` runs every phase ordinarily, and `-o`, the `slc` meta-pipeline, and partial invocation forms remain outside history.
+- `--rebuild` runs every phase ordinarily; `-o`, the `slc` meta-pipeline, and partial invocation forms never select from or publish history, while safety invalidation removes a usable marker before one of those forms overwrites its artifact.
 - Fixture acceptance uses no live model calls, and `npm run release:check` passes before the iteration closes.
