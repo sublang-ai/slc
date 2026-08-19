@@ -718,6 +718,24 @@ describe('INCR-34: rejected mutations never publish', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('fails closed instead of silently skipping an unreadable recorded target (INCR-39)', async () => {
+    const { agent } = makeAgent();
+    expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
+
+    // The terminal target becomes unreadable while its inputs still match:
+    // the old lstat-only check would select reuse, fail the read, skip the
+    // executor anyway, and report success having proven nothing.
+    const { chmod } = await import('node:fs/promises');
+    await chmod(join(artDir, 'onboarding.fsm.ts'), 0o000);
+    const { agent: second, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(second));
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('cannot be observed');
+    // Nothing ran and nothing changed: the recorded history still stands.
+    expect(await loadBuildHistory(artDir)).not.toBeNull();
+  });
+
   it('fails closed with zero calls when a protected target is unobservable (PHEXEC-43)', async () => {
     const { agent } = makeAgent();
     expect((await runSlc(['flow', source], deps(agent))).ok).toBe(true);
@@ -1213,6 +1231,47 @@ describe('PHEXEC-39: plan-wide protection and canonical cwd', () => {
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(1);
     expect(await readFile(out, 'utf8')).toBe('fsm bytes\n');
+  });
+
+  it('refuses -o reaching a planned verification write through an alias', async () => {
+    // alias -> the playbook artifact directory: the linked output and the
+    // coverage test the run will emit are two absent paths naming the same
+    // prospective file, which only the prospective relation can see.
+    const { symlink } = await import('node:fs/promises');
+    const playbookArtDir = join(srcDir, 'onboarding.playbook');
+    await mkdir(playbookArtDir, { recursive: true });
+    const alias = join(srcDir, 'palias');
+    await symlink(playbookArtDir, alias);
+    const runner = join(srcDir, 'runner.ts');
+    await writeFile(runner, 'export default {};\n');
+
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      [
+        'playbook',
+        source,
+        '--link',
+        runner,
+        '-o',
+        join(alias, 'onboarding.fsm.coverage.test.ts'),
+      ],
+      {
+        ...deps(agent),
+        resolver: (reference) =>
+          reference === 'playbook' ? [pipelineDir] : [],
+      },
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('same file');
+  });
+
+  it('refuses -o naming the artifact directory the run creates', async () => {
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', source, '-o', artDir], deps(agent));
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(result.diagnostics.join('\n')).toContain('collide');
   });
 
   it('canonicalizes a relative injected cwd and relative --link operand', async () => {

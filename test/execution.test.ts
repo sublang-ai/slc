@@ -584,6 +584,48 @@ describe('runPhase link execution', () => {
     }
   });
 
+  it('refuses a linked path entering a protected directory through an alias with missing parents (PHEXEC-40)', async () => {
+    const { symlink } = await import('node:fs/promises');
+    const definition = join(dir, 'link.md');
+    const object = join(dir, 'onboarding.fsm.ts');
+    const linkTarget = join(dir, 'runtime');
+    await mkdir(linkTarget, { recursive: true });
+    await writeFile(definition, '# link');
+    await writeFile(object, 'fsm');
+    // alias -> the protected runtime directory; the linked path sits under
+    // a missing intermediate, so parent-only resolution would see nothing.
+    const alias = join(dir, 'alias');
+    await symlink(linkTarget, alias);
+
+    let invoked = false;
+    const result = await runPhase({
+      request: {
+        kind: 'link',
+        definitionPath: definition,
+        objects: [object],
+        linkTarget,
+        options: [],
+        linked: join(alias, 'missing', 'out.ts'),
+      },
+      phase: 'link',
+      targetExt: '.ts',
+      executor: executor(() => {
+        invoked = true;
+        return { status: 'ok', diagnostics: [] };
+      }),
+    });
+
+    expect(invoked).toBe(false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.report.reasons.some((reason) =>
+          reason.includes('inside protected directory'),
+        ),
+      ).toBe(true);
+    }
+  });
+
   it('detects a nested hard-link swap to byte-identical content (PHEXEC-41)', async () => {
     const definition = join(dir, 'link.md');
     const object = join(dir, 'onboarding.fsm.ts');

@@ -22,18 +22,20 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { Stats } from 'node:fs';
+import { constants, type Stats } from 'node:fs';
 import {
   lstat,
+  open,
   readFile,
   readdir,
   readlink,
   realpath,
   stat,
 } from 'node:fs/promises';
-import { basename, dirname, extname, join } from 'node:path';
+import { extname, join } from 'node:path';
 
 import { errorCode, isAbsentPathError, messageOf } from './errors.js';
+import { prospectiveRealPath } from './pin-paths.js';
 
 /** An opaque link option pair (PIPE-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
@@ -282,6 +284,44 @@ export async function runPhase(opts: {
   return { ok: true, target, diagnostics: result?.diagnostics ?? [] };
 }
 
+/**
+ * One atomic observation of a live target (PHEXEC-39, INCR-13): opened
+ * no-follow and nonblocking, validated as a private single-link regular file
+ * on the open descriptor, and read on that same descriptor — so the bytes
+ * returned are the bytes of exactly the file that was checked. `absent` is
+ * genuine absence; `unsafe` is a leaf that must never be reused or written
+ * through; `indeterminate` is an observation that failed — the caller must
+ * fail closed rather than proceed over it.
+ */
+export type TargetObservation =
+  | { state: 'absent' }
+  | { state: 'file'; bytes: Buffer }
+  | { state: 'unsafe' }
+  | { state: 'indeterminate'; reason: string };
+
+export async function observeTarget(path: string): Promise<TargetObservation> {
+  let handle;
+  try {
+    handle = await open(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+  } catch (error) {
+    if (isAbsentPathError(error)) return { state: 'absent' };
+    if (errorCode(error) === 'ELOOP') return { state: 'unsafe' };
+    return { state: 'indeterminate', reason: errorCode(error) };
+  }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.nlink !== 1) return { state: 'unsafe' };
+    return { state: 'file', bytes: await handle.readFile() };
+  } catch (error) {
+    return { state: 'indeterminate', reason: errorCode(error) };
+  } finally {
+    await handle.close();
+  }
+}
+
 /** One no-follow view of a target path (PHEXEC-39). */
 export type RegularFileState = 'absent' | 'file' | 'unsafe';
 
@@ -332,19 +372,22 @@ async function unsafeSinkReason(
     // Absent target: fine, it will be created.
   }
   let targetInode: string | null = null;
-  let plannedPath: string | null = null;
   try {
     const info = await stat(target);
     targetInode = `${info.dev}:${info.ino}`;
   } catch {
     // Not yet created.
   }
+  // The prospective form resolves the nearest existing ancestor, so a
+  // missing intermediate beneath a symlinked parent cannot hide where the
+  // write will actually land; a target that cannot be resolved at all is
+  // indeterminate and fails closed (PHEXEC-39).
+  let plannedPath: string;
   try {
-    plannedPath = join(await realpath(dirname(target)), basename(target));
-  } catch {
-    // The parent does not resolve; the write itself will fail.
+    plannedPath = prospectiveRealPath(target);
+  } catch (error) {
+    return `target "${target}" cannot be resolved safely (${messageOf(error)}); refusing to write it`;
   }
-  if (targetInode === null && plannedPath === null) return null;
   for (const path of protectedPaths) {
     let info: Stats;
     try {
@@ -356,18 +399,16 @@ async function unsafeSinkReason(
     if (targetInode !== null && `${info.dev}:${info.ino}` === targetInode) {
       return `target "${target}" is the same file as protected input "${path}"; refusing to overwrite it`;
     }
-    if (plannedPath !== null) {
-      try {
-        const resolved = await realpath(path);
-        if (targetInode === null && resolved === plannedPath) {
-          return `target "${target}" is the same file as protected input "${path}"; refusing to overwrite it`;
-        }
-        if (info.isDirectory() && plannedPath.startsWith(`${resolved}/`)) {
-          return `target "${target}" is inside protected directory "${path}"; refusing to write into it`;
-        }
-      } catch {
-        continue;
+    try {
+      const resolved = await realpath(path);
+      if (targetInode === null && resolved === plannedPath) {
+        return `target "${target}" is the same file as protected input "${path}"; refusing to overwrite it`;
       }
+      if (info.isDirectory() && plannedPath.startsWith(`${resolved}/`)) {
+        return `target "${target}" is inside protected directory "${path}"; refusing to write into it`;
+      }
+    } catch {
+      continue;
     }
   }
   return null;

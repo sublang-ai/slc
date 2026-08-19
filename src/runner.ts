@@ -39,6 +39,7 @@ import {
   type ExecuteRequest,
   type PhaseExecutor,
   formatFailureReport,
+  observeTarget,
   regularFileState,
   runPhase,
 } from './execution.js';
@@ -409,13 +410,15 @@ async function runFullLink(
     kind: 'link',
   };
   // The runnable entry is a planned host write (DR-014) — except when the
-  // invocation source already sits at its path, where emission is skipped
-  // with a diagnostic below rather than refused (COMPILE-7).
+  // invocation source already sits at its path, lexically or as the same
+  // prospective physical file, where emission is skipped with a diagnostic
+  // below rather than refused: the plan and the emission guard must decide
+  // that case with the same relation (COMPILE-7, PHEXEC-39).
   const entryPath = join(runCwd(deps), `${basename}.ts`);
   const emitsEntry =
     invocation.pipeline === 'playbook' &&
     invocation.output === null &&
-    entryPath !== invocation.source;
+    !(await samePlannedFile(entryPath, invocation.source));
   const result = await executeSteps(
     [...compileSteps, linkStep],
     pipeline,
@@ -615,12 +618,13 @@ function immutableInputs(steps: readonly PhaseStep[]): string[] {
 }
 
 /**
- * Rejects a plan whose outputs — chain targets and host writes — collide
- * with each other, physically alias a protected input from the plan-wide
- * immutable union, or touch a reserved directory (PHEXEC-39), before any
- * executor runs. Containment is checked lexically on the canonical paths
- * first — a missing parent must not defeat it — with physical resolution as
- * a supplement.
+ * Rejects a conflicting plan before any executor runs (PHEXEC-39). One
+ * prospective physical-path relation ({@link samePlannedFile}) decides every
+ * conflict — pairwise across all planned writes (chain targets, host file
+ * writes, and the directories the run creates) and against every protected
+ * input — so two absent paths reached through aliased parents can never name
+ * the same file. Containment is lexical on the canonical paths first, with
+ * the prospective form as a supplement.
  */
 async function plannedOutputConflict(
   steps: readonly PhaseStep[],
@@ -630,16 +634,21 @@ async function plannedOutputConflict(
   const targets = steps.map((step) =>
     step.request.kind === 'compile' ? step.request.target : step.request.linked,
   );
-  const seen = new Set<string>();
-  for (const target of targets) {
-    if (seen.has(target)) {
-      return `slc: planned outputs collide at "${target}"; adjust -o`;
-    }
-    seen.add(target);
-  }
-  for (const write of host.writes) {
-    if (seen.has(write)) {
-      return `slc: planned output "${write}" is also written by the run itself; adjust -o`;
+  // Everything this run will place on disk. `file: false` marks a created
+  // directory: it may legitimately already exist as a directory, but must
+  // never coincide with a file write or overwrite a protected file.
+  const planned = [
+    ...targets.map((path) => ({ path, file: true })),
+    ...host.writes.map((path) => ({ path, file: true })),
+    ...host.ensureDirs.map((path) => ({ path, file: false })),
+  ];
+  for (let i = 0; i < planned.length; i++) {
+    for (let j = i + 1; j < planned.length; j++) {
+      if (await samePlannedFile(planned[i].path, planned[j].path)) {
+        return planned[i].path === planned[j].path
+          ? `slc: planned outputs collide at "${planned[i].path}"; adjust -o`
+          : `slc: planned outputs "${planned[i].path}" and "${planned[j].path}" are the same file; refusing to run`;
+      }
     }
   }
   for (const dir of host.reserved) {
@@ -649,23 +658,9 @@ async function plannedOutputConflict(
       }
     }
   }
-  for (const write of host.writes) {
-    for (const input of immutable) {
-      if (write === input || (await samePhysicalFile(write, input))) {
-        return `slc: the run would write "${write}", which is the protected input "${input}"; refusing to overwrite it`;
-      }
-    }
-  }
-  for (let i = 0; i < targets.length; i++) {
-    for (let j = i + 1; j < targets.length; j++) {
-      if (await samePhysicalFile(targets[i], targets[j])) {
-        return `slc: planned outputs "${targets[i]}" and "${targets[j]}" are the same file; refusing to run`;
-      }
-    }
-  }
-  for (const target of targets) {
-    if ((await regularFileState(target)) === 'unsafe') {
-      return `slc: planned output "${target}" is not writable as a private regular file (symbolic link, non-regular, or hard-linked); refusing to run`;
+  for (const { path, file } of planned) {
+    if (file && (await regularFileState(path)) === 'unsafe') {
+      return `slc: planned output "${path}" is not writable as a private regular file (symbolic link, non-regular, or hard-linked); refusing to run`;
     }
   }
   for (const input of immutable) {
@@ -675,15 +670,17 @@ async function plannedOutputConflict(
     } catch {
       inputInfo = null;
     }
-    for (const target of targets) {
-      if (target === input || (await samePhysicalFile(target, input))) {
-        return `slc: planned output "${target}" is the protected input "${input}"; refusing to overwrite it`;
+    for (const { path, file } of planned) {
+      if (await samePlannedFile(path, input)) {
+        // Re-ensuring an existing directory is a no-op, not an overwrite.
+        if (!file && inputInfo?.isDirectory() === true) continue;
+        return `slc: planned ${file ? 'output' : 'directory'} "${path}" is the protected input "${input}"; refusing to overwrite it`;
       }
       if (
         inputInfo?.isDirectory() === true &&
-        (await pathInsideDir(target, input))
+        (await pathInsideDir(path, input))
       ) {
-        return `slc: planned output "${target}" is inside protected directory "${input}"; refusing to run`;
+        return `slc: planned ${file ? 'output' : 'directory'} "${path}" is inside protected directory "${input}"; refusing to run`;
       }
     }
   }
@@ -727,6 +724,23 @@ async function pathInsideDir(path: string, dir: string): Promise<boolean> {
     const root = prospectiveRealPath(dir);
     const resolved = prospectiveRealPath(path);
     return resolved === root || resolved.startsWith(`${root}${sep}`);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether two planned paths will be the same physical file once written:
+ * lexically equal, physically the same existing inode (hard links), or
+ * resolving to the same prospective form through their nearest existing
+ * ancestors — so two absent paths reached through aliased parents still
+ * conflict (PHEXEC-39).
+ */
+async function samePlannedFile(left: string, right: string): Promise<boolean> {
+  if (left === right) return true;
+  if (await samePhysicalFile(left, right)) return true;
+  try {
+    return prospectiveRealPath(left) === prospectiveRealPath(right);
   } catch {
     return false;
   }
@@ -1004,8 +1018,10 @@ interface IncrementalState extends IncrementalRun {
 
 /** How one step proceeds under the loaded history (DR-021, INCR-13). */
 type StepMode =
-  | { mode: 'ordinary' | 'reuse' }
-  | { mode: 'update'; priorInput: string; diff: string | null };
+  | { mode: 'ordinary' }
+  | { mode: 'reuse'; output: Hash }
+  | { mode: 'update'; priorInput: string; diff: string | null }
+  | { mode: 'blocked'; reason: string };
 
 /**
  * Runs steps in order, selecting interpreted or compiled execution per phase from
@@ -1185,6 +1201,21 @@ async function executeSteps(
         elapsedMs: Date.now() - startedAt,
       });
 
+    // A recorded target whose observation failed must not be reused,
+    // skipped, or rebuilt over: nothing about it is proven (PHEXEC-43). The
+    // phase-start line was emitted above, so the failure keeps its pairing.
+    if (mode.mode === 'blocked') {
+      fail();
+      diagnostics.push(
+        formatFailureReport({
+          phase: step.phase,
+          target,
+          reasons: [mode.reason],
+        }),
+      );
+      return finish({ ok: false, outputs, diagnostics });
+    }
+
     // Selecting a compiled executor can throw rather than return a verdict —
     // notably an unmapped pinned Playbook provenance, which the host factory
     // rejects (PHEXEC-30). That is the same fail-closed family as a stale pin,
@@ -1221,20 +1252,10 @@ async function executeSteps(
       });
       // A reused target was not written, so it stays out of `outputs`:
       // CLI-3 reports the paths a run wrote, and reuse is reported through
-      // the status line above. Its identity is captured through the safe
-      // reader so publication can prove no later, rejected work changed it;
-      // a target it cannot read stays uncaptured and unrecorded (INCR-16).
-      if (state !== undefined) {
-        const bytes = await readStoreFile(target);
-        if (bytes !== null) {
-          state.completed.push({
-            step,
-            inputs,
-            target,
-            output: hashBytes(bytes),
-          });
-        }
-      }
+      // the status line above. Its identity was captured atomically with
+      // the observation that selected reuse, so a step can never be skipped
+      // without a proven, recordable target (INCR-13, INCR-16).
+      state?.completed.push({ step, inputs, target, output: mode.output });
       continue;
     }
     if (mode.mode === 'update') {
@@ -1519,16 +1540,26 @@ async function selectStepMode(
       candidate.target === rel,
   );
   if (record === undefined) return { mode: 'ordinary' };
-  // Reuse and update both stand on the existing target being a safe regular
-  // file — a symlink, directory, or FIFO never satisfies them (PHEXEC-39).
-  if ((await regularFileState(target)) !== 'file') {
-    return { mode: 'ordinary' };
+  // One atomic observation decides reuse and update alike: type, link
+  // count, and bytes come off a single descriptor, so the identity a reused
+  // step records is the identity of exactly the file that was checked.
+  // Only genuine absence — or an unsafe leaf the plan already refuses to
+  // write — selects ordinary execution; a recorded target that cannot be
+  // observed fails the run closed instead of being silently skipped or
+  // rebuilt over (INCR-13, PHEXEC-43).
+  const observed = await observeTarget(target);
+  if (observed.state === 'indeterminate') {
+    return {
+      mode: 'blocked',
+      reason: `recorded target "${target}" cannot be observed (${observed.reason}); fix or remove it, or delete .slc to compile fresh`,
+    };
   }
+  if (observed.state !== 'file') return { mode: 'ordinary' };
   if (
     record.inputs.length === inputs.length &&
     record.inputs.every((hash, index) => hash === inputs[index])
   ) {
-    return { mode: 'reuse' };
+    return { mode: 'reuse', output: hashBytes(observed.bytes) };
   }
   if (step.request.kind !== 'compile') return { mode: 'ordinary' };
 
