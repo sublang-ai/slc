@@ -39,6 +39,16 @@ export function verifierSupportSources(): string[] {
   return SUPPORT_FILES.map((file) => join(sourceDir, file));
 }
 
+/**
+ * The managed files a planned emission will write inside `.slc-verify` —
+ * the planner preflights these so a blocked root or unsafe leaf refuses
+ * the plan before any agent runs (PHEXEC-39).
+ */
+export function verifierSupportWrites(artifactDir: string): string[] {
+  const targetDir = join(artifactDir, VERIFIER_SUPPORT_DIR);
+  return SUPPORT_FILES.map((file) => join(targetDir, file));
+}
+
 function compiledModuleDir(): string {
   const modulePath = fileURLToPath(import.meta.url);
   const moduleDir = dirname(modulePath);

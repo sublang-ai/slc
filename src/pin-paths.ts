@@ -14,7 +14,7 @@
  * the currency engine maps to a malformed verdict. See specs/dev/pinning.md.
  */
 
-import { realpathSync, statSync } from 'node:fs';
+import { lstatSync, realpathSync, statSync } from 'node:fs';
 import {
   basename,
   dirname,
@@ -117,6 +117,17 @@ export function prospectiveRealPath(
           cause: error,
         });
       }
+      // Only genuine absence may walk upward under the planner's rule: a
+      // component that exists but does not resolve — a dangling symbolic
+      // link — is not a location a write may assume, and following it
+      // later could land the write somewhere no check ever saw
+      // (PHEXEC-39).
+      if (opts.anchorMustBeDir === true && lstatExists(cursor)) {
+        throw new Error(
+          `"${cursor}" is an unresolvable symbolic link, so "${path}" cannot exist`,
+          { cause: error },
+        );
+      }
     }
     if (anchor !== null) {
       if (
@@ -153,6 +164,15 @@ function requireRelative(path: string, field: string): void {
       'pin-invalid',
       `${field} must be a relative path, got "${path}"`,
     );
+  }
+}
+
+function lstatExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
   }
 }
 

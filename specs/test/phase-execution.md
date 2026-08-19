@@ -90,7 +90,7 @@ Where a faked agent transport yields an initial event and then stalls under a sh
 ### PHEXEC-40
 Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
 
-Where a compile target is the source path itself, a symbolic link, a hard link of the source or of an unrelated file, or `-o` names the invocation source, a declared semantic input of any phase, the built-in normalize definition, any local path a pin record names — an unscheduled record's artifact or a path inside a package runtime dependency's directory included — the pipeline pin index, or a path inside the reserved `.slc` directory, even through a symlinked alias with missing intermediate directories, or the link target names the runnable entry path the run would emit, or two planned outputs are pre-existing hard links of one file, or two planned writes (chain targets, host-emitted files, and created directories alike) resolve to the same prospective file through an aliased parent, or a planned write enters any `.slc` or `.slc-verify` namespace — a foreign bundle's via `-o` or a direct link included — or components of it are still missing below an existing file, or one planned file would contain another planned write, or the target resolves prospectively to an absent protected path's location, when the run starts, the slc command shall fail before invoking any executor with a reason naming the conflict, leave every named input unchanged, and create no directory; whereas a single-phase `-o` at a path the invocation will never write — a would-be verification file — shall be accepted.
+Where a compile target is the source path itself, a symbolic link, a hard link of the source or of an unrelated file, or `-o` names the invocation source, a declared semantic input of any phase, the built-in normalize definition, any local path a pin record names — an unscheduled record's artifact or a path inside a package runtime dependency's directory included — the pipeline pin index, or a path inside the reserved `.slc` directory, even through a symlinked alias with missing intermediate directories, or the link target names the runnable entry path the run would emit, or two planned outputs are pre-existing hard links of one file, or two planned writes (chain targets, host-emitted files, and created directories alike) resolve to the same prospective file through an aliased parent, or a planned write enters any `.slc` or `.slc-verify` namespace — a foreign bundle's via `-o` or a direct link included — or components of it are still missing below an existing file or a dangling symbolic link, or a planned directory's place is held by a file, or a planned emission's `.slc-verify` root is blocked, or `-o` resolves through an aliased parent to an installed verifier-support source or into a `.slc-verify` namespace, or one planned file would contain another planned write, or the target resolves prospectively to an absent protected path's location, when the run starts, the slc command shall fail before invoking any executor with a reason naming the conflict, leave every named input unchanged, and create no directory; whereas a single-phase `-o` at a path the invocation will never write — a would-be verification file — shall be accepted.
 
 ### PHEXEC-41
 Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
@@ -106,6 +106,11 @@ When a recorded target or a deterministic derivative's output path was replaced 
 Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
 
 While a protected path cannot be fully observed — an unreadable planned target included — when a phase would otherwise invoke its executor, the slc command shall fail the phase before the executor runs with zero executor calls, naming the unobservable path.
+
+### PHEXEC-45
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)
+
+When a phase request's target names or crosses a `.slc` or `.slc-verify` namespace, the runPhase boundary shall refuse it before invoking the executor, leaving the path unwritten — however the host is driven, CLI plan or direct call.
 
 ### PHEXEC-44
 Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39)

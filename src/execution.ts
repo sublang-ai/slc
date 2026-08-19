@@ -32,10 +32,12 @@ import {
   realpath,
   stat,
 } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname, join, sep } from 'node:path';
 
+import { HISTORY_DIR } from './build-history.js';
 import { errorCode, isAbsentPathError, messageOf } from './errors.js';
 import { prospectiveRealPath } from './pin-paths.js';
+import { VERIFIER_SUPPORT_DIR } from './verify-support.js';
 
 /** An opaque link option pair (PIPE-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
@@ -344,6 +346,21 @@ export async function regularFileState(
 }
 
 /**
+ * The reserved directory name a path names or crosses, or `null`. `.slc`
+ * and `.slc-verify` are slc-owned namespaces wherever they appear — any
+ * bundle's, not just an invocation's own: a write through one could
+ * resurrect a superseded currentness marker or corrupt a verifier closure
+ * (DR-021, PHEXEC-39).
+ */
+export function reservedNamespace(path: string): string | null {
+  const parts = path.split(sep);
+  for (const name of [HISTORY_DIR, VERIFIER_SUPPORT_DIR]) {
+    if (parts.includes(name)) return name;
+  }
+  return null;
+}
+
+/**
  * Returns the reason a target is an unsafe sink, or `null`.
  *
  * A symbolic-link target is refused outright — writing through it lands on an
@@ -387,6 +404,13 @@ async function unsafeSinkReason(
     plannedPath = prospectiveRealPath(target, { anchorMustBeDir: true });
   } catch (error) {
     return `target "${target}" cannot be resolved safely (${messageOf(error)}); refusing to write it`;
+  }
+  // The public checked boundary enforces the namespace ban itself: a host
+  // driving runPhase directly must be refused a `.slc` or `.slc-verify`
+  // destination exactly like a planned CLI run (PHEXEC-39).
+  const reserved = reservedNamespace(target) ?? reservedNamespace(plannedPath);
+  if (reserved !== null) {
+    return `target "${target}" names or enters the reserved directory namespace "${reserved}"; refusing to write it`;
   }
   for (const path of protectedPaths) {
     let info: Stats;

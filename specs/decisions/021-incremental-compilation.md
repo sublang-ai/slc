@@ -50,11 +50,12 @@ On a full or full-link run, `slc` walks the scheduled chain in order, matching h
 | Reuse | every recorded input identity matches, and one atomic observation of the target yields a private regular file | skip the step; the observed bytes stand as the accepted identity, refined or not |
 | Update | a record matches but inputs differ, its prior-input copy re-hashes intact, and the same observation yields the target file | execute with update context |
 | Ordinary | no matching record, an absent target, a failed prior-input copy, or `--rebuild` | execute as a first compile |
-| Refused | the target observation is indeterminate | fail before the executor; an unsafe planned target was already refused at plan validation |
+
+Selection has exactly these three executing modes; an indeterminate target observation is a pre-mode refusal — the run fails before that step's executor rather than guess — and an unsafe planned target was already refused at plan validation.
 
 - Current identities are computed live: a step's chained input is its predecessor's actual current output, or the source for the first step, so refinement and update effects propagate downstream within one run.
 - Link steps reuse or run in full; they take no update context.
-- Pin validation ([DR-007](007-slc-phase-artifact-pinning.md)) precedes selection; recorded output never makes a stale or malformed pin runnable.
+- Pin validation ([DR-007](007-slc-phase-artifact-pinning.md)) precedes every executing mode — recorded output never makes a stale or malformed pin runnable — while the pre-mode refusal above fires without consulting the pin.
 - Executor provenance — interpreted versus compiled, package versions — selects how a step runs, never whether: it does not enter input identity.
 - When every step is reused, `slc` reports the bundle up to date, invokes no agent, and rewrites no chain artifact or history; deterministic entry and verification derivation still runs on every successful invocation, so an all-reuse run restores a missing or drifted derivative.
 
