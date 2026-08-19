@@ -55,3 +55,8 @@ Where an invocation uses `-o`, the reserved `slc` meta-pipeline, a single-phase 
 Verifies: [INCR-8](../user/incremental-compilation.md#incr-8), [INCR-26](../dev/incremental-compilation.md#incr-26)
 
 While a usable active build exists, when a history-excluded invocation fails after writing one of that build's targets, `.slc/latest` shall already be absent and the next eligible invocation shall execute every phase ordinarily.
+
+### INCR-28
+Verifies: [INCR-3](../user/incremental-compilation.md#incr-3)
+
+While malformed `.slc` state structurally prevents fresh history from being recorded, when an eligible invocation runs, every phase shall execute ordinarily, the compile shall still succeed, the recording failure shall be diagnostic-only, and no active marker shall be published.
