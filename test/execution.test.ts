@@ -114,6 +114,26 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
       ).toBe(true);
   });
 
+  it('protects the update-mode prior input like a reference (INCR-15)', async () => {
+    const priorInput = join(dir, 'prior-input');
+    await writeFile(priorInput, 'prior source');
+    request = { ...request, update: { priorInput, diff: '-a\n+b' } };
+    const result = await run(
+      executor(async (req) => {
+        if (req.kind === 'compile') {
+          await writeFile(req.target, 'out');
+          await writeFile(priorInput, 'tampered');
+        }
+        return { status: 'ok', diagnostics: [] };
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(
+        result.report.reasons.some((r) => r.includes('changed during the run')),
+      ).toBe(true);
+  });
+
   it('fails when the executor mutates the phase definition (chain validity, PHEXEC-5)', async () => {
     const result = await run(
       executor(async (req) => {

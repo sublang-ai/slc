@@ -65,6 +65,15 @@ export function createPlaybookPorts(opts: {
    */
   captainWorkspace?: string;
   /**
+   * Host update-mode context appended to every Player prompt and to
+   * transformation-performing direct Captain prompts (DR-021, INCR-16). The
+   * compiled artifact composes host-agnostic prompts and knows nothing about
+   * incremental updates, so only the host can say the target already holds
+   * the prior accepted output. Routing-only Captain and judge calls never
+   * carry it.
+   */
+  updateContext?: string;
+  /**
    * Live status sink (DR-019, PHEXEC-25): when set, human status and non-trace
    * operational telemetry stream here as they occur instead of being collected
    * for {@link PlaybookPortsAdapter.drainDiagnostics}, so a long compiled phase
@@ -94,7 +103,10 @@ export function createPlaybookPorts(opts: {
       options?: PlayerCallOptions,
     ): Promise<PlayerResult> {
       const result = await playerFor(playerId).run({
-        prompt,
+        prompt:
+          opts.updateContext === undefined
+            ? prompt
+            : `${prompt}\n\n${opts.updateContext}`,
         model: opts.models?.[playerId] ?? opts.defaultModel,
         cwd: opts.cwd,
         ...(options !== undefined ? { resume: options.resume } : {}),
@@ -114,9 +126,10 @@ export function createPlaybookPorts(opts: {
       // composes host-agnostic prompts, and only the host knows the request's
       // absolute source/target paths (PHEXEC-34).
       const transported =
-        isolation.allowedTools === undefined &&
-        opts.captainWorkspace !== undefined
-          ? `${prompt}\n\n${opts.captainWorkspace}`
+        isolation.allowedTools === undefined
+          ? [prompt, opts.captainWorkspace, opts.updateContext]
+              .filter((part): part is string => part !== undefined)
+              .join('\n\n')
           : prompt;
       return withSerialCaptain(signal, async () => {
         const result = await opts.judge.run({
