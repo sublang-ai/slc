@@ -98,6 +98,39 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     if (!result.ok) expect(result.report.reasons[0]).toContain('extension');
   });
 
+  it('refuses a target squatting an absent protected path through an alias (PHEXEC-40)', async () => {
+    const { mkdir: makeDir, symlink } = await import('node:fs/promises');
+    // The protected path does not exist yet — but the target, reached
+    // through an aliased parent, resolves to the same prospective file:
+    // writing it would become the bytes a later read of the input sees.
+    const inner = join(dir, 'inner');
+    await makeDir(inner);
+    const alias = join(dir, 'alias');
+    await symlink(inner, alias);
+    const ghost = join(inner, 'ghost.md');
+    let invoked = false;
+    const result = await runPhase({
+      request: { ...request, target: join(alias, 'ghost.md') },
+      phase: 'text2gears',
+      targetExt: '.md',
+      executor: executor(async (req) => {
+        invoked = true;
+        if (req.kind === 'compile') await writeFile(req.target, 'out');
+        return { status: 'ok', diagnostics: [] };
+      }),
+      protect: [ghost],
+    });
+    expect(invoked).toBe(false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.report.reasons.some((reason) =>
+          reason.includes('same file as protected input'),
+        ),
+      ).toBe(true);
+    }
+  });
+
   it('fails closed before the executor when a protected path is unobservable (PHEXEC-43)', async () => {
     const { chmod } = await import('node:fs/promises');
     const shadowed = join(dir, 'shadowed.md');

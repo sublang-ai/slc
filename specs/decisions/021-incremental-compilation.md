@@ -32,7 +32,8 @@ The host therefore does not need to understand a change semantically; it needs t
   Recorded paths are POSIX locators relative to `<art-dir>`.
 - `N` starts at 1 and increases with each recording run; prior builds are retained, versioning the lineage and doubling as recovery copies.
 - History is memory, never authority.
-  A missing, malformed, or inconsistent `.slc/` never fails or degrades a run: the run behaves as a first compile and re-records where the reserved path permits, so deleting `.slc/` is always safe; a reserved path blocked by foreign content (a `.slc` file, a directory at `latest`) surfaces as an actionable diagnostic and leaves history disabled until cleared, while an active marker whose removal or observation fails keeps the fail-closed refusal.
+  A missing or malformed `.slc/` never fails a run: the run behaves as a first compile and re-records where the reserved path permits, so deleting `.slc/` is always safe.
+  Damage inside a store degrades proportionally, per use, never whole-build: every read re-verifies what it consumes, and a copy that no longer hashes to its record disables only the reuse or update that depended on it — partial damage costs partial recompilation, keeping cost proportional to the change; a reserved path blocked by foreign content (a `.slc` file, a directory at `latest`) surfaces as an actionable diagnostic and leaves history disabled until cleared, while an active marker whose removal or observation fails keeps the fail-closed refusal.
 - `.slc/latest` is the sole currentness marker: it names the last accepted build and is removed before a run's first executor may write, failing the run closed when an active marker cannot be removed.
   On an orderly finish, at most one new build publishes — none when nothing recordable survived: completed steps republish only under the output identity captured at their acceptance, unreached steps carry their previous records forward unless the failed executor changed their target, and a touched step without a recordable completion, or a completed target that rejected later work changed, gets none — a retry re-executes it instead of reusing rejected bytes, and a late handled failure still does not forfeit hours of earlier phases.
   An abrupt interruption leaves no marker, so the next run compiles fresh; crash-resume of partial progress is deliberately not promised.
@@ -46,9 +47,10 @@ On a full or full-link run, `slc` walks the scheduled chain in order, matching h
 
 | Mode | Condition | Behavior |
 | --- | --- | --- |
-| Reuse | every recorded input identity matches the current bytes and the target is a safe regular file | skip the step; the on-disk bytes stand, refined or not |
-| Update | a record matches but inputs differ, its prior-input copy is intact, and the target is a safe regular file | execute with update context |
-| Ordinary | no matching record, missing copy, unsafe target, or `--rebuild` | execute as a first compile |
+| Reuse | every recorded input identity matches, and one atomic observation of the target yields a private regular file | skip the step; the observed bytes stand as the accepted identity, refined or not |
+| Update | a record matches but inputs differ, its prior-input copy re-hashes intact, and the same observation yields the target file | execute with update context |
+| Ordinary | no matching record, an absent target, a failed prior-input copy, or `--rebuild` | execute as a first compile |
+| Refused | the target observation is indeterminate | fail before the executor; an unsafe planned target was already refused at plan validation |
 
 - Current identities are computed live: a step's chained input is its predecessor's actual current output, or the source for the first step, so refinement and update effects propagate downstream within one run.
 - Link steps reuse or run in full; they take no update context.

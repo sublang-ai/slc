@@ -384,7 +384,7 @@ async function unsafeSinkReason(
   // indeterminate and fails closed (PHEXEC-39).
   let plannedPath: string;
   try {
-    plannedPath = prospectiveRealPath(target);
+    plannedPath = prospectiveRealPath(target, { anchorMustBeDir: true });
   } catch (error) {
     return `target "${target}" cannot be resolved safely (${messageOf(error)}); refusing to write it`;
   }
@@ -393,7 +393,16 @@ async function unsafeSinkReason(
     try {
       info = await stat(path);
     } catch {
-      // An absent input cannot be destroyed.
+      // An absent input cannot be destroyed, but its path can be squatted:
+      // a target resolving to the same prospective file would become the
+      // bytes a later read of that input sees (PHEXEC-39).
+      try {
+        if (prospectiveRealPath(path) === plannedPath) {
+          return `target "${target}" is the same file as protected input "${path}"; refusing to overwrite it`;
+        }
+      } catch {
+        // An unresolvable absent input names no location to squat.
+      }
       continue;
     }
     if (targetInode !== null && `${info.dev}:${info.ino}` === targetInode) {
