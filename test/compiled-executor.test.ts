@@ -521,6 +521,73 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     ]);
   });
 
+  it('carries update context to a performing Captain (INCR-16)', async () => {
+    const target = join(root, 'out.ts');
+    const prompts: string[] = [];
+    const captain: AgentClient = {
+      async run(request) {
+        prompts.push(request.prompt);
+        return { status: 'success', text: 'Captain response' };
+      },
+    };
+    let ports:
+      | {
+          callCaptain(
+            prompt: string,
+            signal: AbortSignal,
+            options: { visibility: 'visible'; resume: false },
+          ): Promise<unknown>;
+        }
+      | undefined;
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'composed-v2',
+      player: idleAgent,
+      judge: captain,
+      loadFactory: async () => () => ({
+        async init(value: unknown) {
+          ports = (value as { ports: typeof ports }).ports;
+        },
+        async handleBossInput({ signal }: { signal: AbortSignal }) {
+          await ports?.callCaptain('Transform it.', signal, {
+            visibility: 'visible',
+            resume: false,
+          });
+          await writeFile(target, 'updated');
+          return { outcome: 'terminal', state: structuredState };
+        },
+        async resumePlaybookCall() {
+          return { outcome: 'no-action', state: structuredState };
+        },
+        async dispose() {},
+      }),
+    });
+
+    const priorInput = join(root, '.slc/builds/1/source');
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: 'src.md',
+        target,
+        update: {
+          priorInput,
+          diff: '@@ -1,1 +1,1 @@\n-old\n+new',
+        },
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('Transform it.');
+    expect(prompts[0]).toContain('Incremental update');
+    expect(prompts[0]).toContain(priorInput);
+    expect(prompts[0]).toContain(target);
+    expect(prompts[0]).toContain('-old');
+  });
+
   it.each(['session-v1', 'composed-v2'] as const)(
     'rejects omitted or invalid %s player continuation options',
     async (runtimeContract) => {
