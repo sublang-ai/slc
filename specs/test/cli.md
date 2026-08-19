@@ -27,7 +27,7 @@ Where no agent is configured, when the slc executable is run with `--version` or
 ### CLI-14
 Verifies: [CLI-2](../user/cli.md#cli-2), [CLI-9](../dev/cli.md#cli-9)
 
-Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero without resolving a pipeline or selecting an agent.
+Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, `--rebuild`, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero without resolving a pipeline or selecting an agent.
 
 ## Reporting
 
@@ -40,6 +40,11 @@ Where the run succeeds, when the slc executable runs a documented invocation for
 Verifies: [CLI-4](../user/cli.md#cli-4), [CLI-11](../dev/cli.md#cli-11)
 
 Where a run is rejected, a phase fails, or a phase reports `BLOCKED`, when the slc executable runs, the slc executable shall print the failure report — naming the failing phase and its target when a phase is at fault — to standard error, write nothing to standard output, and exit non-zero.
+
+### CLI-38
+Verifies: [CLI-3](../user/cli.md#cli-3), [CLI-11](../dev/cli.md#cli-11)
+
+Where `runSlc` reports an incremental `up to date` outcome, when the slc executable completes the run, the slc executable shall print `up to date` to standard output and exit zero.
 
 ## Progress
 
