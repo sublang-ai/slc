@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
   symlink,
   writeFile,
 } from 'node:fs/promises';
@@ -100,6 +101,27 @@ describe('complete build history (INCR-9..12)', () => {
     expect(await readFile(outputCopyPath(history!, 0), 'utf8')).toBe(
       'output one\n',
     );
+  });
+
+  it('keeps snapshot directories and payloads owner-only', async () => {
+    await publish();
+    const history = (await loadBuildHistory(artDir))!;
+    for (const path of [
+      join(artDir, '.slc'),
+      join(artDir, '.slc', 'builds'),
+      history.dir,
+      join(history.dir, 'outputs'),
+    ]) {
+      expect((await stat(path)).mode & 0o077).toBe(0);
+    }
+    for (const path of [
+      join(artDir, '.slc', 'latest'),
+      join(history.dir, 'source'),
+      join(history.dir, 'manifest.json'),
+      outputCopyPath(history, 0),
+    ]) {
+      expect((await stat(path)).mode & 0o077).toBe(0);
+    }
   });
 
   it.each([

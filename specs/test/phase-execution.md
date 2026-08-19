@@ -67,7 +67,7 @@ Where a phase target aliases a source, installed verifier-support source, or oth
 ### PHEXEC-41
 Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39), [PHEXEC-4](../dev/phase-execution.md#phexec-4)
 
-While a phase target is absent or a private regular file, when its executor reports `ok`, the slc command shall accept an unchanged existing target or a byte-identical rewrite, but shall fail the phase when the target remains absent, becomes non-regular, or changes physical location.
+While a phase target is absent or a single-link regular file, when its executor reports `ok`, the slc command shall accept an unchanged existing target or a byte-identical rewrite, but shall fail the phase when the target remains absent, becomes non-regular, gains another hard link, or changes physical location.
 
 ### PHEXEC-43
 Verifies: [PHEXEC-42](../dev/phase-execution.md#phexec-42), [COMPILE-4](../user/compiler.md#compile-4)

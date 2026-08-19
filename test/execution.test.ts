@@ -104,6 +104,29 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('rejects an ok executor that leaves a symbolic-link target', async () => {
+    const victim = join(dir, 'victim.md');
+    await writeFile(victim, 'keep');
+    const result = await run(
+      executor(async () => {
+        await symlink(victim, request.target);
+        return { status: 'ok', diagnostics: [] };
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(await readFile(victim, 'utf8')).toBe('keep');
+  });
+
+  it('rejects an ok executor that leaves a directory target', async () => {
+    const result = await run(
+      executor(async () => {
+        await mkdir(request.target);
+        return { status: 'ok', diagnostics: [] };
+      }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
   it('refuses a target that aliases a protected input before execution', async () => {
     let calls = 0;
     const result = await runPhase({

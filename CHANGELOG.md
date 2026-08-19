@@ -11,6 +11,21 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Incremental recompilation with complete snapshots.** Canonical full and
+  full-link runs of ordinary pipelines now keep numbered, private builds under
+  `<artifact-dir>/.slc/`, each with verbatim source and accepted phase-output
+  copies. A re-run reuses a live output when its inputs are unchanged, gives a
+  changed compile phase its recorded prior input plus a bounded best-effort diff
+  as an update hint, or compiles ordinarily when no usable record exists; phase
+  definitions need no update section and retain their normal acceptance rules.
+  Any missing or corrupt member discards the whole build for selection. The
+  active marker is removed before executor work and published only after the
+  complete invocation succeeds, while `--rebuild` forces an ordinary fresh
+  build. Runs using `-o`, the reserved `slc` meta-pipeline, a partial phase or
+  pass, or direct link remain outside history selection and publication.
+
 ## [0.3.0] - 2026-08-06
 
 ### Added

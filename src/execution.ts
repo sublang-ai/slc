@@ -424,14 +424,14 @@ function compareNames(left: string, right: string): number {
 interface TargetObservation {
   /** Canonical existing path, or canonical prospective path for an absent leaf. */
   path: string;
-  /** Whether the target is a private regular file rather than absent. */
+  /** Whether the target is a single-link regular file rather than absent. */
   exists: boolean;
 }
 
 /**
  * Establishes the one pre/post target rule used by every executor: the target
  * is outside host-owned namespaces, does not alias a read input, and is absent
- * or a private regular file. An existing target may remain byte-identical when
+ * or a single-link regular file. An existing target may remain byte-identical when
  * the executor accepts that no semantic output change is needed.
  */
 async function inspectTarget(

@@ -9,10 +9,10 @@ Implement [DR-021](../decisions/021-incremental-compilation.md) as a thin succes
 
 ## Deliverables
 
-- [ ] Complete versioned build history that treats any unusable active build as absent.
-- [ ] Exact phase reuse and ordinary phase execution augmented with prior-input/diff update context.
-- [ ] Marker invalidation before executor work and one success-only publication after the complete invocation.
-- [ ] `--rebuild`, exclusions, integration acceptance, user documentation, and a green release gate.
+- [x] Complete versioned build history that treats any unusable active build as absent.
+- [x] Exact phase reuse and ordinary phase execution augmented with prior-input/diff update context.
+- [x] Marker invalidation before executor work and one success-only publication after the complete invocation.
+- [x] `--rebuild`, exclusions, integration acceptance, user documentation, and a green release gate.
 
 ## Tasks
 
@@ -23,7 +23,7 @@ Tasks are ordered; each task shall land as one commit with its focused tests and
 3. [x] **Add complete-snapshot history and a best-effort diff.** Implement strict whole-build loading, exclusive numbered-directory creation, marker-last publication, and a bounded line diff.
 4. [x] **Carry update context through both executors.** Extend compile requests and interpreted/compiled performing prompts while keeping ordinary acceptance and the compiled Boss contract unchanged.
 5. [x] **Implement the three-mode runner.** Add live input identities, Reuse/Update/Ordinary selection, marker removal before the first executor, success-only final publication, `up to date`, exclusions, and `--rebuild`.
-6. [ ] **Land acceptance and close.** Cover the complete state machine with fixture executors, update README and CHANGELOG, reconcile traceability, and pass `npm run release:check`.
+6. [x] **Land acceptance and close.** Cover the complete state machine with fixture executors, update README and CHANGELOG, reconcile traceability, and pass `npm run release:check`.
 
 ## Acceptance criteria
 
