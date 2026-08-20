@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -216,6 +223,48 @@ describe('compiled selection and pin-input safety (PHEXEC-28, PHEXEC-40)', () =>
     expect(result.diagnostics.join('\n')).toContain('aliases protected input');
     expect(interpreted.calls).toHaveLength(0);
     expect(compiled.calls).toHaveLength(0);
+  });
+
+  it.each(['regular file', 'dangling symlink'] as const)(
+    'does not let an impossible stale-pin path through a %s veto an unpinned phase',
+    async (shape) => {
+      await writeCurrentPin();
+      const bundleDir = join(pipelineDir, 'text2gears.slc');
+      await rm(bundleDir, { recursive: true });
+      if (shape === 'regular file') {
+        await writeFile(bundleDir, 'stale bundle path\n');
+      } else {
+        await symlink(join(pipelineDir, 'missing-bundle'), bundleDir);
+      }
+      const gearsSource = join(dirname(source), 'onboarding.gears.md');
+      await writeFile(gearsSource, 'gears input\n');
+
+      const result = await runSlc(['playbook.gears2fsm', gearsSource], deps());
+
+      expect(result.ok).toBe(true);
+      expect(interpreted.calls).toHaveLength(1);
+      expect(compiled.calls).toHaveLength(0);
+    },
+  );
+
+  it('keeps the file blocking a stale pin path protected', async () => {
+    await writeCurrentPin();
+    const bundleDir = join(pipelineDir, 'text2gears.slc');
+    await rm(bundleDir, { recursive: true });
+    await writeFile(bundleDir, 'protected stale bundle\n');
+    const gearsSource = join(dirname(source), 'onboarding.gears.md');
+    await writeFile(gearsSource, 'gears input\n');
+
+    const result = await runSlc(
+      ['playbook.gears2fsm', gearsSource, '-o', bundleDir],
+      deps(),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('aliases protected input');
+    expect(interpreted.calls).toHaveLength(0);
+    expect(compiled.calls).toHaveLength(0);
+    expect(await readFile(bundleDir, 'utf8')).toBe('protected stale bundle\n');
   });
 
   it('fails closed for a stale pin without interpreting', async () => {
