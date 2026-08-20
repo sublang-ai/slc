@@ -53,6 +53,7 @@ export async function deriveClosure(
   pipelineDir: string,
   boundary: string,
   definitionPath: string,
+  observePath?: (path: string) => void,
 ): Promise<Set<string>> {
   const closure = new Set<string>();
   const seen = new Set<string>();
@@ -72,6 +73,7 @@ export async function deriveClosure(
       PIN_INPUT_FIELD,
     );
     closure.add(resolved);
+    observePath?.(resolved);
 
     // Recurse only into Markdown inputs that declare their own ## Pin Inputs;
     // non-Markdown and sectionless inputs are members but terminate the walk.
@@ -100,11 +102,13 @@ export async function closureMatchesRecord(
   pipelineDir: string,
   boundary: string,
   record: PinRecord,
+  observePath?: (path: string) => void,
 ): Promise<boolean> {
   const derived = await deriveClosure(
     pipelineDir,
     boundary,
     record.definition.path,
+    observePath,
   );
   const recorded = new Set<string>();
   recorded.add(

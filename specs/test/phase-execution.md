@@ -62,7 +62,7 @@ While interpreting a phase, when the agent adds, removes, or renames a phase fil
 ### PHEXEC-40
 Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39), [COMPILE-4](../user/compiler.md#compile-4)
 
-Where a phase target aliases a source, installed verifier-support source, or other protected input, has multiple hard links, or enters an exact `.slc` or `.slc-verify` component, when the slc command runs the phase, it shall refuse before invoking the executor and leave the protected bytes unchanged.
+Where a phase target aliases a source, pin index, pinned local artifact or dependency, installed verifier-support source, or other protected input, has multiple hard links, or enters an exact `.slc` or `.slc-verify` component, when the slc command runs the phase, it shall refuse before invoking the executor and leave the protected bytes unchanged.
 
 ### PHEXEC-41
 Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39), [PHEXEC-4](../dev/phase-execution.md#phexec-4)
@@ -72,7 +72,7 @@ While a phase target is absent or a single-link regular file, when its executor 
 ### PHEXEC-43
 Verifies: [PHEXEC-42](../dev/phase-execution.md#phexec-42), [COMPILE-4](../user/compiler.md#compile-4)
 
-Where a required planned playbook entry, verifier-support file, or conformance test physically aliases the source, link target, a declared semantic input, a phase target, another deterministic output, or an installed verifier-support source, when the user runs the full or full-link invocation, the slc command shall refuse before invoking an executor and shall leave the protected bytes unchanged.
+Where a required planned playbook entry, verifier-support file, or conformance test physically aliases the source, link target, a declared semantic input, pin index or pinned local input, a phase target, another deterministic output, or an installed verifier-support source, when the user runs the full or full-link invocation, the slc command shall refuse before invoking an executor and shall leave the protected bytes unchanged.
 
 ### PHEXEC-44
 Verifies: [PHEXEC-42](../dev/phase-execution.md#phexec-42), [COMPILE-7](../user/compiler.md#compile-7)

@@ -139,6 +139,35 @@ describe('evaluatePin (PIN-2..PIN-6)', () => {
     });
   });
 
+  it('reports every local input consumed by a current pin', async () => {
+    const { file, record } = await currentFixture();
+    await write('runtime/runtime.ts', 'runtime dependency\n');
+    record.runtimeDependencies = [
+      {
+        kind: 'file',
+        locator: 'runtime/runtime.ts',
+        identity: await hashFile(join(dir, 'runtime/runtime.ts')),
+      },
+    ];
+    const observed = new Set<string>();
+
+    expect(
+      await evaluatePin(dir, file, 'text2gears', record, {
+        observePath: (path) => observed.add(path),
+      }),
+    ).toEqual({ status: 'current' });
+    expect(observed).toEqual(
+      new Set([
+        join(dir, 'text2gears.md'),
+        join(dir, 'text2gears.slc', 'text2gears.playbook.ts'),
+        join(dir, 'text2gears.slc'),
+        join(dir, 'reference', 'gears.md'),
+        join(dir, 'link', 'code.ts'),
+        join(dir, 'runtime', 'runtime.ts'),
+      ]),
+    );
+  });
+
   it('reports malformed when a record is indexed under another phase', async () => {
     const { file, record } = await currentFixture();
     const verdict = await evaluatePin(dir, file, 'gears2fsm', record);

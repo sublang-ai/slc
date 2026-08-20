@@ -35,7 +35,7 @@ When an eligible run computes a compile phase's current identities, the slc comm
 
 ### INCR-14
 
-Where the active manifest names the invocation's pipeline and source locator, when an eligible run selects a scheduled phase, the slc command shall compare the record at the same schedule index and target: matching identities plus a readable live target selects Reuse; a matching compile record with differing identities, an intact prior-input copy, and a readable live target selects Update; every other case and every `--rebuild` phase selects Ordinary, while a link phase never selects Update.
+Where the active manifest names the invocation's pipeline and source locator, when an eligible run selects a scheduled phase, the slc command shall compare the record at the same schedule index and target: matching identities plus a readable live target selects Reuse; a matching compile record with differing identities, an intact prior-input copy, and a readable live target selects Update; an identity that cannot be derived or read, every other unmatched case, and every `--rebuild` phase selects Ordinary, while a link phase never selects Update.
 
 ## Update and publication
 
@@ -49,7 +49,7 @@ Where a compile phase executes in Update mode, when its interpreted or compiled 
 
 ### INCR-17
 
-When an eligible invocation finishes successfully after executing at least one phase and completing required deterministic post-processing, the slc command shall materialize the current source and every scheduled live phase output into one complete build and publish it once.
+When an eligible invocation finishes successfully after executing at least one phase and completing required deterministic post-processing, the slc command shall materialize the current source and every scheduled live phase output into one complete build and publish it once when every phase identity and output byte sequence is available, or otherwise leave history inactive and report an advisory diagnostic.
 
 ### INCR-26
 

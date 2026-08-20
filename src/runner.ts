@@ -43,7 +43,13 @@ import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
 import { deriveClosure } from './pin-closure.js';
 import type { ProgressSink } from './progress.js';
 import { evaluatePin, evaluatePinFile, hashTree } from './pin-currency.js';
-import { PinError, loadPinFile, type PinFile, type PinRecord } from './pins.js';
+import {
+  PINS_FILE,
+  PinError,
+  loadPinFile,
+  type PinFile,
+  type PinRecord,
+} from './pins.js';
 import type { Phase } from './phase.js';
 import {
   type Pipeline,
@@ -643,6 +649,12 @@ interface StepIdentity {
   chainedInput?: Buffer;
 }
 
+interface DeclaredInputs {
+  paths: string[];
+  /** False when a runner-only incremental closure could not be derived. */
+  complete: boolean;
+}
+
 type StepMode =
   | { mode: 'ordinary' }
   | { mode: 'reuse'; bytes: Buffer }
@@ -779,6 +791,7 @@ async function executeSteps(
   opts: ExecuteStepsOptions = {},
 ): Promise<SlcResult> {
   const complete = opts.complete ?? (async (result: SlcResult) => result);
+  const pinInputs = new Set<string>([join(pipeline.dir, PINS_FILE)]);
   let pinFile: PinFile | undefined;
   try {
     pinFile = (await loadPinFile(pipeline.dir)).file;
@@ -789,7 +802,9 @@ async function executeSteps(
     throw error;
   }
   if (pinFile !== undefined) {
-    const verdicts = await evaluatePinFile(pipeline.dir, pinFile);
+    const verdicts = await evaluatePinFile(pipeline.dir, pinFile, {
+      observePath: (path) => pinInputs.add(resolve(path)),
+    });
     const malformed = Object.entries(verdicts).find(
       ([, verdict]) => verdict.status === 'malformed',
     );
@@ -825,7 +840,9 @@ async function executeSteps(
   const declaredByStep = await Promise.all(
     steps.map((step) => stepDeclaredInputs(step, pipeline, pinFile)),
   );
-  const declaredInputs = [...new Set(declaredByStep.flat())];
+  const declaredInputs = [
+    ...new Set(declaredByStep.flatMap((declared) => declared.paths)),
+  ];
   const immutableInputs = externalInputPaths(steps);
   const hostInputs = (opts.hostTargets ?? []).flatMap(
     (target) => target.protectedInputs ?? [],
@@ -836,6 +853,7 @@ async function executeSteps(
       ...definitions,
       ...declaredInputs,
       ...hostInputs,
+      ...pinInputs,
     ]),
   ];
   const plannedTargets = opts.hostTargets ?? [];
@@ -882,7 +900,12 @@ async function executeSteps(
     const identity =
       state === undefined
         ? null
-        : await stepIdentity(step, state, index, stepDeclared);
+        : await stepIdentity(
+            step,
+            state,
+            index,
+            stepDeclared.complete ? stepDeclared.paths : null,
+          );
     const mode =
       state === undefined
         ? ({ mode: 'ordinary' } as const)
@@ -983,11 +1006,12 @@ async function executeSteps(
       targetExt: step.targetExt,
       executor: selection.executor,
       definitions,
-      protectedInputs: stepDeclared,
+      protectedInputs: stepDeclared.paths,
       aliasInputs: [
         ...immutableInputs,
         ...declaredInputs,
         ...hostInputs,
+        ...pinInputs,
         ...targets.filter((_, candidate) => candidate !== index),
       ],
       beforeExecute: () =>
@@ -1136,8 +1160,9 @@ async function stepIdentity(
   step: PhaseStep,
   state: IncrementalState,
   index: number,
-  declared: readonly string[],
+  declared: readonly string[] | null,
 ): Promise<StepIdentity | null> {
+  if (declared === null) return null;
   try {
     if (step.request.kind === 'compile') {
       const chainedInput =
@@ -1215,7 +1240,7 @@ async function stepDeclaredInputs(
   step: PhaseStep,
   pipeline: Pipeline,
   pinFile: PinFile | undefined,
-): Promise<string[]> {
+): Promise<DeclaredInputs> {
   const roots =
     step.request.kind === 'compile'
       ? [step.request.definitionPath, ...(step.request.references ?? [])]
@@ -1228,11 +1253,12 @@ async function declaredInputPaths(
   pipeline: Pipeline,
   pinFile: PinFile | undefined,
   roots: readonly string[],
-): Promise<string[]> {
+): Promise<DeclaredInputs> {
   const boundary = pinFile?.pathBoundary.path ?? '.';
   const base = new Set(roots.map((path) => resolve(path)));
   const seen = new Set(base);
   const inputs: string[] = [];
+  let complete = true;
   const normalize = resolve(normalizeDefinitionPath());
   for (const root of roots) {
     const absolute = resolve(root);
@@ -1240,7 +1266,17 @@ async function declaredInputPaths(
       continue;
     }
     const locator = relative(pipeline.dir, absolute).split(sep).join('/');
-    const closure = await deriveClosure(pipeline.dir, boundary, locator);
+    const closure = new Set<string>();
+    try {
+      await deriveClosure(pipeline.dir, boundary, locator, (path) =>
+        closure.add(path),
+      );
+    } catch {
+      // This derivation exists only for incremental identity and best-effort
+      // target protection. Pin generation/currency remain fail-closed, while an
+      // otherwise interpretable phase degrades to Ordinary execution.
+      complete = false;
+    }
     for (const path of closure) {
       const absolutePath = resolve(path);
       if (seen.has(absolutePath)) continue;
@@ -1248,7 +1284,7 @@ async function declaredInputPaths(
       inputs.push(absolutePath);
     }
   }
-  return inputs;
+  return { paths: inputs, complete };
 }
 
 async function selectStepMode(
