@@ -486,7 +486,25 @@ async function aliasesProtectedPath(
   } catch (error) {
     if (!isAbsentPathError(error)) throw error;
   }
-  const inputPath = await prospectiveRealPath(input);
+  let inputPath: string;
+  try {
+    inputPath = await prospectiveRealPath(input);
+  } catch (error) {
+    // An impossible protected path cannot itself alias this target, but its
+    // existing blocking ancestor remains protected. Permission and I/O errors
+    // are indeterminate and continue to fail closed.
+    if (error instanceof ImpossiblePathError) {
+      const blocker = error.blocker;
+      return (
+        blocker !== undefined &&
+        (targetPath === blocker.path ||
+          (targetInfo !== null &&
+            targetInfo.dev === blocker.info.dev &&
+            targetInfo.ino === blocker.info.ino))
+      );
+    }
+    throw error;
+  }
   if (targetPath === inputPath) return true;
   if (inputInfo?.isDirectory() && isWithin(inputPath, targetPath)) return true;
   return (
@@ -497,6 +515,15 @@ async function aliasesProtectedPath(
   );
 }
 
+class ImpossiblePathError extends Error {
+  constructor(
+    message: string,
+    readonly blocker?: { path: string; info: Stats },
+  ) {
+    super(message);
+  }
+}
+
 /** Resolves a missing leaf through its nearest real directory ancestor. */
 async function prospectiveRealPath(path: string): Promise<string> {
   const suffix: string[] = [];
@@ -504,8 +531,14 @@ async function prospectiveRealPath(path: string): Promise<string> {
   while (true) {
     try {
       const resolved = await realpath(cursor);
-      if (suffix.length > 0 && !(await stat(resolved)).isDirectory()) {
-        throw new Error(`target parent "${cursor}" is not a directory`);
+      if (suffix.length > 0) {
+        const info = await stat(resolved);
+        if (!info.isDirectory()) {
+          throw new ImpossiblePathError(
+            `target parent "${cursor}" is not a directory`,
+            { path: resolved, info },
+          );
+        }
       }
       return resolve(resolved, ...suffix.reverse());
     } catch (error) {
@@ -515,15 +548,18 @@ async function prospectiveRealPath(path: string): Promise<string> {
     // `realpath` reports ENOENT for both an absent path and a dangling link.
     // An existing unresolved link is not a safe ancestor to write through.
     try {
-      await lstat(cursor);
-      throw new Error(`target path "${cursor}" cannot be resolved safely`);
+      const info = await lstat(cursor);
+      throw new ImpossiblePathError(
+        `target path "${cursor}" cannot be resolved safely`,
+        { path: resolve(cursor), info },
+      );
     } catch (error) {
       if (!isAbsentPathError(error)) throw error;
     }
 
     const parent = dirname(cursor);
     if (parent === cursor) {
-      throw new Error(
+      throw new ImpossiblePathError(
         `target path "${path}" has no existing directory ancestor`,
       );
     }
