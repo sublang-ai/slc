@@ -73,6 +73,11 @@ export interface PinsResult {
   malformed?: string;
 }
 
+/** Optional observation hook for local paths consumed during pin validation. */
+export interface PinEvaluationOptions {
+  observePath?: (path: string) => void;
+}
+
 /**
  * Evaluates every pin in `<pipelineDir>/slc.pins.json` (PIN-1..PIN-6).
  *
@@ -103,10 +108,11 @@ export async function evaluatePins(pipelineDir: string): Promise<PinsResult> {
 export async function evaluatePinFile(
   pipelineDir: string,
   file: PinFile,
+  opts: PinEvaluationOptions = {},
 ): Promise<Record<string, PinVerdict>> {
   const verdicts: Record<string, PinVerdict> = {};
   for (const [phase, record] of Object.entries(file.pins)) {
-    verdicts[phase] = await evaluatePin(pipelineDir, file, phase, record);
+    verdicts[phase] = await evaluatePin(pipelineDir, file, phase, record, opts);
   }
   const malformedPhase = Object.entries(verdicts).find(
     ([, verdict]) => verdict.status === 'malformed',
@@ -138,6 +144,7 @@ export async function evaluatePin(
   file: PinFile,
   phase: string,
   record: PinRecord,
+  opts: PinEvaluationOptions = {},
 ): Promise<PinVerdict> {
   const boundary = file.pathBoundary.path;
   try {
@@ -181,7 +188,13 @@ export async function evaluatePin(
     // Currency (stale) checks. resolvePinPath throws PinError for a bad path,
     // which the catch below maps to malformed (PIN-5).
     for (const [field, ref] of recordedFileRefs(record)) {
-      const reason = await fileStale(pipelineDir, boundary, ref, field);
+      const reason = await fileStale(
+        pipelineDir,
+        boundary,
+        ref,
+        field,
+        opts.observePath,
+      );
       if (reason !== null) {
         return stale(reason);
       }
@@ -191,6 +204,7 @@ export async function evaluatePin(
       boundary,
       record.artifactBundle,
       'artifactBundle',
+      opts.observePath,
     );
     if (bundleReason !== null) {
       return stale(bundleReason);
@@ -212,11 +226,19 @@ export async function evaluatePin(
       pipelineDir,
       boundary,
       record.artifact,
+      opts.observePath,
     );
     if (artifactFormat !== null) {
       return stale(artifactFormat);
     }
-    if (!(await closureMatchesRecord(pipelineDir, boundary, record))) {
+    if (
+      !(await closureMatchesRecord(
+        pipelineDir,
+        boundary,
+        record,
+        opts.observePath,
+      ))
+    ) {
       return stale(
         "the semantic-input closure differs from the definition's ## Pin Inputs",
       );
@@ -225,6 +247,8 @@ export async function evaluatePin(
       pipelineDir,
       boundary,
       record.linkTarget,
+      'linkTarget',
+      opts.observePath,
     );
     if (linkStale !== null) {
       return stale(linkStale);
@@ -236,6 +260,7 @@ export async function evaluatePin(
         record.artifact,
         record.runtimeDependencies[index],
         `runtimeDependencies[${index}]`,
+        opts.observePath,
       );
       if (resolutionStale !== null) return stale(resolutionStale);
       const dependencyStale = await linkTargetStale(
@@ -243,6 +268,7 @@ export async function evaluatePin(
         boundary,
         record.runtimeDependencies[index],
         `runtimeDependencies[${index}]`,
+        opts.observePath,
       );
       if (dependencyStale !== null) return stale(dependencyStale);
     }
@@ -285,8 +311,10 @@ async function fileStale(
   boundary: string,
   ref: PinFileRef,
   field: string,
+  observePath?: (path: string) => void,
 ): Promise<string | null> {
   const resolved = resolvePinPath(pipelineDir, boundary, ref.path, field);
+  observePath?.(resolved);
   const current = await hashFileOrNull(resolved);
   if (current === null) {
     return `${field} is missing or unreadable (${ref.path})`;
@@ -302,8 +330,10 @@ async function treeStale(
   boundary: string,
   ref: PinFileRef,
   field: string,
+  observePath?: (path: string) => void,
 ): Promise<string | null> {
   const resolved = resolvePinPath(pipelineDir, boundary, ref.path, field);
+  observePath?.(resolved);
   let current: string;
   try {
     current = await hashTree(resolved, { rejectSymlinks: true });
@@ -387,6 +417,7 @@ async function artifactFormatStale(
   pipelineDir: string,
   boundary: string,
   artifact: PinFileRef,
+  observePath?: (path: string) => void,
 ): Promise<string | null> {
   const resolved = resolvePinPath(
     pipelineDir,
@@ -394,6 +425,7 @@ async function artifactFormatStale(
     artifact.path,
     'artifact',
   );
+  observePath?.(resolved);
   let source: string;
   try {
     source = await readFile(resolved, 'utf8');
@@ -446,6 +478,7 @@ function runtimeDependencyResolutionStale(
   artifact: PinFileRef,
   dependency: PinRuntimeDependency,
   field: string,
+  observePath?: (path: string) => void,
 ): string | null {
   if (dependency.kind !== 'package' || dependency.specifier === undefined) {
     return null;
@@ -462,12 +495,14 @@ function runtimeDependencyResolutionStale(
     dependency.locator,
     `${field}.locator`,
   );
+  observePath?.(recordedRoot);
   let selectedRoot: string;
   try {
     selectedRoot = resolveRuntimePackage(
       artifactPath,
       dependency.specifier,
     ).root;
+    observePath?.(selectedRoot);
   } catch {
     return `${field} import no longer resolves (${dependency.specifier})`;
   }
@@ -481,6 +516,7 @@ async function linkTargetStale(
   boundary: string,
   linkTarget: PinLinkTarget,
   field = 'linkTarget',
+  observePath?: (path: string) => void,
 ): Promise<string | null> {
   const resolved = resolvePinPath(
     pipelineDir,
@@ -488,6 +524,7 @@ async function linkTargetStale(
     linkTarget.locator,
     `${field}.locator`,
   );
+  observePath?.(resolved);
   const current =
     linkTarget.kind === 'file'
       ? await hashFileOrNull(resolved)

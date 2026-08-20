@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -44,7 +44,7 @@ function spyExecutor(
   };
 }
 
-describe('compiled selection (PHEXEC-28)', () => {
+describe('compiled selection and pin-input safety (PHEXEC-28, PHEXEC-40)', () => {
   let root: string;
   let pipelineDir: string;
   let source: string;
@@ -180,6 +180,42 @@ describe('compiled selection (PHEXEC-28)', () => {
     expect(selections[0]?.record.artifact.path).toBe(
       'text2gears.slc/text2gears.playbook.ts',
     );
+  });
+
+  it('refuses a phase target that aliases the pin index', async () => {
+    await writeCurrentPin();
+    const pinsPath = join(pipelineDir, PINS_FILE);
+    const gearsSource = join(dirname(source), 'onboarding.gears.md');
+    await writeFile(gearsSource, 'gears input\n');
+    const original = await readFile(pinsPath);
+
+    const result = await runSlc(
+      ['playbook.gears2fsm', gearsSource, '-o', pinsPath],
+      deps(),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('aliases protected input');
+    expect(interpreted.calls).toHaveLength(0);
+    expect(compiled.calls).toHaveLength(0);
+    expect(await readFile(pinsPath)).toEqual(original);
+  });
+
+  it('refuses a phase target inside a pinned artifact bundle', async () => {
+    await writeCurrentPin();
+    const gearsSource = join(dirname(source), 'onboarding.gears.md');
+    await writeFile(gearsSource, 'gears input\n');
+    const target = join(pipelineDir, 'text2gears.slc', 'generated.md');
+
+    const result = await runSlc(
+      ['playbook.gears2fsm', gearsSource, '-o', target],
+      deps(),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('aliases protected input');
+    expect(interpreted.calls).toHaveLength(0);
+    expect(compiled.calls).toHaveLength(0);
   });
 
   it('fails closed for a stale pin without interpreting', async () => {
