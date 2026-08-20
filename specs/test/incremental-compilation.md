@@ -60,3 +60,8 @@ While a usable active build exists, when a history-excluded invocation fails aft
 Verifies: [INCR-3](../user/incremental-compilation.md#incr-3)
 
 While malformed `.slc` state structurally prevents fresh history from being recorded, when an eligible invocation runs, every phase shall execute ordinarily, the compile shall still succeed, the recording failure shall be diagnostic-only, and no active marker shall be published.
+
+### INCR-29
+Verifies: [INCR-14](../dev/incremental-compilation.md#incr-14), [INCR-17](../dev/incremental-compilation.md#incr-17)
+
+Where an unpinned phase's declared local-input identity cannot be derived or read, when an eligible invocation runs, the phase shall execute ordinarily, the compile shall remain successful, and history publication shall be skipped with an advisory diagnostic.

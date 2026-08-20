@@ -55,7 +55,7 @@ Options:
 | seed | Fixture seed. |
 `;
 
-describe('success-only incremental runner (INCR-18..25, INCR-27..28)', () => {
+describe('success-only incremental runner (INCR-18..25, INCR-27..29)', () => {
   let root: string;
   let pipelineDir: string;
   let workDir: string;
@@ -284,6 +284,59 @@ describe('success-only incremental runner (INCR-18..25, INCR-27..28)', () => {
       update: expect.any(Object) as object,
     });
     expect((await loadBuildHistory(artDir))?.build).toBe(3);
+  });
+
+  it.each([
+    ['escapes the local boundary', '../outside.md'],
+    ['is missing', 'references/missing.md'],
+  ])(
+    'runs ordinarily when a declared Pin Input %s',
+    async (_label, citation) => {
+      await writeFile(
+        join(pipelineDir, 'text2middle.md'),
+        `${phase('text', '.md', 'middle', '.md')}\n## Pin Inputs\n\n- \`${citation}\`\n`,
+      );
+      const calls: ExecuteRequest[] = [];
+
+      const result = await runSlc(['flow', source], deps(fake(calls)));
+
+      expect(result.ok).toBe(true);
+      expect(calls).toHaveLength(2);
+      expect(
+        calls.every(
+          (request) =>
+            request.kind !== 'compile' || request.update === undefined,
+        ),
+      ).toBe(true);
+      expect(result.diagnostics.join('\n')).toContain(
+        'slc: build history not recorded:',
+      );
+      expect(await loadBuildHistory(artDir)).toBeNull();
+    },
+  );
+
+  it('retains valid declared inputs when a later citation is invalid', async () => {
+    const references = join(pipelineDir, 'references');
+    const protectedInput = join(references, 'protected.md');
+    const middle = join(workDir, 'case.middle.md');
+    await mkdir(references);
+    await writeFile(protectedInput, 'protected input\n');
+    await writeFile(middle, 'middle input\n');
+    await writeFile(
+      join(pipelineDir, 'middle2final.md'),
+      `${phase('middle', '.md', 'final', '.md')}\n## Pin Inputs\n\n- \`references/protected.md\`\n- \`../outside.md\`\n`,
+    );
+    const calls: ExecuteRequest[] = [];
+
+    const result = await runSlc(
+      ['flow.middle2final', middle, '-o', protectedInput],
+      deps(fake(calls)),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('aliases protected input');
+    expect(calls).toHaveLength(0);
+    expect(await readFile(protectedInput, 'utf8')).toBe('protected input\n');
   });
 
   it('includes an explicit normalization reference in compile identity', async () => {

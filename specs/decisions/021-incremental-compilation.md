@@ -66,7 +66,7 @@ The host walks the current schedule in order and compares it with the active bui
 
 ### Honest publication
 
-- Before an executor or deterministic completion writer runs, the host refuses its target when that target aliases an invocation input, declared local semantic input, definition, another phase target, or another planned host output; SLC's verifier files remain confined to their managed `.slc-verify` directory.
+- Before an executor or deterministic completion writer runs, the host refuses its target when that target aliases an invocation input, pin-validation input, declared local semantic input, definition, another phase target, or another planned host output; SLC's verifier files remain confined to their managed `.slc-verify` directory.
 - `.slc/latest` is the only active-history marker.
   It remains while phases only Reuse and is removed immediately before the first Update or Ordinary executor may write.
 - If that run fails, is cancelled, or is interrupted, it publishes no build and leaves no active marker.
