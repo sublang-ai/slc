@@ -55,7 +55,7 @@ When a write-scope violation is detected by any means, the slc command shall fai
 
 ### PHEXEC-39
 
-When a phase is selected for execution, the slc command shall refuse before invoking its executor unless the declared target is outside exact `.slc` and `.slc-verify` path components, is absent or a single-link regular file, and does not alias the source, objects, link target, definitions, references, prior update input, declared local semantic-input closure, pin index or local pin-validation input, or an installed verifier-support source the invocation will copy during deterministic completion; after an `ok` executor result, it shall require the target to be a single-link regular file at the physical location accepted before execution.
+When a phase is selected for execution, the slc command shall refuse before invoking its executor unless the declared target is outside exact `.slc` and `.slc-verify` path components, is absent or a single-link regular file, and does not alias the source, objects, link target, definitions, references, prior update input, declared local semantic-input closure, pin index or local pin-validation input, or an installed verifier-support source the invocation will copy during deterministic completion; for that alias decision, it shall treat a protected input path as non-aliasing where an existing non-directory or dangling symbolic link proves its prospective location impossible, shall continue to protect that blocking entry by physical identity, and shall refuse execution where any other observation or resolution failure prevents it from establishing non-aliasing; after an `ok` executor result, it shall require the target to be a single-link regular file at the physical location accepted before execution.
 
 ### PHEXEC-42
 
@@ -131,7 +131,7 @@ Where a `composed-v2` compiled phase makes a direct Captain call, the slc comman
 
 ### PHEXEC-27
 
-When the slc command runs a phase, the slc command shall select its execution from the pin index: a phase with no pin — including when the pipeline has no pin file — interprets; a current pin runs the phase's compiled artifact, and fails the run closed when it cannot run that artifact rather than interpreting it; and a stale or malformed pin, or an unparseable pin file, stops the run with a diagnostic, never silently interpreting the phase ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#strategy-selection), [DR-007](../decisions/007-slc-phase-artifact-pinning.md#currency-and-selection)).
+When the slc command runs a phase, the slc command shall select its execution from the pin index: a phase with no pin — including when the pipeline has no pin file or only unrelated stale records — interprets; a current pin runs the phase's compiled artifact, and fails the run closed when it cannot run that artifact rather than interpreting it; a stale pin for the selected phase stops the run with a diagnostic, never silently interpreting that phase; and any malformed pin record or unparseable pin file stops the run before execution ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#strategy-selection), [DR-007](../decisions/007-slc-phase-artifact-pinning.md#currency-and-selection)).
 
 ### PHEXEC-30
 
