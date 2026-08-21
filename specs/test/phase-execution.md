@@ -79,6 +79,11 @@ Verifies: [PHEXEC-42](../dev/phase-execution.md#phexec-42), [COMPILE-7](../user/
 
 Where a raw playbook source physically aliases the deterministic `<basename>.ts` entry path, when the user runs the full-link invocation, the slc command shall compile the bundle, leave the raw source unchanged, omit the entry module, and report that omission as a diagnostic.
 
+### PHEXEC-45
+Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39), [PHEXEC-27](../dev/phase-execution.md#phexec-27)
+
+Where a present pin records an unrelated phase whose local input path is impossible beneath an existing regular file or dangling symbolic link, and the selected unpinned fixture phase targets either an unrelated path or that existing regular-file blocker, when the slc command runs the selected phase, it shall invoke the interpreted executor for the unrelated target; for the blocker target, it shall refuse before invoking the executor and leave the blocker's bytes unchanged.
+
 ## Compiled runs
 
 ### PHEXEC-26
@@ -89,7 +94,7 @@ Where phases are backed by `legacy`, `session-v1`, and `composed-v2` fixture `pl
 ### PHEXEC-28
 Verifies: [PHEXEC-27](../dev/phase-execution.md#phexec-27), [PHEXEC-30](../dev/phase-execution.md#phexec-30), [COMPILE-6](../user/compiler.md#compile-6)
 
-When the slc command runs a fixture phase, a phase with no pin file or absent from a present pin file shall interpret, a current pin with absent or exact `@sublang/playbook@0.9.0` link-target provenance shall select the `legacy` compiled executor without interpreting, a current pin with exact `@sublang/playbook@1.0.0`, `@sublang/playbook@2.0.0`, `@sublang/playbook@3.1.0`, or `@sublang/playbook@4.0.0` provenance shall select the six-port `composed-v2` executor, a current pin carrying any other unmapped provenance — including `@sublang/playbook@1.3.0` and `@sublang/playbook@3.0.0` — or a compiled artifact the selected host cannot run shall fail closed without profile inference or initialization retry, and a stale pin, a malformed pin record, or an unparseable pin file shall fail the run with a diagnostic and not interpret.
+When the slc command runs a fixture phase, a phase with no pin file or absent from a present pin file — including one with an unrelated stale record — shall interpret, a current pin with absent or exact `@sublang/playbook@0.9.0` link-target provenance shall select the `legacy` compiled executor without interpreting, a current pin with exact `@sublang/playbook@1.0.0`, `@sublang/playbook@2.0.0`, `@sublang/playbook@3.1.0`, or `@sublang/playbook@4.0.0` provenance shall select the six-port `composed-v2` executor, a current pin carrying any other unmapped provenance — including `@sublang/playbook@1.3.0` and `@sublang/playbook@3.0.0` — or a compiled artifact the selected host cannot run shall fail closed without profile inference or initialization retry, and a stale pin for the selected phase, any malformed pin record including for an unselected phase, or an unparseable pin file shall fail the run with a diagnostic and not interpret.
 
 ### PHEXEC-32
 
