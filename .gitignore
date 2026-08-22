@@ -151,3 +151,6 @@ vite.config.ts.timestamp-*
 # the demo's own consumer install (demo/package.json)
 /demo/node_modules/
 /demo/package-lock.json
+
+# slc build history published beside compiled artifacts (DR-021)
+.slc/

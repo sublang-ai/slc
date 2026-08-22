@@ -24,7 +24,7 @@ Playbook's DR-016 adds the target-side primitive — GEARS script items compiled
 ### 1. Pass phases
 
 - A phase whose `## Formats` source and target formats are equal is a **pass phase**.
-  Its filename is its pass name (`<name>.md`, e.g. `optimize.md`); the `<source>2<target>.md` rule applies only to format-changing phases.
+  Its filename is its non-empty portable pass name (`<name>.md`, e.g. `optimize.md`), which may otherwise be named freely but may not contain a path separator, NUL, or ASCII drive prefix or use `.` or `..`; the `<source>2<target>.md` rule applies only to format-changing phases.
 - Pass phases sit outside chain inference: entry/exit computation, branch and cycle refusals, and the single-linear-chain requirement consider only format-changing phases.
   A pass may not shadow a chain phase's name or the reserved `link`.
 - Passes run only on request. `-O`/`--optimize` on a full or full-link run schedules every discovered pass after the phase producing its format, in pass-name order.

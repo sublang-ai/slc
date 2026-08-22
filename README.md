@@ -157,6 +157,16 @@ of those excluded forms is about to overwrite an artifact named by a usable
 active build, `slc` clears that marker first so it cannot describe the new
 bytes.
 
+`.slc/` sits inside the artifact bundle and holds verbatim copies of your
+source and every accepted phase output, so treat it as no less private than
+the source, and add `.slc/` to your `.gitignore` if you commit the bundle.
+Deleting it is always safe — the next run simply compiles ordinarily — and
+old numbered builds under `.slc/builds/` can be pruned at any time. An upgrade
+that changes a recorded definition or input invalidates only the affected
+steps: an eligible compile step can use Update while link steps run ordinarily.
+Pass `--rebuild` after an upgrade when you want every phase to compile from
+scratch instead.
+
 While a compile runs, `slc` reports progress on stderr: each phase as it
 starts, each artifact as it lands with the elapsed time, the compiled
 runtime's own state transitions, and a heartbeat so the terminal is
@@ -164,9 +174,11 @@ never silent for more than 30 seconds. An agent call that goes quiet for
 `stallTimeout` seconds (default 600, `0` disables) is aborted and
 reported as a failed phase rather than hanging indefinitely.
 
-Success prints the written artifact paths to stdout and exits 0; a
-failure prints diagnostics to stderr — naming the failing phase when one
-is at fault — and exits non-zero.
+Success prints the written artifact paths to stdout and exits 0 — or
+just `up to date` when incremental selection recompiled nothing, in which
+case the paths the previous run reported are still current; a failure
+prints diagnostics to stderr — naming the failing phase when one is at
+fault — and exits non-zero.
 
 ## Configuration
 

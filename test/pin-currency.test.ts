@@ -46,17 +46,17 @@ const write = async (rel: string, content: string): Promise<void> => {
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
-const writeReviewedBundle = async (): Promise<void> => {
-  await write('text2gears.slc/text2gears.playbook.ts', PHASE_ARTIFACT);
+const writeReviewedBundle = async (phase = 'text2gears'): Promise<void> => {
+  await write(`${phase}.slc/${phase}.playbook.ts`, PHASE_ARTIFACT);
   for (const name of [
-    'text2gears.fsm.ts',
-    'text2gears.gears.md',
-    'text2gears.gears-fsm.test.ts',
-    'text2gears.fsm.introspect.test.ts',
-    'text2gears.prompt-contract.test.ts',
-    'text2gears.fsm.coverage.test.ts',
+    `${phase}.fsm.ts`,
+    `${phase}.gears.md`,
+    `${phase}.gears-fsm.test.ts`,
+    `${phase}.fsm.introspect.test.ts`,
+    `${phase}.prompt-contract.test.ts`,
+    `${phase}.fsm.coverage.test.ts`,
   ]) {
-    await write(`text2gears.slc/${name}`, `fixture: ${name}\n`);
+    await write(`${phase}.slc/${name}`, `fixture: ${name}\n`);
   }
 };
 
@@ -135,6 +135,35 @@ describe('evaluatePin (PIN-2..PIN-6)', () => {
   it('reports a fully matching pin as current', async () => {
     const { file, record } = await currentFixture();
     expect(await evaluatePin(dir, file, 'text2gears', record)).toEqual({
+      status: 'current',
+    });
+  });
+
+  it('reports a portable format-preserving pass pin as current', async () => {
+    const { file, record } = await currentFixture();
+    await write(
+      'optimize.md',
+      '## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | gears | .md |\n| target | gears | .md |\n\n## Pin Inputs\n\n- `reference/gears.md`\n',
+    );
+    await writeReviewedBundle('optimize');
+    const pass: PinRecord = {
+      ...record,
+      definition: {
+        path: 'optimize.md',
+        hash: await hashFile(join(dir, 'optimize.md')),
+      },
+      artifact: {
+        path: 'optimize.slc/optimize.playbook.ts',
+        hash: await hashFile(join(dir, 'optimize.slc/optimize.playbook.ts')),
+      },
+      artifactBundle: {
+        path: 'optimize.slc',
+        hash: await hashTree(join(dir, 'optimize.slc')),
+      },
+    };
+    file.pins = { optimize: pass };
+
+    expect(await evaluatePin(dir, file, 'optimize', pass)).toEqual({
       status: 'current',
     });
   });

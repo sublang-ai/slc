@@ -17,6 +17,7 @@
  *   npm run test:acceptance -- --compile-only  # stop after compiling
  *   npm run test:acceptance -- --run-only      # skip the compile and run the
  *                                              # committed reference instead
+ *   npm run test:acceptance -- --skip-update    # skip the incremental edit
  *   npm run test:acceptance -- --keep          # also retain a *passing* run's
  *                                              # scratch tree; a failing run
  *                                              # always retains it
@@ -28,8 +29,10 @@
  * maintainer's own `run.*` playbook config never changes what the gate tests.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
+  appendFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -40,8 +43,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -52,13 +55,18 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const { AGENT_RUNTIME_TARGETS } = await import('@sublang/cligent');
 const args = new Set(process.argv.slice(2));
 
-const KNOWN_FLAGS = new Set(['--keep', '--compile-only', '--run-only']);
+const KNOWN_FLAGS = new Set([
+  '--keep',
+  '--compile-only',
+  '--run-only',
+  '--skip-update',
+]);
 
 /** Refuses an invocation that would silently test nothing. */
 function usage(message) {
   console.error(`test:acceptance: ${message}`);
   console.error(
-    'usage: npm run test:acceptance -- [--compile-only | --run-only] [--keep]',
+    'usage: npm run test:acceptance -- [--compile-only | --run-only] [--skip-update] [--keep]',
   );
   process.exit(1);
 }
@@ -72,6 +80,7 @@ if (args.has('--compile-only') && args.has('--run-only')) {
 
 const keep = args.has('--keep');
 const runCompile = !args.has('--run-only');
+const runUpdate = runCompile && !args.has('--skip-update');
 const runWorkflow = !args.has('--compile-only');
 
 /** The smallest workflow that still exercises normalize → GEARS → FSM → link. */
@@ -93,6 +102,10 @@ function ok(label, detail = '') {
 
 function fail(label, detail) {
   throw new Error(`${label}${detail === undefined ? '' : ` — ${detail}`}`);
+}
+
+function hashBytes(bytes) {
+  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 }
 
 /** The agent bound to any role the maintainer does not override. */
@@ -305,6 +318,100 @@ function installedBin(consumer, pkg, binName) {
   return join(root, bin);
 }
 
+/** Runs the installed compiler while preserving live progress and captured output. */
+function runInstalledSlc(consumer, compileArgs) {
+  const slc = installedBin(consumer, '@sublang/slc', 'slc');
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(process.execPath, [slc, ...compileArgs], {
+      cwd: consumer,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on('data', (chunk) => {
+      stdout.push(Buffer.from(chunk));
+      process.stdout.write(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr.push(Buffer.from(chunk));
+      process.stderr.write(chunk);
+    });
+    child.on('error', rejectRun);
+    child.on('close', (code, signal) => {
+      const result = {
+        stdout: Buffer.concat(stdout).toString('utf8'),
+        stderr: Buffer.concat(stderr).toString('utf8'),
+      };
+      if (code === 0) {
+        resolveRun(result);
+      } else {
+        rejectRun(
+          new Error(
+            `installed slc exited ${code ?? `on signal ${signal ?? 'unknown'}`}`,
+          ),
+        );
+      }
+    });
+  });
+}
+
+/** Reads the active manifest and verifies every recorded output round-trip. */
+function activeBuild(bundle) {
+  const history = join(bundle, '.slc');
+  const latestText = readFileSync(join(history, 'latest'), 'utf8');
+  if (!/^[1-9]\d*\n?$/.test(latestText)) {
+    fail('active build marker is malformed', JSON.stringify(latestText));
+  }
+  const build = Number(latestText.trim());
+  const buildDir = join(history, 'builds', String(build));
+  const manifest = JSON.parse(
+    readFileSync(join(buildDir, 'manifest.json'), 'utf8'),
+  );
+  if (!Array.isArray(manifest.steps) || manifest.steps.length === 0) {
+    fail('active build manifest has no phase records');
+  }
+  const targets = manifest.steps.map((record, index) => {
+    if (
+      typeof record.target !== 'string' ||
+      typeof record.output !== 'string'
+    ) {
+      fail('active build manifest has a malformed phase record', String(index));
+    }
+    const target = resolve(bundle, record.target);
+    const live = readFileSync(target);
+    const copy = readFileSync(join(buildDir, 'outputs', String(index)));
+    if (!live.equals(copy)) {
+      fail('recorded phase target differs from its snapshot', record.target);
+    }
+    if (hashBytes(live) !== record.output) {
+      fail(
+        'recorded phase target differs from its manifest hash',
+        record.target,
+      );
+    }
+    return { record, target, live };
+  });
+  return { latestText, build, targets };
+}
+
+function assertEntryLoads(entry, label) {
+  execFileSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      [
+        `const entry = (await import(${JSON.stringify(pathToFileURL(entry).href)})).default;`,
+        "if (typeof entry.createRuntime !== 'function') {",
+        "  throw new Error('emitted entry exposes no createRuntime');",
+        '}',
+      ].join('\n'),
+    ],
+    { stdio: 'pipe' },
+  );
+  ok(`${label} entry loads`);
+}
+
 function compileStage(consumer) {
   step('compile a minimal workflow with a real agent');
   const slc = installedBin(consumer, '@sublang/slc', 'slc');
@@ -336,21 +443,7 @@ function compileStage(consumer) {
   }
   ok('bundle and entry emitted', `${emitted.length} files`);
 
-  execFileSync(
-    process.execPath,
-    [
-      '--input-type=module',
-      '--eval',
-      [
-        "const entry = (await import('./minimal.ts')).default;",
-        "if (typeof entry.createRuntime !== 'function') {",
-        "  throw new Error('emitted entry exposes no createRuntime');",
-        '}',
-      ].join('\n'),
-    ],
-    { cwd: consumer, stdio: 'pipe' },
-  );
-  ok('freshly compiled entry loads');
+  assertEntryLoads(entry, 'freshly compiled');
 
   return {
     label: 'freshly compiled',
@@ -358,6 +451,71 @@ function compileStage(consumer) {
     entry,
     bundle,
   };
+}
+
+/** Proves the installed compiler's unchanged path performs no model calls. */
+async function upToDateStage(consumer, compiled) {
+  step('repeat unchanged with no agent calls');
+  const before = activeBuild(compiled.bundle);
+  const result = await runInstalledSlc(consumer, ['playbook', 'minimal.txt']);
+  if (result.stdout !== 'up to date\n') {
+    fail('unchanged repeat did not report exactly `up to date`', result.stdout);
+  }
+  const after = activeBuild(compiled.bundle);
+  if (after.latestText !== before.latestText) {
+    fail('unchanged repeat advanced build history');
+  }
+  if (after.targets.length !== before.targets.length) {
+    fail('unchanged repeat changed the recorded phase count');
+  }
+  for (let index = 0; index < before.targets.length; index++) {
+    if (
+      before.targets[index].record.target !==
+        after.targets[index].record.target ||
+      !before.targets[index].live.equals(after.targets[index].live)
+    ) {
+      fail(
+        'unchanged repeat changed a recorded phase target',
+        before.targets[index].record.target,
+      );
+    }
+  }
+  ok('unchanged repeat reused every recorded phase', `build ${before.build}`);
+}
+
+/** Proves a hand-refined intermediate becomes the baseline for downstream Update. */
+async function updateStage(consumer, compiled) {
+  step('update after a manual intermediate refinement');
+  const before = activeBuild(compiled.bundle);
+  const gears = join(compiled.bundle, 'minimal.gears.md');
+  const comment = '<!-- acceptance: preserve this manual refinement -->';
+  appendFileSync(gears, `\n${comment}\n`);
+  const refined = readFileSync(gears);
+
+  const result = await runInstalledSlc(consumer, ['playbook', 'minimal.txt']);
+  if (!/^◇ updating /m.test(result.stderr)) {
+    fail('incremental repeat reported no Update phase');
+  }
+  if (!/^◇ reusing /m.test(result.stderr)) {
+    fail('incremental repeat reported no Reuse phase');
+  }
+  if (!readFileSync(gears, 'utf8').includes(comment)) {
+    fail('incremental repeat destroyed the manual refinement');
+  }
+
+  const after = activeBuild(compiled.bundle);
+  if (after.build <= before.build) {
+    fail('incremental repeat did not advance build history');
+  }
+  const gearsRecord = after.targets.find((target) => target.target === gears);
+  if (gearsRecord === undefined || !gearsRecord.live.equals(refined)) {
+    fail('new build did not accept the refined GEARS bytes');
+  }
+  assertEntryLoads(compiled.entry, 'incrementally updated');
+  ok(
+    'incremental repeat updated downstream and retained reuse',
+    `build ${after.build}`,
+  );
 }
 
 /** The committed reference set, used when `--run-only` skips the compile. */
@@ -492,9 +650,17 @@ try {
   // Default to running exactly what this compiler just produced; the
   // committed reference is the fallback only when the compile was skipped.
   const compiled = runCompile ? compileStage(consumer) : referenceSource();
+  if (runCompile) await upToDateStage(consumer, compiled);
+  if (runUpdate) await updateStage(consumer, compiled);
   if (runWorkflow) runStage(consumer, compiled);
   console.log(
-    `\nacceptance passed (${[runCompile ? 'compile' : null, runWorkflow ? 'run' : null].filter(Boolean).join(' + ')})`,
+    `\nacceptance passed (${[
+      runCompile ? 'compile + reuse' : null,
+      runUpdate ? 'update' : null,
+      runWorkflow ? 'run' : null,
+    ]
+      .filter(Boolean)
+      .join(' + ')})`,
   );
 } catch (error) {
   failed = error;
