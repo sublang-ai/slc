@@ -110,7 +110,10 @@ export async function evaluatePinFile(
   file: PinFile,
   opts: PinEvaluationOptions = {},
 ): Promise<Record<string, PinVerdict>> {
-  const verdicts: Record<string, PinVerdict> = {};
+  const verdicts: Record<string, PinVerdict> = Object.create(null) as Record<
+    string,
+    PinVerdict
+  >;
   for (const [phase, record] of Object.entries(file.pins)) {
     verdicts[phase] = await evaluatePin(pipelineDir, file, phase, record, opts);
   }

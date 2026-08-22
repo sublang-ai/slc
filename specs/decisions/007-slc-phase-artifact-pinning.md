@@ -29,6 +29,7 @@ The present index shall be a regular file and shall not be a symbolic link.
 
 The file shall be strict JSON with a schema identifier, a hash algorithm, and a map from phase name to pin record.
 The reserved key `link` represents the pipeline's `link.md` phase.
+Other keys shall use the phase or pass's non-empty portable definition basename, without a path separator, NUL, or ASCII drive prefix and other than `.` or `..`; this admits pass names such as `optimize` as well as transform names such as `text2gears`.
 Each map key shall bind to that phase's canonical definition, artifact bundle, and linked entry paths (`<phase>.md`, `<phase>.slc`, and `<phase>.slc/<phase>.playbook.ts`); swapping otherwise-current records shall therefore be malformed rather than selecting another phase's compiled semantics.
 
 ```json

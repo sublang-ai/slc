@@ -125,9 +125,11 @@ When preparing a release tag, the developer or agent shall verify that all
 release checks pass from a clean locked install, the changelog and package
 version name the release, all changes are committed and pushed to `main`, the
 publishable tarball contains only intended production files, and CI is green
-for the release commit. Before the first tag, a maintainer shall also perform
-the interactive first publication and configure the trusted publisher required
-by [RELEASE-8](#release-8).
+for the release commit. Where the release changes compiler execution behavior,
+the maintainer shall also run the opt-in local acceptance gate before tagging.
+Before the first tag, a maintainer shall perform the interactive first
+publication and configure the trusted publisher required by
+[RELEASE-8](#release-8).
 
 ## Local Acceptance
 
@@ -146,8 +148,16 @@ maintainer's own host run defaults cannot change what it tests, and require
 exactly the agent CLIs that bound lineup invokes. It shall retain its scratch tree whenever a stage fails, so the
 compiled artifacts and the agents' commits remain inspectable. It shall state a
 missing prerequisite as an actionable message rather than failing inside a
-downstream tool, and because it spends real model calls
-it shall stay outside repository continuous integration and outside the
+downstream tool. After the cold compile, it shall repeat the installed compile,
+require the exact `up to date` outcome with an unchanged active marker and
+recorded phase targets, and thereby verify Reuse without another agent call.
+Unless the maintainer passes `--skip-update`, it shall then refine the canonical
+GEARS intermediate, repeat the compile, require both Update and Reuse, require
+the refinement to become the accepted snapshot baseline, and load the updated
+entry. Where both compile and run portions are selected, it shall run that
+updated entry, or the freshly compiled entry when Update was skipped. Because
+it spends real model calls, it shall stay outside repository continuous
+integration and outside the
 [RELEASE-13](#release-13) release checks that run before every publication.
 
 ## References

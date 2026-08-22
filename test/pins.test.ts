@@ -86,11 +86,36 @@ describe('parsePinFile (PIN-5)', () => {
     expect(() => parsePinFile(json(obj))).not.toThrow();
   });
 
-  it('rejects a pin-map key that is not a phase name', () => {
+  it.each(['optimize', 'constructor', '__proto__'])(
+    'accepts the portable phase/pass key %j as an own record',
+    (name) => {
+      const obj = validPinObject();
+      obj.pins = JSON.parse(
+        JSON.stringify({
+          [name]: (obj.pins as Record<string, unknown>).text2gears,
+        }),
+      ) as Record<string, unknown>;
+
+      const file = parsePinFile(json(obj));
+      expect(Object.hasOwn(file.pins, name)).toBe(true);
+      expect(Object.keys(file.pins)).toEqual([name]);
+    },
+  );
+
+  it.each([
+    '',
+    '.',
+    '..',
+    '../x',
+    'bad/name',
+    'bad\\name',
+    `bad\0name`,
+    'c:drive',
+  ])('rejects the non-portable phase key %j', (name) => {
     const obj = validPinObject();
-    const pins = obj.pins as Record<string, unknown>;
-    pins['../text2gears'] = pins.text2gears;
-    delete pins.text2gears;
+    obj.pins = {
+      [name]: (obj.pins as Record<string, unknown>).text2gears,
+    };
     expect(() => parsePinFile(json(obj))).toThrow(/phase key/);
   });
 

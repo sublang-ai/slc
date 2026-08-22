@@ -55,8 +55,11 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
   };
 
   /** Writes a matching pipeline and returns its pin record with current hashes. */
-  const currentRecord = async (phase = 'text2gears'): Promise<PinRecord> => {
-    await write(`${phase}.md`, '## Pin Inputs\n\n- `reference/gears.md`\n');
+  const currentRecord = async (
+    phase = 'text2gears',
+    definition = '## Pin Inputs\n\n- `reference/gears.md`\n',
+  ): Promise<PinRecord> => {
+    await write(`${phase}.md`, definition);
     await write('reference/gears.md', 'gears reference body\n');
     await writeReviewedBundle(phase);
     await write('link/code.ts', 'link target bytes\n');
@@ -97,12 +100,15 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     };
   };
 
-  const writePinFile = async (record: PinRecord): Promise<void> => {
+  const writePinFile = async (
+    record: PinRecord,
+    phase = 'text2gears',
+  ): Promise<void> => {
     const file: PinFile = {
       schema: PIN_SCHEMA,
       hashAlgorithm: PIN_HASH_ALGORITHM,
       pathBoundary: { path: '.' },
-      pins: { text2gears: record },
+      pins: { [phase]: record },
     };
     await write(PINS_FILE, JSON.stringify(file, null, 2));
   };
@@ -135,6 +141,23 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     const result = await evaluatePins(dir);
     expect(result.path).toBe(join(dir, PINS_FILE));
     expect(result.verdicts?.text2gears).toEqual({ status: 'current' });
+  });
+
+  it('reports current for a portable format-preserving pass pin (PIN-8)', async () => {
+    const definition =
+      '## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | gears | .md |\n| target | gears | .md |\n\n## Pin Inputs\n\n- `reference/gears.md`\n';
+    await writePinFile(await currentRecord('optimize', definition), 'optimize');
+
+    const result = await evaluatePins(dir);
+    expect(result.verdicts?.optimize).toEqual({ status: 'current' });
+  });
+
+  it('keeps a prototype-like portable key as its own verdict (PIN-8)', async () => {
+    await writePinFile(await currentRecord('__proto__'), '__proto__');
+
+    const result = await evaluatePins(dir);
+    expect(Object.hasOwn(result.verdicts ?? {}, '__proto__')).toBe(true);
+    expect(result.verdicts?.['__proto__']).toEqual({ status: 'current' });
   });
 
   it('reports swapped otherwise-current phase records malformed', async () => {
@@ -231,6 +254,15 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
         pins: { text2gears: { artifact: { path: 42, hash: 'x' } } },
       }),
       'path',
+    ],
+    [
+      'a non-portable phase key',
+      JSON.stringify({
+        schema: PIN_SCHEMA,
+        hashAlgorithm: PIN_HASH_ALGORITHM,
+        pins: { '../x': {} },
+      }),
+      'phase key',
     ],
   ])(
     'reports a file-level malformed pin for %s, naming the field (PIN-11)',

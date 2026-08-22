@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-22
+
 ### Added
 
 - **Incremental recompilation with complete snapshots.** Canonical full and
@@ -25,6 +27,21 @@ and this project adheres to
   complete invocation succeeds, while `--rebuild` forces an ordinary fresh
   build. Runs using `-o`, the reserved `slc` meta-pipeline, a partial phase or
   pass, or direct link remain outside history selection and publication.
+
+### Changed
+
+- **A reused run no longer prints artifact paths.** A run that reuses every
+  phase prints `up to date` instead of the artifact paths, and a partially
+  reused run prints the artifact paths written during that run. Anything
+  scripting `slc` and reading stdout for a path should treat `up to date` as
+  "the previously reported paths are current", or pass `--rebuild` to force a
+  full recompile.
+
+### Fixed
+
+- **Pass phases can be pinned by their legal names.** Pin indexes now accept
+  portable pass names such as `optimize`, while non-portable pass names are
+  rejected when the pipeline is loaded.
 
 ## [0.3.0] - 2026-08-06
 
@@ -126,7 +143,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/sublang-ai/slc/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sublang-ai/slc/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sublang-ai/slc/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sublang-ai/slc/releases/tag/v0.1.0
