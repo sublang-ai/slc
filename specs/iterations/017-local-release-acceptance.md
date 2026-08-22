@@ -36,6 +36,7 @@ existing gate is static or agent-free, so nothing verified that a published
 - `npm run release:check` passes and now fails if an installed package cannot
   drive its emitted entry to a terminal outcome.
 - `npm run test:acceptance` compiles and runs through the installed
-  executables against real agents; `--compile-only` and `--run-only` select a
-  single stage, and a missing agent stops the gate with a named prerequisite.
+  executables against real agents; `--compile-only` and `--run-only` select only
+  the compile or run portion, and a missing agent stops the gate with a named
+  prerequisite.
 - No repository CI workflow invokes the acceptance gate.

@@ -349,6 +349,20 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     );
   };
 
+  it('refuses a pass file with no portable name (PIPE-30, PIPE-35)', async () => {
+    await writeFile(
+      join(pipelineDir, '.md'),
+      formats('gears', '.md', 'gears', '.md'),
+    );
+    const { agent, calls } = makeAgent();
+
+    const result = await runSlc(['flow', source], deps(agent));
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain('pass filename ".md"');
+    expect(calls).toHaveLength(0);
+  });
+
   it('schedules a discovered pass by default: raw intermediate, canonical pass output (PIPE-32, PIPE-35)', async () => {
     await addOptimizePass();
     const { agent, calls } = makeAgent();

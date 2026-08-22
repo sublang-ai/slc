@@ -131,7 +131,7 @@ Where a `composed-v2` compiled phase makes a direct Captain call, the slc comman
 
 ### PHEXEC-27
 
-When the slc command runs a phase, the slc command shall select its execution from the pin index: a phase with no pin — including when the pipeline has no pin file or only unrelated stale records — interprets; a current pin runs the phase's compiled artifact, and fails the run closed when it cannot run that artifact rather than interpreting it; a stale pin for the selected phase stops the run with a diagnostic, never silently interpreting that phase; and any malformed pin record or unparseable pin file stops the run before execution ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#strategy-selection), [DR-007](../decisions/007-slc-phase-artifact-pinning.md#currency-and-selection)).
+When the slc command runs a phase, the slc command shall select its execution from the pin index: a phase with no pin — including when the pipeline has no pin file or only unrelated stale records — interprets; the host-owned generic normalization step has no pipeline pin key and interprets even when the pipeline contains a same-named pass pin; a current pin runs the phase's compiled artifact, and fails the run closed when it cannot run that artifact rather than interpreting it; a stale pin for the selected phase stops the run with a diagnostic, never silently interpreting that phase; and any malformed pin record or unparseable pin file stops the run before execution ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#strategy-selection), [DR-007](../decisions/007-slc-phase-artifact-pinning.md#currency-and-selection)).
 
 ### PHEXEC-30
 

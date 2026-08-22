@@ -77,7 +77,7 @@ When the slc command is run with `--link-option <name>=<value>` pairs, the slc c
 ### PIPE-35
 Verifies: [PIPE-30](../dev/pipeline.md#pipe-30), [PIPE-31](../dev/pipeline.md#pipe-31), [PIPE-32](../dev/pipeline.md#pipe-32), [PIPE-33](../dev/pipeline.md#pipe-33), [COMPILE-8](../user/compiler.md#compile-8)
 
-When a pipeline directory contains a format-preserving pass phase, the slc command shall run the pass by default between the producing and consuming phases — the producing phase writing the `.raw` intermediate and the pass the canonical path; with `--no-optimize` it shall run the chain with no passes, and as `slc <pipeline>.<pass>` it shall write the `.opt` sibling.
+Where a pipeline directory contains a format-preserving phase file, when the slc command loads or runs that pipeline, it shall refuse the file unless its basename is a portable pass name; otherwise it shall run the pass by default between the producing and consuming phases — the producing phase writing the `.raw` intermediate and the pass the canonical path — run the chain without passes under `--no-optimize`, and write the `.opt` sibling under `slc <pipeline>.<pass>`.
 
 ### PIPE-36
 Verifies: [PIPE-34](../dev/pipeline.md#pipe-34), [PHEXEC-33](../dev/phase-execution.md#phexec-33), [COMPILE-7](../user/compiler.md#compile-7)

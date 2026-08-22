@@ -314,6 +314,7 @@ async function runDirectLink(
       linked,
     },
     phase: 'link',
+    pinKey: 'link',
     targetExt: link.target.ext,
   };
   return executeSteps([step], pipeline, deps);
@@ -369,6 +370,7 @@ async function runFullLink(
       linked,
     },
     phase: 'link',
+    pinKey: 'link',
     targetExt: link.target.ext,
   };
   const steps = [...compileSteps, linkStep];
@@ -615,6 +617,8 @@ function verificationHostTargets(ctx: VerificationContext): HostTarget[] {
 interface PhaseStep {
   request: ExecuteRequest;
   phase: string;
+  /** Pipeline pin key; absent for the host-owned normalization step. */
+  pinKey?: string;
   targetExt: string;
 }
 
@@ -775,6 +779,7 @@ function compileStep(
       target,
     },
     phase: phase.name,
+    pinKey: phase.name,
     targetExt: phase.target.ext,
   };
 }
@@ -919,7 +924,7 @@ async function executeSteps(
       }
       let reasons: string[] | null;
       try {
-        reasons = await reusePinFailure(step.phase, pipeline.dir, pinFile);
+        reasons = await reusePinFailure(step.pinKey, pipeline.dir, pinFile);
       } catch (error) {
         reasons = [messageOf(error)];
       }
@@ -970,7 +975,13 @@ async function executeSteps(
     // phase and target from the report (CLI-4, CLI-32, PHEXEC-27).
     let selection: Strategy;
     try {
-      selection = await selectExecutor(step.phase, pipeline.dir, pinFile, deps);
+      selection = await selectExecutor(
+        step.phase,
+        step.pinKey,
+        pipeline.dir,
+        pinFile,
+        deps,
+      );
     } catch (error) {
       selection = { kind: 'fail', reasons: [messageOf(error)] };
     }
@@ -1353,13 +1364,15 @@ function sameHashes(left: readonly Hash[], right: readonly Hash[]): boolean {
 }
 
 async function reusePinFailure(
-  phase: string,
+  pinKey: string | undefined,
   pipelineDir: string,
   pinFile: PinFile | undefined,
 ): Promise<string[] | null> {
-  const record = pinFile?.pins[phase];
-  if (pinFile === undefined || record === undefined) return null;
-  const verdict = await evaluatePin(pipelineDir, pinFile, phase, record);
+  const record = ownPin(pinFile, pinKey);
+  if (pinFile === undefined || pinKey === undefined || record === undefined) {
+    return null;
+  }
+  const verdict = await evaluatePin(pipelineDir, pinFile, pinKey, record);
   return verdict.status === 'current'
     ? null
     : [`pin is ${verdict.status}: ${verdict.reason}`];
@@ -1483,16 +1496,17 @@ type Strategy =
  */
 async function selectExecutor(
   phase: string,
+  pinKey: string | undefined,
   pipelineDir: string,
   pinFile: PinFile | undefined,
   deps: SlcDeps,
 ): Promise<Strategy> {
-  const record = pinFile?.pins[phase];
-  if (pinFile === undefined || record === undefined) {
+  const record = ownPin(pinFile, pinKey);
+  if (pinFile === undefined || pinKey === undefined || record === undefined) {
     return { kind: 'run', executor: deps.executor };
   }
 
-  const verdict = await evaluatePin(pipelineDir, pinFile, phase, record);
+  const verdict = await evaluatePin(pipelineDir, pinFile, pinKey, record);
   if (verdict.status === 'current') {
     if (deps.compiled === undefined) {
       return {
@@ -1504,13 +1518,24 @@ async function selectExecutor(
     }
     return {
       kind: 'run',
-      executor: deps.compiled({ phase, pipelineDir, record }),
+      executor: deps.compiled({ phase: pinKey, pipelineDir, record }),
     };
   }
   return {
     kind: 'fail',
     reasons: [`pin is ${verdict.status}: ${verdict.reason}`],
   };
+}
+
+function ownPin(
+  pinFile: PinFile | undefined,
+  pinKey: string | undefined,
+): PinRecord | undefined {
+  return pinFile !== undefined &&
+    pinKey !== undefined &&
+    Object.hasOwn(pinFile.pins, pinKey)
+    ? pinFile.pins[pinKey]
+    : undefined;
 }
 
 function phaseDefinition(pipeline: Pipeline, name: string): string {

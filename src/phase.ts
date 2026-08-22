@@ -66,6 +66,19 @@ export class PhaseError extends Error {
 const FORMAT_TOKEN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const EXTENSION = /^\.[A-Za-z0-9]+$/;
 
+/** True when a phase/pass basename is a portable direct-child filename. */
+export function isPortablePhaseName(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value !== '.' &&
+    value !== '..' &&
+    !value.includes('/') &&
+    !value.includes('\\') &&
+    !value.includes('\0') &&
+    !/^[a-zA-Z]:/.test(value)
+  );
+}
+
 /**
  * Reads the authoritative `## Formats` table into its source and target
  * declarations (PIPE-1), shared by the phase and link loaders.
@@ -129,10 +142,18 @@ export function parsePhase(file: { name: string; content: string }): Phase {
     throw new PhaseError(code, message);
   });
 
-  // A format-preserving pass phase is named freely — its filename is the pass
-  // name (DR-013); the `<source>2<target>.md` rule identifies transform phases.
   const pass = source.format === target.format;
-  if (!pass) {
+  if (pass) {
+    const name = file.name.endsWith('.md')
+      ? file.name.slice(0, -'.md'.length)
+      : '';
+    if (!isPortablePhaseName(name)) {
+      throw new PhaseError(
+        'filename-mismatch',
+        `pass filename "${file.name}" does not contain a portable phase name`,
+      );
+    }
+  } else {
     const expected = `${source.format}2${target.format}.md`;
     if (file.name !== expected) {
       throw new PhaseError(

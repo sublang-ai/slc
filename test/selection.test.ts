@@ -87,7 +87,8 @@ describe('compiled selection and pin-input safety (PHEXEC-28, PHEXEC-40)', () =>
   });
 
   const deps = (withCompiled = true): SlcDeps => ({
-    resolver: (reference) => (reference === 'playbook' ? [pipelineDir] : []),
+    resolver: (reference) =>
+      reference === 'playbook' || reference === 'flow' ? [pipelineDir] : [],
     executor: interpreted,
     compiled: withCompiled
       ? (selection) => {
@@ -99,36 +100,37 @@ describe('compiled selection and pin-input safety (PHEXEC-28, PHEXEC-40)', () =>
     cwd: dirname(source),
   });
 
-  /** Writes a current pin for `text2gears` over committed artifact and link files. */
-  const writeCurrentPin = async (): Promise<PinRecord> => {
-    const bundleDir = join(pipelineDir, 'text2gears.slc');
+  /** Writes a current pin over committed artifact and link files. */
+  const writeCurrentPin = async (phase = 'text2gears'): Promise<PinRecord> => {
+    const bundleDir = join(pipelineDir, `${phase}.slc`);
     await mkdir(bundleDir);
     await writeFile(
-      join(bundleDir, 'text2gears.playbook.ts'),
+      join(bundleDir, `${phase}.playbook.ts`),
       'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n',
     );
-    for (const name of [
-      'text2gears.fsm.ts',
-      'text2gears.gears.md',
-      'text2gears.gears-fsm.test.ts',
-      'text2gears.fsm.introspect.test.ts',
-      'text2gears.prompt-contract.test.ts',
-      'text2gears.fsm.coverage.test.ts',
+    for (const suffix of [
+      'fsm.ts',
+      'gears.md',
+      'gears-fsm.test.ts',
+      'fsm.introspect.test.ts',
+      'prompt-contract.test.ts',
+      'fsm.coverage.test.ts',
     ]) {
+      const name = `${phase}.${suffix}`;
       await writeFile(join(bundleDir, name), `fixture: ${name}\n`);
     }
     await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target bytes\n');
     const record: PinRecord = {
       definition: {
-        path: 'text2gears.md',
-        hash: await hashFile(join(pipelineDir, 'text2gears.md')),
+        path: `${phase}.md`,
+        hash: await hashFile(join(pipelineDir, `${phase}.md`)),
       },
       artifact: {
-        path: 'text2gears.slc/text2gears.playbook.ts',
-        hash: await hashFile(join(bundleDir, 'text2gears.playbook.ts')),
+        path: `${phase}.slc/${phase}.playbook.ts`,
+        hash: await hashFile(join(bundleDir, `${phase}.playbook.ts`)),
       },
       artifactBundle: {
-        path: 'text2gears.slc',
+        path: `${phase}.slc`,
         hash: await hashTree(bundleDir),
       },
       semanticInputs: [],
@@ -140,7 +142,7 @@ describe('compiled selection and pin-input safety (PHEXEC-28, PHEXEC-40)', () =>
         identity: await hashFile(join(pipelineDir, 'linktarget.ts')),
       },
     };
-    await writePins({ text2gears: record });
+    await writePins({ [phase]: record });
     return record;
   };
 
@@ -186,6 +188,29 @@ describe('compiled selection and pin-input safety (PHEXEC-28, PHEXEC-40)', () =>
     expect(selections[0]?.phase).toBe('text2gears');
     expect(selections[0]?.record.artifact.path).toBe(
       'text2gears.slc/text2gears.playbook.ts',
+    );
+  });
+
+  it('never selects a pipeline pass pin for the built-in normalizer', async () => {
+    await writeFile(
+      join(pipelineDir, 'normalize.md'),
+      formats('gears', '.md', 'gears', '.md'),
+    );
+    await writeCurrentPin('normalize');
+
+    const result = await runSlc(['flow', source, '--normalize'], deps());
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(compiled.calls).toHaveLength(1);
+    expect(compiled.calls[0]?.definitionPath).toBe(
+      join(pipelineDir, 'normalize.md'),
+    );
+    expect(selections.map((selection) => selection.phase)).toEqual([
+      'normalize',
+    ]);
+    expect(interpreted.calls[0]?.kind).toBe('compile');
+    expect(interpreted.calls[0]?.definitionPath).not.toBe(
+      join(pipelineDir, 'normalize.md'),
     );
   });
 
