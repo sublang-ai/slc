@@ -189,20 +189,34 @@ seeds `~/.config/slc/config.yaml` with `agent: claude-code`, so a fresh
 machine needs no setup; `model` falls through to the agent CLI's own default
 and `pipelinePath` to the working directory.
 
+Set `reviewerAgent` to opt into a two-agent review/fix loop for every
+transformation that actually runs. The existing `agent`/`model`/`effort`
+selection remains the Coder. The independent Reviewer inspects the result
+read-only, reports only material correctness or spec defects, and rechecks
+accepted fixes and reasoned rejections until no unsettled findings remain.
+Incremental Reuse still makes no calls; Update, Ordinary, and `--rebuild` use
+the review loop automatically. A reviewer model or effort without
+`reviewerAgent` is rejected.
+
 ```yaml
 # slc.config.yaml
 agent: claude-code # claude-code | codex | gemini | opencode
 model: claude-opus-4-8 # optional; omit to use the agent CLI's default
+effort: high # optional adapter-scoped reasoning effort
+reviewerAgent: codex # optional; enables reviewed compilation
+reviewerModel: gpt-5.3-codex # optional reviewer model
+reviewerEffort: xhigh # optional reviewer reasoning effort
 stallTimeout: 600 # seconds of agent silence before a stalled call fails
 pipelinePath: # search roots for <pipeline> references; defaults to the cwd
   - ./pipelines
 ```
 
 A `slc.config.yaml` in the working directory wins over the user config;
-`SLC_AGENT`, `SLC_MODEL`, `SLC_STALL_TIMEOUT`, and `SLC_PIPELINE_PATH`
-override either per key. Discovery order, `--config`, and validation
-rules live in the [CLI spec](specs/user/cli.md); `slc --help` prints the
-summary.
+`SLC_AGENT`, `SLC_MODEL`, `SLC_EFFORT`, the matching `SLC_REVIEWER_AGENT`,
+`SLC_REVIEWER_MODEL`, `SLC_REVIEWER_EFFORT`, `SLC_STALL_TIMEOUT`, and
+`SLC_PIPELINE_PATH` override either per key. Discovery order, `--config`, and
+validation rules live in the [CLI spec](specs/user/cli.md); `slc --help`
+prints the summary.
 
 ## How pipelines work
 

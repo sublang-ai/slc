@@ -20,6 +20,11 @@ import type {
   ExecutorResult,
   PhaseExecutor,
 } from '../src/execution.js';
+import {
+  createInterpretedExecutor,
+  type AgentClient,
+} from '../src/interpreter.js';
+import { createReviewingAgent } from '../src/reviewing-agent.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
 
 const phase = (
@@ -141,13 +146,30 @@ describe('success-only incremental runner (INCR-18..25, INCR-27..29)', () => {
     await runSlc(['flow', source], deps(fake([])));
     const final = join(artDir, 'case.final.md');
     await writeFile(final, 'reviewed final\n');
-    const calls: ExecuteRequest[] = [];
+    let coderCalls = 0;
+    let reviewerClients = 0;
+    const coder: AgentClient = {
+      async run() {
+        coderCalls++;
+        throw new Error('Reuse must not enter the reviewed executor');
+      },
+    };
+    const reviewedExecutor = createInterpretedExecutor({
+      agent: createReviewingAgent({
+        coder,
+        reviewer: () => {
+          reviewerClients++;
+          throw new Error('Reuse must not construct a Reviewer');
+        },
+      }),
+    });
 
-    const result = await runSlc(['flow', source], deps(fake(calls)));
+    const result = await runSlc(['flow', source], deps(reviewedExecutor));
 
     expect(result).toMatchObject({ ok: true, outcome: 'up-to-date' });
     expect(result.outputs).toEqual([]);
-    expect(calls).toHaveLength(0);
+    expect(coderCalls).toBe(0);
+    expect(reviewerClients).toBe(0);
     expect(await readFile(final, 'utf8')).toBe('reviewed final\n');
     expect((await loadBuildHistory(artDir))?.build).toBe(1);
   });

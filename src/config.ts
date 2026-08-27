@@ -5,8 +5,9 @@
  * Agent/model configuration and executor construction for the `slc` bin (CLI-7,
  * CLI-8, CLI-12, DR-004, DR-005).
  *
- * `resolveAgentSelection` reads `SLC_AGENT`/`SLC_MODEL` from the environment and
- * refuses an unset or unsupported agent with no implicit default (CLI-12).
+ * `resolveAgentSelection` reads the Coder and optional Reviewer selections from
+ * the environment and refuses unset or unsupported required values (CLI-12,
+ * DR-022).
  * `createConfiguredExecutor` builds the interpreted executor and
  * `createConfiguredCompiledFactory` the compiled-execution factory pinned phases
  * select, both over Cligent-backed transports for the selected agent, binding
@@ -30,6 +31,7 @@ import { createCompiledExecutor } from './compiled-executor.js';
 import type { PhaseExecutor } from './execution.js';
 import type { AgentClient } from './interpreter.js';
 import { createInterpretedExecutor } from './interpreter.js';
+import { createReviewingAgent } from './reviewing-agent.js';
 import type { CompiledSelection } from './runner.js';
 
 /** Agent CLI ids the executable registers (CLI-7). */
@@ -60,22 +62,27 @@ export const defaultAdapterFactory: AdapterFactory = (agent) => {
   }
 };
 
-/** A resolved agent/model/effort selection (CLI-7). */
+/** A resolved Coder and optional Reviewer selection (CLI-7, DR-022). */
 export interface AgentSelection {
   agent: SupportedAgent;
   /** Optional model; omitted so the agent CLI uses its own default. */
   model?: string;
   /** Optional adapter-scoped reasoning effort; omitted for the default. */
   effort?: string;
+  /** Optional independent Reviewer selection; presence enables DR-022. */
+  reviewer?: Omit<AgentSelection, 'reviewer'>;
 }
 
 /** Machine-readable reason agent configuration was refused (CLI-12). */
 export type ConfigErrorCode =
   | 'agent-unset'
   | 'agent-unsupported'
-  | 'effort-unsupported';
+  | 'effort-unsupported'
+  | 'reviewer-agent-unset'
+  | 'reviewer-agent-unsupported'
+  | 'reviewer-effort-unsupported';
 
-/** Raised when `SLC_AGENT` is unset or names an unsupported agent CLI (CLI-12). */
+/** Raised when a required Coder or Reviewer selection is invalid. */
 export class ConfigError extends Error {
   readonly code: ConfigErrorCode;
 
@@ -92,7 +99,7 @@ export function isSupportedAgent(agent: string): agent is SupportedAgent {
 }
 
 /**
- * Resolves the agent/model/effort selection from environment configuration
+ * Resolves the Coder and optional Reviewer selections from environment configuration
  * (CLI-7, CLI-12): `SLC_AGENT` names a registered agent CLI, `SLC_MODEL`
  * optionally names a model, and `SLC_EFFORT` optionally selects an
  * adapter-scoped reasoning effort validated against Cligent's support
@@ -106,25 +113,64 @@ export function isSupportedAgent(agent: string): agent is SupportedAgent {
 export function resolveAgentSelection(
   env: Record<string, string | undefined>,
 ): AgentSelection {
-  const agent = (env.SLC_AGENT ?? '').trim();
+  const selection = resolveOneSelection(env, {
+    agent: 'SLC_AGENT',
+    model: 'SLC_MODEL',
+    effort: 'SLC_EFFORT',
+    unsetCode: 'agent-unset',
+    unsupportedCode: 'agent-unsupported',
+    effortCode: 'effort-unsupported',
+    required: true,
+  });
+  if (selection === undefined) {
+    throw new Error('required Coder selection unexpectedly resolved empty');
+  }
+  const reviewer = resolveOneSelection(env, {
+    agent: 'SLC_REVIEWER_AGENT',
+    model: 'SLC_REVIEWER_MODEL',
+    effort: 'SLC_REVIEWER_EFFORT',
+    unsetCode: 'reviewer-agent-unset',
+    unsupportedCode: 'reviewer-agent-unsupported',
+    effortCode: 'reviewer-effort-unsupported',
+    required: false,
+  });
+  return reviewer === undefined ? selection : { ...selection, reviewer };
+}
+
+function resolveOneSelection(
+  env: Record<string, string | undefined>,
+  names: {
+    agent: string;
+    model: string;
+    effort: string;
+    unsetCode: ConfigErrorCode;
+    unsupportedCode: ConfigErrorCode;
+    effortCode: ConfigErrorCode;
+    required: boolean;
+  },
+): Omit<AgentSelection, 'reviewer'> | undefined {
+  const agent = (env[names.agent] ?? '').trim();
+  const model = (env[names.model] ?? '').trim();
+  const effort = (env[names.effort] ?? '').trim();
   if (agent === '') {
+    if (!names.required && model === '' && effort === '') return undefined;
     throw new ConfigError(
-      'agent-unset',
-      `SLC_AGENT is not set; set it to one of: ${SUPPORTED_AGENTS.join(', ')}`,
+      names.unsetCode,
+      names.required
+        ? `${names.agent} is not set; set it to one of: ${SUPPORTED_AGENTS.join(', ')}`
+        : `${names.agent} is not set; ${names.model} and ${names.effort} require a reviewer agent; set ${names.agent} to one of: ${SUPPORTED_AGENTS.join(', ')}`,
     );
   }
   if (!isSupportedAgent(agent)) {
     throw new ConfigError(
-      'agent-unsupported',
-      `SLC_AGENT "${agent}" is not a supported agent CLI; choose one of: ${SUPPORTED_AGENTS.join(', ')}`,
+      names.unsupportedCode,
+      `${names.agent} "${agent}" is not a supported agent CLI; choose one of: ${SUPPORTED_AGENTS.join(', ')}`,
     );
   }
-  const model = (env.SLC_MODEL ?? '').trim();
-  const effort = (env.SLC_EFFORT ?? '').trim();
   if (effort !== '' && !isEffortSupported(agent, effort)) {
     throw new ConfigError(
-      'effort-unsupported',
-      `SLC_EFFORT "${effort}" is not supported by ${agent}; choose one of: ${(supportedEffortValues(agent) ?? []).join(', ')}`,
+      names.effortCode,
+      `${names.effort} "${effort}" is not supported by ${agent}; choose one of: ${(supportedEffortValues(agent) ?? []).join(', ')}`,
     );
   }
   return {
@@ -153,7 +199,8 @@ export function createConfiguredExecutor(
     stallTimeoutMs?: number;
   } = {},
 ): PhaseExecutor {
-  const agent = createConfiguredAgentClient(selection, opts);
+  const coder = createConfiguredAgentClient(selection, opts);
+  const agent = configuredReviewingClient(selection, coder, opts);
   return createInterpretedExecutor({
     agent,
     config: { model: selection.model, cwd: opts.cwd },
@@ -209,8 +256,10 @@ export function createConfiguredCompiledFactory(
     onStatus?: (line: string) => void;
   } = {},
 ): (choice: CompiledSelection) => PhaseExecutor {
-  const client = (): AgentClient =>
-    createConfiguredAgentClient(selection, opts);
+  const client = (): AgentClient => {
+    const coder = createConfiguredAgentClient(selection, opts);
+    return configuredReviewingClient(selection, coder, opts);
+  };
   return (choice) =>
     createCompiledExecutor({
       artifactPath: resolve(choice.pipelineDir, choice.record.artifact.path),
@@ -223,6 +272,30 @@ export function createConfiguredCompiledFactory(
       cwd: opts.cwd,
       onStatus: opts.onStatus,
     });
+}
+
+function configuredReviewingClient(
+  selection: AgentSelection,
+  coder: AgentClient,
+  opts: Parameters<typeof createConfiguredAgentClient>[1],
+): AgentClient {
+  const reviewer = selection.reviewer;
+  if (reviewer === undefined) return coder;
+  return createReviewingAgent({
+    coder,
+    reviewer: () =>
+      createConfiguredAgentClient(reviewer, {
+        ...opts,
+        // Reviewer inspection is read-only even though the Coder is allowed to
+        // write its declared artifact (DR-022).
+        permissions: {
+          fileWrite: 'deny',
+          shellExecute: 'deny',
+          networkAccess: 'deny',
+        },
+      }),
+    reviewerModel: reviewer.model,
+  });
 }
 
 function runtimeContractForPin(

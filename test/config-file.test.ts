@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -45,7 +45,7 @@ describe('loadConfigFile (CLI-20, CLI-21)', () => {
     const path = await write(
       cwd,
       CONFIG_FILE,
-      'agent: codex\nmodel: gpt-5.5\npipelinePath:\n  - ./pipes\n  - /abs/pipes\n',
+      'agent: codex\nmodel: gpt-5.5\nreviewerAgent: claude-code\nreviewerModel: opus\nreviewerEffort: high\npipelinePath:\n  - ./pipes\n  - /abs/pipes\n',
     );
 
     const loaded = await loadConfigFile({ cwd, configHome: home });
@@ -54,6 +54,9 @@ describe('loadConfigFile (CLI-20, CLI-21)', () => {
     expect(loaded.config).toEqual({
       agent: 'codex',
       model: 'gpt-5.5',
+      reviewerAgent: 'claude-code',
+      reviewerModel: 'opus',
+      reviewerEffort: 'high',
       pipelinePath: ['./pipes', '/abs/pipes'],
     });
   });
@@ -147,6 +150,10 @@ describe('loadConfigFile (CLI-20, CLI-21)', () => {
     expect(loaded.path).toBe(expected);
     expect(loaded.config).toEqual({ agent: 'claude-code' });
     expect(seeded).toEqual([expected]);
+    const template = await readFile(expected, 'utf8');
+    expect(template).toContain('# reviewerAgent: codex');
+    expect(template).toContain('# reviewerModel:');
+    expect(template).toContain('# reviewerEffort:');
   });
 
   it('does not seed when the working-directory file exists (CLI-30)', async () => {

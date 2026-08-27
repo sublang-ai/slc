@@ -137,7 +137,9 @@ export function createPlaybookPorts(opts: {
           model: opts.defaultModel,
           cwd: opts.cwd,
           resume: isolation.resume,
-          allowedTools: isolation.allowedTools,
+          ...(isolation.allowedTools === undefined
+            ? {}
+            : { allowedTools: isolation.allowedTools }),
           signal,
         });
         return toCaptainResult(result, signal);

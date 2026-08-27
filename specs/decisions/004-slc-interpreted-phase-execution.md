@@ -51,7 +51,7 @@ When interpreting a phase, the agent prompt shall establish this contract:
 ### Scope
 
 Within this DR's scope, `slc` shall interpret a phase with one agent invocation per phase.
-Automatic multi-call audit and repair orchestration is out of scope for this DR.
+Automatic multi-call audit and repair orchestration is out of scope for this DR unless the optional independent Reviewer in [DR-022](022-two-agent-reviewed-compilation.md) is configured; DR-022 supersedes this one-call scope for that opt-in mode.
 
 ## Consequences
 
