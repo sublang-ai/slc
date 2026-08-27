@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import type { AgentAdapter } from '@sublang/cligent';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import type { AgentAdapter, AgentOptions } from '@sublang/cligent';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -65,6 +69,50 @@ describe('resolveAgentSelection (CLI-7, CLI-12)', () => {
     ).toThrow(expect.objectContaining({ code: 'effort-unsupported' }));
   });
 
+  it('resolves and validates an optional independent Reviewer selection', () => {
+    expect(
+      resolveAgentSelection({
+        SLC_AGENT: 'claude-code',
+        SLC_REVIEWER_AGENT: 'codex',
+        SLC_REVIEWER_MODEL: 'gpt-review',
+        SLC_REVIEWER_EFFORT: 'xhigh',
+      }),
+    ).toEqual({
+      agent: 'claude-code',
+      model: undefined,
+      effort: undefined,
+      reviewer: {
+        agent: 'codex',
+        model: 'gpt-review',
+        effort: 'xhigh',
+      },
+    });
+    expect(() =>
+      resolveAgentSelection({
+        SLC_AGENT: 'codex',
+        SLC_REVIEWER_AGENT: 'unknown',
+      }),
+    ).toThrow(expect.objectContaining({ code: 'reviewer-agent-unsupported' }));
+    expect(() =>
+      resolveAgentSelection({
+        SLC_AGENT: 'codex',
+        SLC_REVIEWER_AGENT: 'claude-code',
+        SLC_REVIEWER_EFFORT: 'ultra',
+      }),
+    ).toThrow(expect.objectContaining({ code: 'reviewer-effort-unsupported' }));
+  });
+
+  it('refuses Reviewer model or effort without reviewerAgent', () => {
+    for (const reviewer of [
+      { SLC_REVIEWER_MODEL: 'review-model' },
+      { SLC_REVIEWER_EFFORT: 'high' },
+    ]) {
+      expect(() =>
+        resolveAgentSelection({ SLC_AGENT: 'codex', ...reviewer }),
+      ).toThrow(expect.objectContaining({ code: 'reviewer-agent-unset' }));
+    }
+  });
+
   it('refuses an unset or blank SLC_AGENT with no implicit default', () => {
     for (const env of [{}, { SLC_AGENT: '' }, { SLC_AGENT: '   ' }]) {
       let caught: unknown;
@@ -75,6 +123,9 @@ describe('resolveAgentSelection (CLI-7, CLI-12)', () => {
       }
       expect(caught).toBeInstanceOf(ConfigError);
       expect((caught as ConfigError).code).toBe('agent-unset');
+      expect((caught as ConfigError).message).toBe(
+        'SLC_AGENT is not set; set it to one of: claude-code, codex, gemini, opencode',
+      );
     }
   });
 
@@ -143,6 +194,160 @@ describe('createConfiguredExecutor (CLI-7, CLI-8)', () => {
     createConfiguredExecutor({ agent: 'gemini' }, { adapterFactory: factory });
 
     expect(requested).toEqual(['gemini']);
+  });
+
+  it('lazily constructs a read-only Reviewer and returns only clean Coder text', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-reviewed-config-'));
+    const definitionPath = join(dir, 'text2gears.md');
+    await writeFile(definitionPath, 'perform the transformation');
+    const requested: string[] = [];
+    const optionsByAgent = new Map<string, AgentOptions>();
+    const factory: AdapterFactory = (agent) => {
+      requested.push(agent);
+      return {
+        agent,
+        async isAvailable() {
+          return true;
+        },
+        async *run(_prompt: string, options?: AgentOptions) {
+          if (options !== undefined) optionsByAgent.set(agent, options);
+          yield {
+            type: 'done',
+            agent,
+            timestamp: 1,
+            sessionId: `${agent}-session`,
+            payload: {
+              status: 'success',
+              result: agent === 'gemini' ? 'NO_FINDINGS' : 'coder summary',
+              usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+              durationMs: 1,
+            },
+          } as never;
+        },
+      };
+    };
+
+    try {
+      const executor = createConfiguredExecutor(
+        {
+          agent: 'codex',
+          reviewer: { agent: 'gemini', model: 'review-model' },
+        },
+        { adapterFactory: factory, cwd: dir },
+      );
+      expect(requested).toEqual(['codex']);
+
+      await expect(
+        executor.run(
+          {
+            kind: 'compile',
+            definitionPath,
+            source: join(dir, 'source.txt'),
+            target: join(dir, 'target.md'),
+          },
+          new AbortController().signal,
+        ),
+      ).resolves.toEqual({ status: 'ok', diagnostics: ['coder summary'] });
+
+      expect(requested).toEqual(['codex', 'gemini']);
+      expect(optionsByAgent.get('gemini')).toMatchObject({
+        model: 'review-model',
+        permissions: {
+          fileWrite: 'deny',
+          shellExecute: 'deny',
+          networkAccess: 'deny',
+        },
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reviews a transformation reached through the configured compiled-player port', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-reviewed-compiled-'));
+    const artifactPath = join(dir, 'phase.playbook.mjs');
+    const definitionPath = join(dir, 'phase.md');
+    const source = join(dir, 'source.md');
+    const target = join(dir, 'target.ts');
+    await writeFile(definitionPath, 'compiled phase definition');
+    await writeFile(source, 'source input');
+    await writeFile(
+      artifactPath,
+      [
+        'export default function createPlaybookRuntime() {',
+        '  let ports;',
+        '  return {',
+        '    async init(value) { ports = value; },',
+        '    async handleBossInput({ text, signal }) {',
+        "      const result = await ports.callPlayer('writer', text, signal);",
+        "      if (result.status !== 'ok') throw new Error('player failed');",
+        '    },',
+        '    async dispose() {},',
+        '  };',
+        '}',
+      ].join('\n'),
+    );
+    const runs: string[] = [];
+    const factory: AdapterFactory = (agent) => ({
+      agent,
+      async isAvailable() {
+        return true;
+      },
+      async *run(prompt: string) {
+        runs.push(agent);
+        if (agent === 'codex') {
+          const marker = 'Request: ';
+          const line = prompt
+            .split('\n')
+            .find((candidate) => candidate.startsWith(marker));
+          if (line === undefined) throw new Error('missing compiled request');
+          const input = JSON.parse(line.slice(marker.length)) as {
+            target: string;
+          };
+          await writeFile(input.target, 'compiled output');
+        }
+        yield {
+          type: 'done',
+          agent,
+          timestamp: 1,
+          sessionId: `${agent}-session`,
+          payload: {
+            status: 'success',
+            result: agent === 'gemini' ? 'NO_FINDINGS' : 'coder summary',
+            usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+            durationMs: 1,
+          },
+        } as never;
+      },
+    });
+
+    try {
+      const configured = createConfiguredCompiledFactory(
+        {
+          agent: 'codex',
+          reviewer: { agent: 'gemini', model: 'review-model' },
+        },
+        { adapterFactory: factory, cwd: dir },
+      );
+      const executor = configured({
+        phase: 'phase',
+        pipelineDir: dir,
+        record: {
+          artifact: { path: 'phase.playbook.mjs' },
+          linkTarget: { provenance: '@sublang/playbook@0.9.0' },
+        },
+      } as unknown as CompiledSelection);
+
+      await expect(
+        executor.run(
+          { kind: 'compile', definitionPath, source, target },
+          new AbortController().signal,
+        ),
+      ).resolves.toMatchObject({ status: 'ok' });
+      expect(runs).toEqual(['codex', 'gemini']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('binds compiled execution to the pin-recorded runtime contract', () => {

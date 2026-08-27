@@ -45,3 +45,7 @@ When the user runs a full pipeline with `--normalize` or on a raw source whose e
 ### COMPILE-8
 
 When the user runs a full pipeline, the slc command shall run the pipeline's optimization pass phases between the ordinary phases by default — producing the same canonical artifact names as an unoptimized run plus the inspectable pre-pass intermediates — and shall run the chain without passes when the user gives `--no-optimize` ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+
+### COMPILE-9
+
+Where an independent Reviewer is configured, when a phase is selected for Update, Ordinary, or `--rebuild` execution, the slc command shall have the Coder perform each transformation, obtain independent read-only review of successful non-`BLOCKED` work, return material findings to the Coder for evidenced disposition and minimal root-cause repair, and continue review until no unsettled finding remains; whereas incremental Reuse shall invoke neither agent ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-021](../decisions/021-incremental-compilation.md)).

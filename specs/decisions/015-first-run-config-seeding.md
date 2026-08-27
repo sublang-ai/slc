@@ -18,7 +18,7 @@ Playbook set the ecosystem precedent — its launcher seeds `~/.config/playbook/
 ## Decision
 
 - When config discovery misses both the working-directory file and the user config file, `slc` seeds `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from a starter template bundled with the host, then loads it — so a first bare run proceeds instead of refusing.
-- The starter template sets `agent: claude-code`, matching Playbook's `claude` default, and carries `model` and `effort` as commented examples so the agent CLI's own defaults apply until the user chooses.
+- The starter template sets `agent: claude-code`, matching Playbook's `claude` default, and carries Coder `model` and `effort` plus [DR-022](022-two-agent-reviewed-compilation.md) Reviewer selection as commented examples so agent CLI defaults apply and reviewed execution remains disabled until the user chooses.
 - Seeding is reported on stderr with the created path; it never overwrites an existing file.
 - No seeding occurs when a working-directory config exists (discovery never reaches the user file), when `--config` names an explicit file (discovery is disabled, per DR-006), or when the user file already exists.
 - Environment overrides are unchanged: `SLC_AGENT` and friends still win per key over the seeded file.

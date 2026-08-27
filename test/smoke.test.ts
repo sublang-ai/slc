@@ -37,6 +37,7 @@ describe('slc bin entry', () => {
     expect(code).toBe(0);
     expect(out.join('')).toMatch(/Usage:/);
     expect(out.join('')).toContain('SLC_AGENT');
+    expect(out.join('')).toContain('SLC_REVIEWER_AGENT');
   });
 
   it('seeds the user config on a bare first run (CLI-29, DR-015)', async () => {

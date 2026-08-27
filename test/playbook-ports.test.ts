@@ -9,6 +9,7 @@ import type {
   AgentRunResult,
 } from '../src/interpreter.js';
 import { createPlaybookPorts } from '../src/playbook-ports.js';
+import { createReviewingAgent } from '../src/reviewing-agent.js';
 
 /** A fake agent transport that records its requests and returns a scripted result. */
 function fakeAgent(
@@ -160,6 +161,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     expect(captain.calls).toEqual([
       expect.objectContaining({ resume: false, allowedTools: [] }),
     ]);
+    expect(Object.hasOwn(captain.calls[0], 'allowedTools')).toBe(true);
   });
 
   // The tool restriction is source-owned (link.md, PHEXEC-32): an absent own
@@ -182,6 +184,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
 
     expect(captain.calls).toHaveLength(1);
     expect(captain.calls[0].allowedTools).toBeUndefined();
+    expect(Object.hasOwn(captain.calls[0], 'allowedTools')).toBe(false);
   });
 
   // PHEXEC-34: the host workspace contract rides only on the
@@ -209,6 +212,37 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
       'route it',
       'grade it',
     ]);
+    expect(
+      agent.calls.map((call) => Object.hasOwn(call, 'allowedTools')),
+    ).toEqual([false, true, true]);
+  });
+
+  it('reviews a performing Captain while control Captain and judge calls bypass', async () => {
+    const coder = fakeAgent({ status: 'success', text: 'coder result' });
+    const reviewer = fakeAgent({ status: 'success', text: 'NO_FINDINGS' });
+    let reviewerClients = 0;
+    const reviewed = createReviewingAgent({
+      coder,
+      reviewer: () => {
+        reviewerClients++;
+        return reviewer;
+      },
+    });
+    const ports = createPlaybookPorts({ player: reviewed, judge: reviewed });
+
+    await ports.callCaptain('perform it', notAborted, {
+      visibility: 'visible',
+      resume: false,
+    });
+    await ports.callCaptain('route it', notAborted, captainOptions('hidden'));
+    await ports.callJudge('judge it', notAborted);
+
+    expect(reviewerClients).toBe(1);
+    expect(reviewer.calls).toHaveLength(1);
+    expect(coder.calls).toHaveLength(3);
+    expect(
+      coder.calls.map((call) => Object.hasOwn(call, 'allowedTools')),
+    ).toEqual([false, true, true]);
   });
 
   // INCR-16: the host update context rides every Player prompt and the

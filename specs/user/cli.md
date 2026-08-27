@@ -61,6 +61,10 @@ Where the stall timeout — a non-blank `SLC_STALL_TIMEOUT` environment variable
 
 Where a config file is present — `slc.config.yaml` in the working directory, `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`, or a file named by `--config <path>` — when the user runs a documented invocation form, the slc executable shall take its agent, model, and pipeline search path from that file except where a matching, non-blank environment variable overrides it, so a run is configurable without environment variables ([DR-006](../decisions/006-slc-configuration-sources.md#sources-and-precedence)).
 
+### CLI-39
+
+Where `reviewerAgent` or `SLC_REVIEWER_AGENT` selects a supported independent Reviewer, when the user runs a documented invocation form, the slc executable shall enable reviewed compilation using the independently resolved optional Reviewer model and effort; whereas Reviewer model or effort without a Reviewer agent shall refuse the run clearly, and absent Reviewer configuration shall leave execution unreviewed ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-006](../decisions/006-slc-configuration-sources.md#sources-and-precedence)).
+
 ### CLI-29
 
 Where no config file exists in the working directory or the user config location and `--config` is not given, when the user runs a documented invocation form, the slc executable shall seed `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` with the bundled starter defaults — `agent: claude-code`, model and effort left to the agent CLI — name the created file on stderr, and carry out the run with those defaults, so a first run needs no prior setup ([DR-015](../decisions/015-first-run-config-seeding.md)).

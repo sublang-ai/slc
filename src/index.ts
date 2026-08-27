@@ -21,4 +21,5 @@ export * from './phase.js';
 export * from './pipeline.js';
 export * from './progress.js';
 export * from './resolver.js';
+export * from './reviewing-agent.js';
 export * from './runner.js';

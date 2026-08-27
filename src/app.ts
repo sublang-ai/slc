@@ -176,6 +176,10 @@ export function resolveRunConfig(
     SLC_AGENT: nonBlank(env.SLC_AGENT) ?? file.agent,
     SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.model,
     SLC_EFFORT: nonBlank(env.SLC_EFFORT) ?? file.effort,
+    SLC_REVIEWER_AGENT: nonBlank(env.SLC_REVIEWER_AGENT) ?? file.reviewerAgent,
+    SLC_REVIEWER_MODEL: nonBlank(env.SLC_REVIEWER_MODEL) ?? file.reviewerModel,
+    SLC_REVIEWER_EFFORT:
+      nonBlank(env.SLC_REVIEWER_EFFORT) ?? file.reviewerEffort,
   });
   const pipelinePath = nonBlank(env.SLC_PIPELINE_PATH) ?? file.pipelinePath;
   const stallSeconds =
@@ -238,11 +242,15 @@ export function usageText(): string {
     '  environment variable below:',
     '    ./slc.config.yaml',
     '    ${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml',
-    '  Keys: agent, model, effort, pipelinePath, stallTimeout.',
+    '  Keys: agent, model, effort, reviewerAgent, reviewerModel,',
+    '        reviewerEffort, pipelinePath, stallTimeout.',
     '',
     '  SLC_AGENT          agent CLI: claude-code | codex | gemini | opencode',
     '  SLC_MODEL          optional model for the agent CLI',
     '  SLC_EFFORT         optional adapter-scoped reasoning effort (e.g. xhigh)',
+    '  SLC_REVIEWER_AGENT optional independent reviewer; enables reviewed compilation',
+    '  SLC_REVIEWER_MODEL optional model for the reviewer agent CLI',
+    '  SLC_REVIEWER_EFFORT optional adapter-scoped reviewer reasoning effort',
     '  SLC_PIPELINE_PATH  search roots for <pipeline> references (default: cwd)',
     '  SLC_STALL_TIMEOUT  seconds of agent inactivity before a stalled call',
     '                     fails the run (default: 600; 0 disables)',

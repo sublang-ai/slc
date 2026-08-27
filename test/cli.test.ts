@@ -198,6 +198,8 @@ describe('conveniences (CLI-13, CLI-14)', () => {
       const help = out.join('');
       expect(help).toMatch(/Usage:/);
       expect(help).toContain('SLC_AGENT');
+      expect(help).toContain('reviewerAgent');
+      expect(help).toContain('SLC_REVIEWER_AGENT');
       // Reworded CLI-2: help names --config and the config file, not just env.
       expect(help).toContain('--config');
       expect(help).toContain('slc.config.yaml');
@@ -548,6 +550,38 @@ describe('stall timeout resolution (CLI-34, CLI-35)', () => {
     expect(() =>
       resolveRunConfig({ ...env, SLC_STALL_TIMEOUT: '3600000' }, {}),
     ).toThrow(/at most/);
+  });
+});
+
+describe('reviewer configuration resolution (DR-022)', () => {
+  it('merges environment over file independently for every Reviewer key', () => {
+    expect(
+      resolveRunConfig(
+        {
+          SLC_AGENT: 'claude-code',
+          SLC_REVIEWER_AGENT: 'codex',
+          SLC_REVIEWER_EFFORT: 'xhigh',
+        },
+        {
+          reviewerAgent: 'gemini',
+          reviewerModel: 'file-review-model',
+          reviewerEffort: 'high',
+        },
+      ).selection.reviewer,
+    ).toEqual({
+      agent: 'codex',
+      model: 'file-review-model',
+      effort: 'xhigh',
+    });
+  });
+
+  it('refuses file-supplied Reviewer model without a Reviewer agent', () => {
+    expect(() =>
+      resolveRunConfig(
+        { SLC_AGENT: 'claude-code' },
+        { reviewerModel: 'orphan-model' },
+      ),
+    ).toThrow(/SLC_REVIEWER_AGENT/);
   });
 });
 
