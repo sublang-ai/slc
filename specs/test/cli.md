@@ -27,7 +27,7 @@ Where no agent is configured, when the slc executable is run with `--version` or
 ### CLI-14
 Verifies: [CLI-2](../user/cli.md#cli-2), [CLI-9](../dev/cli.md#cli-9)
 
-Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, `--rebuild`, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero without resolving a pipeline or selecting an agent.
+Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, `--rebuild`, the `--config` option, and the Coder and optional Reviewer config keys and environment variables it reads to standard output and exit zero without resolving a pipeline or selecting an agent.
 
 ## Reporting
 
@@ -105,12 +105,12 @@ Where a loaded config file is malformed YAML, declares an unknown key, or holds 
 ### CLI-31
 Verifies: [CLI-29](../user/cli.md#cli-29), [CLI-30](../dev/cli.md#cli-30)
 
-Where neither the working-directory `slc.config.yaml` nor the user config file exists and `--config` is absent, when the slc executable runs a full pipeline, the slc executable shall create the user config file with `agent: claude-code`, name it on stderr, and complete the run with the seeded selection; where the working-directory file exists, where the user file exists, or where `--config` is given, the slc executable shall create no file.
+Where neither the working-directory `slc.config.yaml` nor the user config file exists and `--config` is absent, when the slc executable runs a full pipeline, the slc executable shall create the user config file with active `agent: claude-code`, commented `model`, `effort`, `reviewerAgent`, `reviewerModel`, and `reviewerEffort` examples, and no active Reviewer selection, name it on stderr, and complete the run with the seeded Coder selection; where the working-directory file exists, where the user file exists, or where `--config` is given, the slc executable shall create no file.
 
 ### CLI-41
-Verifies: [CLI-39](../user/cli.md#cli-39), [CLI-40](../dev/cli.md#cli-40)
+Verifies: [CLI-39](../user/cli.md#cli-39), [CLI-40](../dev/cli.md#cli-40), [CLI-20](../dev/cli.md#cli-20)
 
-Where Reviewer configuration is supplied to the config-loader and run-config seams by a strict flat config file and matching environment values, when those seams and the configured executor factories are exercised, each non-blank environment Reviewer value shall override its file value, supported adapter-scoped selections shall lazily build reviewed interpreted and compiled-player execution, Reviewer model or effort without Reviewer agent and unsupported selections shall refuse, help shall name the Reviewer keys and variables, and the seeded template shall leave review disabled with commented examples.
+Where Reviewer configuration is supplied to the config-loader and run-config seams by a strict flat config file and matching environment values, when those seams and the configured executor factories are exercised, each non-blank environment Reviewer value shall override its file value, supported adapter-scoped selections shall lazily build reviewed interpreted and compiled-player execution, and an unsupported Reviewer or Reviewer model/effort without Reviewer agent shall refuse before phase execution.
 
 ## Compiled execution
 

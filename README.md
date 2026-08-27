@@ -193,7 +193,8 @@ Set `reviewerAgent` to opt into a two-agent review/fix loop for every
 transformation that actually runs. The existing `agent`/`model`/`effort`
 selection remains the Coder. The independent Reviewer inspects the result
 read-only, reports only material correctness or spec defects, and rechecks
-accepted fixes and reasoned rejections until no unsettled findings remain.
+accepted fixes and reasoned rejections for up to three review calls. The phase
+fails closed if the third review still reports findings.
 Incremental Reuse still makes no calls; Update, Ordinary, and `--rebuild` use
 the review loop automatically. A reviewer model or effort without
 `reviewerAgent` is rejected.
