@@ -25,7 +25,7 @@ When the user runs `slc` with `--version` or `-v`, the slc executable shall prin
 
 ### CLI-2
 
-When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--rebuild`, the `--config` option, and the configuration it reads — the config file and the environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli), [DR-006](../decisions/006-slc-configuration-sources.md#file-format-and-discovery), [DR-021](../decisions/021-incremental-compilation.md), [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7)).
+When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--rebuild`, the `--config` option, and the configuration it reads — including the Coder and optional Reviewer config keys and environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-002](../decisions/002-slc-link-phases.md#cli), [DR-006](../decisions/006-slc-configuration-sources.md#file-format-and-discovery), [DR-021](../decisions/021-incremental-compilation.md), [CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7), [CLI-40](../dev/cli.md#cli-40)).
 
 ## Outcomes
 
@@ -67,4 +67,4 @@ Where `reviewerAgent` or `SLC_REVIEWER_AGENT` selects a supported independent Re
 
 ### CLI-29
 
-Where no config file exists in the working directory or the user config location and `--config` is not given, when the user runs a documented invocation form, the slc executable shall seed `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` with the bundled starter defaults — `agent: claude-code`, model and effort left to the agent CLI — name the created file on stderr, and carry out the run with those defaults, so a first run needs no prior setup ([DR-015](../decisions/015-first-run-config-seeding.md)).
+Where no config file exists in the working directory or the user config location and `--config` is not given, when the user runs a documented invocation form, the slc executable shall seed `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` with the bundled starter defaults — `agent: claude-code` active, Coder model/effort and Reviewer agent/model/effort as commented examples so agent defaults apply and reviewed compilation remains disabled — name the created file on stderr, and carry out the run with those defaults, so a first run needs no prior setup ([DR-015](../decisions/015-first-run-config-seeding.md)).

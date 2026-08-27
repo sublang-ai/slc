@@ -75,6 +75,28 @@ describe('createReviewingAgent (DR-022)', () => {
     });
     expect(reviewer.calls[0].prompt).toContain('produce target.txt');
     expect(reviewer.calls[0].prompt).toContain('wrote target');
+    expect(reviewer.calls[0].prompt).toContain(
+      'host-exposed read-only file and search capabilities',
+    );
+    expect(reviewer.calls[0].prompt).toContain(
+      'shell and network capabilities may be unavailable',
+    );
+    expect(reviewer.calls[0].prompt).toContain(
+      'Treat a finding rejected twice with evidence as settled',
+    );
+  });
+
+  it('accepts NO_FINDINGS with surrounding whitespace and CRLF', async () => {
+    const coder = queuedClient([{ status: 'success', text: 'coder result' }]);
+    const reviewer = queuedClient([
+      { status: 'success', text: ' \r\n\tNO_FINDINGS\r\n  ' },
+    ]);
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    await expect(agent.run(request())).resolves.toEqual({
+      status: 'success',
+      text: 'coder result',
+    });
   });
 
   it('relays findings to the Coder, preserves role resumes, and re-reviews the final Coder text', async () => {
@@ -145,6 +167,11 @@ describe('createReviewingAgent (DR-022)', () => {
       correctionEnvelope('replacement result'),
     );
     expect(reviewer.calls.every((call) => call.signal === signal)).toBe(true);
+    expect(
+      reviewer.calls.every((call) =>
+        call.prompt.includes('Never edit, write, mutate, or commit'),
+      ),
+    ).toBe(true);
   });
 
   it('keeps accepted and rejected dispositions private while preserving a compiled response exactly', async () => {
@@ -193,6 +220,57 @@ describe('createReviewingAgent (DR-022)', () => {
     expect(reviewer.calls[1].prompt).not.toContain(privateEnvelope);
   });
 
+  it('accepts indented finding evidence while keeping top-level numbering consecutive', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'initial' },
+      {
+        status: 'success',
+        text: correctionEnvelope('replacement', [
+          { finding: 1, decision: 'accept', reason: 'fixed first' },
+          {
+            finding: 2,
+            decision: 'reject',
+            reason: 'evidence disproves second',
+          },
+        ]),
+      },
+    ]);
+    const reviewer = queuedClient([
+      {
+        status: 'success',
+        text: 'FINDINGS:\n1. first issue\n   Evidence: line 10\n2. second issue\n\tEvidence: line 20',
+      },
+      { status: 'success', text: 'NO_FINDINGS' },
+    ]);
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    await expect(agent.run(request())).resolves.toEqual({
+      status: 'success',
+      text: 'replacement',
+    });
+  });
+
+  it.each([
+    ['bare', (json: string) => json],
+    ['json fence', (json: string) => `\`\`\`json\n${json}\n\`\`\``],
+    ['unlabeled fence', (json: string) => `\`\`\`\n${json}\n\`\`\``],
+  ])('accepts a correction envelope in the %s form', async (_label, wrap) => {
+    const coder = queuedClient([
+      { status: 'success', text: 'initial' },
+      { status: 'success', text: wrap(correctionEnvelope('decoded result')) },
+    ]);
+    const reviewer = queuedClient([
+      { status: 'success', text: 'FINDINGS:\n1. issue' },
+      { status: 'success', text: 'NO_FINDINGS' },
+    ]);
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    await expect(agent.run(request())).resolves.toEqual({
+      status: 'success',
+      text: 'decoded result',
+    });
+  });
+
   it.each([
     ['not JSON', 'BLOCKED: raw successful correction'],
     [
@@ -223,6 +301,27 @@ describe('createReviewingAgent (DR-022)', () => {
         { finding: 2, decision: 'accept', reason: 'wrong' },
         { finding: 1, decision: 'reject', reason: 'wrong' },
       ]),
+    ],
+    [
+      'surrounding prose',
+      `Envelope follows:\n${correctionEnvelope('replacement', [
+        { finding: 1, decision: 'accept', reason: 'one' },
+        { finding: 2, decision: 'reject', reason: 'two' },
+      ])}`,
+    ],
+    [
+      'other fence label',
+      `\`\`\`typescript\n${correctionEnvelope('replacement', [
+        { finding: 1, decision: 'accept', reason: 'one' },
+        { finding: 2, decision: 'reject', reason: 'two' },
+      ])}\n\`\`\``,
+    ],
+    [
+      'multiple fences',
+      `\`\`\`json\n${correctionEnvelope('replacement', [
+        { finding: 1, decision: 'accept', reason: 'one' },
+        { finding: 2, decision: 'reject', reason: 'two' },
+      ])}\n\`\`\`\n\`\`\`json\n{}\n\`\`\``,
     ],
   ])(
     'fails closed on a malformed correction envelope: %s',
@@ -456,6 +555,37 @@ describe('createReviewingAgent (DR-022)', () => {
     expect(reviewer.calls[2].prompt).toContain(
       'Coder replacement result:\ncorrection two',
     );
+  });
+
+  it('fails closed after three Reviewer findings without a third correction', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'initial', resumeToken: 'coder-0' },
+      {
+        status: 'success',
+        text: correctionEnvelope('correction one'),
+        resumeToken: 'coder-1',
+      },
+      {
+        status: 'success',
+        text: correctionEnvelope('correction two'),
+        resumeToken: 'coder-2',
+      },
+    ]);
+    const reviewer = queuedClient([
+      { status: 'success', text: 'FINDINGS:\n1. first' },
+      { status: 'success', text: 'FINDINGS:\n1. second' },
+      { status: 'success', text: 'FINDINGS:\n1. third' },
+    ]);
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    const result = await agent.run(request());
+
+    expect(reviewer.calls).toHaveLength(3);
+    expect(coder.calls).toHaveLength(3);
+    expect(result.status).toBe('error');
+    expect(result.resumeToken).toBe('coder-2');
+    expect(result.text).toContain('third and final review call');
+    expect(result.text).toContain('latest Coder output: correction two');
   });
 
   it('creates a separate Reviewer conversation for each performing call', async () => {
