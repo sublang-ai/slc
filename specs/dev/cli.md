@@ -46,7 +46,7 @@ Where `--config <path>` names a file that does not exist, or a loaded config fil
 
 ### CLI-30
 
-When discovery finds neither the working-directory `slc.config.yaml` nor the user config file, the executable shall create `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from the starter template bundled with the host — `agent: claude-code` set, `model` and `effort` as commented examples — report the created path on stderr, load the seeded file, and shall not seed when `--config` is given or when either discovered file exists ([DR-015](../decisions/015-first-run-config-seeding.md)).
+When discovery finds neither the working-directory `slc.config.yaml` nor the user config file, the executable shall create `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from the starter template bundled with the host — `agent: claude-code` set, Coder `model` and `effort` plus `reviewerAgent`, `reviewerModel`, and `reviewerEffort` as commented examples so reviewed compilation is disabled — report the created path on stderr, load the seeded file, and shall not seed when `--config` is given or when either discovered file exists ([DR-015](../decisions/015-first-run-config-seeding.md)).
 
 ### CLI-8
 
@@ -54,7 +54,7 @@ When the slc executable runs a pipeline, phase, or link, the executable shall in
 
 ### CLI-40
 
-Where a non-blank `SLC_REVIEWER_AGENT` environment variable, otherwise the config file's `reviewerAgent`, selects a registered adapter, when the slc executable constructs interpreted and compiled executors, the executable shall validate the optional Reviewer model and adapter-scoped effort through the same selection rules as the Coder, lazily wrap each transformation-capable client with a fresh read-only Reviewer per performing call, preserve separate compiled-player clients, and refuse Reviewer model or effort without a Reviewer agent; a non-blank environment value shall override its corresponding flat YAML key independently ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-006](../decisions/006-slc-configuration-sources.md#sources-and-precedence), [PHEXEC-46](phase-execution.md#phexec-46)).
+Where a non-blank `SLC_REVIEWER_AGENT` environment variable, otherwise the config file's `reviewerAgent`, supplies the optional Reviewer selection, when the slc executable constructs interpreted and compiled executors, the executable shall refuse an unsupported Reviewer adapter or Reviewer model/effort without a Reviewer agent, validate a supported optional Reviewer model and adapter-scoped effort through the same selection rules as the Coder, lazily wrap each transformation-capable client with a fresh read-only Reviewer per performing call, preserve separate compiled-player clients, and apply each non-blank environment value over its corresponding flat YAML key independently ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-006](../decisions/006-slc-configuration-sources.md#sources-and-precedence), [PHEXEC-46](phase-execution.md#phexec-46)).
 
 ### CLI-35
 

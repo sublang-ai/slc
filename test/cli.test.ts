@@ -197,9 +197,22 @@ describe('conveniences (CLI-13, CLI-14)', () => {
       expect(code).toBe(0);
       const help = out.join('');
       expect(help).toMatch(/Usage:/);
-      expect(help).toContain('SLC_AGENT');
-      expect(help).toContain('reviewerAgent');
-      expect(help).toContain('SLC_REVIEWER_AGENT');
+      for (const name of [
+        'agent',
+        'model',
+        'effort',
+        'reviewerAgent',
+        'reviewerModel',
+        'reviewerEffort',
+        'SLC_AGENT',
+        'SLC_MODEL',
+        'SLC_EFFORT',
+        'SLC_REVIEWER_AGENT',
+        'SLC_REVIEWER_MODEL',
+        'SLC_REVIEWER_EFFORT',
+      ]) {
+        expect(help).toContain(name);
+      }
       // Reworded CLI-2: help names --config and the config file, not just env.
       expect(help).toContain('--config');
       expect(help).toContain('slc.config.yaml');
@@ -651,7 +664,14 @@ describe('configuration (CLI-18, CLI-19)', () => {
     expect(selected).toBe('claude-code');
     const seeded = join(root, 'slc', 'config.yaml');
     expect(await exists(seeded)).toBe(true);
-    expect(await readFile(seeded, 'utf8')).toContain('agent: claude-code');
+    const seededConfig = await readFile(seeded, 'utf8');
+    expect(seededConfig).toContain('agent: claude-code');
+    expect(seededConfig).toContain('# model:');
+    expect(seededConfig).toContain('# effort:');
+    expect(seededConfig).toContain('# reviewerAgent:');
+    expect(seededConfig).toContain('# reviewerModel:');
+    expect(seededConfig).toContain('# reviewerEffort:');
+    expect(seededConfig).not.toMatch(/^reviewer(?:Agent|Model|Effort):/m);
     expect(seen.join('')).toContain(seeded);
   });
 
