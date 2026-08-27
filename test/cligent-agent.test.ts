@@ -9,6 +9,7 @@ import {
   createCligentAgent,
   defaultWatchdogTimers,
 } from '../src/cligent-agent.js';
+import { createReviewingAgent } from '../src/reviewing-agent.js';
 
 describe('createCligentAgent player continuation', () => {
   it('forwards explicit selection and exposes the returned resume token', async () => {
@@ -112,6 +113,44 @@ describe('createCligentAgent stall watchdog (PHEXEC-36, PHEXEC-38)', () => {
     expect(result.text).toContain('stalled');
     expect(result.text).toContain('0s'); // the 40 ms window, as elapsed text
     expect(runs).toBe(1); // no retry of the aborted call (PHEXEC-12)
+  });
+
+  it('preserves a stalled Reviewer diagnostic and does not retry it', async () => {
+    let reviewerRuns = 0;
+    const adapter: AgentAdapter = {
+      agent: 'fixture',
+      async isAvailable() {
+        return true;
+      },
+      async *run(_prompt: string, options?: AgentOptions) {
+        reviewerRuns++;
+        yield event('init', { model: 'm', cwd: '.', tools: [] });
+        await new Promise<void>((resolve) => {
+          options?.abortSignal?.addEventListener('abort', () => resolve(), {
+            once: true,
+          });
+        });
+      },
+    };
+    const reviewer = createCligentAgent({ adapter, stallTimeoutMs: 40 });
+    const reviewed = createReviewingAgent({
+      coder: {
+        async run() {
+          return { status: 'success', text: 'coder finished' };
+        },
+      },
+      reviewer: () => reviewer,
+    });
+
+    const result = await reviewed.run({
+      prompt: 'review the artifact',
+      signal: new AbortController().signal,
+    });
+
+    expect(result.status).toBe('error');
+    expect(result.text).toContain('Reviewer returned error');
+    expect(result.text).toContain('no agent activity for 0s');
+    expect(reviewerRuns).toBe(1);
   });
 
   it('arms a referenced timer so a dead transport still trips the watchdog', () => {

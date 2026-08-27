@@ -87,7 +87,7 @@ When interpreting a phase, the slc command shall prompt a coding agent, reached 
 
 ### PHEXEC-12
 
-When interpreting a phase, the slc command shall use exactly one agent invocation per phase ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#scope)).
+Where no independent Reviewer is configured, when interpreting a phase, the slc command shall use exactly one agent invocation per phase; reviewed execution is governed instead by [PHEXEC-46](#phexec-46) ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#scope), [DR-022](../decisions/022-two-agent-reviewed-compilation.md)).
 
 ### PHEXEC-13
 
@@ -110,6 +110,10 @@ When interpreting a phase, the slc command shall establish in the agent prompt a
 ### PHEXEC-15
 
 When interpreting a phase, the slc command shall permit the agent to invoke the deterministic tools or commands the definition calls for and to read the content the definition cites or references, as part of following the definition, and shall treat that readable closure as the phase's semantic input closure ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter)).
+
+### PHEXEC-46
+
+Where an independent Reviewer is configured, when an agent call has no explicit `allowedTools` property and its Coder returns successful non-`BLOCKED` work, the slc command shall create a fresh read-only Reviewer conversation for that performing call, require the exact verdict `NO_FINDINGS` or `FINDINGS:` with every nonempty finding line consecutively numbered, relay every finding to the Coder for evidenced acceptance or rejection and minimal accepted root-cause repair under the original request and response contract, recheck until no unsettled finding remains, and treat a twice-reasoned rejection as settled; it shall require every successful correction to be exactly one private JSON object whose `dispositions` consecutively cover every current finding with its number, `accept` or `reject` decision, and nonblank reason and whose string `result` is the complete replacement in the original response format, validate and add those decoded fields to the explicit review transcript, replace only the Coder result text with decoded `result` before re-review or phase adjudication, and fail closed on a malformed envelope while retaining the preceding usable Coder result; it shall use a role's continuation token only when that role's immediately preceding result supplies one, include prior transcript in later Coder and Reviewer prompts as fallback, preserve the original cwd, models, and cancellation signal, fail closed with the Reviewer failure text on Reviewer failure, incompletion, or malformed verdict, return Coder error or incompletion without envelope parsing, treat `BLOCKED` only after decoding a successful correction's `result`, and bypass every call carrying explicit `allowedTools` unchanged ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [PHEXEC-31](#phexec-31)).
 
 ## Compiled execution
 
@@ -153,7 +157,7 @@ Where a `composed-v2` compiled phase makes a transformation-performing direct Ca
 
 ### PHEXEC-36
 
-Where a positive stall timeout is configured, while an agent call is in flight on either transport — the single interpreted phase invocation or a compiled player, Captain, or judge call — when the Cligent transport observes no agent event for the stall timeout, the slc command shall abort exactly that call through its abort plumbing and report it as a failed call with a diagnostic carrying the inactivity duration, unless the aborted call still yields a successful terminal outcome within the transport's post-abort drain, in which case that outcome stands so a completed phase is never reported as a hang; a reported failure shall surface through the unchanged phase protocols: a failure report naming the phase and target, no retry of the aborted call, no second interpreted invocation, and fail-closed handling — never an interpreted fallback — for a pinned phase ([DR-019](../decisions/019-compile-progress-stall-watchdog.md#inactivity-watchdog-not-a-per-phase-deadline), [PHEXEC-9](#phexec-9), [PHEXEC-12](#phexec-12), [PHEXEC-23](#phexec-23), [PHEXEC-27](#phexec-27)).
+Where a positive stall timeout is configured, while any Coder, Reviewer, compiled player, Captain, or judge agent call is in flight, when the Cligent transport observes no agent event for the stall timeout, the slc command shall abort exactly that call through its abort plumbing and report it as a failed call with a diagnostic carrying the inactivity duration, unless the aborted call still yields a successful terminal outcome within the transport's post-abort drain, in which case that outcome stands so a completed call is never reported as a hang; a reported failure shall surface through the unchanged phase protocols as a failure report naming the phase and target, with no automatic transport retry or later review-loop call after the abort, and with fail-closed handling — never an interpreted fallback — for a pinned phase ([DR-019](../decisions/019-compile-progress-stall-watchdog.md#inactivity-watchdog-not-a-per-phase-deadline), [PHEXEC-9](#phexec-9), [PHEXEC-12](#phexec-12), [PHEXEC-23](#phexec-23), [PHEXEC-27](#phexec-27), [PHEXEC-46](#phexec-46)).
 
 ## References
 

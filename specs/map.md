@@ -45,6 +45,7 @@ meta.md     The spec of specs
 | DR-019 | [019-compile-progress-stall-watchdog.md](decisions/019-compile-progress-stall-watchdog.md) | In-run progress on stderr: per-phase lines with elapsed times, live compiled-status streaming, a 30 s silence-bounded heartbeat, a configurable agent-inactivity watchdog, and measured time estimates |
 | DR-020 | [020-playbook-4-0-adoption.md](decisions/020-playbook-4-0-adoption.md) | Playbook 4.0 adoption: 4.0.0 provenance to `composed-v2` on a byte-identical runtime, retained bundles with regenerated pins, cligent 0.18 as runtime-version authority, SDKs as devDependencies and demo-named vendors |
 | DR-021 | [021-incremental-compilation.md](decisions/021-incremental-compilation.md) | Incremental compilation through complete versioned snapshots, exact phase reuse, and ordinary execution with prior-input/diff update context |
+| DR-022 | [022-two-agent-reviewed-compilation.md](decisions/022-two-agent-reviewed-compilation.md) | Opt-in independent review/fix/re-review for transformation-performing compilation calls |
 
 ## Iterations
 
@@ -85,15 +86,15 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [cli.md](user/cli.md) | Executable surface: version/help, success and failure reporting, in-run progress and heartbeat, stall watchdog, cancellation, config file |
-| dev | [cli.md](dev/cli.md) | Bin wiring: resolver, agent/config-file selection, executor injection, progress reporter, stall-timeout resolution, process control |
-| test | [cli.md](test/cli.md) | Integration: version/help, reporting, progress lines, stall watchdog, exit codes, cancellation, config file/env, pinned compiled execution |
+| user | [cli.md](user/cli.md) | Executable surface: version/help, success and failure reporting, in-run progress and heartbeat, stall watchdog, cancellation, Coder/Reviewer config file |
+| dev | [cli.md](dev/cli.md) | Bin wiring: resolver, Coder/Reviewer config selection, executor injection, progress reporter, stall-timeout resolution, process control |
+| test | [cli.md](test/cli.md) | Integration: version/help, reporting, progress lines, stall watchdog, exit codes, cancellation, Coder/Reviewer config and env, pinned compiled execution |
 
 ### COMPILE
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, compiled-pin selection, raw-input normalization, and optimization passes |
+| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
 
 ### GIT
 
@@ -120,8 +121,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, compiled phase-runner facade, six-port Cligent adapter, provenance-driven selection, live status streaming, and the agent-stall watchdog |
-| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted execution, generic checks, blocked protocol, compiled runtime profiles including direct Captain, pin-selection, streamed-status, and stall-watchdog acceptance |
+| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, optional reviewed calls, compiled phase-runner facade, six-port Cligent adapter, provenance-driven selection, live status streaming, and the agent-stall watchdog |
+| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted and optional reviewed execution, generic checks, blocked protocol, compiled runtime profiles including direct Captain, pin-selection, streamed-status, and stall-watchdog acceptance |
 
 ### PIN
 

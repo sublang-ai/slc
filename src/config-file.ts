@@ -5,10 +5,11 @@
  * Config-file loader for the `slc` bin (DR-006, CLI-20, CLI-21).
  *
  * Discovers and parses the optional YAML config file that supplies the
- * cligent-invocation defaults — `agent`, `model`, `effort`, and `pipelinePath` — which the
- * environment then overrides (DR-006). Discovery reads `slc.config.yaml` in the
- * working directory, then `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`; an
- * explicit `--config` path disables discovery and is an error when absent, while
+ * cligent-invocation defaults — Coder and optional Reviewer selection plus
+ * `pipelinePath` — which the environment then overrides (DR-006). Discovery
+ * reads `slc.config.yaml` in the working directory, then
+ * `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`; an explicit `--config` path
+ * disables discovery and is an error when absent, while
  * a discovery miss returns an empty result that falls through to the environment
  * and defaults. The loader validates a flat schema and rejects unknown keys and
  * mistyped values; the supported-agent check stays with `resolveAgentSelection`
@@ -50,6 +51,10 @@ export interface FileConfig {
   agent?: string;
   model?: string;
   effort?: string;
+  /** Optional independent Reviewer; presence enables reviewed calls (DR-022). */
+  reviewerAgent?: string;
+  reviewerModel?: string;
+  reviewerEffort?: string;
   pipelinePath?: string[];
   /** Agent-stall watchdog window in seconds; `0` disables (DR-019, CLI-34). */
   stallTimeout?: number;
@@ -190,6 +195,9 @@ const ALLOWED_KEYS = new Set([
   'agent',
   'model',
   'effort',
+  'reviewerAgent',
+  'reviewerModel',
+  'reviewerEffort',
   'pipelinePath',
   'stallTimeout',
 ]);
@@ -210,7 +218,7 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
     if (!ALLOWED_KEYS.has(key)) {
       throw new ConfigFileError(
         'config-invalid',
-        `Unknown config key "${key}" in ${path}; allowed keys: agent, model, effort, pipelinePath, stallTimeout`,
+        `Unknown config key "${key}" in ${path}; allowed keys: agent, model, effort, reviewerAgent, reviewerModel, reviewerEffort, pipelinePath, stallTimeout`,
       );
     }
   }
@@ -224,6 +232,27 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
   }
   if (input.effort !== undefined) {
     config.effort = requireString(input.effort, 'effort', path);
+  }
+  if (input.reviewerAgent !== undefined) {
+    config.reviewerAgent = requireString(
+      input.reviewerAgent,
+      'reviewerAgent',
+      path,
+    );
+  }
+  if (input.reviewerModel !== undefined) {
+    config.reviewerModel = requireString(
+      input.reviewerModel,
+      'reviewerModel',
+      path,
+    );
+  }
+  if (input.reviewerEffort !== undefined) {
+    config.reviewerEffort = requireString(
+      input.reviewerEffort,
+      'reviewerEffort',
+      path,
+    );
   }
   if (input.pipelinePath !== undefined) {
     config.pipelinePath = requireStringArray(

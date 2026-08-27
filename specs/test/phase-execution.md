@@ -27,7 +27,7 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 ### PHEXEC-16
 Verifies: [PHEXEC-8](../dev/phase-execution.md#phexec-8), [PHEXEC-10](../dev/phase-execution.md#phexec-10), [PHEXEC-11](../dev/phase-execution.md#phexec-11), [PHEXEC-12](../dev/phase-execution.md#phexec-12), [COMPILE-5](../user/compiler.md#compile-5)
 
-Where every phase is interpreted, when the slc command runs a full pipeline whose agent writes each declared target, the slc command shall complete with exactly one agent invocation per phase, the canonical artifacts present, and any ambiguity the agent reported surfaced in its diagnostics.
+Where every phase is interpreted and no independent Reviewer is configured, when the slc command runs a full pipeline whose agent writes each declared target, the slc command shall complete with exactly one agent invocation per phase, the canonical artifacts present, and any ambiguity the agent reported surfaced in its diagnostics.
 
 ### PHEXEC-17
 Verifies: [PHEXEC-4](../dev/phase-execution.md#phexec-4), [PHEXEC-9](../dev/phase-execution.md#phexec-9), [COMPILE-4](../user/compiler.md#compile-4)
@@ -84,6 +84,11 @@ Verifies: [PHEXEC-39](../dev/phase-execution.md#phexec-39), [PHEXEC-27](../dev/p
 
 Where a present pin records an unrelated phase whose local input path is impossible beneath an existing regular file or dangling symbolic link, and the selected unpinned fixture phase targets either an unrelated path or that existing regular-file blocker, when the slc command runs the selected phase, it shall invoke the interpreted executor for the unrelated target; for the blocker target, it shall refuse before invoking the executor and leave the blocker's bytes unchanged.
 
+### PHEXEC-47
+Verifies: [PHEXEC-46](../dev/phase-execution.md#phexec-46), [COMPILE-9](../user/compiler.md#compile-9)
+
+Where reviewed execution uses faked Coder and Reviewer transports, when interpreted, configured compiled-player, or transformation-Captain work runs, clean review shall return the final Coder text, exactly numbered findings shall cause Coder repair and Reviewer recheck with immediately preceding role tokens when available plus the complete explicit transcript, a valid private correction envelope shall expose accepted and rejected dispositions only to the Reviewer and preserve the decoded original-format result exactly for phase adjudication, a missing, duplicate, wrongly numbered, malformed, or raw successful correction shall fail closed with the preceding usable Coder result, explicit `allowedTools` control calls shall bypass review, initial Coder failure or `BLOCKED` and correction error or incompletion shall stop without review, an encoded correction `result` carrying `BLOCKED` shall preserve the blocked protocol, Reviewer failure, incompletion, malformed verdict, or thrown error shall fail closed with its diagnostic, cancellation and cwd/model selection shall cross every call unchanged, and separate performing calls shall use separate Reviewer conversations; whereas an incremental Reuse invocation supplied a reviewed executor shall invoke neither Coder nor Reviewer.
+
 ## Compiled runs
 
 ### PHEXEC-26
@@ -110,7 +115,7 @@ Where a compiled fixture runtime emits status and operational telemetry mid-turn
 ### PHEXEC-38
 Verifies: [PHEXEC-36](../dev/phase-execution.md#phexec-36), [PHEXEC-12](../dev/phase-execution.md#phexec-12)
 
-Where a faked agent transport yields an initial event and then stalls under a short configured stall timeout, when a phase runs through the transport, the slc command shall abort the stalled call once the timeout elapses, map it to a failed call whose diagnostic carries the inactivity duration, and make no additional agent invocation; whereas where the aborted transport still yields a successful terminal event within the post-abort drain, the slc command shall report that success rather than a stall.
+Where a faked Coder or Reviewer transport yields an initial event and then stalls under a short configured stall timeout, when the call runs through the phase transport or review wrapper, the slc command shall abort the stalled call once the timeout elapses, preserve a failure diagnostic carrying the inactivity duration, and make no automatic retry of that call; whereas where the aborted transport still yields a successful terminal event within the post-abort drain, the slc command shall report that success rather than a stall.
 
 ### PHEXEC-35
 Verifies: [PHEXEC-34](../dev/phase-execution.md#phexec-34)

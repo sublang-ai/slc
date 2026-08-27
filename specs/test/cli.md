@@ -107,6 +107,11 @@ Verifies: [CLI-29](../user/cli.md#cli-29), [CLI-30](../dev/cli.md#cli-30)
 
 Where neither the working-directory `slc.config.yaml` nor the user config file exists and `--config` is absent, when the slc executable runs a full pipeline, the slc executable shall create the user config file with `agent: claude-code`, name it on stderr, and complete the run with the seeded selection; where the working-directory file exists, where the user file exists, or where `--config` is given, the slc executable shall create no file.
 
+### CLI-41
+Verifies: [CLI-39](../user/cli.md#cli-39), [CLI-40](../dev/cli.md#cli-40)
+
+Where Reviewer configuration is supplied to the config-loader and run-config seams by a strict flat config file and matching environment values, when those seams and the configured executor factories are exercised, each non-blank environment Reviewer value shall override its file value, supported adapter-scoped selections shall lazily build reviewed interpreted and compiled-player execution, Reviewer model or effort without Reviewer agent and unsupported selections shall refuse, help shall name the Reviewer keys and variables, and the seeded template shall leave review disabled with commented examples.
+
 ## Compiled execution
 
 ### CLI-28
