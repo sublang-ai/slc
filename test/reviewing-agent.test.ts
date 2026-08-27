@@ -558,6 +558,8 @@ describe('createReviewingAgent (DR-022)', () => {
   });
 
   it('fails closed after three Reviewer findings without a third correction', async () => {
+    const finalFindings =
+      'FINDINGS:\n1. final unresolved defect at src/output.ts:42';
     const coder = queuedClient([
       { status: 'success', text: 'initial', resumeToken: 'coder-0' },
       {
@@ -574,7 +576,7 @@ describe('createReviewingAgent (DR-022)', () => {
     const reviewer = queuedClient([
       { status: 'success', text: 'FINDINGS:\n1. first' },
       { status: 'success', text: 'FINDINGS:\n1. second' },
-      { status: 'success', text: 'FINDINGS:\n1. third' },
+      { status: 'success', text: finalFindings },
     ]);
     const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
 
@@ -585,6 +587,9 @@ describe('createReviewingAgent (DR-022)', () => {
     expect(result.status).toBe('error');
     expect(result.resumeToken).toBe('coder-2');
     expect(result.text).toContain('third and final review call');
+    expect(result.text).toContain(
+      `unresolved Reviewer findings:\n${finalFindings}`,
+    );
     expect(result.text).toContain('latest Coder output: correction two');
   });
 
