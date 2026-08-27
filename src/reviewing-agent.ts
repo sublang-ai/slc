@@ -98,14 +98,14 @@ export function createReviewingAgent(
             `Reviewer returned a malformed verdict: ${review.text}`,
           );
         }
+        const findings = review.text.trim();
         if (reviewerCalls === MAX_REVIEWER_CALLS) {
           return failClosed(
             coderResult,
-            'Reviewer still reported findings on the third and final review call',
+            `Reviewer reached the third and final review call; unresolved Reviewer findings:\n${findings}`,
           );
         }
 
-        const findings = review.text.trim();
         const priorTranscript = [...transcript];
         transcript.push(`Reviewer verdict:\n${findings}`);
         const coderResume = coderResult.resumeToken;
