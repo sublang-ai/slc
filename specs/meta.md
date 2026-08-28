@@ -158,3 +158,11 @@ External references in specs shall cite authoritative sources (e.g., official do
 Each test item shall include one `Verifies:` metadata line immediately below its item ID heading.
 
 The `Verifies:` line shall contain one or more comma-separated [citations](#meta-16) to the user or dev items that the test item verifies.
+
+## Authoring language
+
+### META-21
+
+Spec content added for this project shall be authored in the language declared by this machine-readable marker line:
+
+Authoring language: en
