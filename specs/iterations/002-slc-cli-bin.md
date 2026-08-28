@@ -26,7 +26,7 @@ Turn the stubbed `slc` bin into a working command-line compiler over the existin
 1. **Author the user and dev `cli` spec items.**
    Write `specs/user/cli.md` (bin surface: running a documented invocation form, `--version`/`--help` with exit 0, printing canonical artifact paths on success, printing the phase/target/reasons report on failure or `BLOCKED` with a non-zero exit, and cancellation on interrupt) and `specs/dev/cli.md` (host wiring: pipeline-reference resolution to one directory per [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md); agent-CLI and model selection from configuration with credentials from the environment per [DR-004](../decisions/004-slc-interpreted-phase-execution.md); constructing the interpreted executor over Cligent and injecting it with the resolver into `runSlc`; pre-handling `--version`/`--help`; interrupt-to-`AbortSignal` cancellation; and mapping `runSlc`'s result to printed output and a process exit code per [DR-003](../decisions/003-slc-phase-execution.md)).
    Register the `CLI` package in `map.md`.
-   Add SPDX headers per [LIC-1](../dev/licensing.md#lic-1)/[LIC-2](../dev/licensing.md#lic-2).
+   Add SPDX headers per [[licensing-1](../packages/licensing.md#licensing-1)]/[[licensing-2](../packages/licensing.md#licensing-2)].
 
 2. **Pipeline-reference resolver** ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#directory-layout)).
    Implement a concrete `PipelineResolver` that maps a `<pipeline>` reference to candidate directories under a defined host policy, returning every match so `runSlc`'s exactly-one rule refuses zero or many ([PIPE-16](../dev/pipeline.md#pipe-16)).

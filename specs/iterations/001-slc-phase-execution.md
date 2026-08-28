@@ -25,7 +25,7 @@ Implement [DR-003](../decisions/003-slc-phase-execution.md) (phase execution bou
 
 1. **Scaffold the `slc` project.**
    Initialize a TypeScript/Node package with a `slc` `bin` entry, a test runner (e.g., Vitest), lint, and format scripts; `build` and `test` pass on a stub.
-   Add SPDX headers per [LIC-3](../test/licensing.md#lic-3)/[LIC-4](../test/licensing.md#lic-4).
+   Add SPDX headers per [[licensing-3](../packages/licensing.md#licensing-3)]/[[licensing-4](../packages/licensing.md#licensing-4)].
 
 2. **Author dev spec packages.**
    Write `specs/dev/pipeline.md` (DR-001/DR-002 generic mechanics) and `specs/dev/phase-execution.md` (DR-003 boundary plus DR-004 interpreted execution and agent contract) as GEARS items; register both in `map.md`.
