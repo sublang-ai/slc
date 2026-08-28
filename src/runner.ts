@@ -1039,10 +1039,9 @@ async function executeSteps(
       return { ok: false, outputs, diagnostics };
     }
     diagnostics.push(...result.diagnostics);
-    // Settle an agent-chosen `.js`/`.ts` edge from the sibling that actually
-    // exists, then keep rejecting every genuinely unresolved import. This
-    // makes source-only and JS-shipping destinations deterministic without
-    // weakening the load-integrity boundary (VERIFY-18).
+    // Settle an agent-chosen `.js`/`.ts` link-object edge from the sibling that
+    // currently exists (PIPE-40), then keep rejecting every genuinely
+    // unresolved import (VERIFY-18).
     if (
       step.phase === 'link' &&
       (step.targetExt === '.ts' || step.targetExt === '.js')
@@ -1051,9 +1050,16 @@ async function executeSteps(
       try {
         const linked =
           step.request.kind === 'link' ? step.request.linked : target;
-        await reconcileLinkObjectImportSpecifiers(
+        const rewrites = await reconcileLinkObjectImportSpecifiers(
           linked,
           step.request.kind === 'link' ? step.request.objects : [],
+        );
+        diagnostics.push(
+          ...rewrites.map(
+            ({ from, to }) =>
+              `linked module ${linked} reconciled link-object import ` +
+              `${JSON.stringify(from)} to ${JSON.stringify(to)} (PIPE-40)`,
+          ),
         );
         missing = await unresolvableRelativeImports(linked);
       } catch (error) {
@@ -1062,9 +1068,10 @@ async function executeSteps(
         // terminal event (CLI-32).
         fail();
         diagnostics.push(
-          `linked module ${target} could not be reconciled and checked: ` +
+          `linked module ${target} could not be settled and checked: ` +
             `${messageOf(error)} — ` +
-            'an emitted module that cannot load fails the link (VERIFY-18)',
+            'post-link completion and load integrity are mandatory ' +
+            '(PIPE-40, VERIFY-18)',
         );
         return { ok: false, outputs, diagnostics };
       }

@@ -77,6 +77,7 @@ These checks defend the inputs whose silent mutation would corrupt later phases;
 
 Any semantic or format-aware verification beyond generic checks shall belong to the phase or link definition.
 The executing phase carries out that verification while following the definition; it is not a separate opaque hook executed by `slc`.
+[DR-023](023-host-settled-link-object-imports.md) narrowly supersedes this boundary for post-link settlement of declared-object import extensions against materialized siblings.
 
 ### Blocked protocol
 

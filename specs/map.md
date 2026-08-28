@@ -46,6 +46,7 @@ meta.md     The spec of specs
 | DR-020 | [020-playbook-4-0-adoption.md](decisions/020-playbook-4-0-adoption.md) | Playbook 4.0 adoption: 4.0.0 provenance to `composed-v2` on a byte-identical runtime, retained bundles with regenerated pins, cligent 0.18 as runtime-version authority, SDKs as devDependencies and demo-named vendors |
 | DR-021 | [021-incremental-compilation.md](decisions/021-incremental-compilation.md) | Incremental compilation through complete versioned snapshots, exact phase reuse, and ordinary execution with prior-input/diff update context |
 | DR-022 | [022-two-agent-reviewed-compilation.md](decisions/022-two-agent-reviewed-compilation.md) | Opt-in independent review/fix/re-review for transformation-performing compilation calls |
+| DR-023 | [023-host-settled-link-object-imports.md](decisions/023-host-settled-link-object-imports.md) | Generic post-link settlement and reporting of declared-object import extensions from materialized siblings |
 
 ## Iterations
 
@@ -135,8 +136,8 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link, pass phases, and the generic normalization step |
-| test | [pipeline.md](test/pipeline.md) | End-to-end pipeline run, chain, naming, path, link, pass-scheduling, and normalization acceptance |
+| dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link-object import settlement, pass phases, and the generic normalization step |
+| test | [pipeline.md](test/pipeline.md) | End-to-end pipeline run, chain, naming, path, link-object import settlement, pass-scheduling, and normalization acceptance |
 
 ### RELEASE
 
@@ -157,5 +158,5 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [verification.md](dev/verification.md) | Compilation correctness: emitted link-object import reconciliation and integrity, distinct Captain/player/child/script conformance, dynamic context wiring, pinned introspection, prompt contracts, scripted transition coverage, and artifact-local checker support |
-| test | [verification.md](test/verification.md) | Acceptance: emitted link-object import reconciliation and refusal, reference and synthetic checks, injected actor/dynamic/transition drift, runtime equivalence, and portable emitted verification artifacts |
+| dev | [verification.md](dev/verification.md) | Compilation correctness: emitted-import integrity, distinct Captain/player/child/script conformance, dynamic context wiring, pinned introspection, prompt contracts, scripted transition coverage, and artifact-local checker support |
+| test | [verification.md](test/verification.md) | Acceptance: emitted-import refusal, reference and synthetic checks, injected actor/dynamic/transition drift, runtime equivalence, and portable emitted verification artifacts |
