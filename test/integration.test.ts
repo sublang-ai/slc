@@ -513,7 +513,7 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     expect(result.diagnostics.join('\n')).toContain('changed during the run');
   });
 
-  it('fails a link whose module carries an unresolvable relative import (VERIFY-19)', async () => {
+  it('leaves an unrelated import unchanged and fails it (PIPE-41, VERIFY-19)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
@@ -537,9 +537,12 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('./missing.js');
     expect(result.diagnostics.join('\n')).toContain('VERIFY-18');
+    expect(await readFile(join(artDir, 'onboarding.run.ts'), 'utf8')).toContain(
+      "import './missing.js'",
+    );
   });
 
-  it('settles a source-only linked import on its TypeScript sibling (VERIFY-19)', async () => {
+  it('settles and reports a linked import on its TypeScript sibling (PIPE-41)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
@@ -550,7 +553,9 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
         if (match)
           await writeFile(
             match[1].trim(),
-            "import { machine } from './onboarding.fsm.js';\nexport default machine;\n",
+            "import { machine } from './onboarding.fsm.js';\n" +
+              "export { machine as linkedMachine } from './onboarding.fsm.js';\n" +
+              'export default machine;\n',
           );
         return { status: 'success', text: 'wrote the artifact' };
       },
@@ -564,9 +569,17 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     expect(await readFile(linked, 'utf8')).toContain(
       "from './onboarding.fsm.ts'",
     );
+    expect(
+      result.diagnostics.filter(
+        (diagnostic) =>
+          diagnostic ===
+          `linked module ${linked} reconciled link-object import ` +
+            `"./onboarding.fsm.js" to "./onboarding.fsm.ts" (PIPE-40)`,
+      ),
+    ).toHaveLength(2);
   });
 
-  it('settles a JS-shipping linked import on its JavaScript sibling (VERIFY-19)', async () => {
+  it('settles and reports a linked import on its JavaScript sibling (PIPE-41)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm source');
@@ -591,6 +604,10 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     expect(result.ok).toBe(true);
     expect(await readFile(linked, 'utf8')).toContain(
       "from './onboarding.fsm.js'",
+    );
+    expect(result.diagnostics).toContain(
+      `linked module ${linked} reconciled link-object import ` +
+        `"./onboarding.fsm.ts" to "./onboarding.fsm.js" (PIPE-40)`,
     );
   });
 

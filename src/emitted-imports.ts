@@ -2,16 +2,16 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Deterministic import reconciliation and load-integrity checks for emitted
- * modules (VERIFY-18).
+ * Deterministic link-object import settlement and load-integrity checks for
+ * emitted modules (PIPE-40, VERIFY-18).
  *
  * A linked artifact is code whose relative imports Node resolves with exact
  * specifiers — `./workflow.fsm.js` does not find `workflow.fsm.ts`. An
  * agent-performed link can emit the wrong extension for its object import. The
- * host settles that exact edge mechanically when a `.js` or `.ts` sibling
- * identifies the destination's loading mode, then requires every relative
- * specifier to name an existing file beside it. A genuinely unloadable module
- * still fails before the first `playbook run`.
+ * host settles that exact edge mechanically against a `.js` or `.ts` sibling
+ * that currently exists, then requires every relative specifier to name an
+ * existing file beside it. A genuinely unloadable module still fails before
+ * the first `playbook run`.
  */
 
 import { existsSync, statSync } from 'node:fs';
@@ -32,10 +32,10 @@ const isRegularFile = (path: string): boolean =>
 
 /**
  * Settles relative `.js`/`.ts` imports of the link's object artifacts from the
- * files that actually exist beside an emitted module. A JavaScript sibling
- * wins because its presence identifies a JS-shipping destination; otherwise a
- * TypeScript sibling identifies a source-only destination. Unrelated imports
- * and object specifiers with neither sibling are left for
+ * files that actually exist beside an emitted module. A materialized
+ * JavaScript sibling wins; otherwise the declared TypeScript object's sibling
+ * is used when present. Unrelated imports and object specifiers with neither
+ * sibling are left for
  * {@link unresolvableRelativeImports} to reject.
  */
 export async function reconcileLinkObjectImportSpecifiers(

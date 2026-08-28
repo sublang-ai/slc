@@ -12,7 +12,9 @@ handling, per [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md
 and [DR-002](../decisions/002-slc-link-phases.md).
 These are the generic half of the execution boundary in
 [DR-003](../decisions/003-slc-phase-execution.md); phase transformation behavior
-is specified in the `phase-execution` package.
+is specified in the `phase-execution` package, except for the narrow
+post-link completion rule of
+[DR-023](../decisions/023-host-settled-link-object-imports.md).
 
 Essential project-specific reference: `slc`, this project's compiler CLI.
 
@@ -111,6 +113,10 @@ When a link phase runs in a full-pipeline invocation, the slc command shall trea
 ### PIPE-18
 
 When invoked as `slc <pipeline>.link` with exactly one object, the slc command shall place the linked artifact by DR-001's source-adjacent directory and basename rules unless `-o <linked-target>` overrides the linked-artifact path; with more than one object, the slc command shall require `-o <linked-target>`, refuse the invocation when it is absent, and write the linked artifact to that path ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [DR-002](../decisions/002-slc-link-phases.md#output-locations)).
+
+### PIPE-40
+
+When a link phase has successfully written a `.ts` or `.js` module, the slc command shall settle each relative `.js` or `.ts` import whose extensionless resolved path matches a declared link object: an existing regular `.js` sibling wins, otherwise an existing regular `.ts` sibling wins, and otherwise the specifier remains unchanged; the linked module itself shall not count as a sibling, imports unrelated to declared link objects shall remain unchanged, and each changed specifier shall produce a diagnostic naming the module, original specifier, and replacement before the settled output is accepted or recorded in build history ([DR-023](../decisions/023-host-settled-link-object-imports.md)).
 
 ## Passes and normalization
 
