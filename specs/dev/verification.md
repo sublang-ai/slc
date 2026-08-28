@@ -17,9 +17,8 @@ A compiled artifact is judgment-produced, so `slc` re-checks it deterministicall
 against the `gears` and `fsm` it was built from and emits that check as a test
 beside the artifacts (under `<basename>.playbook/`) so each build re-verifies
 faithfulness.
-This package covers GEARS↔FSM conformance, emitted link-object import
-reconciliation and integrity, FSM introspection, prompt contracts, and
-transition coverage.
+This package covers GEARS↔FSM conformance, emitted-import integrity, FSM
+introspection, prompt contracts, and transition coverage.
 
 Essential project-specific reference: `slc`, this project's compiler CLI.
 
@@ -82,13 +81,11 @@ When checking FSM transition coverage, the slc command shall drive `script` acto
 
 ### VERIFY-18
 
-When a link phase completes with a `.ts` or `.js` target, the slc command shall
-settle each relative import of a link object ending in `.js` or `.ts` to `.js`
-when that sibling file exists, otherwise to `.ts` when that sibling exists,
-and otherwise leave the specifier unchanged; it shall leave imports of other
-files unchanged, then verify that every relative import resolves from the
-module's own location and fail the run with a diagnostic naming the module and
-each unresolvable specifier.
+When a `.ts` or `.js` link target has undergone the generic post-link
+completion of [PIPE-40](pipeline.md#pipe-40), the slc command shall verify that
+every relative import resolves exactly from the module's own location and fail
+the run with a diagnostic naming the module and each unresolvable specifier
+([DR-023](../decisions/023-host-settled-link-object-imports.md)).
 When an entry module is emitted, the slc command shall apply the same
 import-resolution verification.
 A compile whose output cannot load is a failed compile, not a success with a
