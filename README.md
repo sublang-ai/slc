@@ -240,3 +240,7 @@ We welcome contributions of all kinds.
 ## License
 
 [Apache-2.0](LICENSE)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
