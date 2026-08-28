@@ -6,10 +6,11 @@
 ## Intent
 
 This package specifies acceptance tests for the compilation-correctness
-verification of the `verification` dev package: the deterministic checks hold
-against the manual reference artifacts `@sublang/playbook` ships, injected
-drift is detected, and a successful reserved-pipeline run emits the
-verification tests beside its artifacts.
+verification of the `verification` dev package: emitted imports are reconciled
+and checked, the deterministic checks hold against the manual reference
+artifacts `@sublang/playbook` ships, injected drift is detected, and a
+successful reserved-pipeline run emits the verification tests beside its
+artifacts.
 
 Essential project-specific references: `slc`, this project's compiler CLI; and
 `@sublang/playbook`, whose installed package provides the manual reference
@@ -57,8 +58,13 @@ When a GEARS package contains a script item realized by a matching `script` acto
 ### VERIFY-19
 Verifies: [VERIFY-18](../dev/verification.md#verify-18)
 
-Where a link phase writes a linked module whose relative import names a file
-that does not exist beside it, when the run completes, the slc command shall
-exit non-zero with a diagnostic naming the module and the unresolvable
-specifier; where every relative import resolves, the same run shall succeed
-unchanged.
+Where a link phase writes a linked module beside only a `.ts` link object,
+when a relative import names its missing `.js` counterpart, the slc command
+shall rewrite that specifier to `.ts` and complete successfully.
+Where both `.js` and `.ts` siblings of a link object exist, when a relative
+import names the `.ts` sibling, the slc command shall rewrite that specifier to
+`.js` and complete successfully.
+Where a relative import has neither exact nor alternate link-object sibling,
+when the run completes, the slc command shall exit non-zero with a diagnostic
+naming the module and the unresolvable specifier; every import unrelated to a
+link object shall remain unchanged.

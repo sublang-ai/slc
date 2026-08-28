@@ -517,6 +517,7 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
+    await writeFile(join(artDir, 'missing.ts'), 'not a link object');
     await writeFile(join(srcDir, 'runner.ts'), 'runner');
     const agent: AgentClient = {
       run: async ({ prompt }) => {
@@ -524,7 +525,7 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
         if (match)
           await writeFile(
             match[1].trim(),
-            "import './onboarding.fsm.js';\nexport default 1;\n",
+            "import './missing.js';\nexport default 1;\n",
           );
         return { status: 'success', text: 'wrote the artifact' };
       },
@@ -534,8 +535,63 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
       deps(agent),
     );
     expect(result.ok).toBe(false);
-    expect(result.diagnostics.join('\n')).toContain('./onboarding.fsm.js');
+    expect(result.diagnostics.join('\n')).toContain('./missing.js');
     expect(result.diagnostics.join('\n')).toContain('VERIFY-18');
+  });
+
+  it('settles a source-only linked import on its TypeScript sibling (VERIFY-19)', async () => {
+    await mkdir(artDir, { recursive: true });
+    const object = join(artDir, 'onboarding.fsm.ts');
+    await writeFile(object, 'fsm');
+    await writeFile(join(srcDir, 'runner.ts'), 'runner');
+    const agent: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match)
+          await writeFile(
+            match[1].trim(),
+            "import { machine } from './onboarding.fsm.js';\nexport default machine;\n",
+          );
+        return { status: 'success', text: 'wrote the artifact' };
+      },
+    };
+    const result = await runSlc(
+      ['flow.link', object, join(srcDir, 'runner.ts')],
+      deps(agent),
+    );
+    const linked = join(artDir, 'onboarding.run.ts');
+    expect(result.ok).toBe(true);
+    expect(await readFile(linked, 'utf8')).toContain(
+      "from './onboarding.fsm.ts'",
+    );
+  });
+
+  it('settles a JS-shipping linked import on its JavaScript sibling (VERIFY-19)', async () => {
+    await mkdir(artDir, { recursive: true });
+    const object = join(artDir, 'onboarding.fsm.ts');
+    await writeFile(object, 'fsm source');
+    await writeFile(join(artDir, 'onboarding.fsm.js'), 'fsm build');
+    await writeFile(join(srcDir, 'runner.ts'), 'runner');
+    const agent: AgentClient = {
+      run: async ({ prompt }) => {
+        const match = /artifact to write: (.+)/.exec(prompt);
+        if (match)
+          await writeFile(
+            match[1].trim(),
+            "import { machine } from './onboarding.fsm.ts';\nexport default machine;\n",
+          );
+        return { status: 'success', text: 'wrote the artifact' };
+      },
+    };
+    const result = await runSlc(
+      ['flow.link', object, join(srcDir, 'runner.ts')],
+      deps(agent),
+    );
+    const linked = join(artDir, 'onboarding.run.ts');
+    expect(result.ok).toBe(true);
+    expect(await readFile(linked, 'utf8')).toContain(
+      "from './onboarding.fsm.js'",
+    );
   });
 
   it('fails the link when the emitted target is not a regular file', async () => {
