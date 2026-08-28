@@ -19,17 +19,18 @@ through it. Why compile prose instead of prompting with it:
   stop — the control flow becomes an inspectable
   [XState](https://xstate.js.org) machine, not prompt improvisation.
   LLM judgment is confined to the work *inside* each state.
-- **Auditable at every stage.** The intermediates are first-class files
-  you can read and edit: the normalized text, one testable "shall" item
-  per behavior (in the GEARS spec grammar the SubLang stack shares), and
-  the state machine itself. The compiler also emits verification tests
-  binding its output to the source spec.
+- **Auditable at every stage.** Every intermediate is a file you can
+  read and edit: the normalized text, one testable "shall" item per
+  behavior, the state machine itself. The compiler also emits tests
+  binding its output back to the spec.
 - **Cheaper and safer by optimization.** Steps that need no judgment are
   rewritten at compile time into plain shell commands — no LLM call, no
-  hallucination, verifiable before anything runs.
+  hallucination.
 - **Your agents, per role.** Compilation and execution run through the
   agent CLIs you already use — Claude Code, Codex, Gemini, OpenCode —
-  selectable per role.
+  selectable per role, with an optional
+  [second agent reviewing](#reviewed-compilation-two-agents) every
+  compile step.
 
 The flagship pipeline is `playbook` (the name of both the pipeline and
 the sibling [playbook](https://github.com/sublang-ai/playbook) project
@@ -41,9 +42,9 @@ a linked module the `playbook` CLI runs.
 The [demo](demo/README.md) compiles a one-paragraph description into a
 two-agent code-review loop, then lets it loose on a buggy C file: the
 coder and reviewer commit, review, and debate inside a real Git
-repository until the review comes back clean. Precompiled reference
-artifacts are included, so you can watch a run — or just read every
-compile stage — without waiting on a compile.
+repository until the review comes back clean. Precompiled artifacts are
+included, so you can watch a run — or read every compile stage —
+without waiting on a compile.
 
 ## Install
 
@@ -53,59 +54,41 @@ npm install -g @anthropic-ai/claude-agent-sdk @openai/codex-sdk
 slc --version
 ```
 
-The second line supplies the agent SDKs for the default Claude and Codex
-lineup. Playbook 4 installs none itself — which versions work is
-`@sublang/cligent`'s to enforce at load — so name the SDKs your own
-configuration needs. If one is missing, the compile stops before any
-agent call and names the package to install; if one is too old, it
-names the installed and required versions along with the exact version
-to install.
-
-Compiled artifacts import the Playbook engine from their own directory;
-when that import does not resolve, `playbook run` (3.1+) links its own
-engine beside the artifact and says so (`--no-provision` opts out).
-Working inside an npm project instead? Install the same set there — the
-compiler, the engine, and the SDKs your lineup uses — and prefix the
-commands with `npx`. A project's own install is always authoritative,
-and a globally installed SDK is invisible to a project's nested
-`@sublang/cligent`, so the SDKs belong in the same tree
-([RELEASE-11](specs/dev/release.md#release-11) has the full rules).
-
 Requirements:
 
-- A POSIX platform — macOS or Linux; on Windows, use WSL (or Git
-  Bash). Compiled script steps execute through `sh`, so native Windows
-  is not supported.
-- Node.js >= 23.6 (compiled phase artifacts are imported as native
-  TypeScript at runtime).
+- A POSIX platform — macOS or Linux; on Windows, use WSL (or Git Bash).
+  Compiled script steps execute through `sh`.
+- Node.js >= 23.6 (compiled artifacts are imported as native TypeScript).
 - One supported coding-agent CLI, installed and authenticated:
   [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview),
   [Codex CLI](https://github.com/openai/codex),
   [Gemini CLI](https://github.com/google-gemini/gemini-cli), or
   [OpenCode](https://opencode.ai).
 
+The second install line supplies the agent SDKs for the default Claude
+and Codex lineup; name the SDKs your own lineup needs instead. A missing
+or too-old SDK stops the compile before any agent call and names the
+exact package and version to install.
+
+Compiled artifacts import the Playbook engine from their own directory;
+when that import does not resolve, `playbook run` (3.1+) links its own
+engine beside the artifact and says so (`--no-provision` opts out).
+Working inside an npm project? Install the same set there and prefix the
+commands with `npx`: a project-local install is authoritative wherever it
+resolves, a project manifest declaring `@sublang/playbook` must install
+it itself, and a global SDK is invisible to a project's nested
+`@sublang/cligent`
+([RELEASE-11](specs/dev/release.md#release-11) has the full rules).
+
 ## Quick start
 
-In any directory, write a prose workflow as a `.md` or plain `.txt`
-file — [`demo/workflow.txt`](demo/workflow.txt) is a complete
-one-paragraph example — and compile it:
+Write a prose workflow as a `.md` or `.txt` file —
+[`demo/workflow.txt`](demo/workflow.txt) is a complete one-paragraph
+example — and compile it from any directory:
 
 ```bash
 slc playbook my-workflow.md
 ```
-
-`slc` finds the `playbook` pipeline inside its own `@sublang/playbook`
-dependency, so it compiles in any directory — no clone, no project
-setup. Compilation drives your configured coding agent — the first run
-seeds `~/.config/slc/config.yaml` with `agent: claude-code`; set
-`SLC_AGENT` (or edit that file) to use another agent CLI. Expect it to
-take a while: duration is agent- and workload-dependent, and measured
-compiles of a five-line workflow have run from tens of minutes to more
-than two hours, with the first intermediate typically landing within
-about five minutes. Plain-text input (`.txt`) works too; it is
-normalized first. The pipeline's optimization pass, which rewrites
-judgment-free steps into plain script, runs by default
-(`--no-optimize` skips it).
 
 Artifacts land in your working directory: `my-workflow.playbook/` holds
 the intermediates — `my-workflow.gears.md`, the XState machine
@@ -116,88 +99,48 @@ tests — and `my-workflow.ts` is the runnable entry. Run it:
 playbook run ./my-workflow.ts "<your task>"
 ```
 
-Intermediates are first-class: edit one and re-run a single phase
-(`slc playbook.gears2fsm …`) and it lands in the same place.
-`slc --help` shows all invocation forms.
+Compilation drives your configured coding agent, so **expect it to take
+a while**: measured compiles of a five-line workflow have run from tens
+of minutes to more than two hours, with the first intermediate typically
+landing within about five minutes. Meanwhile `slc` reports each phase,
+each artifact with its elapsed time, and a heartbeat at least every 30
+seconds on stderr; an agent call that goes silent for `stallTimeout`
+seconds fails that phase instead of hanging. Success prints the artifact
+paths and exits 0; a failure prints diagnostics naming the failing phase
+and exits non-zero.
+
+Intermediates are first-class: edit one, re-run a single phase
+(`slc playbook.gears2fsm …`), and it lands in the same place.
+`slc --help` shows all invocation forms and flags, including
+`--no-optimize` to skip the optimization pass.
 
 ### Incremental recompiles
 
-Canonical full and full-link runs of ordinary pipelines remember successful
-builds under `<artifact-dir>/.slc/`. Each numbered, private snapshot contains
-one manifest plus verbatim copies of the source and every accepted phase
-output. The active marker is committed last. If that build is missing,
-deleted, or corrupt in any part, `slc` treats the whole snapshot as absent and
-compiles ordinarily.
+A successful full compile is snapshotted under `<artifact-dir>/.slc/`,
+so a re-run only redoes what changed. Per phase, `slc` picks:
 
-On a re-run, `slc` walks the phases in order and chooses one mode for each:
+- **Reuse** — inputs are byte-identical: no agent call, and the artifact
+  on disk is left exactly as it is, manual refinements included.
+- **Update** — inputs changed: the phase runs ordinarily and also
+  receives its prior input and a diff, as a hint to update the artifact
+  rather than rewrite it from scratch.
+- **Ordinary** — no usable record, a changed link phase, or `--rebuild`.
 
-- **Reuse** when every input is byte-identical and the live target is readable:
-  no agent runs, and the on-disk output stays exactly as it is, including manual
-  refinements.
-- **Update** when a compile phase's inputs changed and its prior input and live
-  output are available: the ordinary executor also receives the recorded old
-  input, a bounded best-effort diff, and one instruction to update the complete
-  artifact while preserving unaffected work.
-- **Ordinary** when no usable record exists, for a changed link phase, or when
-  `--rebuild` is given.
-
-Update is only a hint to the usual executor. The phase definition remains the
-sole authority, needs no update section, and uses the same acceptance rules as
-a fresh compile. A run that only reuses reports `up to date` and records
-nothing new. Before the first executor in an eligible run may write, `slc`
-removes the active marker; only a wholly successful run, including required
-deterministic post-processing, publishes a new marker. Once the marker is
-removed, a failed or interrupted run therefore leaves the next run to compile
-ordinarily. `--rebuild` forces every phase through Ordinary mode and records a
-fresh successful build while retaining older numbered snapshots.
-
-History selection and publication do not apply to `-o`, the reserved `slc`
-meta-pipeline, single-phase or standalone-pass runs, or direct-link runs. If one
-of those excluded forms is about to overwrite an artifact named by a usable
-active build, `slc` clears that marker first so it cannot describe the new
-bytes.
-
-`.slc/` sits inside the artifact bundle and holds verbatim copies of your
-source and every accepted phase output, so treat it as no less private than
-the source, and add `.slc/` to your `.gitignore` if you commit the bundle.
-Deleting it is always safe — the next run simply compiles ordinarily — and
-old numbered builds under `.slc/builds/` can be pruned at any time. An upgrade
-that changes a recorded definition or input invalidates only the affected
-steps: an eligible compile step can use Update while link steps run ordinarily.
-Pass `--rebuild` after an upgrade when you want every phase to compile from
-scratch instead.
-
-While a compile runs, `slc` reports progress on stderr: each phase as it
-starts, each artifact as it lands with the elapsed time, the compiled
-runtime's own state transitions, and a heartbeat so the terminal is
-never silent for more than 30 seconds. An agent call that goes quiet for
-`stallTimeout` seconds (default 600, `0` disables) is aborted and
-reported as a failed phase rather than hanging indefinitely.
-
-Success prints the written artifact paths to stdout and exits 0 — or
-just `up to date` when incremental selection recompiled nothing, in which
-case the paths the previous run reported are still current; a failure
-prints diagnostics to stderr — naming the failing phase when one is at
-fault — and exits non-zero.
+A run that reuses everything prints `up to date` instead of paths.
+History is success-only, so an interrupted or failed run simply leaves
+the next one to compile ordinarily. `.slc/` holds verbatim copies of
+your source and outputs — treat it as no less private, gitignore it if
+you commit the bundle, and delete it freely. Excluded invocation forms
+and the full rules are in the
+[incremental spec](specs/user/incremental-compilation.md).
 
 ## Configuration
 
-`slc` reads its agent and pipeline settings from an optional YAML config file,
-overridden per key by environment variables. A blank or unset environment value
-falls through to the file. When no config file exists anywhere, the first run
-seeds `~/.config/slc/config.yaml` with `agent: claude-code`, so a fresh
-machine needs no setup; `model` falls through to the agent CLI's own default
-and `pipelinePath` to the working directory.
-
-Set `reviewerAgent` to opt into a two-agent review/fix loop for every
-transformation that actually runs. The existing `agent`/`model`/`effort`
-selection remains the Coder. The independent Reviewer inspects the result
-read-only, reports only material correctness or spec defects, and rechecks
-accepted fixes and reasoned rejections for up to three review calls. The phase
-fails closed if the third review still reports findings.
-Incremental Reuse still makes no calls; Update, Ordinary, and `--rebuild` use
-the review loop automatically. A reviewer model or effort without
-`reviewerAgent` is rejected.
+The first run seeds `~/.config/slc/config.yaml` with
+`agent: claude-code`, so a fresh machine needs no setup. A
+`slc.config.yaml` in the working directory wins over the user config,
+and `SLC_AGENT`, `SLC_MODEL`, and the other `SLC_*` variables override
+either, per key.
 
 ```yaml
 # slc.config.yaml
@@ -212,24 +155,35 @@ pipelinePath: # search roots for <pipeline> references; defaults to the cwd
   - ./pipelines
 ```
 
-A `slc.config.yaml` in the working directory wins over the user config;
-`SLC_AGENT`, `SLC_MODEL`, `SLC_EFFORT`, the matching `SLC_REVIEWER_AGENT`,
-`SLC_REVIEWER_MODEL`, `SLC_REVIEWER_EFFORT`, `SLC_STALL_TIMEOUT`, and
-`SLC_PIPELINE_PATH` override either per key. Discovery order, `--config`, and
-validation rules live in the [CLI spec](specs/user/cli.md); `slc --help`
-prints the summary.
+Discovery order, `--config`, and validation rules live in the
+[CLI spec](specs/user/cli.md); `slc --help` prints the summary.
+
+### Reviewed compilation (two agents)
+
+Set `reviewerAgent` to compile with two independent agents. Your `agent`
+selection is the Coder that writes each artifact; the Reviewer then
+inspects that work read-only and reports only material correctness or
+spec defects, and the Coder answers every finding with evidence and a
+minimal fix. Up to three review rounds — if the third still reports
+findings, the phase fails closed and names them rather than shipping a
+questionable artifact.
+
+It costs at least one extra agent call per transformation that runs.
+Reuse performs no transformation and so makes no calls; Update,
+Ordinary, and `--rebuild` use the loop automatically
+([DR-022](specs/decisions/022-two-agent-reviewed-compilation.md)).
 
 ## How pipelines work
 
 A pipeline is a directory of phase definitions named
 `<source-format>2<target-format>.md`, each declaring its formats in a
-`## Formats` table, plus an optional `link.md` defining the terminal
-link phase. `slc` infers phase order by chaining formats — no
-manifest — and refuses incomplete, branching, or cyclic chains. Adding
-a phase means writing a definition, never changing the compiler: `slc`
-itself performs only the generic mechanics of chaining, validation, and
-artifact placement. The bundled `playbook` pipeline chains `text2gears`
-and `gears2fsm`, with `link` emitting the runnable runtime.
+`## Formats` table, plus an optional `link.md` for the terminal link
+phase. `slc` infers phase order by chaining formats — no manifest — and
+refuses incomplete, branching, or cyclic chains. Adding a phase means
+writing a definition, never changing the compiler: `slc` itself performs
+only the generic mechanics of chaining, validation, and artifact
+placement. The bundled `playbook` pipeline chains `text2gears` and
+`gears2fsm`, with `link` emitting the runnable runtime.
 
 Every phase runs through a coding agent, one of two ways:
 
@@ -237,9 +191,9 @@ Every phase runs through a coding agent, one of two ways:
   performs it. This is how an npm-installed `slc` runs the `playbook`
   pipeline, using the definitions shipped inside `@sublang/playbook`.
 - **Compiled** — the phase's own compiled playbook artifact drives the
-  agent through audited state-machine steps. This repository's checkout
-  runs its bundled phases this way: `slc` is self-hosting, its phase
-  definitions compiled, reviewed, and sha256-pinned under
+  agent through audited state-machine steps. This repository runs its
+  bundled phases this way: `slc` is self-hosting, its phase definitions
+  compiled, reviewed, and sha256-pinned under
   [`pipelines/playbook/`](pipelines/playbook), failing closed on drift
   ([self-hosting spec](specs/user/self-hosting.md)).
 
