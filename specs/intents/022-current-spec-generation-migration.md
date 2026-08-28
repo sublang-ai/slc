@@ -5,7 +5,7 @@
 
 ## Status
 
-Pending — repository-owner approval of the released package and framework item-ID changes is required before migration starts.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Task 1 is complete.
 
 ## Intent
 
@@ -94,7 +94,7 @@ They shall also add the minimal local integration or system verification needed 
 
 ## Deliverables
 
-- [ ] Obtain explicit repository-owner approval for both complete released-ID rename maps.
+- [x] Obtain explicit repository-owner approval for both complete released-ID rename maps.
 - [ ] Merge all legacy behavior and test sources into the 12 current package files with classifications and dependencies audited under the current law.
 - [ ] Move all 22 legacy iteration records into `intents/`, reconciling the SPDX seed and preserving every checkbox and state.
 - [ ] Make all non-framework decision records and project guidance use current citations, paths, and record rules without editing the protected framework law or framework decision.
@@ -112,7 +112,7 @@ Each record task shall preserve status and checkboxes, use the current required 
 Record tasks shall retarget the repository's actual legacy framework citations by concern: map the released-ID rule in `META-12` to `meta-12` while rewriting any obsolete higher-number allocation claim; replace every `META-20` detached `Verifies:` claim with inline citations at verifying assertions confined to the containing package under `meta-20`; map the released testing concern in `META-21` to `meta-21`; and map the duplicated unreleased authoring-language concern to `meta-27` if it survives disposal.
 No unlisted legacy framework ID receives an identity mapping without a concern audit.
 
-1. Reconcile `dev/git.md` into the generated `packages/git.md`, preserving the seed-only requirements while retargeting every `GIT-*` identity and reference.
+1. [x] Reconciled the legacy Git workflow source into `packages/git.md`, preserving the seed-only requirements and retargeting every authored item identity and reference.
 2. Reconcile `dev/licensing.md`, `test/licensing.md`, and the legacy SPDX intent into the generated licensing package and SPDX intent seed, preserving the seed-only requirements and legacy completion state while retargeting every `LIC-*` identity and reference.
 3. Merge the `compiler` sources into `packages/compiler.md` and retarget all `COMPILE-*` identities and citations.
 4. Merge the `incremental-compilation` sources into `packages/incremental-compilation.md` and retarget all `INCR-*` identities and citations.
