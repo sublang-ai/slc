@@ -11,6 +11,33 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-28
+
+### Added
+
+- **Opt-in two-agent reviewed compilation.** Setting `reviewerAgent` — with
+  optional `reviewerModel` and `reviewerEffort`, each overridden by the
+  matching `SLC_REVIEWER_*` variable — turns every transformation that runs
+  into a Coder/Reviewer loop. The existing `agent`/`model`/`effort` selection
+  remains the Coder; an independent Reviewer inspects each successful,
+  non-`BLOCKED` result read-only and reports only material correctness or spec
+  defects, which the Coder disposes of with evidence and minimal root-cause
+  repair. A performing call permits at most three Reviewer calls: `NO_FINDINGS`
+  succeeds, while findings on the third fail the phase closed and report them.
+  The loop covers interpreted execution, compiled players, and
+  transformation-performing Captain calls; explicit-`allowedTools` control
+  calls bypass it, and incremental Reuse invokes neither agent. Review stays
+  off by default and costs at least one extra agent call per transformation
+  when enabled
+  ([DR-022](specs/decisions/022-two-agent-reviewed-compilation.md)).
+
+### Fixed
+
+- **The demo consumer project requires the current compiler.**
+  `demo/package.json` asked for `@sublang/slc` `^0.3.0`, which excludes 0.4.x
+  and later, so a fresh `npm install` in `demo/` installed a compiler without
+  incremental compilation.
+
 ## [0.4.0] - 2026-08-22
 
 ### Added
@@ -143,7 +170,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/sublang-ai/slc/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sublang-ai/slc/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sublang-ai/slc/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sublang-ai/slc/compare/v0.1.0...v0.2.0
