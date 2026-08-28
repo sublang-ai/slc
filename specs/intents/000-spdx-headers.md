@@ -14,7 +14,7 @@ Apply [[licensing-1](../packages/licensing.md#licensing-1)], [[licensing-2](../p
 ## Deliverables
 
 - [x] Add SPDX headers to applicable files missing them
-- [ ] Document header format in a dev spec
+- [ ] Add `licensing-9` to the External Behavior of [`packages/licensing.md`](../packages/licensing.md) with the project's actual header format, license, and copyright
 
 ## Tasks
 
