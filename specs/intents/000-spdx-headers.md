@@ -5,7 +5,7 @@
 
 ## Status
 
-Pending
+In progress — SPDX headers are present, while their project-specific format is not yet specified in the licensing package.
 
 ## Intent
 
@@ -13,8 +13,8 @@ Apply [[licensing-1](../packages/licensing.md#licensing-1)], [[licensing-2](../p
 
 ## Deliverables
 
-- [ ] Add SPDX headers to in-scope files missing them
-- [ ] Add `licensing-9` to the External Behavior of [`packages/licensing.md`](../packages/licensing.md) with the project's actual header format, license, and copyright
+- [x] Add SPDX headers to applicable files missing them
+- [ ] Document header format in a dev spec
 
 ## Tasks
 
@@ -22,17 +22,19 @@ Apply [[licensing-1](../packages/licensing.md#licensing-1)], [[licensing-2](../p
 
 2. Insert SPDX lines in each file's first comment block (after any shebang), using the file's native comment syntax.
 
-3. Add `licensing-9` to the `## External Behavior` section of [`packages/licensing.md`](../packages/licensing.md), showing the concrete header per comment style. Example for a single Apache-2.0 `LICENSE`:
+3. Add `licensing-9` to the `## External Behavior` section of [`packages/licensing.md`](../packages/licensing.md), showing the concrete header for each native comment style:
 
    ```markdown
    <!-- SPDX-License-Identifier: Apache-2.0 -->
-   <!-- SPDX-FileCopyrightText: <year> <holder> -->
+   <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
    ```
 
    ```typescript
    // SPDX-License-Identifier: Apache-2.0
-   // SPDX-FileCopyrightText: <year> <holder>
+   // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
    ```
+
+   The legacy record's `CC-BY-SA-4.0` content example is not a target because the repository has a single `Apache-2.0` license and its tracked content uses that identifier.
 
 ## Verification
 

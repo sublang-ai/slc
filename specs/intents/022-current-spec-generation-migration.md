@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Task 1 is complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–2 are complete.
 
 ## Intent
 
@@ -113,7 +113,7 @@ Record tasks shall retarget the repository's actual legacy framework citations b
 No unlisted legacy framework ID receives an identity mapping without a concern audit.
 
 1. [x] Reconciled the legacy Git workflow source into `packages/git.md`, preserving the seed-only requirements and retargeting every authored item identity and reference.
-2. Reconcile `dev/licensing.md`, `test/licensing.md`, and the legacy SPDX intent into the generated licensing package and SPDX intent seed, preserving the seed-only requirements and legacy completion state while retargeting every `LIC-*` identity and reference.
+2. [x] Reconciled the legacy licensing behavior, verification, and SPDX record into `packages/licensing.md` and `intents/000-spdx-headers.md`, preserving the seed requirements and record state while retargeting every authored item identity and reference.
 3. Merge the `compiler` sources into `packages/compiler.md` and retarget all `COMPILE-*` identities and citations.
 4. Merge the `incremental-compilation` sources into `packages/incremental-compilation.md` and retarget all `INCR-*` identities and citations.
 5. Merge the `pinning` sources into `packages/pinning.md` and retarget all `PIN-*` identities and citations.

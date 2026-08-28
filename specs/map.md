@@ -51,7 +51,6 @@ meta.md     The spec of specs
 
 | ID | File | Goal |
 | --- | --- | --- |
-| IR-000 | [000-spdx-headers.md](iterations/000-spdx-headers.md) | Add SPDX headers to applicable files |
 | IR-001 | [001-slc-phase-execution.md](iterations/001-slc-phase-execution.md) | Implement DR-003/DR-004: interpreted slc phase execution |
 | IR-002 | [002-slc-cli-bin.md](iterations/002-slc-cli-bin.md) | Wire the slc bin to runSlc: resolver, agent config, reporting, CLI |
 | IR-003 | [003-slc-config-file.md](iterations/003-slc-config-file.md) | Add a simple YAML config file for slc's cligent invocation |
@@ -110,12 +109,11 @@ meta.md     The spec of specs
 | dev | [incremental-compilation.md](dev/incremental-compilation.md) | Snapshot schema, whole-build loading, identities, three-mode selection, update transport, and success-only publication |
 | test | [incremental-compilation.md](test/incremental-compilation.md) | Fixture acceptance for snapshots, reuse, updates, corruption, failures, rebuild, and exclusions |
 
-### LIC
+### licensing
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [licensing.md](dev/licensing.md) | SPDX header requirements and file-scope rules |
-| test | [licensing.md](test/licensing.md) | Copyright and license header presence checks |
+| package | [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
 
 ### PHEXEC
 
