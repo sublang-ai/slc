@@ -96,11 +96,11 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
 
-### GIT
+### git
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [git.md](dev/git.md) | Commit message format and AI co-authorship trailers |
+| package | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
 
 ### INCR
 
