@@ -157,5 +157,5 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [verification.md](dev/verification.md) | Compilation correctness: distinct Captain/player/child/script conformance, dynamic context wiring, pinned introspection, prompt contracts, scripted transition coverage, and artifact-local checker support |
-| test | [verification.md](test/verification.md) | Acceptance: reference and synthetic checks, injected actor/dynamic/transition drift, runtime equivalence, and portable emitted verification artifacts |
+| dev | [verification.md](dev/verification.md) | Compilation correctness: emitted link-object import reconciliation and integrity, distinct Captain/player/child/script conformance, dynamic context wiring, pinned introspection, prompt contracts, scripted transition coverage, and artifact-local checker support |
+| test | [verification.md](test/verification.md) | Acceptance: emitted link-object import reconciliation and refusal, reference and synthetic checks, injected actor/dynamic/transition drift, runtime equivalence, and portable emitted verification artifacts |

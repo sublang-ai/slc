@@ -26,7 +26,10 @@ import {
   type StepToRecord,
 } from './build-history.js';
 import { emitEntryModule } from './entry-module.js';
-import { unresolvableRelativeImports } from './emitted-imports.js';
+import {
+  reconcileLinkObjectImportSpecifiers,
+  unresolvableRelativeImports,
+} from './emitted-imports.js';
 import { messageOf } from './errors.js';
 import {
   assertSafeTarget,
@@ -1036,26 +1039,31 @@ async function executeSteps(
       return { ok: false, outputs, diagnostics };
     }
     diagnostics.push(...result.diagnostics);
-    // A linked module that cannot resolve its own relative imports cannot
-    // load under `playbook run`; fail the link rather than report success
-    // for a dead artifact (VERIFY-18).
+    // Settle an agent-chosen `.js`/`.ts` edge from the sibling that actually
+    // exists, then keep rejecting every genuinely unresolved import. This
+    // makes source-only and JS-shipping destinations deterministic without
+    // weakening the load-integrity boundary (VERIFY-18).
     if (
       step.phase === 'link' &&
       (step.targetExt === '.ts' || step.targetExt === '.js')
     ) {
       let missing: string[];
       try {
-        missing = await unresolvableRelativeImports(
-          step.request.kind === 'link' ? step.request.linked : target,
+        const linked =
+          step.request.kind === 'link' ? step.request.linked : target;
+        await reconcileLinkObjectImportSpecifiers(
+          linked,
+          step.request.kind === 'link' ? step.request.objects : [],
         );
+        missing = await unresolvableRelativeImports(linked);
       } catch (error) {
-        // A target that cannot even be read is a dead artifact too — a
-        // directory at the linked path passes the DR-003 existence and
-        // extension checks and then fails the read. Fail the link here so
-        // every started phase still reaches a terminal event (CLI-32).
+        // A target that cannot be reconciled and checked is a dead artifact
+        // too. Fail the link here so every started phase still reaches a
+        // terminal event (CLI-32).
         fail();
         diagnostics.push(
-          `linked module ${target} could not be read: ${messageOf(error)} — ` +
+          `linked module ${target} could not be reconciled and checked: ` +
+            `${messageOf(error)} — ` +
             'an emitted module that cannot load fails the link (VERIFY-18)',
         );
         return { ok: false, outputs, diagnostics };
