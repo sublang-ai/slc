@@ -108,7 +108,7 @@ and this project adheres to
   dependencies — a project-local tree has no other way to place them where
   its nested cligent resolves — and couples to `@sublang/slc` `^0.3.0`
   ([DR-020](specs/decisions/020-playbook-4-0-adoption.md),
-  [IR-020](specs/iterations/020-playbook-4-0-adoption.md)).
+  [IR-020](specs/intents/020-playbook-4-0-adoption.md)).
 
 - Documented compile and run durations are now measured ranges stated
   as agent- and workload-dependent, replacing the "more than ten
