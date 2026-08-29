@@ -9,7 +9,7 @@ Accepted
 
 ## Context
 
-`slc` reaches coding agents through Cligent (npm `@sublang/cligent` [[1]]); agent, model, and pipeline-path selection is `slc` configuration, not phase semantics ([DR-004](004-slc-interpreted-phase-execution.md#interpreter)).
+`slc` reaches coding agents through Cligent (npm `@sublang/cligent` [[1]]); agent, model, and pipeline-path selection is `slc` configuration, not phase semantics ([DR-004](004-slc-interpreted-phase-execution.md)).
 Today that configuration is environment-only — `SLC_AGENT`, `SLC_MODEL`, and `SLC_PIPELINE_PATH` ([[cli-6](../packages/cli.md#cli-6)], [[cli-7](../packages/cli.md#cli-7)], [[cli-12](../packages/cli.md#cli-12)]) — which is awkward for a persistent per-project or per-user setup.
 Cligent's sibling `tmux-play` reference app already establishes a config-file ergonomic: a YAML file discovered cwd-first then under `${XDG_CONFIG_HOME:-~/.config}`, with a `--config` override.
 `slc` should offer that same shape with a smaller surface, without disturbing existing env-only runs.
