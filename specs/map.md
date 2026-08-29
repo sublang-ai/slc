@@ -48,14 +48,6 @@ meta.md     The spec of specs
 | DR-022 | [022-two-agent-reviewed-compilation.md](decisions/022-two-agent-reviewed-compilation.md) | Opt-in independent review/fix/re-review for transformation-performing compilation calls |
 | DR-023 | [023-host-settled-link-object-imports.md](decisions/023-host-settled-link-object-imports.md) | Generic post-link settlement and reporting of declared-object import extensions from materialized siblings |
 
-## Iterations
-
-| ID | File | Goal |
-| --- | --- | --- |
-| IR-019 | [019-compile-progress-stall-watchdog.md](iterations/019-compile-progress-stall-watchdog.md) | Implement DR-019: progress sink and stderr reporter, live status streaming, silence heartbeat, agent-stall watchdog, measured-time docs |
-| IR-020 | [020-playbook-4-0-adoption.md](iterations/020-playbook-4-0-adoption.md) | Adopt Playbook 4.0 and cligent 0.18 atomically with retained bundles, regenerated pins, and prepare 0.3.0 |
-| IR-021 | [021-incremental-compilation.md](iterations/021-incremental-compilation.md) | Implement DR-021 as a success-only history layer with Reuse, Update, Ordinary, and fixture acceptance |
-
 ## Packages
 
 ### continuous-integration

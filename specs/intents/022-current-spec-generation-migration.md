@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–18 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–19 are complete.
 
 ## Intent
 
@@ -97,7 +97,7 @@ The behavior citation audit establishes these peer-package edges:
 
 - [x] Obtain explicit repository-owner approval for both complete released-ID rename maps.
 - [x] Merge all legacy behavior and test sources into the 12 current package files with classifications and dependencies audited under the current law.
-- [ ] Move all 22 legacy iteration records into `intents/`, reconciling the SPDX seed and preserving every checkbox and state.
+- [x] Move all 22 legacy iteration records into `intents/`, reconciling the SPDX seed and preserving every checkbox and state.
 - [ ] Make all non-framework decision records and project guidance use current citations, paths, and record rules without editing the protected framework law or framework decision.
 - [ ] Record the Spex 3.0.0 tooling provenance while retaining the separately pinned 0.3.0 compiled-grammar dependency.
 - [x] Rebuild generated verifier support in all five committed bundles and regenerate the three affected compile-pin records atomically.
@@ -131,7 +131,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 16. [x] Migrated the runtime-contract, Captain-adoption, routing-separation, and Playbook 0.10 records into `intents/`, preserved their `Done`, `Superseded`, `Done`, and `Superseded` states, 20 checked and three unchecked deliverables, and 19 task boundaries, routed surviving behavior and verification to their owning packages and decisions, and removed their cross-intent and script-provenance references.
 17. [x] Migrated the normalization-demo, CWD-emission, grammar-provenance, and Playbook 2 records into `intents/`, preserved their four `Done` states, 26 checked deliverables, and 24 task boundaries, routed surviving behavior and verification to their owning packages and decisions, corrected direct-link placement to the invocation-CWD contract, and removed their cross-intent decision and demo-script provenance.
 18. [x] Migrated the first-release, local-release-acceptance, and Playbook 3.1 records into `intents/`, preserved the first release's unverified external handoff plus two `Done` states, 18 checked and two unchecked deliverables, and 11 task boundaries, recovered the adoption's seven tasks from the named commits, separated its stale release checkbox from truthful status, routed surviving behavior and evidence to current packages and decisions, and removed their legacy map entries.
-19. Migrate the progress-watchdog, Playbook 4, and incremental-compilation intent records; recover the watchdog's seven historical tasks from commits `7af1117`, `7babcfc`, `4e893a0`, `81725e1`, `2a979ec`, `bd8459e`, and `20a0562`; preserve stale checkbox evidence separately from truthful status.
+19. [x] Migrated the progress-watchdog, Playbook 4, and incremental-compilation records into `intents/`, preserved their three `Done` states, eight checked and seven stale unchecked deliverables, six checked task states, and 17 task boundaries, recovered the watchdog's seven tasks from the named commits, moved the Playbook 4 task checkboxes into its required Deliverables section, separated stale progress evidence from truthful status, retargeted the changelog reference, and removed the retired intent map index.
 20. Migrate the pipeline-layout and link-phase decision records to current citation law without changing their accepted decisions.
 21. Migrate the execution-boundary, interpreted-execution, and self-hosting decision records to current citation law without changing their accepted decisions.
 22. Migrate the configuration-sources decision record to current citation law without changing the accepted decision.
