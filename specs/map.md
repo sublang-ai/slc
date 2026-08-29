@@ -132,12 +132,11 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | package | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, pass and normalization scheduling, and system acceptance |
 
-### RELEASE
+### release
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [release.md](dev/release.md) | SemVer, changelog, package contract, interactive first publication, CI-green token-free OIDC publication, GitHub release, pre-release checks, clean generated output, and the opt-in local acceptance gate |
-| test | [release.md](test/release.md) | Tarball hygiene, installed executable and exports, external thin-artifact resolution, installed-package runtime drive, token-free OIDC publication, and real-agent acceptance |
+| package | [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |
 
 ### self-hosting
 

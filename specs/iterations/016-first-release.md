@@ -5,14 +5,14 @@
 
 ## Goal
 
-Prepare `@sublang/slc` 0.1.0 as the first npm release under the current RELEASE
+Prepare `@sublang/slc` 0.1.0 as the first npm release under the current release
 package, with a reproducible tarball, CI-gated publication with provenance,
 accurate local installation guidance for Playbook 2.0 thin artifacts, and
 auditable notes.
 
 ## Deliverables
 
-- [x] RELEASE dev and test items plus the map record versioning, changelog,
+- [x] release behavior and verification items plus the map record versioning, changelog,
   package, CI-green, provenance, and pre-release contracts.
 - [x] `package.json`, `package-lock.json`, and the CLI report 0.1.0; package
   metadata identifies the source repository.
@@ -33,7 +33,7 @@ auditable notes.
 
 ## Maintainer handoff
 
-- [x] Publish `0.1.0` from an interactive `npm login` session, as RELEASE-8
+- [x] Publish `0.1.0` from an interactive `npm login` session, as release-8
   requires while the package does not yet exist and no trusted publisher can
   be configured. (Published 2026-07-21.)
 - [ ] Immediately after that first publication and before the next release

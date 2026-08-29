@@ -41,5 +41,5 @@ continuous integration runs, the workflow shall exercise the English demo
 reference through its runtime boundary, validate the publishable tarball in an
 empty consumer project, and verify that the release workflow publishes through
 trusted OIDC alone, carrying no static registry credential
-([RELEASE-8](release.md#release-8), [RELEASE-10](release.md#release-10),
-[RELEASE-11](release.md#release-11)).
+([[release-8](../packages/release.md#release-8)], [[release-10](../packages/release.md#release-10)],
+[[release-11](../packages/release.md#release-11)]).

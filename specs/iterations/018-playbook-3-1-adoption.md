@@ -32,8 +32,8 @@ the 0.2.0 release.
       playbook 3.1, trimmed install prose pointing at spec items, zh mirror
       updated with its restored native reference entry.
 - [ ] `CHANGELOG.md` 0.2.0 section; version 0.2.0; `release:check` green;
-      release steps per [RELEASE-13](../dev/release.md#release-13).
-- [x] The RELEASE-17 acceptance gate's compile stage caught an interpreted
+      release steps per [[release-13](../packages/release.md#release-13)].
+- [x] The release-17 acceptance gate's compile stage caught an interpreted
       link emitting `./minimal.fsm.js` beside a `.ts`-only bundle with a zero
       exit; the deterministic verification-18 load-integrity check now fails such a
       compile at the link and at entry emission.

@@ -78,7 +78,7 @@ commands with `npx`: a project-local install is authoritative wherever it
 resolves, a project manifest declaring `@sublang/playbook` must install
 it itself, and a global SDK is invisible to a project's nested
 `@sublang/cligent`
-([RELEASE-11](specs/dev/release.md#release-11) has the full rules).
+([[release-11](specs/packages/release.md#release-11)] has the full rules).
 
 ## Quick start
 
