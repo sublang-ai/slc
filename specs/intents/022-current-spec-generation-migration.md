@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–27 are complete.
+Done — all 28 tasks are complete.
 
 ## Intent
 
@@ -99,11 +99,11 @@ The behavior citation audit establishes these peer-package edges:
 - [x] Obtain explicit repository-owner approval for both complete released-ID rename maps.
 - [x] Merge all legacy behavior and test sources into the 12 current package files with classifications and dependencies audited under the current law.
 - [x] Move all 22 legacy iteration records into `intents/`, reconciling the SPDX seed and preserving every checkbox and state.
-- [ ] Make all non-framework decision records and project guidance use current citations, paths, and record rules without editing the protected framework law or framework decision.
-- [ ] Record the Spex 3.0.0 tooling provenance while retaining the separately pinned 0.3.0 compiled-grammar dependency.
+- [x] Make all non-framework decision records and project guidance use current citations, paths, and record rules without editing the protected framework law or framework decision.
+- [x] Record the Spex 3.0.0 tooling provenance while retaining the separately pinned 0.3.0 compiled-grammar dependency.
 - [x] Rebuild generated verifier support in all five committed bundles and regenerate the three affected compile-pin records atomically.
-- [ ] Make `map.md` an accurate minimal index of decisions and packages and remove the retired layout only after all content and citations survive.
-- [ ] Produce clean `spex lint` evidence and a manual residue audit for human diff review.
+- [x] Make `map.md` an accurate minimal index of decisions and packages and remove the retired layout only after all content and citations survive.
+- [x] Produce clean `spex lint` evidence and a manual residue audit for human diff review.
 
 ## Tasks
 
@@ -111,11 +111,9 @@ Each numbered task shall be exactly one commit and shall retarget every affected
 The package tasks shall leave derived verifier-support copies to the dedicated artifact-refresh task, which shall rebuild them once after every canonical package source is stable.
 Each package task shall preserve all behavior, classify human or component guarantees as External Behavior and only hidden behavior as Internal Behavior, place integration or system tests in Verification, restate each item as one GEARS requirement, bind peer behavior inline, and confine verification citations to its own package.
 Each record task shall preserve status and checkboxes, use the current required sections, move any still-unique behavior into a package or decision, retain only disposable record concerns, remove prohibited cross-intent names, and recover missing commit-sized tasks only from repository history.
-Record tasks shall retarget the repository's actual legacy framework citations by concern: map the released-ID rule in `META-12` to `meta-12` while rewriting any obsolete higher-number allocation claim; replace every `META-20` detached `Verifies:` claim with inline citations at verifying assertions confined to the containing package under `meta-20`; map the released testing concern in `META-21` to `meta-21`; and map the duplicated unreleased authoring-language concern to `meta-27` if it survives disposal.
-No unlisted legacy framework ID receives an identity mapping without a concern audit.
 
 1. [x] Reconciled the legacy Git workflow source into `packages/git.md`, preserving the seed-only requirements and retargeting every authored item identity and reference.
-2. [x] Reconciled the legacy licensing behavior, verification, and SPDX record into `packages/licensing.md` and `intents/000-spdx-headers.md`, preserving the seed requirements and record state while retargeting every authored item identity and reference.
+2. [x] Reconciled the legacy licensing behavior, verification, and SPDX record into `packages/licensing.md` and the current SPDX record, preserving the seed requirements and record state while retargeting every authored item identity and reference.
 3. [x] Merged the `compiler` source into `packages/compiler.md`, retargeted every authored item identity and reference, bound its four peer packages, and added package-local system coverage.
 4. [x] Merged the `incremental-compilation` sources into `packages/incremental-compilation.md`, retargeted every authored item identity and reference, confirmed its two peer bindings, and localized its verification evidence.
 5. [x] Merged the `pinning` sources into `packages/pinning.md`, retargeted every authored item identity and reference, confirmed its self-hosting binding, localized its verification evidence, and left derived verifier-support copies for Task 13.
@@ -141,7 +139,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 25. [x] Migrated the normalization, CWD-emission, configuration-seeding, and grammar-provenance decision records to current citation law, preserved their Accepted states and decisions, bound their historical upstream claims to immutable sources, normalized their map identities and substantive citations, and retargeted every malformed inbound link.
 26. [x] Migrated the Playbook 2, Playbook 3.1, progress-watchdog, and Playbook 4 decision records to current citation law, preserved their Accepted states and decisions, bound their historical upstream claims to immutable sources, normalized their sentence layout, map identities, and substantive citations, and retargeted every malformed inbound link.
 27. [x] Migrated the incremental-compilation and reviewed-agent-call decision records to current citation law, preserved their Accepted states and decisions, confirmed DR-021 already satisfied current citation law, bound DR-022's historical Playbook claims to immutable sources and its local dependencies to their decisions, and normalized both map identities after confirming every other inbound link was already current.
-28. Replace `map.md` with the minimal current decision-and-package index, update remaining project guidance to identify `@sublang/spex@3.0.0` as the spec migration and lint tool while retaining the separately reviewed 0.3.0 grammar dependency, remove empty legacy directories, resolve all migration residue, and report zero-error version-pinned `spex lint` plus manual audit evidence in the commit.
+28. [x] Replaced `map.md` with the minimal current decision-and-package index, updated project guidance to distinguish globally installed `@sublang/spex@3.0.0` migration and lint tooling from the locked `@sublang/spex@0.3.0` grammar dependency, removed the last empty legacy directory, cleared migration residue, and recorded zero-error, zero-warning version-pinned lint and manual audit evidence with no unresolved migration questions.
 
 ## Verification
 
