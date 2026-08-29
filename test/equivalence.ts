@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Reference-equivalence comparator (verification-9; IR-007 Task 9, DR-009).
+ * Reference-equivalence comparator (verification-9; DR-009).
  *
  * Two faithful compilations of the same workflow need not be byte-identical —
  * item partitions and state names are judgment — but they must agree on the
