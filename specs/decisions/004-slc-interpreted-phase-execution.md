@@ -23,7 +23,7 @@ To interpret a phase, `slc` shall prompt a coding agent with the phase or link d
 
 Interpreted execution shall not require compiling the definition, an FSM, or linking.
 The agent may invoke deterministic tools or commands the definition calls for, as part of following the definition.
-It may also read the content the definition cites or references; that readable closure is the semantic input closure that pinning ([DR-005](005-slc-self-hosting-meta-pipeline.md#pinning)) tracks.
+It may also read the content the definition cites or references; that readable closure is the semantic input closure that pinning ([DR-005](005-slc-self-hosting-meta-pipeline.md)) tracks.
 
 Interpreted execution shall be available for every phase, so a pipeline can run from its definitions alone.
 This is the bootstrap base case: it has no dependency on [DR-005](005-slc-self-hosting-meta-pipeline.md).
@@ -51,7 +51,7 @@ When interpreting a phase, the agent prompt shall establish this contract:
 ### Scope
 
 Within this DR's scope, `slc` shall interpret a phase with one agent invocation per phase.
-Automatic multi-call audit and repair orchestration is out of scope for this DR unless the optional independent Reviewer in [DR-022](022-two-agent-reviewed-compilation.md) is configured; DR-022 supersedes this one-call scope for that opt-in mode.
+Automatic multi-call audit and repair orchestration is out of scope for this DR unless the optional independent Reviewer in [DR-022](022-two-agent-reviewed-compilation.md) is configured; that decision supersedes this one-call scope for that opt-in mode.
 
 ## Consequences
 

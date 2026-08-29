@@ -35,15 +35,15 @@ No new transformation rules are introduced.
 
 ### Compile output versus host-performing infrastructure
 
-`slc`'s compile output for the `playbook` pipeline is the compile-chain artifacts (the `gears` intermediate and the `fsm` object) and, with linking, the `playbook` linked module — a `createPlaybookRuntime` factory per [DR-005](005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract).
+`slc`'s compile output for the `playbook` pipeline is the compile-chain artifacts (the `gears` intermediate and the `fsm` object) and, with linking, the `playbook` linked module — a `createPlaybookRuntime` factory per [DR-005](005-slc-self-hosting-meta-pipeline.md).
 The reference's registry entry, captain shell, `bin/playbook.js` launcher, and config template are `@sublang/playbook` host-performing infrastructure [[2]]; `slc` does not emit them.
 The compilation-correctness verification bundle (see [Verification](#verification-is-deterministic-and-artifact-derived)) is `slc` output, emitted beside the artifacts.
 Equivalence to the manual reference is defined over `slc`'s in-scope output and need not be byte-identical.
 
 ### Performing is compiled execution via pins
 
-Performing the `playbook` pipeline "from the playbook(s)" means running its phases through compiled, pinned phase artifacts under [DR-005](005-slc-self-hosting-meta-pipeline.md#strategy-selection) strategy selection and [DR-007](007-slc-phase-artifact-pinning.md#currency-and-selection) pinning: a current pin runs the compiled artifact, an unpinned phase interprets, and a stale, malformed, or missing pin fails closed.
-Those compiled phase artifacts are produced by `slc slc` over the same definitions, the self-hosting bootstrap of [DR-005](005-slc-self-hosting-meta-pipeline.md#artifact-stability).
+Performing the `playbook` pipeline "from the playbook(s)" means running its phases through compiled, pinned phase artifacts under [DR-005](005-slc-self-hosting-meta-pipeline.md) strategy selection and [DR-007](007-slc-phase-artifact-pinning.md#currency-and-selection) pinning: a current pin runs the compiled artifact, an unpinned phase interprets, and a stale, malformed, or missing pin fails closed.
+Those compiled phase artifacts are produced by `slc slc` over the same definitions, the self-hosting bootstrap of [DR-005](005-slc-self-hosting-meta-pipeline.md).
 Performing the produced SDLC workflow itself — hosting the compiled runtime against live Boss and agents — is the Playbook host's role [[2]] and is out of `slc`'s scope.
 
 ### Reserved-link handling covers the `playbook` link

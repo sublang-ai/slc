@@ -34,7 +34,7 @@ The installed `@sublang/playbook` v4 package exposes no standalone `review` play
 - Incremental Reuse makes no call and therefore no review.
   Update, Ordinary, and `--rebuild` use the same wrapped executor automatically.
 
-This supersedes [DR-004](004-slc-interpreted-phase-execution.md#scope)'s one-call scope only when the Reviewer is configured.
+This supersedes [DR-004](004-slc-interpreted-phase-execution.md)'s one-call scope only when the Reviewer is configured.
 The phase definition remains the semantic authority, and review adds no phase-specific rules.
 
 ## Consequences

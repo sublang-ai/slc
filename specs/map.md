@@ -26,9 +26,9 @@ meta.md     The spec of specs
 | DR-000 | [000-spec-structure-format.md](decisions/000-spec-structure-format.md) | Spec structure, format, and naming conventions |
 | [DR-001](decisions/001-slc-pipeline-layout-naming-invocation.md) | 001-slc-pipeline-layout-naming-invocation.md | Pipeline layout, naming, CLI invocation, and output locations |
 | [DR-002](decisions/002-slc-link-phases.md) | 002-slc-link-phases.md | Generic link phases and link-target invocation |
-| DR-003 | [003-slc-phase-execution.md](decisions/003-slc-phase-execution.md) | Phase execution boundary: generic slc vs phase-specific |
-| DR-004 | [004-slc-interpreted-phase-execution.md](decisions/004-slc-interpreted-phase-execution.md) | Interpreted phase execution: agent bootstrap and reference semantics |
-| DR-005 | [005-slc-self-hosting-meta-pipeline.md](decisions/005-slc-self-hosting-meta-pipeline.md) | Self-hosting meta pipeline: compiled phase artifacts |
+| [DR-003](decisions/003-slc-phase-execution.md) | 003-slc-phase-execution.md | Phase execution boundary: generic slc vs phase-specific |
+| [DR-004](decisions/004-slc-interpreted-phase-execution.md) | 004-slc-interpreted-phase-execution.md | Interpreted phase execution: agent bootstrap and reference semantics |
+| [DR-005](decisions/005-slc-self-hosting-meta-pipeline.md) | 005-slc-self-hosting-meta-pipeline.md | Self-hosting meta pipeline: compiled phase artifacts |
 | DR-006 | [006-slc-configuration-sources.md](decisions/006-slc-configuration-sources.md) | Configuration sources and precedence: env over config file, discovery, schema |
 | DR-007 | [007-slc-phase-artifact-pinning.md](decisions/007-slc-phase-artifact-pinning.md) | Phase artifact pinning: currentness, semantic inputs, and compiled selection |
 | DR-008 | [008-slc-file-capability.md](decisions/008-slc-file-capability.md) | File capability (superseded): compiled execution writes through agents and relies on the DR-003 generic checks |

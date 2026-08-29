@@ -10,7 +10,7 @@ Accepted
 ## Context
 
 [DR-005](005-slc-self-hosting-meta-pipeline.md) defines compiled phase artifacts but defers the concrete pinning contract.
-With this pinning contract settled, compiled selection follows [DR-005](005-slc-self-hosting-meta-pipeline.md#strategy-selection).
+With this pinning contract settled, compiled selection follows [DR-005](005-slc-self-hosting-meta-pipeline.md).
 This DR settles only pinning: how a pipeline records a compiled phase artifact, the inputs that produced it, and the checks that make the pin current.
 
 Interpreted execution remains the reference semantics of a phase definition per [DR-004](004-slc-interpreted-phase-execution.md).
@@ -207,4 +207,4 @@ The artifact and its pin are committed together per pipeline version.
 - Exact-byte hashes make the validator simple and conservative, while `.gitattributes` or equivalent checkout policy is required for cross-platform stability of pinned text files.
 - External mutable content must be snapshotted or content-addressed before a phase can be pinned.
 - The compiler version remains auditable without forcing churn across all pins on every meta-pipeline change.
-- Compiled selection follows [DR-005](005-slc-self-hosting-meta-pipeline.md#strategy-selection) now that the pinning contract exists; an unpinned phase interprets per [DR-004](004-slc-interpreted-phase-execution.md).
+- Compiled selection follows [DR-005](005-slc-self-hosting-meta-pipeline.md) now that the pinning contract exists; an unpinned phase interprets per [DR-004](004-slc-interpreted-phase-execution.md).
