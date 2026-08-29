@@ -14,7 +14,7 @@ Turn the stubbed `slc` bin into a working command-line compiler over the existin
 
 ## Deliverables
 
-- [x] `cli` spec package (`user`, `dev`, `test`), short form `CLI`, registered in `map.md`
+- [x] `cli` spec package (`user`, `dev`, `test`), short form `cli`, registered in `map.md`
 - [x] Concrete pipeline-reference resolver mapping a `<pipeline>` reference to one directory under a defined host policy ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md))
 - [x] Configuration-driven agent/model selection with credentials from the environment, backing the interpreted executor through Cligent ([DR-004](../decisions/004-slc-interpreted-phase-execution.md))
 - [x] Working `slc` bin over `runSlc`: full-pipeline, single-phase, `.link`, `--link`, `-o`, and `--link-option`, plus `--version`/`--help` and cancellation
@@ -24,8 +24,8 @@ Turn the stubbed `slc` bin into a working command-line compiler over the existin
 ## Tasks
 
 1. **Author the user and dev `cli` spec items.**
-   Write `specs/user/cli.md` (bin surface: running a documented invocation form, `--version`/`--help` with exit 0, printing canonical artifact paths on success, printing the phase/target/reasons report on failure or `BLOCKED` with a non-zero exit, and cancellation on interrupt) and `specs/dev/cli.md` (host wiring: pipeline-reference resolution to one directory per [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md); agent-CLI and model selection from configuration with credentials from the environment per [DR-004](../decisions/004-slc-interpreted-phase-execution.md); constructing the interpreted executor over Cligent and injecting it with the resolver into `runSlc`; pre-handling `--version`/`--help`; interrupt-to-`AbortSignal` cancellation; and mapping `runSlc`'s result to printed output and a process exit code per [DR-003](../decisions/003-slc-phase-execution.md)).
-   Register the `CLI` package in `map.md`.
+   Write `specs/packages/cli.md` with the bin surface (running a documented invocation form, `--version`/`--help` with exit 0, printing canonical artifact paths on success, printing the phase/target/reasons report on failure or `BLOCKED` with a non-zero exit, and cancellation on interrupt) and host wiring (pipeline-reference resolution to one directory per [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md); agent-CLI and model selection from configuration with credentials from the environment per [DR-004](../decisions/004-slc-interpreted-phase-execution.md); constructing the interpreted executor over Cligent and injecting it with the resolver into `runSlc`; pre-handling `--version`/`--help`; interrupt-to-`AbortSignal` cancellation; and mapping `runSlc`'s result to printed output and a process exit code per [DR-003](../decisions/003-slc-phase-execution.md)).
+   Register the `cli` package in `map.md`.
    Add SPDX headers per [[licensing-1](../packages/licensing.md#licensing-1)]/[[licensing-2](../packages/licensing.md#licensing-2)].
 
 2. **Pipeline-reference resolver** ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#directory-layout)).
@@ -41,7 +41,7 @@ Turn the stubbed `slc` bin into a working command-line compiler over the existin
    Update `src/cli.ts` and `src/index.ts` `run()` to this shape, leaving `runSlc` untouched.
 
 5. **Author the test `cli` spec items.**
-   Write `specs/test/cli.md` as integration and system test items, each with a `Verifies:` line citing the Task 1 user/dev items ([META-20](../meta.md#meta-20), [META-21](../meta.md#meta-21)); register in `map.md`.
+   Add integration and system test items to `specs/packages/cli.md`, each with a `Verifies:` line citing the Task 1 user/dev items ([META-20](../meta.md#meta-20), [META-21](../meta.md#meta-21)); register in `map.md`.
 
 6. **Integration tests.**
    Implement the Task 5 items against the bin with a fake resolver and a faked agent transport: `--version`/`--help` output with exit 0; full-pipeline, single-phase, `.link`, and `--link` runs with `-o` and `--link-option` route correctly and print canonical paths with exit 0; a phase failure and a `BLOCKED` print the phase/target/reasons report with a non-zero exit; and an interrupt cancels the run.

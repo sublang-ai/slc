@@ -2,17 +2,17 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * The `slc` bin orchestrator (CLI package).
+ * The `slc` bin orchestrator (`cli` package).
  *
  * `run` is the testable command-line entry: it short-circuits `--version` and
- * `--help` before touching any pipeline or agent (CLI-1, CLI-2, CLI-9), builds
- * the run dependencies from environment configuration (CLI-6, CLI-7, CLI-12),
- * invokes the injectable `runSlc` core under a cancellation signal (CLI-10), and
+ * `--help` before touching any pipeline or agent (cli-1, cli-2, cli-9), builds
+ * the run dependencies from environment configuration (cli-6, cli-7, cli-12),
+ * invokes the injectable `runSlc` core under a cancellation signal (cli-10), and
  * maps the result onto process streams and an exit code — produced artifact
- * paths to stdout on success, the failure report to stderr otherwise (CLI-3,
- * CLI-4, CLI-11). Every IO seam is injectable so the bin is integration-testable
+ * paths to stdout on success, the failure report to stderr otherwise (cli-3,
+ * cli-4, cli-11). Every IO seam is injectable so the bin is integration-testable
  * without a real agent; the `cli.ts` shim supplies the process-backed defaults
- * and signal wiring. See specs/dev/cli.md and specs/user/cli.md.
+ * and signal wiring. See specs/packages/cli.md.
  */
 
 import { createRequire } from 'node:module';
@@ -58,11 +58,11 @@ export type DepsBuilder = (io: {
   env: Record<string, string | undefined>;
   cwd: string;
   signal: AbortSignal;
-  /** Explicit `--config <path>`, when given (CLI-20). */
+  /** Explicit `--config <path>`, when given (cli-20). */
   configPath?: string;
-  /** Sink for host notes such as first-run config seeding (DR-015, CLI-30). */
+  /** Sink for host notes such as first-run config seeding (DR-015, cli-30). */
   note?: (text: string) => void;
-  /** The run's progress sink, rendered to stderr by the bin (DR-019, CLI-35). */
+  /** The run's progress sink, rendered to stderr by the bin (DR-019, cli-35). */
   progress?: ProgressSink;
 }) => SlcDeps | Promise<SlcDeps>;
 
@@ -72,9 +72,9 @@ export interface RunOptions {
   cwd?: string;
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
-  /** Cancellation signal passed into `runSlc` (CLI-10). */
+  /** Cancellation signal passed into `runSlc` (cli-10). */
   signal?: AbortSignal;
-  /** Overrides production dependency construction (CLI-6, CLI-7). */
+  /** Overrides production dependency construction (cli-6, cli-7). */
   buildDeps?: DepsBuilder;
 }
 
@@ -86,19 +86,19 @@ export type CompiledFactoryBuilder = typeof createConfiguredCompiledFactory;
 
 /**
  * Builds the production {@link SlcDeps}: a pipeline resolver over the resolved
- * search roots (CLI-6) — with the reserved `slc` reference routed to the
+ * search roots (cli-6) — with the reserved `slc` reference routed to the
  * meta-pipeline definitions `@sublang/playbook` provides (self-hosting-2) — an
- * interpreted executor for the resolved agent/model (CLI-7), and the
- * compiled-execution factory a current pinned phase selects (CLI-8, phase-execution-27).
- * Configuration is loaded from the config file (DR-006, CLI-20) and
+ * interpreted executor for the resolved agent/model (cli-7), and the
+ * compiled-execution factory a current pinned phase selects (cli-8, phase-execution-27).
+ * Configuration is loaded from the config file (DR-006, cli-20) and
  * then overridden per key by a non-blank environment variable, so existing
  * env-only runs are unchanged and the file fills any key the environment leaves
  * unset.
  *
  * @throws {import('./config-file.js').ConfigFileError} when an explicit
- *   `--config` path is absent or the file is malformed or invalid (CLI-21).
+ *   `--config` path is absent or the file is malformed or invalid (cli-21).
  * @throws {import('./config.js').ConfigError} when neither source supplies an
- *   agent, or the resolved agent is unsupported (CLI-12).
+ *   agent, or the resolved agent is unsupported (cli-12).
  */
 export async function buildSlcDeps(
   { env, cwd, signal, configPath, note, progress }: Parameters<DepsBuilder>[0],
@@ -126,7 +126,7 @@ export async function buildSlcDeps(
   // Auto-accept the agents' file operations so a non-interactive `slc` run can
   // write its target artifact; the DR-003 generic checks still guard the
   // protected inputs (DR-004). The stall watchdog rides every constructed
-  // transport (DR-019, CLI-35).
+  // transport (DR-019, cli-35).
   const agentOpts = {
     cwd,
     permissions: { mode: 'auto' as const },
@@ -134,7 +134,7 @@ export async function buildSlcDeps(
   };
   const executor = createExecutor(selection, agentOpts);
   // Compiled-runtime status streams to the same reporter as phase progress
-  // (phase-execution-25, CLI-32).
+  // (phase-execution-25, cli-32).
   const compiled = createCompiled(selection, {
     ...agentOpts,
     onStatus:
@@ -150,21 +150,21 @@ export interface RunConfig {
   selection: AgentSelection;
   /** Search-root source: an `SLC_PIPELINE_PATH` string, the file's sequence, or undefined. */
   pipelinePath: string | string[] | undefined;
-  /** Agent-stall watchdog window in milliseconds; `0` disables (DR-019, CLI-34). */
+  /** Agent-stall watchdog window in milliseconds; `0` disables (DR-019, cli-34). */
   stallTimeoutMs: number;
 }
 
-/** Default agent-stall watchdog window in seconds (DR-019, CLI-34). */
+/** Default agent-stall watchdog window in seconds (DR-019, cli-34). */
 export const DEFAULT_STALL_TIMEOUT_SECONDS = 600;
 
 /**
- * Merges the environment over config-file values per key (DR-006, CLI-20): for
+ * Merges the environment over config-file values per key (DR-006, cli-20): for
  * each key a non-blank environment variable wins, otherwise the file value,
  * otherwise the built-in default. The agent and model go through
  * {@link resolveAgentSelection} so the supported-agent check stays single-sourced
- * (CLI-7, CLI-12); the stall timeout defaults to
+ * (cli-7, cli-12); the stall timeout defaults to
  * {@link DEFAULT_STALL_TIMEOUT_SECONDS} with `0` disabling the watchdog
- * (DR-019, CLI-34).
+ * (DR-019, cli-34).
  *
  * @throws {Error} when `SLC_STALL_TIMEOUT` is not a non-negative number.
  */
@@ -212,7 +212,7 @@ function nonBlank(value: string | undefined): string | undefined {
   return value !== undefined && value.trim() !== '' ? value : undefined;
 }
 
-/** Usage text naming the documented invocation forms and configuration (CLI-2). */
+/** Usage text naming the documented invocation forms and configuration (cli-2). */
 export function usageText(): string {
   return [
     'Usage:',
@@ -260,7 +260,7 @@ export function usageText(): string {
 
 /**
  * Splits `--config <path>` out of argv, returning the path and the remaining
- * arguments for `runSlc` (CLI-20). `--config` is a bin-level flag, so it is
+ * arguments for `runSlc` (cli-20). `--config` is a bin-level flag, so it is
  * removed before the grammar parser, which rejects unknown options.
  *
  * @throws {Error} when `--config` is given without a following value.
@@ -286,7 +286,7 @@ function extractConfigFlag(argv: readonly string[]): {
 }
 
 /**
- * Runs the `slc` command line and returns a process exit code (CLI package).
+ * Runs the `slc` command line and returns a process exit code (`cli` package).
  * Never rejects: configuration refusals and run failures are reported and
  * mapped to a non-zero code.
  */
@@ -297,7 +297,7 @@ export async function run(
   const stdout = options.stdout ?? ((text) => void process.stdout.write(text));
   const stderr = options.stderr ?? ((text) => void process.stderr.write(text));
 
-  // Conveniences short-circuit before any pipeline or agent work (CLI-1, CLI-2, CLI-9).
+  // Conveniences short-circuit before any pipeline or agent work (cli-1, cli-2, cli-9).
   if (hasFlag(argv, '--version', '-v')) {
     stdout(`${name} ${version()}\n`);
     return 0;
@@ -311,14 +311,14 @@ export async function run(
   const cwd = options.cwd ?? process.cwd();
   const signal = options.signal ?? new AbortController().signal;
   // In-run progress renders on stderr as it happens, with the silence-bounded
-  // heartbeat (DR-019, CLI-32, CLI-33, CLI-35).
+  // heartbeat (DR-019, cli-32, cli-33, cli-35).
   const reporter = createProgressReporter(stderr);
 
   let deps: SlcDeps;
   let rest: readonly string[];
   try {
     // `--config <path>` is a bin-level flag: strip it before runSlc, whose
-    // grammar (parseInvocation) rejects unknown options (CLI-20).
+    // grammar (parseInvocation) rejects unknown options (cli-20).
     const extracted = extractConfigFlag(argv);
     rest = extracted.rest;
     deps = await (options.buildDeps ?? buildSlcDeps)({
@@ -331,7 +331,7 @@ export async function run(
     });
   } catch (error) {
     // Configuration refusals — a bad `--config`, an invalid config file
-    // (CLI-21), or an unset/unsupported agent (CLI-12) — fail the run.
+    // (cli-21), or an unset/unsupported agent (cli-12) — fail the run.
     reporter.dispose();
     stderr(`${name}: ${messageOf(error)}\n`);
     return 1;
@@ -360,7 +360,7 @@ export async function run(
 
 /**
  * Wires `SIGINT`/`SIGTERM` on `emitter` to abort a fresh controller, returning
- * its cancellation signal and a disposer that removes the listeners (CLI-10).
+ * its cancellation signal and a disposer that removes the listeners (cli-10).
  * The `cli.ts` shim passes `process`; tests pass a fake emitter so the
  * interrupt-to-abort wiring is exercised without real signals.
  */

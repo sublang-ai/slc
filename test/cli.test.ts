@@ -13,7 +13,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentAdapter } from '@sublang/cligent';
 
@@ -165,8 +165,8 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-describe('conveniences (CLI-13, CLI-14)', () => {
-  it('prints the version and exits 0 without building deps (CLI-13)', async () => {
+describe('conveniences (cli-13, cli-14)', () => {
+  it('prints the version and exits 0 without building deps (cli-13)', async () => {
     for (const flag of ['--version', '-v']) {
       const out: string[] = [];
       const err: string[] = [];
@@ -184,7 +184,7 @@ describe('conveniences (CLI-13, CLI-14)', () => {
     }
   });
 
-  it('prints usage naming the forms and exits 0 without building deps (CLI-14)', async () => {
+  it('prints usage naming the forms and exits 0 without building deps (cli-14)', async () => {
     for (const flag of ['--help', '-h']) {
       const out: string[] = [];
       const code = await run([flag], {
@@ -213,7 +213,7 @@ describe('conveniences (CLI-13, CLI-14)', () => {
       ]) {
         expect(help).toContain(name);
       }
-      // Reworded CLI-2: help names --config and the config file, not just env.
+      // Reworded cli-2: help names --config and the config file, not just env.
       expect(help).toContain('--config');
       expect(help).toContain('slc.config.yaml');
       // DR-014: the full-run synopsis carries --no-optimize, the placement
@@ -238,8 +238,8 @@ describe('conveniences (CLI-13, CLI-14)', () => {
   });
 });
 
-describe('reporting (CLI-15, CLI-16, CLI-38, CLI-42)', () => {
-  it('prints `up to date` for a fully reused repeat (CLI-38)', async () => {
+describe('reporting (cli-15, cli-16, cli-38, cli-42)', () => {
+  it('prints `up to date` for a fully reused repeat (cli-38)', async () => {
     const { agent } = makeAgent();
     expect(
       await run(['flow', source], {
@@ -262,7 +262,7 @@ describe('reporting (CLI-15, CLI-16, CLI-38, CLI-42)', () => {
     expect(out.join('')).toBe('up to date\n');
   });
 
-  it('separates written paths and successful diagnostics (CLI-15, CLI-42)', async () => {
+  it('separates written paths and successful diagnostics (cli-15, cli-42)', async () => {
     const { agent } = makeAgent();
     const out: string[] = [];
     const err: string[] = [];
@@ -303,7 +303,7 @@ describe('reporting (CLI-15, CLI-16, CLI-38, CLI-42)', () => {
     expect(await exists(artDir)).toBe(false);
   });
 
-  it('reports a rejected run to stderr, nothing to stdout, non-zero (CLI-16)', async () => {
+  it('reports a rejected run to stderr, nothing to stdout, non-zero (cli-16)', async () => {
     const { agent } = makeAgent();
     const out: string[] = [];
     const err: string[] = [];
@@ -319,7 +319,7 @@ describe('reporting (CLI-15, CLI-16, CLI-38, CLI-42)', () => {
     expect(err.join('')).toContain('missing');
   });
 
-  it('reports a failed phase naming the phase and target (CLI-16)', async () => {
+  it('reports a failed phase naming the phase and target (cli-16)', async () => {
     const { agent } = makeAgent({ skip: true });
     const out: string[] = [];
     const err: string[] = [];
@@ -337,7 +337,7 @@ describe('reporting (CLI-15, CLI-16, CLI-38, CLI-42)', () => {
     expect(report).toContain('onboarding.gears.md');
   });
 
-  it('reports a BLOCKED phase to stderr with a non-zero exit (CLI-16)', async () => {
+  it('reports a BLOCKED phase to stderr with a non-zero exit (cli-16)', async () => {
     const { agent } = makeAgent({ block: true });
     const out: string[] = [];
     const err: string[] = [];
@@ -354,9 +354,9 @@ describe('reporting (CLI-15, CLI-16, CLI-38, CLI-42)', () => {
   });
 });
 
-describe('progress (CLI-36, CLI-37)', () => {
+describe('progress (cli-36, cli-37)', () => {
   // interpretedDeps plus the bin's progress sink, mirroring buildSlcDeps's
-  // wiring of io.progress into SlcDeps (CLI-35).
+  // wiring of io.progress into SlcDeps (cli-35).
   const progressDeps: DepsBuilder = ({ signal, progress }) => ({
     ...interpretedDeps(agent().agent, signal),
     progress,
@@ -368,7 +368,7 @@ describe('progress (CLI-36, CLI-37)', () => {
     current = makeAgent();
   });
 
-  it('writes start and finish lines with elapsed times in order (CLI-36)', async () => {
+  it('writes start and finish lines with elapsed times in order (cli-36)', async () => {
     const out: string[] = [];
     const err: string[] = [];
     const code = await run(['flow', source], {
@@ -396,12 +396,12 @@ describe('progress (CLI-36, CLI-37)', () => {
       'wrote the artifact',
       'wrote the artifact',
     ]);
-    // Stdout stays reserved for the success report (CLI-3).
+    // Stdout stays reserved for the success report (cli-3).
     expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
     expect(out.join('')).not.toContain('→');
   });
 
-  it('renders progress while phases run, not buffered until the run settles (CLI-36)', async () => {
+  it('renders progress while phases run, not buffered until the run settles (cli-36)', async () => {
     // Liveness is the whole point of issue #4: a run that collects progress
     // and flushes it at the end produces identical final output, so assert
     // what stderr had already received at the moment each phase was still
@@ -442,7 +442,55 @@ describe('progress (CLI-36, CLI-37)', () => {
     );
   });
 
-  it('reports a failing phase with a ✗ line and keeps stdout empty (CLI-36, CLI-16)', async () => {
+  it('writes recurring heartbeats while an in-flight phase stays silent (cli-36)', async () => {
+    vi.useFakeTimers();
+    let signalEntered: () => void = () => {};
+    const entered = new Promise<void>((resolve) => {
+      signalEntered = resolve;
+    });
+    let releaseAgent: () => void = () => {};
+    const released = new Promise<void>((resolve) => {
+      releaseAgent = resolve;
+    });
+    const quietAgent: AgentClient = {
+      run: async ({ prompt }) => {
+        signalEntered();
+        await released;
+        const target = /artifact to write: (.+)/.exec(prompt)?.[1].trim();
+        if (target !== undefined) await writeFile(target, 'output\n');
+        return { status: 'success', text: 'wrote the artifact' };
+      },
+    };
+    const out: string[] = [];
+    const err: string[] = [];
+    let pending: Promise<number> | undefined;
+
+    try {
+      pending = run(['flow', source], {
+        env: {},
+        stdout: (text) => out.push(text),
+        stderr: (text) => err.push(text),
+        buildDeps: ({ signal, progress }) => ({
+          ...interpretedDeps(quietAgent, signal),
+          progress,
+        }),
+      });
+      await entered;
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(err.join('')).toContain('… text2gears still running (30s)\n');
+      expect(err.join('')).toContain('… text2gears still running (1m00s)\n');
+      releaseAgent();
+      expect(await pending).toBe(0);
+      expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
+    } finally {
+      releaseAgent();
+      if (pending !== undefined) await pending;
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports a failing phase with a ✗ line and keeps stdout empty (cli-36, cli-16)', async () => {
     current = makeAgent({ skip: true });
     const out: string[] = [];
     const err: string[] = [];
@@ -462,7 +510,7 @@ describe('progress (CLI-36, CLI-37)', () => {
     );
   });
 
-  it('aborts a stalled agent call and reports the inactivity duration (CLI-37)', async () => {
+  it('aborts a stalled agent call and reports the inactivity duration (cli-37)', async () => {
     // A transport that yields one event and then stalls until aborted — the
     // measured issue-#4 failure mode (a live session waiting on the network).
     const stallingAdapter: AgentAdapter = {
@@ -519,7 +567,7 @@ describe('progress (CLI-36, CLI-37)', () => {
   });
 });
 
-describe('stall timeout resolution (CLI-34, CLI-35)', () => {
+describe('stall timeout resolution (cli-34, cli-35)', () => {
   const env = { SLC_AGENT: 'claude-code' };
 
   it('defaults to 600 seconds', () => {
@@ -602,8 +650,8 @@ describe('reviewer configuration resolution (DR-022)', () => {
   });
 });
 
-describe('process control (CLI-17)', () => {
-  it('aborts the in-flight run on a SIGINT interrupt through the shim wiring (CLI-17)', async () => {
+describe('process control (cli-17)', () => {
+  it('aborts the in-flight run on a SIGINT interrupt through the shim wiring (cli-17)', async () => {
     const { agent } = makeAgent({ waitAbort: true });
     // Drive cancellation through interruptSignal — the exact wiring cli.ts uses —
     // with a fake emitter, so a broken SIGINT handler fails this test.
@@ -625,7 +673,7 @@ describe('process control (CLI-17)', () => {
     expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(false);
   });
 
-  it('wires SIGINT and SIGTERM to abort and disposes the listeners (CLI-10)', () => {
+  it('wires SIGINT and SIGTERM to abort and disposes the listeners (cli-10)', () => {
     for (const sig of ['SIGINT', 'SIGTERM']) {
       const emitter = new EventEmitter();
       const { signal } = interruptSignal(emitter);
@@ -644,8 +692,8 @@ describe('process control (CLI-17)', () => {
   });
 });
 
-describe('configuration (CLI-18, CLI-19)', () => {
-  it('seeds the user config on a discovery miss and proceeds (CLI-29, CLI-30)', async () => {
+describe('configuration (cli-18, cli-19)', () => {
+  it('seeds the user config on a discovery miss and proceeds (cli-29, cli-30)', async () => {
     // Isolate discovery (DR-006): no config under cwd or this config home, so
     // the first run seeds `<home>/slc/config.yaml` (DR-015) and carries on
     // with the seeded claude-code selection.
@@ -679,7 +727,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
     expect(seen.join('')).toContain(seeded);
   });
 
-  it('refuses an agent-less explicit --config to stderr, runs no phase (CLI-18)', async () => {
+  it('refuses an agent-less explicit --config to stderr, runs no phase (cli-18)', async () => {
     const out: string[] = [];
     const err: string[] = [];
     await writeFile(join(root, 'agentless.yaml'), 'model: m1\n');
@@ -702,7 +750,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
     ).toBe(false);
   });
 
-  it('refuses an unsupported SLC_AGENT (CLI-18)', async () => {
+  it('refuses an unsupported SLC_AGENT (cli-18)', async () => {
     const err: string[] = [];
     const code = await run(['flow', source], {
       cwd: root,
@@ -718,7 +766,7 @@ describe('configuration (CLI-18, CLI-19)', () => {
     expect(err.join('')).toContain('not a supported');
   });
 
-  it('resolves via SLC_PIPELINE_PATH and interprets every phase through the configured agent and model (CLI-19)', async () => {
+  it('resolves via SLC_PIPELINE_PATH and interprets every phase through the configured agent and model (cli-19)', async () => {
     const { agent, calls, models } = makeAgent();
     // Transport registry keyed by agent id: the selected SLC_AGENT must pick it.
     const transports: Record<string, AgentClient> = { 'claude-code': agent };
@@ -754,13 +802,13 @@ describe('configuration (CLI-18, CLI-19)', () => {
 
     expect(code).toBe(0);
     expect(chosenAgent).toBe('claude-code'); // SLC_AGENT drove the selection
-    expect(calls).toHaveLength(2); // every phase interpreted (CLI-8)
+    expect(calls).toHaveLength(2); // every phase interpreted (cli-8)
     expect(models).toEqual(['opus-x', 'opus-x']); // configured model reaches the agent
     expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
   });
 });
 
-describe('--config flag (CLI-20)', () => {
+describe('--config flag (cli-20)', () => {
   it('forwards --config to buildDeps and strips it before runSlc', async () => {
     const { agent } = makeAgent();
     const out: string[] = [];
@@ -804,7 +852,7 @@ describe('--config flag (CLI-20)', () => {
   });
 });
 
-describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
+describe('config file (cli-23, cli-24, cli-25, cli-26, cli-27)', () => {
   // buildDeps mirroring production config selection — the real loader and merge
   // and a real resolver — with a fake transport keyed by agent id, so no real
   // agent CLI runs. `configHome` is pinned to the test root for isolation.
@@ -841,7 +889,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
   const writeConfig = (dir: string, content: string): Promise<void> =>
     writeFile(join(dir, 'slc.config.yaml'), content);
 
-  it('runs from a config file alone with no environment (CLI-23)', async () => {
+  it('runs from a config file alone with no environment (cli-23)', async () => {
     const { agent, models } = makeAgent();
     await writeConfig(
       srcDir,
@@ -865,7 +913,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
   });
 
-  it('lets the environment override the file per key (CLI-24)', async () => {
+  it('lets the environment override the file per key (cli-24)', async () => {
     const claude = makeAgent();
     const codex = makeAgent();
     // File names codex, cfg-model, and a non-existent path; the environment
@@ -902,7 +950,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     expect(claude.models).toEqual(['env-model', 'env-model']);
   });
 
-  it('loads the --config file over a discovered cwd config (CLI-25)', async () => {
+  it('loads the --config file over a discovered cwd config (cli-25)', async () => {
     const claude = makeAgent();
     const codex = makeAgent();
     await writeConfig(
@@ -931,7 +979,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     expect(codex.calls).toHaveLength(0);
   });
 
-  it('falls through to the environment on a discovery miss (CLI-26)', async () => {
+  it('falls through to the environment on a discovery miss (cli-26)', async () => {
     const { agent } = makeAgent();
     const capture: { selection?: AgentSelection } = {};
     const out: string[] = [];
@@ -947,7 +995,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     expect(out.join('')).toContain(join(artDir, 'onboarding.fsm.ts'));
   });
 
-  it('refuses an absent --config path to stderr, non-zero (CLI-26)', async () => {
+  it('refuses an absent --config path to stderr, non-zero (cli-26)', async () => {
     const err: string[] = [];
     const code = await run(
       ['--config', join(root, 'missing.yaml'), 'flow', source],
@@ -972,7 +1020,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
     ['malformed YAML', 'agent: [unterminated\n'],
     ['a wrong-typed value', 'agent: 42\n'],
   ] as const) {
-    it(`refuses a config with ${label}, non-zero (CLI-27)`, async () => {
+    it(`refuses a config with ${label}, non-zero (cli-27)`, async () => {
       await writeConfig(srcDir, content);
       const err: string[] = [];
       const code = await run(['flow', source], {
@@ -992,7 +1040,7 @@ describe('config file (CLI-23, CLI-24, CLI-25, CLI-26, CLI-27)', () => {
   }
 });
 
-describe('buildSlcDeps executor construction (CLI-6, CLI-7)', () => {
+describe('buildSlcDeps executor construction (cli-6, cli-7)', () => {
   let cwd: string;
   beforeEach(async () => {
     cwd = await mkdtemp(join(tmpdir(), 'slc-deps-'));
@@ -1029,7 +1077,7 @@ describe('buildSlcDeps executor construction (CLI-6, CLI-7)', () => {
     expect(deps.executor).toBe(stub);
   });
 
-  it('supplies the compiled-execution factory with the same agent options (CLI-8)', async () => {
+  it('supplies the compiled-execution factory with the same agent options (cli-8)', async () => {
     let captured: Parameters<CompiledFactoryBuilder>[1] | undefined;
     const compiledFactory = (): SlcDeps['executor'] => ({
       run: async () => ({ status: 'ok', diagnostics: [] }),
@@ -1058,8 +1106,8 @@ describe('buildSlcDeps executor construction (CLI-6, CLI-7)', () => {
 
 // End to end through the bin: a current pin runs the pinned compiled `playbook`
 // artifact via the production compiled factory — resolving the artifact against
-// the pipeline directory — without interpreting the phase (CLI-28; phase-execution-27).
-describe('compiled execution through the bin (CLI-28)', () => {
+// the pipeline directory — without interpreting the phase (cli-28; phase-execution-27).
+describe('compiled execution through the bin (cli-28)', () => {
   it('runs a current pinned artifact and writes its target', async () => {
     // A minimal compiled `playbook` artifact: parses the phase-execution-29 seed and
     // writes the requested target from the requested source.
@@ -1176,7 +1224,7 @@ describe('compiled execution through the bin (CLI-28)', () => {
     const target = join(root, 'onboarding.flow', 'onboarding.gears.md');
     // Stderr carries the in-run progress lines, including the compiled
     // runtime's own status streamed through the bin's sink rather than
-    // drained into the end-of-run diagnostics (DR-019, CLI-32, CLI-35).
+    // drained into the end-of-run diagnostics (DR-019, cli-32, cli-35).
     const progressLines = err
       .join('')
       .split('\n')
@@ -1192,11 +1240,11 @@ describe('compiled execution through the bin (CLI-28)', () => {
     expect(await readFile(target, 'utf8')).toBe('compiled:prose');
   });
 
-  it('reports an unmapped pinned provenance through the phase-failure path (CLI-16, CLI-36)', async () => {
+  it('reports an unmapped pinned provenance through the phase-failure path (cli-16, cli-36)', async () => {
     // Selecting the compiled executor throws for an unmapped provenance
     // (phase-execution-30) instead of returning a verdict. The run must still close its
     // progress line and name the phase and target, exactly as a stale pin
-    // does — not strand a start line behind a bare message (CLI-4, CLI-32).
+    // does — not strand a start line behind a bare message (cli-4, cli-32).
     const bundleDir = join(pipelineDir, 'text2gears.slc');
     await mkdir(bundleDir);
     await writeFile(

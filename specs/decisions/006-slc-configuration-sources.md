@@ -10,7 +10,7 @@ Accepted
 ## Context
 
 `slc` reaches coding agents through Cligent (npm `@sublang/cligent` [[1]]); agent, model, and pipeline-path selection is `slc` configuration, not phase semantics ([DR-004](004-slc-interpreted-phase-execution.md#interpreter)).
-Today that configuration is environment-only — `SLC_AGENT`, `SLC_MODEL`, and `SLC_PIPELINE_PATH` ([CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7), [CLI-12](../dev/cli.md#cli-12)) — which is awkward for a persistent per-project or per-user setup.
+Today that configuration is environment-only — `SLC_AGENT`, `SLC_MODEL`, and `SLC_PIPELINE_PATH` ([[cli-6](../packages/cli.md#cli-6)], [[cli-7](../packages/cli.md#cli-7)], [[cli-12](../packages/cli.md#cli-12)]) — which is awkward for a persistent per-project or per-user setup.
 Cligent's sibling `tmux-play` reference app already establishes a config-file ergonomic: a YAML file discovered cwd-first then under `${XDG_CONFIG_HOME:-~/.config}`, with a `--config` override.
 `slc` should offer that same shape with a smaller surface, without disturbing existing env-only runs.
 This DR settles the sources and their precedence, discovery, the schema (including the `pipelinePath` value shape and relative base), validation, and what stays out of scope.
@@ -23,7 +23,7 @@ This DR settles the sources and their precedence, discovery, the schema (includi
   1. the matching environment variable;
   2. the config file;
   3. the built-in default.
-- Environment overrides file so every current env-only run is unchanged and the unset-agent refusal ([CLI-12](../dev/cli.md#cli-12)) still fires only when neither environment nor file supplies an agent.
+- Environment overrides file so every current env-only run is unchanged and the unset-agent refusal ([[cli-12](../packages/cli.md#cli-12)]) still fires only when neither environment nor file supplies an agent.
 - An unset, empty, or all-whitespace environment value does not supply its key, so resolution falls through to the config file and then the built-in default.
 - Each key maps one-to-one to an existing environment variable, so the two sources are interchangeable per key.
 
@@ -49,7 +49,7 @@ This DR settles the sources and their precedence, discovery, the schema (includi
 
 - `pipelinePath` is a YAML sequence of path strings, not an OS path-list string: a sequence is idiomatic in YAML and avoids embedding OS-dependent `:`/`;` separators.
   The environment form `SLC_PIPELINE_PATH` stays an OS path-list string; because precedence is per-key and wholesale, the two forms need not match.
-- Relative `pipelinePath` entries resolve against the cwd, consistent with `SLC_PIPELINE_PATH` ([CLI-6](../dev/cli.md#cli-6)) and independent of which file supplied them; absolute entries are used verbatim.
+- Relative `pipelinePath` entries resolve against the cwd, consistent with `SLC_PIPELINE_PATH` ([[cli-6](../packages/cli.md#cli-6)]) and independent of which file supplied them; absolute entries are used verbatim.
   Rejected: resolving against the config-file directory — `tmux-play` does this for `captain.from`, a module reference bound to the config's location, but pipeline search roots describe the user's workspace, so a cwd base is the predictable reading, especially for the shared home config.
 
 ### Validation
@@ -60,7 +60,7 @@ This DR settles the sources and their precedence, discovery, the schema (includi
 ## Consequences
 
 - Users can persist agent, model, and pipeline settings per project (cwd) or per user (home) without exporting environment variables; environment remains the per-invocation override.
-- Existing env-only behavior and the [CLI-12](../dev/cli.md#cli-12) refusal are preserved; the file is purely additive.
+- Existing env-only behavior and the [[cli-12](../packages/cli.md#cli-12)] refusal are preserved; the file is purely additive.
 - A `--config` typo fails loudly, while an absent discovered config is benign.
 - A cwd-relative `pipelinePath` sequence reads the same regardless of which source supplied it, so a home default such as `[./pipelines]` means the same thing wherever `slc` runs.
 - A YAML parse dependency and a config-loading surface are added.

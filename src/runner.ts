@@ -100,7 +100,7 @@ export interface SlcDeps {
   signal?: AbortSignal;
   /**
    * Receives phase start/finish/failure events with elapsed times as the run
-   * progresses (DR-019, CLI-32). Absent for hosts that want a quiet run.
+   * progresses (DR-019, cli-32). Absent for hosts that want a quiet run.
    */
   progress?: ProgressSink;
 }
@@ -958,7 +958,7 @@ async function executeSteps(
       continue;
     }
 
-    // In-run progress (DR-019, CLI-32): announce the phase, then report its
+    // In-run progress (DR-019, cli-32): announce the phase, then report its
     // outcome with the elapsed time.
     const startedAt = Date.now();
     deps.progress?.({ kind: 'phase-start', phase: step.phase, target });
@@ -975,7 +975,7 @@ async function executeSteps(
     // rejects (phase-execution-30). That is the same fail-closed family as a stale pin,
     // so it is reported through the phase-failure path; letting it unwind
     // would strand the phase-start line with no terminal event and drop the
-    // phase and target from the report (CLI-4, CLI-32, phase-execution-27).
+    // phase and target from the report (cli-4, cli-32, phase-execution-27).
     let selection: Strategy;
     try {
       selection = await selectExecutor(
@@ -1065,7 +1065,7 @@ async function executeSteps(
       } catch (error) {
         // A target that cannot be reconciled and checked is a dead artifact
         // too. Fail the link here so every started phase still reaches a
-        // terminal event (CLI-32).
+        // every started phase still reaches a terminal event (cli-32).
         fail();
         diagnostics.push(
           `linked module ${target} could not be settled and checked: ` +

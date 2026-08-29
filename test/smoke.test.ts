@@ -18,7 +18,7 @@ describe('slc bin entry', () => {
     expect(version()).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it('prints the version with --version and exits 0 (CLI-1)', async () => {
+  it('prints the version with --version and exits 0 (cli-1)', async () => {
     const out: string[] = [];
     const code = await run(['--version'], {
       env: {},
@@ -28,7 +28,7 @@ describe('slc bin entry', () => {
     expect(out.join('')).toContain(version());
   });
 
-  it('prints usage with --help and exits 0 (CLI-2)', async () => {
+  it('prints usage with --help and exits 0 (cli-2)', async () => {
     const out: string[] = [];
     const code = await run(['--help'], {
       env: {},
@@ -40,7 +40,7 @@ describe('slc bin entry', () => {
     expect(out.join('')).toContain('SLC_REVIEWER_AGENT');
   });
 
-  it('seeds the user config on a bare first run (CLI-29, DR-015)', async () => {
+  it('seeds the user config on a bare first run (cli-29, DR-015)', async () => {
     // Pin cwd (and the XDG root) to an empty temp dir so this repo's committed
     // slc.config.yaml is not discovered: the first run seeds the user config,
     // then still refuses the empty invocation.
@@ -60,7 +60,7 @@ describe('slc bin entry', () => {
     }
   });
 
-  it('maps a runSlc failure to a stderr report and non-zero exit (CLI-4, CLI-11)', async () => {
+  it('maps a runSlc failure to a stderr report and non-zero exit (cli-4, cli-11)', async () => {
     const out: string[] = [];
     const err: string[] = [];
     const code = await run(['missing', 'onboarding.md'], {

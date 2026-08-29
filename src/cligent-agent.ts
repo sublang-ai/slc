@@ -74,7 +74,7 @@ export function createCligentAgent(opts: {
   const cligent = new Cligent(opts.adapter, {
     maxTurns: opts.maxTurns,
     permissions: opts.permissions,
-    // Validated adapter-scoped by the configuration layer (CLI-12).
+    // Validated adapter-scoped by the configuration layer (cli-12).
     ...(opts.effort !== undefined ? { effort: opts.effort as Effort } : {}),
   });
   const stallMs = opts.stallTimeoutMs ?? 0;

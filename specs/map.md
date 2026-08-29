@@ -82,13 +82,11 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | package | [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, runtime-transition boundaries, immutable Playbook adoption, demo acceptance, and package publication checks |
 
-### CLI
+### cli
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [cli.md](user/cli.md) | Executable surface: version/help, success and failure reporting, in-run progress and heartbeat, stall watchdog, cancellation, Coder/Reviewer config file |
-| dev | [cli.md](dev/cli.md) | Bin wiring: resolver, Coder/Reviewer config selection, executor injection, progress reporter, stall-timeout resolution, process control |
-| test | [cli.md](test/cli.md) | Integration: version/help, reporting, progress lines, stall watchdog, exit codes, cancellation, Coder/Reviewer config and env, pinned compiled execution |
+| package | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, progress and heartbeat reporting, cancellation, and bin-boundary verification |
 
 ### compiler
 

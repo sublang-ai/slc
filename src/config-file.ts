@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Config-file loader for the `slc` bin (DR-006, CLI-20, CLI-21).
+ * Config-file loader for the `slc` bin (DR-006, cli-20, cli-21).
  *
  * Discovers and parses the optional YAML config file that supplies the
  * cligent-invocation defaults — Coder and optional Reviewer selection plus
@@ -15,7 +15,7 @@
  * mistyped values; the supported-agent check stays with `resolveAgentSelection`
  * so the agent set keeps a single source of truth. Relative `pipelinePath`
  * entries are returned verbatim and resolved against the cwd downstream
- * (CLI-6). See specs/dev/cli.md.
+ * (cli-6). See specs/packages/cli.md.
  */
 
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -56,7 +56,7 @@ export interface FileConfig {
   reviewerModel?: string;
   reviewerEffort?: string;
   pipelinePath?: string[];
-  /** Agent-stall watchdog window in seconds; `0` disables (DR-019, CLI-34). */
+  /** Agent-stall watchdog window in seconds; `0` disables (DR-019, cli-34). */
   stallTimeout?: number;
 }
 
@@ -72,23 +72,23 @@ export interface LoadedFileConfig {
 /** Injectable IO for {@link loadConfigFile}; all fields default to the process. */
 export interface LoadConfigFileOptions {
   cwd?: string;
-  /** Explicit `--config <path>`: disables discovery and errors when absent (CLI-20, CLI-21). */
+  /** Explicit `--config <path>`: disables discovery and errors when absent (cli-20, cli-21). */
   configPath?: string;
   /** User config home; defaults to `${XDG_CONFIG_HOME:-~/.config}`. Injectable for tests. */
   configHome?: string;
   /** Environment for resolving `XDG_CONFIG_HOME`; defaults to `process.env`. */
   env?: Record<string, string | undefined>;
-  /** Called with the created path when a discovery miss seeds the user config (DR-015, CLI-30). */
+  /** Called with the created path when a discovery miss seeds the user config (DR-015, cli-30). */
   onSeed?: (path: string) => void;
 }
 
-/** Machine-readable reason a config file was rejected (CLI-21). */
+/** Machine-readable reason a config file was rejected (cli-21). */
 export type ConfigFileErrorCode =
   | 'config-not-found'
   | 'config-parse'
   | 'config-invalid';
 
-/** Raised when an explicit `--config` file is missing, malformed, or invalid (CLI-21). */
+/** Raised when an explicit `--config` file is missing, malformed, or invalid (cli-21). */
 export class ConfigFileError extends Error {
   readonly code: ConfigFileErrorCode;
 
@@ -100,7 +100,7 @@ export class ConfigFileError extends Error {
 }
 
 /**
- * Loads the slc config file (DR-006, CLI-20, CLI-21).
+ * Loads the slc config file (DR-006, cli-20, cli-21).
  *
  * Resolves the file via an explicit `--config` path or cwd/home discovery,
  * parses and validates it, and returns the partial selection plus the resolved
@@ -151,7 +151,7 @@ function resolveConfigPath(
   }
 
   // First run: neither discovered file exists, so seed the user config from
-  // the bundled starter and load it (DR-015, CLI-30).
+  // the bundled starter and load it (DR-015, cli-30).
   mkdirSync(dirname(homeConfig), { recursive: true });
   copyFileSync(TEMPLATE_PATH, homeConfig);
   options.onSeed?.(homeConfig);

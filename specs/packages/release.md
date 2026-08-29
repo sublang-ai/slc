@@ -19,7 +19,7 @@ The project shall follow Semantic Versioning 2.0.0 [[1]] using `MAJOR.MINOR.PATC
 
 #### release-2
 
-When a release tag is created, the project shall keep the `version` in `package.json`, the version the `slc --version` command reports [[CLI-1](../user/cli.md#cli-1)], and the git tag without its `v` prefix identical.
+When a release tag is created, the project shall keep the `version` in `package.json`, the version the `slc --version` command reports [[cli-1](cli.md#cli-1)], and the git tag without its `v` prefix identical.
 
 ### Changelog
 
@@ -115,7 +115,7 @@ Where a maintainer prepares a release tag, when the opt-in local acceptance gate
 | Candidate preparation | Build the candidate from the working tree before packing it, because generated output is untracked and an unbuilt checkout would pack no executable while a stale build would test superseded output; install the package into a scratch consumer project. |
 | Any selected stage fails | Report a non-zero exit and retain the scratch tree so the compiled artifacts and agent commits remain inspectable. |
 | Cold compile | Compile a minimal workflow through the installed executable [[compiler-1](compiler.md#compiler-1)] with the maintainer's configured coding agent [[compiler-5](compiler.md#compiler-5)], then require the freshly emitted entry to load. |
-| Unchanged repeat after the cold compile has published active build history [[incremental-compilation-1](incremental-compilation.md#incremental-compilation-1)] | Repeat the installed compile, require the exact `up to date` outcome [[CLI-3](../user/cli.md#cli-3)] with an unchanged active marker and recorded phase targets, and thereby verify Reuse without another agent call [[incremental-compilation-2](incremental-compilation.md#incremental-compilation-2)]. |
+| Unchanged repeat after the cold compile has published active build history [[incremental-compilation-1](incremental-compilation.md#incremental-compilation-1)] | Repeat the installed compile, require the exact `up to date` outcome [[cli-3](cli.md#cli-3)] with an unchanged active marker and recorded phase targets, and thereby verify Reuse without another agent call [[incremental-compilation-2](incremental-compilation.md#incremental-compilation-2)]. |
 | Update is not skipped | Refine the canonical GEARS intermediate, repeat the compile, require Update [[incremental-compilation-5](incremental-compilation.md#incremental-compilation-5)] and Reuse that preserves the manual refinement as the accepted snapshot baseline [[incremental-compilation-4](incremental-compilation.md#incremental-compilation-4)], and load the updated entry. |
 | Compile and run portions are both selected | Drive the updated entry through the installed host with real agents, or drive the freshly compiled entry when Update was skipped. |
 
