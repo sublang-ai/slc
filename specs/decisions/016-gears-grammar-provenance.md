@@ -9,12 +9,12 @@ Accepted
 
 ## Context
 
-The gears artifact grammar is Playbook's specialization of the GEARS pattern, and its definition file cites the pattern through the root-relative link `/specs/meta.md#item-syntax`.
+The gears artifact grammar is Playbook's specialization of the GEARS pattern, and its definition file cites the pattern through the root-relative link `/specs/meta.md#item-syntax` [[4]].
 That link rebinds per repository: in the vendored copy it resolves to this repo's own `specs/meta.md` — a drifted spex scaffold output — and `text2gears.md`'s `## Pin Inputs` accordingly hash this repo's `specs/meta.md` and `specs/decisions/000-spec-structure-format.md` as the grammar's pinned identity.
 Two defects follow: the compile pins record a local, unversioned copy as the grammar authority, and editing this repo's own spec-authoring conventions stales the compile pins.
 
-The GEARS pattern is maintained by spex and ships in the published `@sublang/spex` package as scaffold data, in English (`scaffold/specs/meta.md`) and Chinese (`scaffold/i18n/zh/specs/meta.md`); the package declares no `exports` map, so those subpaths resolve directly.
-Playbook (upstream owner of the artifact grammar) repoints `text2gears.md`'s citation to the spex-shipped definition and states the unified language rule — source-language prose, fixed-English machine syntax — in that same place.
+The GEARS pattern is maintained by spex and ships in the published `@sublang/spex` package as scaffold data, in English (`scaffold/specs/meta.md`) [[1]] and Chinese (`scaffold/i18n/zh/specs/meta.md`) [[2]]; the package declares no `exports` map, so those subpaths resolve directly [[3]].
+Playbook (upstream owner of the artifact grammar) repoints `text2gears.md`'s citation to the spex-shipped definition and states the unified language rule — source-language prose, fixed-English machine syntax — in that same place [[5]].
 
 ## Decision
 
@@ -25,7 +25,15 @@ Playbook (upstream owner of the artifact grammar) repoints `text2gears.md`'s cit
 
 ## Consequences
 
-- The grammar a compile is pinned against is the published spex artifact in both languages, matching how the link target pins `@sublang/playbook` content.
+- The grammar a compile is pinned against is the published spex artifact in both languages [[1]], [[2]], matching how the link target pins `@sublang/playbook` content.
 - A spex release adopted through the lock stales all compile pins at once — a second atomic release coupling, identical in shape to the existing playbook coupling.
 - Spec-authoring edits in this repo no longer invalidate compile pins.
-- Chinese-language sources compile against an authoritative Chinese GEARS definition rather than agent improvisation; language detection stays agent-implicit per the normalization definition.
+- Chinese-language sources compile against an authoritative Chinese GEARS definition [[2]] rather than agent improvisation; language detection stays agent-implicit per the normalization definition.
+
+## References
+
+[1]: https://github.com/sublang-ai/spex/blob/v0.3.0/scaffold/specs/meta.md "Spex GEARS definition (English, v0.3.0)"
+[2]: https://github.com/sublang-ai/spex/blob/v0.3.0/scaffold/i18n/zh/specs/meta.md "Spex GEARS definition (Chinese, v0.3.0)"
+[3]: https://github.com/sublang-ai/spex/blob/v0.3.0/package.json "Spex package manifest (v0.3.0)"
+[4]: https://github.com/sublang-ai/playbook/blob/fd86a6b8c466c34d4b1bfc43c987cbca46b4a073/slc/text2gears.md "Playbook text2gears definition before grammar repointing"
+[5]: https://github.com/sublang-ai/playbook/blob/2892baf891ac3af88d1dcdaaf900fde71befb736/slc/text2gears.md "Playbook text2gears definition after grammar repointing"
