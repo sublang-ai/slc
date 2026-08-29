@@ -41,7 +41,7 @@ An absolute per-phase deadline would misfire on legitimately long phases, whose 
 
 - When the host configures a status sink, a compiled phase's human status and non-trace operational telemetry stream to it as they occur instead of being collected for the end; streamed lines are not duplicated into the run's diagnostics.
 - Without a sink, the drainable-diagnostics behavior is unchanged, so embedders of the library API see today's contract.
-- Exact `playbook.trace` payloads stay out of the streamed lines exactly as they stay out of ordinary diagnostics ([DR-010](010-playbook-runtime-contract-evolution.md#port-policy-and-diagnostic-privacy)).
+- Exact `playbook.trace` payloads stay out of the streamed lines exactly as they stay out of ordinary diagnostics ([DR-010](010-playbook-runtime-contract-evolution.md)).
 
 ### Silence-bounded heartbeat
 

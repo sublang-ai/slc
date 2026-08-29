@@ -10,9 +10,9 @@ Accepted
 ## Context
 
 [DR-005](005-slc-self-hosting-meta-pipeline.md) binds compiled phase execution to Playbook's source-owned runtime contract.
-The committed SLC meta-phase artifacts and their pins currently bind the published Playbook 0.9.0 four-port runtime, whose `init` receives ports and whose `handleBossInput` resolves with no structured result.
-Playbook subsequently committed an unreleased traced-session contract whose `init` receives `{ sessionId, playbookId, ports }`, whose four-port player call requires explicit continuation, and whose turn still resolves with no structured result.
-Playbook's accepted composition decision evolves that contract again to a causal root `PlaybookSession`, structured run results, a fifth nested-playbook port, and resumable child calls.
+The committed SLC meta-phase artifacts and their pins currently bind the published Playbook 0.9.0 four-port runtime [[1]], whose `init` receives ports and whose `handleBossInput` resolves with no structured result.
+Playbook subsequently committed an unreleased traced-session contract [[2]] whose `init` receives `{ sessionId, playbookId, ports }`, whose four-port player call requires explicit continuation, and whose turn still resolves with no structured result.
+Playbook's accepted composition decision [[3]] evolves that contract again to a causal root `PlaybookSession`, structured run results, a fifth nested-playbook port, and resumable child calls.
 The complete composed implementation exists only as a dirty sibling checkout whose package still reports 0.9.0, so replacing SLC's reviewed definitions and artifacts from it would violate [DR-007](007-slc-phase-artifact-pinning.md)'s reproducibility and review model.
 
 SLC still needs to understand the new host boundary before the release arrives, without misrepresenting old artifacts as compiled against it or exposing the new runtime trace through ordinary diagnostics.
@@ -85,3 +85,9 @@ CI shall not read a mutable sibling checkout or refresh reviewed assets from one
 - Nested composition fails closed instead of hanging a non-interactive phase or silently omitting the required port.
 - Player continuity survives the adapter boundary, while trace contents do not leak through CLI diagnostics.
 - The eventual dependency and artifact migration remains a review-gated atomic change rather than a compatibility shortcut.
+
+## References
+
+[1]: https://github.com/sublang-ai/playbook/blob/v0.9.0/src/runtime.ts "Playbook runtime contract (v0.9.0)"
+[2]: https://github.com/sublang-ai/playbook/blob/e14ebaf3e41067dcebd6102c3a891d6d9fc4c902/specs/decisions/010-playbook-session-tracing-and-resume.md "Playbook session tracing and player resume"
+[3]: https://github.com/sublang-ai/playbook/blob/b8ccb9b46c74c0caf1f3b5c796aecbf1b6e64f96/specs/decisions/011-composable-playbook-execution.md "Composable Playbook execution"

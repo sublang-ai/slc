@@ -13,8 +13,8 @@ Accepted
 Its `composed-v2` seam had five ports and could represent nested calls, but it could not distinguish direct Captain work from delegated player work.
 
 Playbook 1.0 adopts the default Captain workflow of Playbook DR-012 [[1]].
-It finalizes `composed-v2` with a sixth `callCaptain` port, distinct `captain`, `player`, and `playbook` FSM actors, and dynamic nested targets whose runtime values come from typed context.
-It also requires a compiler to verify real nested-call completion and failure paths rather than report every child transition as unsupported.
+It finalizes `composed-v2` with a sixth `callCaptain` port, distinct `captain`, `player`, and `playbook` FSM actors, and dynamic nested targets whose runtime values come from typed context [[1]].
+It also requires a compiler to verify real nested-call completion and failure paths rather than report every child transition as unsupported [[1]].
 
 SLC's committed definitions, reviewed meta-phase artifact bundles, dependency lock, and pin index still form one Playbook 0.9.0 provenance set.
 Refreshing only part of that set would mix incompatible compiler and runtime contracts and could make a stale judgment-produced artifact appear current.
@@ -33,7 +33,7 @@ Every other provenance shall fail closed until a later decision maps it, without
 The `session-v1` profile shall remain an explicit compatibility and test seam, not a configured production selection.
 
 This decision supersedes [DR-005](005-slc-self-hosting-meta-pipeline.md)'s five-port composed adapter listing, [DR-009](009-slc-playbook-pipeline-compilation.md)'s Captain-as-player and unsupported nested-coverage assumptions, and [DR-010](010-playbook-runtime-contract-evolution.md)'s provisional five-port `composed-v2` boundary and release deferral.
-DR-010's structured-result validation, trace privacy, unsupported nested phase-host policy, and exact-profile probing remain in force.
+[DR-010](010-playbook-runtime-contract-evolution.md)'s structured-result validation, trace privacy, unsupported nested phase-host policy, and exact-profile probing remain in force.
 
 ### Direct Captain phase execution
 
