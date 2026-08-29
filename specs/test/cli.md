@@ -120,7 +120,7 @@ Where Reviewer configuration is supplied to the config-loader and run-config sea
 ## Compiled execution
 
 ### CLI-28
-Verifies: [CLI-8](../dev/cli.md#cli-8), [COMPILE-6](../user/compiler.md#compile-6)
+Verifies: [CLI-8](../dev/cli.md#cli-8)
 
 Where a pipeline directory pins a phase to a current compiled `playbook` artifact, when the slc executable runs that phase, the slc executable shall run the pinned artifact through compiled execution — writing the artifact's declared target and exiting zero — without invoking the interpreted executor for that phase.
 

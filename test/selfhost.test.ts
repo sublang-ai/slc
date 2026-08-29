@@ -443,7 +443,7 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
 // (text2gears -> optimize -> gears2fsm) and, with no `--link`, defaults the
 // link target to the installed `@sublang/playbook` runtime and emits the entry
 // module, each artifact at its canonical location under the invocation cwd
-// (COMPILE-1, COMPILE-2, SELFHOST-8, SELFHOST-13, SELFHOST-16; DR-014). The
+// (compiler-1, compiler-2, SELFHOST-8, SELFHOST-13, SELFHOST-16; DR-014). The
 // agent is faked, so this exercises the pipeline mechanics, not compilation
 // quality.
 describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', () => {

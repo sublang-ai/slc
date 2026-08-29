@@ -31,11 +31,11 @@ When the user runs `slc` with `--help` or `-h`, the slc executable shall print u
 
 ### CLI-3
 
-When a run completes successfully, the slc executable shall print to standard output either the paths of the artifacts it wrote — including the `-o` output path when one was given — or `up to date` when incremental selection invoked no phase executor, print every diagnostic returned with the successful run to standard error, and exit zero ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [DR-021](../decisions/021-incremental-compilation.md), [DR-023](../decisions/023-host-settled-link-object-imports.md), [COMPILE-1](compiler.md#compile-1), [COMPILE-3](compiler.md#compile-3)).
+When a run completes successfully, the slc executable shall print to standard output either the paths of the artifacts it wrote — including the `-o` output path when one was given — or `up to date` when incremental selection invoked no phase executor, print every diagnostic returned with the successful run to standard error, and exit zero ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [DR-021](../decisions/021-incremental-compilation.md), [DR-023](../decisions/023-host-settled-link-object-imports.md), [[compiler-1](../packages/compiler.md#compiler-1)], [[compiler-3](../packages/compiler.md#compiler-3)]).
 
 ### CLI-4
 
-When a run cannot complete — because the invocation or pipeline is rejected, a phase fails, or a phase reports `BLOCKED` — the slc executable shall print the failure report to standard error, naming the failing phase and its target artifact when a phase is at fault, and exit with a non-zero status ([DR-003](../decisions/003-slc-phase-execution.md#blocked-protocol), [COMPILE-4](compiler.md#compile-4)).
+When a run cannot complete — because the invocation or pipeline is rejected, a phase fails, or a phase reports `BLOCKED` — the slc executable shall print the failure report to standard error, naming the failing phase and its target artifact when a phase is at fault, and exit with a non-zero status ([DR-003](../decisions/003-slc-phase-execution.md#blocked-protocol), [[compiler-4](../packages/compiler.md#compiler-4)]).
 
 ### CLI-5
 
