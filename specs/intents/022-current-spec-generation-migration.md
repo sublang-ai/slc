@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–15 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–16 are complete.
 
 ## Intent
 
@@ -128,7 +128,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 13. [x] Built once after the package migrations, refreshed all six verifier-support files in each of the five committed `.slc-verify` bundles, independently verified the three reviewed pipeline bundles and both reference demos, regenerated the three compile-pin records, confirmed a second pin generation was byte-identical, and retained the locked `@sublang/spex@0.3.0` grammar dependency unchanged.
 14. [x] Migrated the interpreted-execution, CLI-wiring, configuration-file, and pin-validator records into `intents/`, preserved their `Done` state, 24 checked deliverables, and 29 task boundaries, routed delivered behavior and verification to their owning packages and decisions, and removed their cross-intent references.
 15. [x] Migrated the compiled-execution, runtime-reconciliation, and pipeline-compilation records into `intents/`, preserved their `Superseded`, `Done`, and `Done` states, 29 checked deliverables, and 28 task boundaries, routed delivered behavior and verification to their owning packages and decisions, and removed their cross-intent and generated-provenance references.
-16. Migrate the runtime-contract, Captain-adoption, routing-separation, and Playbook 0.10 intent records under the same preservation and disposal rules.
+16. [x] Migrated the runtime-contract, Captain-adoption, routing-separation, and Playbook 0.10 records into `intents/`, preserved their `Done`, `Superseded`, `Done`, and `Superseded` states, 20 checked and three unchecked deliverables, and 19 task boundaries, routed surviving behavior and verification to their owning packages and decisions, and removed their cross-intent and script-provenance references.
 17. Migrate the normalization-demo, CWD-emission, grammar-provenance, and Playbook 2 intent records under the same preservation and disposal rules.
 18. Migrate the first-release, local-release-acceptance, and Playbook 3.1 intent records; recover the adoption's seven historical tasks from commits `f3828ad`, `dcdca62`, `e700539`, `18c7fc5`, `25a71b3`, `6a7fce6`, and `1d79333`; preserve stale checkbox evidence separately from truthful status.
 19. Migrate the progress-watchdog, Playbook 4, and incremental-compilation intent records; recover the watchdog's seven historical tasks from commits `7af1117`, `7babcfc`, `4e893a0`, `81725e1`, `2a979ec`, `bd8459e`, and `20a0562`; preserve stale checkbox evidence separately from truthful status.
