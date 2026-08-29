@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–13 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–14 are complete.
 
 ## Intent
 
@@ -126,7 +126,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 11. [x] Merged the legacy continuous-integration source into `packages/continuous-integration.md`, retargeted every authored item identity and reference, confirmed its pinning, release, self-hosting, and verification bindings, and added `continuous-integration-6` with a deterministic repository audit for package-local system coverage.
 12. [x] Merged the `cli` sources into `packages/cli.md`, retargeted every authored item identity and reference, confirmed its compiler, phase-execution, pipeline, and self-hosting bindings, localized its verification evidence, and extended `cli-36` with bin-boundary heartbeat coverage for `cli-33`.
 13. [x] Built once after the package migrations, refreshed all six verifier-support files in each of the five committed `.slc-verify` bundles, independently verified the three reviewed pipeline bundles and both reference demos, regenerated the three compile-pin records, confirmed a second pin generation was byte-identical, and retained the locked `@sublang/spex@0.3.0` grammar dependency unchanged.
-14. Migrate the interpreted-execution, CLI-wiring, configuration-file, and pin-validator intent records, preserving their record-only concerns and historical state while routing unique behavior to its owning package or decision and removing cross-intent references.
+14. [x] Migrated the interpreted-execution, CLI-wiring, configuration-file, and pin-validator records into `intents/`, preserved their `Done` state, 24 checked deliverables, and 29 task boundaries, routed delivered behavior and verification to their owning packages and decisions, and removed their cross-intent references.
 15. Migrate the compiled-execution, runtime-reconciliation, and pipeline-compilation intent records under the same preservation and disposal rules.
 16. Migrate the runtime-contract, Captain-adoption, routing-separation, and Playbook 0.10 intent records under the same preservation and disposal rules.
 17. Migrate the normalization-demo, CWD-emission, grammar-provenance, and Playbook 2 intent records under the same preservation and disposal rules.

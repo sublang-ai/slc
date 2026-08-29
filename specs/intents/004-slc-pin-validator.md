@@ -3,23 +3,26 @@
 
 # IR-004: SLC Pin Model and Currency Validator
 
-## Goal
+## Status
+
+Done
+
+## Intent
 
 Implement the portion of [DR-007](../decisions/007-slc-phase-artifact-pinning.md) that does not depend on running compiled artifacts: the committed `slc.pins.json` model and the host-side pin-currency validator.
 The validator loads the pin file, hashes committed bytes, resolves the path boundary, derives and compares the `## Pin Inputs` semantic-input closure, and emits a per-phase verdict of `current`, `stale`, or `malformed` with a diagnostic naming the changed input or malformed field.
-This is a standalone, deterministic, `slc`-side library; it changes no runtime execution behavior, so every phase still interprets.
+The standalone deterministic library changed no runtime execution behavior and required neither the compiled executor nor its file capability.
+The additive work left `runSlc`, the interpreted executor, and the [DR-003](../decisions/003-slc-phase-execution.md) execution boundary unchanged.
+The iteration left these concerns to follow-up work under [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md), and [DR-008](../decisions/008-slc-file-capability.md):
 
-- Context: [DR-007](../decisions/007-slc-phase-artifact-pinning.md) settles pinning; [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) defines compiled artifacts, the reserved `slc.link` phase, the `phase` format, and strategy selection; and a dedicated capability DR defines the artifact-facing file capability.
-- State today: `slc` has no pinning code and no compiled executor; the `PhaseExecutor` seam exists with only the interpreted executor, so every phase interprets.
-- Why a validator is implementable alone: pin currency is computed from committed bytes and definitions, which `slc` reads directly; it needs neither the compiled executor nor the host-supplied file capability (which sandboxes the artifact at run time, not the host-side validator).
-- Constraint: additive library only — the `runSlc` core, the interpreted executor, and the execution boundary ([DR-003](../decisions/003-slc-phase-execution.md)) are untouched.
-- Out of scope (deferred to later IRs; most blocked on the DR-005 compiled executor and meta-pipeline):
   - compiled execution, the `PhaseRunner` facade, `slc.link`, and the `phase` format;
-  - the package-manager integrity-digest link-target identity that [DR-007](../decisions/007-slc-phase-artifact-pinning.md#link-target-identity) permits for directory or package targets; this iteration's validator recomputes only a `sha256:` content or tree hash and does not yet validate integrity-digest identities, deferring that support to a later IR;
+  - the package-manager integrity-digest link-target identity for directory or package targets, because this iteration's validator recomputed only a `sha256:` content or tree hash;
   - wiring the verdict into runtime strategy selection (no pin → interpret, current → run compiled, stale/malformed → fail closed);
   - pin generation and the build-and-review flow that writes pins;
   - the currency sub-check that the artifact "resolves to the linked `phase` format" (the validator does existence and exact-byte hash only, deferring format resolution to when the `phase` format lands);
-  - the `FileCapability`, deferred to a dedicated capability DR, which the host-side validator does not use.
+  - the `FileCapability`, which the host-side validator does not use.
+
+The delivered behavior and its verification are now owned by the [`pinning`](../packages/pinning.md) package.
 
 ## Deliverables
 
@@ -33,7 +36,7 @@ This is a standalone, deterministic, `slc`-side library; it changes no runtime e
 ## Tasks
 
 1. **Author the `pinning` spec package.**
-   Write `specs/packages/pinning.md` with pin-file presence and the no-pins case; strict schema and supported hash algorithm; exact-byte hashing format; path-boundary resolution and absolute/escape rejection; the semantic-input closure and the closure-match check; the per-phase currency verdict with fail-closed `stale`/`malformed` reasons; external-input well-formedness without network fetch; link-target identity over committed bytes; an explicit note that the artifact-format-resolution check and runtime strategy selection are deferred to the compiled executor; and integration items, each with a `Verifies:` line per [META-20](../meta.md#meta-20)/[META-21](../meta.md#meta-21).
+   Write `specs/packages/pinning.md` with pin-file presence and the no-pins case; strict schema and supported hash algorithm; exact-byte hashing format; path-boundary resolution and absolute/escape rejection; the semantic-input closure and the closure-match check; the per-phase currency verdict with fail-closed `stale`/`malformed` reasons; external-input well-formedness without network fetch; link-target identity over committed bytes; an explicit note that the artifact-format-resolution check and runtime strategy selection are deferred to the compiled executor; and integration and system verification that binds each assertion inline to its same-package behavior under [[meta-20](../meta.md#meta-20)] and keeps unit tests outside the specs under [[meta-21](../meta.md#meta-21)].
    Reference [DR-007](../decisions/007-slc-phase-artifact-pinning.md) in the package `## Intent`, citing [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) and [DR-003](../decisions/003-slc-phase-execution.md) in preconditions where relevant.
    Register the `pinning` package in `map.md` and add SPDX headers per [[licensing-1](../packages/licensing.md#licensing-1)]/[[licensing-2](../packages/licensing.md#licensing-2)].
 
@@ -58,10 +61,7 @@ This is a standalone, deterministic, `slc`-side library; it changes no runtime e
 6. **Acceptance tests over fixtures.**
    Implement the Task 1 test items against fixture pipeline directories: a fully-matching pin validates `current`; mutating the definition, a semantic input, the artifact, or a link-target identity yields `stale` naming it; a closure mismatch yields `stale`; an unsupported schema, unknown field, wrong-typed field, or absolute/escaping path yields `malformed` naming the field; and an absent `slc.pins.json` yields no pins without error.
 
-## Acceptance criteria
+## Verification
 
-- Where a pipeline directory holds an `slc.pins.json` whose recorded inputs all match the committed files, the validator reports every pinned phase `current`.
-- Changing a definition, a semantic input, the artifact, or a link-target's committed identity makes that phase `stale` with a diagnostic naming the changed input, and a recorded closure differing from the definition's `## Pin Inputs` closure is `stale`.
-- A malformed pin file — unsupported schema or hash algorithm, unknown field, wrong-typed field, or absolute or boundary-escaping path — is `malformed` with a diagnostic naming the field, and ordinary validation performs no network fetch.
-- An absent `slc.pins.json` yields no pins, with every phase unpinned and no error.
-- The validator is deterministic and `slc`-side; compiled execution, runtime strategy selection, pin generation, and the file capability remain out of scope, and the `runSlc` core, the interpreted executor, and the execution boundary are unchanged.
+- Fixture-pipeline integration scenarios [[pinning-7](../packages/pinning.md#pinning-7)] through [[pinning-12](../packages/pinning.md#pinning-12)] preserve the iteration's acceptance coverage.
+- The task commits kept the validator deterministic and `slc`-side while leaving compiled execution, runtime selection, pin generation, the file capability, `runSlc`, the interpreted executor, and the execution boundary outside this iteration.

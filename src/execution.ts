@@ -5,8 +5,8 @@
  * Execution boundary orchestrator and generic checks (DR-003).
  *
  * `runPhase` performs only generic mechanics (phase-execution-1): it snapshots the
- * protected inputs, runs an injected {@link PhaseExecutor} (interpreted in
- * IR-001 Task 9, compiled later), then applies the generic checks — the target
+ * protected inputs, runs an injected {@link PhaseExecutor} (interpreted or
+ * compiled), then applies the generic checks — the target
  * exists and its extension matches the declared one (phase-execution-4); the source,
  * objects, link target, and the chain's definition files are unchanged; and an
  * optional `revalidate` hook confirms the pipeline chain still infers, catching
