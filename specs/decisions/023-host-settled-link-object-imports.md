@@ -29,7 +29,7 @@ A clean destination that will later build JavaScript is observationally identica
   Imports unrelated to declared link objects are never repaired by this rule.
 - The settled bytes are the accepted link output used by subsequent verification, output hashing, and history publication.
   A later Reuse accepts that live output under [DR-021](021-incremental-compilation.md) without reapplying settlement.
-- This is a narrow generic link-completion exception to DR-003's rule against host-side format-aware transformation and supersedes any link definition's `.js`-versus-`.ts` extension choice for matching declared-object imports processed by `slc`, including Playbook's extension-selection clause.
+- This is a narrow generic link-completion exception to [DR-003](003-slc-phase-execution.md)'s rule against host-side format-aware transformation and supersedes any link definition's `.js`-versus-`.ts` extension choice for matching declared-object imports processed by `slc`, including Playbook's extension-selection clause.
   The rest of the link definition remains authoritative for module semantics; the host makes the current filesystem locator final for this one edge.
 - `slc` shall not infer an unmaterialized future JavaScript build mode from workspace configuration or package scripts.
   Supporting such a clean build before JavaScript siblings exist requires a separate explicit destination-mode contract.

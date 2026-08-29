@@ -287,11 +287,11 @@ describe('reserved slc pipeline consumes Playbook definitions (self-hosting-2)',
 
   // Playbook ships its reserved `link` as a phase definition with no
   // `## Link Targets`; the reserved `slc` link relaxes that requirement
-  // (pipeline-40), so `slc slc <src> --link <tgt>` links end to end to a
+  // (pipeline-42), so `slc slc <src> --link <tgt>` links end to end to a
   // `.playbook.ts` runtime. The agent is faked, so this exercises the SLC link
   // path, not Playbook's link-compiler behavior (PROVISIONAL: the interpreted
   // link follows Playbook's `link.md` prose, validated by a real artifact).
-  it('links the reserved slc pipeline through target-less Playbook definitions (pipeline-40)', async () => {
+  it('links the reserved slc pipeline through target-less Playbook definitions (pipeline-42)', async () => {
     const root = await mkdtemp(join(tmpdir(), 'slc-reserved-link-'));
     try {
       const work = join(root, 'work');
@@ -361,10 +361,10 @@ describe('reserved slc pipeline consumes Playbook definitions (self-hosting-2)',
 // definitions as the reserved `slc`, and its target-less `link.md` loads under
 // the same relaxation, so `slc playbook <src> --link <tgt>` links to a
 // `.playbook.ts` runtime under `<basename>.playbook/` (self-hosting-6, self-hosting-7,
-// pipeline-40). The agent is faked, so this exercises SLC's resolution and link
+// pipeline-42). The agent is faked, so this exercises SLC's resolution and link
 // loading, not Playbook's link-compiler behavior.
 describe('playbook pipeline shares Playbook definitions (self-hosting-6, self-hosting-7)', () => {
-  it('resolves `playbook` and loads its target-less link (pipeline-40)', async () => {
+  it('resolves `playbook` and loads its target-less link (pipeline-42)', async () => {
     const root = await mkdtemp(join(tmpdir(), 'slc-playbook-link-'));
     try {
       const work = join(root, 'work');
@@ -396,8 +396,8 @@ describe('playbook pipeline shares Playbook definitions (self-hosting-6, self-ho
   // The ## Link Targets relaxation keys on the `playbook` linked format, not the
   // reference name, so an injected resolver mapping `playbook` to a directory
   // whose link emits a different format and omits ## Link Targets is refused
-  // (pipeline-40, DR-009).
-  it('refuses a non-playbook link without ## Link Targets (pipeline-40)', async () => {
+  // (pipeline-42, DR-009).
+  it('refuses a non-playbook link without ## Link Targets (pipeline-42)', async () => {
     const root = await mkdtemp(join(tmpdir(), 'slc-playbook-badlink-'));
     try {
       const dir = join(root, 'custom');

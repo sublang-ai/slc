@@ -252,7 +252,7 @@ describe('single-phase run (pipeline-24)', () => {
   });
 });
 
-describe('link runs (pipeline-25, pipeline-26, pipeline-40)', () => {
+describe('link runs (pipeline-25, pipeline-26, pipeline-42)', () => {
   it('runs a single-object .link, placing the artifact under the invocation cwd (pipeline-38, DR-014)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');

@@ -102,7 +102,7 @@ When checking FSM transition coverage, the slc command shall drive `script` acto
 
 #### verification-18
 
-When the slc command emits a `.ts` or `.js` module as a linked target after full or direct linking [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)] or as a `playbook` entry module [[self-hosting-15](self-hosting.md#self-hosting-15)], it shall verify that every relative import specifier in the emitted module resolves to an existing file from the module's own location, and shall fail the run with a diagnostic naming the module and each unresolvable specifier — a compile whose output cannot load is a failed compile, not a success with a latent runtime error, as exposed by the [[release-17](release.md#release-17)] acceptance gate when an interpreted link emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.
+When the slc command emits a `.ts` or `.js` module as a linked target after full or direct linking [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)] and generic post-link settlement [[pipeline-40](pipeline.md#pipeline-40)], or as a `playbook` entry module [[self-hosting-15](self-hosting.md#self-hosting-15)], it shall verify that every relative import specifier in the emitted module resolves exactly from the module's own location and shall fail the run with a diagnostic naming the module and each unresolvable specifier ([DR-023](../decisions/023-host-settled-link-object-imports.md)); a compile whose output cannot load is a failed compile, not a success with a latent runtime error, as exposed by the [[release-17](release.md#release-17)] acceptance gate when an interpreted link emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.
 
 ## Verification
 
@@ -173,9 +173,9 @@ When a GEARS package and FSM contain script behavior, the conformance and covera
 
 #### verification-19
 
-Where a link phase writes a linked module, when the run completes, the slc command shall produce the applicable load-integrity outcome:
+Where a link phase writes a linked module, when the run completes after post-link settlement, the slc command shall produce the applicable load-integrity outcome:
 
 | Relative imports | Required outcome |
 | --- | --- |
-| A relative import names a file that does not exist beside the module. | Exit non-zero with a diagnostic naming the module and the unresolvable specifier [[verification-18](#verification-18)]. |
-| Every relative import resolves. | Succeed unchanged [[verification-18](#verification-18)]. |
+| A relative import remains unresolved. | Exit non-zero with a diagnostic naming the module and the unresolvable specifier [[verification-18](#verification-18)]. |
+| Every relative import is already in its settled form and resolves exactly beside the module. | Complete successfully without changing those imports [[verification-18](#verification-18)]. |
