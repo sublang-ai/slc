@@ -95,11 +95,13 @@ const changelogGroups = [
   'Fixed',
   'Security',
 ];
-for (let index = 1; index < changelogSections.length; index += 1) {
-  const groups = [...sectionBody(index).matchAll(/^### (.+)$/gm)].map(
-    (match) => match[1],
+for (let index = 0; index < changelogSections.length; index += 1) {
+  const body = sectionBody(index);
+  const groups = [...body.matchAll(/^### (.+)$/gm)].map((match) => match[1]);
+  assert.ok(
+    groups.length > 0 || (index === 0 && body.trim() === ''),
+    `${changelogSections[index][1]} has no change groups`,
   );
-  assert.ok(groups.length > 0, `${changelogSections[index][1]} has no changes`);
   let priorGroup = -1;
   for (const group of groups) {
     const groupIndex = changelogGroups.indexOf(group);
@@ -147,7 +149,10 @@ assert.match(ciGate.run, /actions\/workflows\/ci\.yml\/runs/);
 assert.match(ciGate.run, /head_sha=\$\{SHA\}/);
 assert.match(ciGate.run, /event=push/);
 assert.match(ciGate.run, /branch=main/);
-assert.match(ciGate.run, /conclusion.*success/s);
+assert.match(
+  ciGate.run,
+  /if \[ "\$conclusion" = "success" \]; then\s+echo "CI passed for \$\{SHA\}\."\s+break\s+fi\s+echo "::error::CI concluded '\$\{conclusion\}' for \$\{SHA\}"\s+exit 1/,
+);
 assert.equal(step('Install locked dependencies').run, 'npm ci');
 assert.equal(step('Run release checks').run, 'npm run release:check');
 
