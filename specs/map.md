@@ -76,11 +76,11 @@ meta.md     The spec of specs
 
 ## Packages
 
-### CI
+### continuous-integration
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [continuous-integration.md](dev/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, the runtime-transition boundary, and atomic Playbook 2.0 adoption |
+| package | [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, runtime-transition boundaries, immutable Playbook adoption, demo acceptance, and package publication checks |
 
 ### CLI
 

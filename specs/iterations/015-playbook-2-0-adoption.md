@@ -17,7 +17,7 @@ Implement [DR-017](../decisions/017-playbook-2-0-thin-runtime-adoption.md): move
 - [x] `scripts/generate-pins.mjs` expects 2.0.0, records `@sublang/playbook` as an out-of-bundle runtime dependency beside `xstate`, retires the packed-sibling fallback, and `pipelines/playbook/slc.pins.json` regenerates as current with exact `@sublang/playbook@2.0.0` link-target provenance.
 - [x] Host tests updated for the adopted semantics: 2.0.0 provenance selection, structured Captain-failure mapping through the `failed` outcome, nullish host-port rejection normalization at the SLC boundary, and reference equivalence against the thin `code.playbook` reference.
 - [x] `demo/workflow.txt` compiled under the adopted set into `demo/reference/` and the documented command sequence verified verbatim, including the documented role flags; a bilingual reference checker replaces the retired harness.
-- [x] CI-4/self-hosting-11-shaped gates restated for the 2.0.0 adoption so no mixed 1.0.0/2.0.0 set passes; the Chinese reference regeneration from the released packages is recorded as the maintainer follow-up.
+- [x] continuous-integration-4/self-hosting-11-shaped gates restated for the 2.0.0 adoption so no mixed 1.0.0/2.0.0 set passes; the Chinese reference regeneration from the released packages is recorded as the maintainer follow-up.
 
 ## Tasks
 
@@ -29,7 +29,8 @@ Implement [DR-017](../decisions/017-playbook-2-0-thin-runtime-adoption.md): move
 6. Update `generate-pins.mjs` (expected version, shared-engine runtime dependency, retired packed-sibling fallback) and regenerate `slc.pins.json`.
 7. Reconcile compiled-executor, ports, and equivalence tests with the resolved-`failed` Captain semantics, preserve nullish control-plane rejections at the SLC boundary, and use the thin reference artifact.
 8. Compile the English demo reference, add the bilingual checker, and drive the documented README flow end to end with the documented role flags.
-9. Restate the CI and self-hosting adoption gates for 2.0.0.
+9. Restate the continuous-integration and self-hosting adoption gates for
+   2.0.0.
 
 ## Acceptance criteria
 

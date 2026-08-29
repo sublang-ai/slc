@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–10 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–11 are complete.
 
 ## Intent
 
@@ -67,7 +67,7 @@ The package classification audit yields this target placement, with new verifica
 | --- | --- | --- | --- |
 | `cli` | 1–5, 22, 29, 32–34, 39 | 6–12, 20–21, 30, 35, 40 | 13–19, 23–28, 31, 36–38, 41 |
 | `compiler` | 1–9 | — | 10 |
-| `continuous-integration` | 1–5 | — | new local coverage |
+| `continuous-integration` | 1–5 | — | 6 |
 | `git` | 1–5 | — | 6 |
 | `incremental-compilation` | 1–8 | 9–17, 26 | 18–25, 27–29 |
 | `licensing` | 1–2, 5–7 | — | 3–4, 8 |
@@ -84,7 +84,7 @@ The behavior citation audit establishes these peer-package edges:
 | --- | --- |
 | `cli` | `compiler`, `phase-execution`, `pipeline`, `self-hosting` |
 | `compiler` | `incremental-compilation`, `phase-execution`, `pinning`, `pipeline` |
-| `continuous-integration` | `release`, `self-hosting` |
+| `continuous-integration` | `pinning`, `release`, `self-hosting`, `verification` |
 | `incremental-compilation` | `phase-execution`, `pipeline` |
 | `phase-execution` | `pinning`, `pipeline`, `self-hosting` |
 | `pinning` | `self-hosting` |
@@ -93,8 +93,7 @@ The behavior citation audit establishes these peer-package edges:
 | `self-hosting` | `phase-execution`, `pinning`, `pipeline` |
 | `verification` | `pinning`, `pipeline`, `release`, `self-hosting` |
 
-Package tasks shall confirm or reject the additional uncited dependency candidates exposed by package intent or prose: continuous integration to verification and pinning.
-They shall also add the minimal local integration or system verification needed for uncovered compiler and continuous-integration behavior and CLI item 33.
+They shall also add the minimal local integration or system verification needed for uncovered compiler behavior and CLI item 33.
 
 ## Deliverables
 
@@ -126,7 +125,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 8. [x] Merged the `self-hosting` sources into `packages/self-hosting.md`, retargeted every authored item identity and reference, confirmed its phase-execution, pinning, and pipeline bindings, and localized its verification evidence.
 9. [x] Merged the `verification` sources into `packages/verification.md`, retargeted every authored item identity and reference, confirmed its pinning, pipeline, release, and self-hosting bindings, localized its verification evidence, and left derived verifier-support copies for Task 13.
 10. [x] Merged the `release` sources into `packages/release.md`, retargeted every authored item identity and reference, confirmed its CLI, compiler, and incremental-compilation bindings, localized its verification evidence, and added `release-20` for the uncovered repository release contract.
-11. Merge `dev/continuous-integration.md` into `packages/continuous-integration.md` and retarget all `CI-*` identities and citations.
+11. [x] Merged the legacy continuous-integration source into `packages/continuous-integration.md`, retargeted every authored item identity and reference, confirmed its pinning, release, self-hosting, and verification bindings, and added `continuous-integration-6` with a deterministic repository audit for package-local system coverage.
 12. Merge the `cli` sources into `packages/cli.md` and retarget all `CLI-*` identities and citations after its peer packages have stable destinations.
 13. Build once after the package migrations, refresh all six verifier-support files in each of the five committed `.slc-verify` bundles, independently verify the three reviewed pipeline bundles and both reference demos, commit the three regenerated compile-pin records, and confirm a second regeneration produces no diff without changing the locked Spex grammar dependency.
 14. Migrate the interpreted-execution, CLI-wiring, configuration-file, and pin-validator intent records, preserving their record-only concerns and historical state while routing unique behavior to its owning package or decision and removing cross-intent references.

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-// CI-4 / self-hosting-11: prove that the definitions vendored for compiled pin
-// selection carry the immutable Playbook 4.0.0 normative content. SLC adds
-// only its explicit Pin Inputs, whose exact lists are part of the pin closure.
+// continuous-integration-4 / self-hosting-11: prove that the definitions
+// vendored for compiled pin selection carry the immutable Playbook 4.0.0
+// normative content. SLC adds only its explicit Pin Inputs, whose exact lists
+// are part of the pin closure.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
