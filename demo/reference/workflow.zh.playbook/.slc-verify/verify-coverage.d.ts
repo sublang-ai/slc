@@ -57,7 +57,7 @@ export declare function guardSatisfiable(
 export declare function fsmCoverageTestTimeout(fsmModule: unknown): number;
 /**
  * Checks transition coverage over a compiled `playbook` artifact's machine
- * (VERIFY-6) and returns findings (empty when every declared transition is
+ * (verification-6) and returns findings (empty when every declared transition is
  * reachable). Drives the machine through the `gears2fsm` surfaces it
  * declares; a workflow without pre-emption may omit the `BOSS_INTERRUPT`
  * surface entirely, in which case interrupt coverage is skipped.
@@ -71,7 +71,7 @@ export declare function checkFsmCoverage(
 ): Promise<string[]>;
 /**
  * Builds a per-artifact vitest module running the transition-coverage check
- * beside the artifacts (VERIFY-6).
+ * beside the artifacts (verification-6).
  */
 export declare function generateFsmCoverageTest(opts: {
   basename: string;
@@ -83,7 +83,7 @@ export declare function generateFsmCoverageTest(opts: {
 }): string;
 /**
  * Emits the transition-coverage test beside a compiled `playbook` artifact
- * (VERIFY-6): validates the produced `fsm` drives cleanly, then writes
+ * (verification-6): validates the produced `fsm` drives cleanly, then writes
  * `<basename>.fsm.coverage.test.ts` and returns its path with any coverage
  * findings as diagnostics.
  *

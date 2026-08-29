@@ -135,7 +135,7 @@ export declare function enumerateScriptStates(
  * conformant): every GEARS item maps to one state with the same player and the
  * prompt verbatim, every captain state references a known item, and every
  * captain state's `result` map declares the Boss-reply suspension key with its
- * adjudicator contract (VERIFY-1, VERIFY-3; DR-009).
+ * adjudicator contract (verification-1, verification-3; DR-009).
  */
 export declare function checkGearsFsmConformance(
   gears: string,
@@ -170,7 +170,7 @@ export interface StructuredStatePin {
   onError: TransitionArm[];
   on: EventArms;
 }
-/** The structural facts {@link pinIntrospection} pins for a machine (VERIFY-4). */
+/** The structural facts {@link pinIntrospection} pins for a machine (verification-4). */
 export interface IntrospectionPins {
   initial: string | null;
   /** Captain-invoking states, in declaration order. */
@@ -220,7 +220,7 @@ export interface IntrospectionPins {
 export declare function normalizeArms(raw: unknown): TransitionArm[];
 /**
  * Reduces a machine config to the structural facts the emitted introspection
- * test pins (VERIFY-4): captain bindings with result keys and every transition
+ * test pins (verification-4): captain bindings with result keys and every transition
  * arm, the quiescent states' event surfaces, the root event surface, and the
  * `BOSS_INTERRUPT` jumpable set.
  */
@@ -232,7 +232,7 @@ export declare const CONTINUATION_PREAMBLE =
   'You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.';
 export declare const BOSS_QUESTION_LABEL = 'Boss question:';
 export declare const BOSS_REPLY_LABEL = 'Boss reply:';
-/** One captain state's derived prompt contract (VERIFY-5). */
+/** One captain state's derived prompt contract (verification-5). */
 export interface PromptContractRow {
   state: string;
   sourceItem: string;
@@ -255,7 +255,7 @@ export declare function probeContextReads(
 ): string[];
 /**
  * Derives every captain state's prompt contract from the machine config
- * (VERIFY-5): traced context reads, sentinel-traced input wiring, and the
+ * (verification-5): traced context reads, sentinel-traced input wiring, and the
  * prompt body's placeholder tokens.
  */
 export declare function capturePromptContract(
@@ -265,7 +265,7 @@ export declare function capturePromptContract(
  * Derives, per captain state, which of its prompt's placeholder tokens the
  * linked composer substitutes when the wired context is present — pinned into
  * the emitted test so a token that later leaks unsubstituted fails it
- * (VERIFY-5).
+ * (verification-5).
  */
 export declare function deriveSubstitutions(
   config: MachineConfigLike,
@@ -274,7 +274,7 @@ export declare function deriveSubstitutions(
 ): Record<string, string[]>;
 /**
  * Checks the linked composer against the link contract for every captain state
- * (VERIFY-5), returning findings (empty when conformant): the prompt body is
+ * (verification-5), returning findings (empty when conformant): the prompt body is
  * preserved modulo substituted placeholders, the adjudicator-facing Boss-reply
  * contract never leaks into a player prompt, no continuation appears on an
  * ordinary turn, and a Boss-reply continuation turn opens with the exact
@@ -321,7 +321,7 @@ export declare function generateGearsFsmConformanceTest(opts: {
  * Emits the GEARS↔FSM conformance test as `slc` output beside a compiled
  * `playbook` artifact: writes `<basename>.gears-fsm.test.ts` into the artifact
  * directory (`<basename>.playbook/`), wiring the artifact's `gears` file and its
- * `fsm` module's machine to the checker, and returns the written path (VERIFY-2;
+ * `fsm` module's machine to the checker, and returns the written path (verification-2;
  * [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
  */
 export declare function emitGearsFsmConformanceTest(opts: {
@@ -343,7 +343,7 @@ export declare function emitGearsFsmConformanceTest(opts: {
 export declare function loadFsmModule(fsmPath: string): Promise<unknown>;
 /**
  * Builds a per-artifact vitest module that fails when the machine's structure
- * drifts from the topology pinned at build time (VERIFY-4).
+ * drifts from the topology pinned at build time (verification-4).
  */
 export declare function generateFsmIntrospectionTest(opts: {
   basename: string;
@@ -353,7 +353,7 @@ export declare function generateFsmIntrospectionTest(opts: {
 }): string;
 /**
  * Builds a per-artifact vitest module pinning the prompt contract derived from
- * the artifacts at build time (VERIFY-5): the per-state context reads, input
+ * the artifacts at build time (verification-5): the per-state context reads, input
  * wiring, and placeholders always; and, when the linked module exposes its
  * matching Captain/player composers, the composition checks and pinned
  * substitution maps.
@@ -372,7 +372,7 @@ export declare function generatePromptContractTest(opts: {
 }): string;
 /**
  * Emits the prompt-contract test beside a compiled `playbook` artifact
- * (VERIFY-5): derives and pins the per-state contract from the physical
+ * (verification-5): derives and pins the per-state contract from the physical
  * `<basename>.fsm.ts` artifact, then emits NodeNext `.js` imports for that FSM
  * and any linked `<basename>.playbook.ts` module. When the linked module
  * exposes the `_internal` composer matching each state actor —
@@ -394,7 +394,7 @@ export declare function emitPromptContractTest(opts: {
 }>;
 /**
  * Emits the introspection test beside a compiled `playbook` artifact
- * (VERIFY-4): derives topology pins from the physical `<basename>.fsm.ts`,
+ * (verification-4): derives topology pins from the physical `<basename>.fsm.ts`,
  * emits a NodeNext `.js` import for that sibling source, and writes
  * `<basename>.fsm.introspect.test.ts` into the artifact directory.
  *

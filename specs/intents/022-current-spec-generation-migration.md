@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–12 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–13 are complete.
 
 ## Intent
 
@@ -100,7 +100,7 @@ The behavior citation audit establishes these peer-package edges:
 - [ ] Move all 22 legacy iteration records into `intents/`, reconciling the SPDX seed and preserving every checkbox and state.
 - [ ] Make all non-framework decision records and project guidance use current citations, paths, and record rules without editing the protected framework law or framework decision.
 - [ ] Record the Spex 3.0.0 tooling provenance while retaining the separately pinned 0.3.0 compiled-grammar dependency.
-- [ ] Rebuild generated verifier support in all five committed bundles and regenerate the three affected compile-pin records atomically.
+- [x] Rebuild generated verifier support in all five committed bundles and regenerate the three affected compile-pin records atomically.
 - [ ] Make `map.md` an accurate minimal index of decisions and packages and remove the retired layout only after all content and citations survive.
 - [ ] Produce clean `spex lint` evidence and a manual residue audit for human diff review.
 
@@ -125,7 +125,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 10. [x] Merged the `release` sources into `packages/release.md`, retargeted every authored item identity and reference, confirmed its CLI, compiler, and incremental-compilation bindings, localized its verification evidence, and added `release-20` for the uncovered repository release contract.
 11. [x] Merged the legacy continuous-integration source into `packages/continuous-integration.md`, retargeted every authored item identity and reference, confirmed its pinning, release, self-hosting, and verification bindings, and added `continuous-integration-6` with a deterministic repository audit for package-local system coverage.
 12. [x] Merged the `cli` sources into `packages/cli.md`, retargeted every authored item identity and reference, confirmed its compiler, phase-execution, pipeline, and self-hosting bindings, localized its verification evidence, and extended `cli-36` with bin-boundary heartbeat coverage for `cli-33`.
-13. Build once after the package migrations, refresh all six verifier-support files in each of the five committed `.slc-verify` bundles, independently verify the three reviewed pipeline bundles and both reference demos, commit the three regenerated compile-pin records, and confirm a second regeneration produces no diff without changing the locked Spex grammar dependency.
+13. [x] Built once after the package migrations, refreshed all six verifier-support files in each of the five committed `.slc-verify` bundles, independently verified the three reviewed pipeline bundles and both reference demos, regenerated the three compile-pin records, confirmed a second pin generation was byte-identical, and retained the locked `@sublang/spex@0.3.0` grammar dependency unchanged.
 14. Migrate the interpreted-execution, CLI-wiring, configuration-file, and pin-validator intent records, preserving their record-only concerns and historical state while routing unique behavior to its owning package or decision and removing cross-intent references.
 15. Migrate the compiled-execution, runtime-reconciliation, and pipeline-compilation intent records under the same preservation and disposal rules.
 16. Migrate the runtime-contract, Captain-adoption, routing-separation, and Playbook 0.10 intent records under the same preservation and disposal rules.
