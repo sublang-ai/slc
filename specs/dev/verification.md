@@ -17,8 +17,8 @@ A compiled artifact is judgment-produced, so `slc` re-checks it deterministicall
 against the `gears` and `fsm` it was built from and emits that check as a test
 beside the artifacts (under `<basename>.playbook/`) so each build re-verifies
 faithfulness.
-This package covers GEARS↔FSM conformance; further invariants (FSM introspection
-counts, prompt-contract, and transition coverage) extend it.
+This package covers GEARS↔FSM conformance, emitted-import integrity, FSM
+introspection, prompt contracts, and transition coverage.
 
 Essential project-specific reference: `slc`, this project's compiler CLI.
 
@@ -81,11 +81,14 @@ When checking FSM transition coverage, the slc command shall drive `script` acto
 
 ### VERIFY-18
 
-When a link phase completes with a `.ts` or `.js` target, and when the entry
-module is emitted, the slc command shall verify that every relative import
-specifier in the emitted module resolves to an existing file from the
-module's own location, and shall fail the run with a diagnostic naming the
-module and each unresolvable specifier — a compile whose output cannot load
-is a failed compile, not a success with a latent runtime error. (Found by the
-[RELEASE-17](release.md#release-17) acceptance gate: an interpreted link
-emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.)
+When a `.ts` or `.js` link target has undergone the generic post-link
+completion of [PIPE-40](pipeline.md#pipe-40), the slc command shall verify that
+every relative import resolves exactly from the module's own location and fail
+the run with a diagnostic naming the module and each unresolvable specifier
+([DR-023](../decisions/023-host-settled-link-object-imports.md)).
+When an entry module is emitted, the slc command shall apply the same
+import-resolution verification.
+A compile whose output cannot load is a failed compile, not a success with a
+latent runtime error. (Found by the [RELEASE-17](release.md#release-17)
+acceptance gate: an interpreted link emitted `./<basename>.fsm.js` beside a
+`.ts`-only bundle.)

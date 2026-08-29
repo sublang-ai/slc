@@ -348,7 +348,7 @@ export async function run(
     if (result.outcome === 'up-to-date') stdout('up to date\n');
     else if (result.outputs.length > 0)
       stdout(`${result.outputs.join('\n')}\n`);
-    // Surface any ambiguity the agent resolved without polluting the path output.
+    // Surface benign ambiguity resolved during the run without polluting paths.
     if (result.diagnostics.length > 0)
       stderr(`${result.diagnostics.join('\n')}\n`);
     return 0;

@@ -31,7 +31,7 @@ When the user runs `slc` with `--help` or `-h`, the slc executable shall print u
 
 ### CLI-3
 
-When a run completes successfully, the slc executable shall print the paths of the artifacts it wrote — including the `-o` output path when one was given — or `up to date` when incremental selection invoked no phase executor, and shall exit zero ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [DR-021](../decisions/021-incremental-compilation.md), [COMPILE-1](compiler.md#compile-1), [COMPILE-3](compiler.md#compile-3)).
+When a run completes successfully, the slc executable shall print to standard output either the paths of the artifacts it wrote — including the `-o` output path when one was given — or `up to date` when incremental selection invoked no phase executor, print every diagnostic returned with the successful run to standard error, and exit zero ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations), [DR-021](../decisions/021-incremental-compilation.md), [DR-023](../decisions/023-host-settled-link-object-imports.md), [COMPILE-1](compiler.md#compile-1), [COMPILE-3](compiler.md#compile-3)).
 
 ### CLI-4
 
