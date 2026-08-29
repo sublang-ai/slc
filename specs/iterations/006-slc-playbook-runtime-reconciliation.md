@@ -25,7 +25,7 @@ It updates the affected decisions ([DR-002](../decisions/002-slc-link-phases.md)
 - [x] The `FCAP` package (`dev`, `test`) and its `map.md` summary reconciled to [DR-008](../decisions/008-slc-file-capability.md)'s host-side capability — host-owned rather than artifact-facing — repointing FCAP-1's citation from the removed `#artifact-facing-api` anchor to `#capability-api`
 - [x] Pin currency's artifact-format sub-check updated to recognize the `playbook` factory, and `pinning` items renamed `phase` → `playbook`
 - [x] `SELFHOST` (`user`/`dev`/`test`) and the [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) output locations renamed `phase` → `playbook` (`.playbook.ts`), with `map.md` updated
-- [x] The reserved `slc` link driven end-to-end so `slc slc <source> --link <target>` produces a `.playbook.ts` runtime through Playbook's link definition, with [PIPE-11](../dev/pipeline.md#pipe-11)'s `## Link Targets` requirement reconciled to except the reserved `slc` link, replacing the IR-005 link boundary test with a passing reserved-`slc` link test
+- [x] The reserved `slc` link driven end-to-end so `slc slc <source> --link <target>` produces a `.playbook.ts` runtime through Playbook's link definition, with [[pipeline-11](../packages/pipeline.md#pipeline-11)]'s `## Link Targets` requirement reconciled to except the reserved `slc` link, replacing the IR-005 link boundary test with a passing reserved-`slc` link test
 
 ## Tasks
 
@@ -62,7 +62,7 @@ Each task is one-commit-sized and updates decisions, specs, code, and tests toge
 ### F. Reserved `slc` link ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-002](../decisions/002-slc-link-phases.md))
 
 6. **Drive the reserved `slc` link end-to-end.**
-   Make `slc slc <source> --link <target>` produce a `.playbook.ts` runtime through Playbook's link definition, reconciling the reserved link path with Playbook's `link.md` (which carries no `## Link Targets`), and reconcile [PIPE-11](../dev/pipeline.md#pipe-11)'s `## Link Targets` requirement to except the reserved `slc` link.
+   Make `slc slc <source> --link <target>` produce a `.playbook.ts` runtime through Playbook's link definition, reconciling the reserved link path with Playbook's `link.md` (which carries no `## Link Targets`), and reconcile [[pipeline-11](../packages/pipeline.md#pipeline-11)]'s `## Link Targets` requirement to except the reserved `slc` link.
    Replace the IR-005 link boundary test with a passing integration test of reserved-`slc` linking to a `.playbook.ts` artifact at its [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) location.
 
 ### G. File capability package ([DR-008](../decisions/008-slc-file-capability.md))

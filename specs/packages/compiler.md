@@ -13,15 +13,15 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 
 ### compiler-1
 
-When the user runs a pipeline on a source, the slc command shall transform the source through the pipeline's ordered phases [[PIPE-4](../dev/pipeline.md#pipe-4)] and produce the pipeline output, leaving each non-final phase's result as an inspectable intermediate [[PIPE-8](../dev/pipeline.md#pipe-8)] in the invocation working directory's artifact directory [[PIPE-7](../dev/pipeline.md#pipe-7)], so compiling from another directory never rewrites artifacts committed beside the source ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+When the user runs a pipeline on a source, the slc command shall transform the source through the pipeline's ordered phases [[pipeline-4](pipeline.md#pipeline-4)] and produce the pipeline output, leaving each non-final phase's result as an inspectable intermediate [[pipeline-8](pipeline.md#pipeline-8)] in the invocation working directory's artifact directory [[pipeline-7](pipeline.md#pipeline-7)], so compiling from another directory never rewrites artifacts committed beside the source ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### compiler-2
 
-The slc command shall let the user run the whole pipeline or a single named phase [[PIPE-9](../dev/pipeline.md#pipe-9)], or the direct or full link step [[PIPE-12](../dev/pipeline.md#pipe-12)], [[PIPE-13](../dev/pipeline.md#pipe-13)], and shall place each artifact at the location it would occupy in a full run [[PIPE-8](../dev/pipeline.md#pipe-8)], [[PIPE-15](../dev/pipeline.md#pipe-15)], [[PIPE-18](../dev/pipeline.md#pipe-18)], so an artifact's role does not depend on the invocation form ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md)).
+The slc command shall let the user run the whole pipeline or a single named phase [[pipeline-9](pipeline.md#pipeline-9)], or the direct or full link step [[pipeline-12](pipeline.md#pipeline-12)], [[pipeline-13](pipeline.md#pipeline-13)], and shall place each artifact at the location it would occupy in a full run [[pipeline-8](pipeline.md#pipeline-8)], [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)], so an artifact's role does not depend on the invocation form ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md)).
 
 ### compiler-3
 
-When the user supplies an output-path override, the slc command shall write the final pipeline output [[PIPE-8](../dev/pipeline.md#pipe-8)] or linked output [[PIPE-15](../dev/pipeline.md#pipe-15)], [[PIPE-18](../dev/pipeline.md#pipe-18)] to that path while leaving intermediates at their default locations ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md)).
+When the user supplies an output-path override, the slc command shall write the final pipeline output [[pipeline-8](pipeline.md#pipeline-8)] or linked output [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)] to that path while leaving intermediates at their default locations ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md)).
 
 ### compiler-4
 
@@ -37,11 +37,11 @@ Where a pipeline pins a phase to a reviewed compiled artifact, when the user run
 
 ### compiler-7
 
-When the user runs a full pipeline with `--normalize` or on a raw source whose extension is not the entry phase's [[PIPE-6](../dev/pipeline.md#pipe-6)], [[PIPE-34](../dev/pipeline.md#pipe-34)], the slc command shall first rewrite the raw source into a document satisfying the entry phase's stated source requirements [[phase-execution-2](phase-execution.md#phase-execution-2)], [[phase-execution-33](phase-execution.md#phase-execution-33)] — preserving the input's meaning, order, and language, surfacing only implicit structure and implicit executability preconditions — and compile from that normalized source, leaving the user's raw input unchanged ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+When the user runs a full pipeline with `--normalize` or on a raw source whose extension is not the entry phase's [[pipeline-6](pipeline.md#pipeline-6)], [[pipeline-34](pipeline.md#pipeline-34)], the slc command shall first rewrite the raw source into a document satisfying the entry phase's stated source requirements [[phase-execution-2](phase-execution.md#phase-execution-2)], [[phase-execution-33](phase-execution.md#phase-execution-33)] — preserving the input's meaning, order, and language, surfacing only implicit structure and implicit executability preconditions — and compile from that normalized source, leaving the user's raw input unchanged ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### compiler-8
 
-When the user runs a full pipeline, the slc command shall run the pipeline's optimization pass phases between the ordinary phases by default — producing the same canonical artifact names as an unoptimized run plus the inspectable pre-pass intermediates — and shall run the chain without passes when the user gives `--no-optimize` [[PIPE-32](../dev/pipeline.md#pipe-32)] ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+When the user runs a full pipeline, the slc command shall run the pipeline's optimization pass phases between the ordinary phases by default — producing the same canonical artifact names as an unoptimized run plus the inspectable pre-pass intermediates — and shall run the chain without passes when the user gives `--no-optimize` [[pipeline-32](pipeline.md#pipeline-32)] ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### compiler-9
 

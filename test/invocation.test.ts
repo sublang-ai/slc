@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { CliError, parseInvocation } from '../src/invocation.js';
 
-describe('parseInvocation full pipeline (PIPE-9)', () => {
+describe('parseInvocation full pipeline (pipeline-9)', () => {
   it('routes a bare pipeline to a full run', () => {
     expect(parseInvocation(['playbook', 'flows/onboarding.md'])).toEqual({
       kind: 'full',
@@ -107,7 +107,7 @@ describe('parseInvocation full pipeline (PIPE-9)', () => {
   });
 });
 
-describe('parseInvocation single phase (PIPE-9)', () => {
+describe('parseInvocation single phase (pipeline-9)', () => {
   it('routes <pipeline>.<phase> to a single-phase run', () => {
     expect(parseInvocation(['playbook.text2gears', 'src.md'])).toEqual({
       kind: 'phase',
@@ -125,7 +125,7 @@ describe('parseInvocation single phase (PIPE-9)', () => {
   });
 });
 
-describe('parseInvocation full-pipeline link (PIPE-13, PIPE-14)', () => {
+describe('parseInvocation full-pipeline link (pipeline-13, pipeline-14)', () => {
   it('routes --link to a full-link run with options', () => {
     expect(
       parseInvocation([
@@ -158,7 +158,7 @@ describe('parseInvocation full-pipeline link (PIPE-13, PIPE-14)', () => {
   });
 });
 
-describe('parseInvocation direct link (PIPE-12)', () => {
+describe('parseInvocation direct link (pipeline-12)', () => {
   it('treats the final operand as the target and earlier ones as ordered objects', () => {
     expect(
       parseInvocation([

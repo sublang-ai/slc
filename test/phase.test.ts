@@ -32,7 +32,7 @@ const gears2fsm = `## Formats
 | target | fsm | .ts |
 `;
 
-describe('parsePhase (PIPE-1, PIPE-2)', () => {
+describe('parsePhase (pipeline-1, pipeline-2)', () => {
   it('reads the source and target declarations from ## Formats', () => {
     const phase = parsePhase({ name: 'text2gears.md', content: text2gears });
     expect(phase).toEqual<Phase>({
@@ -146,20 +146,20 @@ describe('parsePhase (PIPE-1, PIPE-2)', () => {
     );
   });
 
-  it('refuses a filename whose tokens do not match the table (PIPE-2)', () => {
+  it('refuses a filename whose tokens do not match the table (pipeline-2)', () => {
     expect(() =>
       parsePhase({ name: 'text2fsm.md', content: text2gears }),
     ).toThrow(expect.objectContaining({ code: 'filename-mismatch' }));
   });
 
-  it('refuses a non-.md phase filename (PIPE-2)', () => {
+  it('refuses a non-.md phase filename (pipeline-2)', () => {
     expect(() =>
       parsePhase({ name: 'text2gears.txt', content: text2gears }),
     ).toThrow(PhaseError);
   });
 });
 
-describe('checkExtensionConsistency (PIPE-3)', () => {
+describe('checkExtensionConsistency (pipeline-3)', () => {
   const phase = (
     name: string,
     source: Phase['source'],

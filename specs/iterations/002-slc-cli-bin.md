@@ -29,7 +29,7 @@ Turn the stubbed `slc` bin into a working command-line compiler over the existin
    Add SPDX headers per [[licensing-1](../packages/licensing.md#licensing-1)]/[[licensing-2](../packages/licensing.md#licensing-2)].
 
 2. **Pipeline-reference resolver** ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#directory-layout)).
-   Implement a concrete `PipelineResolver` that maps a `<pipeline>` reference to candidate directories under a defined host policy, returning every match so `runSlc`'s exactly-one rule refuses zero or many ([PIPE-16](../dev/pipeline.md#pipe-16)).
+   Implement a concrete `PipelineResolver` that maps a `<pipeline>` reference to candidate directories under a defined host policy, returning every match so `runSlc`'s exactly-one rule refuses zero or many ([[pipeline-16](../packages/pipeline.md#pipeline-16)]).
    Unit-test the hit, miss, and ambiguous cases.
 
 3. **Configuration and agent/model selection** ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter)).

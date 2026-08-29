@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–6 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–7 are complete.
 
 ## Intent
 
@@ -73,7 +73,7 @@ The package classification audit yields this target placement, with new verifica
 | `licensing` | 1–2, 5–7 | — | 3–4, 8 |
 | `phase-execution` | 1–15, 23–25, 27, 29–31, 33–34, 36, 39, 42, 46 | — | 16–22, 26, 28, 32, 35, 37–38, 40–41, 43–45, 47–48 |
 | `pinning` | 1–6, 13, 15 | — | 7–12, 14, 16 |
-| `pipeline` | 1–19, 30–34, 37 | — | 20–29, 35–36, 38–39 plus new local coverage for behavior 11 |
+| `pipeline` | 1–19, 30–34, 37 | — | 20–29, 35–36, 38–40 |
 | `release` | 1–13, 17, 19 | — | 14–16, 18 plus uncovered local behavior |
 | `self-hosting` | 1–3, 6, 9, 11, 13–15 | — | 4–5, 7–8, 10, 12, 16 |
 | `verification` | 1–6, 10, 12–13, 15–16, 18 | — | 7–9, 11, 14, 17, 19 |
@@ -93,7 +93,7 @@ The behavior citation audit establishes these peer-package edges:
 | `verification` | `release` |
 
 Package tasks shall confirm or reject the additional uncited dependency candidates exposed by package intent or prose: continuous integration to verification and pinning; release to CLI, compiler, and incremental compilation; self-hosting to phase execution; and verification to pipeline and self-hosting.
-They shall also add the minimal local integration or system verification needed for uncovered compiler and continuous-integration behavior, CLI item 33, pipeline items 1, 3, 10–11, 19, and 37, and release items 1, 3–7, 9, 12–13, and 19.
+They shall also add the minimal local integration or system verification needed for uncovered compiler and continuous-integration behavior, CLI item 33, and release items 1, 3–7, 9, 12–13, and 19.
 
 ## Deliverables
 
@@ -121,7 +121,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 4. [x] Merged the `incremental-compilation` sources into `packages/incremental-compilation.md`, retargeted every authored item identity and reference, confirmed its two peer bindings, and localized its verification evidence.
 5. [x] Merged the `pinning` sources into `packages/pinning.md`, retargeted every authored item identity and reference, confirmed its self-hosting binding, localized its verification evidence, and left derived verifier-support copies for Task 13.
 6. [x] Merged the `phase-execution` sources into `packages/phase-execution.md`, retargeted every authored item identity and reference, confirmed its pinning, pipeline, and self-hosting bindings, localized behavior 29 coverage, and added `phase-execution-48` for behavior 33.
-7. Merge the `pipeline` sources into `packages/pipeline.md` and retarget all `PIPE-*` identities and citations, preserving its bidirectional component bindings with phase execution.
+7. [x] Merged the `pipeline` sources into `packages/pipeline.md`, retargeted every authored item identity and reference, preserved its phase-execution and self-hosting bindings, localized behaviors 1, 3, 10, 19, and 37, and added `pipeline-40` for behavior 11.
 8. Merge the `self-hosting` sources into `packages/self-hosting.md` and retarget all `SELFHOST-*` identities and citations.
 9. Merge the `verification` sources into `packages/verification.md` and retarget all `VERIFY-*` identities and citations.
 10. Merge the `release` sources into `packages/release.md` and retarget all `RELEASE-*` identities and citations.

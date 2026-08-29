@@ -231,7 +231,7 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
     expect(await exists(join(artDir, 'text2gears.playbook.ts'))).toBe(false);
   });
 
-  it('places the artifact directory under a cwd that differs from the source directory (DR-014, PIPE-38)', async () => {
+  it('places the artifact directory under a cwd that differs from the source directory (DR-014, pipeline-38)', async () => {
     const out = join(root, 'out');
     await mkdir(out);
     const result = await runSlc(['slc', source], { ...deps(), cwd: out });
@@ -287,11 +287,11 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
 
   // Playbook ships its reserved `link` as a phase definition with no
   // `## Link Targets`; the reserved `slc` link relaxes that requirement
-  // (PIPE-11), so `slc slc <src> --link <tgt>` links end to end to a
+  // (pipeline-40), so `slc slc <src> --link <tgt>` links end to end to a
   // `.playbook.ts` runtime. The agent is faked, so this exercises the SLC link
   // path, not Playbook's link-compiler behavior (PROVISIONAL: the interpreted
   // link follows Playbook's `link.md` prose, validated by a real artifact).
-  it('links the reserved slc pipeline through Playbook definitions to a .playbook.ts artifact', async () => {
+  it('links the reserved slc pipeline through target-less Playbook definitions (pipeline-40)', async () => {
     const root = await mkdtemp(join(tmpdir(), 'slc-reserved-link-'));
     try {
       const work = join(root, 'work');
@@ -361,10 +361,10 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
 // definitions as the reserved `slc`, and its target-less `link.md` loads under
 // the same relaxation, so `slc playbook <src> --link <tgt>` links to a
 // `.playbook.ts` runtime under `<basename>.playbook/` (SELFHOST-6, SELFHOST-7,
-// PIPE-11). The agent is faked, so this exercises SLC's resolution and link
+// pipeline-40). The agent is faked, so this exercises SLC's resolution and link
 // loading, not Playbook's link-compiler behavior.
 describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)', () => {
-  it('resolves `playbook` to the shared definitions and loads its target-less link', async () => {
+  it('resolves `playbook` and loads its target-less link (pipeline-40)', async () => {
     const root = await mkdtemp(join(tmpdir(), 'slc-playbook-link-'));
     try {
       const work = join(root, 'work');
@@ -396,8 +396,8 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
   // The ## Link Targets relaxation keys on the `playbook` linked format, not the
   // reference name, so an injected resolver mapping `playbook` to a directory
   // whose link emits a different format and omits ## Link Targets is refused
-  // (PIPE-11, DR-009).
-  it('refuses a `playbook` reference whose link is not the Playbook `playbook` format and omits ## Link Targets', async () => {
+  // (pipeline-40, DR-009).
+  it('refuses a non-playbook link without ## Link Targets (pipeline-40)', async () => {
     const root = await mkdtemp(join(tmpdir(), 'slc-playbook-badlink-'));
     try {
       const dir = join(root, 'custom');
@@ -482,7 +482,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     expect(result.ok).toBe(true);
     // The discovered optimize pass runs by default: the producing phase writes
     // the `.raw` intermediate and the pass the canonical gears (DR-014,
-    // PIPE-35).
+    // pipeline-35).
     expect(await exists(join(artDir, 'code.gears.raw.md'))).toBe(true);
     expect(await exists(join(artDir, 'code.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'code.fsm.ts'))).toBe(true);
@@ -745,7 +745,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     expect(diagnostics).toMatch(/coverage test not emitted/);
   });
 
-  it('emits no verification when -o relocates the fsm out of the artifact dir (VERIFY-2, PIPE-8)', async () => {
+  it('emits no verification when -o relocates the fsm out of the artifact dir (VERIFY-2, pipeline-8)', async () => {
     // Only the `playbook` pipeline defaults a link target (SELFHOST-13), so
     // `-o` on a bare `playbook` run names the linked artifact; the reserved
     // `slc` run of the same shared definitions keeps the full form where `-o`

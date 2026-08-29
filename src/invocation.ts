@@ -4,14 +4,14 @@
 /**
  * CLI parsing and invocation routing (DR-001, DR-002).
  *
- * Implements PIPE-9 (`slc <pipeline>[.<phase>] <source> [-o <target>]`), PIPE-12
+ * Implements pipeline-9 (`slc <pipeline>[.<phase>] <source> [-o <target>]`), pipeline-12
  * (`slc <pipeline>.link <object>... <target>` with positional, not extension- or
- * `--`-inferred, roles), PIPE-13 (`--link` selects the terminal link phase only
- * for full-pipeline runs), and PIPE-14 (opaque `--link-option name=value` pairs).
- * See specs/dev/pipeline.md.
+ * `--`-inferred, roles), pipeline-13 (`--link` selects the terminal link phase only
+ * for full-pipeline runs), and pipeline-14 (opaque `--link-option name=value` pairs).
+ * See specs/packages/pipeline.md.
  */
 
-/** An opaque link option passed through to the link phase (PIPE-14). */
+/** An opaque link option passed through to the link phase (pipeline-14). */
 export interface LinkOption {
   name: string;
   value: string;
@@ -86,7 +86,7 @@ export class CliError extends Error {
  * Parses argv (without the node/script prefix) into a routed {@link Invocation}.
  *
  * Options (`-o`, `--link`, `--link-option`, `--rebuild`) may be interspersed with positionals;
- * positional roles are assigned by position alone (PIPE-12).
+ * positional roles are assigned by position alone (pipeline-12).
  *
  * @throws {CliError} when the grammar is violated.
  */

@@ -117,7 +117,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-describe('full pipeline run (PIPE-20, PIPE-38, phase-execution-16)', () => {
+describe('full pipeline run (pipeline-20, pipeline-38, phase-execution-16)', () => {
   it('writes the canonical intermediate and output with one agent call per phase', async () => {
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow', source], deps(agent));
@@ -132,7 +132,7 @@ describe('full pipeline run (PIPE-20, PIPE-38, phase-execution-16)', () => {
     ]);
   });
 
-  it('lets -o override the output while keeping intermediates canonical (PIPE-28)', async () => {
+  it('lets -o override the output while keeping intermediates canonical (pipeline-28)', async () => {
     const { agent } = makeAgent();
     const out = join(srcDir, 'custom.fsm.ts');
     const result = await runSlc(['flow', source, '-o', out], deps(agent));
@@ -143,7 +143,7 @@ describe('full pipeline run (PIPE-20, PIPE-38, phase-execution-16)', () => {
     expect(await exists(join(artDir, 'onboarding.fsm.ts'))).toBe(false);
   });
 
-  it('creates the artifact directory under a cwd other than the source directory (PIPE-38)', async () => {
+  it('creates the artifact directory under a cwd other than the source directory (pipeline-38)', async () => {
     const outDir = join(root, 'elsewhere');
     await mkdir(outDir);
     const { agent } = makeAgent();
@@ -192,7 +192,7 @@ describe('full pipeline run (PIPE-20, PIPE-38, phase-execution-16)', () => {
   });
 });
 
-describe('single-phase run (PIPE-24)', () => {
+describe('single-phase run (pipeline-24)', () => {
   it('writes only the named phase target', async () => {
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow.text2gears', source], deps(agent));
@@ -216,14 +216,14 @@ describe('single-phase run (PIPE-24)', () => {
     expect(await exists(out)).toBe(false);
   });
 
-  it('reuses the artifact directory without nesting when invoked inside it (PIPE-24, PIPE-38)', async () => {
+  it('reuses the artifact directory without nesting when invoked inside it (pipeline-24, pipeline-38)', async () => {
     await mkdir(artDir, { recursive: true });
     const intermediate = join(artDir, 'onboarding.gears.md');
     await writeFile(intermediate, 'gears');
     const { agent } = makeAgent();
 
     // Invoked from inside the artifact directory: the cwd leaf is already
-    // <basename>.<pipeline>, so the run lands in place (PIPE-7, DR-014).
+    // <basename>.<pipeline>, so the run lands in place (pipeline-7, DR-014).
     const result = await runSlc(['flow.gears2fsm', intermediate], {
       ...deps(agent),
       cwd: artDir,
@@ -252,8 +252,8 @@ describe('single-phase run (PIPE-24)', () => {
   });
 });
 
-describe('link runs (PIPE-25, PIPE-26)', () => {
-  it('runs a single-object .link, placing the artifact under the invocation cwd (PIPE-38, DR-014)', async () => {
+describe('link runs (pipeline-25, pipeline-26, pipeline-40)', () => {
+  it('runs a single-object .link, placing the artifact under the invocation cwd (pipeline-38, DR-014)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
@@ -278,7 +278,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     expect(await exists(join(artDir, 'onboarding.run.ts'))).toBe(false);
   });
 
-  it('refuses a multi-object .link without -o (PIPE-25)', async () => {
+  it('refuses a multi-object .link without -o (pipeline-25)', async () => {
     const { agent } = makeAgent();
     const result = await runSlc(
       ['flow.link', 'a.fsm.ts', 'b.fsm.ts', join(srcDir, 'runner.ts')],
@@ -287,7 +287,26 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('runs a full pipeline then links the exit artifact (PIPE-26)', async () => {
+  it('refuses equal object and linked formats before execution (pipeline-25)', async () => {
+    await writeFile(
+      join(pipelineDir, 'link.md'),
+      linkDoc.replace('| target | run | .ts |', '| target | fsm | .ts |'),
+    );
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(
+      ['flow.link', 'onboarding.fsm.ts', 'runner.ts'],
+      deps(agent),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain(
+      'must differ from the object source format token',
+    );
+    expect(result.outputs).toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('runs a full pipeline then links the exit artifact (pipeline-26)', async () => {
     await writeFile(join(srcDir, 'runner.ts'), 'runner');
     const { agent } = makeAgent();
 
@@ -301,7 +320,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     expect(await exists(join(artDir, 'onboarding.run.ts'))).toBe(true); // linked artifact
   });
 
-  it('lets -o override the linked artifact for a .link run (PIPE-28)', async () => {
+  it('lets -o override the linked artifact for a .link run (pipeline-28)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
@@ -319,7 +338,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
     expect(await exists(out)).toBe(true);
   });
 
-  it('conveys --link-option to the link phase (PIPE-29)', async () => {
+  it('conveys --link-option to the link phase (pipeline-29)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
@@ -341,7 +360,7 @@ describe('link runs (PIPE-25, PIPE-26)', () => {
   });
 });
 
-describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-39)', () => {
+describe('pass phases and normalization (DR-013, DR-014; pipeline-35, pipeline-36, pipeline-39)', () => {
   const addOptimizePass = async (): Promise<void> => {
     await writeFile(
       join(pipelineDir, 'optimize.md'),
@@ -349,7 +368,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     );
   };
 
-  it('refuses a pass file with no portable name (PIPE-30, PIPE-35)', async () => {
+  it('refuses a pass file with no portable name (pipeline-30, pipeline-35)', async () => {
     await writeFile(
       join(pipelineDir, '.md'),
       formats('gears', '.md', 'gears', '.md'),
@@ -363,7 +382,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     expect(calls).toHaveLength(0);
   });
 
-  it('schedules a discovered pass by default: raw intermediate, canonical pass output (PIPE-32, PIPE-35)', async () => {
+  it('schedules a discovered pass by default: raw intermediate, canonical pass output (pipeline-32, pipeline-35)', async () => {
     await addOptimizePass();
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow', source], deps(agent));
@@ -385,7 +404,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     );
   });
 
-  it('-O states the default, scheduling the same pass (PIPE-32)', async () => {
+  it('-O states the default, scheduling the same pass (pipeline-32)', async () => {
     await addOptimizePass();
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow', source, '-O'], deps(agent));
@@ -395,7 +414,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     expect(await exists(join(artDir, 'onboarding.gears.md'))).toBe(true);
   });
 
-  it('--no-optimize runs the chain bare, skipping discovered passes (PIPE-35)', async () => {
+  it('--no-optimize runs the chain bare, skipping discovered passes (pipeline-35)', async () => {
     await addOptimizePass();
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow', source, '--no-optimize'], deps(agent));
@@ -404,7 +423,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     expect(await exists(join(artDir, 'onboarding.gears.raw.md'))).toBe(false);
   });
 
-  it('runs a pass standalone, writing the .opt sibling (PIPE-33)', async () => {
+  it('runs a pass standalone, writing the .opt sibling (pipeline-33)', async () => {
     await addOptimizePass();
     await mkdir(artDir, { recursive: true });
     const intermediate = join(artDir, 'onboarding.gears.md');
@@ -416,7 +435,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     expect(await exists(join(artDir, 'onboarding.gears.opt.md'))).toBe(true);
   });
 
-  it('schedules the generic normalize step ahead of the entry phase (PIPE-34, phase-execution-48)', async () => {
+  it('schedules the generic normalize step ahead of the entry phase (pipeline-34, phase-execution-48)', async () => {
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow', source, '--normalize'], deps(agent));
     expect(result.ok).toBe(true);
@@ -445,7 +464,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     expect(result.diagnostics.join('\n')).toContain(entryDefinition);
   });
 
-  it('auto-schedules normalization for a raw entry source without --normalize (PIPE-39)', async () => {
+  it('auto-schedules normalization for a raw entry source without --normalize (pipeline-39)', async () => {
     const rawSource = join(srcDir, 'onboarding.txt'); // entry declares .md
     await writeFile(rawSource, 'raw prose');
     const { agent, calls } = makeAgent();
@@ -471,7 +490,32 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
   });
 });
 
-describe('failure paths (phase-execution-17, phase-execution-19, phase-execution-22, PIPE-21, PIPE-27)', () => {
+describe('failure paths (phase-execution-17, phase-execution-19, phase-execution-22, pipeline-21, pipeline-27)', () => {
+  it.each([
+    ['single phase', '-O'],
+    ['single phase', '--optimize'],
+    ['single phase', '--no-optimize'],
+    ['single phase', '--normalize'],
+    ['direct link', '-O'],
+    ['direct link', '--optimize'],
+    ['direct link', '--no-optimize'],
+    ['direct link', '--normalize'],
+  ])(
+    'refuses %s with %s before execution (pipeline-35)',
+    async (kind, flag) => {
+      const args =
+        kind === 'single phase'
+          ? ['flow.text2gears', source, flag]
+          : ['flow.link', 'onboarding.fsm.ts', 'runner.ts', flag];
+      const { agent, calls } = makeAgent();
+      const result = await runSlc(args, deps(agent));
+
+      expect(result.ok).toBe(false);
+      expect(result.outputs).toEqual([]);
+      expect(calls).toHaveLength(0);
+    },
+  );
+
   it('fails when the agent does not write the target (phase-execution-17)', async () => {
     const { agent } = makeAgent({ skip: true });
     const result = await runSlc(['flow', source], deps(agent));
@@ -664,7 +708,7 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
     expect(result.ok).toBe(true);
   });
 
-  it('fails when a phase filename disagrees with its ## Formats (PIPE-23)', async () => {
+  it('fails when a phase filename disagrees with its ## Formats (pipeline-23)', async () => {
     const badDir = join(root, 'badname');
     await mkdir(badDir);
     // Named text2gears.md but declares target fsm, so the expected name is text2fsm.md.
@@ -689,7 +733,7 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
     expect(result.diagnostics.join('\n')).toContain('no longer valid');
   });
 
-  it('fails on an invalid pipeline chain (PIPE-21)', async () => {
+  it('fails on an invalid pipeline chain (pipeline-21)', async () => {
     const broken = join(root, 'broken');
     await mkdir(broken);
     await writeFile(join(broken, 'a2b.md'), formats('a', '.md', 'b', '.md'));
@@ -701,7 +745,23 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
     expect(result.outputs).toEqual([]);
   });
 
-  it('fails on an unresolved pipeline reference (PIPE-27)', async () => {
+  it('fails on conflicting extensions before execution (pipeline-21)', async () => {
+    await writeFile(
+      join(pipelineDir, 'gears2fsm.md'),
+      formats('gears', '.txt', 'fsm', '.ts'),
+    );
+    const { agent, calls } = makeAgent();
+    const result = await runSlc(['flow', source], deps(agent));
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toContain(
+      'declares conflicting extensions',
+    );
+    expect(result.outputs).toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('fails on an unresolved pipeline reference (pipeline-27)', async () => {
     const { agent } = makeAgent();
     const result = await runSlc(['missing', source], deps(agent));
     expect(result.ok).toBe(false);
@@ -709,7 +769,7 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
     expect(result.outputs).toEqual([]);
   });
 
-  it('fails on an ambiguous pipeline reference (PIPE-27)', async () => {
+  it('fails on an ambiguous pipeline reference (pipeline-27)', async () => {
     const { agent } = makeAgent();
     const ambiguous: SlcDeps = {
       ...deps(agent),
@@ -721,8 +781,8 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
     expect(result.outputs).toEqual([]);
   });
 
-  it('fails on a non-entry source whose name matches no form (PIPE-22)', async () => {
-    // An entry source with a foreign extension is a raw input now (PIPE-39);
+  it('fails on a non-entry source whose name matches no form (pipeline-22)', async () => {
+    // An entry source with a foreign extension is a raw input now (pipeline-39);
     // only non-entry sources keep the strict refusal (DR-014).
     const badSource = join(srcDir, 'onboarding.txt');
     await writeFile(badSource, 'prose');

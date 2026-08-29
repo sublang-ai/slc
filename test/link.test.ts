@@ -40,7 +40,7 @@ Validation:
 Reject invocations with anything other than one object.
 `;
 
-describe('parseLinkPhase (PIPE-11, PIPE-19)', () => {
+describe('parseLinkPhase (pipeline-11, pipeline-19)', () => {
   it('reads formats, target forms, required symbols, options, and validation', () => {
     const link = parseLinkPhase(linkDoc);
     expect(link.source).toEqual({ format: 'fsm', ext: '.ts' });
@@ -71,7 +71,7 @@ describe('parseLinkPhase (PIPE-11, PIPE-19)', () => {
     expect(link.validation).toBeNull();
   });
 
-  it('refuses a linked format token equal to the object source token (PIPE-19)', () => {
+  it('refuses a linked format token equal to the object source token (pipeline-19)', () => {
     const collide = linkDoc.replace(
       '| target | run | .ts |',
       '| target | fsm | .ts |',
@@ -88,7 +88,7 @@ describe('parseLinkPhase (PIPE-11, PIPE-19)', () => {
     );
   });
 
-  it('accepts a missing ## Link Targets for the Playbook-owned `playbook` format (PIPE-11, DR-009)', () => {
+  it('accepts a missing ## Link Targets for the Playbook-owned `playbook` format (pipeline-11, DR-009)', () => {
     const playbookLink = `## Formats
 
 | Role | Format | Extension |
@@ -164,7 +164,7 @@ describe('loadLinkFile', () => {
   });
 });
 
-describe('linkedArtifactPath (PIPE-15, PIPE-18)', () => {
+describe('linkedArtifactPath (pipeline-15, pipeline-18)', () => {
   const fsm = { format: 'fsm', ext: '.ts' };
   const playbook = { format: 'playbook', ext: '.ts' };
 
@@ -207,7 +207,7 @@ describe('linkedArtifactPath (PIPE-15, PIPE-18)', () => {
     ).toBe(join('flows', 'onboarding.playbook', 'onboarding.playbook.ts'));
   });
 
-  it('places the single-object artifact under the CWD when the object lives elsewhere (DR-014, PIPE-38)', () => {
+  it('places the single-object artifact under the CWD when the object lives elsewhere (DR-014, pipeline-38)', () => {
     expect(
       linkedArtifactPath({
         kind: 'link',
@@ -223,7 +223,7 @@ describe('linkedArtifactPath (PIPE-15, PIPE-18)', () => {
     );
   });
 
-  it('reuses the CWD when its leaf is already <basename>.<pipeline> (DR-014, PIPE-38)', () => {
+  it('reuses the CWD when its leaf is already <basename>.<pipeline> (DR-014, pipeline-38)', () => {
     expect(
       linkedArtifactPath({
         kind: 'link',

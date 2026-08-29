@@ -26,12 +26,12 @@ Verifies: [SELFHOST-1](../user/self-hosting.md#selfhost-1), [SELFHOST-2](../dev/
 Where a fixture reserves an `slc` pipeline that chains `text2gears` and `gears2fsm` and a `link.md` emitting `playbook`, when the user runs `slc slc <definition>` and then the same run with an explicit `--link <target>`, the slc command shall write the `fsm` object and a `playbook` artifact that resolves to a `createPlaybookRuntime` factory at their canonical locations under the working directory ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)), and shall still fail the run when the `slc` reference itself does not resolve.
 
 ### SELFHOST-5
-Verifies: [SELFHOST-2](../dev/self-hosting.md#selfhost-2), [SELFHOST-3](../dev/self-hosting.md#selfhost-3), [PIPE-11](../dev/pipeline.md#pipe-11)
+Verifies: [SELFHOST-2](../dev/self-hosting.md#selfhost-2), [SELFHOST-3](../dev/self-hosting.md#selfhost-3)
 
 Where the reserved `slc` resolves to the meta-pipeline definitions `@sublang/playbook` provides — whose `link.md` declares no `## Link Targets` — when the user runs `slc slc <definition> --link <target>`, the slc command shall chain those definitions and link the result to a `playbook` artifact at its canonical location under the working directory ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### SELFHOST-7
-Verifies: [SELFHOST-6](../dev/self-hosting.md#selfhost-6), [PIPE-11](../dev/pipeline.md#pipe-11)
+Verifies: [SELFHOST-6](../dev/self-hosting.md#selfhost-6)
 
 Where the `playbook` pipeline resolves to the definitions `@sublang/playbook` provides — whose `link.md` declares no `## Link Targets` — when the user runs `slc playbook <source> --link <target>`, the slc command shall resolve the `playbook` reference to those shared definitions, load that target-less link, and write the `playbook` artifact into the working directory's `<basename>.playbook/` at its canonical name ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 

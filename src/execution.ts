@@ -45,7 +45,7 @@ import {
 
 import { errorCode, isAbsentPathError, messageOf } from './errors.js';
 
-/** An opaque link option pair (PIPE-14), structurally compatible with the CLI's LinkOption. */
+/** An opaque link option pair (pipeline-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
   name: string;
   value: string;

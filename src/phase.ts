@@ -4,11 +4,11 @@
 /**
  * Phase model and `## Formats` parsing (DR-001).
  *
- * Implements PIPE-1 (read the authoritative `## Formats` table), PIPE-2 (refuse
+ * Implements pipeline-1 (read the authoritative `## Formats` table), pipeline-2 (refuse
  * a phase whose `<source-format>2<target-format>.md` filename does not match its
- * table), and PIPE-3 (refuse phases declaring conflicting extensions for the
+ * table), and pipeline-3 (refuse phases declaring conflicting extensions for the
  * same format token). The `## Formats` reader is shared with the link loader.
- * See specs/dev/pipeline.md.
+ * See specs/packages/pipeline.md.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -81,7 +81,7 @@ export function isPortablePhaseName(value: string): boolean {
 
 /**
  * Reads the authoritative `## Formats` table into its source and target
- * declarations (PIPE-1), shared by the phase and link loaders.
+ * declarations (pipeline-1), shared by the phase and link loaders.
  *
  * Refusals are reported through `fail` so each loader can raise its own error
  * type; `fail` must not return.
@@ -135,7 +135,7 @@ export function readFormats(
  * Parses and validates a phase definition from its filename and content.
  *
  * @throws {PhaseError} when the `## Formats` table is missing or malformed, or
- *   when the filename does not match the declared tokens (PIPE-1, PIPE-2).
+ *   when the filename does not match the declared tokens (pipeline-1, pipeline-2).
  */
 export function parsePhase(file: { name: string; content: string }): Phase {
   const { source, target } = readFormats(file.content, (code, message) => {
@@ -166,7 +166,7 @@ export function parsePhase(file: { name: string; content: string }): Phase {
   return { name: file.name.slice(0, -'.md'.length), source, target, pass };
 }
 
-/** Reads a phase definition file from disk and parses it (PIPE-1, PIPE-2). */
+/** Reads a phase definition file from disk and parses it (pipeline-1, pipeline-2). */
 export async function loadPhaseFile(path: string): Promise<Phase> {
   const content = await readFile(path, 'utf8');
   return parsePhase({ name: basename(path), content });
@@ -174,7 +174,7 @@ export async function loadPhaseFile(path: string): Promise<Phase> {
 
 /**
  * Refuses a set of phases that declare conflicting extensions for the same
- * format token (PIPE-3).
+ * format token (pipeline-3).
  *
  * @throws {PhaseError} with code `extension-conflict` on the first conflict.
  */

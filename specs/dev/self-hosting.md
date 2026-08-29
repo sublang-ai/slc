@@ -38,7 +38,7 @@ When resolving the reserved `slc` or the `playbook` pipeline reference, the slc 
 
 ### SELFHOST-13
 
-When a full invocation of the `playbook` pipeline carries no `--link`, the slc command shall supply the installed `@sublang/playbook` package's `src/runtime.ts` — located by the same package resolution the pin generator uses — as the default link target and run the full-link form against it; the reserved `slc` pipeline and every other pipeline shall keep requiring an explicit `--link` ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [PIPE-13](pipeline.md#pipe-13)).
+When a full invocation of the `playbook` pipeline carries no `--link`, the slc command shall supply the installed `@sublang/playbook` package's `src/runtime.ts` — located by the same package resolution the pin generator uses — as the default link target and run the full-link form against it; the reserved `slc` pipeline and every other pipeline shall keep requiring an explicit `--link` ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [[pipeline-13](../packages/pipeline.md#pipeline-13)]).
 
 ## Playbook format
 

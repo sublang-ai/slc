@@ -24,7 +24,7 @@ const phase = (
   target: { format: target[0], ext: target[1] },
 });
 
-describe('parseSource (PIPE-6)', () => {
+describe('parseSource (pipeline-6)', () => {
   it('accepts the plain entry form', () => {
     expect(
       parseSource({
@@ -147,7 +147,7 @@ describe('parseSource (PIPE-6)', () => {
   });
 });
 
-describe('artifactDir (PIPE-7)', () => {
+describe('artifactDir (pipeline-7)', () => {
   it('places artifacts in a canonical directory under the invocation cwd (DR-014)', () => {
     expect(artifactDir('flows', 'onboarding', 'playbook')).toBe(
       join('flows', 'onboarding.playbook'),
@@ -171,7 +171,7 @@ describe('artifactDir (PIPE-7)', () => {
   });
 });
 
-describe('artifactPath and planArtifacts (PIPE-8)', () => {
+describe('artifactPath and planArtifacts (pipeline-8)', () => {
   const artDir = join('flows', 'onboarding.playbook');
   const chain = [
     phase('text2gears', ['text', '.md'], ['gears', '.md']),
