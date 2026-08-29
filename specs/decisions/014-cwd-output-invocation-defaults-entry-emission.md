@@ -9,7 +9,7 @@ Accepted
 
 ## Context
 
-AI compilation is nondeterministic: recompiling a source whose reference bundle is committed beside it ([DR-001](001-slc-pipeline-layout-naming-invocation.md#output-locations)) overwrites reviewed artifacts in place with byte-different output.
+AI compilation is nondeterministic: recompiling a source whose reference bundle is committed beside it ([DR-001](001-slc-pipeline-layout-naming-invocation.md)) overwrites reviewed artifacts in place with byte-different output.
 Classic compilers solve this with out-of-tree builds: outputs follow the invocation, not the source.
 
 The canonical raw-prose invocation carries three flags — `--normalize -O --link <path>` — although each has exactly one sensible value for the `playbook` pipeline, and the `--link` path reaches into `node_modules/`.
@@ -21,7 +21,7 @@ Playbook 1.0's `run` CLI consumes any module whose default export matches its re
 
 ### 1. Artifact directory from the invocation CWD
 
-Supersedes [DR-001 §Output locations](001-slc-pipeline-layout-naming-invocation.md#output-locations) placement; naming is unchanged.
+Supersedes the output-location placement in [DR-001](001-slc-pipeline-layout-naming-invocation.md); naming is unchanged.
 
 - `<art-dir>` = `<cwd>/<basename>.<pipeline>/`, where `<cwd>` is the invocation working directory.
 - When `<cwd>`'s leaf name is exactly `<basename>.<pipeline>`, `<art-dir>` = `<cwd>` — no nesting, so re-runs invoked inside the artifact directory land in place.
@@ -45,7 +45,7 @@ Amends [DR-013 §1](013-normalize-and-pass-phases.md) ("passes run only on reque
 
 ### 4. Default link target for the reserved playbook pipeline
 
-Amends [DR-002 §CLI](002-slc-link-phases.md#cli) ("default link targets are not supported") for the reserved `playbook` pipeline only.
+Amends the CLI decision in [DR-002](002-slc-link-phases.md) ("default link targets are not supported") for the reserved `playbook` pipeline only.
 
 - A full invocation of the reserved `playbook` pipeline without `--link` runs the full-link form against the installed `@sublang/playbook` runtime contract module (the package's `src/runtime.ts`, located by the same package resolution the pin generator uses).
 - Every other pipeline keeps DR-002: without `--link`, the run stops at the compile-chain output.

@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–19 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–20 are complete.
 
 ## Intent
 
@@ -132,7 +132,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 17. [x] Migrated the normalization-demo, CWD-emission, grammar-provenance, and Playbook 2 records into `intents/`, preserved their four `Done` states, 26 checked deliverables, and 24 task boundaries, routed surviving behavior and verification to their owning packages and decisions, corrected direct-link placement to the invocation-CWD contract, and removed their cross-intent decision and demo-script provenance.
 18. [x] Migrated the first-release, local-release-acceptance, and Playbook 3.1 records into `intents/`, preserved the first release's unverified external handoff plus two `Done` states, 18 checked and two unchecked deliverables, and 11 task boundaries, recovered the adoption's seven tasks from the named commits, separated its stale release checkbox from truthful status, routed surviving behavior and evidence to current packages and decisions, and removed their legacy map entries.
 19. [x] Migrated the progress-watchdog, Playbook 4, and incremental-compilation records into `intents/`, preserved their three `Done` states, eight checked and seven stale unchecked deliverables, six checked task states, and 17 task boundaries, recovered the watchdog's seven tasks from the named commits, moved the Playbook 4 task checkboxes into its required Deliverables section, separated stale progress evidence from truthful status, retargeted the changelog reference, and removed the retired intent map index.
-20. Migrate the pipeline-layout and link-phase decision records to current citation law without changing their accepted decisions.
+20. [x] Migrated the pipeline-layout and link-phase decision records to current citation law, preserved their Accepted states and decisions, normalized their substantive citations, and retargeted every malformed inbound link.
 21. Migrate the execution-boundary, interpreted-execution, and self-hosting decision records to current citation law without changing their accepted decisions.
 22. Migrate the configuration-sources decision record to current citation law without changing the accepted decision.
 23. Migrate the pinning and file-capability decision records to current citation law, preserving the capability decision's superseded status.
