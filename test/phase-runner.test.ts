@@ -11,7 +11,7 @@ import {
   seedPhaseTurn,
 } from '../src/phase-runner.js';
 
-describe('mapPhaseResult (PHEXEC-24)', () => {
+describe('mapPhaseResult (phase-execution-24)', () => {
   it.each(['ok', 'blocked', 'error'] as const)(
     'carries the %s status to the executor outcome',
     (status) => {
@@ -35,7 +35,7 @@ describe('mapPhaseResult (PHEXEC-24)', () => {
 
 // The settled SLC-to-runtime seeding contract: a prose directive naming the
 // request kind, then the full request as one `Request: `-introduced JSON line.
-describe('seedPhaseTurn (PHEXEC-29)', () => {
+describe('seedPhaseTurn (phase-execution-29)', () => {
   const requestLine = (seed: string): string => {
     const line = seed
       .split('\n')

@@ -33,7 +33,7 @@ Turn the stubbed `slc` bin into a working command-line compiler over the existin
    Unit-test the hit, miss, and ambiguous cases.
 
 3. **Configuration and agent/model selection** ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter)).
-   Resolve configuration into an agent-CLI selection (a Cligent adapter chosen by name) and an optional model, taking credentials from the environment, then construct the Cligent-backed `AgentClient` via `createCligentAgent` and the executor via `createInterpretedExecutor`, keeping selection configuration-only and never phase semantics ([PHEXEC-13](../dev/phase-execution.md#phexec-13)).
+   Resolve configuration into an agent-CLI selection (a Cligent adapter chosen by name) and an optional model, taking credentials from the environment, then construct the Cligent-backed `AgentClient` via `createCligentAgent` and the executor via `createInterpretedExecutor`, keeping selection configuration-only and never phase semantics ([[phase-execution-13](../packages/phase-execution.md#phase-execution-13)]).
    Unit-test the configuration resolution with adapter construction faked.
 
 4. **Bin orchestration and reporting** ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#cli), [DR-003](../decisions/003-slc-phase-execution.md#blocked-protocol)).

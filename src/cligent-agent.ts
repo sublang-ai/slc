@@ -7,19 +7,19 @@
  * Backs the interpreter's agent transport with Cligent (npm `@sublang/cligent`),
  * draining its event stream into a normalized {@link AgentRunResult}. The host
  * supplies the concrete `AgentAdapter` (e.g. Claude Code, Codex) and any write
- * permissions, keeping agent selection a configuration concern (PHEXEC-13); the
+ * permissions, keeping agent selection a configuration concern (phase-execution-13); the
  * DR-003 write-scope sandbox would be configured here via `permissions`.
  *
- * The transport also owns the agent-stall watchdog (DR-019, PHEXEC-36): with a
+ * The transport also owns the agent-stall watchdog (DR-019, phase-execution-36): with a
  * positive `stallTimeoutMs`, an in-flight call that observes no adapter event
  * for that window is aborted through a call-local controller — the caller's
  * signal is composed in, never mutated — and reported as an error carrying the
  * inactivity duration. Cligent's abort drain guarantees the event loop then
  * terminates promptly with a terminal event, so a tripped watchdog cannot
- * itself hang. No retry occurs at this seam (PHEXEC-12, PHEXEC-23).
+ * itself hang. No retry occurs at this seam (phase-execution-12, phase-execution-23).
  *
  * This transport is exercised by integration runs and by tests that fake the
- * adapter's event stream. See specs/dev/phase-execution.md.
+ * adapter's event stream. See specs/packages/phase-execution.md.
  */
 
 import { Cligent } from '@sublang/cligent';
@@ -64,7 +64,7 @@ export function createCligentAgent(opts: {
   effort?: string;
   /**
    * Milliseconds of adapter-event inactivity after which the in-flight call is
-   * aborted and reported as an error (DR-019, PHEXEC-36). Zero or absent
+   * aborted and reported as an error (DR-019, phase-execution-36). Zero or absent
    * disables the watchdog.
    */
   stallTimeoutMs?: number;

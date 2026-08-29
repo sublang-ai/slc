@@ -4,22 +4,22 @@
 /**
  * Execution boundary orchestrator and generic checks (DR-003).
  *
- * `runPhase` performs only generic mechanics (PHEXEC-1): it snapshots the
+ * `runPhase` performs only generic mechanics (phase-execution-1): it snapshots the
  * protected inputs, runs an injected {@link PhaseExecutor} (interpreted in
  * IR-001 Task 9, compiled later), then applies the generic checks — the target
- * exists and its extension matches the declared one (PHEXEC-4); the source,
+ * exists and its extension matches the declared one (phase-execution-4); the source,
  * objects, link target, and the chain's definition files are unchanged; and an
  * optional `revalidate` hook confirms the pipeline chain still infers, catching
- * added/removed phase files (PHEXEC-5). Input-mutating write-scope violations
- * are caught after any executor outcome (PHEXEC-3, PHEXEC-6). A `blocked` or
+ * added/removed phase files (phase-execution-5). Input-mutating write-scope violations
+ * are caught after any executor outcome (phase-execution-3, phase-execution-6). A `blocked` or
  * `error` result, a thrown executor, or any failed check becomes a failure
- * report naming the phase, target, and reasons (PHEXEC-7, PHEXEC-9).
+ * report naming the phase, target, and reasons (phase-execution-7, phase-execution-9).
  *
- * The executor honors PHEXEC-2 by treating the passed definition as the
+ * The executor honors phase-execution-2 by treating the passed definition as the
  * semantic source of truth. The host refuses target/input aliases and verifies
  * protected inputs afterward; sandboxing arbitrary unrelated writes remains a
  * host capability outside this boundary.
- * See specs/dev/phase-execution.md.
+ * See specs/packages/phase-execution.md.
  */
 
 import { createHash } from 'node:crypto';
@@ -106,7 +106,7 @@ export function updateContextLines(
 export type ExecuteRequest =
   | {
       kind: 'compile';
-      /** Path to the phase definition, the semantic source of truth (PHEXEC-2). */
+      /** Path to the phase definition, the semantic source of truth (phase-execution-2). */
       definitionPath: string;
       source: string;
       target: string;
@@ -121,7 +121,7 @@ export type ExecuteRequest =
     }
   | {
       kind: 'link';
-      /** Path to the `link.md` definition, the semantic source of truth (PHEXEC-2). */
+      /** Path to the `link.md` definition, the semantic source of truth (phase-execution-2). */
       definitionPath: string;
       objects: string[];
       linkTarget: string;
@@ -143,7 +143,7 @@ export interface PhaseExecutor {
   run(request: ExecuteRequest, signal: AbortSignal): Promise<ExecutorResult>;
 }
 
-/** A failure naming the phase, target path, and reasons (PHEXEC-9). */
+/** A failure naming the phase, target path, and reasons (phase-execution-9). */
 export interface FailureReport {
   phase: string;
   target: string;
@@ -192,7 +192,7 @@ export async function pathsAlias(
 
 /**
  * Runs a single phase through the execution boundary: generic mechanics only,
- * plus the DR-003 generic checks and blocked protocol (PHEXEC-1, PHEXEC-4..9).
+ * plus the DR-003 generic checks and blocked protocol (phase-execution-1, phase-execution-4..9).
  */
 export async function runPhase(opts: {
   request: ExecuteRequest;
@@ -207,7 +207,7 @@ export async function runPhase(opts: {
   aliasInputs?: readonly string[];
   /** Host state transition that must succeed immediately before executor work. */
   beforeExecute?: () => void | Promise<void>;
-  /** Re-checks that the pipeline chain still infers; throws when it no longer does (PHEXEC-5). */
+  /** Re-checks that the pipeline chain still infers; throws when it no longer does (phase-execution-5). */
   revalidate?: () => void | Promise<void>;
   signal?: AbortSignal;
 }): Promise<PhaseResult> {
@@ -282,7 +282,7 @@ export async function runPhase(opts: {
 
   // Protected inputs and chain definitions are re-checked after any outcome, so
   // a mutation is caught even when the executor blocks, errors, or throws
-  // (PHEXEC-5, PHEXEC-6).
+  // (phase-execution-5, phase-execution-6).
   const after = await snapshot(protectedPaths);
   for (const path of protectedPaths) {
     if (before.get(path) !== after.get(path)) {
@@ -304,7 +304,7 @@ export async function runPhase(opts: {
   return { ok: true, target, diagnostics: result?.diagnostics ?? [] };
 }
 
-/** Renders a failure report as a multi-line diagnostic string (PHEXEC-9). */
+/** Renders a failure report as a multi-line diagnostic string (phase-execution-9). */
 export function formatFailureReport(report: FailureReport): string {
   const lines = [`slc: phase "${report.phase}" failed at "${report.target}"`];
   for (const reason of report.reasons) {

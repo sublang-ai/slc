@@ -29,9 +29,9 @@ This bootstraps self-hosting: `slc slc` compiles the meta-pipeline's own phase d
 - [x] `@sublang/playbook` installed and version-aligned (`^0.9.0`) to the release that ships the `slc/` definitions and the `./runtime` contract `slc` consumes, so the reserved `slc` resolves here (the `playbook` pipeline resolution lands with its own deliverable in Task 3)
 - [x] The `playbook` domain pipeline resolvable in this repo (its `text2gears`/`gears2fsm`/`link` definitions reused from the installed package via `withReservedPipelines`), with [PIPE-11](../dev/pipeline.md#pipe-11) reconciled so the Playbook-authored target-less `link.md` loads for the `playbook` pipeline, not only the reserved `slc` name ([SELFHOST-6](../dev/self-hosting.md#selfhost-6))
 - [x] `slc playbook <source>` producing `<basename>.playbook/{<basename>.gears.md, <basename>.fsm.ts}` and `slc playbook <source> --link <target>` additionally linking `<basename>.playbook.ts`, under interpreted execution, with an integration test over a faked agent transport (extends `compiler`, `SELFHOST`) ([SELFHOST-8](../test/self-hosting.md#selfhost-8))
-- [x] Compiled execution completed for real artifacts: the player sandbox and host-side file-capability/write-scope scope removed (DR-008 superseded, `FCAP` package and code deleted), the `seedPhaseTurn`/`PhaseInput` contract settled against a real `playbook` artifact, and write scope left to the [DR-003](../decisions/003-slc-phase-execution.md) generic checks as for interpreted execution (extends `PHEXEC`)
+- [x] Compiled execution completed for real artifacts: the player sandbox and host-side file-capability/write-scope scope removed (DR-008 superseded, `FCAP` package and code deleted), the `seedPhaseTurn`/`PhaseInput` contract settled against a real `playbook` artifact, and write scope left to the [DR-003](../decisions/003-slc-phase-execution.md) generic checks as for interpreted execution (extends `phase-execution`)
 - [x] Reviewed, committed, and pinned compiled `playbook` artifacts for the meta phases (`text2gears`, `gears2fsm`, `link`) produced via `slc slc`, selecting the best of Claude Code + Opus 4.8 and Codex + GPT-5.5, with `slc.pins.json` per [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#artifact-stability) and [DR-007](../decisions/007-slc-phase-artifact-pinning.md)
-- [x] The `playbook` pipeline pinned to those compiled meta-phase artifacts so `slc playbook <source>` performs through compiled execution, with current pins running compiled and stale/missing pins failing closed (extends `PHEXEC`, `compiler`)
+- [x] The `playbook` pipeline pinned to those compiled meta-phase artifacts so `slc playbook <source>` performs through compiled execution, with current pins running compiled and stale/missing pins failing closed (extends `phase-execution`, `compiler`)
 - [x] Auto-generated compilation-correctness tests modeled on the reference (gears↔fsm verbatim-prompt and player-binding and `needsBossReply` coverage; fsm introspection; prompt-contract; fsm coverage), emitted beside the artifacts, in a new spec package
 - [x] An equivalence harness comparing `slc playbook ../playbook/reference/sdlc/code.md` output to `../playbook/reference/sdlc/code.playbook/` for equivalence (states, verbatim prompts, player bindings, runtime contract), not byte-identity
 - [x] `map.md` updated for IR-007, the new decision record, and any new spec package(s)
@@ -70,7 +70,7 @@ Tasks gated on real agent runs or human review are flagged; they may split furth
 ### C. Remove the sandbox scope
 
 5. **Remove the player-sandbox and file-capability scope.**
-   Per the Boss decision, drop the deferred player sandbox and host-side file-capability staging/write-scope enforcement rather than design around it: supersede [DR-008](../decisions/008-slc-file-capability.md), delete the `FCAP` package and the `file-capability`/`file-grants` code and tests, drop the reserved `ClosureInput`/`semanticInputs` plumbing from the compiled executor, and reconcile [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)/[DR-007](../decisions/007-slc-phase-artifact-pinning.md)/`PHEXEC` so a compiled phase writes through its agents and relies on the [DR-003](../decisions/003-slc-phase-execution.md) generic checks, like interpreted execution.
+   Per the Boss decision, drop the deferred player sandbox and host-side file-capability staging/write-scope enforcement rather than design around it: supersede [DR-008](../decisions/008-slc-file-capability.md), delete the `FCAP` package and the `file-capability`/`file-grants` code and tests, drop the reserved `ClosureInput`/`semanticInputs` plumbing from the compiled executor, and reconcile [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#linked-phase-artifact-contract)/[DR-007](../decisions/007-slc-phase-artifact-pinning.md)/`phase-execution` so a compiled phase writes through its agents and relies on the [DR-003](../decisions/003-slc-phase-execution.md) generic checks, like interpreted execution.
    The removed unit suites go with their code; the compiled-executor, ports, selection, and pinning suites stay green.
 
 ### D. Self-hosting compiled bootstrap (gated on real agent runs + review)
@@ -80,8 +80,8 @@ Tasks gated on real agent runs or human review are flagged; they may split furth
    Judgment-produced and human-reviewed; may split one task per phase.
 
 7. **Settle the input contract, wire the executor, and perform through the pins.**
-   Settle the `seedPhaseTurn`/`PhaseInput` contract against the first real artifact (Task 6) and wire `createCompiledExecutor` into `buildDeps`, then pin the `playbook` pipeline's phases to the Task 6 artifacts and run `slc playbook code.md` through compiled execution, so a current pin runs compiled and a stale or missing pin fails closed and never silently interprets ([PHEXEC-27](../dev/phase-execution.md#phexec-27)).
-   Extend `PHEXEC`/`compiler`; add an integration test per verdict path.
+   Settle the `seedPhaseTurn`/`PhaseInput` contract against the first real artifact (Task 6) and wire `createCompiledExecutor` into `buildDeps`, then pin the `playbook` pipeline's phases to the Task 6 artifacts and run `slc playbook code.md` through compiled execution, so a current pin runs compiled and a stale or missing pin fails closed and never silently interprets ([[phase-execution-27](../packages/phase-execution.md#phase-execution-27)]).
+   Extend `phase-execution`/`compiler`; add an integration test per verdict path.
 
 ### E. Verification test generation
 
@@ -98,7 +98,7 @@ Tasks gated on real agent runs or human review are flagged; they may split furth
 ### G. Finalize
 
 10. **Spec coherence and `map.md`.**
-    Make a coherence pass over `compiler`, `PIPE`, `PHEXEC`, `SELFHOST`, `pinning`, and the new package(s) so items are complete, minimal, right-level, and well organized, and ensure `map.md` reflects every change.
+    Make a coherence pass over `compiler`, `PIPE`, `phase-execution`, `SELFHOST`, `pinning`, and the new package(s) so items are complete, minimal, right-level, and well organized, and ensure `map.md` reflects every change.
 
 ## Acceptance criteria
 

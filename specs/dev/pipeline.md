@@ -92,7 +92,7 @@ When loading `link.md`, the slc command shall read its `## Formats` (the object 
 
 ### PIPE-19
 
-While loading `link.md`, the slc command shall refuse a linked format token equal to the object source format token declared in `## Formats`, even when they share a file extension; accepting any additional object formats and validating object count and compatibility are the link phase's responsibility ([DR-002](../decisions/002-slc-link-phases.md#link-phase), [PHEXEC-7](phase-execution.md#phexec-7)).
+While loading `link.md`, the slc command shall refuse a linked format token equal to the object source format token declared in `## Formats`, even when they share a file extension; accepting any additional object formats and validating object count and compatibility are the link phase's responsibility ([DR-002](../decisions/002-slc-link-phases.md#link-phase), [[phase-execution-7](../packages/phase-execution.md#phase-execution-7)]).
 
 ### PIPE-12
 
@@ -130,7 +130,7 @@ When invoked as `slc <pipeline>.<pass> <source>`, the slc command shall run the 
 
 ### PIPE-34
 
-When a full or full-link invocation carries `--normalize` or its entry source is a raw input ([PIPE-6](#pipe-6)), the slc command shall schedule one generic normalization step ahead of the entry phase, driven by the pipeline-agnostic definition shipped with slc, writing `<art-dir>/<basename>.<entry-source-format><entry-source-ext>` as the entry phase's source and supplying the entry-phase definition as a protected read-only reference input ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [PHEXEC-33](phase-execution.md#phexec-33)).
+When a full or full-link invocation carries `--normalize` or its entry source is a raw input ([PIPE-6](#pipe-6)), the slc command shall schedule one generic normalization step ahead of the entry phase, driven by the pipeline-agnostic definition shipped with slc, writing `<art-dir>/<basename>.<entry-source-format><entry-source-ext>` as the entry phase's source and supplying the entry-phase definition as a protected read-only reference input ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [[phase-execution-33](../packages/phase-execution.md#phase-execution-33)]).
 
 ### PIPE-37
 

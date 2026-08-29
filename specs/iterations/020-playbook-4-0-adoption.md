@@ -20,8 +20,8 @@ Done
 Each task is one commit and keeps the repository gates green at its
 boundary.
 
-1. [x] **Record the adoption.** Record DR-020; amend PHEXEC-30 and
-       PHEXEC-28 for the 4.0.0 provenance mapping, SELFHOST-11 and
+1. [x] **Record the adoption.** Record DR-020; amend phase-execution-30 and
+       phase-execution-28 for the 4.0.0 provenance mapping, SELFHOST-11 and
        SELFHOST-12 for the retained-bundle adoption shape, and CI-4 for the
        4.0.0 anchor; add the DR-020 and IR-020 rows to the spec map.
 2. [x] **Adopt the reviewed set.** Move the root manifest to playbook

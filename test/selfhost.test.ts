@@ -523,7 +523,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     ).toContain('from "./.slc-verify/verify.js"');
   });
 
-  it('compiles a raw .ts source without replacing it with the deterministic entry (PHEXEC-44)', async () => {
+  it('compiles a raw .ts source without replacing it with the deterministic entry (phase-execution-44)', async () => {
     const rawSource = join(work, 'raw.ts');
     const rawBytes =
       'export const workflowIntent = "compile this raw workflow";\n';
@@ -542,7 +542,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     );
   });
 
-  it('refuses an entry that aliases the link target before any phase executes (PHEXEC-43)', async () => {
+  it('refuses an entry that aliases the link target before any phase executes (phase-execution-43)', async () => {
     const entryAndLinkTarget = join(work, 'code.ts');
     const original = 'export const protectedRuntime = true;\n';
     await writeFile(entryAndLinkTarget, original);
@@ -567,7 +567,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     );
   });
 
-  it('refuses a verifier output that aliases the link target before any phase executes (PHEXEC-43)', async () => {
+  it('refuses a verifier output that aliases the link target before any phase executes (phase-execution-43)', async () => {
     await mkdir(artDir);
     const verifierAndLinkTarget = join(artDir, 'code.gears-fsm.test.ts');
     const original = 'export const protectedRuntime = true;\n';

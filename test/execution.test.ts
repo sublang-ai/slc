@@ -39,7 +39,7 @@ const writingExecutor = (
     return { status: 'ok', diagnostics };
   });
 
-describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
+describe('runPhase generic checks (phase-execution-4, phase-execution-5)', () => {
   let dir: string;
   let request: Extract<ExecuteRequest, { kind: 'compile' }>;
 
@@ -78,7 +78,7 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     });
   });
 
-  it('fails when the target is not written (PHEXEC-4)', async () => {
+  it('fails when the target is not written (phase-execution-4)', async () => {
     const result = await run(
       executor(() => ({ status: 'ok', diagnostics: [] })),
     );
@@ -173,7 +173,7 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     expect(await readFile(other, 'utf8')).toBe('user file');
   });
 
-  it('fails when the target extension does not match the declared one (PHEXEC-4)', async () => {
+  it('fails when the target extension does not match the declared one (phase-execution-4)', async () => {
     const result = await runPhase({
       request: { ...request, target: join(dir, 'onboarding.gears.txt') },
       phase: 'text2gears',
@@ -184,7 +184,7 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     if (!result.ok) expect(result.report.reasons[0]).toContain('extension');
   });
 
-  it('fails when the executor mutates a protected input (PHEXEC-5, PHEXEC-6)', async () => {
+  it('fails when the executor mutates a protected input (phase-execution-5, phase-execution-6)', async () => {
     const result = await run(
       executor(async (req) => {
         if (req.kind === 'compile') {
@@ -246,7 +246,7 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     }
   });
 
-  it('fails when the executor mutates the phase definition (chain validity, PHEXEC-5)', async () => {
+  it('fails when the executor mutates the phase definition (chain validity, phase-execution-5)', async () => {
     const result = await run(
       executor(async (req) => {
         await writeFile(req.target, 'out');
@@ -267,7 +267,7 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     expect(await readFile(request.source, 'utf8')).toBe('source');
   });
 
-  it('fails when a sibling chain definition is mutated (PHEXEC-5)', async () => {
+  it('fails when a sibling chain definition is mutated (phase-execution-5)', async () => {
     const sibling = join(dir, 'gears2fsm.md');
     await writeFile(sibling, 'sibling def');
     const result = await runPhase({
@@ -309,7 +309,7 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     }
   });
 
-  it('fails when the revalidate hook reports an invalid chain (PHEXEC-5)', async () => {
+  it('fails when the revalidate hook reports an invalid chain (phase-execution-5)', async () => {
     const result = await runPhase({
       request,
       phase: 'text2gears',
@@ -342,7 +342,7 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('detects an input mutation even when the executor blocks (PHEXEC-6)', async () => {
+  it('detects an input mutation even when the executor blocks (phase-execution-6)', async () => {
     const result = await run(
       executor(async (req) => {
         if (req.kind === 'compile') await writeFile(req.source, 'tampered');
@@ -359,7 +359,7 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
   });
 });
 
-describe('runPhase blocked protocol (PHEXEC-7, PHEXEC-9)', () => {
+describe('runPhase blocked protocol (phase-execution-7, phase-execution-9)', () => {
   const request: ExecuteRequest = {
     kind: 'compile',
     definitionPath: '/defs/text2gears.md',
@@ -454,7 +454,7 @@ describe('runPhase link execution', () => {
     expect(await readFile(join(dir, 'onboarding.fsm.ts'), 'utf8')).toBe('fsm');
   });
 
-  it('fails when the executor mutates a file link target (PHEXEC-5, PHEXEC-6)', async () => {
+  it('fails when the executor mutates a file link target (phase-execution-5, phase-execution-6)', async () => {
     const definition = join(dir, 'link.md');
     const object = join(dir, 'onboarding.fsm.ts');
     const linkTarget = join(dir, 'runner.ts');
@@ -529,7 +529,7 @@ describe('runPhase link execution', () => {
     }
   });
 
-  it('fails when the executor mutates a nested file in a directory link target (PHEXEC-5, PHEXEC-6)', async () => {
+  it('fails when the executor mutates a nested file in a directory link target (phase-execution-5, phase-execution-6)', async () => {
     const definition = join(dir, 'link.md');
     const object = join(dir, 'onboarding.fsm.ts');
     const linkTarget = join(dir, 'runtime');

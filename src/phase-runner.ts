@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * SLC phase-runner facade for compiled `playbook` artifacts (PHEXEC-23,
- * PHEXEC-24; DR-005).
+ * SLC phase-runner facade for compiled `playbook` artifacts (phase-execution-23,
+ * phase-execution-24; DR-005).
  *
  * A compiled `playbook` artifact default-exports a `PlaybookRuntimeFactory`
  * (`createPlaybookRuntime`). `slc` drives it host-side — `init` with the
@@ -17,9 +17,9 @@
  * The non-interactive driving lives in the compiled executor; this module owns
  * the shared facade types, the static `playbook`-format recognition the
  * pin-currency validator uses, the seeding of a phase request into the
- * runtime's single Boss turn (PHEXEC-29), and the host workspace contract a
- * transformation-performing direct Captain call carries (PHEXEC-34). See
- * specs/dev/phase-execution.md.
+ * runtime's single Boss turn (phase-execution-29), and the host workspace contract a
+ * transformation-performing direct Captain call carries (phase-execution-34). See
+ * specs/packages/phase-execution.md.
  */
 
 import ts from 'typescript';
@@ -45,7 +45,7 @@ export interface PhaseResult {
 
 /**
  * Maps a compiled phase's {@link PhaseResult} onto the DR-003 execution-boundary
- * outcome consumed by `runPhase` (PHEXEC-24).
+ * outcome consumed by `runPhase` (phase-execution-24).
  *
  * The facade result (owned by the DR-005 artifact contract) and the executor
  * result (owned by the DR-003 boundary) are distinct types, so the compiled
@@ -359,7 +359,7 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
 
 /**
  * Seeds a phase request into the single non-interactive Boss turn `slc` hands
- * the runtime through `handleBossInput` (PHEXEC-29; DR-005).
+ * the runtime through `handleBossInput` (phase-execution-29; DR-005).
  *
  * The settled SLC-to-runtime seeding contract: one Boss turn whose text states
  * the request kind in prose — so any compiled playbook's judge-backed classifier
@@ -378,12 +378,12 @@ export function seedPhaseTurn(input: PhaseInput): string {
 
 /**
  * Composes the host workspace contract a transformation-performing direct
- * Captain call carries (PHEXEC-34; DR-005, DR-012).
+ * Captain call carries (phase-execution-34; DR-005, DR-012).
  *
  * A linked `playbook` artifact composes host-agnostic Captain prompts — the
  * GEARS-derived domain body plus typed runtime evidence — and is forbidden from
  * appending workspace specifics, which only the host owns. Mirroring the
- * interpreted agent contract (PHEXEC-14), the host therefore supplies the
+ * interpreted agent contract (phase-execution-14), the host therefore supplies the
  * request's absolute workspace paths and write-scope rules at its transport
  * boundary, so the acting Captain writes exactly the declared target instead
  * of merely emitting the artifact in its reply. Routing-only Captain calls

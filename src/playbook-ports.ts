@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Cligent-backed `PlaybookPorts` adapter for compiled phase execution (PHEXEC-25;
+ * Cligent-backed `PlaybookPorts` adapter for compiled phase execution (phase-execution-25;
  * DR-005, DR-004).
  *
  * A compiled artifact reaches coding agents and judges only through Playbook's
@@ -16,9 +16,9 @@
  * one whose source-owned options carry no tool restriction — additionally
  * carries the host workspace contract appended to its composed prompt, because
  * the linked artifact is host-agnostic and only the host owns the request's
- * workspace paths (PHEXEC-34). Exact `playbook.trace` payloads stay out of ordinary
+ * workspace paths (phase-execution-34). Exact `playbook.trace` payloads stay out of ordinary
  * diagnostics (DR-010, DR-011). The adapter holds no host specifics beyond the
- * injected transports. See specs/dev/phase-execution.md.
+ * injected transports. See specs/packages/phase-execution.md.
  */
 
 import type { AgentClient, AgentRunResult } from './interpreter.js';
@@ -45,22 +45,22 @@ export interface PlaybookPortsAdapter extends CompatiblePlaybookPorts {
  */
 export type PlayerTransport = AgentClient | ((playerId: string) => AgentClient);
 
-/** Builds a {@link PlaybookPortsAdapter} over coding-agent transports (PHEXEC-25). */
+/** Builds a {@link PlaybookPortsAdapter} over coding-agent transports (phase-execution-25). */
 export function createPlaybookPorts(opts: {
   /** Transport backing `callPlayer`; a factory yields one client per player id. */
   player: PlayerTransport;
   /** Shared transport backing `callCaptain` and `callJudge`. */
   judge: AgentClient;
-  /** Per-player model binding, applied as configuration (PHEXEC-13). */
+  /** Per-player model binding, applied as configuration (phase-execution-13). */
   models?: Readonly<Record<string, string>>;
-  /** Model for players the `models` binding does not name (PHEXEC-13). */
+  /** Model for players the `models` binding does not name (phase-execution-13). */
   defaultModel?: string;
   /** Working directory handed to the transports. */
   cwd?: string;
   /**
    * Host workspace contract appended to transformation-performing direct
    * Captain prompts — those whose source-owned options carry no `allowedTools`
-   * restriction (PHEXEC-34). Routing-only Captain and judge calls never
+   * restriction (phase-execution-34). Routing-only Captain and judge calls never
    * carry it.
    */
   captainWorkspace?: string;
@@ -74,7 +74,7 @@ export function createPlaybookPorts(opts: {
    */
   updateContext?: string;
   /**
-   * Live status sink (DR-019, PHEXEC-25): when set, human status and non-trace
+   * Live status sink (DR-019, phase-execution-25): when set, human status and non-trace
    * operational telemetry stream here as they occur instead of being collected
    * for {@link PlaybookPortsAdapter.drainDiagnostics}, so a long compiled phase
    * is observable while it runs. `playbook.trace` payloads are excluded from
@@ -124,7 +124,7 @@ export function createPlaybookPorts(opts: {
       // A transformation-performing Captain (absent source-owned tool
       // restriction) gets the host workspace contract appended: the artifact
       // composes host-agnostic prompts, and only the host knows the request's
-      // absolute source/target paths (PHEXEC-34).
+      // absolute source/target paths (phase-execution-34).
       const transported =
         isolation.allowedTools === undefined
           ? [prompt, opts.captainWorkspace, opts.updateContext]
@@ -191,7 +191,7 @@ export function createPlaybookPorts(opts: {
   /**
    * Streams a non-trace line live when the host configured a sink, otherwise
    * collects it as a drainable diagnostic — never both, so streamed lines do
-   * not repeat in the run's diagnostics (DR-019, PHEXEC-25).
+   * not repeat in the run's diagnostics (DR-019, phase-execution-25).
    */
   function report(line: string): void {
     if (opts.onStatus !== undefined) {

@@ -1049,7 +1049,7 @@ describe('buildSlcDeps executor construction (CLI-6, CLI-7)', () => {
       createCompiled,
     );
 
-    // A current pin must find a compiled factory, or PHEXEC-27 fails it closed.
+    // A current pin must find a compiled factory, or phase-execution-27 fails it closed.
     expect(deps.compiled).toBe(compiledFactory);
     expect(captured?.permissions).toEqual({ mode: 'auto' });
     expect(captured?.cwd).toBe(cwd);
@@ -1058,10 +1058,10 @@ describe('buildSlcDeps executor construction (CLI-6, CLI-7)', () => {
 
 // End to end through the bin: a current pin runs the pinned compiled `playbook`
 // artifact via the production compiled factory — resolving the artifact against
-// the pipeline directory — without interpreting the phase (CLI-28; PHEXEC-27).
+// the pipeline directory — without interpreting the phase (CLI-28; phase-execution-27).
 describe('compiled execution through the bin (CLI-28)', () => {
   it('runs a current pinned artifact and writes its target', async () => {
-    // A minimal compiled `playbook` artifact: parses the PHEXEC-29 seed and
+    // A minimal compiled `playbook` artifact: parses the phase-execution-29 seed and
     // writes the requested target from the requested source.
     const bundleDir = join(pipelineDir, 'text2gears.slc');
     await mkdir(bundleDir);
@@ -1194,7 +1194,7 @@ describe('compiled execution through the bin (CLI-28)', () => {
 
   it('reports an unmapped pinned provenance through the phase-failure path (CLI-16, CLI-36)', async () => {
     // Selecting the compiled executor throws for an unmapped provenance
-    // (PHEXEC-30) instead of returning a verdict. The run must still close its
+    // (phase-execution-30) instead of returning a verdict. The run must still close its
     // progress line and name the phase and target, exactly as a stale pin
     // does — not strand a start line behind a bare message (CLI-4, CLI-32).
     const bundleDir = join(pipelineDir, 'text2gears.slc');

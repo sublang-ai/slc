@@ -16,7 +16,7 @@ exact behavior and the file is purely additive.
 - Context: today the bin configures the cligent invocation only from `SLC_AGENT`, `SLC_MODEL`, and `SLC_PIPELINE_PATH`, resolved in `buildSlcDeps`/`resolveAgentSelection`/`pipelineSearchRoots` ([CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7), [CLI-12](../dev/cli.md#cli-12)).
 - Reference model: `tmux-play` discovers `tmux-play.config.yaml` in the cwd, then `${XDG_CONFIG_HOME:-~/.config}/tmux-play/config.yaml`, lets `--config <path>` disable discovery, parses YAML, and rejects unknown keys; `slc` adopts the same discovery shape with a much smaller flat schema.
 - Strategy: an additive host layer — a config loader feeds the same agent/model/pipeline-path selection the bin already builds, leaving the `runSlc` core, the interpreter ([DR-004](../decisions/004-slc-interpreted-phase-execution.md)), and the `createCligentAgent` transport untouched.
-- Constraint: configuration stays a selection concern that does not change phase semantics ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter), [PHEXEC-13](../dev/phase-execution.md#phexec-13)).
+- Constraint: configuration stays a selection concern that does not change phase semantics ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter), [[phase-execution-13](../packages/phase-execution.md#phase-execution-13)]).
 - Out of scope: auto-creating a default config on first run, a `permissions` block (the DR-003 write-scope sandbox), `maxTurns`, legacy-file handling, and config snapshotting — each is a natural follow-up IR but is omitted here to keep the first iteration simple.
 
 ## Deliverables

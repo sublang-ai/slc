@@ -32,7 +32,7 @@ const captainOptions = (visibility: 'visible' | 'hidden') => ({
   allowedTools: [] as const,
 });
 
-describe('createPlaybookPorts (PHEXEC-25)', () => {
+describe('createPlaybookPorts (phase-execution-25)', () => {
   it('maps a successful agent run to an ok PlayerResult', async () => {
     const player = fakeAgent({ status: 'success', text: 'wrote artifact' });
     const ports = createPlaybookPorts({ player, judge: player });
@@ -164,7 +164,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     expect(Object.hasOwn(captain.calls[0], 'allowedTools')).toBe(true);
   });
 
-  // The tool restriction is source-owned (link.md, PHEXEC-32): an absent own
+  // The tool restriction is source-owned (link.md, phase-execution-32): an absent own
   // `allowedTools` — including one only inherited from a prototype — forwards
   // no restriction, so a transformation-performing Captain keeps its tools.
   it.each([
@@ -187,7 +187,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     expect(Object.hasOwn(captain.calls[0], 'allowedTools')).toBe(false);
   });
 
-  // PHEXEC-34: the host workspace contract rides only on the
+  // phase-execution-34: the host workspace contract rides only on the
   // transformation-performing Captain transport (absent source-owned tool
   // restriction); routing-only Captain and judge prompts cross unchanged.
   it('appends the workspace contract only to transformation-performing Captain calls', async () => {
@@ -584,7 +584,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     await ports.emitStatus('drafting');
     await ports.emitStatus('progress', { turn: 2 });
     await ports.emitTelemetry({ topic: 'cost', payload: { tokens: 100 } });
-    // Trace privacy holds on the streamed path too (PHEXEC-25, PHEXEC-37).
+    // Trace privacy holds on the streamed path too (phase-execution-25, phase-execution-37).
     await ports.emitTelemetry({
       topic: 'playbook.trace',
       payload: { prompt: 'private prompt', resumeToken: 'private token' },

@@ -10,7 +10,7 @@ Implement [DR-017](../decisions/017-playbook-2-0-thin-runtime-adoption.md): move
 ## Deliverables
 
 - [x] `package.json` and `package-lock.json` adopt `@sublang/playbook@^2.0.0` and `@sublang/cligent@^0.16.0` from a clean registry install (no sibling checkout).
-- [x] `runtimeContractForPin` and PHEXEC-30 map exact `@sublang/playbook@2.0.0` to `composed-v2`, PHEXEC-30's stated set matches the selector (0.10.0, 1.0.0, 2.0.0), and 1.3.0 stays fail-closed with test coverage.
+- [x] `runtimeContractForPin` and phase-execution-30 map exact `@sublang/playbook@2.0.0` to `composed-v2`, phase-execution-30's stated set matches the selector (0.10.0, 1.0.0, 2.0.0), and 1.3.0 stays fail-closed with test coverage.
 - [x] The emitted entry module binds runtime-resolved player ids back to the verbatim `requiredRoleIds` at the `callPlayer` boundary, preserving optional runtime capabilities and failing closed on case-insensitive player collisions, with unit and behavioral coverage.
 - [x] `pipelines/playbook/` re-synced with Playbook 2.0.0's maintained `text2gears`, `gears2fsm`, `link`, and `optimize` definitions, keeping the local `## Pin Inputs` (including the DR-016 spex grammar identities).
 - [x] `text2gears.slc/`, `gears2fsm.slc/`, and `link.slc/` rebuilt from the synced definitions as thin linked modules via interpreted `slc slc` runs, reviewed with `scripts/verify-artifacts.mjs` (no findings).
@@ -22,7 +22,7 @@ Implement [DR-017](../decisions/017-playbook-2-0-thin-runtime-adoption.md): move
 ## Tasks
 
 1. Bump the dependency manifest and lock to playbook 2.0.0 and cligent 0.16.0 from a clean registry install.
-2. Map 2.0.0 provenance in `runtimeContractForPin`, correct PHEXEC-30 and its test item, and pin 1.3.0 fail-closed in `config.test.ts`.
+2. Map 2.0.0 provenance in `runtimeContractForPin`, correct phase-execution-30 and its test item, and pin 1.3.0 fail-closed in `config.test.ts`.
 3. Implement the entry-module role binding with its emission and behavioral tests.
 4. Sync the four vendored definitions from the installed package, retaining the explicit Pin Inputs.
 5. Rebuild the three compiled meta-phase artifacts with real agents; run all generated verification.

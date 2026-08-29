@@ -42,7 +42,7 @@ const pipelineDir = fileURLToPath(
 // All three meta phases enter through a payload-free classified
 // `BOSS_REQUEST` (their thin specs declare it under `bossEvents`); the
 // workspace request reaches the Captain through the host transport's appended
-// workspace contract (PHEXEC-34), not through classified routing fields.
+// workspace contract (phase-execution-34), not through classified routing fields.
 const COMPILE_CLASSIFICATION = '{"type":"BOSS_REQUEST"}';
 
 // The shared 2.0.0 engine's classifier prompt preamble.
@@ -573,10 +573,10 @@ describe('reviewed compiled meta-phase artifacts', () => {
 });
 
 // Regressions at the compiled meta-phase SLC boundary: nullish host-port
-// rejections must remain control-plane failures (PHEXEC-26), and the artifacts
+// rejections must remain control-plane failures (phase-execution-26), and the artifacts
 // compose host-agnostic Captain prompts, so the host appends its workspace
-// contract (PHEXEC-35) before the Captain transport runs.
-describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
+// contract (phase-execution-35) before the Captain transport runs.
+describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-35)', () => {
   let root: string;
 
   beforeEach(async () => {
@@ -667,7 +667,7 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
       promptAnchor: 'into a `PlaybookRuntime`',
       workspaceAnchors: (dir) => [
         // The paths reach the Captain only through the host transport's
-        // appended workspace contract (PHEXEC-34): the classified COMPILE
+        // appended workspace contract (phase-execution-34): the classified COMPILE
         // carries no routing fields under the 2.0.0 thin artifact.
         join(dir, 'workflow.fsm.ts'),
         `object artifacts to read, in order: ${join(dir, 'workflow.fsm.ts')}`,
@@ -732,7 +732,7 @@ describe('compiled meta-phase SLC boundary (PHEXEC-26, PHEXEC-35)', () => {
     }) => {
       const captainPrompts: string[] = [];
       const judgePrompts: string[] = [];
-      // One shared Captain/judge transport, as in production (PHEXEC-25):
+      // One shared Captain/judge transport, as in production (phase-execution-25):
       // the transformation-performing Captain call is the one without an
       // allowed-tool restriction; hidden judge calls carry the empty list.
       const judge: AgentClient = {

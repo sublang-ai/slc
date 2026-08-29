@@ -3,7 +3,7 @@
 
 /**
  * Compiled phase execution: load a `playbook` artifact and drive it host-side
- * (PHEXEC-23, PHEXEC-24, PHEXEC-25; DR-005).
+ * (phase-execution-23, phase-execution-24, phase-execution-25; DR-005).
  *
  * {@link loadPlaybookRuntime} imports a compiled `playbook` module and returns
  * its `createPlaybookRuntime` factory. {@link createCompiledExecutor} adapts it
@@ -20,13 +20,13 @@
  * protected inputs (not the full write scope); `slc` adds no host-side
  * write-scope enforcement.
  *
- * The turn is seeded per the PHEXEC-29 contract ({@link seedPhaseTurn}), and a
+ * The turn is seeded per the phase-execution-29 contract ({@link seedPhaseTurn}), and a
  * transformation-performing direct Captain call additionally carries the host
- * workspace contract ({@link composeWorkspaceContract}; PHEXEC-34) so the
+ * workspace contract ({@link composeWorkspaceContract}; phase-execution-34) so the
  * host-agnostic artifact's Captain learns the request's absolute paths; the
  * result is derived in {@link drivePhase} from the structured runtime boundary
  * or, for a void-result legacy runtime, the host-observable output delta.
- * See specs/dev/phase-execution.md.
+ * See specs/packages/phase-execution.md.
  */
 
 import { createHash, randomUUID } from 'node:crypto';
@@ -68,7 +68,7 @@ import { createPlaybookPorts, type PlayerTransport } from './playbook-ports.js';
 
 /**
  * Imports a compiled `playbook` module and returns its runtime factory
- * (PHEXEC-23).
+ * (phase-execution-23).
  *
  * @throws when the module has no callable `createPlaybookRuntime` default export.
  */
@@ -89,7 +89,7 @@ export async function loadPlaybookRuntime(
 
 /**
  * Adapts a compiled `playbook` artifact to the {@link PhaseExecutor} boundary
- * (PHEXEC-24, PHEXEC-25): build the Cligent-backed Playbook ports, load and
+ * (phase-execution-24, phase-execution-25): build the Cligent-backed Playbook ports, load and
  * construct the runtime, drive one non-interactive root-session turn, and map
  * the outcome, appending drained status and non-trace operational telemetry.
  */
@@ -102,16 +102,16 @@ export function createCompiledExecutor(opts: {
   player: PlayerTransport;
   /** Shared agent transport backing `callCaptain` and `callJudge`. */
   judge: AgentClient;
-  /** Per-player model binding, applied as configuration (PHEXEC-13). */
+  /** Per-player model binding, applied as configuration (phase-execution-13). */
   models?: Readonly<Record<string, string>>;
-  /** Model for players the `models` binding does not name (PHEXEC-13). */
+  /** Model for players the `models` binding does not name (phase-execution-13). */
   defaultModel?: string;
   /** Working directory handed to the agent transports. */
   cwd?: string;
   /** Stable authored phase identity used as the Playbook session's playbook id. */
   playbookId?: string;
   /**
-   * Live status sink (DR-019, PHEXEC-25): streams the runtime's human status
+   * Live status sink (DR-019, phase-execution-25): streams the runtime's human status
    * and non-trace telemetry as it occurs; absent hosts keep the drained
    * end-of-run diagnostics.
    */
@@ -142,7 +142,7 @@ export function createCompiledExecutor(opts: {
         cwd: opts.cwd,
         // The host owns the workspace: a transformation-performing Captain's
         // transported prompt carries the request's absolute paths and
-        // write-scope rules (PHEXEC-34).
+        // write-scope rules (phase-execution-34).
         captainWorkspace: composeWorkspaceContract(input),
         // The compiled artifact knows nothing about incremental updates, so
         // the host appends the update context to performing prompts
@@ -158,7 +158,7 @@ export function createCompiledExecutor(opts: {
         onStatus: opts.onStatus,
       });
       // Hand the runtime only Playbook's ports — never the host-only
-      // drainDiagnostics, nor a file capability (DR-005, PHEXEC-23).
+      // drainDiagnostics, nor a file capability (DR-005, phase-execution-23).
       const ports: CompatiblePlaybookPorts = {
         callPlayer: adapter.callPlayer,
         callCaptain: adapter.callCaptain,

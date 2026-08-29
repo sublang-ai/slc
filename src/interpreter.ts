@@ -5,14 +5,14 @@
  * Interpreted phase execution (DR-004).
  *
  * `createInterpretedExecutor` implements the {@link PhaseExecutor} boundary by
- * prompting a coding agent once per phase (PHEXEC-12) with the phase or link
- * definition and the phase inputs (PHEXEC-11), establishing the agent contract
- * (PHEXEC-14) and allowing the agent to run definition-called tools and read
- * cited content (PHEXEC-15). The agent is reached through an injected
+ * prompting a coding agent once per phase (phase-execution-12) with the phase or link
+ * definition and the phase inputs (phase-execution-11), establishing the agent contract
+ * (phase-execution-14) and allowing the agent to run definition-called tools and read
+ * cited content (phase-execution-15). The agent is reached through an injected
  * {@link AgentClient}; the Cligent-backed default lives in cligent-agent.ts so
  * this core stays transport-free and testable. Agent and model selection are
- * configuration, not phase semantics (PHEXEC-13). See
- * specs/dev/phase-execution.md.
+ * configuration, not phase semantics (phase-execution-13). See
+ * specs/packages/phase-execution.md.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -52,7 +52,7 @@ export interface AgentClient {
   run(request: AgentRunRequest): Promise<AgentRunResult>;
 }
 
-/** Agent/model selection, applied as configuration not phase semantics (PHEXEC-13). */
+/** Agent/model selection, applied as configuration not phase semantics (phase-execution-13). */
 export interface InterpreterConfig {
   model?: string;
   cwd?: string;
@@ -60,7 +60,7 @@ export interface InterpreterConfig {
 
 /**
  * Builds the agent-contract prompt for a phase from its definition and inputs
- * (PHEXEC-11, PHEXEC-14, PHEXEC-15).
+ * (phase-execution-11, phase-execution-14, phase-execution-15).
  */
 export function buildPhasePrompt(opts: {
   request: ExecuteRequest;

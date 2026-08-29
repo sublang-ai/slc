@@ -21,7 +21,7 @@ export type ProgressEvent =
   | { kind: 'phase-start'; phase: string; target: string }
   | { kind: 'phase-finish'; phase: string; target: string; elapsedMs: number }
   | { kind: 'phase-fail'; phase: string; target: string; elapsedMs: number }
-  /** A streamed compiled-runtime status or telemetry line (PHEXEC-25). */
+  /** A streamed compiled-runtime status or telemetry line (phase-execution-25). */
   | { kind: 'status'; text: string }
   | { kind: 'heartbeat'; phase: string; elapsedMs: number };
 
