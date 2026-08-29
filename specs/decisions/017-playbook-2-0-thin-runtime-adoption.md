@@ -53,7 +53,7 @@ Two declared players that collide case-insensitively make the binding ambiguous;
 ### Atomic reviewed-asset adoption
 
 The dependency manifest and lock (`@sublang/playbook@^2.0.0`, `@sublang/cligent@^0.16.0`), the vendored `text2gears`, `gears2fsm`, `link`, and `optimize` definitions, all three reviewed meta-phase artifact bundles, and `pipelines/playbook/slc.pins.json` shall move to Playbook 2.0.0 as one review unit.
-The definition refresh shall start from the immutable installed package, retain SLC's explicit `## Pin Inputs` including the DR-016 spex-shipped grammar identities, rebuild all three bundles as thin linked modules, independently run all generated verification, and regenerate pins with exact `@sublang/playbook@2.0.0` link-target provenance.
+The definition refresh shall start from the immutable installed package, retain SLC's explicit `## Pin Inputs` including the [DR-016](016-gears-grammar-provenance.md) spex-shipped grammar identities, rebuild all three bundles as thin linked modules, independently run all generated verification, and regenerate pins with exact `@sublang/playbook@2.0.0` link-target provenance.
 The adoption shall run from a clean registry install and shall not read a sibling checkout; no mixed 1.0.0/2.0.0 definition, artifact, dependency, or pin set shall pass review or be committed as the adopted state.
 The demo reference sets shall be recompiled against the adopted set: the English reference immediately, through the documented `slc playbook workflow.txt` → `playbook run ./workflow.ts` flow including the documented role flags, and the Chinese reference by the maintainer from the released packages.
 

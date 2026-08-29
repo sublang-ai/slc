@@ -9,7 +9,7 @@ Accepted.
 
 ## Context
 
-Two gaps separate `slc` from the driver/pass architecture that makes classic compilers composable (LLVM's `clang` driver over `opt` passes over a fixed IR).
+Two gaps separate `slc` from the driver/pass architecture that makes classic compilers composable (LLVM's `clang` driver [[1]] over `opt` passes [[2]] over a fixed IR).
 
 First, raw user input often under-determines a pipeline's entry phase.
 The `playbook` entry phase accepts free-form prose, but an input that leaves actors unnamed, outcomes implicit, or environment preconditions unstated compiles leniently: the compile agent must guess structure the user never wrote down (players, `Results:` contracts, setup steps).
@@ -17,7 +17,7 @@ Other pipelines' entry phases may be stricter still.
 `slc` has no generic way to turn raw input into the entry phase's expected source form.
 
 Second, every compiled behavior runs an agent, even when the behavior is mechanical.
-Playbook's DR-016 adds the target-side primitive — GEARS script items compiled to agent-free script states — but nothing in `slc` can schedule the transformation that introduces them: the chain model (pipeline-4) admits only format-changing phases, so a gears → gears rewrite cannot even be loaded (pipeline-2 rejects its filename, pipeline-5 its chain shape).
+Playbook's DR-016 [[3]] adds the target-side primitive — GEARS script items compiled to agent-free script states — but nothing in `slc` can schedule the transformation that introduces them: the chain model [[pipeline-4](../packages/pipeline.md#pipeline-4)] admits only format-changing phases, so a gears → gears rewrite cannot even be loaded ([[pipeline-2](../packages/pipeline.md#pipeline-2)] rejects its filename, [[pipeline-5](../packages/pipeline.md#pipeline-5)] its chain shape).
 
 ## Decision
 
@@ -29,9 +29,9 @@ Playbook's DR-016 adds the target-side primitive — GEARS script items compiled
   A pass may not shadow a chain phase's name or the reserved `link`.
 - Passes run only on request. `-O`/`--optimize` on a full or full-link run schedules every discovered pass after the phase producing its format, in pass-name order.
   With passes active on a format, the producing phase writes the `.raw` intermediate (`<basename>.<format>.raw<ext>`) and the final pass writes the canonical path, so downstream phases, verification, and pins see the canonical artifact with identical naming whether or not optimization ran.
-- `slc <pipeline>.<pass> <source>` runs one pass standalone; it writes `<basename>.<format>.opt<ext>` (or `-o`) because a pass may not overwrite its own source (DR-003).
-- A pass executes like any phase: interpreted without a pin, compiled through a current pin, fail-closed on a stale one (DR-007).
-  Pass definitions are ordinary definitions — compilable by `slc slc`, ownable by the pipeline vendor (the `playbook` pipeline's `optimize.md` is Playbook's DR-016).
+- `slc <pipeline>.<pass> <source>` runs one pass standalone; it writes `<basename>.<format>.opt<ext>` (or `-o`) because a pass may not overwrite its own source ([DR-003](003-slc-phase-execution.md)).
+- A pass executes like any phase: interpreted without a pin, compiled through a current pin, fail-closed on a stale one ([DR-007](007-slc-phase-artifact-pinning.md)).
+  Pass definitions are ordinary definitions — compilable by `slc slc`, ownable by the pipeline vendor (the `playbook` pipeline's `optimize.md` is Playbook's DR-016 [[3]]).
 
 ### 2. Generic input normalization
 
@@ -40,7 +40,7 @@ Playbook's DR-016 adds the target-side primitive — GEARS script items compiled
 - The step writes `<artifact-dir>/<basename>.<entry-format><entry-ext>` (the entry phase's non-entry source form); the entry phase consumes that file.
   The raw user input is never modified.
 - Normalization is fidelity-bounded: same language, same meaning, same step order; it may only surface *implicit structure* (actors, delimitation) and *implicit executability preconditions* (e.g. a procedure that commits to version control assumes a repository; a setup step establishing it when absent may be made explicit).
-- The `compile` execution request gains optional read-only `references`; the interpreter presents them beside the source and the DR-003 boundary protects them like definitions.
+- The `compile` execution request gains optional read-only `references`; the interpreter presents them beside the source and the [DR-003](003-slc-phase-execution.md) boundary protects them like definitions.
 
 ### 3. Division of labor (the LLVM analogy)
 
@@ -54,3 +54,9 @@ Playbook's DR-016 adds the target-side primitive — GEARS script items compiled
 - Unoptimized runs are byte-compatible with today: no pass phase in the directory, or no `-O`, changes nothing.
 - A pipeline directory may now legally contain non-chain `.md` phase files; hosts older than this decision refuse such directories, which is the intended fail-closed behavior for a vendored pipeline they cannot schedule.
 - Verification gains script-item parsing and script-state conformance/coverage so optimized artifacts verify as strictly as unoptimized ones.
+
+## References
+
+[1]: https://clang.llvm.org/docs/DriverInternals.html "Clang driver internals"
+[2]: https://llvm.org/docs/CommandGuide/opt.html "LLVM opt command"
+[3]: https://github.com/sublang-ai/playbook/blob/v1.0.0/specs/decisions/016-script-actors-and-optimize-pass.md "Playbook DR-016: Script actors and the GEARS optimize pass (v1.0.0)"
