@@ -106,7 +106,7 @@ When a link phase runs in a full-pipeline invocation, the slc command shall trea
 
 #### pipeline-18
 
-When invoked as `slc <pipeline>.link` with exactly one object, the slc command shall place the linked artifact by DR-001's source-adjacent directory and basename rules unless `-o <linked-target>` overrides the linked-artifact path; with more than one object, the slc command shall require `-o <linked-target>`, refuse the invocation when it is absent, and write the linked artifact to that path ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md)).
+When invoked as `slc <pipeline>.link` with exactly one object, the slc command shall derive the basename from that object and place the linked artifact under the invocation working directory in `<basename>.<pipeline>/<basename>.<target-format>.<ext>`, reusing the working directory when its leaf is already `<basename>.<pipeline>` [[pipeline-7](#pipeline-7)], unless `-o <linked-target>` overrides the linked-artifact path; with more than one object, the slc command shall require `-o <linked-target>`, refuse the invocation when it is absent, and write the linked artifact to that path ([DR-002](../decisions/002-slc-link-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### Passes and normalization
 
@@ -169,7 +169,7 @@ Where direct-link fixture invocations assign positional roles without inference 
 
 | Case | Required outcome |
 | --- | --- |
-| One object | The linked artifact is written by the source-adjacent rules [[pipeline-18](#pipeline-18)]. |
+| One object | The linked artifact is written under the invocation working directory by the artifact-directory and direct-link rules [[pipeline-7](#pipeline-7)], [[pipeline-18](#pipeline-18)]. |
 | Multiple objects without `-o` | The invocation exits non-zero with a diagnostic [[pipeline-18](#pipeline-18)]. |
 | Equal object and linked formats | The invocation is refused before execution with a diagnostic naming the format collision [[pipeline-19](#pipeline-19)]. |
 
