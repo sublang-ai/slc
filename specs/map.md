@@ -52,10 +52,6 @@ meta.md     The spec of specs
 
 | ID | File | Goal |
 | --- | --- | --- |
-| IR-008 | [008-playbook-runtime-contract-evolution.md](iterations/008-playbook-runtime-contract-evolution.md) | Reconcile three runtime profiles, structured results, composition-aware verification, CI, and the immutable-release boundary |
-| IR-009 | [009-playbook-1-0-captain-adoption.md](iterations/009-playbook-1-0-captain-adoption.md) | Adopt Playbook 1.0's six-port runtime, Captain and dynamic-child compiler primitives, reviewed definitions and artifacts, and pins as one reproducible set |
-| IR-010 | [010-playbook-routing-control-separation.md](iterations/010-playbook-routing-control-separation.md) | Separate routing prose from control metadata, preserve exact Boss text, isolate Captain calls, and verify explicit result contracts |
-| IR-011 | [011-playbook-0-10-adoption.md](iterations/011-playbook-0-10-adoption.md) | Adopt the Playbook 0.10 generation: frozen local legacy contract, composed-v2 pin mapping, re-synced definitions, rebuilt meta artifacts, and refreshed pins |
 | IR-012 | [012-normalize-optimize-demo.md](iterations/012-normalize-optimize-demo.md) | Implement DR-013 (--normalize, -O pass phases, script-actor verification) and land the end-to-end demo/ acceptance workflow |
 | IR-013 | [013-cwd-output-entry-emission-demo.md](iterations/013-cwd-output-entry-emission-demo.md) | Implement DR-014 (CWD output, raw-entry normalization, default passes, default link target, entry emission) and rebase demo/ on the three-line flow |
 | IR-014 | [014-gears-provenance-adoption.md](iterations/014-gears-provenance-adoption.md) | Adopt DR-016: spex dependency, vendored definition sync, grammar Pin Inputs swap, pin regeneration (meta-artifact recompile deferred) |
