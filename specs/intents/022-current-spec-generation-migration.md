@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–23 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–24 are complete.
 
 ## Intent
 
@@ -136,7 +136,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 21. [x] Migrated the execution-boundary, interpreted-execution, and self-hosting decision records to current citation law, preserved their Accepted states and decisions, normalized current record terminology and sentence layout, and retargeted every malformed inbound link.
 22. [x] Migrated the configuration-sources decision record to current citation law, preserved its Accepted state and decision, bound every external `tmux-play` claim to its authoritative reference, and normalized its map identity after confirming every other inbound link was already current.
 23. [x] Migrated the pinning and file-capability decision records to current citation law, preserved the pinning record's Accepted state and the capability record's Superseded state, retained both decisions, normalized their map identities and substantive citations, and retargeted every malformed inbound link.
-24. Migrate the playbook-compilation, runtime-contract, Captain-adoption, and routing-separation decision records to current citation law without changing their accepted decisions.
+24. [x] Migrated the playbook-compilation, runtime-contract, Captain-adoption, and routing-separation decision records to current citation law, preserved their Accepted states and decisions, bound their historical upstream claims to immutable sources, normalized their map identities and substantive citations, and retargeted every malformed inbound link.
 25. Migrate the normalization, CWD-emission, configuration-seeding, and grammar-provenance decision records to current citation law without changing their accepted decisions.
 26. Migrate the Playbook 2, Playbook 3.1, progress-watchdog, and Playbook 4 decision records to current citation law without changing their accepted decisions.
 27. Migrate the incremental-compilation and reviewed-agent-call decision records to current citation law without changing their accepted decisions.

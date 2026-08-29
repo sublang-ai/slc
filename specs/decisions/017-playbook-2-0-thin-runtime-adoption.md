@@ -31,7 +31,7 @@ phase-execution-30 shall be corrected to state this complete mapped set, closing
 
 ### Captain-failure result semantics
 
-A 2.0.0 runtime delivers a failing host Captain reply as the structured `failed` outcome, which [DR-010](010-playbook-runtime-contract-evolution.md#phase-result-mapping)'s existing mapping already turns into the phase `error` result; no new mapping row is added.
+A 2.0.0 runtime delivers a failing host Captain reply as the structured `failed` outcome, which [DR-010](010-playbook-runtime-contract-evolution.md)'s existing mapping already turns into the phase `error` result; no new mapping row is added.
 The host's thrown-turn error path remains reserved for what PBRT-47 keeps as control-plane rejections: non-abort thrown ports, malformed host results, and rejecting trace sinks.
 SLC's `callCaptain` port shall keep returning Playbook's Captain status, final text, and error shape as a resolved host result rather than throwing, so the runtime — not the host — decides failure routing.
 Because immutable 2.0.0 cannot retain `null` or `undefined` in its nullish-coalescing control-error latch, SLC's `composed-v2` port boundary shall replace any non-abort nullish host-port rejection with a deterministic `Error` before it reaches the runtime; every non-nullish rejection and any rejection causally identical to the active abort reason cross unchanged.
