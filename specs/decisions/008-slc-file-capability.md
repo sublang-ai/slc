@@ -145,14 +145,14 @@ An unauthorized read or write, invalid path, symlink escape, or write outside th
 It shall fail like a failed generic check under [DR-003](003-slc-phase-execution.md), because the executing artifact violated the run boundary.
 
 A missing or malformed input may make the compiled phase `blocked` when the phase definition says the input is incompatible.
-The host shall not rely on the artifact to perform DR-003 generic checks or DR-007 pin currency checks.
+The host shall not rely on the artifact to perform [DR-003](003-slc-phase-execution.md) generic checks or [DR-007](007-slc-phase-artifact-pinning.md) pin currency checks.
 Those checks remain `slc` responsibilities around phase execution.
 
 ## Consequences
 
 - Compiled phases get deterministic, host-mediated file access without the artifact performing direct file I/O or seeing host-specific paths.
 - The capability port stays small: read bytes, list immediate children, and atomically write bytes.
-- Write-scope enforcement is explicit and host-controlled, matching DR-003's target-or-linked invariant.
+- Write-scope enforcement is explicit and host-controlled, matching [DR-003](003-slc-phase-execution.md)'s target-or-linked invariant.
 - Pinned compiled phases cannot silently depend on undeclared files through recursive reads or directory discovery.
-- Exact-byte hashes align file access with DR-007 pin currentness and generic input integrity checks.
+- Exact-byte hashes align file access with [DR-007](007-slc-phase-artifact-pinning.md) pin currentness and generic input integrity checks.
 - Text-editing, deletion, recursive traversal, MCP transport, and structured tool execution remain outside this capability and can be added only by later DRs if needed.

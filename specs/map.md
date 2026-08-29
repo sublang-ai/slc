@@ -30,8 +30,8 @@ meta.md     The spec of specs
 | [DR-004](decisions/004-slc-interpreted-phase-execution.md) | 004-slc-interpreted-phase-execution.md | Interpreted phase execution: agent bootstrap and reference semantics |
 | [DR-005](decisions/005-slc-self-hosting-meta-pipeline.md) | 005-slc-self-hosting-meta-pipeline.md | Self-hosting meta pipeline: compiled phase artifacts |
 | [DR-006](decisions/006-slc-configuration-sources.md) | 006-slc-configuration-sources.md | Configuration sources and precedence: env over config file, discovery, schema |
-| DR-007 | [007-slc-phase-artifact-pinning.md](decisions/007-slc-phase-artifact-pinning.md) | Phase artifact pinning: currentness, semantic inputs, and compiled selection |
-| DR-008 | [008-slc-file-capability.md](decisions/008-slc-file-capability.md) | File capability (superseded): compiled execution writes through agents and relies on the DR-003 generic checks |
+| [DR-007](decisions/007-slc-phase-artifact-pinning.md) | 007-slc-phase-artifact-pinning.md | Phase artifact pinning: currentness, semantic inputs, and compiled selection |
+| [DR-008](decisions/008-slc-file-capability.md) | 008-slc-file-capability.md | File capability (superseded): compiled execution writes through agents and relies on the [DR-003](decisions/003-slc-phase-execution.md) generic checks |
 | DR-009 | [009-slc-playbook-pipeline-compilation.md](decisions/009-slc-playbook-pipeline-compilation.md) | `playbook` pipeline compilation: generic invocation, compile-output scope, compiled performing, link reconciliation, and artifact-derived verification |
 | DR-010 | [010-playbook-runtime-contract-evolution.md](decisions/010-playbook-runtime-contract-evolution.md) | Playbook runtime evolution: exact legacy/session-v1/composed-v2 profiles, fail-closed adoption, structured outcomes, host ports, trace privacy, and CI deferral |
 | DR-011 | [011-playbook-1-0-captain-contract-adoption.md](decisions/011-playbook-1-0-captain-contract-adoption.md) | Playbook 1.0 adoption: final six-port composed profile, distinct Captain/player verification, dynamic child wiring, scripted child coverage, and atomic reviewed assets |
