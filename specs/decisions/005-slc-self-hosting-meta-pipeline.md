@@ -25,15 +25,15 @@ Its source is a phase or link definition rather than a domain workflow, so a sin
 The reserved `slc` resolves to Playbook's authored `slc/` definitions, which the `playbook` domain pipeline also uses ([DR-009](009-slc-playbook-pipeline-compilation.md)), so the reservation fixes the name's resolution and the source semantics rather than a phase-file set unique to `slc`.
 Where the `slc` pipeline directory resolves from is consumer-defined per [DR-001](001-slc-pipeline-layout-naming-invocation.md).
 
-The `slc` pipeline is named explicitly like any other pipeline, so it claims no default and leaves the [DR-001](001-slc-pipeline-layout-naming-invocation.md#cli) grammar unchanged.
-`slc slc <source>` runs it end-to-end and `slc slc.<phase> <source>` runs one named phase, per [DR-001](001-slc-pipeline-layout-naming-invocation.md#cli).
+The `slc` pipeline is named explicitly like any other pipeline, so it claims no default and leaves the [DR-001](001-slc-pipeline-layout-naming-invocation.md) grammar unchanged.
+`slc slc <source>` runs it end-to-end and `slc slc.<phase> <source>` runs one named phase, per [DR-001](001-slc-pipeline-layout-naming-invocation.md).
 
 The `slc` pipeline shall chain `text2gears` (`text` `.md` to `gears` `.md`) and `gears2fsm` (`gears` `.md` to `fsm` `.ts`), plus a reserved `link.md` link phase (`fsm` `.ts` to `playbook` `.ts`) per [DR-002](002-slc-link-phases.md).
 Each phase's transformation rules live in its own definition, not in this DR.
 This DR constrains only the properties self-hosting depends on:
 
 - `gears2fsm` shall preserve the GEARS-to-FSM mapping in machine-readable form, so a generated phase artifact can be audited against its phase definition.
-- The link phase shall emit the distinct `playbook` linked format — a `PlaybookRuntimeFactory` per Playbook's source-owned `slc/link.md` — which `slc` drives through a host-side phase-execution facade rather than an artifact-exported one. Per [DR-002](002-slc-link-phases.md#cli), full-pipeline invocation without `--link` stops at the `fsm` object artifact.
+- The link phase shall emit the distinct `playbook` linked format — a `PlaybookRuntimeFactory` per Playbook's source-owned `slc/link.md` — which `slc` drives through a host-side phase-execution facade rather than an artifact-exported one. Per [DR-002](002-slc-link-phases.md), full-pipeline invocation without `--link` stops at the `fsm` object artifact.
 
 ### Compiled phase execution
 
@@ -163,7 +163,7 @@ Phase artifacts shall be built once, reviewed, and committed per pipeline versio
 
 ### Locations
 
-Artifacts for the `slc` pipeline follow [DR-001](001-slc-pipeline-layout-naming-invocation.md#output-locations).
+Artifacts for the `slc` pipeline follow [DR-001](001-slc-pipeline-layout-naming-invocation.md).
 For example:
 
 - `slc slc playbook/text2gears.md` writes `playbook/text2gears.slc/text2gears.gears.md` and `playbook/text2gears.slc/text2gears.fsm.ts`.

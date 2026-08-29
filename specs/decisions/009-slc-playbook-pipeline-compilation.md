@@ -28,9 +28,9 @@ It builds on [DR-001](001-slc-pipeline-layout-naming-invocation.md) (layout, nam
 
 ### `playbook` is a generic pipeline, not a new verb
 
-`slc playbook <source>` is the [DR-001](001-slc-pipeline-layout-naming-invocation.md#cli) `slc <pipeline> <source>` invocation with the pipeline named `playbook`, and `slc playbook <source> --link <target>` adds the terminal link phase per [DR-002](002-slc-link-phases.md#cli).
+`slc playbook <source>` is the [DR-001](001-slc-pipeline-layout-naming-invocation.md) `slc <pipeline> <source>` invocation with the pipeline named `playbook`, and `slc playbook <source> --link <target>` adds the terminal link phase per [DR-002](002-slc-link-phases.md).
 The `playbook` pipeline's compile chain is `text2gears` (`text` → `gears`) then `gears2fsm` (`gears` → `fsm`); its reserved `link.md` emits the `playbook` linked format (`fsm` → `playbook`).
-The `playbook` pipeline and the reserved `slc` pipeline share the same Playbook-authored phase and link definitions, differing only in the pipeline name — hence the [DR-001](001-slc-pipeline-layout-naming-invocation.md#output-locations) artifact directory `<basename>.playbook/` versus `<basename>.slc/` — and in the conceptual source, a domain workflow versus a phase or link definition.
+The `playbook` pipeline and the reserved `slc` pipeline share the same Playbook-authored phase and link definitions, differing only in the pipeline name — hence the [DR-001](001-slc-pipeline-layout-naming-invocation.md) artifact directory `<basename>.playbook/` versus `<basename>.slc/` — and in the conceptual source, a domain workflow versus a phase or link definition.
 No new transformation rules are introduced.
 
 ### Compile output versus host-performing infrastructure
@@ -48,7 +48,7 @@ Performing the produced SDLC workflow itself — hosting the compiled runtime ag
 
 ### Reserved-link handling covers the `playbook` link
 
-Playbook's authored `link.md` declares `## Formats` (`fsm` `.ts` → `playbook` `.ts`) but no `## Link Targets`, because target validation for the `playbook` format is Playbook-owned ([DR-002](002-slc-link-phases.md#playbook-example), [[self-hosting-2](../packages/self-hosting.md#self-hosting-2)]).
+Playbook's authored `link.md` declares `## Formats` (`fsm` `.ts` → `playbook` `.ts`) but no `## Link Targets`, because target validation for the `playbook` format is Playbook-owned ([DR-002](002-slc-link-phases.md), [[self-hosting-2](../packages/self-hosting.md#self-hosting-2)]).
 The `## Link Targets` exception applies to the Playbook-authored `playbook`-format link wherever it is used — both the reserved `slc` pipeline and the `playbook` pipeline — not narrowly to the name `slc`.
 `slc` resolves both through [DR-005](005-slc-self-hosting-meta-pipeline.md)'s reserved-link handling, while the rule that the linked format token differ from the object source token ([[pipeline-19](../packages/pipeline.md#pipeline-19)]) still holds.
 
