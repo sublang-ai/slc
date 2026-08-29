@@ -9,73 +9,53 @@ Accepted.
 
 ## Context
 
-- `@sublang/playbook` 4.0.0 is published. Its breaking change is dependency
+- `@sublang/playbook` 4.0.0 is published [[1]]. Its breaking change is dependency
   topology, not contract: the agent SDKs leave `dependencies`, and which SDK
   versions work becomes `@sublang/cligent`'s to publish and enforce —
   cligent 0.18.0 ships a runtime descriptor with per-adapter floors and
   pinned repairs, and gates them inside the loaders its probe and `run()`
-  share (cligent DR-013, playbook DR-027).
+  share [[2]][[3]].
 - Everything SLC consumes is byte-identical between 3.1.0 and 4.0.0,
   verified against the published tarballs: the four `slc/*.md` phase
   definitions, `src/runtime.ts` and the `xstate-runtime` engine files
   (`RUNTIME_ABI` 1, `SUPPORTED_ARTIFACT_SCHEMAS` `[1]`), and every registry
-  and captain declaration file. The engine gains exactly one additive
+  and captain declaration file [[4]]. The engine gains exactly one additive
   export (`defaultBuildCaptainJudgePrompt`); the captain shells harden
-  behind unchanged declarations.
+  behind unchanged declarations [[1]][[4]].
 - Staying on 3.1.0 keeps the defect this migration exists to end: 3.1.0
-  hard-depends on `@openai/codex-sdk` `^0.139.0`, and a caret on a `0.x`
-  version pins the minor, so every SLC install transitively froze Codex
+  hard-depends on `@openai/codex-sdk` `^0.139.0` [[5]], and a caret on a `0.x`
+  version pins the minor [[8]], so every SLC install transitively froze Codex
   below the versions current models require — the
   `The 'gpt-5.6-sol' model requires a newer version of Codex` failure.
 - With 4.0.0 the dependency closure installs no agent SDK at all: cligent
   declares them as optional peers, so npm skips them. SLC reaches agents
   only through cligent ([DR-004](004-slc-interpreted-phase-execution.md))
   and imports no SDK module, but live runs — the opt-in acceptance and the
-  demo — need the SDKs present where cligent resolves them.
+  demo — need the SDKs present where cligent resolves them [[1]][[6]][[7]].
 
 ## Decision
 
 ### Provenance mapping
 
-Exact `@sublang/playbook@4.0.0` link-target provenance selects the six-port
-`composed-v2` profile, joining 0.10.0, 1.0.0, 2.0.0, and 3.1.0: 4.0.0 ships
-`runtime.ts` byte-identical to 3.1.0's, with the same ABI and artifact
-schemas, and its major version marks the SDK-topology break rather than any
-runtime-contract change. `1.3.0`, `3.0.0`, and every other unreviewed
-release remain fail-closed as unmapped
-([[phase-execution-30](../packages/phase-execution.md#phase-execution-30)]).
+Exact `@sublang/playbook@4.0.0` link-target provenance selects the six-port `composed-v2` profile, joining 0.10.0, 1.0.0, 2.0.0, and 3.1.0: 4.0.0 ships `runtime.ts` byte-identical to 3.1.0's, with the same ABI and artifact schemas, and its major version marks the SDK-topology break rather than any runtime-contract change [[4]].
+`1.3.0`, `3.0.0`, and every other unreviewed release remain fail-closed as unmapped ([[phase-execution-30](../packages/phase-execution.md#phase-execution-30)]).
 
 ### Atomic reviewed-asset adoption
 
-The dependency range moves to `^4.0.0` with the lock resolving exactly
-4.0.0, and `@sublang/cligent` moves to `^0.18.0` in the same unit — the
-release whose descriptor owns the runtime-version policy. The vendored
-definitions are verified unchanged against the 4.0.0 tarball, and the three
-reviewed meta-phase bundles are retained rather than rebuilt: every input
-the pins record for them — definitions, link target, engine — is
-byte-identical, so a rebuild could only launder identical bytes through
-nondeterministic runs. Pins regenerate with exact 4.0.0 provenance, moving
-the lockfile hash and the installed-package identities. Manifest, lock,
-definitions, bundles, and pins move as one reviewed set
-([[self-hosting-11](../packages/self-hosting.md#self-hosting-11)]).
+The dependency range moves to `^4.0.0` with the lock resolving exactly 4.0.0, and `@sublang/cligent` moves to `^0.18.0` in the same unit — the release whose descriptor owns the runtime-version policy [[2]][[6]][[7]].
+The vendored definitions are verified unchanged against the 4.0.0 tarball, and the three reviewed meta-phase bundles are retained rather than rebuilt: every input the pins record for them — definitions, link target, engine — is byte-identical, so a rebuild could only launder identical bytes through nondeterministic runs [[4]].
+Pins regenerate with exact 4.0.0 provenance, moving the lockfile hash and the installed-package identities.
+Manifest, lock, definitions, bundles, and pins move as one reviewed set ([[self-hosting-11](../packages/self-hosting.md#self-hosting-11)]).
 
 ### Agent runtimes for repository verification
 
-The repository supplies `@anthropic-ai/claude-agent-sdk` and
-`@openai/codex-sdk` as `devDependencies` for its own opt-in live acceptance,
-resolved by the lock like every other dev tool. The published `@sublang/slc`
-declares no agent SDK in any dependency field: cligent's optional-peer
-declaration is the single range npm checks, and a second copy could only
-drift — drifting is exactly what froze Codex. Hermetic gates are unaffected;
-they fake the agent layer.
+The repository supplies `@anthropic-ai/claude-agent-sdk` and `@openai/codex-sdk` as `devDependencies` for its own opt-in live acceptance, resolved by the lock like every other dev tool.
+The published `@sublang/slc` keeps both SDKs out of `dependencies`, `optionalDependencies`, and `peerDependencies`; Cligent's optional-peer declaration is the single range npm checks [[7]], and a second copy could only drift — drifting is exactly what froze Codex.
+Hermetic gates are unaffected; they fake the agent layer.
 
 ### Version-coupled consumers
 
-`demo/package.json` moves to `@sublang/playbook` `^4.0.0` in the same unit
-and now also names the demo lineup's SDKs as its own dependencies: the demo
-is a project-local install, and a project tree has no other way to place the
-SDKs where its nested cligent resolves them — playbook's global-install
-guidance does not reach inside a project's `node_modules`.
+`demo/package.json` moves to `@sublang/playbook` `^4.0.0` in the same unit and now also names the demo lineup's SDKs as its own dependencies: the demo is a project-local install, and a project tree has no other way to place the SDKs where its nested Cligent resolves them — Playbook's global-install guidance does not reach inside a project's `node_modules` [[1]].
 
 ## Consequences
 
@@ -88,4 +68,15 @@ guidance does not reach inside a project's `node_modules`.
   sets still fail closed.
 - A live phase run on a machine without a needed SDK now fails at
   playbook's preflight with cligent's pinned install command, instead of
-  mid-run on a vendor error.
+  mid-run on a vendor error [[1]][[2]][[3]].
+
+## References
+
+[1]: https://github.com/sublang-ai/playbook/blob/v4.0.0/CHANGELOG.md#400---2026-08-05 "Playbook 4.0.0 release"
+[2]: https://github.com/sublang-ai/cligent/blob/v0.18.0/specs/decisions/013-cligent-owned-runtime-compatibility.md "Cligent DR-013: Cligent-owned runtime compatibility"
+[3]: https://github.com/sublang-ai/playbook/blob/v4.0.0/specs/decisions/027-runtime-compatibility-from-cligent.md "Playbook DR-027: Runtime compatibility from Cligent"
+[4]: https://github.com/sublang-ai/playbook/compare/88fa24810c2f7e1d5482240a39538b0d01ffadb4...29bf5d2a4725ebf16ecb149bc40a526aef612239 "Playbook 3.1.0 to 4.0.0 source comparison"
+[5]: https://github.com/sublang-ai/playbook/blob/v3.1.0/package.json "Playbook 3.1.0 package manifest"
+[6]: https://github.com/sublang-ai/playbook/blob/v4.0.0/package.json "Playbook 4.0.0 package manifest"
+[7]: https://github.com/sublang-ai/cligent/blob/v0.18.0/package.json "Cligent 0.18.0 package manifest"
+[8]: https://github.com/npm/node-semver/blob/v7.8.4/README.md#caret-ranges-123-025-004 "npm semver caret ranges (v7.8.4)"
