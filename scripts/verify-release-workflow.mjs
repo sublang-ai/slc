@@ -149,10 +149,25 @@ assert.match(ciGate.run, /actions\/workflows\/ci\.yml\/runs/);
 assert.match(ciGate.run, /head_sha=\$\{SHA\}/);
 assert.match(ciGate.run, /event=push/);
 assert.match(ciGate.run, /branch=main/);
+const pollLoop = ciGate.run.match(
+  /for attempt in \$\(seq 1 ([1-9][0-9]*)\); do\n([\s\S]*?)\n\s*done/,
+);
+assert.ok(pollLoop, 'CI gate needs a bounded poll loop');
+const [, pollBound, pollBody] = pollLoop;
 assert.match(
-  ciGate.run,
+  pollBody,
   /if \[ "\$conclusion" = "success" \]; then\s+echo "CI passed for \$\{SHA\}\."\s+break\s+fi\s+echo "::error::CI concluded '\$\{conclusion\}' for \$\{SHA\}"\s+exit 1/,
 );
+const timeoutGuard = pollBody.match(
+  /if \[ "\$attempt" = ([1-9][0-9]*) \]; then([\s\S]*?)\n\s*fi/,
+);
+assert.ok(timeoutGuard, 'CI gate needs a fail-closed timeout');
+assert.equal(
+  timeoutGuard[1],
+  pollBound,
+  'CI poll and timeout bounds must match',
+);
+assert.match(timeoutGuard[2], /^\s*exit 1\s*$/m);
 assert.equal(step('Install locked dependencies').run, 'npm ci');
 assert.equal(step('Run release checks').run, 'npm run release:check');
 
