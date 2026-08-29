@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Pin path-boundary resolution for the pin-currency validator (PIN-2, PIN-5;
+ * Pin path-boundary resolution for the pin-currency validator (pinning-2, pinning-5;
  * DR-007).
  *
  * Every pin path is a relative POSIX-style path resolved from the pipeline
@@ -11,7 +11,7 @@
  * pipeline directory); every local pin path must resolve inside that boundary,
  * so `..` is permitted only when the recorded boundary is wide enough to contain
  * the result. A violation is a {@link PinError} naming the offending field, which
- * the currency engine maps to a malformed verdict. See specs/dev/pinning.md.
+ * the currency engine maps to a malformed verdict. See specs/packages/pinning.md.
  */
 
 import { realpathSync } from 'node:fs';
@@ -30,7 +30,7 @@ import { PinError } from './pins.js';
 
 /**
  * Resolves a relative POSIX `relPath` against `pipelineDir`, requiring it to stay
- * inside `boundary` (also a relative POSIX path from `pipelineDir`) (PIN-2, PIN-5).
+ * inside `boundary` (also a relative POSIX path from `pipelineDir`) (pinning-2, pinning-5).
  *
  * @returns the resolved absolute host path.
  * @throws {PinError} (`pin-invalid`) when the recorded `boundary` is absolute
@@ -102,7 +102,7 @@ function canonicalProspectivePath(path: string, field: string): string {
   }
 }
 
-/** Rejects an absolute (POSIX or Windows) path, naming `field` (PIN-5). */
+/** Rejects an absolute (POSIX or Windows) path, naming `field` (pinning-5). */
 function requireRelative(path: string, field: string): void {
   if (path === '' || path.includes('\\') || path.includes('\0')) {
     throw new PinError(

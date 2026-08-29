@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Pin-file model and strict parser for the pin-currency validator (PIN-1, PIN-5;
+ * Pin-file model and strict parser for the pin-currency validator (pinning-1, pinning-5;
  * DR-007).
  *
  * Loads a pipeline's committed `slc.pins.json` and structurally validates it into
@@ -13,7 +13,7 @@
  * {@link PinError} naming the offending field. This module performs structural
  * validation only: it does not hash inputs, resolve the path boundary, derive the
  * semantic closure, or judge currency — those are later validator stages. See
- * specs/dev/pinning.md.
+ * specs/packages/pinning.md.
  */
 
 import { lstat, readFile } from 'node:fs/promises';
@@ -102,10 +102,10 @@ export interface LoadedPins {
   file?: PinFile;
 }
 
-/** Machine-readable reason a pin file was rejected (PIN-5). */
+/** Machine-readable reason a pin file was rejected (pinning-5). */
 export type PinErrorCode = 'pin-parse' | 'pin-invalid';
 
-/** Raised when `slc.pins.json` is not valid JSON or violates the pin schema (PIN-5). */
+/** Raised when `slc.pins.json` is not valid JSON or violates the pin schema (pinning-5). */
 export class PinError extends Error {
   readonly code: PinErrorCode;
 
@@ -117,7 +117,7 @@ export class PinError extends Error {
 }
 
 /**
- * Loads and validates `<pipelineDir>/slc.pins.json` (PIN-1, PIN-5).
+ * Loads and validates `<pipelineDir>/slc.pins.json` (pinning-1, pinning-5).
  *
  * @returns `{ path, file }` when present and valid, or `{}` (no pins) when absent.
  * @throws {PinError} when the file is not valid JSON (`pin-parse`) or violates the
@@ -145,7 +145,7 @@ export async function loadPinFile(pipelineDir: string): Promise<LoadedPins> {
   return { path, file: parsePinFile(source, path) };
 }
 
-/** Parses and structurally validates the text of a pin file into a {@link PinFile} (PIN-5). */
+/** Parses and structurally validates the text of a pin file into a {@link PinFile} (pinning-5). */
 export function parsePinFile(
   source: string,
   path: string = PINS_FILE,

@@ -17,13 +17,13 @@ import {
   type PinRecord,
 } from '../src/pins.js';
 
-/** A compiled artifact that resolves to the linked `playbook` format (PIN-13). */
+/** A compiled artifact that resolves to the linked `playbook` format (pinning-13). */
 const PHASE_ARTIFACT =
   'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
 // System-level acceptance over fixture pipeline directories with a committed
-// slc.pins.json, driving the validator through evaluatePins (PIN-7..PIN-14).
-describe('pin validator acceptance (PIN-7..PIN-14)', () => {
+// slc.pins.json, driving the validator through evaluatePins (pinning-7..pinning-14).
+describe('pin validator acceptance (pinning-7..pinning-14)', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -113,13 +113,13 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     await write(PINS_FILE, JSON.stringify(file, null, 2));
   };
 
-  it('reports no pins when slc.pins.json is absent (PIN-7)', async () => {
+  it('reports no pins when slc.pins.json is absent (pinning-7)', async () => {
     const result = await evaluatePins(dir);
     expect(result.verdicts).toBeUndefined();
     expect(result.malformed).toBeUndefined();
   });
 
-  it('reports a symbolic-link pin index malformed (PIN-11)', async () => {
+  it('reports a symbolic-link pin index malformed (pinning-11)', async () => {
     await write(
       'outside-pins.json',
       JSON.stringify({
@@ -135,7 +135,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     expect(result.verdicts).toBeUndefined();
   });
 
-  it('reports current for a fully matching pin (PIN-8)', async () => {
+  it('reports current for a fully matching pin (pinning-8)', async () => {
     await writePinFile(await currentRecord());
 
     const result = await evaluatePins(dir);
@@ -143,7 +143,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     expect(result.verdicts?.text2gears).toEqual({ status: 'current' });
   });
 
-  it('reports current for a portable format-preserving pass pin (PIN-8)', async () => {
+  it('reports current for a portable format-preserving pass pin (pinning-8)', async () => {
     const definition =
       '## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | gears | .md |\n| target | gears | .md |\n\n## Pin Inputs\n\n- `reference/gears.md`\n';
     await writePinFile(await currentRecord('optimize', definition), 'optimize');
@@ -152,7 +152,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     expect(result.verdicts?.optimize).toEqual({ status: 'current' });
   });
 
-  it('keeps a prototype-like portable key as its own verdict (PIN-8)', async () => {
+  it('keeps a prototype-like portable key as its own verdict (pinning-8)', async () => {
     await writePinFile(await currentRecord('__proto__'), '__proto__');
 
     const result = await evaluatePins(dir);
@@ -183,7 +183,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     ['semanticInput', 'reference/gears.md'],
     ['runtimeDependencies[0]', 'runtime/runtime.ts'],
     ['linkTarget', 'link/code.ts'],
-  ])('reports stale when the %s changes (PIN-9)', async (label, rel) => {
+  ])('reports stale when the %s changes (pinning-9)', async (label, rel) => {
     await writePinFile(await currentRecord());
     await write(rel, 'mutated after pinning\n');
 
@@ -192,7 +192,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     expect((verdict as { reason: string }).reason).toContain(label);
   });
 
-  it('reports stale on a semantic-input closure mismatch (PIN-10)', async () => {
+  it('reports stale on a semantic-input closure mismatch (pinning-10)', async () => {
     const record = await currentRecord();
     record.semanticInputs = []; // definition still cites reference/gears.md
     await writePinFile(record);
@@ -202,7 +202,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     expect((verdict as { reason: string }).reason).toContain('closure');
   });
 
-  it('reports stale for an artifact that is not a playbook module (PIN-14)', async () => {
+  it('reports stale for an artifact that is not a playbook module (pinning-14)', async () => {
     const record = await currentRecord();
     await write(
       'text2gears.slc/text2gears.playbook.ts',
@@ -219,7 +219,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     expect((verdict as { reason: string }).reason).toContain('playbook format');
   });
 
-  // File-level malformations rejected at parse time (PIN-11).
+  // File-level malformations rejected at parse time (pinning-11).
   it.each([
     ['not JSON', '{ not json', 'JSON'],
     [
@@ -265,7 +265,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
       'phase key',
     ],
   ])(
-    'reports a file-level malformed pin for %s, naming the field (PIN-11)',
+    'reports a file-level malformed pin for %s, naming the field (pinning-11)',
     async (_label, content, field) => {
       await write(PINS_FILE, content);
 
@@ -276,12 +276,12 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
   );
 
   // Portable-path syntax is rejected while parsing; boundary escapes are
-  // rejected when the parsed phase is resolved (PIN-11).
+  // rejected when the parsed phase is resolved (pinning-11).
   it.each([
     ['an absolute', '/etc/passwd'],
     ['a boundary-escaping', '../escape'],
   ])(
-    'reports malformed, no phase current, for %s recorded path (PIN-11)',
+    'reports malformed, no phase current, for %s recorded path (pinning-11)',
     async (_label, badPath) => {
       const record = await currentRecord();
       record.artifact.path = badPath;
@@ -303,7 +303,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     },
   );
 
-  // Malformed recorded digests rejected per phase (PIN-11).
+  // Malformed recorded digests rejected per phase (pinning-11).
   const digestCases: Array<[string, (record: PinRecord) => void, string]> = [
     [
       'a non-digest file hash',
@@ -321,7 +321,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     ],
   ];
   it.each(digestCases)(
-    'reports malformed, naming the field, for %s (PIN-11)',
+    'reports malformed, naming the field, for %s (pinning-11)',
     async (_label, mutate, field) => {
       const record = await currentRecord();
       mutate(record);
@@ -337,7 +337,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     ['an unvendored mutable reference', 'latest'],
     ['a bare URL', 'https://example.com/data'],
   ])(
-    'reports malformed for %s external input (PIN-12)',
+    'reports malformed for %s external input (pinning-12)',
     async (_label, identity) => {
       const record = await currentRecord();
       record.externalInputs = [{ identity }];
@@ -351,7 +351,7 @@ describe('pin validator acceptance (PIN-7..PIN-14)', () => {
     },
   );
 
-  it('validates without issuing any network request (PIN-12)', async () => {
+  it('validates without issuing any network request (pinning-12)', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const record = await currentRecord();
     record.externalInputs = [{ identity: `sha256:${'a'.repeat(64)}` }];

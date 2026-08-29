@@ -69,7 +69,7 @@ describe('seedPhaseTurn (PHEXEC-29)', () => {
   });
 });
 
-describe('resolvesToPlaybook (PIN-13)', () => {
+describe('resolvesToPlaybook (pinning-13)', () => {
   it('recognizes a createPlaybookRuntime default export', () => {
     expect(
       resolvesToPlaybook(

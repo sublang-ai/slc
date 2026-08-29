@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-// The explicit build-and-review pin step (PIN-15; DR-005, DR-007): after the
+// The explicit build-and-review pin step (pinning-15; DR-005, DR-007): after the
 // compiled meta-phase artifacts under pipelines/playbook/<phase>.slc/ are
 // built and reviewed, this records pipelines/playbook/slc.pins.json pinning
 // the playbook pipeline's phases (and the reserved link) to them, then
@@ -21,7 +21,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const pipelineDir = join(repoRoot, 'pipelines', 'playbook');
 // The artifacts are linked against the installed runtime contract, which sits
 // outside the pipeline directory; the recorded boundary widens to the repo
-// root so its identity can be pinned (PIN-15).
+// root so its identity can be pinned (pinning-15).
 const boundary = { boundary: '../..' };
 
 const expectedPlaybookVersion = '4.0.0';

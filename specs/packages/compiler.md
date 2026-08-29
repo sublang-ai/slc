@@ -33,7 +33,7 @@ When a phase is selected for execution rather than incremental reuse [[increment
 
 ### compiler-6
 
-Where a pipeline pins a phase to a reviewed compiled artifact, when the user runs the pipeline, the slc command shall require the pin to be current before reuse or execution [[PIN-2](../dev/pinning.md#pin-2)], shall run that artifact when execution is selected, and shall stop with a diagnostic rather than silently interpreting [[PHEXEC-27](../dev/phase-execution.md#phexec-27)] when the pin is stale [[PIN-3](../dev/pinning.md#pin-3)] or malformed [[PIN-5](../dev/pinning.md#pin-5)] or the pin file is unreadable ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md), [DR-021](../decisions/021-incremental-compilation.md)).
+Where a pipeline pins a phase to a reviewed compiled artifact, when the user runs the pipeline, the slc command shall require the pin to be current before reuse or execution [[pinning-2](pinning.md#pinning-2)], shall run that artifact when execution is selected, and shall stop with a diagnostic rather than silently interpreting [[PHEXEC-27](../dev/phase-execution.md#phexec-27)] when the pin is stale [[pinning-3](pinning.md#pinning-3)] or malformed [[pinning-5](pinning.md#pinning-5)] or the pin file is unreadable ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md), [DR-021](../decisions/021-incremental-compilation.md)).
 
 ### compiler-7
 

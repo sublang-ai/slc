@@ -18,7 +18,7 @@ import { PinError } from '../src/pins.js';
 
 const DIR = resolve('/work/text2gears.slc');
 
-describe('resolvePinPath (PIN-2, PIN-5)', () => {
+describe('resolvePinPath (pinning-2, pinning-5)', () => {
   it('resolves a relative POSIX path against the pipeline directory', () => {
     expect(resolvePinPath(DIR, '.', 'reference/gears.md', 'f')).toBe(
       resolve(DIR, 'reference', 'gears.md'),
