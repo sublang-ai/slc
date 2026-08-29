@@ -10,11 +10,11 @@ Accepted
 ## Context
 
 An executing phase can produce a structurally complete artifact with a material correctness or specification defect.
-The existing one-call interpreted boundary deliberately provides no automatic independent review, and compiled transformation-performing calls have the same gap.
-Incremental Reuse, by contrast, accepts existing live output without executing a transformation.
+The existing one-call interpreted boundary under [DR-004](004-slc-interpreted-phase-execution.md) deliberately provides no automatic independent review, and compiled transformation-performing calls have the same gap.
+Incremental Reuse under [DR-021](021-incremental-compilation.md), by contrast, accepts existing live output without executing a transformation.
 
 Delegating this loop to a compiled Playbook is not currently practical.
-The installed `@sublang/playbook` v4 package exposes no standalone `review` playbook and its `code` playbook owns a commit-oriented workflow, while the current v9 SDLC reference nests the same commit-oriented review workflow; both conflict with the phase boundary's no-commit and single-target write rules, and SLC's compiled host deliberately lacks a child-playbook stack.
+The installed `@sublang/playbook` v4.0.0 package exposes no standalone `review` playbook [[1]] and its `code` playbook owns a commit-oriented workflow [[2]], while the v9.0.0 SDLC reference nests the same commit-oriented review workflow [[3]]; both conflict with [DR-004](004-slc-interpreted-phase-execution.md)'s no-commit and single-target write rules, and SLC's compiled host deliberately lacks a child-playbook stack under [DR-010](010-playbook-runtime-contract-evolution.md).
 
 ## Decision
 
@@ -31,7 +31,7 @@ The installed `@sublang/playbook` v4 package exposes no standalone `review` play
   Reviewer error, incompletion, or malformed verdict fails the performing call closed; successful completion returns only the latest Coder result to the existing phase-runtime adjudication.
 - The wrapper applies to interpreted execution, compiled players, and transformation-performing direct Captain calls.
   Each compiled player keeps a separate Coder client, and each performing call gets a separate Reviewer conversation.
-- Incremental Reuse makes no call and therefore no review.
+- Incremental Reuse under [DR-021](021-incremental-compilation.md) makes no call and therefore no review.
   Update, Ordinary, and `--rebuild` use the same wrapped executor automatically.
 
 This supersedes [DR-004](004-slc-interpreted-phase-execution.md)'s one-call scope only when the Reviewer is configured.
@@ -41,5 +41,11 @@ The phase definition remains the semantic authority, and review adds no phase-sp
 
 - Review is disabled by default and no-review call count and semantics remain unchanged.
 - Reviewed execution costs at least one additional agent call for each transformation that runs and may cost more when findings require repair.
-- Reuse is intentionally not re-reviewed because it performs no transformation and preserves the accepted live artifact byte-for-byte.
-- Review orchestration belongs at the generic agent-client boundary, not in pipeline history or generated Playbook artifacts, because the installed runtime and the current commit-oriented nested SDLC flow cannot satisfy SLC's phase host boundary.
+- Reuse under [DR-021](021-incremental-compilation.md) is intentionally not re-reviewed because it performs no transformation and preserves the accepted live artifact byte-for-byte.
+- Review orchestration belongs at the generic agent-client boundary, not in pipeline history or generated Playbook artifacts, because neither the installed v4.0.0 CODE workflow [[1]][[2]] nor the v9.0.0 nested CODE/REVIEW workflow [[3]] can satisfy SLC's phase host boundary.
+
+## References
+
+[1]: https://github.com/sublang-ai/playbook/blob/v4.0.0/package.json "Playbook package manifest (v4.0.0)"
+[2]: https://github.com/sublang-ai/playbook/blob/v4.0.0/reference/sdlc/code.md "Playbook CODE workflow (v4.0.0)"
+[3]: https://github.com/sublang-ai/playbook/blob/v9.0.0/reference/sdlc/code.md "Playbook nested CODE/REVIEW workflow (v9.0.0)"

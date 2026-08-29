@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–26 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–27 are complete.
 
 ## Intent
 
@@ -140,7 +140,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 24. [x] Migrated the playbook-compilation, runtime-contract, Captain-adoption, and routing-separation decision records to current citation law, preserved their Accepted states and decisions, bound their historical upstream claims to immutable sources, normalized their map identities and substantive citations, and retargeted every malformed inbound link.
 25. [x] Migrated the normalization, CWD-emission, configuration-seeding, and grammar-provenance decision records to current citation law, preserved their Accepted states and decisions, bound their historical upstream claims to immutable sources, normalized their map identities and substantive citations, and retargeted every malformed inbound link.
 26. [x] Migrated the Playbook 2, Playbook 3.1, progress-watchdog, and Playbook 4 decision records to current citation law, preserved their Accepted states and decisions, bound their historical upstream claims to immutable sources, normalized their sentence layout, map identities, and substantive citations, and retargeted every malformed inbound link.
-27. Migrate the incremental-compilation and reviewed-agent-call decision records to current citation law without changing their accepted decisions.
+27. [x] Migrated the incremental-compilation and reviewed-agent-call decision records to current citation law, preserved their Accepted states and decisions, confirmed DR-021 already satisfied current citation law, bound DR-022's historical Playbook claims to immutable sources and its local dependencies to their decisions, and normalized both map identities after confirming every other inbound link was already current.
 28. Replace `map.md` with the minimal current decision-and-package index, update remaining project guidance to identify `@sublang/spex@3.0.0` as the spec migration and lint tool while retaining the separately reviewed 0.3.0 grammar dependency, remove empty legacy directories, resolve all migration residue, and report zero-error version-pinned `spex lint` plus manual audit evidence in the commit.
 
 ## Verification

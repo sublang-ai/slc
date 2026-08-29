@@ -44,8 +44,8 @@ meta.md     The spec of specs
 | [DR-018](decisions/018-playbook-3-1-adoption.md) | 018-playbook-3-1-adoption.md | Playbook 3.1 adoption: 3.1.0 provenance to `composed-v2`, link.md judge-envelope and compat-stamping re-sync, full bundle rebuild, coupled demo manifest, and the global-first consumption model |
 | [DR-019](decisions/019-compile-progress-stall-watchdog.md) | 019-compile-progress-stall-watchdog.md | In-run progress on stderr: per-phase lines with elapsed times, live compiled-status streaming, a 30 s silence-bounded heartbeat, a configurable agent-inactivity watchdog, and measured time estimates |
 | [DR-020](decisions/020-playbook-4-0-adoption.md) | 020-playbook-4-0-adoption.md | Playbook 4.0 adoption: 4.0.0 provenance to `composed-v2` on a byte-identical runtime, retained bundles with regenerated pins, Cligent 0.18 as runtime-version authority, SDKs as devDependencies and demo-named vendors |
-| DR-021 | [021-incremental-compilation.md](decisions/021-incremental-compilation.md) | Incremental compilation through complete versioned snapshots, exact phase reuse, and ordinary execution with prior-input/diff update context |
-| DR-022 | [022-two-agent-reviewed-compilation.md](decisions/022-two-agent-reviewed-compilation.md) | Opt-in independent review/fix/re-review for transformation-performing compilation calls |
+| [DR-021](decisions/021-incremental-compilation.md) | 021-incremental-compilation.md | Incremental compilation through complete versioned snapshots, exact phase reuse, and ordinary execution with prior-input/diff update context |
+| [DR-022](decisions/022-two-agent-reviewed-compilation.md) | 022-two-agent-reviewed-compilation.md | Opt-in independent review/fix/re-review for transformation-performing compilation calls |
 | [DR-023](decisions/023-host-settled-link-object-imports.md) | 023-host-settled-link-object-imports.md | Generic post-link settlement and reporting of declared-object import extensions from materialized siblings |
 
 ## Packages
