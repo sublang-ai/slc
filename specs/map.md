@@ -52,9 +52,6 @@ meta.md     The spec of specs
 
 | ID | File | Goal |
 | --- | --- | --- |
-| IR-005 | [005-slc-compiled-execution.md](iterations/005-slc-compiled-execution.md) | Implement DR-005, DR-008 (since superseded), and the compiled-execution DR-007 items: file capability, compiled execution, selection, meta-pipeline |
-| IR-006 | [006-slc-playbook-runtime-reconciliation.md](iterations/006-slc-playbook-runtime-reconciliation.md) | Reconcile compiled execution with Playbook 0.7.0's playbook/PlaybookRuntime contract |
-| IR-007 | [007-slc-playbook-pipeline-compilation.md](iterations/007-slc-playbook-pipeline-compilation.md) | Implement `slc playbook` end to end: resolve the playbook pipeline, complete compiled execution, bootstrap pinned meta-phase artifacts, auto-generate verification tests, and compare to the reference |
 | IR-008 | [008-playbook-runtime-contract-evolution.md](iterations/008-playbook-runtime-contract-evolution.md) | Reconcile three runtime profiles, structured results, composition-aware verification, CI, and the immutable-release boundary |
 | IR-009 | [009-playbook-1-0-captain-adoption.md](iterations/009-playbook-1-0-captain-adoption.md) | Adopt Playbook 1.0's six-port runtime, Captain and dynamic-child compiler primitives, reviewed definitions and artifacts, and pins as one reproducible set |
 | IR-010 | [010-playbook-routing-control-separation.md](iterations/010-playbook-routing-control-separation.md) | Separate routing prose from control metadata, preserve exact Boss text, isolate Captain calls, and verify explicit result contracts |

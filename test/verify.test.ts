@@ -1218,8 +1218,8 @@ const referenceFsm = async (): Promise<unknown> =>
   import(join(referenceDir, 'code.fsm.js'));
 
 // The checkers must hold for the real, human-reviewed reference artifacts that
-// model DR-009's verification contract (IR-007 Task 8: "test the generator
-// against the reference artifacts"). The installed @sublang/playbook ships them.
+// model DR-009's verification contract and exercise the generator against the
+// reference artifacts. The installed @sublang/playbook ships them.
 describe('conformance against the reference artifacts', () => {
   it('finds nothing on the reference code.gears.md + code.fsm', async () => {
     const referenceGears = readFileSync(

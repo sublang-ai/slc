@@ -354,8 +354,8 @@ When review is needed, Captain shall call playbook \`${target}\`:
   });
 
   // The real acceptance: `slc playbook <source>` output compared to the manual
-  // reference (IR-007 Task 9). Gated on a produced directory — a real agent
-  // compile — so a clean checkout skips rather than fails.
+  // reference under verification-9 and DR-009. Gated on a produced directory —
+  // a real agent compile — so a clean checkout skips rather than fails.
   it('accepts real slc playbook output when produced (gated)', async (context) => {
     const producedDir =
       process.env.SLC_EQUIVALENCE_DIR ??
