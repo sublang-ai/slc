@@ -42,7 +42,7 @@ Equivalence to the manual reference is defined over `slc`'s in-scope output and 
 
 ### Performing is compiled execution via pins
 
-Performing the `playbook` pipeline "from the playbook(s)" means running its phases through compiled, pinned phase artifacts under [DR-005](005-slc-self-hosting-meta-pipeline.md) strategy selection and [DR-007](007-slc-phase-artifact-pinning.md#currency-and-selection) pinning: a current pin runs the compiled artifact, an unpinned phase interprets, and a stale, malformed, or missing pin fails closed.
+Performing the `playbook` pipeline "from the playbook(s)" means running its phases through compiled, pinned phase artifacts under [DR-005](005-slc-self-hosting-meta-pipeline.md) strategy selection and [DR-007](007-slc-phase-artifact-pinning.md) pinning: a current pin runs the compiled artifact, an unpinned phase interprets, and a stale, malformed, or missing pin fails closed.
 Those compiled phase artifacts are produced by `slc slc` over the same definitions, the self-hosting bootstrap of [DR-005](005-slc-self-hosting-meta-pipeline.md).
 Performing the produced SDLC workflow itself — hosting the compiled runtime against live Boss and agents — is the Playbook host's role [[2]] and is out of `slc`'s scope.
 
