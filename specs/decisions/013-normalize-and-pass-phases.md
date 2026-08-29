@@ -50,7 +50,7 @@ Playbook's DR-016 adds the target-side primitive — GEARS script items compiled
 
 ## Consequences
 
-- `slc playbook workflow.md --normalize -O --link <runtime>` compiles raw prose end to end: normalization makes actors and preconditions explicit, the optimize pass rewrites mechanical steps into agent-free script states, and the emitted verification tests cover both (script conformance and coverage extend `VERIFY`).
+- `slc playbook workflow.md --normalize -O --link <runtime>` compiles raw prose end to end: normalization makes actors and preconditions explicit, the optimize pass rewrites mechanical steps into agent-free script states, and the emitted verification tests cover both (script conformance and coverage extend `verification`).
 - Unoptimized runs are byte-compatible with today: no pass phase in the directory, or no `-O`, changes nothing.
 - A pipeline directory may now legally contain non-chain `.md` phase files; hosts older than this decision refuse such directories, which is the intended fail-closed behavior for a vendored pipeline they cannot schedule.
 - Verification gains script-item parsing and script-state conformance/coverage so optimized artifacts verify as strictly as unoptimized ones.

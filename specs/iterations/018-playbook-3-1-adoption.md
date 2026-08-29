@@ -35,7 +35,7 @@ the 0.2.0 release.
       release steps per [RELEASE-13](../dev/release.md#release-13).
 - [x] The RELEASE-17 acceptance gate's compile stage caught an interpreted
       link emitting `./minimal.fsm.js` beside a `.ts`-only bundle with a zero
-      exit; the deterministic VERIFY-18 load-integrity check now fails such a
+      exit; the deterministic verification-18 load-integrity check now fails such a
       compile at the link and at entry emission.
 
 ## Acceptance criteria

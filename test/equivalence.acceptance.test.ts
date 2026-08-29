@@ -178,7 +178,7 @@ function unmarkedStrictComposedRuntime(): unknown {
   };
 }
 
-describe('reference equivalence harness (VERIFY-9)', () => {
+describe('reference equivalence harness (verification-9)', () => {
   it('accepts the reference compared to itself', async () => {
     const reference = await loadReference();
     expect(

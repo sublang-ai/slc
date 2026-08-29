@@ -675,7 +675,7 @@ type ErrorGuardArgs = {
   event: { error: Error };
 };
 
-describe('guardSatisfiable (VERIFY-6)', () => {
+describe('guardSatisfiable (verification-6)', () => {
   it('satisfies a conjunctive guard by iterative deepening over its literals', () => {
     const guard = ({
       context,
@@ -722,7 +722,7 @@ describe('identifierLiterals', () => {
   });
 });
 
-describe('checkFsmCoverage (VERIFY-6)', () => {
+describe('checkFsmCoverage (verification-6)', () => {
   it('finds nothing on a machine covering all its transitions', async () => {
     expect(await checkFsmCoverage({ machine: goodMachine() })).toEqual([]);
   });

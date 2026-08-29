@@ -46,7 +46,7 @@ const formats = (sf: string, se: string, tf: string, te: string): string =>
 const playbookLink = `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | fsm | .ts |\n| target | playbook | .ts |\n\n## Link Targets\n\n| Target form | Meaning |\n| --- | --- |\n| <path>.ts | A runtime module. |\n`;
 
 // A conformant gears+fsm artifact pair in the meta-pipeline output shapes, so
-// a faked full run exercises every verification emission (VERIFY-8): the fsm
+// a faked full run exercises every verification emission (verification-8): the fsm
 // carries the FLOW-1 binding verbatim plus the gears2fsm Boss surfaces. The
 // `Players:` block feeds entry-module `requiredRoleIds` derivation
 // (self-hosting-16).
@@ -149,7 +149,7 @@ export const machine = setup({
 // An agent that writes the prompt's declared target, emitting realistic
 // artifacts per target kind — a gears package, a conformant machine, and a
 // real createPlaybookRuntime module — so verification emission runs end to end
-// (self-hosting-3, VERIFY-8).
+// (self-hosting-3, verification-8).
 const writingAgent = (
   opts: { prompts?: string[]; gears?: string } = {},
 ): AgentClient => ({
@@ -494,7 +494,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       true,
     );
     expect(await exists(join(work, 'code.ts'))).toBe(true);
-    // Every verification test is emitted beside the artifacts (VERIFY-8): the
+    // Every verification test is emitted beside the artifacts (verification-8): the
     // faked agents produced a conformant gears+fsm pair, so conformance,
     // introspection, prompt-contract, and coverage all derive and emit.
     for (const test of [
@@ -705,7 +705,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     expect(`${stdout}\n${stderr}`).toMatch(/4 passed/);
   });
 
-  it('degrades fsm-derived emissions to diagnostics when the produced fsm cannot be imported (VERIFY-8)', async () => {
+  it('degrades fsm-derived emissions to diagnostics when the produced fsm cannot be imported (verification-8)', async () => {
     const junkAgent: AgentClient = {
       run: async ({ prompt }) => {
         const match = /artifact to write: (.+)/.exec(prompt);
@@ -745,7 +745,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     expect(diagnostics).toMatch(/coverage test not emitted/);
   });
 
-  it('emits no verification when -o relocates the fsm out of the artifact dir (VERIFY-2, pipeline-8)', async () => {
+  it('emits no verification when -o relocates the fsm out of the artifact dir (verification-2, pipeline-8)', async () => {
     // Only the `playbook` pipeline defaults a link target (self-hosting-13), so
     // `-o` on a bare `playbook` run names the linked artifact; the reserved
     // `slc` run of the same shared definitions keeps the full form where `-o`

@@ -443,7 +443,7 @@ async function runFullLink(
             diagnostics: [
               ...verified.diagnostics,
               `entry module ${entryPath} has unresolvable relative imports: ` +
-                `${missing.join(', ')} (VERIFY-18)`,
+                `${missing.join(', ')} (verification-18)`,
             ],
           };
         }
@@ -463,8 +463,8 @@ function runCwd(deps: SlcDeps): string {
  * After a reserved-pipeline full run produces a `gears` intermediate and an `fsm`
  * object at their canonical `<basename>.playbook/` locations, emits the
  * artifact-local checker support plus compilation-correctness tests beside
- * them as `slc` output, appending their paths to the outputs (VERIFY-2,
- * VERIFY-4;
+ * them as `slc` output, appending their paths to the outputs (verification-2,
+ * verification-4;
  * [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
  * Non-reserved pipelines, runs without a gears+fsm pair, and runs whose `fsm` was
  * relocated out of that directory by `-o` (pipeline-8) are left unchanged, so an
@@ -1040,8 +1040,8 @@ async function executeSteps(
     }
     diagnostics.push(...result.diagnostics);
     // Settle an agent-chosen `.js`/`.ts` link-object edge from the sibling that
-    // currently exists (PIPE-40), then keep rejecting every genuinely
-    // unresolved import (VERIFY-18).
+    // currently exists (pipeline-40), then keep rejecting every genuinely
+    // unresolved import (verification-18).
     if (
       step.phase === 'link' &&
       (step.targetExt === '.ts' || step.targetExt === '.js')
@@ -1058,7 +1058,7 @@ async function executeSteps(
           ...rewrites.map(
             ({ from, to }) =>
               `linked module ${linked} reconciled link-object import ` +
-              `${JSON.stringify(from)} to ${JSON.stringify(to)} (PIPE-40)`,
+              `${JSON.stringify(from)} to ${JSON.stringify(to)} (pipeline-40)`,
           ),
         );
         missing = await unresolvableRelativeImports(linked);
@@ -1071,7 +1071,7 @@ async function executeSteps(
           `linked module ${target} could not be settled and checked: ` +
             `${messageOf(error)} — ` +
             'post-link completion and load integrity are mandatory ' +
-            '(PIPE-40, VERIFY-18)',
+            '(pipeline-40, verification-18)',
         );
         return { ok: false, outputs, diagnostics };
       }
@@ -1080,7 +1080,7 @@ async function executeSteps(
         diagnostics.push(
           `linked module ${target} has unresolvable relative imports: ` +
             `${missing.join(', ')} — an emitted module that cannot load ` +
-            'fails the link (VERIFY-18)',
+            'fails the link (verification-18)',
         );
         return { ok: false, outputs, diagnostics };
       }

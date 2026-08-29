@@ -688,11 +688,11 @@ describe('checkGearsFsmConformance', () => {
     expect(checkGearsFsmConformance(directGears, directConfig())).toEqual([]);
   });
 
-  it('accepts a script item realized by a matching script state (VERIFY-15, VERIFY-17)', () => {
+  it('accepts a script item realized by a matching script state (verification-15, verification-17)', () => {
     expect(checkGearsFsmConformance(scriptGears, scriptConfig())).toEqual([]);
   });
 
-  it('reports a drifted script command (VERIFY-17)', () => {
+  it('reports a drifted script command (verification-17)', () => {
     expect(
       checkGearsFsmConformance(
         scriptGears,
@@ -701,7 +701,7 @@ describe('checkGearsFsmConformance', () => {
     ).toMatch(/FSM script command is not the GEARS blockquote verbatim/);
   });
 
-  it('reports reordered script guards and a needsBossReply on a script state (VERIFY-17)', () => {
+  it('reports reordered script guards and a needsBossReply on a script state (verification-17)', () => {
     expect(
       checkGearsFsmConformance(
         scriptGears,
@@ -727,7 +727,7 @@ describe('checkGearsFsmConformance', () => {
     ).toMatch(/script/);
   });
 
-  it('reports a script item realized by a captain state (VERIFY-17)', () => {
+  it('reports a script item realized by a captain state (verification-17)', () => {
     expect(
       checkGearsFsmConformance(
         scriptGears,
@@ -1179,7 +1179,7 @@ describe('checkGearsFsmConformance', () => {
     );
   });
 
-  it('detects a state with no needsBossReply result (VERIFY-3)', () => {
+  it('detects a state with no needsBossReply result (verification-3)', () => {
     const config = conformantConfig();
     const state = config.states!.draft as {
       invoke: { input: () => Record<string, unknown> };
@@ -1194,7 +1194,7 @@ describe('checkGearsFsmConformance', () => {
     );
   });
 
-  it('detects a needsBossReply description missing the question contract (VERIFY-3)', () => {
+  it('detects a needsBossReply description missing the question contract (verification-3)', () => {
     const config = conformantConfig();
     config.states!.draft = captain(
       'Writer',
@@ -1258,7 +1258,7 @@ describe('normalizeArms', () => {
 });
 
 // A machine fixture with transitions, root events, and a quiescent surface, in
-// the `gears2fsm` shape the introspection pins (VERIFY-4).
+// the `gears2fsm` shape the introspection pins (verification-4).
 const introspectableConfig = (): MachineConfigLike => ({
   initial: 'ready',
   states: {
@@ -1297,7 +1297,7 @@ const introspectableConfig = (): MachineConfigLike => ({
   },
 });
 
-describe('pinIntrospection (VERIFY-4)', () => {
+describe('pinIntrospection (verification-4)', () => {
   it('pins captain bindings, transition arms, event surfaces, and the jumpable set', () => {
     const pins = pinIntrospection(introspectableConfig());
     expect(pins.initial).toBe('ready');
@@ -1552,7 +1552,7 @@ const goodCompose = (raw: unknown): string => {
   return blocks.join('\n\n');
 };
 
-describe('prompt contract capture (VERIFY-5)', () => {
+describe('prompt contract capture (verification-5)', () => {
   it('probes context reads through a recording proxy', () => {
     const reads = probeContextReads(({ context }) => ({
       a: context.audience,
@@ -1622,7 +1622,7 @@ describe('prompt contract capture (VERIFY-5)', () => {
   });
 });
 
-describe('checkPromptComposition (VERIFY-5)', () => {
+describe('checkPromptComposition (verification-5)', () => {
   it('accepts a composer following the link contract', () => {
     expect(
       checkPromptComposition({
@@ -1946,7 +1946,7 @@ describe('checkPromptComposition (VERIFY-5)', () => {
   });
 });
 
-describe('emitPromptContractTest (VERIFY-5)', () => {
+describe('emitPromptContractTest (verification-5)', () => {
   const fsmFixture = [
     'export const machine = {',
     '  config: {',
@@ -2227,7 +2227,7 @@ describe('generateGearsFsmConformanceTest', () => {
 });
 
 describe('emitGearsFsmConformanceTest', () => {
-  it('writes the conformance test into the artifact directory (VERIFY-2)', async () => {
+  it('writes the conformance test into the artifact directory (verification-2)', async () => {
     const artifactDir = await mkdtemp(join(tmpdir(), 'slc-verify-emit-'));
     try {
       const path = await emitGearsFsmConformanceTest({

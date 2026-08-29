@@ -3,7 +3,7 @@
 
 /**
  * FSM transition-coverage verification for a compiled `playbook` artifact
- * (VERIFY-6; DR-009).
+ * (verification-6; DR-009).
  *
  * {@link checkFsmCoverage} drives the artifact's machine with scripted Captain
  * and nested-playbook actors and returns findings when a declared transition
@@ -16,7 +16,7 @@
  * covered by deterministic guard-satisfiability probing — candidate values
  * mined from the guard's own source — so an unsatisfiable arm is still flagged.
  * The checker needs only the artifact and `xstate`; the emitted per-artifact
- * test runs it beside the artifacts. See specs/dev/verification.md.
+ * test runs it beside the artifacts. See specs/packages/verification.md.
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -522,7 +522,7 @@ function playbookRefs(config: MachineConfigLike): PlaybookRef[] {
   );
 }
 
-// Local copy: this module is copied verbatim beside the artifact (VERIFY-12),
+// Local copy: this module is copied verbatim beside the artifact (verification-12),
 // so it may not import a sibling module.
 function coverageErrorMessage(error: unknown): string {
   try {
@@ -2258,7 +2258,7 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
 
 /**
  * Checks transition coverage over a compiled `playbook` artifact's machine
- * (VERIFY-6) and returns findings (empty when every declared transition is
+ * (verification-6) and returns findings (empty when every declared transition is
  * reachable). Drives the machine through the `gears2fsm` surfaces it
  * declares; a workflow without pre-emption may omit the `BOSS_INTERRUPT`
  * surface entirely, in which case interrupt coverage is skipped.
@@ -2784,7 +2784,7 @@ export async function checkFsmCoverage(
 
 /**
  * Builds a per-artifact vitest module running the transition-coverage check
- * beside the artifacts (VERIFY-6).
+ * beside the artifacts (verification-6).
  */
 export function generateFsmCoverageTest(opts: {
   basename: string;
@@ -2827,7 +2827,7 @@ describe(${suiteName}, () => {
 
 /**
  * Emits the transition-coverage test beside a compiled `playbook` artifact
- * (VERIFY-6): validates the produced `fsm` drives cleanly, then writes
+ * (verification-6): validates the produced `fsm` drives cleanly, then writes
  * `<basename>.fsm.coverage.test.ts` and returns its path with any coverage
  * findings as diagnostics.
  *

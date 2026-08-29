@@ -566,7 +566,7 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
     expect(result.diagnostics.join('\n')).toContain('changed during the run');
   });
 
-  it('leaves an unrelated import unchanged and fails it (PIPE-41, VERIFY-19)', async () => {
+  it('leaves an unrelated import unchanged and fails it (pipeline-41, verification-19)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
@@ -589,13 +589,13 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
     );
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('./missing.js');
-    expect(result.diagnostics.join('\n')).toContain('VERIFY-18');
+    expect(result.diagnostics.join('\n')).toContain('verification-18');
     expect(await readFile(join(artDir, 'onboarding.run.ts'), 'utf8')).toContain(
       "import './missing.js'",
     );
   });
 
-  it('settles and reports a linked import on its TypeScript sibling (PIPE-41)', async () => {
+  it('settles and reports a linked import on its TypeScript sibling (pipeline-41)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
@@ -627,12 +627,12 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
         (diagnostic) =>
           diagnostic ===
           `linked module ${linked} reconciled link-object import ` +
-            `"./onboarding.fsm.js" to "./onboarding.fsm.ts" (PIPE-40)`,
+            `"./onboarding.fsm.js" to "./onboarding.fsm.ts" (pipeline-40)`,
       ),
     ).toHaveLength(2);
   });
 
-  it('settles and reports a linked import on its JavaScript sibling (PIPE-41)', async () => {
+  it('settles and reports a linked import on its JavaScript sibling (pipeline-41)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm source');
@@ -660,7 +660,7 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
     );
     expect(result.diagnostics).toContain(
       `linked module ${linked} reconciled link-object import ` +
-        `"./onboarding.fsm.ts" to "./onboarding.fsm.js" (PIPE-40)`,
+        `"./onboarding.fsm.ts" to "./onboarding.fsm.js" (pipeline-40)`,
     );
   });
 
@@ -685,7 +685,7 @@ describe('failure paths (phase-execution-17, phase-execution-19, phase-execution
     expect(report).toContain('is not a regular file');
   });
 
-  it('accepts a link whose relative imports resolve beside the module (VERIFY-19)', async () => {
+  it('accepts a link whose relative imports resolve beside the module (verification-19)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
