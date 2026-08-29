@@ -93,7 +93,7 @@ The behavior citation audit establishes these peer-package edges:
 | `self-hosting` | `phase-execution`, `pinning`, `pipeline` |
 | `verification` | `pinning`, `pipeline`, `release`, `self-hosting` |
 
-They shall also add the minimal local integration or system verification needed for uncovered compiler behavior and CLI item 33.
+The remaining package task shall add the minimal local integration or system verification needed for CLI item 33.
 
 ## Deliverables
 

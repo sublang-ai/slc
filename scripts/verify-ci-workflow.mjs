@@ -6,7 +6,10 @@
 
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { matchesGlob } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+import ts from 'typescript';
 import { parse } from 'yaml';
 
 const repoRoot = new URL('../', import.meta.url);
@@ -205,33 +208,6 @@ const exactScripts = new Map([
 for (const [name, command] of exactScripts) {
   assert.equal(manifest.scripts[name], command, `${name} is not the full gate`);
 }
-const excludeBlock = vitestSource.match(/exclude:\s*\[([\s\S]*?)\]/);
-assert.ok(excludeBlock, 'Vitest config needs an explicit exclusion list');
-const excludeLiterals = [...excludeBlock[1].matchAll(/(['"])(.*?)\1/g)];
-const excludeResidue = excludeLiterals
-  .reduce((source, match) => source.replace(match[0], ''), excludeBlock[1])
-  .replace(/[\s,]/g, '');
-assert.equal(
-  excludeResidue,
-  '',
-  'Vitest exclusions must be auditable static string globs',
-);
-assert.deepEqual(
-  excludeLiterals.map((match) => match[2]),
-  [
-    '**/node_modules/**',
-    'dist/**',
-    '.scratch/**',
-    'demo/workflow.playbook/**',
-    'demo/workflow.zh.playbook/**',
-  ],
-  'Vitest exclusions must keep committed pipeline bundles discoverable',
-);
-assert.doesNotMatch(
-  vitestSource,
-  /^\s*(?:root|dir|include|includeSource|namePattern|testNamePattern)\s*:/m,
-  'the full suite must not narrow test discovery',
-);
 
 const bundles = ['text2gears', 'gears2fsm', 'link'];
 const generatedTestSuffixes = [
@@ -245,43 +221,281 @@ const generatedTests = bundles.flatMap((bundle) =>
     (suffix) => `pipelines/playbook/${bundle}.slc/${bundle}.${suffix}`,
   ),
 );
+const handwrittenFixtureTests = [
+  'test/equivalence.acceptance.test.ts',
+  'test/verify.test.ts',
+  'test/verify-coverage.test.ts',
+];
+const requiredTestFiles = [...generatedTests, ...handwrittenFixtureTests];
+
+const parseTypeScript = (source, filename) =>
+  ts.createSourceFile(
+    filename,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+const staticPropertyName = (property, label) => {
+  assert.ok(
+    ts.isPropertyAssignment(property),
+    `${label} must use static property assignments`,
+  );
+  const name = property.name;
+  assert.ok(
+    ts.isIdentifier(name) ||
+      ts.isStringLiteral(name) ||
+      ts.isNoSubstitutionTemplateLiteral(name),
+    `${label} has an unauditable property name`,
+  );
+  return name.text;
+};
+const staticProperties = (object, label) => {
+  const entries = object.properties.map((property) => [
+    staticPropertyName(property, label),
+    property.initializer,
+  ]);
+  assert.equal(
+    new Set(entries.map(([name]) => name)).size,
+    entries.length,
+    `${label} has a duplicate property`,
+  );
+  return new Map(entries);
+};
+
+const vitestSyntax = parseTypeScript(vitestSource, 'vitest.config.ts');
+const defaultExports = vitestSyntax.statements.filter(ts.isExportAssignment);
+assert.equal(
+  defaultExports.length,
+  1,
+  'Vitest config needs one default export',
+);
+const configCall = defaultExports[0].expression;
+assert.ok(
+  ts.isCallExpression(configCall) &&
+    ts.isIdentifier(configCall.expression) &&
+    configCall.expression.text === 'defineConfig',
+  'Vitest config must call defineConfig directly',
+);
+assert.equal(configCall.arguments.length, 1);
+const configObject = configCall.arguments[0];
+assert.ok(
+  ts.isObjectLiteralExpression(configObject),
+  'Vitest config must use an auditable object literal',
+);
+const configProperties = staticProperties(configObject, 'Vitest config');
+assert.equal(
+  configProperties.get('root'),
+  undefined,
+  'Vitest root must remain the repository root',
+);
+const testObject = configProperties.get('test');
+assert.ok(
+  testObject && ts.isObjectLiteralExpression(testObject),
+  'Vitest test config must use an auditable object literal',
+);
+const testProperties = staticProperties(testObject, 'Vitest test config');
+for (const property of [
+  'root',
+  'dir',
+  'include',
+  'namePattern',
+  'testNamePattern',
+  'projects',
+  'shard',
+  'tagsFilter',
+]) {
+  assert.equal(
+    testProperties.get(property),
+    undefined,
+    `Vitest test.${property} must not narrow test discovery`,
+  );
+}
+const excludeArray = testProperties.get('exclude');
+assert.ok(
+  !excludeArray || ts.isArrayLiteralExpression(excludeArray),
+  'Vitest exclusions must be an auditable array literal',
+);
+const exclusions = (excludeArray?.elements ?? []).map((element) => {
+  assert.ok(
+    ts.isStringLiteral(element) || ts.isNoSubstitutionTemplateLiteral(element),
+    'Vitest exclusions must be static string globs',
+  );
+  assert.doesNotMatch(
+    element.text,
+    /^!/,
+    'Vitest exclusions must not use unauditable negation',
+  );
+  return element.text;
+});
+for (const requiredTestFile of requiredTestFiles) {
+  const candidates = [
+    requiredTestFile,
+    `./${requiredTestFile}`,
+    fileURLToPath(new URL(requiredTestFile, repoRoot)),
+  ];
+  const excludingGlob = exclusions.find((glob) =>
+    candidates.some((candidate) => matchesGlob(candidate, glob)),
+  );
+  assert.equal(
+    excludingGlob,
+    undefined,
+    `${requiredTestFile} is excluded from the full suite by ${String(excludingGlob)}`,
+  );
+}
+
+const allowOnly = testProperties.get('allowOnly');
+assert.ok(
+  !allowOnly || allowOnly.kind === ts.SyntaxKind.FalseKeyword,
+  'Vitest test.allowOnly must not permit focused tests in CI',
+);
+
 const generatedSources = await Promise.all(generatedTests.map(readProjectFile));
 const disabledTest =
   /\b(?:describe|suite|it|test)\s*\.\s*(?:skip|skipIf|runIf|todo|only)\b|\b(?:skip|todo)\s*:\s*true/;
 const requireActiveTests = (source, label) => {
   assert.doesNotMatch(source, disabledTest, `${label} disables required tests`);
 };
+const testCalls = (syntax) => {
+  const matches = [];
+  const collect = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      ['it', 'test'].includes(node.expression.text)
+    ) {
+      matches.push(node);
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(syntax);
+  return matches;
+};
+const conditionalRegistration = (node) =>
+  ts.isIfStatement(node) ||
+  ts.isConditionalExpression(node) ||
+  ts.isForStatement(node) ||
+  ts.isForInStatement(node) ||
+  ts.isForOfStatement(node) ||
+  ts.isWhileStatement(node) ||
+  ts.isDoStatement(node) ||
+  ts.isSwitchStatement(node) ||
+  (ts.isBinaryExpression(node) &&
+    [
+      ts.SyntaxKind.AmpersandAmpersandToken,
+      ts.SyntaxKind.BarBarToken,
+      ts.SyntaxKind.QuestionQuestionToken,
+    ].includes(node.operatorToken.kind));
+const requireActiveTestCall = (testCall, label) => {
+  assert.ok(
+    [2, 3].includes(testCall.arguments.length),
+    `${label} test must use an auditable callback`,
+  );
+  const title = testCall.arguments[0];
+  assert.ok(
+    ts.isStringLiteralLike(title),
+    `${label} test needs a static title`,
+  );
+  const callback = testCall.arguments[1];
+  assert.ok(
+    ts.isArrowFunction(callback) || ts.isFunctionExpression(callback),
+    `${label} test has no auditable implementation: ${title.text}`,
+  );
+  assert.equal(
+    callback.parameters.length,
+    0,
+    `${label} test must not accept a runtime skip context: ${title.text}`,
+  );
+
+  let hasExpectation = false;
+  const findExpectation = (node) => {
+    if (
+      node !== callback &&
+      (ts.isFunctionLike(node) ||
+        ts.isIfStatement(node) ||
+        ts.isConditionalExpression(node) ||
+        ts.isForStatement(node) ||
+        ts.isForInStatement(node) ||
+        ts.isWhileStatement(node) ||
+        ts.isDoStatement(node) ||
+        ts.isSwitchStatement(node) ||
+        (ts.isBinaryExpression(node) &&
+          [
+            ts.SyntaxKind.AmpersandAmpersandToken,
+            ts.SyntaxKind.BarBarToken,
+            ts.SyntaxKind.QuestionQuestionToken,
+          ].includes(node.operatorToken.kind)))
+    ) {
+      return;
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'expect'
+    ) {
+      hasExpectation = true;
+    }
+    ts.forEachChild(node, findExpectation);
+  };
+  findExpectation(callback);
+  assert.ok(hasExpectation, `${label} test has no expectation: ${title.text}`);
+
+  for (let ancestor = testCall.parent; ancestor; ancestor = ancestor.parent) {
+    assert.ok(
+      !conditionalRegistration(ancestor),
+      `${label} test is conditionally registered: ${title.text}`,
+    );
+    if (ts.isArrowFunction(ancestor) || ts.isFunctionExpression(ancestor)) {
+      const suiteCall = ancestor.parent;
+      assert.ok(
+        ts.isCallExpression(suiteCall) &&
+          ts.isIdentifier(suiteCall.expression) &&
+          ['describe', 'suite'].includes(suiteCall.expression.text) &&
+          suiteCall.arguments.length === 2 &&
+          suiteCall.arguments[1] === ancestor &&
+          ts.isStringLiteralLike(suiteCall.arguments[0]),
+        `${label} test must belong to an active static suite: ${title.text}`,
+      );
+    }
+  }
+};
 for (let index = 0; index < generatedSources.length; index += 1) {
-  requireActiveTests(generatedSources[index], generatedTests[index]);
-  assert.match(
-    generatedSources[index],
-    /\bit\s*\(/,
-    `${generatedTests[index]} has no executable assertion`,
-  );
-  assert.match(
-    generatedSources[index],
-    /\bexpect\s*\(/,
-    `${generatedTests[index]} has no executable expectation`,
-  );
+  const label = generatedTests[index];
+  const source = generatedSources[index];
+  requireActiveTests(source, label);
+  const calls = testCalls(parseTypeScript(source, label));
+  assert.ok(calls.length > 0, `${label} has no executable assertion`);
+  for (const call of calls) requireActiveTestCall(call, label);
 }
 
-requireActiveTests(equivalenceSource, 'runtime-profile fixture');
-requireActiveTests(verificationSource, 'structured-verification fixture');
-requireActiveTests(coverageSource, 'structured-coverage fixture');
-assert.match(
-  equivalenceSource,
-  /\['legacy', 'session-v1', 'composed-v2'\] as const/,
-  'full-suite runtime-profile coverage is missing',
-);
-assert.match(
-  verificationSource,
-  /const structuredConfig = \(\): MachineConfigLike =>/,
-  'full-suite structured verification is missing',
-);
-assert.match(
+const requireTestCase = (source, label, title) => {
+  const syntax = parseTypeScript(source, label);
+  const matches = testCalls(syntax).filter(
+    (testCall) =>
+      ts.isStringLiteralLike(testCall.arguments[0]) &&
+      testCall.arguments[0].text === title,
+  );
+  assert.equal(matches.length, 1, `${label} must retain active test: ${title}`);
+  requireActiveTestCall(matches[0], label);
+};
+for (const title of [
+  'accepts each matching exact runtime contract profile',
+  'distinguishes unmarked legacy and session-v1 init boundaries',
+  'supplies the exact six-port composed-v2 probe boundary',
+]) {
+  requireTestCase(equivalenceSource, 'runtime-profile fixture', title);
+}
+for (const title of [
+  'maps nested parallel captain work and a playbook actor',
+  'adds recursive topology and playbook bindings only for a structured machine',
+  'captures prompt contracts from nested parallel leaves',
+]) {
+  requireTestCase(verificationSource, 'structured-verification fixture', title);
+}
+requireTestCase(
   coverageSource,
-  /two-region structured machine with branch-local Boss-reply waits/i,
-  'full-suite structured transition coverage is missing',
+  'structured-coverage fixture',
+  'drives explicit player leaves by entering their parallel parent',
 );
 
 assert.equal(manifest.dependencies?.['@sublang/playbook'], '^4.0.0');
