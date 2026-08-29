@@ -414,10 +414,6 @@ const requireActiveTestCall = (testCall, label) => {
       (ts.isFunctionLike(node) ||
         ts.isIfStatement(node) ||
         ts.isConditionalExpression(node) ||
-        ts.isForStatement(node) ||
-        ts.isForInStatement(node) ||
-        ts.isWhileStatement(node) ||
-        ts.isDoStatement(node) ||
         ts.isSwitchStatement(node) ||
         (ts.isBinaryExpression(node) &&
           [
