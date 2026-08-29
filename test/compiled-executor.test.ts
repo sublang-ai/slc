@@ -117,29 +117,52 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  const runFixture = async (sourceContent: string) => {
-    await writeFile(join(root, 'src.md'), sourceContent);
-    const executor = createCompiledExecutor({
+  const fixtureExecutor = () =>
+    createCompiledExecutor({
       artifactPath: fixture,
       runRoot: root,
       player: idleAgent,
       judge: idleAgent,
     });
+
+  const runFixture = async (sourceContent: string) => {
+    await writeFile(join(root, 'src.md'), sourceContent);
     const request: ExecuteRequest = {
       kind: 'compile',
       definitionPath: join(root, 'phase.md'),
       source: 'src.md',
       target: 'out.ts',
     };
-    return executor.run(request, new AbortController().signal);
+    return fixtureExecutor().run(request, new AbortController().signal);
   };
 
-  it('drives the runtime, writes the target, and yields ok with drained diagnostics', async () => {
+  it('seeds and drives a compile request through the fixture runtime (phase-execution-29)', async () => {
     const result = await runFixture('hello');
     expect(result.status).toBe('ok');
     // The runtime returns void; the only diagnostics are its drained status.
     expect(result.diagnostics).toEqual(['fixture wrote target']);
     expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe('compiled:hello');
+  });
+
+  it('seeds and drives a link request through the fixture runtime (phase-execution-29)', async () => {
+    await writeFile(join(root, 'object.ts'), 'object');
+    await writeFile(join(root, 'runtime.ts'), 'runtime');
+    const result = await fixtureExecutor().run(
+      {
+        kind: 'link',
+        definitionPath: join(root, 'link.md'),
+        objects: ['object.ts'],
+        linkTarget: 'runtime.ts',
+        options: [],
+        linked: 'linked.ts',
+      },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe('ok');
+    expect(result.diagnostics).toEqual(['fixture wrote target']);
+    expect(await readFile(join(root, 'linked.ts'), 'utf8')).toBe(
+      'compiled:object',
+    );
   });
 
   it('streams status live to a configured sink without duplicating diagnostics (phase-execution-37)', async () => {
