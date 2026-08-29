@@ -44,7 +44,7 @@ Playbook's DR-016 adds the target-side primitive — GEARS script items compiled
 
 ### 3. Division of labor (the LLVM analogy)
 
-- **slc host (driver + pass manager)**: discovery of pass phases, `-O`/`--normalize` scheduling, artifact naming, protection, and executor selection — deterministic mechanics, spec'd here and in `pipeline`/`CLI`/`phase-execution`.
+- **slc host (driver + pass manager)**: discovery of pass phases, `-O`/`--normalize` scheduling, artifact naming, protection, and executor selection — deterministic mechanics, spec'd here and in `pipeline`/`cli`/`phase-execution`.
 - **Definitions (the passes and frontends themselves)**: what a pass does (`optimize.md`), what a phase accepts (`text2gears.md`), and the target-side primitives they compile to (script actors) — owned upstream with the pipeline, vendored and pinned like every definition, evolved through `slc slc`.
 - The generic normalize definition is host-owned precisely because it binds to no pipeline: it is parameterized on whichever entry-phase definition the resolved pipeline supplies.
 

@@ -15,7 +15,7 @@ Implement [DR-019](../decisions/019-compile-progress-stall-watchdog.md): report 
 - [ ] The Cligent transport aborts an agent call that observes no adapter event for the configured stall timeout and reports the inactivity duration as an error.
 - [ ] The bin wires the progress reporter into `runSlc` and compiled execution, and resolves `stallTimeout`/`SLC_STALL_TIMEOUT` (default 600 s, `0` disables) into both transports; `--help` names the new configuration.
 - [ ] README and demo READMEs (en/zh) state measured, agent- and workload-dependent durations and describe the new progress output.
-- [ ] Spec items [CLI-32](../user/cli.md#cli-32)–[CLI-37](../test/cli.md#cli-37), [[phase-execution-36](../packages/phase-execution.md#phase-execution-36)]–[[phase-execution-38](../packages/phase-execution.md#phase-execution-38)], the [[phase-execution-25](../packages/phase-execution.md#phase-execution-25)] amendment, and the map rows.
+- [ ] Spec items [[cli-32](../packages/cli.md#cli-32)]–[[cli-37](../packages/cli.md#cli-37)], [[phase-execution-36](../packages/phase-execution.md#phase-execution-36)]–[[phase-execution-38](../packages/phase-execution.md#phase-execution-38)], the [[phase-execution-25](../packages/phase-execution.md#phase-execution-25)] amendment, and the map rows.
 
 ## Acceptance criteria
 

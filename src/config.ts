@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Agent/model configuration and executor construction for the `slc` bin (CLI-7,
- * CLI-8, CLI-12, DR-004, DR-005).
+ * Agent/model configuration and executor construction for the `slc` bin (cli-7,
+ * cli-8, cli-12, DR-004, DR-005).
  *
  * `resolveAgentSelection` reads the Coder and optional Reviewer selections from
- * the environment and refuses unset or unsupported required values (CLI-12,
+ * the environment and refuses unset or unsupported required values (cli-12,
  * DR-022).
  * `createConfiguredExecutor` builds the interpreted executor and
  * `createConfiguredCompiledFactory` the compiled-execution factory pinned phases
@@ -14,7 +14,7 @@
  * the optional model as configuration — not phase semantics (phase-execution-13);
  * credentials are left for the agent CLI to read from the inherited process
  * environment. The adapter factory is injectable so tests can fake adapter
- * construction. See specs/dev/cli.md.
+ * construction. See specs/packages/cli.md.
  */
 
 import { resolve } from 'node:path';
@@ -34,7 +34,7 @@ import { createInterpretedExecutor } from './interpreter.js';
 import { createReviewingAgent } from './reviewing-agent.js';
 import type { CompiledSelection } from './runner.js';
 
-/** Agent CLI ids the executable registers (CLI-7). */
+/** Agent CLI ids the executable registers (cli-7). */
 export const SUPPORTED_AGENTS = [
   'claude-code',
   'codex',
@@ -42,13 +42,13 @@ export const SUPPORTED_AGENTS = [
   'opencode',
 ] as const;
 
-/** One of the registered agent CLI ids (CLI-7). */
+/** One of the registered agent CLI ids (cli-7). */
 export type SupportedAgent = (typeof SUPPORTED_AGENTS)[number];
 
-/** Constructs the Cligent adapter for a supported agent id (CLI-7). */
+/** Constructs the Cligent adapter for a supported agent id (cli-7). */
 export type AdapterFactory = (agent: SupportedAgent) => AgentAdapter;
 
-/** Default factory: Cligent's built-in adapters, constructed on demand (CLI-7). */
+/** Default factory: Cligent's built-in adapters, constructed on demand (cli-7). */
 export const defaultAdapterFactory: AdapterFactory = (agent) => {
   switch (agent) {
     case 'claude-code':
@@ -62,7 +62,7 @@ export const defaultAdapterFactory: AdapterFactory = (agent) => {
   }
 };
 
-/** A resolved Coder and optional Reviewer selection (CLI-7, DR-022). */
+/** A resolved Coder and optional Reviewer selection (cli-7, DR-022). */
 export interface AgentSelection {
   agent: SupportedAgent;
   /** Optional model; omitted so the agent CLI uses its own default. */
@@ -73,7 +73,7 @@ export interface AgentSelection {
   reviewer?: Omit<AgentSelection, 'reviewer'>;
 }
 
-/** Machine-readable reason agent configuration was refused (CLI-12). */
+/** Machine-readable reason agent configuration was refused (cli-12). */
 export type ConfigErrorCode =
   | 'agent-unset'
   | 'agent-unsupported'
@@ -93,14 +93,14 @@ export class ConfigError extends Error {
   }
 }
 
-/** Reports whether `agent` is one of the registered ids (CLI-7). */
+/** Reports whether `agent` is one of the registered ids (cli-7). */
 export function isSupportedAgent(agent: string): agent is SupportedAgent {
   return (SUPPORTED_AGENTS as readonly string[]).includes(agent);
 }
 
 /**
  * Resolves the Coder and optional Reviewer selections from environment configuration
- * (CLI-7, CLI-12): `SLC_AGENT` names a registered agent CLI, `SLC_MODEL`
+ * (cli-7, cli-12): `SLC_AGENT` names a registered agent CLI, `SLC_MODEL`
  * optionally names a model, and `SLC_EFFORT` optionally selects an
  * adapter-scoped reasoning effort validated against Cligent's support
  * metadata.
@@ -181,7 +181,7 @@ function resolveOneSelection(
 }
 
 /**
- * Builds the interpreted {@link PhaseExecutor} for a selection (CLI-7, CLI-8):
+ * Builds the interpreted {@link PhaseExecutor} for a selection (cli-7, cli-8):
  * constructs the agent CLI's adapter, wraps it as a Cligent-backed transport,
  * and binds the optional model as configuration, not phase semantics
  * (phase-execution-13). The adapter factory is injectable so tests can fake adapter
@@ -208,7 +208,7 @@ export function createConfiguredExecutor(
 }
 
 /**
- * Builds one Cligent-backed {@link AgentClient} for a selection (CLI-7): a fresh
+ * Builds one Cligent-backed {@link AgentClient} for a selection (cli-7): a fresh
  * adapter wrapped as a transport. Each client is a single-flight Cligent
  * instance that resumes its own agent session across calls, so callers wanting
  * isolated sessions construct one client per role or player.
@@ -237,7 +237,7 @@ export function createConfiguredAgentClient(
 
 /**
  * Builds the compiled-execution factory the bin injects as `SlcDeps.compiled`
- * (CLI-8, phase-execution-27): for a current pinned phase it drives the pinned `playbook`
+ * (cli-8, phase-execution-27): for a current pinned phase it drives the pinned `playbook`
  * artifact — resolved against its pipeline directory — through the compiled
  * executor, backing the runtime's player ports with one agent transport per
  * player id and its Captain/judge ports with one shared transport (phase-execution-25),

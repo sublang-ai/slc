@@ -156,7 +156,7 @@ pipelinePath: # search roots for <pipeline> references; defaults to the cwd
 ```
 
 Discovery order, `--config`, and validation rules live in the
-[CLI spec](specs/user/cli.md); `slc --help` prints the summary.
+[CLI spec](specs/packages/cli.md); `slc --help` prints the summary.
 
 ### Reviewed compilation (two agents)
 

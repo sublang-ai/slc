@@ -86,7 +86,7 @@ const fakeTimers = (): ProgressTimers & { tick: (ms: number) => void } => {
   };
 };
 
-describe('createProgressReporter heartbeat (CLI-33)', () => {
+describe('createProgressReporter heartbeat (cli-33)', () => {
   it('emits a heartbeat once silence exceeds the bound, only while a phase runs', () => {
     const lines: string[] = [];
     const timers = fakeTimers();

@@ -34,7 +34,7 @@ An absolute per-phase deadline would misfire on legitimately long phases, whose 
 
 - The generic step loop reports each phase start, finish, and failure — with the phase name, target artifact, and elapsed time — through a progress sink the host injects beside the resolver and executors.
 - The bin renders these events as human-readable lines on standard error.
-  Standard output remains reserved for the success report ([CLI-3](../user/cli.md#cli-3)); a failed run still writes nothing to standard output ([CLI-16](../test/cli.md#cli-16)).
+  Standard output remains reserved for the success report ([[cli-3](../packages/cli.md#cli-3)]); a failed run still writes nothing to standard output ([[cli-16](../packages/cli.md#cli-16)]).
   The exact line format is host-owned presentation and is not specified.
 
 ### Live status streaming
@@ -66,7 +66,7 @@ An absolute per-phase deadline would misfire on legitimately long phases, whose 
 
 - A compile is never silent longer than the heartbeat bound: phases announce themselves, targets land with elapsed times, compiled-runtime transitions stream as they happen, and a stalled agent call fails loudly within the stall timeout instead of hanging for hours.
 - `SlcDeps` gains an optional progress sink; hosts that do not supply one keep today's quiet behavior, and the sink addition is not a breaking API change.
-- [[phase-execution-25](../packages/phase-execution.md#phase-execution-25)] is amended for streaming; new items [CLI-32](../user/cli.md#cli-32)–[CLI-37](../test/cli.md#cli-37) and [[phase-execution-36](../packages/phase-execution.md#phase-execution-36)]–[[phase-execution-38](../packages/phase-execution.md#phase-execution-38)] specify the progress, heartbeat, and watchdog behavior.
+- [[phase-execution-25](../packages/phase-execution.md#phase-execution-25)] is amended for streaming; new items [[cli-32](../packages/cli.md#cli-32)]–[[cli-37](../packages/cli.md#cli-37)] and [[phase-execution-36](../packages/phase-execution.md#phase-execution-36)]–[[phase-execution-38](../packages/phase-execution.md#phase-execution-38)] specify the progress, heartbeat, and watchdog behavior.
 - The structural three-cold-sessions-per-phase cost and the fixed-size Captain prompt remain; reducing them needs artifact and `@sublang/playbook` changes under a later decision.
 
 ## References

@@ -6,17 +6,16 @@
  *
  * The step loop emits {@link ProgressEvent}s — phase start/finish/failure with
  * elapsed times, plus streamed compiled-runtime status lines — through an
- * optional {@link ProgressSink} on `SlcDeps` (CLI-32). The bin renders them as
+ * optional {@link ProgressSink} on `SlcDeps` (cli-32). The bin renders them as
  * human-readable lines on stderr via {@link createProgressReporter}, which also
- * owns the 30-second silence-bounded heartbeat (CLI-33): whenever no event has
+ * owns the 30-second silence-bounded heartbeat (cli-33): whenever no event has
  * been rendered for the bound while a phase is in flight, it emits an
  * elapsed-time heartbeat line. Timer construction is injectable so tests drive
  * the heartbeat deterministically. The exact line format is host-owned
- * presentation and deliberately unspecified. See specs/user/cli.md and
- * specs/dev/cli.md.
+ * presentation and deliberately unspecified. See specs/packages/cli.md.
  */
 
-/** One in-run progress event the step loop reports (CLI-32). */
+/** One in-run progress event the step loop reports (cli-32). */
 export type ProgressEvent =
   | { kind: 'phase-start'; phase: string; target: string }
   | { kind: 'phase-finish'; phase: string; target: string; elapsedMs: number }
@@ -28,7 +27,7 @@ export type ProgressEvent =
 /** Receives progress events as they occur; injected beside the executors. */
 export type ProgressSink = (event: ProgressEvent) => void;
 
-/** The silence bound after which the reporter emits a heartbeat (CLI-33). */
+/** The silence bound after which the reporter emits a heartbeat (cli-33). */
 export const HEARTBEAT_INTERVAL_MS = 30_000;
 
 /** Renders a duration as a compact human-readable elapsed time. */
@@ -87,9 +86,9 @@ export interface ProgressReporter {
 }
 
 /**
- * Builds the bin's progress reporter (CLI-35): renders each event as a line
+ * Builds the bin's progress reporter (cli-35): renders each event as a line
  * through `write`, and, while a phase is in flight, emits a heartbeat whenever
- * no line has been written for `intervalMs` (CLI-33). The heartbeat's elapsed
+ * no line has been written for `intervalMs` (cli-33). The heartbeat's elapsed
  * time counts from the running phase's start, so a long phase reads as one
  * growing duration rather than a series of 30-second gaps.
  */

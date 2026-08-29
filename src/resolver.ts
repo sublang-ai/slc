@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Concrete pipeline-reference resolver for the `slc` bin (CLI-6, DR-001).
+ * Concrete pipeline-reference resolver for the `slc` bin (cli-6, DR-001).
  *
  * DR-001 leaves pipeline-to-directory resolution to the consumer; this is the
  * bin's host policy: a `<reference>` resolves to the directories named
@@ -10,7 +10,7 @@
  * path-list), defaulting to the working directory when unset. The resolver
  * returns every existing match so `runSlc`'s exactly-one rule (pipeline-16) refuses
  * zero or many; it does not check that a match is a well-formed pipeline, which
- * `loadPipeline` does. See specs/dev/cli.md.
+ * `loadPipeline` does. See specs/packages/cli.md.
  */
 
 import { stat } from 'node:fs/promises';
@@ -44,7 +44,7 @@ export function isReservedPipeline(reference: string): boolean {
 }
 
 /**
- * Computes the ordered pipeline search roots from a pipeline-path value (CLI-6):
+ * Computes the ordered pipeline search roots from a pipeline-path value (cli-6):
  * either the `SLC_PIPELINE_PATH` OS path-list string or the config file's
  * `pipelinePath` sequence (DR-006). Entries are resolved to absolute, normalized
  * roots against `cwd`, defaulting to `[cwd]` when the value is unset, empty, or
@@ -67,7 +67,7 @@ export function pipelineSearchRoots(
 }
 
 /**
- * Builds a {@link PipelineResolver} over the given search roots (CLI-6).
+ * Builds a {@link PipelineResolver} over the given search roots (cli-6).
  *
  * A `<reference>` matches `join(root, reference)` only when that path exists, is
  * a directory, and sits directly under the root — so nested paths and `..`

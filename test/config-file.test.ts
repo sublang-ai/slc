@@ -16,7 +16,7 @@ import {
   loadConfigFile,
 } from '../src/config-file.js';
 
-describe('loadConfigFile (CLI-20, CLI-21)', () => {
+describe('loadConfigFile (cli-20, cli-21)', () => {
   let cwd: string;
   let home: string;
 
@@ -61,7 +61,7 @@ describe('loadConfigFile (CLI-20, CLI-21)', () => {
     });
   });
 
-  it('parses a numeric stallTimeout, including the disabling 0 (CLI-34)', async () => {
+  it('parses a numeric stallTimeout, including the disabling 0 (cli-34)', async () => {
     await write(cwd, CONFIG_FILE, 'agent: codex\nstallTimeout: 30\n');
     expect((await loadConfigFile({ cwd, configHome: home })).config).toEqual({
       agent: 'codex',
@@ -138,7 +138,7 @@ describe('loadConfigFile (CLI-20, CLI-21)', () => {
     expect(loaded.config.agent).toBe('opencode');
   });
 
-  it('seeds and loads the user config on a discovery miss (CLI-30)', async () => {
+  it('seeds and loads the user config on a discovery miss (cli-30)', async () => {
     const seeded: string[] = [];
     const loaded = await loadConfigFile({
       cwd,
@@ -156,7 +156,7 @@ describe('loadConfigFile (CLI-20, CLI-21)', () => {
     expect(template).toContain('# reviewerEffort:');
   });
 
-  it('does not seed when the working-directory file exists (CLI-30)', async () => {
+  it('does not seed when the working-directory file exists (cli-30)', async () => {
     await write(cwd, CONFIG_FILE, 'agent: codex\n');
     const seeded: string[] = [];
     const loaded = await loadConfigFile({

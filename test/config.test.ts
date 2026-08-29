@@ -20,7 +20,7 @@ import {
 } from '../src/config.js';
 import type { CompiledSelection } from '../src/runner.js';
 
-describe('resolveAgentSelection (CLI-7, CLI-12)', () => {
+describe('resolveAgentSelection (cli-7, cli-12)', () => {
   it('resolves a supported agent and model', () => {
     expect(
       resolveAgentSelection({ SLC_AGENT: 'claude-code', SLC_MODEL: 'opus' }),
@@ -49,7 +49,7 @@ describe('resolveAgentSelection (CLI-7, CLI-12)', () => {
     ).toEqual({ agent: 'gemini', model: 'g-2' });
   });
 
-  it('resolves a supported adapter-scoped effort (CLI-12)', () => {
+  it('resolves a supported adapter-scoped effort (cli-12)', () => {
     expect(
       resolveAgentSelection({ SLC_AGENT: 'claude-code', SLC_EFFORT: 'xhigh' })
         .effort,
@@ -63,7 +63,7 @@ describe('resolveAgentSelection (CLI-7, CLI-12)', () => {
     ).toBeUndefined();
   });
 
-  it('refuses an effort the selected agent does not support (CLI-12)', () => {
+  it('refuses an effort the selected agent does not support (cli-12)', () => {
     expect(() =>
       resolveAgentSelection({ SLC_AGENT: 'claude-code', SLC_EFFORT: 'ultra' }),
     ).toThrow(expect.objectContaining({ code: 'effort-unsupported' }));
@@ -141,7 +141,7 @@ describe('resolveAgentSelection (CLI-7, CLI-12)', () => {
   });
 });
 
-describe('isSupportedAgent (CLI-7)', () => {
+describe('isSupportedAgent (cli-7)', () => {
   it('is true only for registered ids', () => {
     expect(isSupportedAgent('opencode')).toBe(true);
     expect(isSupportedAgent('claude-code')).toBe(true);
@@ -150,7 +150,7 @@ describe('isSupportedAgent (CLI-7)', () => {
   });
 });
 
-describe('defaultAdapterFactory (CLI-7)', () => {
+describe('defaultAdapterFactory (cli-7)', () => {
   it('maps each id to a Cligent adapter advertising that id', () => {
     for (const agent of SUPPORTED_AGENTS) {
       expect(defaultAdapterFactory(agent).agent).toBe(agent);
@@ -158,7 +158,7 @@ describe('defaultAdapterFactory (CLI-7)', () => {
   });
 });
 
-describe('createConfiguredExecutor (CLI-7, CLI-8)', () => {
+describe('createConfiguredExecutor (cli-7, cli-8)', () => {
   const fakeAdapter = (id: string): AgentAdapter => ({
     agent: id,
     isAvailable: async () => true,

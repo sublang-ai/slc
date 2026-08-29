@@ -13,7 +13,7 @@ the same `@sublang/cligent` SDK).
 Environment variables remain overrides, so every current env-only run keeps its
 exact behavior and the file is purely additive.
 
-- Context: today the bin configures the cligent invocation only from `SLC_AGENT`, `SLC_MODEL`, and `SLC_PIPELINE_PATH`, resolved in `buildSlcDeps`/`resolveAgentSelection`/`pipelineSearchRoots` ([CLI-6](../dev/cli.md#cli-6), [CLI-7](../dev/cli.md#cli-7), [CLI-12](../dev/cli.md#cli-12)).
+- Context: today the bin configures the cligent invocation only from `SLC_AGENT`, `SLC_MODEL`, and `SLC_PIPELINE_PATH`, resolved in `buildSlcDeps`/`resolveAgentSelection`/`pipelineSearchRoots` ([[cli-6](../packages/cli.md#cli-6)], [[cli-7](../packages/cli.md#cli-7)], [[cli-12](../packages/cli.md#cli-12)]).
 - Reference model: `tmux-play` discovers `tmux-play.config.yaml` in the cwd, then `${XDG_CONFIG_HOME:-~/.config}/tmux-play/config.yaml`, lets `--config <path>` disable discovery, parses YAML, and rejects unknown keys; `slc` adopts the same discovery shape with a much smaller flat schema.
 - Strategy: an additive host layer — a config loader feeds the same agent/model/pipeline-path selection the bin already builds, leaving the `runSlc` core, the interpreter ([DR-004](../decisions/004-slc-interpreted-phase-execution.md)), and the `createCligentAgent` transport untouched.
 - Constraint: configuration stays a selection concern that does not change phase semantics ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#interpreter), [[phase-execution-13](../packages/phase-execution.md#phase-execution-13)]).
@@ -22,7 +22,7 @@ exact behavior and the file is purely additive.
 ## Deliverables
 
 - [x] A DR settling the slc configuration sources: YAML file format, discovery order, `--config` precedence, env-over-file precedence, schema, and validation, registered in `map.md`
-- [x] Revised and extended `cli` user/dev spec items so configuration is "config file overridden by environment," with the unset-agent refusal firing only when neither source supplies an agent ([CLI-7](../dev/cli.md#cli-7), [CLI-12](../dev/cli.md#cli-12), [CLI-2](../user/cli.md#cli-2))
+- [x] Revised and extended `cli` user/dev spec items so configuration is "config file overridden by environment," with the unset-agent refusal firing only when neither source supplies an agent ([[cli-7](../packages/cli.md#cli-7)], [[cli-12](../packages/cli.md#cli-12)], [[cli-2](../packages/cli.md#cli-2)])
 - [x] A config-file loader: cwd/home discovery, `--config` override that errors on an absent explicit path, YAML parse, flat-schema validation with unknown-key rejection, and a partial selection result
 - [x] The loader wired into `buildSlcDeps` with env-over-file precedence and a `--config <path>` flag, with `usageText` naming the config file
 - [x] Integration tests covering file-only configuration, env override, `--config`, and the neither-source refusal, with the `runSlc` core and DRs unchanged
@@ -31,12 +31,12 @@ exact behavior and the file is purely additive.
 ## Tasks
 
 1. **Author the configuration-sources DR.**
-   Record the design decision for `slc` configuration: a flat YAML file; discovery of `slc.config.yaml` in the cwd, then `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`; an explicit `--config <path>` that disables discovery and is an error when the named file is absent — distinct from a discovery miss, which falls through to environment and defaults so a `--config` typo never silently degrades (matching `tmux-play`, which errors on an explicit missing path while only discovery no-ops); precedence of environment variable over file over built-in default; the schema (`agent`, `model`, `pipelinePath`), settling whether `pipelinePath` is an OS path-list string or a YAML sequence and whether relative entries resolve against the cwd or the config-file directory (today `SLC_PIPELINE_PATH` is an OS path-list resolved against the cwd per [CLI-6](../dev/cli.md#cli-6), whereas `tmux-play` resolves a relative `captain.from` against the config-file directory); strict unknown-key rejection; and no auto-create in this iteration.
-   State the rationale that env-over-file precedence keeps every current env-only run unchanged and preserves the [CLI-12](../dev/cli.md#cli-12) refusal when neither source supplies an agent.
+   Record the design decision for `slc` configuration: a flat YAML file; discovery of `slc.config.yaml` in the cwd, then `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`; an explicit `--config <path>` that disables discovery and is an error when the named file is absent — distinct from a discovery miss, which falls through to environment and defaults so a `--config` typo never silently degrades (matching `tmux-play`, which errors on an explicit missing path while only discovery no-ops); precedence of environment variable over file over built-in default; the schema (`agent`, `model`, `pipelinePath`), settling whether `pipelinePath` is an OS path-list string or a YAML sequence and whether relative entries resolve against the cwd or the config-file directory (today `SLC_PIPELINE_PATH` is an OS path-list resolved against the cwd per [[cli-6](../packages/cli.md#cli-6)], whereas `tmux-play` resolves a relative `captain.from` against the config-file directory); strict unknown-key rejection; and no auto-create in this iteration.
+   State the rationale that env-over-file precedence keeps every current env-only run unchanged and preserves the [[cli-12](../packages/cli.md#cli-12)] refusal when neither source supplies an agent.
    Register the DR in `map.md` and add SPDX headers per [[licensing-1](../packages/licensing.md#licensing-1)]/[[licensing-2](../packages/licensing.md#licensing-2)].
 
 2. **Revise and extend the user and dev `cli` items.**
-   Reword [CLI-7](../dev/cli.md#cli-7) and [CLI-12](../dev/cli.md#cli-12) so the agent/model selection is drawn from the config file overridden by the environment, with the refusal firing only when neither the file nor `SLC_AGENT` supplies an agent; reword [CLI-6](../dev/cli.md#cli-6) so the pipeline search roots may come from the file; and update [CLI-2](../user/cli.md#cli-2) so help names the config file and `--config`.
+   Reword [[cli-7](../packages/cli.md#cli-7)] and [[cli-12](../packages/cli.md#cli-12)] so the agent/model selection is drawn from the config file overridden by the environment, with the refusal firing only when neither the file nor `SLC_AGENT` supplies an agent; reword [[cli-6](../packages/cli.md#cli-6)] so the pipeline search roots may come from the file; and update [[cli-2](../packages/cli.md#cli-2)] so help names the config file and `--config`.
    Add new higher-numbered `cli` items (IDs above the current maximum, per [META-12](../meta.md#meta-12)) for config-file discovery and precedence (dev), the `--config <path>` flag and the config file as a configuration source named in help (user), citing the Task 1 DR.
    Update the `cli` summaries in `map.md`.
 
@@ -58,7 +58,7 @@ exact behavior and the file is purely additive.
 ## Acceptance criteria
 
 - A run configured solely by `slc.config.yaml` (cwd) or `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` resolves the agent, model, and pipeline search path and runs, with no `SLC_*` variables set.
-- An environment variable overrides the corresponding file value; when neither the file nor `SLC_AGENT` supplies an agent, the run is refused with a diagnostic and no phase runs ([CLI-12](../dev/cli.md#cli-12) preserved).
+- An environment variable overrides the corresponding file value; when neither the file nor `SLC_AGENT` supplies an agent, the run is refused with a diagnostic and no phase runs ([[cli-12](../packages/cli.md#cli-12)] preserved).
 - `--config <path>` loads that file and disables cwd/home discovery; an explicit `--config` path that does not exist is refused with a diagnostic, distinct from a discovery miss, which falls through to environment and defaults.
 - An unknown key or malformed YAML is rejected with a clear diagnostic, no phase runs, and the exit code is non-zero.
 - The `runSlc` core, the interpreter, and the `createCligentAgent` transport are unchanged; `map.md` and the `cli` specs reflect the new configuration source; auto-create, permissions, and snapshotting remain out of scope.

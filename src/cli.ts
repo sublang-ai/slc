@@ -3,12 +3,12 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * The published `slc` executable shim (CLI package).
+ * The published `slc` executable shim (`cli` package).
  *
  * It supplies the process-backed defaults `run` falls back to and wires
  * cancellation through `interruptSignal`: an interrupt aborts the in-flight run
- * via the signal passed into `runSlc` (CLI-10), and the returned exit code
- * becomes the process exit status (CLI-11). All behavior lives in the testable
+ * via the signal passed into `runSlc` (cli-10), and the returned exit code
+ * becomes the process exit status (cli-11). All behavior lives in the testable
  * `run`/`interruptSignal`; see app.ts.
  */
 

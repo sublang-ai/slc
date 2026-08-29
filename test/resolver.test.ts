@@ -12,7 +12,7 @@ import {
   pipelineSearchRoots,
 } from '../src/resolver.js';
 
-describe('pipelineSearchRoots (CLI-6)', () => {
+describe('pipelineSearchRoots (cli-6)', () => {
   it('defaults to [cwd] when SLC_PIPELINE_PATH is unset, empty, or blank', () => {
     expect(pipelineSearchRoots(undefined, '/work')).toEqual(['/work']);
     expect(pipelineSearchRoots('', '/work')).toEqual(['/work']);
@@ -56,7 +56,7 @@ describe('pipelineSearchRoots (CLI-6)', () => {
   });
 });
 
-describe('createPipelineResolver (CLI-6)', () => {
+describe('createPipelineResolver (cli-6)', () => {
   let root: string;
 
   beforeEach(async () => {
