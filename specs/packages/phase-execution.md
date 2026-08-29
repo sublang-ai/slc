@@ -136,7 +136,7 @@ When the slc command seeds a compiled phase's non-interactive turn [[phase-execu
 
 #### phase-execution-33
 
-Where a compile execution request carries read-only reference documents — e.g. the entry-phase definition a generic normalization step rewrites toward [[PIPE-34](../dev/pipeline.md#pipe-34)] — the slc command shall present each reference beside the source in the interpreted agent contract and protect it like a definition, failing the run when a reference changed during execution ([DR-003](../decisions/003-slc-phase-execution.md), [DR-013](../decisions/013-normalize-and-pass-phases.md)).
+Where a compile execution request carries read-only reference documents — e.g. the entry-phase definition a generic normalization step rewrites toward [[pipeline-34](pipeline.md#pipeline-34)] — the slc command shall present each reference beside the source in the interpreted agent contract and protect it like a definition, failing the run when a reference changed during execution ([DR-003](../decisions/003-slc-phase-execution.md), [DR-013](../decisions/013-normalize-and-pass-phases.md)).
 
 #### phase-execution-34
 

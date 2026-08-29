@@ -35,7 +35,7 @@ const formatsDoc = (
 | target | ${target} | ${targetExt} |
 `;
 
-describe('inferChain (PIPE-4, PIPE-5)', () => {
+describe('inferChain (pipeline-4, pipeline-5)', () => {
   it('orders a linear chain from entry to exit', () => {
     const chain = inferChain([
       phase('gears2fsm', 'gears', 'fsm'),
@@ -90,7 +90,7 @@ describe('inferChain (PIPE-4, PIPE-5)', () => {
   });
 });
 
-describe('resolvePipeline (PIPE-16)', () => {
+describe('resolvePipeline (pipeline-16)', () => {
   it('returns the single resolved directory', async () => {
     await expect(
       resolvePipeline('playbook', () => ['/pipelines/playbook']),
@@ -120,7 +120,7 @@ describe('resolvePipeline (PIPE-16)', () => {
   });
 });
 
-describe('discoverPhaseFiles and loadPipeline (PIPE-17)', () => {
+describe('discoverPhaseFiles and loadPipeline (pipeline-17)', () => {
   let dir: string;
 
   beforeEach(async () => {

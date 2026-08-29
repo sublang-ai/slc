@@ -8,7 +8,7 @@
  * pipeline, computes artifact paths, then runs each phase through `runPhase`,
  * stopping at the first failure with its report. The resolver and executor are
  * injected so a host wires the real pipeline resolution and Cligent agent while
- * tests supply fakes. See specs/dev/pipeline.md and specs/packages/phase-execution.md.
+ * tests supply fakes. See specs/packages/pipeline.md and specs/packages/phase-execution.md.
  */
 
 import { mkdir, readFile, stat } from 'node:fs/promises';
@@ -253,7 +253,7 @@ async function runSinglePhase(
     entry: pipeline.phases[0] === phase,
   });
   if (raw) {
-    // A named phase cannot normalize (PIPE-37), so a raw entry source has no
+    // A named phase cannot normalize (pipeline-37), so a raw entry source has no
     // path into the phase's declared source format here.
     return failure(
       `source "${invocation.source}" is a raw input; run the full pipeline to normalize it`,
@@ -344,7 +344,7 @@ async function runFullLink(
   const artDir = artifactDir(cwd, basename, invocation.pipeline);
   await mkdir(artDir, { recursive: true });
 
-  // Compile chain: the exit artifact becomes the object artifact (PIPE-15).
+  // Compile chain: the exit artifact becomes the object artifact (pipeline-15).
   const plan = planArtifacts({ phases: pipeline.phases, basename, artDir });
   const compileSteps = buildCompileSteps({
     pipeline,
@@ -467,7 +467,7 @@ function runCwd(deps: SlcDeps): string {
  * VERIFY-4;
  * [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
  * Non-reserved pipelines, runs without a gears+fsm pair, and runs whose `fsm` was
- * relocated out of that directory by `-o` (PIPE-8) are left unchanged, so an
+ * relocated out of that directory by `-o` (pipeline-8) are left unchanged, so an
  * emitted test never imports a file that was not written beside it. A test whose
  * emission needs the produced `fsm` imported (the pinned introspection) degrades
  * to a diagnostic when the artifact cannot be loaded, leaving the run outcome
@@ -1575,7 +1575,7 @@ async function requireLink(
     throw new Error(`pipeline "${reference}" has no link phase`);
   }
   // `loadLinkFile` relaxes the ## Link Targets requirement intrinsically for
-  // Playbook's `playbook` linked format (DR-002, DR-009, PIPE-11), so the
+  // Playbook's `playbook` linked format (DR-002, DR-009, pipeline-11), so the
   // requirement does not depend on how the pipeline reference resolved.
   return loadLinkFile(pipeline.linkFile);
 }

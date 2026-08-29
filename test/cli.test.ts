@@ -283,7 +283,7 @@ describe('reporting (CLI-15, CLI-16, CLI-38, CLI-42)', () => {
     expect(await exists(outPath)).toBe(true);
   });
 
-  it('places artifacts under the invocation cwd, not the source directory (PIPE-38)', async () => {
+  it('places artifacts under the invocation cwd, not the source directory (pipeline-38)', async () => {
     const { agent } = makeAgent();
     const out: string[] = [];
     // Invoke from `root` while the source lives in `srcDir`: DR-014 anchors
@@ -1172,7 +1172,7 @@ describe('compiled execution through the bin (CLI-28)', () => {
 
     expect(code).toBe(0);
     // DR-014: the run's cwd is `root`, not the source's directory, so the
-    // artifact lands under `<root>/onboarding.flow/` (out-of-tree, PIPE-38).
+    // artifact lands under `<root>/onboarding.flow/` (out-of-tree, pipeline-38).
     const target = join(root, 'onboarding.flow', 'onboarding.gears.md');
     // Stderr carries the in-run progress lines, including the compiled
     // runtime's own status streamed through the bin's sink rather than

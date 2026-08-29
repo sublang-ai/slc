@@ -4,13 +4,13 @@
 /**
  * Link phase loading and linked-artifact paths (DR-002).
  *
- * Implements PIPE-11 (read `## Formats` and `## Link Targets`, target-form table
- * required and the rest optional), PIPE-19 (refuse a linked format token equal
+ * Implements pipeline-11 (read `## Formats` and `## Link Targets`, target-form table
+ * required and the rest optional), pipeline-19 (refuse a linked format token equal
  * to the object source token; object count/compatibility is the link phase's
- * job), PIPE-15 (full-pipeline linked-artifact path, honoring `-o`), and PIPE-18
+ * job), pipeline-15 (full-pipeline linked-artifact path, honoring `-o`), and pipeline-18
  * (direct `.link` path: source-adjacent for one object, `-o`-required for many).
- * Discovery and exclusion from chain inference (PIPE-10) live in pipeline.ts.
- * See specs/dev/pipeline.md.
+ * Discovery and exclusion from chain inference (pipeline-10) live in pipeline.ts.
+ * See specs/packages/pipeline.md.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -63,7 +63,7 @@ export class LinkError extends Error {
 const PLAYBOOK_LINKED_FORMAT = 'playbook';
 
 /**
- * Parses a `link.md` definition (PIPE-11, PIPE-19).
+ * Parses a `link.md` definition (pipeline-11, pipeline-19).
  *
  * `## Link Targets` is required, except when the linked target format is the
  * Playbook-owned `playbook` format, whose target validation Playbook owns and
@@ -88,7 +88,7 @@ export function parseLinkPhase(content: string): LinkPhase {
   }
 
   // Playbook owns target validation for its `playbook` linked format, so a
-  // `link.md` emitting it carries no ## Link Targets (DR-002, DR-009, PIPE-11).
+  // `link.md` emitting it carries no ## Link Targets (DR-002, DR-009, pipeline-11).
   const relaxed = target.format === PLAYBOOK_LINKED_FORMAT;
   const section = findSection(content, 'Link Targets');
   if (section === null) {
@@ -120,14 +120,14 @@ export function parseLinkPhase(content: string): LinkPhase {
   return { source, target, targetForms, requiredSymbols, options, validation };
 }
 
-/** Reads and parses a `link.md` file from disk (PIPE-11). */
+/** Reads and parses a `link.md` file from disk (pipeline-11). */
 export async function loadLinkFile(path: string): Promise<LinkPhase> {
   return parseLinkPhase(await readFile(path, 'utf8'));
 }
 
 /**
- * Computes the linked-artifact path for a full-pipeline link (PIPE-15) or a
- * direct `.link` invocation (PIPE-18).
+ * Computes the linked-artifact path for a full-pipeline link (pipeline-15) or a
+ * direct `.link` invocation (pipeline-18).
  *
  * @throws {LinkError} with code `output-required` for a multi-object `.link`
  *   without `-o`.
@@ -246,7 +246,7 @@ function listItems(lines: readonly string[]): string[] {
   return items;
 }
 
-/** Derives a basename and directory from a single object, leniently (PIPE-18, PIPE-19). */
+/** Derives a basename and directory from a single object, leniently (pipeline-18, pipeline-19). */
 function deriveObjectBasename(
   objectPath: string,
   source: FormatDecl,

@@ -4,11 +4,11 @@
 /**
  * Source-name validation and artifact-path computation (DR-001, DR-014).
  *
- * Implements PIPE-6 (the entry/non-entry source filename forms, with a
- * foreign-extension entry source accepted as a raw input), PIPE-7 (compute the
+ * Implements pipeline-6 (the entry/non-entry source filename forms, with a
+ * foreign-extension entry source accepted as a raw input), pipeline-7 (compute the
  * artifact directory under the invocation working directory, reusing it without
- * nesting), and PIPE-8 (place intermediates and the output, honoring `-o`). See
- * specs/dev/pipeline.md.
+ * nesting), and pipeline-8 (place intermediates and the output, honoring `-o`). See
+ * specs/packages/pipeline.md.
  */
 
 import { basename as pathBasename, extname, join } from 'node:path';
@@ -18,7 +18,7 @@ import type { Phase } from './phase.js';
 /** Machine-readable reason a source path was refused. */
 export type SourceErrorCode = 'invalid-source-name';
 
-/** Raised when a source filename matches no applicable form (PIPE-6). */
+/** Raised when a source filename matches no applicable form (pipeline-6). */
 export class SourceError extends Error {
   readonly code: SourceErrorCode;
 
@@ -35,14 +35,14 @@ export interface ParsedSource {
   basename: string;
   /**
    * True when an entry source carries a foreign extension: a raw input whose
-   * compilation auto-schedules normalization (DR-014, PIPE-6, PIPE-34).
+   * compilation auto-schedules normalization (DR-014, pipeline-6, pipeline-34).
    */
   raw: boolean;
 }
 
 /**
  * Validates a source path against the consuming phase's source format and
- * extension, returning its `<basename>` (PIPE-6).
+ * extension, returning its `<basename>` (pipeline-6).
  *
  * The non-entry form requires `<basename>.<source-format>.<ext>`; the entry form
  * also accepts the plain `<basename>.<ext>`, and an entry source with any other
@@ -105,7 +105,7 @@ export function parseSource(opts: {
 /**
  * Computes the artifact directory under the invocation working directory,
  * reusing the working directory itself without nesting when its leaf is
- * already the canonical `<basename>.<pipeline>` (PIPE-7, DR-014).
+ * already the canonical `<basename>.<pipeline>` (pipeline-7, DR-014).
  */
 export function artifactDir(
   cwd: string,
@@ -119,7 +119,7 @@ export function artifactDir(
   return join(cwd, canonicalLeaf);
 }
 
-/** Computes the canonical path of a `<basename>.<format>.<ext>` artifact (PIPE-8). */
+/** Computes the canonical path of a `<basename>.<format>.<ext>` artifact (pipeline-8). */
 export function artifactPath(
   artDir: string,
   basename: string,
@@ -139,7 +139,7 @@ export interface ArtifactPlan {
 /**
  * Plans the target artifact each phase writes: every non-terminal phase writes a
  * canonical intermediate, and the terminal phase writes the output, overridden by
- * `output` (`-o`) when provided while intermediates stay canonical (PIPE-8).
+ * `output` (`-o`) when provided while intermediates stay canonical (pipeline-8).
  */
 export function planArtifacts(opts: {
   phases: readonly Phase[];

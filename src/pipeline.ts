@@ -4,11 +4,11 @@
 /**
  * Pipeline resolution, phase discovery, and chain inference (DR-001).
  *
- * Implements PIPE-16 (refuse a reference that resolves to other than one
- * directory), PIPE-17 (discover phase files directly in a pipeline directory,
- * reserving `link.md`), PIPE-4 (infer the single linear phase order), and
- * PIPE-5 (refuse incomplete, branching, or cyclic chains). See
- * specs/dev/pipeline.md.
+ * Implements pipeline-16 (refuse a reference that resolves to other than one
+ * directory), pipeline-17 (discover phase files directly in a pipeline directory,
+ * reserving `link.md`), pipeline-4 (infer the single linear phase order), and
+ * pipeline-5 (refuse incomplete, branching, or cyclic chains). See
+ * specs/packages/pipeline.md.
  */
 
 import { readdir } from 'node:fs/promises';
@@ -63,7 +63,7 @@ export class PipelineError extends Error {
 }
 
 /**
- * Resolves a pipeline reference to exactly one directory (PIPE-16).
+ * Resolves a pipeline reference to exactly one directory (pipeline-16).
  *
  * @throws {PipelineError} when the reference resolves to zero (`unresolved`) or
  *   more than one (`ambiguous`) directory.
@@ -89,7 +89,7 @@ export async function resolvePipeline(
 }
 
 /**
- * Lists the `.md` files directly inside a resolved pipeline directory (PIPE-17).
+ * Lists the `.md` files directly inside a resolved pipeline directory (pipeline-17).
  *
  * Subdirectories are not descended into, and `link.md` is returned separately as
  * the reserved link phase rather than as an ordinary phase file.
@@ -115,10 +115,10 @@ export async function discoverPhaseFiles(
 
 /**
  * Infers the single linear phase order by chaining each phase's target format to
- * the next phase's source format (PIPE-4).
+ * the next phase's source format (pipeline-4).
  *
  * @throws {PipelineError} when the chain is incomplete, branches, or cycles
- *   (PIPE-5).
+ *   (pipeline-5).
  */
 export function inferChain(phases: readonly Phase[]): Phase[] {
   if (phases.length === 0) {
@@ -174,7 +174,7 @@ export function inferChain(phases: readonly Phase[]): Phase[] {
 
 /**
  * Discovers, loads, and orders the ordinary phases of a pipeline directory,
- * validating extension consistency (PIPE-3) and chain shape (PIPE-4, PIPE-5).
+ * validating extension consistency (pipeline-3) and chain shape (pipeline-4, pipeline-5).
  * Format-preserving pass phases are split out of chain inference (DR-013) and
  * returned sorted by name. Names cannot collide: every phase — chain or pass —
  * is named by its unique filename, and `link.md` is reserved before loading.

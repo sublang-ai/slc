@@ -126,12 +126,11 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | package | [pinning.md](packages/pinning.md) | Pin-currency validation and generation: presence, current/stale/malformed verdicts, and fixture acceptance |
 
-### PIPE
+### pipeline
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [pipeline.md](dev/pipeline.md) | Pipeline mechanics: resolution, formats, chain, naming, paths, CLI, link-object import settlement, pass phases, and the generic normalization step |
-| test | [pipeline.md](test/pipeline.md) | End-to-end pipeline run, chain, naming, path, link-object import settlement, pass-scheduling, and normalization acceptance |
+| package | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, pass and normalization scheduling, and system acceptance |
 
 ### RELEASE
 

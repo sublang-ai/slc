@@ -14,7 +14,7 @@ Essential project-specific reference: `slc`, this project's compiler CLI.
 
 #### incremental-compilation-1
 
-Where a full invocation [[PIPE-9](../dev/pipeline.md#pipe-9)] or full-link invocation [[PIPE-13](../dev/pipeline.md#pipe-13)] has canonical output [[PIPE-8](../dev/pipeline.md#pipe-8)], [[PIPE-15](../dev/pipeline.md#pipe-15)] and its pipeline is not the reserved `slc` meta-pipeline, when the run succeeds after executing at least one phase, the slc command shall publish one new numbered build under `<art-dir>/.slc/` [[PIPE-7](../dev/pipeline.md#pipe-7)] containing a manifest and verbatim source and phase-output copies [[incremental-compilation-9](#incremental-compilation-9)], with `.slc/latest` committed after the complete build [[incremental-compilation-11](#incremental-compilation-11)], [[incremental-compilation-17](#incremental-compilation-17)].
+Where a full invocation [[pipeline-9](pipeline.md#pipeline-9)] or full-link invocation [[pipeline-13](pipeline.md#pipeline-13)] has canonical output [[pipeline-8](pipeline.md#pipeline-8)], [[pipeline-15](pipeline.md#pipeline-15)] and its pipeline is not the reserved `slc` meta-pipeline, when the run succeeds after executing at least one phase, the slc command shall publish one new numbered build under `<art-dir>/.slc/` [[pipeline-7](pipeline.md#pipeline-7)] containing a manifest and verbatim source and phase-output copies [[incremental-compilation-9](#incremental-compilation-9)], with `.slc/latest` committed after the complete build [[incremental-compilation-11](#incremental-compilation-11)], [[incremental-compilation-17](#incremental-compilation-17)].
 
 #### incremental-compilation-2
 
@@ -40,11 +40,11 @@ While an eligible run has removed its active marker before executor work [[incre
 
 #### incremental-compilation-7
 
-When the user passes `--rebuild` to a canonical full invocation [[PIPE-9](../dev/pipeline.md#pipe-9)] or full-link invocation [[PIPE-13](../dev/pipeline.md#pipe-13)], the slc command shall execute every phase ordinarily without update context [[incremental-compilation-14](#incremental-compilation-14)], retain normal pin validation [[phase-execution-27](phase-execution.md#phase-execution-27)], and publish one complete build only when the invocation succeeds [[incremental-compilation-17](#incremental-compilation-17)].
+When the user passes `--rebuild` to a canonical full invocation [[pipeline-9](pipeline.md#pipeline-9)] or full-link invocation [[pipeline-13](pipeline.md#pipeline-13)], the slc command shall execute every phase ordinarily without update context [[incremental-compilation-14](#incremental-compilation-14)], retain normal pin validation [[phase-execution-27](phase-execution.md#phase-execution-27)], and publish one complete build only when the invocation succeeds [[incremental-compilation-17](#incremental-compilation-17)].
 
 #### incremental-compilation-8
 
-Where an invocation uses `-o` [[PIPE-8](../dev/pipeline.md#pipe-8)], the reserved `slc` meta-pipeline, a single-phase form [[PIPE-9](../dev/pipeline.md#pipe-9)], standalone-pass form [[PIPE-33](../dev/pipeline.md#pipe-33)], or direct-link form [[PIPE-12](../dev/pipeline.md#pipe-12)], when it runs, the slc command shall neither select execution from nor publish build history, but shall remove a usable active marker before overwriting a target recorded by that build [[incremental-compilation-26](#incremental-compilation-26)].
+Where an invocation uses `-o` [[pipeline-8](pipeline.md#pipeline-8)], the reserved `slc` meta-pipeline, a single-phase form [[pipeline-9](pipeline.md#pipeline-9)], standalone-pass form [[pipeline-33](pipeline.md#pipeline-33)], or direct-link form [[pipeline-12](pipeline.md#pipeline-12)], when it runs, the slc command shall neither select execution from nor publish build history, but shall remove a usable active marker before overwriting a target recorded by that build [[incremental-compilation-26](#incremental-compilation-26)].
 
 ## Internal Behavior
 
@@ -52,7 +52,7 @@ Where an invocation uses `-o` [[PIPE-8](../dev/pipeline.md#pipe-8)], the reserve
 
 #### incremental-compilation-9
 
-When the slc command records an eligible build, the slc command shall write schema `sublang.slc.build.v1`, the pipeline, a source locator and exact-byte SHA-256 hash, and an ordered record per scheduled phase [[PIPE-4](../dev/pipeline.md#pipe-4)], [[PIPE-13](../dev/pipeline.md#pipe-13)], [[PIPE-32](../dev/pipeline.md#pipe-32)], [[PIPE-34](../dev/pipeline.md#pipe-34)] containing exactly its kind, name, target locator, ordered input hashes, and output hash; the build shall store the source at `source` and phase output `<index>` at `outputs/<index>`.
+When the slc command records an eligible build, the slc command shall write schema `sublang.slc.build.v1`, the pipeline, a source locator and exact-byte SHA-256 hash, and an ordered record per scheduled phase [[pipeline-4](pipeline.md#pipeline-4)], [[pipeline-13](pipeline.md#pipeline-13)], [[pipeline-32](pipeline.md#pipeline-32)], [[pipeline-34](pipeline.md#pipeline-34)] containing exactly its kind, name, target locator, ordered input hashes, and output hash; the build shall store the source at `source` and phase output `<index>` at `outputs/<index>`.
 
 #### incremental-compilation-10
 
@@ -70,11 +70,11 @@ While an eligible run has a valid active marker, when its first phase is selecte
 
 #### incremental-compilation-13
 
-When an eligible run computes a compile phase's current identities, the slc command shall hash exact bytes in this order: chained input, definition, explicit references, then the definitions' and Markdown references' declared local `## Pin Inputs` closures [[phase-execution-15](phase-execution.md#phase-execution-15)], [[phase-execution-33](phase-execution.md#phase-execution-33)]; for a link phase it shall hash ordered object locators and bytes, the link definition [[phase-execution-2](phase-execution.md#phase-execution-2)] and its declared local closure, link-target locator and content [[PIPE-12](../dev/pipeline.md#pipe-12)], and ordered option pairs with unambiguous framing [[PIPE-14](../dev/pipeline.md#pipe-14)].
+When an eligible run computes a compile phase's current identities, the slc command shall hash exact bytes in this order: chained input, definition, explicit references, then the definitions' and Markdown references' declared local `## Pin Inputs` closures [[phase-execution-15](phase-execution.md#phase-execution-15)], [[phase-execution-33](phase-execution.md#phase-execution-33)]; for a link phase it shall hash ordered object locators and bytes, the link definition [[phase-execution-2](phase-execution.md#phase-execution-2)] and its declared local closure, link-target locator and content [[pipeline-12](pipeline.md#pipeline-12)], and ordered option pairs with unambiguous framing [[pipeline-14](pipeline.md#pipeline-14)].
 
 #### incremental-compilation-14
 
-Where the active manifest names the invocation's pipeline and source locator, when an eligible run selects a scheduled phase [[PIPE-4](../dev/pipeline.md#pipe-4)], [[PIPE-13](../dev/pipeline.md#pipe-13)], [[PIPE-32](../dev/pipeline.md#pipe-32)], [[PIPE-34](../dev/pipeline.md#pipe-34)], the slc command shall compare the record at the same schedule index and target [[PIPE-8](../dev/pipeline.md#pipe-8)], [[PIPE-15](../dev/pipeline.md#pipe-15)]: matching identities plus a readable live target selects Reuse; a matching compile record with differing identities, an intact prior-input copy, and a readable live target selects Update; an identity that cannot be derived or read, every other unmatched case, and every `--rebuild` phase selects Ordinary, while a link phase never selects Update.
+Where the active manifest names the invocation's pipeline and source locator, when an eligible run selects a scheduled phase [[pipeline-4](pipeline.md#pipeline-4)], [[pipeline-13](pipeline.md#pipeline-13)], [[pipeline-32](pipeline.md#pipeline-32)], [[pipeline-34](pipeline.md#pipeline-34)], the slc command shall compare the record at the same schedule index and target [[pipeline-8](pipeline.md#pipeline-8)], [[pipeline-15](pipeline.md#pipeline-15)]: matching identities plus a readable live target selects Reuse; a matching compile record with differing identities, an intact prior-input copy, and a readable live target selects Update; an identity that cannot be derived or read, every other unmatched case, and every `--rebuild` phase selects Ordinary, while a link phase never selects Update.
 
 ### Update and publication
 

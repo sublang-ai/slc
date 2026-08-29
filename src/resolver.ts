@@ -8,7 +8,7 @@
  * bin's host policy: a `<reference>` resolves to the directories named
  * `<reference>` directly under each search root from `SLC_PIPELINE_PATH` (an OS
  * path-list), defaulting to the working directory when unset. The resolver
- * returns every existing match so `runSlc`'s exactly-one rule (PIPE-16) refuses
+ * returns every existing match so `runSlc`'s exactly-one rule (pipeline-16) refuses
  * zero or many; it does not check that a match is a well-formed pipeline, which
  * `loadPipeline` does. See specs/dev/cli.md.
  */
@@ -34,7 +34,7 @@ export const RESERVED_PLAYBOOK_PIPELINE = 'playbook';
  * Whether a reference names a pipeline whose definitions `@sublang/playbook`
  * provides — the reserved `slc` meta-pipeline or the `playbook` domain pipeline,
  * which share one definition set and differ only by name (DR-009). Such a link
- * phase consumes Playbook's target-less `link.md` (PIPE-11).
+ * phase consumes Playbook's target-less `link.md` (pipeline-11).
  */
 export function isReservedPipeline(reference: string): boolean {
   return (
