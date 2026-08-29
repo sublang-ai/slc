@@ -8,7 +8,9 @@
 This package specifies integration and system acceptance tests for the generic
 pipeline mechanics in the `pipeline` dev package, exercising the `slc` command
 end-to-end over sample pipelines per [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md)
-and [DR-002](../decisions/002-slc-link-phases.md).
+and [DR-002](../decisions/002-slc-link-phases.md), including post-link
+completion per
+[DR-023](../decisions/023-host-settled-link-object-imports.md).
 
 Essential project-specific reference: `slc`, this project's compiler CLI.
 
@@ -73,6 +75,13 @@ When the slc command is run with `-o <target>`, the slc command shall write the 
 Verifies: [PIPE-14](../dev/pipeline.md#pipe-14)
 
 When the slc command is run with `--link-option <name>=<value>` pairs, the slc command shall convey them unaltered to the link phase.
+
+### PIPE-41
+Verifies: [PIPE-40](../dev/pipeline.md#pipe-40)
+
+Where a link phase writes a linked module beside only a declared `.ts` object, when the module imports the missing `.js` counterpart, the slc command shall rewrite the specifier to `.ts`, report the module, original specifier, and replacement, and complete successfully.
+Where both `.js` and `.ts` siblings of a declared link object exist, when the module imports the `.ts` sibling, the slc command shall rewrite the specifier to `.js`, report the module, original specifier, and replacement, and complete successfully.
+Where a linked module imports a `.js` or `.ts` path unrelated to every declared link object, when post-link completion runs, the slc command shall leave that import unchanged.
 
 ### PIPE-35
 Verifies: [PIPE-30](../dev/pipeline.md#pipe-30), [PIPE-31](../dev/pipeline.md#pipe-31), [PIPE-32](../dev/pipeline.md#pipe-32), [PIPE-33](../dev/pipeline.md#pipe-33), [COMPILE-8](../user/compiler.md#compile-8)
