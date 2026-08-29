@@ -3,9 +3,10 @@
 
 // A fixture compiled `playbook` artifact for the compiled-executor tests. It is
 // driven non-interactively: `init` captures the Playbook ports, and one
-// `handleBossInput` turn reads the seeded source path and chooses an outcome by
-// content — "BLOCK" parks without writing (the executor derives blocked), "ERR"
-// throws (error), otherwise it writes the target so the executor derives ok.
+// `handleBossInput` turn validates the kind-specific seed prose, reads the
+// seeded compile source or first link object, and chooses an outcome by content
+// — "BLOCK" parks without writing (the executor derives blocked), "ERR" throws
+// (error), otherwise it writes the output so the executor derives ok.
 
 import { readFile, writeFile } from 'node:fs/promises';
 
@@ -17,12 +18,18 @@ export default function createPlaybookRuntime() {
     },
     async handleBossInput({ text }) {
       // The seed carries the request as a single-line JSON object introduced by
-      // `Request: ` (phase-execution-29).
+      // `Request: ` after prose naming its request kind (phase-execution-29).
       const marker = 'Request: ';
-      const line = text
-        .split('\n')
-        .find((candidate) => candidate.startsWith(marker));
-      const { source, target } = JSON.parse(line.slice(marker.length));
+      const lines = text.split('\n');
+      const line = lines.find((candidate) => candidate.startsWith(marker));
+      const request = JSON.parse(line.slice(marker.length));
+      if (!lines[0].includes(`${request.kind} phase non-interactively`)) {
+        throw new Error(`fixture seed does not name ${request.kind} execution`);
+      }
+      const source =
+        request.kind === 'compile' ? request.source : request.objects[0];
+      const target =
+        request.kind === 'compile' ? request.target : request.linked;
       const content = (await readFile(source, 'utf8')).trim();
       if (content === 'BLOCK') {
         await ports.emitStatus('fixture parked');
