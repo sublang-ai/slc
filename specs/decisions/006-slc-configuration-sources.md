@@ -31,7 +31,7 @@ This DR settles the sources and their precedence, discovery, the schema (includi
 | --- | --- | --- | --- |
 | `agent` | string | supported agent CLI id | `SLC_AGENT` |
 | `model` | string (optional) | model for the agent CLI | `SLC_MODEL` |
-| `effort` | string (optional) | adapter-scoped reasoning effort (added by [IR-012](../iterations/012-normalize-optimize-demo.md)) | `SLC_EFFORT` |
+| `effort` | string (optional) | adapter-scoped reasoning effort | `SLC_EFFORT` |
 | `reviewerAgent` | string (optional) | supported independent Reviewer CLI id; enables [DR-022](022-two-agent-reviewed-compilation.md) | `SLC_REVIEWER_AGENT` |
 | `reviewerModel` | string (optional) | model for the Reviewer CLI; requires `reviewerAgent` | `SLC_REVIEWER_MODEL` |
 | `reviewerEffort` | string (optional) | adapter-scoped Reviewer reasoning effort; requires `reviewerAgent` | `SLC_REVIEWER_EFFORT` |

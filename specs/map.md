@@ -52,10 +52,6 @@ meta.md     The spec of specs
 
 | ID | File | Goal |
 | --- | --- | --- |
-| IR-012 | [012-normalize-optimize-demo.md](iterations/012-normalize-optimize-demo.md) | Implement DR-013 (--normalize, -O pass phases, script-actor verification) and land the end-to-end demo/ acceptance workflow |
-| IR-013 | [013-cwd-output-entry-emission-demo.md](iterations/013-cwd-output-entry-emission-demo.md) | Implement DR-014 (CWD output, raw-entry normalization, default passes, default link target, entry emission) and rebase demo/ on the three-line flow |
-| IR-014 | [014-gears-provenance-adoption.md](iterations/014-gears-provenance-adoption.md) | Adopt DR-016: spex dependency, vendored definition sync, grammar Pin Inputs swap, pin regeneration (meta-artifact recompile deferred) |
-| IR-015 | [015-playbook-2-0-adoption.md](iterations/015-playbook-2-0-adoption.md) | Adopt DR-017: dependency bumps, 2.0.0 provenance mapping, definition re-sync, meta-artifact rebuild, pin regeneration, entry role binding, and the English demo reference |
 | IR-016 | [016-first-release.md](iterations/016-first-release.md) | Prepare the first npm release: 0.1.0 metadata and changelog, project-local thin-runtime install, package smoke, and CI-green token-free OIDC publication |
 | IR-017 | [017-local-release-acceptance.md](iterations/017-local-release-acceptance.md) | Add the installed-package runtime drive and the opt-in real-agent compile/run acceptance gate |
 | IR-018 | [018-playbook-3-1-adoption.md](iterations/018-playbook-3-1-adoption.md) | Adopt Playbook 3.1 atomically, regenerate the zh demo reference as end-user acceptance, and prepare 0.2.0 |

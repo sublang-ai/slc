@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 //
-// Reference checker for the committed demo artifacts (IR-015).
+// Reference checker for the committed English and Chinese demo artifacts.
 // One checker serves both language flows: `node check.mjs en` validates the
 // English set (workflow.*), `node check.mjs zh` the Chinese set
 // (workflow.zh.*). Each stage prints its verdict; any failure exits 1.
