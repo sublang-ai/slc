@@ -238,7 +238,7 @@ describe('conveniences (CLI-13, CLI-14)', () => {
   });
 });
 
-describe('reporting (CLI-15, CLI-16)', () => {
+describe('reporting (CLI-15, CLI-16, CLI-38, CLI-42)', () => {
   it('prints `up to date` for a fully reused repeat (CLI-38)', async () => {
     const { agent } = makeAgent();
     expect(
@@ -262,13 +262,15 @@ describe('reporting (CLI-15, CLI-16)', () => {
     expect(out.join('')).toBe('up to date\n');
   });
 
-  it('prints written paths including the -o path and exits 0 (CLI-15)', async () => {
+  it('separates written paths and successful diagnostics (CLI-15, CLI-42)', async () => {
     const { agent } = makeAgent();
     const out: string[] = [];
+    const err: string[] = [];
     const outPath = join(srcDir, 'custom.fsm.ts');
     const code = await run(['flow', source, '-o', outPath], {
       env: {},
       stdout: (t) => out.push(t),
+      stderr: (t) => err.push(t),
       buildDeps: ({ signal }) => interpretedDeps(agent, signal),
     });
 
@@ -276,6 +278,8 @@ describe('reporting (CLI-15, CLI-16)', () => {
     const stdout = out.join('');
     expect(stdout).toContain(join(artDir, 'onboarding.gears.md'));
     expect(stdout).toContain(outPath);
+    expect(stdout).not.toContain('wrote the artifact');
+    expect(err.join('')).toBe('wrote the artifact\nwrote the artifact\n');
     expect(await exists(outPath)).toBe(true);
   });
 

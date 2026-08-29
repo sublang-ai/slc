@@ -38,7 +38,7 @@ A clean destination that will later build JavaScript is observationally identica
 
 - Source-only TypeScript consumers no longer fail because an agent guessed a `.js` object import.
 - Consumers with an already materialized JavaScript sibling deterministically retain or receive the `.js` import.
-- Every host correction is visible instead of being silently attributed to the executing phase in diagnostics and build history.
+- Every host correction is visible in successful run diagnostics instead of being silently attributed to the executing phase.
 - Genuinely unresolved imports still fail, and unrelated imports remain untouched.
 - A clean JavaScript-emitting destination is not claimed to be supported by sibling evidence alone; adding that product mode requires explicit input rather than another heuristic.
 - The reviewed Playbook link definition and its pinned compiled artifacts remain unchanged.
