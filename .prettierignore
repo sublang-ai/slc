@@ -3,5 +3,5 @@ node_modules
 coverage
 package-lock.json
 
-# Markdown is hand-authored (specs follow their own conventions, e.g. META-25).
+# Markdown is hand-authored (specs follow their own conventions, e.g. meta-25).
 *.md

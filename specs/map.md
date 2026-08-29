@@ -3,27 +3,29 @@
 
 # Spec Map
 
-Quick-reference index for locating spec files.
+Quick-reference index for locating decisions and spec packages.
 Spec items are the source of truth.
 Code can be inconsistent with specs during development.
+
+## Authoring and reviewing specs
+
+Know the rules in [`meta.md`](meta.md) before authoring, modifying, or reviewing a DR, IR, or item.
 
 ## Layout
 
 ```text
-decisions/  Decision records (DRs)
-iterations/ Iteration records (IRs)
-user/       Spec item files for user-visible behavior
-dev/        Spec item files for implementation requirements
-test/       Spec item files for acceptance testing
-map.md      This index
-meta.md     The spec of specs
+decisions/    Decision records (DRs)
+intents/      Intent records (IRs)
+packages/     Spec packages (one file per package)
+map.md        This index
+meta.md       The spec of specs
 ```
 
 ## Decisions
 
 | ID | File | Summary |
 | --- | --- | --- |
-| DR-000 | [000-spec-structure-format.md](decisions/000-spec-structure-format.md) | Spec structure, format, and naming conventions |
+| [DR-000](decisions/000-spec-structure-format.md) | 000-spec-structure-format.md | Spec structure, format, and naming conventions |
 | [DR-001](decisions/001-slc-pipeline-layout-naming-invocation.md) | 001-slc-pipeline-layout-naming-invocation.md | Pipeline layout, naming, CLI invocation, and output locations |
 | [DR-002](decisions/002-slc-link-phases.md) | 002-slc-link-phases.md | Generic link phases and link-target invocation |
 | [DR-003](decisions/003-slc-phase-execution.md) | 003-slc-phase-execution.md | Phase execution boundary: generic slc vs phase-specific |
@@ -50,74 +52,17 @@ meta.md     The spec of specs
 
 ## Packages
 
-### continuous-integration
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, runtime-transition boundaries, immutable Playbook adoption, demo acceptance, and package publication checks |
-
-### cli
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
-
-### compiler
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
-
-### git
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
-
-### incremental-compilation
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [incremental-compilation.md](packages/incremental-compilation.md) | Complete build history, reuse/update/ordinary selection, update context, success-only publication, rebuilds, exclusions, and fixture acceptance |
-
-### licensing
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
-
-### phase-execution
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, compiled runtime profiles, pin selection, status streaming, and the agent-stall watchdog |
-
-### pinning
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [pinning.md](packages/pinning.md) | Pin-currency validation and generation: presence, current/stale/malformed verdicts, and fixture acceptance |
-
-### pipeline
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, link-object import settlement, pass and normalization scheduling, and system acceptance |
-
-### release
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |
-
-### self-hosting
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, atomic reviewed-asset adoption, and system acceptance |
-
-### verification
-
-| Group | File | Summary |
-| --- | --- | --- |
-| package | [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, and runtime checks; portable generated tests; and emitted-module load integrity |
+| File | Summary |
+| --- | --- |
+| [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
+| [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
+| [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, runtime-transition boundaries, immutable Playbook adoption, demo acceptance, and package publication checks |
+| [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
+| [incremental-compilation.md](packages/incremental-compilation.md) | Complete build history, reuse/update/ordinary selection, update context, success-only publication, rebuilds, exclusions, and fixture acceptance |
+| [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
+| [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, compiled runtime profiles, pin selection, status streaming, and the agent-stall watchdog |
+| [pinning.md](packages/pinning.md) | Pin-currency validation and generation: presence, current/stale/malformed verdicts, and fixture acceptance |
+| [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, link-object import settlement, pass and normalization scheduling, and system acceptance |
+| [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |
+| [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, atomic reviewed-asset adoption, and system acceptance |
+| [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, and runtime checks; portable generated tests; and emitted-module load integrity |

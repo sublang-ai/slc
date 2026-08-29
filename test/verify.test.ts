@@ -1902,7 +1902,7 @@ describe('checkPromptComposition (verification-5)', () => {
     // contract and continuation texts — instructions about them, not leaks.
     const selfHostConfig: MachineConfigLike = {
       states: {
-        work: contractCaptain('Writer', 'META-1', [
+        work: contractCaptain('Writer', 'meta-1', [
           'Use this exact description: Output shall include `question: <text>`.',
           `Preserve the continuation preamble exactly: ${CONTINUATION_PREAMBLE}`,
           'Preserve the labels Boss question: and Boss reply: verbatim.',
