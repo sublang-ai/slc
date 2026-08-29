@@ -27,7 +27,7 @@ import { hashBytes } from '../src/hash.js';
 
 const bytes = (text: string): Buffer => Buffer.from(text, 'utf8');
 
-describe('complete build history (INCR-9..12)', () => {
+describe('complete build history (incremental-compilation-9..12)', () => {
   let root: string;
   let artDir: string;
   let source: string;

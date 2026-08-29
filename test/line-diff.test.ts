@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { unifiedLineDiff } from '../src/line-diff.js';
 
-describe('unifiedLineDiff (INCR-15)', () => {
+describe('unifiedLineDiff (incremental-compilation-15)', () => {
   it('returns an empty hint for identical text', () => {
     expect(unifiedLineDiff('same\n', 'same\n')).toBe('');
   });

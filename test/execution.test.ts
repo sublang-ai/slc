@@ -201,7 +201,7 @@ describe('runPhase generic checks (PHEXEC-4, PHEXEC-5)', () => {
       ).toBe(true);
   });
 
-  it('protects the update-mode prior input like a reference (INCR-15)', async () => {
+  it('protects the update-mode prior input like a reference (incremental-compilation-15)', async () => {
     const priorInput = join(dir, 'prior-input');
     await writeFile(priorInput, 'prior source');
     request = { ...request, update: { priorInput, diff: '-a\n+b' } };

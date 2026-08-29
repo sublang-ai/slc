@@ -521,7 +521,7 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     ]);
   });
 
-  it('carries update context to a performing Captain (INCR-16)', async () => {
+  it('carries update context to a performing Captain (incremental-compilation-16)', async () => {
     const target = join(root, 'out.ts');
     const prompts: string[] = [];
     const captain: AgentClient = {

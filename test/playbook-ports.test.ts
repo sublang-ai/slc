@@ -245,7 +245,7 @@ describe('createPlaybookPorts (PHEXEC-25)', () => {
     ).toEqual([false, true, true]);
   });
 
-  // INCR-16: the host update context rides every Player prompt and the
+  // incremental-compilation-16: the host update context rides every Player prompt and the
   // transformation-performing Captain transport; routing-only Captain and
   // judge prompts cross unchanged.
   it('appends the update context to player and performing Captain calls only', async () => {

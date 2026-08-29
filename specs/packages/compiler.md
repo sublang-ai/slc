@@ -29,7 +29,7 @@ When a run cannot complete — because the invocation or pipeline is rejected, o
 
 ### compiler-5
 
-When a phase is selected for execution rather than incremental reuse [[INCR-2](../user/incremental-compilation.md#incr-2)], the slc command shall carry it out with a coding agent [[PHEXEC-11](../dev/phase-execution.md#phexec-11)], [[PHEXEC-25](../dev/phase-execution.md#phexec-25)] that follows the phase's definition [[PHEXEC-2](../dev/phase-execution.md#phexec-2)], so the user supplies only the source and the phase definitions and writes no transformation code ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-021](../decisions/021-incremental-compilation.md)).
+When a phase is selected for execution rather than incremental reuse [[incremental-compilation-2](incremental-compilation.md#incremental-compilation-2)], the slc command shall carry it out with a coding agent [[PHEXEC-11](../dev/phase-execution.md#phexec-11)], [[PHEXEC-25](../dev/phase-execution.md#phexec-25)] that follows the phase's definition [[PHEXEC-2](../dev/phase-execution.md#phexec-2)], so the user supplies only the source and the phase definitions and writes no transformation code ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-021](../decisions/021-incremental-compilation.md)).
 
 ### compiler-6
 
@@ -45,7 +45,7 @@ When the user runs a full pipeline, the slc command shall run the pipeline's opt
 
 ### compiler-9
 
-Where an independent Reviewer is configured, when a phase is selected for Update [[INCR-5](../user/incremental-compilation.md#incr-5)], Ordinary [[INCR-3](../user/incremental-compilation.md#incr-3)], or `--rebuild` execution [[INCR-7](../user/incremental-compilation.md#incr-7)], the slc command shall have the Coder perform each transformation, obtain independent read-only review of successful non-`BLOCKED` work, return material findings to the Coder for evidenced disposition and minimal root-cause repair, complete when no unsettled finding remains, and fail the phase if the third Reviewer call still reports findings [[PHEXEC-46](../dev/phase-execution.md#phexec-46)]; whereas incremental Reuse shall invoke neither agent [[INCR-2](../user/incremental-compilation.md#incr-2)] ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-021](../decisions/021-incremental-compilation.md)).
+Where an independent Reviewer is configured, when a phase is selected for Update [[incremental-compilation-5](incremental-compilation.md#incremental-compilation-5)], Ordinary [[incremental-compilation-3](incremental-compilation.md#incremental-compilation-3)], or `--rebuild` execution [[incremental-compilation-7](incremental-compilation.md#incremental-compilation-7)], the slc command shall have the Coder perform each transformation, obtain independent read-only review of successful non-`BLOCKED` work, return material findings to the Coder for evidenced disposition and minimal root-cause repair, complete when no unsettled finding remains, and fail the phase if the third Reviewer call still reports findings [[PHEXEC-46](../dev/phase-execution.md#phexec-46)]; whereas incremental Reuse shall invoke neither agent [[incremental-compilation-2](incremental-compilation.md#incremental-compilation-2)] ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-021](../decisions/021-incremental-compilation.md)).
 
 ## Verification
 

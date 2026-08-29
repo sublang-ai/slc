@@ -146,7 +146,7 @@ export function createCompiledExecutor(opts: {
         captainWorkspace: composeWorkspaceContract(input),
         // The compiled artifact knows nothing about incremental updates, so
         // the host appends the update context to performing prompts
-        // (DR-021, INCR-16).
+        // (DR-021, incremental-compilation-16).
         ...(request.kind === 'compile' && request.update !== undefined
           ? {
               updateContext: updateContextLines(

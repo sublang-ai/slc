@@ -66,7 +66,7 @@ export function createPlaybookPorts(opts: {
   captainWorkspace?: string;
   /**
    * Host update-mode context appended to every Player prompt and to
-   * transformation-performing direct Captain prompts (DR-021, INCR-16). The
+   * transformation-performing direct Captain prompts (DR-021, incremental-compilation-16). The
    * compiled artifact composes host-agnostic prompts and knows nothing about
    * incremental updates, so only the host can say the target already holds
    * the prior accepted output. Routing-only Captain and judge calls never

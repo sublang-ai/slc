@@ -102,13 +102,11 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | package | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
 
-### INCR
+### incremental-compilation
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [incremental-compilation.md](user/incremental-compilation.md) | User-visible complete build history, reuse, agent updates, rebuild, and exclusions |
-| dev | [incremental-compilation.md](dev/incremental-compilation.md) | Snapshot schema, whole-build loading, identities, three-mode selection, update transport, and success-only publication |
-| test | [incremental-compilation.md](test/incremental-compilation.md) | Fixture acceptance for snapshots, reuse, updates, corruption, failures, rebuild, and exclusions |
+| package | [incremental-compilation.md](packages/incremental-compilation.md) | Complete build history, reuse/update/ordinary selection, update context, success-only publication, rebuilds, exclusions, and fixture acceptance |
 
 ### licensing
 

@@ -52,7 +52,7 @@ export interface LinkOptionPair {
 }
 
 /**
- * Host-supplied update-mode context for a compile step (DR-021, INCR-15).
+ * Host-supplied update-mode context for a compile step (DR-021, incremental-compilation-15).
  *
  * The existing target file is the previously accepted output; the executor is
  * asked to update it rather than regenerate from scratch. Purely an
@@ -71,7 +71,7 @@ export interface UpdateContext {
 
 /**
  * Renders the host-owned update instruction shared by interpreted prompts and
- * compiled performing prompts (INCR-16).
+ * compiled performing prompts (incremental-compilation-16).
  */
 export function updateContextLines(
   update: UpdateContext,
@@ -116,7 +116,7 @@ export type ExecuteRequest =
        * rewrites the source toward (DR-013). Protected like definitions.
        */
       references?: readonly string[];
-      /** Update-mode context; absent for a fresh compile (DR-021, INCR-15). */
+      /** Update-mode context; absent for a fresh compile (DR-021, incremental-compilation-15). */
       update?: UpdateContext;
     }
   | {
