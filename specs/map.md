@@ -46,7 +46,7 @@ meta.md     The spec of specs
 | [DR-020](decisions/020-playbook-4-0-adoption.md) | 020-playbook-4-0-adoption.md | Playbook 4.0 adoption: 4.0.0 provenance to `composed-v2` on a byte-identical runtime, retained bundles with regenerated pins, Cligent 0.18 as runtime-version authority, SDKs as devDependencies and demo-named vendors |
 | DR-021 | [021-incremental-compilation.md](decisions/021-incremental-compilation.md) | Incremental compilation through complete versioned snapshots, exact phase reuse, and ordinary execution with prior-input/diff update context |
 | DR-022 | [022-two-agent-reviewed-compilation.md](decisions/022-two-agent-reviewed-compilation.md) | Opt-in independent review/fix/re-review for transformation-performing compilation calls |
-| DR-023 | [023-host-settled-link-object-imports.md](decisions/023-host-settled-link-object-imports.md) | Generic post-link settlement and reporting of declared-object import extensions from materialized siblings |
+| [DR-023](decisions/023-host-settled-link-object-imports.md) | 023-host-settled-link-object-imports.md | Generic post-link settlement and reporting of declared-object import extensions from materialized siblings |
 
 ## Packages
 
@@ -60,7 +60,7 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| package | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, progress and heartbeat reporting, cancellation, and bin-boundary verification |
+| package | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
 
 ### compiler
 
@@ -102,7 +102,7 @@ meta.md     The spec of specs
 
 | Group | File | Summary |
 | --- | --- | --- |
-| package | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, pass and normalization scheduling, and system acceptance |
+| package | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, link-object import settlement, pass and normalization scheduling, and system acceptance |
 
 ### release
 

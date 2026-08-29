@@ -13,6 +13,7 @@ Migrate the legacy Spex tree to the current framework law without changing its b
 The protected framework files in the scaffold refresh were produced and linted by the globally installed `@sublang/spex@3.0.0`.
 The repository's locked `@sublang/spex@0.3.0` is a separately pinned compiled-grammar semantic input under [DR-016](../decisions/016-gears-grammar-provenance.md); changing it is outside this behavior-preserving migration and requires a separate adoption that rebuilds all three reviewed phase bundles and regenerates their pins.
 The `v0.5.0` release contains every legacy package item ID and every released legacy framework ID in the rename maps, so the maps require one generation-wide owner approval before any numbered task changes those IDs or their inbound references.
+Post-v0.5.0 upstream work rebased during the migration reserved current identities `cli-42`, `pipeline-40`, and `pipeline-41`; the later migration-only link-target verification therefore moves from its branch-local `pipeline-40` identity to the next free identity, `pipeline-42`.
 The 12 legacy subjects remain 12 cohesive packages; no subject split is warranted, and no legacy `items/`, `interactions/`, or `compositions/` source exists.
 The scaffold-created `git` and `licensing` packages and SPDX intent are destination seeds to reconcile with their legacy sources.
 The `RELEASE-8` sample heading in the immutable vendored `pipelines/playbook/text2gears.md` definition is not an SLC item reference and remains byte-identical as an intentional residue.
@@ -65,7 +66,7 @@ The package classification audit yields this target placement, with new verifica
 
 | Package | External Behavior item numbers | Internal Behavior item numbers | Verification item numbers |
 | --- | --- | --- | --- |
-| `cli` | 1–5, 22, 29, 32–34, 39 | 6–12, 20–21, 30, 35, 40 | 13–19, 23–28, 31, 36–38, 41 |
+| `cli` | 1–5, 22, 29, 32–34, 39 | 6–12, 20–21, 30, 35, 40 | 13–19, 23–28, 31, 36–38, 41–42 |
 | `compiler` | 1–9 | — | 10 |
 | `continuous-integration` | 1–5 | — | 6 |
 | `git` | 1–5 | — | 6 |
@@ -73,7 +74,7 @@ The package classification audit yields this target placement, with new verifica
 | `licensing` | 1–2, 5–7 | — | 3–4, 8 |
 | `phase-execution` | 1–15, 23–25, 27, 29–31, 33–34, 36, 39, 42, 46 | — | 16–22, 26, 28, 32, 35, 37–38, 40–41, 43–45, 47–48 |
 | `pinning` | 1–6, 13, 15 | — | 7–12, 14, 16 |
-| `pipeline` | 1–19, 30–34, 37 | — | 20–29, 35–36, 38–40 |
+| `pipeline` | 1–19, 30–34, 37, 40 | — | 20–29, 35–36, 38–39, 41–42 |
 | `release` | 1–13, 17, 19 | — | 14–16, 18, 20 |
 | `self-hosting` | 1–3, 6, 9, 11, 13–15 | — | 4–5, 7–8, 10, 12, 16 |
 | `verification` | 1–6, 10, 12–13, 15–16, 18 | — | 7–9, 11, 14, 17, 19 |
@@ -88,7 +89,7 @@ The behavior citation audit establishes these peer-package edges:
 | `incremental-compilation` | `phase-execution`, `pipeline` |
 | `phase-execution` | `pinning`, `pipeline`, `self-hosting` |
 | `pinning` | `self-hosting` |
-| `pipeline` | `phase-execution`, `self-hosting` |
+| `pipeline` | `incremental-compilation`, `phase-execution`, `self-hosting` |
 | `release` | `cli`, `compiler`, `incremental-compilation` |
 | `self-hosting` | `phase-execution`, `pinning`, `pipeline` |
 | `verification` | `pinning`, `pipeline`, `release`, `self-hosting` |
@@ -119,7 +120,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 4. [x] Merged the `incremental-compilation` sources into `packages/incremental-compilation.md`, retargeted every authored item identity and reference, confirmed its two peer bindings, and localized its verification evidence.
 5. [x] Merged the `pinning` sources into `packages/pinning.md`, retargeted every authored item identity and reference, confirmed its self-hosting binding, localized its verification evidence, and left derived verifier-support copies for Task 13.
 6. [x] Merged the `phase-execution` sources into `packages/phase-execution.md`, retargeted every authored item identity and reference, confirmed its pinning, pipeline, and self-hosting bindings, localized behavior 29 coverage, and added `phase-execution-48` for behavior 33.
-7. [x] Merged the `pipeline` sources into `packages/pipeline.md`, retargeted every authored item identity and reference, preserved its phase-execution and self-hosting bindings, localized behaviors 1, 3, 10, 19, and 37, and added `pipeline-40` for behavior 11.
+7. [x] Merged the `pipeline` sources into `packages/pipeline.md`, retargeted every authored item identity and reference, preserved its phase-execution and self-hosting bindings, localized behaviors 1, 3, 10, 19, and 37, and added `pipeline-42` for behavior 11 after the upstream reconciliation assigned items 40 and 41.
 8. [x] Merged the `self-hosting` sources into `packages/self-hosting.md`, retargeted every authored item identity and reference, confirmed its phase-execution, pinning, and pipeline bindings, and localized its verification evidence.
 9. [x] Merged the `verification` sources into `packages/verification.md`, retargeted every authored item identity and reference, confirmed its pinning, pipeline, release, and self-hosting bindings, localized its verification evidence, and left derived verifier-support copies for Task 13.
 10. [x] Merged the `release` sources into `packages/release.md`, retargeted every authored item identity and reference, confirmed its CLI, compiler, and incremental-compilation bindings, localized its verification evidence, and added `release-20` for the uncovered repository release contract.

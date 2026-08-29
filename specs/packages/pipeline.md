@@ -5,8 +5,8 @@
 
 ## Intent
 
-This package specifies the generic pipeline mechanics of the `slc` command: pipeline and phase resolution, format and filename validation, chain inference, source-name validation, artifact-path computation, CLI parsing, and link-phase handling, per [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) and [DR-002](../decisions/002-slc-link-phases.md).
-These are the generic half of the execution boundary in [DR-003](../decisions/003-slc-phase-execution.md); phase transformation behavior is specified in the `phase-execution` package.
+This package specifies the generic pipeline mechanics of the `slc` command: pipeline and phase resolution, format and filename validation, chain inference, source-name validation, artifact-path computation, CLI parsing, link-phase handling, and host settlement of declared link-object import extensions, per [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md), and [DR-023](../decisions/023-host-settled-link-object-imports.md).
+These are the generic half of the execution boundary in [DR-003](../decisions/003-slc-phase-execution.md); phase transformation behavior is specified in the `phase-execution` package apart from [DR-023](../decisions/023-host-settled-link-object-imports.md)'s narrow post-link completion exception.
 Verification exercises the `slc` command end to end over sample pipelines.
 Essential project-specific reference: `slc`, this project's compiler CLI.
 
@@ -108,6 +108,10 @@ When a link phase runs in a full-pipeline invocation, the slc command shall trea
 
 When invoked as `slc <pipeline>.link` with exactly one object, the slc command shall derive the basename from that object and place the linked artifact under the invocation working directory in `<basename>.<pipeline>/<basename>.<target-format>.<ext>`, reusing the working directory when its leaf is already `<basename>.<pipeline>` [[pipeline-7](#pipeline-7)], unless `-o <linked-target>` overrides the linked-artifact path; with more than one object, the slc command shall require `-o <linked-target>`, refuse the invocation when it is absent, and write the linked artifact to that path ([DR-002](../decisions/002-slc-link-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
+#### pipeline-40
+
+When a link phase has successfully written a `.ts` or `.js` module, the slc command shall settle each relative `.js` or `.ts` import whose extensionless resolved path matches a declared link object: an existing regular `.js` sibling wins, otherwise an existing regular `.ts` sibling wins, and otherwise the specifier remains unchanged; the linked module itself shall not count as a sibling, imports unrelated to declared link objects shall remain unchanged, and each changed specifier shall produce a successful diagnostic naming the module, original specifier, and replacement before the settled output is accepted or copied verbatim into successful build history [[incremental-compilation-1](incremental-compilation.md#incremental-compilation-1)] ([DR-023](../decisions/023-host-settled-link-object-imports.md)).
+
 ### Passes and normalization
 
 #### pipeline-32
@@ -189,6 +193,16 @@ When the slc command is run with `-o <target>`, the slc command shall write the 
 
 When the slc command is run with `--link-option <name>=<value>` pairs [[pipeline-14](#pipeline-14)], the slc command shall convey them unaltered to the link phase.
 
+#### pipeline-41
+
+Where a link phase has successfully written a `.ts` or `.js` module, when post-link settlement runs, the slc command shall produce the applicable outcome [[pipeline-40](#pipeline-40)]:
+
+| Linked-module import state | Required outcome |
+| --- | --- |
+| Only the declared `.ts` object exists and the module imports its missing `.js` counterpart. | Rewrite the specifier to `.ts`, report the module, original specifier, and replacement, and complete successfully. |
+| Both `.js` and `.ts` siblings of a declared link object exist and the module imports the `.ts` sibling. | Rewrite the specifier to `.js`, report the module, original specifier, and replacement, and complete successfully. |
+| A `.js` or `.ts` import is unrelated to every declared link object. | Leave the import unchanged. |
+
 #### pipeline-35
 
 Where fixture invocations exercise passes and mode flags, when the slc command loads or runs each case, it shall produce its listed outcome:
@@ -205,7 +219,7 @@ Where fixture invocations exercise passes and mode flags, when the slc command l
 
 When the slc command is run with `--normalize`, the slc command shall execute the built-in normalization definition first [[pipeline-34](#pipeline-34)] — receiving the raw source and the entry-phase definition as a read-only reference — write the normalized source into the artifact directory under the entry phase's source name, and run the entry phase from that file.
 
-#### pipeline-40
+#### pipeline-42
 
 Where fixture pipelines exercise ordinary and Playbook-owned link definitions, when the pipeline integration and system suite runs each case through `slc`, each case shall produce its listed outcome:
 

@@ -1065,7 +1065,7 @@ async function executeSteps(
       } catch (error) {
         // A target that cannot be reconciled and checked is a dead artifact
         // too. Fail the link here so every started phase still reaches a
-        // every started phase still reaches a terminal event (cli-32).
+        // terminal event (cli-32).
         fail();
         diagnostics.push(
           `linked module ${target} could not be settled and checked: ` +
