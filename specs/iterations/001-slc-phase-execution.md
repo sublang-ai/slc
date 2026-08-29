@@ -28,7 +28,7 @@ Implement [DR-003](../decisions/003-slc-phase-execution.md) (phase execution bou
    Add SPDX headers per [[licensing-3](../packages/licensing.md#licensing-3)]/[[licensing-4](../packages/licensing.md#licensing-4)].
 
 2. **Author dev spec packages.**
-   Write `specs/dev/pipeline.md` (DR-001/DR-002 generic mechanics) and `specs/dev/phase-execution.md` (DR-003 boundary plus DR-004 interpreted execution and agent contract) as GEARS items; register both in `map.md`.
+   Write `specs/dev/pipeline.md` (DR-001/DR-002 generic mechanics) and `specs/packages/phase-execution.md` (DR-003 boundary plus DR-004 interpreted execution and agent contract) as GEARS items; register both in `map.md`.
 
 3. **Phase model and `## Formats` parsing** ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#phase-format-declarations)).
    Parse a phase `.md`, extract the `## Formats` table, validate the `<source-format>2<target-format>.md` filename against its tokens, and refuse conflicting extensions for the same format token.
@@ -52,7 +52,7 @@ Implement [DR-003](../decisions/003-slc-phase-execution.md) (phase execution bou
    Implement the executor interface by prompting a coding agent through `@sublang/cligent`, building the agent-contract prompt ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#agent-contract)); one invocation per phase ([DR-004](../decisions/004-slc-interpreted-phase-execution.md#scope)); agent and model selection from `slc` config, not phase semantics; wire into the Task 8 orchestrator.
 
 10. **Author test spec packages.**
-    Write `specs/test/pipeline.md` and `specs/test/phase-execution.md` as integration and system test items, each with a `Verifies:` line citing the Task 2 dev items; register both in `map.md`.
+    Write `specs/test/pipeline.md` and `specs/packages/phase-execution.md` as integration and system test items, each with a `Verifies:` line citing the Task 2 dev items; register both in `map.md`.
 
 11. **Integration tests.**
     Implement the Task 10 test items against a sample pipeline (with a faked agent transport), covering interpreted full-pipeline, single-phase, and `.link` runs, plus blocked and generic-check-failure paths.

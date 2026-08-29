@@ -51,7 +51,7 @@ function spyExecutor(
   };
 }
 
-describe('compiled selection and pin-input safety (PHEXEC-28, PHEXEC-40)', () => {
+describe('compiled selection and pin-input safety (phase-execution-28, phase-execution-40)', () => {
   let root: string;
   let pipelineDir: string;
   let source: string;
@@ -251,7 +251,7 @@ describe('compiled selection and pin-input safety (PHEXEC-28, PHEXEC-40)', () =>
   });
 
   it.each(['regular file', 'dangling symlink'] as const)(
-    'does not let an impossible stale-pin path through a %s veto an unpinned phase (PHEXEC-45)',
+    'does not let an impossible stale-pin path through a %s veto an unpinned phase (phase-execution-45)',
     async (shape) => {
       await writeCurrentPin();
       const bundleDir = join(pipelineDir, 'text2gears.slc');
@@ -272,7 +272,7 @@ describe('compiled selection and pin-input safety (PHEXEC-28, PHEXEC-40)', () =>
     },
   );
 
-  it('keeps the file blocking a stale pin path protected (PHEXEC-45)', async () => {
+  it('keeps the file blocking a stale pin path protected (phase-execution-45)', async () => {
     await writeCurrentPin();
     const bundleDir = join(pipelineDir, 'text2gears.slc');
     await rm(bundleDir, { recursive: true });

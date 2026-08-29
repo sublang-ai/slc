@@ -43,7 +43,7 @@ Exact `@sublang/playbook@4.0.0` link-target provenance selects the six-port
 schemas, and its major version marks the SDK-topology break rather than any
 runtime-contract change. `1.3.0`, `3.0.0`, and every other unreviewed
 release remain fail-closed as unmapped
-([PHEXEC-30](../dev/phase-execution.md#phexec-30)).
+([[phase-execution-30](../packages/phase-execution.md#phase-execution-30)]).
 
 ### Atomic reviewed-asset adoption
 

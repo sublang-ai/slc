@@ -33,7 +33,7 @@ Accepted.
 
 Exact `@sublang/playbook@3.1.0` link-target provenance selects the six-port
 `composed-v2` profile, joining 0.10.0, 1.0.0, and 2.0.0. `1.3.0` and `3.0.0`
-remain fail-closed as unmapped ([PHEXEC-30](../dev/phase-execution.md#phexec-30)).
+remain fail-closed as unmapped ([[phase-execution-30](../packages/phase-execution.md#phase-execution-30)]).
 
 ### Atomic reviewed-asset adoption
 

@@ -9,7 +9,7 @@ Compile routing-only Captain workflows whose acting prompts exclude control sche
 
 ## Deliverables
 
-- [x] [DR-012](../decisions/012-playbook-routing-control-separation.md), `PHEXEC`, `VERIFY`, and `map.md` record the result-metadata, exact-text, isolated-call, and presentation contracts.
+- [x] [DR-012](../decisions/012-playbook-routing-control-separation.md), `phase-execution`, `VERIFY`, and `map.md` record the result-metadata, exact-text, isolated-call, and presentation contracts.
 - [x] Playbook's maintained `text2gears`, `gears2fsm`, and `link` definitions define the canonical metadata syntax and generated runtime behavior without changing SLC's release-vendored definitions, reviewed artifacts, or pins.
 - [x] The conformance checker parses and compares explicit result contracts separately from acting prompts.
 - [x] SLC's Captain adapter validates and forwards fresh-session and empty-tool options for visible Captain and hidden judge calls.

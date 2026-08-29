@@ -8,7 +8,7 @@
  * pipeline, computes artifact paths, then runs each phase through `runPhase`,
  * stopping at the first failure with its report. The resolver and executor are
  * injected so a host wires the real pipeline resolution and Cligent agent while
- * tests supply fakes. See specs/dev/pipeline.md and specs/dev/phase-execution.md.
+ * tests supply fakes. See specs/dev/pipeline.md and specs/packages/phase-execution.md.
  */
 
 import { mkdir, readFile, stat } from 'node:fs/promises';
@@ -789,8 +789,8 @@ function compileStep(
 
 /**
  * Runs steps in order, selecting interpreted or compiled execution per phase from
- * the pin index and stopping at the first failure with its report (PHEXEC-9,
- * PHEXEC-27). An unparseable pin file fails the run closed before any phase.
+ * the pin index and stopping at the first failure with its report (phase-execution-9,
+ * phase-execution-27). An unparseable pin file fails the run closed before any phase.
  */
 async function executeSteps(
   steps: readonly PhaseStep[],
@@ -972,10 +972,10 @@ async function executeSteps(
 
     // Selecting a compiled executor can throw rather than return a verdict —
     // notably an unmapped pinned Playbook provenance, which the host factory
-    // rejects (PHEXEC-30). That is the same fail-closed family as a stale pin,
+    // rejects (phase-execution-30). That is the same fail-closed family as a stale pin,
     // so it is reported through the phase-failure path; letting it unwind
     // would strand the phase-start line with no terminal event and drop the
-    // phase and target from the report (CLI-4, CLI-32, PHEXEC-27).
+    // phase and target from the report (CLI-4, CLI-32, phase-execution-27).
     let selection: Strategy;
     try {
       selection = await selectExecutor(
@@ -1498,13 +1498,13 @@ function historyDiagnostic(result: SlcResult, reason: string): SlcResult {
   };
 }
 
-/** An executor to run, or a fail-closed verdict that stops the run (PHEXEC-27). */
+/** An executor to run, or a fail-closed verdict that stops the run (phase-execution-27). */
 type Strategy =
   | { kind: 'run'; executor: PhaseExecutor }
   | { kind: 'fail'; reasons: string[] };
 
 /**
- * Selects a phase's execution strategy from the pin index (PHEXEC-27; DR-005,
+ * Selects a phase's execution strategy from the pin index (phase-execution-27; DR-005,
  * DR-007): a phase with no pin interprets, a current pin runs its compiled
  * artifact, and a stale or malformed pin fails closed and is never silently
  * interpreted.

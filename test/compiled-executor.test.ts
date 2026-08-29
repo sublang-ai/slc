@@ -105,8 +105,8 @@ describe('structured PlaybookRunResult validation', () => {
 });
 
 // Integration: a compiled `playbook` artifact driven non-interactively through
-// the executor over a fixture run root (PHEXEC-26).
-describe('createCompiledExecutor (PHEXEC-26)', () => {
+// the executor over a fixture run root (phase-execution-26).
+describe('createCompiledExecutor (phase-execution-26)', () => {
   let root: string;
 
   beforeEach(async () => {
@@ -142,7 +142,7 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe('compiled:hello');
   });
 
-  it('streams status live to a configured sink without duplicating diagnostics (PHEXEC-37)', async () => {
+  it('streams status live to a configured sink without duplicating diagnostics (phase-execution-37)', async () => {
     const streamed: string[] = [];
     let streamedDuringTurn = 0;
     let ports: PlaybookPorts | undefined;
@@ -192,7 +192,7 @@ describe('createCompiledExecutor (PHEXEC-26)', () => {
     ]);
     expect(streamedDuringTurn).toBe(2);
     // Streamed lines do not repeat as end-of-run diagnostics, and trace
-    // payloads reach neither channel (PHEXEC-25).
+    // payloads reach neither channel (phase-execution-25).
     expect(result.diagnostics).toEqual([]);
     expect(streamed.join('\n')).not.toContain('private');
   });

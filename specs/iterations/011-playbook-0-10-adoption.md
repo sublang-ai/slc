@@ -10,7 +10,7 @@ Move the release-vendored definitions, reviewed artifacts, and pins from the ret
 ## Deliverables
 
 - [x] `src/playbook-contract.ts` freezes the retired 0.9 legacy shapes as local structural types instead of importing them from the moving `@sublang/playbook/runtime` module.
-- [x] `PHEXEC-30` and `runtimeContractForPin` map exact `@sublang/playbook@0.10.0` provenance to the `composed-v2` profile.
+- [x] `phase-execution-30` and `runtimeContractForPin` map exact `@sublang/playbook@0.10.0` provenance to the `composed-v2` profile.
 - [x] `pipelines/playbook/` re-synced with Playbook's maintained definitions (0.10 generation, script actors, single-outcome default contract), keeping the local `## Pin Inputs` sections.
 - [x] `text2gears.slc/`, `gears2fsm.slc/`, and `link.slc/` rebuilt from the synced definitions via interpreted `slc slc` runs, reviewed with `scripts/verify-artifacts.mjs` (no findings).
 - [x] `pipelines/playbook/slc.pins.json` regenerated over the rebuilt set and validated current; CI's clean-install gates go green at the 0.10.0 npm release, which refreshes the lockfile (the local install uses the packed sibling checkout).

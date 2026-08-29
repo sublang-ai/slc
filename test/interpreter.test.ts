@@ -27,7 +27,7 @@ const compileRequest = (
     ...overrides,
   }) satisfies ExecuteRequest;
 
-describe('buildPhasePrompt (PHEXEC-11, PHEXEC-14, PHEXEC-15)', () => {
+describe('buildPhasePrompt (phase-execution-11, phase-execution-14, phase-execution-15)', () => {
   it('embeds the definition, the target, and the agent contract for a compile phase', () => {
     const prompt = buildPhasePrompt({
       request: compileRequest(),
@@ -110,7 +110,7 @@ describe('buildPhasePrompt (PHEXEC-11, PHEXEC-14, PHEXEC-15)', () => {
   });
 });
 
-describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
+describe('createInterpretedExecutor (phase-execution-12, phase-execution-13)', () => {
   let dir: string;
   let request: ExecuteRequest;
 
@@ -151,7 +151,7 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
     expect(result).toEqual({ status: 'ok', diagnostics: ['wrote the gears'] });
   });
 
-  it('passes the configured model and cwd to the agent (PHEXEC-13)', async () => {
+  it('passes the configured model and cwd to the agent (phase-execution-13)', async () => {
     const agent = recordingAgent({ status: 'success', text: 'ok' });
     const executor = createInterpretedExecutor({
       agent,
@@ -163,7 +163,7 @@ describe('createInterpretedExecutor (PHEXEC-12, PHEXEC-13)', () => {
     expect(agent.calls[0]).toMatchObject({ model: 'some-model', cwd: '/work' });
   });
 
-  it('maps a BLOCKED reply to a blocked result (PHEXEC-7)', async () => {
+  it('maps a BLOCKED reply to a blocked result (phase-execution-7)', async () => {
     const agent = recordingAgent({
       status: 'success',
       text: 'BLOCKED: the source has no headings',

@@ -117,7 +117,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-describe('full pipeline run (PIPE-20, PIPE-38, PHEXEC-16)', () => {
+describe('full pipeline run (PIPE-20, PIPE-38, phase-execution-16)', () => {
   it('writes the canonical intermediate and output with one agent call per phase', async () => {
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow', source], deps(agent));
@@ -161,7 +161,7 @@ describe('full pipeline run (PIPE-20, PIPE-38, PHEXEC-16)', () => {
     expect(await exists(artDir)).toBe(false);
   });
 
-  it('passes the configured model to every interpreted phase (PHEXEC-21)', async () => {
+  it('passes the configured model to every interpreted phase (phase-execution-21)', async () => {
     const { agent, models } = makeAgent();
     await runSlc(['flow', source], deps(agent, 'a-model'));
     expect(models).toEqual(['a-model', 'a-model']);
@@ -169,13 +169,13 @@ describe('full pipeline run (PIPE-20, PIPE-38, PHEXEC-16)', () => {
     expect(await readFile(source, 'utf8')).toBe('prose');
   });
 
-  it('builds an agent prompt with the definition verbatim and the full contract (PHEXEC-20)', async () => {
+  it('builds an agent prompt with the definition verbatim and the full contract (phase-execution-20)', async () => {
     const { agent, calls } = makeAgent();
     await runSlc(['flow', source], deps(agent));
     const prompt = calls[0];
     // The definition is embedded verbatim, not just a fragment.
     expect(prompt).toContain(formats('text', '.md', 'gears', '.md'));
-    // Every PHEXEC-14 contract clause (plus PHEXEC-15) appears.
+    // Every phase-execution-14 contract clause (plus phase-execution-15) appears.
     expect(prompt).toContain('authoritative');
     expect(prompt).toContain('write only');
     expect(prompt).toContain('not edit the sources');
@@ -416,7 +416,7 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     expect(await exists(join(artDir, 'onboarding.gears.opt.md'))).toBe(true);
   });
 
-  it('schedules the generic normalize step ahead of the entry phase (PIPE-34, PHEXEC-33)', async () => {
+  it('schedules the generic normalize step ahead of the entry phase (PIPE-34, phase-execution-48)', async () => {
     const { agent, calls } = makeAgent();
     const result = await runSlc(['flow', source, '--normalize'], deps(agent));
     expect(result.ok).toBe(true);
@@ -434,6 +434,15 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
     expect(calls[1]).toContain(
       `source to read: ${join(artDir, 'onboarding.text.md')}`,
     );
+  });
+
+  it('fails when normalization mutates its entry-definition reference (phase-execution-48)', async () => {
+    const entryDefinition = join(pipelineDir, 'text2gears.md');
+    const { agent, calls } = makeAgent({ mutate: entryDefinition });
+    const result = await runSlc(['flow', source, '--normalize'], deps(agent));
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(result.diagnostics.join('\n')).toContain(entryDefinition);
   });
 
   it('auto-schedules normalization for a raw entry source without --normalize (PIPE-39)', async () => {
@@ -462,15 +471,15 @@ describe('pass phases and normalization (DR-013, DR-014; PIPE-35, PIPE-36, PIPE-
   });
 });
 
-describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', () => {
-  it('fails when the agent does not write the target (PHEXEC-17)', async () => {
+describe('failure paths (phase-execution-17, phase-execution-19, phase-execution-22, PIPE-21, PIPE-27)', () => {
+  it('fails when the agent does not write the target (phase-execution-17)', async () => {
     const { agent } = makeAgent({ skip: true });
     const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('was not written');
   });
 
-  it('fails when -o gives the output a wrong extension (PHEXEC-17)', async () => {
+  it('fails when -o gives the output a wrong extension (phase-execution-17)', async () => {
     const { agent } = makeAgent();
     const out = join(srcDir, 'onboarding.fsm.txt'); // terminal phase declares .ts
     const result = await runSlc(['flow', source, '-o', out], deps(agent));
@@ -478,28 +487,28 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     expect(result.diagnostics.join('\n')).toContain('extension');
   });
 
-  it('fails and reports when the agent blocks (PHEXEC-19)', async () => {
+  it('fails and reports when the agent blocks (phase-execution-19)', async () => {
     const { agent } = makeAgent({ block: true });
     const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('BLOCKED');
   });
 
-  it('fails when the agent mutates the source (PHEXEC-18)', async () => {
+  it('fails when the agent mutates the source (phase-execution-18)', async () => {
     const { agent } = makeAgent({ mutate: source });
     const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('changed during the run');
   });
 
-  it('fails when the agent mutates a phase definition (PHEXEC-18)', async () => {
+  it('fails when the agent mutates a phase definition (phase-execution-18)', async () => {
     const { agent } = makeAgent({ mutate: join(pipelineDir, 'text2gears.md') });
     const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain('text2gears.md');
   });
 
-  it('fails when the agent mutates a link object (PHEXEC-18)', async () => {
+  it('fails when the agent mutates a link object (phase-execution-18)', async () => {
     await mkdir(artDir, { recursive: true });
     const object = join(artDir, 'onboarding.fsm.ts');
     await writeFile(object, 'fsm');
@@ -673,7 +682,7 @@ describe('failure paths (PHEXEC-17, PHEXEC-19, PHEXEC-22, PIPE-21, PIPE-27)', ()
     expect(result.outputs).toEqual([]);
   });
 
-  it('fails when the agent breaks the chain mid-run (PHEXEC-22)', async () => {
+  it('fails when the agent breaks the chain mid-run (phase-execution-22)', async () => {
     const { agent } = makeAgent({ add: join(pipelineDir, 'text2foo.md') });
     const result = await runSlc(['flow', source], deps(agent));
     expect(result.ok).toBe(false);

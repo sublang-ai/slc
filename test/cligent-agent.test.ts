@@ -83,7 +83,7 @@ const event = (
     payload,
   }) as unknown as AgentEvent;
 
-describe('createCligentAgent stall watchdog (PHEXEC-36, PHEXEC-38)', () => {
+describe('createCligentAgent stall watchdog (phase-execution-36, phase-execution-38)', () => {
   it('aborts a call that goes silent and reports the inactivity duration', async () => {
     let runs = 0;
     const adapter: AgentAdapter = {
@@ -112,7 +112,7 @@ describe('createCligentAgent stall watchdog (PHEXEC-36, PHEXEC-38)', () => {
     expect(result.status).toBe('error');
     expect(result.text).toContain('stalled');
     expect(result.text).toContain('0s'); // the 40 ms window, as elapsed text
-    expect(runs).toBe(1); // no retry of the aborted call (PHEXEC-12)
+    expect(runs).toBe(1); // no retry of the aborted call (phase-execution-12)
   });
 
   it('preserves a stalled Reviewer diagnostic and does not retry it', async () => {

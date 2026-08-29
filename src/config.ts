@@ -11,7 +11,7 @@
  * `createConfiguredExecutor` builds the interpreted executor and
  * `createConfiguredCompiledFactory` the compiled-execution factory pinned phases
  * select, both over Cligent-backed transports for the selected agent, binding
- * the optional model as configuration — not phase semantics (PHEXEC-13);
+ * the optional model as configuration — not phase semantics (phase-execution-13);
  * credentials are left for the agent CLI to read from the inherited process
  * environment. The adapter factory is injectable so tests can fake adapter
  * construction. See specs/dev/cli.md.
@@ -184,7 +184,7 @@ function resolveOneSelection(
  * Builds the interpreted {@link PhaseExecutor} for a selection (CLI-7, CLI-8):
  * constructs the agent CLI's adapter, wraps it as a Cligent-backed transport,
  * and binds the optional model as configuration, not phase semantics
- * (PHEXEC-13). The adapter factory is injectable so tests can fake adapter
+ * (phase-execution-13). The adapter factory is injectable so tests can fake adapter
  * construction; `permissions` is where a host configures the DR-003 write-scope
  * sandbox.
  */
@@ -237,11 +237,11 @@ export function createConfiguredAgentClient(
 
 /**
  * Builds the compiled-execution factory the bin injects as `SlcDeps.compiled`
- * (CLI-8, PHEXEC-27): for a current pinned phase it drives the pinned `playbook`
+ * (CLI-8, phase-execution-27): for a current pinned phase it drives the pinned `playbook`
  * artifact — resolved against its pipeline directory — through the compiled
  * executor, backing the runtime's player ports with one agent transport per
- * player id and its Captain/judge ports with one shared transport (PHEXEC-25),
- * and applying the selected model as the default per-player model (PHEXEC-13).
+ * player id and its Captain/judge ports with one shared transport (phase-execution-25),
+ * and applying the selected model as the default per-player model (phase-execution-13).
  */
 export function createConfiguredCompiledFactory(
   selection: AgentSelection,
@@ -252,7 +252,7 @@ export function createConfiguredCompiledFactory(
     permissions?: PermissionPolicy;
     /** Agent-stall watchdog window in milliseconds; 0/absent disables (DR-019). */
     stallTimeoutMs?: number;
-    /** Live status sink streaming the runtime's non-trace status (DR-019, PHEXEC-25). */
+    /** Live status sink streaming the runtime's non-trace status (DR-019, phase-execution-25). */
     onStatus?: (line: string) => void;
   } = {},
 ): (choice: CompiledSelection) => PhaseExecutor {

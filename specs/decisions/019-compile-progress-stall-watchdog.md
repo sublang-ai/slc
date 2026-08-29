@@ -16,7 +16,7 @@ The user cannot distinguish "working hard" from "hung", and the documented "more
 The silence and the hang have distinct causes, both host-side:
 
 - Progress exists but is discarded.
-  A compiled phase's runtime emits the same human status lines `playbook run` prints as state transitions happen, but the SLC port adapter buffers them as drainable diagnostics ([PHEXEC-25](../dev/phase-execution.md#phexec-25)) that the bin prints only after the whole run returns.
+  A compiled phase's runtime emits the same human status lines `playbook run` prints as state transitions happen, but the SLC port adapter buffers them as drainable diagnostics ([[phase-execution-25](../packages/phase-execution.md#phase-execution-25)]) that the bin prints only after the whole run returns.
   The generic step loop knows each phase, target, and timing and reports none of it while running.
 - No layer bounds an agent call in time.
   Cligent exposes `maxTurns` and `maxBudgetUsd` but no time-based option; the transport's event loop awaits the next adapter event indefinitely; the bin sets no deadline.
@@ -54,7 +54,7 @@ An absolute per-phase deadline would misfire on legitimately long phases, whose 
   That same drain can deliver a genuine success for a call that completed just as the window expired; the observed outcome then wins over the stall verdict, because discarding a finished phase is the expensive false negative this watchdog exists to prevent, and a real hang drains to an interrupted outcome rather than a successful one.
 - The configured window must stay representable as a timer delay, so a value the runtime would silently clamp is refused at both configuration sources rather than inverting the watchdog into an immediate abort.
 - The watchdog applies to every agent call on both transports: the single interpreted invocation and each compiled player, Captain, and judge call.
-- A tripped watchdog surfaces through the unchanged phase protocols: a failure report naming the phase and target, no retry of the call ([PHEXEC-12](../dev/phase-execution.md#phexec-12), [PHEXEC-23](../dev/phase-execution.md#phexec-23)), and fail-closed handling for a pinned phase — never a silent interpreted fallback ([PHEXEC-27](../dev/phase-execution.md#phexec-27)).
+- A tripped watchdog surfaces through the unchanged phase protocols: a failure report naming the phase and target, no retry of the call ([[phase-execution-12](../packages/phase-execution.md#phase-execution-12)], [[phase-execution-23](../packages/phase-execution.md#phase-execution-23)]), and fail-closed handling for a pinned phase — never a silent interpreted fallback ([[phase-execution-27](../packages/phase-execution.md#phase-execution-27)]).
 - The timeout is configuration: the `stallTimeout` config-file key in seconds, overridden by a non-blank `SLC_STALL_TIMEOUT`, defaulting to 600 seconds, with `0` disabling the watchdog.
   The default is deliberately generous because one long tool execution or model turn is legitimately event-silent on every adapter; the aim is to convert an indefinite hang into a loud, attributed failure within minutes, not to police normal phase length.
 
@@ -66,7 +66,7 @@ An absolute per-phase deadline would misfire on legitimately long phases, whose 
 
 - A compile is never silent longer than the heartbeat bound: phases announce themselves, targets land with elapsed times, compiled-runtime transitions stream as they happen, and a stalled agent call fails loudly within the stall timeout instead of hanging for hours.
 - `SlcDeps` gains an optional progress sink; hosts that do not supply one keep today's quiet behavior, and the sink addition is not a breaking API change.
-- [PHEXEC-25](../dev/phase-execution.md#phexec-25) is amended for streaming; new items [CLI-32](../user/cli.md#cli-32)–[CLI-37](../test/cli.md#cli-37) and [PHEXEC-36](../dev/phase-execution.md#phexec-36)–[PHEXEC-38](../test/phase-execution.md#phexec-38) specify the progress, heartbeat, and watchdog behavior.
+- [[phase-execution-25](../packages/phase-execution.md#phase-execution-25)] is amended for streaming; new items [CLI-32](../user/cli.md#cli-32)–[CLI-37](../test/cli.md#cli-37) and [[phase-execution-36](../packages/phase-execution.md#phase-execution-36)]–[[phase-execution-38](../packages/phase-execution.md#phase-execution-38)] specify the progress, heartbeat, and watchdog behavior.
 - The structural three-cold-sessions-per-phase cost and the fixed-size Captain prompt remain; reducing them needs artifact and `@sublang/playbook` changes under a later decision.
 
 ## References

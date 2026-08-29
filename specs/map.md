@@ -114,12 +114,11 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | package | [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
 
-### PHEXEC
+### phase-execution
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, optional reviewed calls, compiled phase-runner facade, six-port Cligent adapter, provenance-driven selection, live status streaming, and the agent-stall watchdog |
-| test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted and optional reviewed execution, generic checks, blocked protocol, compiled runtime profiles including direct Captain, pin-selection, streamed-status, and stall-watchdog acceptance |
+| package | [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, compiled runtime profiles, pin selection, status streaming, and the agent-stall watchdog |
 
 ### pinning
 

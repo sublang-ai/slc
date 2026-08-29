@@ -17,7 +17,7 @@ First, a failing host Captain reply now resolves `handleBossInput` with the stru
 Second, Playbook DR-019 makes `slc/link.md` emit one thin linked module per playbook — the FSM import, a derived options interface, shared-contract re-exports, and a default-exported `createXStatePlaybookRuntime(machine, spec)` factory call — so a linked artifact's executable closure now includes the shared engine at `@sublang/playbook/xstate-runtime` beside `xstate` [[3]].
 Third, the release raises the registry dependency closure to `@sublang/cligent` `^0.16.0`, whose contract keeps the explicit player resume and isolated tool-restricted Captain calls SLC's ports already implement.
 Playbook 1.3.0 is an intermediate release SLC never installed; no SLC-reviewed artifact carries or will carry its provenance.
-Separately, [PHEXEC-30](../dev/phase-execution.md#phexec-30) still names only `@sublang/playbook@0.10.0` for `composed-v2` while the configured selector and the test spec also accept `1.0.0`, a wording drift this adoption must close.
+Separately, [[phase-execution-30](../packages/phase-execution.md#phase-execution-30)] still names only `@sublang/playbook@0.10.0` for `composed-v2` while the configured selector and the test spec also accept `1.0.0`, a wording drift this adoption must close.
 Finally, the demo exposed a role-identity gap between two published contracts: `text2gears` capitalizes English player names, so [SELFHOST-15](../dev/self-hosting.md#selfhost-15) emits `requiredRoleIds` like `Coder` verbatim, while `slc/link.md`'s default player binding resolves acting players to their lowercased names and Playbook's `playbook run` host keys its agents by the verbatim ids with exact-case `callPlayer` lookup — so a cased English source fails at its first delegated state (`unknown player coder`) even though caseless sources run.
 
 ## Decision
@@ -27,7 +27,7 @@ Finally, the demo exposed a role-identity gap between two published contracts: `
 SLC shall adopt exact immutable `@sublang/playbook@2.0.0` provenance as the existing six-port `composed-v2` profile, unchanged in init shape, structured-result contract, player-continuation enforcement, and `resumePlaybookCall` surface.
 The complete mapped set becomes: absent provenance and exact `@sublang/playbook@0.9.0` select `legacy`; exact `@sublang/playbook@0.10.0`, `@sublang/playbook@1.0.0`, and `@sublang/playbook@2.0.0` select `composed-v2`.
 `@sublang/playbook@1.3.0` shall not be mapped: SLC never installed it, no reviewed artifact records it, and DR-010's fail-closed rule governs it like every other unmapped provenance, without shape inference or initialization retry.
-PHEXEC-30 shall be corrected to state this complete mapped set, closing its current 0.10.0-only drift from the configured selector.
+phase-execution-30 shall be corrected to state this complete mapped set, closing its current 0.10.0-only drift from the configured selector.
 
 ### Captain-failure result semantics
 
@@ -65,7 +65,7 @@ The demo reference sets shall be recompiled against the adopted set: the English
 - Pins bind the shared engine's identity, so shared-machinery changes stale pins the way link-target changes always have.
 - Cased English sources run end to end under Playbook's published `playbook run` host, with `--player` flags matching the names the README documents; caseless sources keep their exact prior behavior.
 - 1.3.0 and every other unadopted provenance stay fail-closed, keeping the profile map a record of reviewed adoptions rather than of releases.
-- PHEXEC-30's stated provenance set matches the configured selector again.
+- phase-execution-30's stated provenance set matches the configured selector again.
 
 ## References
 

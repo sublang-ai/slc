@@ -45,7 +45,7 @@ While a run is in progress, when the process is interrupted, the slc executable 
 
 ### CLI-32
 
-While a run is in progress, when a phase starts and when it finishes or fails, the slc executable shall report the event on standard error — naming the phase, its target artifact, and, on finish or failure, the elapsed time — and shall additionally report a compiled phase's streamed runtime status lines as they occur, keeping standard output reserved for the success report ([DR-019](../decisions/019-compile-progress-stall-watchdog.md#stderr-only-progress-reporting), [CLI-3](#cli-3), [CLI-4](#cli-4), [PHEXEC-25](../dev/phase-execution.md#phexec-25)).
+While a run is in progress, when a phase starts and when it finishes or fails, the slc executable shall report the event on standard error — naming the phase, its target artifact, and, on finish or failure, the elapsed time — and shall additionally report a compiled phase's streamed runtime status lines as they occur, keeping standard output reserved for the success report ([DR-019](../decisions/019-compile-progress-stall-watchdog.md#stderr-only-progress-reporting), [CLI-3](#cli-3), [CLI-4](#cli-4), [[phase-execution-25](../packages/phase-execution.md#phase-execution-25)]).
 
 ### CLI-33
 
@@ -53,7 +53,7 @@ While a phase is executing, when no progress has been reported for the 30-second
 
 ### CLI-34
 
-Where the stall timeout — a non-blank `SLC_STALL_TIMEOUT` environment variable, otherwise the config file's `stallTimeout` field, otherwise 600, each in seconds with `0` disabling the watchdog and a value too large to serve as a timer delay refused — elapses while an in-flight agent call reports no activity, the slc executable shall abort that call and fail the run with a failure report naming the phase, its target artifact, and the inactivity duration, rather than waiting indefinitely ([DR-019](../decisions/019-compile-progress-stall-watchdog.md#inactivity-watchdog-not-a-per-phase-deadline), [CLI-4](#cli-4), [PHEXEC-36](../dev/phase-execution.md#phexec-36)).
+Where the stall timeout — a non-blank `SLC_STALL_TIMEOUT` environment variable, otherwise the config file's `stallTimeout` field, otherwise 600, each in seconds with `0` disabling the watchdog and a value too large to serve as a timer delay refused — elapses while an in-flight agent call reports no activity, the slc executable shall abort that call and fail the run with a failure report naming the phase, its target artifact, and the inactivity duration, rather than waiting indefinitely ([DR-019](../decisions/019-compile-progress-stall-watchdog.md#inactivity-watchdog-not-a-per-phase-deadline), [CLI-4](#cli-4), [[phase-execution-36](../packages/phase-execution.md#phase-execution-36)]).
 
 ## Configuration
 

@@ -30,7 +30,7 @@ While a phase's recorded inputs match but its live target has been refined by th
 
 #### incremental-compilation-5
 
-While a compile phase has a matching record whose current inputs differ and whose prior chained-input copy and live target are readable [[incremental-compilation-14](#incremental-compilation-14)], when that phase executes, the slc command shall give its ordinary executor [[PHEXEC-11](../dev/phase-execution.md#phexec-11)], [[PHEXEC-23](../dev/phase-execution.md#phexec-23)] the current definition [[PHEXEC-2](../dev/phase-execution.md#phexec-2)], prior input, current input, a best-effort diff when renderable, and the live prior output [[incremental-compilation-15](#incremental-compilation-15)], with one instruction to update the complete artifact while preserving unaffected content [[incremental-compilation-16](#incremental-compilation-16)].
+While a compile phase has a matching record whose current inputs differ and whose prior chained-input copy and live target are readable [[incremental-compilation-14](#incremental-compilation-14)], when that phase executes, the slc command shall give its ordinary executor [[phase-execution-11](phase-execution.md#phase-execution-11)], [[phase-execution-23](phase-execution.md#phase-execution-23)] the current definition [[phase-execution-2](phase-execution.md#phase-execution-2)], prior input, current input, a best-effort diff when renderable, and the live prior output [[incremental-compilation-15](#incremental-compilation-15)], with one instruction to update the complete artifact while preserving unaffected content [[incremental-compilation-16](#incremental-compilation-16)].
 
 #### incremental-compilation-6
 
@@ -40,7 +40,7 @@ While an eligible run has removed its active marker before executor work [[incre
 
 #### incremental-compilation-7
 
-When the user passes `--rebuild` to a canonical full invocation [[PIPE-9](../dev/pipeline.md#pipe-9)] or full-link invocation [[PIPE-13](../dev/pipeline.md#pipe-13)], the slc command shall execute every phase ordinarily without update context [[incremental-compilation-14](#incremental-compilation-14)], retain normal pin validation [[PHEXEC-27](../dev/phase-execution.md#phexec-27)], and publish one complete build only when the invocation succeeds [[incremental-compilation-17](#incremental-compilation-17)].
+When the user passes `--rebuild` to a canonical full invocation [[PIPE-9](../dev/pipeline.md#pipe-9)] or full-link invocation [[PIPE-13](../dev/pipeline.md#pipe-13)], the slc command shall execute every phase ordinarily without update context [[incremental-compilation-14](#incremental-compilation-14)], retain normal pin validation [[phase-execution-27](phase-execution.md#phase-execution-27)], and publish one complete build only when the invocation succeeds [[incremental-compilation-17](#incremental-compilation-17)].
 
 #### incremental-compilation-8
 
@@ -70,7 +70,7 @@ While an eligible run has a valid active marker, when its first phase is selecte
 
 #### incremental-compilation-13
 
-When an eligible run computes a compile phase's current identities, the slc command shall hash exact bytes in this order: chained input, definition, explicit references, then the definitions' and Markdown references' declared local `## Pin Inputs` closures [[PHEXEC-15](../dev/phase-execution.md#phexec-15)], [[PHEXEC-33](../dev/phase-execution.md#phexec-33)]; for a link phase it shall hash ordered object locators and bytes, the link definition [[PHEXEC-2](../dev/phase-execution.md#phexec-2)] and its declared local closure, link-target locator and content [[PIPE-12](../dev/pipeline.md#pipe-12)], and ordered option pairs with unambiguous framing [[PIPE-14](../dev/pipeline.md#pipe-14)].
+When an eligible run computes a compile phase's current identities, the slc command shall hash exact bytes in this order: chained input, definition, explicit references, then the definitions' and Markdown references' declared local `## Pin Inputs` closures [[phase-execution-15](phase-execution.md#phase-execution-15)], [[phase-execution-33](phase-execution.md#phase-execution-33)]; for a link phase it shall hash ordered object locators and bytes, the link definition [[phase-execution-2](phase-execution.md#phase-execution-2)] and its declared local closure, link-target locator and content [[PIPE-12](../dev/pipeline.md#pipe-12)], and ordered option pairs with unambiguous framing [[PIPE-14](../dev/pipeline.md#pipe-14)].
 
 #### incremental-compilation-14
 
@@ -80,15 +80,15 @@ Where the active manifest names the invocation's pipeline and source locator, wh
 
 #### incremental-compilation-15
 
-When a compile phase executes in Update mode, the slc command shall extend its ordinary execution request with a read-only path to the recorded prior chained input and a host-computed unified line diff or an explicit unavailable value, and shall protect the prior copy like an ordinary reference input [[PHEXEC-33](../dev/phase-execution.md#phexec-33)], [[PHEXEC-39](../dev/phase-execution.md#phexec-39)].
+When a compile phase executes in Update mode, the slc command shall extend its ordinary execution request with a read-only path to the recorded prior chained input and a host-computed unified line diff or an explicit unavailable value, and shall protect the prior copy like an ordinary reference input [[phase-execution-33](phase-execution.md#phase-execution-33)], [[phase-execution-39](phase-execution.md#phase-execution-39)].
 
 #### incremental-compilation-16
 
-Where a compile phase executes in Update mode, when its interpreted or compiled performing prompt is built [[PHEXEC-11](../dev/phase-execution.md#phexec-11)], [[PHEXEC-25](../dev/phase-execution.md#phexec-25)], the slc command shall append one host-owned instruction naming the prior input and existing target, asking the agent to apply the input changes under the current definition, preserve unaffected content and refinements, and leave a complete artifact, without adding an update contract or changing ordinary acceptance.
+Where a compile phase executes in Update mode, when its interpreted or compiled performing prompt is built [[phase-execution-11](phase-execution.md#phase-execution-11)], [[phase-execution-25](phase-execution.md#phase-execution-25)], the slc command shall append one host-owned instruction naming the prior input and existing target, asking the agent to apply the input changes under the current definition, preserve unaffected content and refinements, and leave a complete artifact, without adding an update contract or changing ordinary acceptance.
 
 #### incremental-compilation-17
 
-When an eligible invocation finishes successfully after executing at least one phase and completing required deterministic post-processing [[PHEXEC-42](../dev/phase-execution.md#phexec-42)], the slc command shall materialize the current source and every scheduled live phase output into one complete build and publish it once when every phase identity and output byte sequence is available, or otherwise leave history inactive and report an advisory diagnostic.
+When an eligible invocation finishes successfully after executing at least one phase and completing required deterministic post-processing [[phase-execution-42](phase-execution.md#phase-execution-42)], the slc command shall materialize the current source and every scheduled live phase output into one complete build and publish it once when every phase identity and output byte sequence is available, or otherwise leave history inactive and report an advisory diagnostic.
 
 #### incremental-compilation-26
 

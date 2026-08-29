@@ -17,7 +17,7 @@ export default function createPlaybookRuntime() {
     },
     async handleBossInput({ text }) {
       // The seed carries the request as a single-line JSON object introduced by
-      // `Request: ` (PHEXEC-29).
+      // `Request: ` (phase-execution-29).
       const marker = 'Request: ';
       const line = text
         .split('\n')
