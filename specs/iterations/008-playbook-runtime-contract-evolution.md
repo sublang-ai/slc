@@ -14,7 +14,7 @@ Prepare SLC's compiled phase host and artifact verification for Playbook's causa
 
 ## Deliverables
 
-- [x] [DR-010](../decisions/010-playbook-runtime-contract-evolution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), `phase-execution`, `verification`, `CI`, and `map.md` record the three exact runtime profiles, provenance-driven fail-closed selection, result mapping, nested-call policy, trace privacy, structured verification, CI choice, and release boundary.
+- [x] [DR-010](../decisions/010-playbook-runtime-contract-evolution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), `phase-execution`, `verification`, `continuous-integration`, and `map.md` record the three exact runtime profiles, provenance-driven fail-closed selection, result mapping, nested-call policy, trace privacy, structured verification, CI choice, and release boundary.
 - [x] The compiled executor implements explicit `legacy`, `session-v1`, and `composed-v2` boundaries, maps only `composed-v2` structured results directly, retains void-result compatibility for the first two profiles, and configures current pins as `legacy` without runtime-shape inference or retry heuristics.
 - [x] The Playbook ports adapter forwards explicit player continuation and returned tokens, serializes judge calls, rejects nested phase calls deterministically, and excludes trace payloads from diagnostics.
 - [x] Verification traverses nested and parallel state nodes, records structured topology without changing flat-artifact output, recognizes nested playbook invocations, explicitly reports unsupported child-driving coverage, and compares all three exact runtime profiles by safely driving their boundaries, with an immutable marker only as an ambiguity seam.

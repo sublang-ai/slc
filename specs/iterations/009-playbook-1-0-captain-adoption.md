@@ -9,7 +9,7 @@ Adopt Playbook 1.0's final six-port composed runtime and compiler definitions as
 
 ## Deliverables
 
-- [x] [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md), `phase-execution`, `verification`, `self-hosting`, `CI`, and `map.md` record the immutable boundary and required verification.
+- [x] [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md), `phase-execution`, `verification`, `self-hosting`, `continuous-integration`, and `map.md` record the immutable boundary and required verification.
 - [ ] Exact `@sublang/playbook@1.0.0` provenance selects the six-port `composed-v2` phase boundary while 0.9.0 remains legacy and other versions fail closed.
 - [x] The phase adapter implements first-class Captain calls and serializes Captain and judge work without player resume semantics or trace leakage.
 - [x] Conformance distinguishes Captain, player, and playbook actors, validates dynamic context metadata and sentinel wiring, and drives nested success and failure transitions.
@@ -19,7 +19,8 @@ Adopt Playbook 1.0's final six-port composed runtime and compiler definitions as
 ## Tasks
 
 1. **Record the immutable adoption.** _[done]_
-   Add DR-011 and this iteration, then amend the affected dev, test, CI, and map items before implementation.
+   Add DR-011 and this iteration, then amend the affected dev, test,
+   continuous-integration, and map items before implementation.
 2. **Finalize the composed phase boundary.** _[in progress]_
    Import the released runtime contract, add `callCaptain`, share Captain/judge serialization, and map exact 1.0.0 provenance.
 3. **Verify the new compiler primitives.** _[done]_

@@ -29,6 +29,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Verify CI workflow
+        run: node scripts/verify-ci-workflow.mjs
+
       - name: Verify vendored Playbook definitions
         run: npm run verify:definitions
 

@@ -22,7 +22,7 @@ the 0.2.0 release.
       pins regenerated with exact 3.1.0 provenance, byte-reproducible.
 - [x] `runtimeContractForPin` maps exact 3.1.0 to `composed-v2`; 1.3.0 and
       3.0.0 stay fail-closed with test coverage; phase-execution-30/28, self-hosting-11
-      and its acceptance, and CI-4 name 3.1.0.
+      and its acceptance, and continuous-integration-4 name 3.1.0.
 - [x] `demo/reference/workflow.zh.*` regenerated: four end-user interpreted
       compiles through the packed candidate failed acceptance in distinct
       ways, so the landed set comes from the pinned compiled pipeline (the
