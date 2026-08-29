@@ -195,7 +195,7 @@ Every phase runs through a coding agent, one of two ways:
   bundled phases this way: `slc` is self-hosting, its phase definitions
   compiled, reviewed, and sha256-pinned under
   [`pipelines/playbook/`](pipelines/playbook), failing closed on drift
-  ([self-hosting spec](specs/user/self-hosting.md)).
+  ([self-hosting spec](specs/packages/self-hosting.md)).
 
 Specs are the source of truth — start at the
 [spec map](specs/map.md).

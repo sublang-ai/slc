@@ -136,7 +136,7 @@ export async function runSlc(
     switch (invocation.kind) {
       case 'full':
         // The reserved playbook pipeline supplies a default link target
-        // (SELFHOST-13): a bare full run becomes a full-link against the
+        // (self-hosting-13): a bare full run becomes a full-link against the
         // installed @sublang/playbook runtime contract module (DR-014).
         if (invocation.pipeline === 'playbook') {
           return await runFullLink(
@@ -418,7 +418,7 @@ async function runFullLink(
         };
       }
 
-      // Entry-module emission (DR-014, SELFHOST-15): only the playbook
+      // Entry-module emission (DR-014, self-hosting-15): only the playbook
       // pipeline, only with the linked artifact at its canonical path.
       if (verified.ok && entryPath !== null && gearsPlan !== undefined) {
         await guardTarget(entryPath);

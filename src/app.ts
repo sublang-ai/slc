@@ -87,7 +87,7 @@ export type CompiledFactoryBuilder = typeof createConfiguredCompiledFactory;
 /**
  * Builds the production {@link SlcDeps}: a pipeline resolver over the resolved
  * search roots (CLI-6) — with the reserved `slc` reference routed to the
- * meta-pipeline definitions `@sublang/playbook` provides (SELFHOST-2) — an
+ * meta-pipeline definitions `@sublang/playbook` provides (self-hosting-2) — an
  * interpreted executor for the resolved agent/model (CLI-7), and the
  * compiled-execution factory a current pinned phase selects (CLI-8, phase-execution-27).
  * Configuration is loaded from the config file (DR-006, CLI-20) and

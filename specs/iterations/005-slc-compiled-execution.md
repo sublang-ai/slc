@@ -26,10 +26,10 @@ Interpreted execution stays the reference semantics and the fallback, and the [D
 - [x] A compiled-`phase` loader and `CompiledExecutor` implementing `PhaseExecutor`, running a loaded artifact under the ports and the file capability (extends `phase-execution`)
 - [x] Compiled selection in `runSlc`: per phase, no pin interprets, a current pin runs the compiled artifact, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets (extends `phase-execution`, `compiler`; selection is execution behavior, which `pinning` deliberately excludes)
 - [x] The deferred [DR-007](../decisions/007-slc-phase-artifact-pinning.md) currency sub-check that a pinned artifact resolves to the linked `phase` format (extends `pinning`)
-- [x] A `self-hosting` spec package (`user`, `dev`, `test`), short form `SELFHOST`, for the reserved `slc` pipeline and the compiled `phase` artifact contract, registered in `map.md`, plus recognition of the reserved `slc` name and the `phase` linked format (`fsm` `.ts` → `phase` `.ts`) with [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) locations
-- [x] The `slc` meta-pipeline definitions consumed from `@sublang/playbook`'s `slc/`, not duplicated here (per [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)'s Playbook-owned source; Boss-approved option 2): the compile chain (`text2gears` → `gears2fsm`, auditable GEARS-to-FSM mapping) loads, chains, and infers through `slc`. Linking a runnable artifact through Playbook's reserved `link` is **not** delivered here: Playbook ships it in the `playbook` runtime contract (no `## Link Targets`, so SLC's `phase`-format link machinery rejects it), so reconciling SLC's link/artifact contract with that runtime ([SELFHOST-3](../dev/self-hosting.md#selfhost-3)) is the remaining reconciliation
+- [x] A [`self-hosting`](../packages/self-hosting.md) spec package for the reserved `slc` pipeline and the compiled `phase` artifact contract, registered in `map.md`, plus recognition of the reserved `slc` name and the `phase` linked format (`fsm` `.ts` → `phase` `.ts`) with [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) locations
+- [x] The `slc` meta-pipeline definitions consumed from `@sublang/playbook`'s `slc/`, not duplicated here (per [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)'s Playbook-owned source; Boss-approved option 2): the compile chain (`text2gears` → `gears2fsm`, auditable GEARS-to-FSM mapping) loads, chains, and infers through `slc`. Linking a runnable artifact through Playbook's reserved `link` is **not** delivered here: Playbook ships it in the `playbook` runtime contract (no `## Link Targets`, so SLC's `phase`-format link machinery rejects it), so reconciling SLC's link/artifact contract with that runtime ([[self-hosting-3](../packages/self-hosting.md#self-hosting-3)]) is the remaining reconciliation
 - [x] Pin generation: an explicit build-and-review flow that writes `slc.pins.json` for a reviewed artifact and is not run during ordinary pipeline runs (extends `pinning`)
-- [x] `map.md` updated for the new `FCAP` and `SELFHOST` packages
+- [x] `map.md` updated for the new `FCAP` and `self-hosting` packages
 
 ## Tasks
 
@@ -72,7 +72,7 @@ Each task is one-commit-sized and updates code, specs, and tests together.
 ### D. Self-hosting meta-pipeline ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md))
 
 8. **Reserved `slc` pipeline and `phase` format.**
-   Recognize the reserved `slc` pipeline name and the `phase` linked format (`fsm` `.ts` → `phase` `.ts`) in pipeline, link, and artifact resolution and locations; author the `SELFHOST` package (`user`, `dev`, `test`).
+   Recognize the reserved `slc` pipeline name and the `phase` linked format (`fsm` `.ts` → `phase` `.ts`) in pipeline, link, and artifact resolution and locations; author the [`self-hosting`](../packages/self-hosting.md) package.
    Test reserved-name resolution, `phase` linking, and [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) locations.
 
 9. **`text2gears` and `gears2fsm` definitions.**

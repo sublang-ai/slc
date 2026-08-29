@@ -12,7 +12,7 @@ This bootstraps self-hosting: `slc slc` compiles the meta-pipeline's own phase d
 - Context: the boss intent is to make `slc playbook` work and compare to the reference — understand the reference and `../playbook/slc/`, compile the pipeline definition with `slc slc`, perform `slc playbook` from the compiled playbook(s), auto-generate verification tests, and compare outputs to the reference for equivalence (not byte-identity).
 - The reference `code.playbook/` is a Playbook-0.9.0 host package: three core artifacts (`code.gears.md`, `code.fsm.ts` ≈1480 lines, `code.playbook.ts` ≈1183 lines), an introspection helper, host-performing infra (registry, captain shell, `bin/playbook.js`, config template), and ≈8 tests, of which four assert compilation correctness (gears↔fsm conformance, fsm introspection, prompt-contract, fsm coverage).
 - State today:
-  - `slc <pipeline>[.<phase>] <source>` generic mechanics exist ([pipeline](../packages/pipeline.md)); the reserved `slc` pipeline resolves to the installed `@sublang/playbook/slc/` defs and links via the reserved-link exception ([SELFHOST-2](../dev/self-hosting.md#selfhost-2), [[pipeline-11](../packages/pipeline.md#pipeline-11)]).
+  - `slc <pipeline>[.<phase>] <source>` generic mechanics exist ([pipeline](../packages/pipeline.md)); the reserved `slc` pipeline resolves to the installed `@sublang/playbook/slc/` defs and links via the reserved-link exception ([[self-hosting-2](../packages/self-hosting.md#self-hosting-2)], [[pipeline-11](../packages/pipeline.md#pipeline-11)]).
   - `@sublang/playbook` is declared (`^0.7.0`) but **absent from `node_modules`** (only `@sublang/cligent` is installed), and the sibling source is at `0.9.0`; the dependency must be installed/aligned before the reserved `slc` or a `playbook` pipeline can resolve here.
   - Interpreted execution is the default and the fallback; the compiled path (`CompiledExecutor` + Cligent-backed `PlaybookPorts`) drives a `PlaybookRuntime` non-interactively, but the `seedPhaseTurn`/`PhaseInput` contract is provisional, `createCompiledExecutor` is not yet wired into `buildDeps`, and no reviewed compiled `playbook` artifact has ever been built or pinned ([IR-005](005-slc-compiled-execution.md) Task 10 carryover).
   - There is no `playbook` domain pipeline vendored/resolvable here, no verification-test generation, and no equivalence harness against the reference.
@@ -27,8 +27,8 @@ This bootstraps self-hosting: `slc slc` compiles the meta-pipeline's own phase d
 
 - [x] A decision record settling: `slc playbook` as the generic `playbook` pipeline (no new verb); the compile-output scope vs. host-performing infra; "performing" as compiled execution via pins; the non-reserved `playbook` link reconciliation; and the verification-test-generation contract — with the `@sublang/playbook` reference refreshed and `map.md` updated ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md))
 - [x] `@sublang/playbook` installed and version-aligned (`^0.9.0`) to the release that ships the `slc/` definitions and the `./runtime` contract `slc` consumes, so the reserved `slc` resolves here (the `playbook` pipeline resolution lands with its own deliverable in Task 3)
-- [x] The `playbook` domain pipeline resolvable in this repo (its `text2gears`/`gears2fsm`/`link` definitions reused from the installed package via `withReservedPipelines`), with [[pipeline-11](../packages/pipeline.md#pipeline-11)] reconciled so the Playbook-authored target-less `link.md` loads for the `playbook` pipeline, not only the reserved `slc` name ([SELFHOST-6](../dev/self-hosting.md#selfhost-6))
-- [x] `slc playbook <source>` producing `<basename>.playbook/{<basename>.gears.md, <basename>.fsm.ts}` and `slc playbook <source> --link <target>` additionally linking `<basename>.playbook.ts`, under interpreted execution, with an integration test over a faked agent transport (extends `compiler`, `SELFHOST`) ([SELFHOST-8](../test/self-hosting.md#selfhost-8))
+- [x] The `playbook` domain pipeline resolvable in this repo (its `text2gears`/`gears2fsm`/`link` definitions reused from the installed package via `withReservedPipelines`), with [[pipeline-11](../packages/pipeline.md#pipeline-11)] reconciled so the Playbook-authored target-less `link.md` loads for the `playbook` pipeline, not only the reserved `slc` name ([[self-hosting-6](../packages/self-hosting.md#self-hosting-6)])
+- [x] `slc playbook <source>` producing `<basename>.playbook/{<basename>.gears.md, <basename>.fsm.ts}` and `slc playbook <source> --link <target>` additionally linking `<basename>.playbook.ts`, under interpreted execution, with an integration test over a faked agent transport (extends `compiler`, `self-hosting`) ([[self-hosting-8](../packages/self-hosting.md#self-hosting-8)])
 - [x] Compiled execution completed for real artifacts: the player sandbox and host-side file-capability/write-scope scope removed (DR-008 superseded, `FCAP` package and code deleted), the `seedPhaseTurn`/`PhaseInput` contract settled against a real `playbook` artifact, and write scope left to the [DR-003](../decisions/003-slc-phase-execution.md) generic checks as for interpreted execution (extends `phase-execution`)
 - [x] Reviewed, committed, and pinned compiled `playbook` artifacts for the meta phases (`text2gears`, `gears2fsm`, `link`) produced via `slc slc`, selecting the best of Claude Code + Opus 4.8 and Codex + GPT-5.5, with `slc.pins.json` per [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md#artifact-stability) and [DR-007](../decisions/007-slc-phase-artifact-pinning.md)
 - [x] The `playbook` pipeline pinned to those compiled meta-phase artifacts so `slc playbook <source>` performs through compiled execution, with current pins running compiled and stale/missing pins failing closed (extends `phase-execution`, `compiler`)
@@ -57,15 +57,15 @@ Tasks gated on real agent runs or human review are flagged; they may split furth
 
 2. **Install and align `@sublang/playbook`.**
    Add the dependency to `node_modules` at the version that ships the `slc/` definitions and the `./runtime` contract `slc` imports, reconciling the declared range with the consumed release, so the reserved `slc` and the `playbook` pipeline resolve in this checkout.
-   Confirm the existing `SELFHOST` suite is green against the installed defs.
+   Confirm the existing `self-hosting` suite is green against the installed defs.
 
 3. **Make the `playbook` pipeline resolve and load.**
    Resolve the `playbook` pipeline to the installed `@sublang/playbook/slc/` definitions (alias) or to a vendored copy in this repo per Task 1, and reconcile [[pipeline-11](../packages/pipeline.md#pipeline-11)] so the Playbook-authored `link.md` (no `## Link Targets`) loads for the `playbook` pipeline and not only the reserved `slc` name.
-   Extend `pipeline`/`SELFHOST` items and test pipeline resolution and link loading.
+   Extend `pipeline`/`self-hosting` items and test pipeline resolution and link loading.
 
 4. **Run `slc playbook <source>` interpreted end to end.**
    Drive `slc playbook code.md` to the `code.gears.md` and `code.fsm.ts` compile-chain artifacts, and `slc playbook code.md --link <target>` to the linked `code.playbook.ts`, through interpreted execution at their [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md#output-locations) locations.
-   Extend `compiler`/`SELFHOST` test items with an integration test over a faked agent transport.
+   Extend `compiler`/`self-hosting` test items with an integration test over a faked agent transport.
 
 ### C. Remove the sandbox scope
 
@@ -98,7 +98,7 @@ Tasks gated on real agent runs or human review are flagged; they may split furth
 ### G. Finalize
 
 10. **Spec coherence and `map.md`.**
-    Make a coherence pass over `compiler`, `pipeline`, `phase-execution`, `SELFHOST`, `pinning`, and the new package(s) so items are complete, minimal, right-level, and well organized, and ensure `map.md` reflects every change.
+    Make a coherence pass over `compiler`, `pipeline`, `phase-execution`, `self-hosting`, `pinning`, and the new package(s) so items are complete, minimal, right-level, and well organized, and ensure `map.md` reflects every change.
 
 ## Acceptance criteria
 

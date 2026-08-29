@@ -139,13 +139,11 @@ meta.md     The spec of specs
 | dev | [release.md](dev/release.md) | SemVer, changelog, package contract, interactive first publication, CI-green token-free OIDC publication, GitHub release, pre-release checks, clean generated output, and the opt-in local acceptance gate |
 | test | [release.md](test/release.md) | Tarball hygiene, installed executable and exports, external thin-artifact resolution, installed-package runtime drive, token-free OIDC publication, and real-agent acceptance |
 
-### SELFHOST
+### self-hosting
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [self-hosting.md](user/self-hosting.md) | Reserved `slc` meta-pipeline: compiling a definition into a runnable `playbook` artifact |
-| dev | [self-hosting.md](dev/self-hosting.md) | Reserved `slc` name, the `playbook` linked format, shared-definition resolution, and atomic Playbook 2.0 definition/artifact/pin adoption |
-| test | [self-hosting.md](test/self-hosting.md) | Acceptance: reserved-name and `playbook`-pipeline resolution, compilation and linking, plus clean-install consistency of the adopted reviewed set |
+| package | [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, atomic reviewed-asset adoption, and system acceptance |
 
 ### VERIFY
 

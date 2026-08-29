@@ -49,7 +49,7 @@ const playbookLink = `## Formats\n\n| Role | Format | Extension |\n| --- | --- |
 // a faked full run exercises every verification emission (VERIFY-8): the fsm
 // carries the FLOW-1 binding verbatim plus the gears2fsm Boss surfaces. The
 // `Players:` block feeds entry-module `requiredRoleIds` derivation
-// (SELFHOST-16).
+// (self-hosting-16).
 const GEARS_ARTIFACT = `# Flow
 
 Players:
@@ -149,7 +149,7 @@ export const machine = setup({
 // An agent that writes the prompt's declared target, emitting realistic
 // artifacts per target kind — a gears package, a conformant machine, and a
 // real createPlaybookRuntime module — so verification emission runs end to end
-// (SELFHOST-3, VERIFY-8).
+// (self-hosting-3, VERIFY-8).
 const writingAgent = (
   opts: { prompts?: string[]; gears?: string } = {},
 ): AgentClient => ({
@@ -178,8 +178,8 @@ const exists = (path: string): Promise<boolean> =>
   );
 
 // The reserved `slc` meta-pipeline run through the generic pipeline/link
-// machinery, emitting the `playbook` linked format (SELFHOST-4).
-describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
+// machinery, emitting the `playbook` linked format (self-hosting-4).
+describe('reserved slc pipeline and playbook format (self-hosting-4)', () => {
   let root: string;
   let slcDir: string;
   let work: string;
@@ -225,7 +225,7 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
     expect(result.ok).toBe(true);
     // text -> gears -> fsm; the reserved `slc` full run stops at the fsm
     // object: only the `playbook` pipeline defaults a link target
-    // (SELFHOST-13).
+    // (self-hosting-13).
     expect(await exists(join(artDir, 'text2gears.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'text2gears.fsm.ts'))).toBe(true);
     expect(await exists(join(artDir, 'text2gears.playbook.ts'))).toBe(false);
@@ -267,8 +267,8 @@ describe('reserved slc pipeline and playbook format (SELFHOST-4)', () => {
 });
 
 // The reserved `slc` pipeline consumes the meta-pipeline definitions
-// `@sublang/playbook` ships, rather than a duplicate authored here (SELFHOST-2).
-describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () => {
+// `@sublang/playbook` ships, rather than a duplicate authored here (self-hosting-2).
+describe('reserved slc pipeline consumes Playbook definitions (self-hosting-2)', () => {
   it('locates Playbook-provided text2gears, gears2fsm, and link definitions', async () => {
     const dir = reservedSlcPipelineDir();
     for (const file of ['text2gears.md', 'gears2fsm.md', 'link.md']) {
@@ -325,7 +325,7 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
     }
   });
 
-  it('routes the reserved `slc` and `playbook` references to the shared definitions, delegating others (SELFHOST-10)', async () => {
+  it('routes the reserved `slc` and `playbook` references to the shared definitions, delegating others (self-hosting-10)', async () => {
     // No search root provides a `playbook` directory: both reserved references
     // fall back to the installed definitions.
     const fallback = withReservedPipelines((reference) =>
@@ -336,17 +336,17 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
     expect(await fallback('domain')).toEqual(['/configured/domain']);
   });
 
-  it('prefers a search-root `playbook` vendor of the shared definitions for both references (SELFHOST-10)', async () => {
+  it('prefers a search-root `playbook` vendor of the shared definitions for both references (self-hosting-10)', async () => {
     const wrapped = withReservedPipelines((reference) =>
       reference === 'playbook' ? ['/roots/playbook'] : [],
     );
     // The vendored directory carries the shared definition set and the pin
-    // index, so `slc` and `playbook` stay one definition set (SELFHOST-9).
+    // index, so `slc` and `playbook` stay one definition set (self-hosting-9).
     expect(await wrapped('slc')).toEqual(['/roots/playbook']);
     expect(await wrapped('playbook')).toEqual(['/roots/playbook']);
   });
 
-  it('resolves the vendored pipelines/playbook directory through real search roots (SELFHOST-10)', async () => {
+  it('resolves the vendored pipelines/playbook directory through real search roots (self-hosting-10)', async () => {
     const repoRoot = fileURLToPath(new URL('..', import.meta.url));
     const resolver = withReservedPipelines(
       createPipelineResolver([join(repoRoot, 'pipelines')]),
@@ -360,10 +360,10 @@ describe('reserved slc pipeline consumes Playbook definitions (SELFHOST-2)', () 
 // The `playbook` domain pipeline resolves to the same Playbook-provided
 // definitions as the reserved `slc`, and its target-less `link.md` loads under
 // the same relaxation, so `slc playbook <src> --link <tgt>` links to a
-// `.playbook.ts` runtime under `<basename>.playbook/` (SELFHOST-6, SELFHOST-7,
+// `.playbook.ts` runtime under `<basename>.playbook/` (self-hosting-6, self-hosting-7,
 // pipeline-40). The agent is faked, so this exercises SLC's resolution and link
 // loading, not Playbook's link-compiler behavior.
-describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)', () => {
+describe('playbook pipeline shares Playbook definitions (self-hosting-6, self-hosting-7)', () => {
   it('resolves `playbook` and loads its target-less link (pipeline-40)', async () => {
     const root = await mkdtemp(join(tmpdir(), 'slc-playbook-link-'));
     try {
@@ -443,10 +443,10 @@ describe('playbook pipeline shares Playbook definitions (SELFHOST-6, SELFHOST-7)
 // (text2gears -> optimize -> gears2fsm) and, with no `--link`, defaults the
 // link target to the installed `@sublang/playbook` runtime and emits the entry
 // module, each artifact at its canonical location under the invocation cwd
-// (compiler-1, compiler-2, SELFHOST-8, SELFHOST-13, SELFHOST-16; DR-014). The
+// (compiler-1, compiler-2, self-hosting-8, self-hosting-13, self-hosting-16; DR-014). The
 // agent is faked, so this exercises the pipeline mechanics, not compilation
 // quality.
-describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', () => {
+describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting-16)', () => {
   let root: string;
   let work: string;
   let source: string;
@@ -477,7 +477,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     cwd: work,
   });
 
-  it('runs the bare playbook invocation as a full-link against the default runtime target (SELFHOST-13)', async () => {
+  it('runs the bare playbook invocation as a full-link against the default runtime target (self-hosting-13)', async () => {
     const result = await runSlc(['playbook', source], deps());
     expect(result.ok).toBe(true);
     // The discovered optimize pass runs by default: the producing phase writes
@@ -746,7 +746,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
   });
 
   it('emits no verification when -o relocates the fsm out of the artifact dir (VERIFY-2, pipeline-8)', async () => {
-    // Only the `playbook` pipeline defaults a link target (SELFHOST-13), so
+    // Only the `playbook` pipeline defaults a link target (self-hosting-13), so
     // `-o` on a bare `playbook` run names the linked artifact; the reserved
     // `slc` run of the same shared definitions keeps the full form where `-o`
     // relocates the fsm object.
@@ -776,7 +776,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     );
   });
 
-  it('emits <cwd>/<basename>.ts default-exporting the registry entry after a playbook full-link (SELFHOST-16)', async () => {
+  it('emits <cwd>/<basename>.ts default-exporting the registry entry after a playbook full-link (self-hosting-16)', async () => {
     const result = await runSlc(['playbook', source], deps());
     expect(result.ok).toBe(true);
     const entry = join(work, 'code.ts');
@@ -804,7 +804,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     );
   });
 
-  it('writes no entry module when -o relocates the linked artifact (SELFHOST-16)', async () => {
+  it('writes no entry module when -o relocates the linked artifact (self-hosting-16)', async () => {
     const out = join(work, 'custom.playbook.ts');
     const result = await runSlc(['playbook', source, '-o', out], deps());
     expect(result.ok).toBe(true);
@@ -813,7 +813,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     expect(result.outputs).not.toContain(join(work, 'code.ts'));
   });
 
-  it('derives requiredRoleIds from the gears Players block, excluding alias declarations (SELFHOST-16)', () => {
+  it('derives requiredRoleIds from the gears Players block, excluding alias declarations (self-hosting-16)', () => {
     expect(
       declaredPlayers(
         'Players:\n\n- Writer\n- `Reviewer`\n- `Editor` = `Writer` | `Reviewer`\n\n## Behaviors\n',
@@ -821,7 +821,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     ).toEqual(['Writer', 'Reviewer']);
   });
 
-  it('reads the markdown-heading form of the Players declaration (SELFHOST-15)', () => {
+  it('reads the markdown-heading form of the Players declaration (self-hosting-15)', () => {
     // A real interpreted compile rendered the declaration as `## Players`
     // with a bare bullet; the emitter must not declare an empty role list
     // for a workflow that plainly names its player.
@@ -830,7 +830,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     ]);
   });
 
-  it('binds runtime-resolved player ids back to declared role ids at callPlayer (SELFHOST-16, DR-017)', async () => {
+  it('binds runtime-resolved player ids back to declared role ids at callPlayer (self-hosting-16, DR-017)', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-entry-binding-'));
     try {
       const bundle = join(dir, 'flow.playbook');
@@ -904,7 +904,7 @@ describe('playbook pipeline interpreted end to end (SELFHOST-8, SELFHOST-16)', (
     }
   });
 
-  it('fails entry emission when declared players collide case-insensitively (SELFHOST-16, DR-017)', async () => {
+  it('fails entry emission when declared players collide case-insensitively (self-hosting-16, DR-017)', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-entry-collision-'));
     try {
       await writeFile(

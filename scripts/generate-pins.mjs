@@ -37,7 +37,7 @@ const lockedPlaybook =
   lock.packages?.['node_modules/@sublang/playbook']?.version;
 const declaredXstate = rootPackage.dependencies?.xstate;
 const lockedXstate = lock.packages?.['node_modules/xstate']?.version;
-// The adoption runs from a clean registry install (DR-017, SELFHOST-11); the
+// The adoption runs from a clean registry install (DR-017, self-hosting-11); the
 // IR-011-era packed-sibling fallback is retired with the published release.
 if (
   declaredPlaybook !== `^${expectedPlaybookVersion}` ||

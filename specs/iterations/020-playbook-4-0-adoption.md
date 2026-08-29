@@ -21,8 +21,8 @@ Each task is one commit and keeps the repository gates green at its
 boundary.
 
 1. [x] **Record the adoption.** Record DR-020; amend phase-execution-30 and
-       phase-execution-28 for the 4.0.0 provenance mapping, SELFHOST-11 and
-       SELFHOST-12 for the retained-bundle adoption shape, and CI-4 for the
+       phase-execution-28 for the 4.0.0 provenance mapping, self-hosting-11 and
+       self-hosting-12 for the retained-bundle adoption shape, and CI-4 for the
        4.0.0 anchor; add the DR-020 and IR-020 rows to the spec map.
 2. [x] **Adopt the reviewed set.** Move the root manifest to playbook
        `^4.0.0` and cligent `^0.18.0` with the SDK `devDependencies`, the

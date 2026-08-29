@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Deterministic entry-module emission (DR-014, DR-017, SELFHOST-15).
+ * Deterministic entry-module emission (DR-014, DR-017, self-hosting-15).
  *
  * After a successful full-link of the `playbook` pipeline, {@link
  * emitEntryModule} writes `<cwd>/<basename>.ts`: an erasable-TypeScript module
@@ -14,7 +14,7 @@
  * factory behind the DR-017 role-binding boundary, which maps the linked
  * runtime's lowercased player ids back to the declared role ids at the
  * session's `callPlayer` port. `playbook run ./<basename>.ts "<task>"`
- * consumes it unchanged (SELFHOST-14). See specs/dev/self-hosting.md.
+ * consumes it unchanged (self-hosting-14). See specs/packages/self-hosting.md.
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -75,7 +75,7 @@ export async function emitEntryModule(
 }
 
 /**
- * The gears `Players:` declaration, verbatim in source order (SELFHOST-15).
+ * The gears `Players:` declaration, verbatim in source order (self-hosting-15).
  * Alias declarations (`` `A` = `B` | `C` ``) are launcher options, not
  * required roles, and are excluded.
  */
