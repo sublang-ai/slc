@@ -24,11 +24,11 @@ Interpreted execution stays the reference semantics and the fallback, and the [D
 - [x] The SLC phase-runner facade (`PhaseInput`/`PhaseResult`/`PhaseRunner`/`createPhaseRunner`) bound to `@sublang/playbook` `PlaybookPorts`, with the `ok`/`blocked`/`error` → [DR-003](../decisions/003-slc-phase-execution.md) protocol mapping and diagnostics drain (extends `PHEXEC`)
 - [x] A `PlaybookPorts` adapter backing `callPlayer`/`callJudge` with Cligent and supplying status and telemetry sinks
 - [x] A compiled-`phase` loader and `CompiledExecutor` implementing `PhaseExecutor`, running a loaded artifact under the ports and the file capability (extends `PHEXEC`)
-- [x] Compiled selection in `runSlc`: per phase, no pin interprets, a current pin runs the compiled artifact, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets (extends `PHEXEC`, `compiler`; selection is execution behavior, which `PIN` deliberately excludes)
-- [x] The deferred [DR-007](../decisions/007-slc-phase-artifact-pinning.md) currency sub-check that a pinned artifact resolves to the linked `phase` format (extends `PIN`)
+- [x] Compiled selection in `runSlc`: per phase, no pin interprets, a current pin runs the compiled artifact, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets (extends `PHEXEC`, `compiler`; selection is execution behavior, which `pinning` deliberately excludes)
+- [x] The deferred [DR-007](../decisions/007-slc-phase-artifact-pinning.md) currency sub-check that a pinned artifact resolves to the linked `phase` format (extends `pinning`)
 - [x] A `self-hosting` spec package (`user`, `dev`, `test`), short form `SELFHOST`, for the reserved `slc` pipeline and the compiled `phase` artifact contract, registered in `map.md`, plus recognition of the reserved `slc` name and the `phase` linked format (`fsm` `.ts` → `phase` `.ts`) with [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) locations
 - [x] The `slc` meta-pipeline definitions consumed from `@sublang/playbook`'s `slc/`, not duplicated here (per [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)'s Playbook-owned source; Boss-approved option 2): the compile chain (`text2gears` → `gears2fsm`, auditable GEARS-to-FSM mapping) loads, chains, and infers through `slc`. Linking a runnable artifact through Playbook's reserved `link` is **not** delivered here: Playbook ships it in the `playbook` runtime contract (no `## Link Targets`, so SLC's `phase`-format link machinery rejects it), so reconciling SLC's link/artifact contract with that runtime ([SELFHOST-3](../dev/self-hosting.md#selfhost-3)) is the remaining reconciliation
-- [x] Pin generation: an explicit build-and-review flow that writes `slc.pins.json` for a reviewed artifact and is not run during ordinary pipeline runs (extends `PIN`)
+- [x] Pin generation: an explicit build-and-review flow that writes `slc.pins.json` for a reviewed artifact and is not run during ordinary pipeline runs (extends `pinning`)
 - [x] `map.md` updated for the new `FCAP` and `SELFHOST` packages
 
 ## Tasks
@@ -62,11 +62,11 @@ Each task is one-commit-sized and updates code, specs, and tests together.
 ### C. Compiled selection ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) + [DR-007](../decisions/007-slc-phase-artifact-pinning.md))
 
 6. **Wire selection into `runSlc`.**
-   Use `evaluatePins` per phase so no pin interprets, a current pin runs the `CompiledExecutor` with grants derived from the pin closure, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets; extend `PIN` and `compiler`.
+   Use `evaluatePins` per phase so no pin interprets, a current pin runs the `CompiledExecutor` with grants derived from the pin closure, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets; extend `pinning` and `compiler`.
    Add integration tests over fixtures for each verdict path.
 
 7. **Artifact-resolves-to-`phase` currency sub-check.**
-   Extend the validator and the `PIN` items so a pinned artifact whose bytes do not resolve to the linked `phase` format is stale, replacing IR-004's existence-and-hash-only deferral.
+   Extend the validator and the `pinning` items so a pinned artifact whose bytes do not resolve to the linked `phase` format is stale, replacing IR-004's existence-and-hash-only deferral.
    Unit- and integration-test the new sub-check.
 
 ### D. Self-hosting meta-pipeline ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md))
@@ -84,7 +84,7 @@ Each task is one-commit-sized and updates code, specs, and tests together.
 ### E. Lifecycle ([DR-007](../decisions/007-slc-phase-artifact-pinning.md))
 
 11. **Pin generation.**
-    Implement the explicit build-and-review flow that writes `slc.pins.json` for a reviewed artifact (definition closure plus link-target identity) and is not run during ordinary pipeline runs; extend `PIN`.
+    Implement the explicit build-and-review flow that writes `slc.pins.json` for a reviewed artifact (definition closure plus link-target identity) and is not run during ordinary pipeline runs; extend `pinning`.
     Test a generate-then-validate round-trip whose pin `evaluatePins` reports current.
 
 ## Acceptance criteria

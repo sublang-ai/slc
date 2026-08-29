@@ -24,7 +24,7 @@ import {
   type PinRecord,
 } from '../src/pins.js';
 
-/** A compiled artifact that resolves to the linked `playbook` format (PIN-13). */
+/** A compiled artifact that resolves to the linked `playbook` format (pinning-13). */
 const PHASE_ARTIFACT =
   'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
@@ -131,7 +131,7 @@ describe('hashTree canonical framing', () => {
   );
 });
 
-describe('evaluatePin (PIN-2..PIN-6)', () => {
+describe('evaluatePin (pinning-2..pinning-6)', () => {
   it('reports a fully matching pin as current', async () => {
     const { file, record } = await currentFixture();
     expect(await evaluatePin(dir, file, 'text2gears', record)).toEqual({
@@ -231,7 +231,7 @@ describe('evaluatePin (PIN-2..PIN-6)', () => {
     expect((verdict as { reason: string }).reason).toContain('closure');
   });
 
-  it('reports stale when the artifact does not resolve to the playbook format (PIN-13)', async () => {
+  it('reports stale when the artifact does not resolve to the playbook format (pinning-13)', async () => {
     const { file, record } = await currentFixture();
     // Hash-matching bytes that are not a `playbook` module.
     await write(
@@ -346,7 +346,7 @@ describe('evaluatePin (PIN-2..PIN-6)', () => {
   });
 });
 
-describe('evaluatePin link targets and external inputs (PIN-2, PIN-6)', () => {
+describe('evaluatePin link targets and external inputs (pinning-2, pinning-6)', () => {
   const withDirectoryLinkTarget = async (
     record: PinRecord,
   ): Promise<PinRecord> => {
@@ -434,7 +434,7 @@ describe('evaluatePin link targets and external inputs (PIN-2, PIN-6)', () => {
   );
 });
 
-describe('evaluatePins (PIN-1, PIN-5)', () => {
+describe('evaluatePins (pinning-1, pinning-5)', () => {
   it('returns no verdicts when slc.pins.json is absent', async () => {
     const result = await evaluatePins(dir);
     expect(result.path).toBeUndefined();

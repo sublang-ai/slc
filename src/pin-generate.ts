@@ -3,7 +3,7 @@
 
 /**
  * Pin generation: the explicit build-and-review flow that writes `slc.pins.json`
- * (PIN-15; DR-007).
+ * (pinning-15; DR-007).
  *
  * This is the inverse of the currency validator: given a built and reviewed
  * compiled artifact, {@link generatePinRecord} records — over committed bytes —
@@ -13,7 +13,7 @@
  * {@link writePinFile} writes the pin index for a pipeline directory. Generation
  * is invoked only by an explicit build-and-review step, never during an ordinary
  * pipeline run; `slc` does not regenerate or rewrite pins per invocation
- * (DR-007 lifecycle). See specs/dev/pinning.md.
+ * (DR-007 lifecycle). See specs/packages/pinning.md.
  */
 
 import { writeFile } from 'node:fs/promises';
@@ -65,7 +65,7 @@ export interface PinSpec {
 /** The default recorded path boundary (the pipeline directory). */
 const BOUNDARY = '.';
 
-/** Options for pin generation (PIN-15). */
+/** Options for pin generation (pinning-15). */
 export interface PinGenerateOptions {
   /**
    * The recorded path boundary, a relative POSIX path from the pipeline
@@ -78,7 +78,7 @@ export interface PinGenerateOptions {
 
 /**
  * Generates a current {@link PinRecord} for one phase from its committed inputs
- * (PIN-15). The definition is recorded separately; the rest of its `## Pin Inputs`
+ * (pinning-15). The definition is recorded separately; the rest of its `## Pin Inputs`
  * closure becomes the enumerated `semanticInputs`.
  */
 export async function generatePinRecord(
@@ -221,7 +221,7 @@ export async function generatePinRecord(
 
 /**
  * Writes the pin index `<pipelineDir>/slc.pins.json` for the given phase records
- * and returns its path (PIN-15).
+ * and returns its path (pinning-15).
  */
 export async function writePinFile(
   pipelineDir: string,

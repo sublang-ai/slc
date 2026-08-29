@@ -11,7 +11,7 @@ import { hashBytes, hashFile, isHash } from '../src/hash.js';
 
 const enc = (text: string): Uint8Array => new TextEncoder().encode(text);
 
-describe('hashBytes / isHash (PIN-2, PIN-3)', () => {
+describe('hashBytes / isHash (pinning-2, pinning-3)', () => {
   it('is deterministic and formats as sha256:<64 lowercase hex>', () => {
     expect(hashBytes(enc('hello'))).toBe(hashBytes(enc('hello')));
     expect(hashBytes(enc('hello'))).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -32,7 +32,7 @@ describe('hashBytes / isHash (PIN-2, PIN-3)', () => {
   });
 });
 
-describe('hashFile (PIN-3)', () => {
+describe('hashFile (pinning-3)', () => {
   let dir: string;
 
   beforeEach(async () => {

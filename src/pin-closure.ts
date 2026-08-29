@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Semantic-input closure derivation for the pin-currency validator (PIN-2, PIN-4;
+ * Semantic-input closure derivation for the pin-currency validator (pinning-2, pinning-4;
  * DR-007).
  *
  * A pinned phase's semantic-input closure is the definition file plus every local
@@ -13,8 +13,8 @@
  * declare their own `## Pin Inputs`; a non-Markdown input, or a Markdown input
  * without the section, is a closure member but terminates the transitive walk.
  * The derived closure is compared — as a set of resolved paths — to the recorded
- * definition plus semanticInputs; any difference is a stale verdict (PIN-4). See
- * specs/dev/pinning.md.
+ * definition plus semanticInputs; any difference is a stale verdict (pinning-4). See
+ * specs/packages/pinning.md.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -44,10 +44,10 @@ export function parsePinInputs(content: string): string[] {
 /**
  * Derives the semantic-input closure of `definitionPath` as a set of resolved
  * absolute paths: the definition plus every transitively cited local file
- * (PIN-2, PIN-4).
+ * (pinning-2, pinning-4).
  *
  * @throws {import('./pins.js').PinError} when a cited path is absolute or escapes
- *   the recorded boundary (PIN-5).
+ *   the recorded boundary (pinning-5).
  */
 export async function deriveClosure(
   pipelineDir: string,
@@ -96,7 +96,7 @@ export async function deriveClosure(
 /**
  * Reports whether the closure derived from `record.definition` matches the
  * recorded definition plus semanticInputs, compared as sets of resolved paths
- * (PIN-4).
+ * (pinning-4).
  */
 export async function closureMatchesRecord(
   pipelineDir: string,

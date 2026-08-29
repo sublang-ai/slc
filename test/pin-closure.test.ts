@@ -26,7 +26,7 @@ const record = (definition: string, semanticInputs: string[]): PinRecord => ({
   linkTarget: { kind: 'file', locator: 'x', identity: H },
 });
 
-describe('parsePinInputs (PIN-4)', () => {
+describe('parsePinInputs (pinning-4)', () => {
   it('extracts inline-code paths from the ## Pin Inputs section only', () => {
     const md = [
       '# Title',
@@ -51,7 +51,7 @@ describe('parsePinInputs (PIN-4)', () => {
   });
 });
 
-describe('deriveClosure (PIN-2, PIN-4)', () => {
+describe('deriveClosure (pinning-2, pinning-4)', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -125,7 +125,7 @@ describe('deriveClosure (PIN-2, PIN-4)', () => {
   });
 });
 
-describe('closureMatchesRecord (PIN-4)', () => {
+describe('closureMatchesRecord (pinning-4)', () => {
   let dir: string;
 
   beforeEach(async () => {

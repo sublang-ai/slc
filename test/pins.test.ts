@@ -45,7 +45,7 @@ const validPinObject = (): Record<string, unknown> => ({
 
 const json = (value: unknown): string => JSON.stringify(value);
 
-describe('parsePinFile (PIN-5)', () => {
+describe('parsePinFile (pinning-5)', () => {
   it('parses a complete valid pin file', () => {
     const file = parsePinFile(json(validPinObject()));
 
@@ -237,7 +237,7 @@ describe('parsePinFile (PIN-5)', () => {
   });
 });
 
-describe('loadPinFile (PIN-1, PIN-5)', () => {
+describe('loadPinFile (pinning-1, pinning-5)', () => {
   let dir: string;
 
   beforeEach(async () => {

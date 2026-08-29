@@ -23,7 +23,7 @@ This is a standalone, deterministic, `slc`-side library; it changes no runtime e
 
 ## Deliverables
 
-- [x] A `PINNING` spec package (`dev`, `test`), short form `PIN`, registered in `map.md`
+- [x] A `pinning` spec package registered in `map.md`
 - [x] A strict `slc.pins.json` model and parser — schema identifier, hash algorithm, `pathBoundary`, and the phase-to-record map — that rejects a malformed file with a diagnostic naming the field
 - [x] Exact-byte SHA-256 hashing written as `sha256:` plus 64 lowercase hex, with no content transformation, and path-boundary resolution: relative POSIX paths from the pipeline directory, absolute paths rejected, `..` allowed only inside the recorded boundary
 - [x] Semantic-input closure derivation from each definition's `## Pin Inputs` section (transitive, terminating at non-Markdown or sectionless inputs) and the check that the recorded closure matches it
@@ -32,10 +32,10 @@ This is a standalone, deterministic, `slc`-side library; it changes no runtime e
 
 ## Tasks
 
-1. **Author the `PINNING` spec package (`dev`, `test`).**
-   Write `specs/dev/pinning.md` (pin-file presence and the no-pins case; strict schema and supported hash algorithm; exact-byte hashing format; path-boundary resolution and absolute/escape rejection; the semantic-input closure and the closure-match check; the per-phase currency verdict with fail-closed `stale`/`malformed` reasons; external-input well-formedness without network fetch; link-target identity over committed bytes; and an explicit note that the artifact-format-resolution check and runtime strategy selection are deferred to the compiled executor) and `specs/test/pinning.md` (integration items, each with a `Verifies:` line per [META-20](../meta.md#meta-20)/[META-21](../meta.md#meta-21)).
+1. **Author the `pinning` spec package.**
+   Write `specs/packages/pinning.md` with pin-file presence and the no-pins case; strict schema and supported hash algorithm; exact-byte hashing format; path-boundary resolution and absolute/escape rejection; the semantic-input closure and the closure-match check; the per-phase currency verdict with fail-closed `stale`/`malformed` reasons; external-input well-formedness without network fetch; link-target identity over committed bytes; an explicit note that the artifact-format-resolution check and runtime strategy selection are deferred to the compiled executor; and integration items, each with a `Verifies:` line per [META-20](../meta.md#meta-20)/[META-21](../meta.md#meta-21).
    Reference [DR-007](../decisions/007-slc-phase-artifact-pinning.md) in the package `## Intent`, citing [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) and [DR-003](../decisions/003-slc-phase-execution.md) in preconditions where relevant.
-   Register the `PIN` package in `map.md` and add SPDX headers per [[licensing-1](../packages/licensing.md#licensing-1)]/[[licensing-2](../packages/licensing.md#licensing-2)].
+   Register the `pinning` package in `map.md` and add SPDX headers per [[licensing-1](../packages/licensing.md#licensing-1)]/[[licensing-2](../packages/licensing.md#licensing-2)].
 
 2. **Pin-file model and strict parser.**
    Implement a typed model of `slc.pins.json` and a strict-JSON parser validating the schema identifier, the hash algorithm, the optional `pathBoundary`, and each phase record's shape (`artifact`, `definition`, `semanticInputs`, `externalInputs`, `linkTarget`, `producer`), with the reserved `link` key for the link phase.

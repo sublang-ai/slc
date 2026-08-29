@@ -121,12 +121,11 @@ meta.md     The spec of specs
 | dev | [phase-execution.md](dev/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted execution, optional reviewed calls, compiled phase-runner facade, six-port Cligent adapter, provenance-driven selection, live status streaming, and the agent-stall watchdog |
 | test | [phase-execution.md](test/phase-execution.md) | End-to-end interpreted and optional reviewed execution, generic checks, blocked protocol, compiled runtime profiles including direct Captain, pin-selection, streamed-status, and stall-watchdog acceptance |
 
-### PIN
+### pinning
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [pinning.md](dev/pinning.md) | Pin-currency validator and build-and-review generation: presence, currency, stale/malformed verdicts, pin writing |
-| test | [pinning.md](test/pinning.md) | Acceptance: no-pins, current, stale, malformed verdicts, and a generate-then-validate round-trip |
+| package | [pinning.md](packages/pinning.md) | Pin-currency validation and generation: presence, current/stale/malformed verdicts, and fixture acceptance |
 
 ### PIPE
 

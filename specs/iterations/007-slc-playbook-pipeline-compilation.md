@@ -98,7 +98,7 @@ Tasks gated on real agent runs or human review are flagged; they may split furth
 ### G. Finalize
 
 10. **Spec coherence and `map.md`.**
-    Make a coherence pass over `compiler`, `PIPE`, `PHEXEC`, `SELFHOST`, `PIN`, and the new package(s) so items are complete, minimal, right-level, and well organized, and ensure `map.md` reflects every change.
+    Make a coherence pass over `compiler`, `PIPE`, `PHEXEC`, `SELFHOST`, `pinning`, and the new package(s) so items are complete, minimal, right-level, and well organized, and ensure `map.md` reflects every change.
 
 ## Acceptance criteria
 

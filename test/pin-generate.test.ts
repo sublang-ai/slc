@@ -11,11 +11,11 @@ import { evaluatePins } from '../src/pin-currency.js';
 import { generatePinRecord, writePinFile } from '../src/pin-generate.js';
 import { PINS_FILE } from '../src/pins.js';
 
-/** A compiled artifact that resolves to the linked `playbook` format (PIN-13). */
+/** A compiled artifact that resolves to the linked `playbook` format (pinning-13). */
 const PHASE_ARTIFACT =
   'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
-describe('pin generation (PIN-16)', () => {
+describe('pin generation (pinning-16)', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -250,7 +250,7 @@ describe('pin generation (PIN-16)', () => {
 
   it('pins a link target outside the pipeline directory under a widened boundary', async () => {
     // The pipeline directory sits two levels below a repo-like root; the link
-    // target (an installed package module) sits outside it (PIN-15, DR-007).
+    // target (an installed package module) sits outside it (pinning-15, DR-007).
     const pipelineDir = join(dir, 'pipelines', 'playbook');
     await write('pipelines/playbook/text2gears.md', '# def\n');
     await writeReviewedBundle('pipelines/playbook/');

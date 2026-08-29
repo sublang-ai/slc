@@ -3,7 +3,7 @@
 
 /**
  * Pin-currency engine: the per-phase verdict that drives compiled selection
- * (PIN-1..PIN-6, PIN-13; DR-007).
+ * (pinning-1..pinning-6, pinning-13; DR-007).
  *
  * Given a pipeline directory, {@link evaluatePins} loads `slc.pins.json` and, for
  * each pinned phase, combines the validator stages into a verdict: `current` when
@@ -17,8 +17,8 @@
  * target by a deterministic `sha256:` tree hash over its files' sorted relative
  * paths and contents. Beyond existing and matching its recorded hash, the
  * compiled artifact must resolve to the linked `playbook` format — a module
- * exposing the runtime factory — or the phase is stale (PIN-13). See
- * specs/dev/pinning.md.
+ * exposing the runtime factory — or the phase is stale (pinning-13). See
+ * specs/packages/pinning.md.
  */
 
 import { lstat, readFile, readdir, readlink } from 'node:fs/promises';
@@ -79,7 +79,7 @@ export interface PinEvaluationOptions {
 }
 
 /**
- * Evaluates every pin in `<pipelineDir>/slc.pins.json` (PIN-1..PIN-6).
+ * Evaluates every pin in `<pipelineDir>/slc.pins.json` (pinning-1..pinning-6).
  *
  * @returns `{}` when the file is absent (no pins), `{ malformed }` when the file
  *   is unparseable or invalid at the file level, or `{ path, verdicts }` with a
@@ -136,8 +136,8 @@ export async function evaluatePinFile(
 }
 
 /**
- * Evaluates one phase's pin record against the committed files (PIN-2..PIN-6,
- * PIN-13).
+ * Evaluates one phase's pin record against the committed files (pinning-2..pinning-6,
+ * pinning-13).
  *
  * Structural defects are reported as `malformed` before currency is judged, so a
  * record that is both malformed and stale reports `malformed`.
@@ -189,7 +189,7 @@ export async function evaluatePin(
     }
 
     // Currency (stale) checks. resolvePinPath throws PinError for a bad path,
-    // which the catch below maps to malformed (PIN-5).
+    // which the catch below maps to malformed (pinning-5).
     for (const [field, ref] of recordedFileRefs(record)) {
       const reason = await fileStale(
         pipelineDir,
@@ -224,7 +224,7 @@ export async function evaluatePin(
     if (bundleLayout !== null) {
       return stale(bundleLayout);
     }
-    // The hash-verified artifact must resolve to the linked `phase` format (PIN-13).
+    // The hash-verified artifact must resolve to the linked `playbook` format (pinning-13).
     const artifactFormat = await artifactFormatStale(
       pipelineDir,
       boundary,
@@ -413,7 +413,7 @@ export async function artifactBundleLayoutIssue(
 
 /**
  * Returns a stale reason when the compiled artifact's bytes do not resolve to the
- * linked `playbook` format, or `null` when they do (PIN-13). The caller has already
+ * linked `playbook` format, or `null` when they do (pinning-13). The caller has already
  * verified the artifact exists and matches its recorded hash.
  */
 async function artifactFormatStale(
