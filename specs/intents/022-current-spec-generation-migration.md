@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–21 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–22 are complete.
 
 ## Intent
 
@@ -134,7 +134,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 19. [x] Migrated the progress-watchdog, Playbook 4, and incremental-compilation records into `intents/`, preserved their three `Done` states, eight checked and seven stale unchecked deliverables, six checked task states, and 17 task boundaries, recovered the watchdog's seven tasks from the named commits, moved the Playbook 4 task checkboxes into its required Deliverables section, separated stale progress evidence from truthful status, retargeted the changelog reference, and removed the retired intent map index.
 20. [x] Migrated the pipeline-layout and link-phase decision records to current citation law, preserved their Accepted states and decisions, normalized their substantive citations, and retargeted every malformed inbound link.
 21. [x] Migrated the execution-boundary, interpreted-execution, and self-hosting decision records to current citation law, preserved their Accepted states and decisions, normalized current record terminology and sentence layout, and retargeted every malformed inbound link.
-22. Migrate the configuration-sources decision record to current citation law without changing the accepted decision.
+22. [x] Migrated the configuration-sources decision record to current citation law, preserved its Accepted state and decision, bound every external `tmux-play` claim to its authoritative reference, and normalized its map identity after confirming every other inbound link was already current.
 23. Migrate the pinning and file-capability decision records to current citation law, preserving the capability decision's superseded status.
 24. Migrate the playbook-compilation, runtime-contract, Captain-adoption, and routing-separation decision records to current citation law without changing their accepted decisions.
 25. Migrate the normalization, CWD-emission, configuration-seeding, and grammar-provenance decision records to current citation law without changing their accepted decisions.

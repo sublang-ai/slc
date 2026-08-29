@@ -29,7 +29,7 @@ meta.md     The spec of specs
 | [DR-003](decisions/003-slc-phase-execution.md) | 003-slc-phase-execution.md | Phase execution boundary: generic slc vs phase-specific |
 | [DR-004](decisions/004-slc-interpreted-phase-execution.md) | 004-slc-interpreted-phase-execution.md | Interpreted phase execution: agent bootstrap and reference semantics |
 | [DR-005](decisions/005-slc-self-hosting-meta-pipeline.md) | 005-slc-self-hosting-meta-pipeline.md | Self-hosting meta pipeline: compiled phase artifacts |
-| DR-006 | [006-slc-configuration-sources.md](decisions/006-slc-configuration-sources.md) | Configuration sources and precedence: env over config file, discovery, schema |
+| [DR-006](decisions/006-slc-configuration-sources.md) | 006-slc-configuration-sources.md | Configuration sources and precedence: env over config file, discovery, schema |
 | DR-007 | [007-slc-phase-artifact-pinning.md](decisions/007-slc-phase-artifact-pinning.md) | Phase artifact pinning: currentness, semantic inputs, and compiled selection |
 | DR-008 | [008-slc-file-capability.md](decisions/008-slc-file-capability.md) | File capability (superseded): compiled execution writes through agents and relies on the DR-003 generic checks |
 | DR-009 | [009-slc-playbook-pipeline-compilation.md](decisions/009-slc-playbook-pipeline-compilation.md) | `playbook` pipeline compilation: generic invocation, compile-output scope, compiled performing, link reconciliation, and artifact-derived verification |

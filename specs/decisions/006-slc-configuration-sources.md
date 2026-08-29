@@ -11,7 +11,7 @@ Accepted
 
 `slc` reaches coding agents through Cligent (npm `@sublang/cligent` [[1]]); agent, model, and pipeline-path selection is `slc` configuration, not phase semantics ([DR-004](004-slc-interpreted-phase-execution.md)).
 Today that configuration is environment-only — `SLC_AGENT`, `SLC_MODEL`, and `SLC_PIPELINE_PATH` ([[cli-6](../packages/cli.md#cli-6)], [[cli-7](../packages/cli.md#cli-7)], [[cli-12](../packages/cli.md#cli-12)]) — which is awkward for a persistent per-project or per-user setup.
-Cligent's sibling `tmux-play` reference app already establishes a config-file ergonomic: a YAML file discovered cwd-first then under `${XDG_CONFIG_HOME:-~/.config}`, with a `--config` override.
+Cligent's sibling `tmux-play` reference app [[1]] already establishes a config-file ergonomic: a YAML file discovered cwd-first then under `${XDG_CONFIG_HOME:-~/.config}`, with a `--config` override.
 `slc` should offer that same shape with a smaller surface, without disturbing existing env-only runs.
 This DR settles the sources and their precedence, discovery, the schema (including the `pipelinePath` value shape and relative base), validation, and what stays out of scope.
 
@@ -43,14 +43,14 @@ This DR settles the sources and their precedence, discovery, the schema (includi
 - Absent an explicit `--config`, discovery reads `slc.config.yaml` in the cwd, then `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`; the first file found wins and cwd takes precedence over home.
 - `--config <path>` names a specific file and disables discovery.
 - An explicit `--config` path that does not exist is an error, whereas a discovery miss is not — it falls through to environment and defaults, so an optional config may be absent but a mistyped `--config` fails loudly rather than silently degrading.
-- `slc` does not auto-create a default config in this iteration; unlike `tmux-play`, a missing config is never written.
+- `slc` does not auto-create a default config in this iteration; unlike `tmux-play` [[1]], a missing config is never written.
 
 ### `pipelinePath` shape and base
 
 - `pipelinePath` is a YAML sequence of path strings, not an OS path-list string: a sequence is idiomatic in YAML and avoids embedding OS-dependent `:`/`;` separators.
   The environment form `SLC_PIPELINE_PATH` stays an OS path-list string; because precedence is per-key and wholesale, the two forms need not match.
 - Relative `pipelinePath` entries resolve against the cwd, consistent with `SLC_PIPELINE_PATH` ([[cli-6](../packages/cli.md#cli-6)]) and independent of which file supplied them; absolute entries are used verbatim.
-  Rejected: resolving against the config-file directory — `tmux-play` does this for `captain.from`, a module reference bound to the config's location, but pipeline search roots describe the user's workspace, so a cwd base is the predictable reading, especially for the shared home config.
+  Rejected: resolving against the config-file directory — `tmux-play` [[1]] does this for `captain.from`, a module reference bound to the config's location, but pipeline search roots describe the user's workspace, so a cwd base is the predictable reading, especially for the shared home config.
 
 ### Validation
 
