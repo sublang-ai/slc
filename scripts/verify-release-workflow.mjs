@@ -45,11 +45,29 @@ const orderedSteps = [
   'Skip the already published version',
   'Create GitHub release',
 ];
+const conditionalSteps = new Set([
+  'Publish to npm with trusted OIDC',
+  'Skip the already published version',
+]);
 let previousStep = -1;
 for (const name of orderedSteps) {
   const index = steps.findIndex((candidate) => candidate.name === name);
   assert.ok(index > previousStep, `${name} is out of release-process order`);
   previousStep = index;
+  const candidate = step(name);
+  assert.equal(
+    candidate['continue-on-error'],
+    undefined,
+    `${name} must fail the release job`,
+  );
+  assert.equal(
+    candidate.background,
+    undefined,
+    `${name} must finish before the next release step`,
+  );
+  if (!conditionalSteps.has(name)) {
+    assert.equal(candidate.if, undefined, `${name} must run unconditionally`);
+  }
 }
 
 // The repository version and changelog are one current SemVer release unit
