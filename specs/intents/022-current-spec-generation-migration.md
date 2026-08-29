@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–9 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–10 are complete.
 
 ## Intent
 
@@ -74,7 +74,7 @@ The package classification audit yields this target placement, with new verifica
 | `phase-execution` | 1–15, 23–25, 27, 29–31, 33–34, 36, 39, 42, 46 | — | 16–22, 26, 28, 32, 35, 37–38, 40–41, 43–45, 47–48 |
 | `pinning` | 1–6, 13, 15 | — | 7–12, 14, 16 |
 | `pipeline` | 1–19, 30–34, 37 | — | 20–29, 35–36, 38–40 |
-| `release` | 1–13, 17, 19 | — | 14–16, 18 plus uncovered local behavior |
+| `release` | 1–13, 17, 19 | — | 14–16, 18, 20 |
 | `self-hosting` | 1–3, 6, 9, 11, 13–15 | — | 4–5, 7–8, 10, 12, 16 |
 | `verification` | 1–6, 10, 12–13, 15–16, 18 | — | 7–9, 11, 14, 17, 19 |
 
@@ -89,11 +89,12 @@ The behavior citation audit establishes these peer-package edges:
 | `phase-execution` | `pinning`, `pipeline`, `self-hosting` |
 | `pinning` | `self-hosting` |
 | `pipeline` | `phase-execution`, `self-hosting` |
+| `release` | `cli`, `compiler`, `incremental-compilation` |
 | `self-hosting` | `phase-execution`, `pinning`, `pipeline` |
 | `verification` | `pinning`, `pipeline`, `release`, `self-hosting` |
 
-Package tasks shall confirm or reject the additional uncited dependency candidates exposed by package intent or prose: continuous integration to verification and pinning; and release to CLI, compiler, and incremental compilation.
-They shall also add the minimal local integration or system verification needed for uncovered compiler and continuous-integration behavior, CLI item 33, and release items 1, 3–7, 9, 12–13, and 19.
+Package tasks shall confirm or reject the additional uncited dependency candidates exposed by package intent or prose: continuous integration to verification and pinning.
+They shall also add the minimal local integration or system verification needed for uncovered compiler and continuous-integration behavior and CLI item 33.
 
 ## Deliverables
 
@@ -124,7 +125,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 7. [x] Merged the `pipeline` sources into `packages/pipeline.md`, retargeted every authored item identity and reference, preserved its phase-execution and self-hosting bindings, localized behaviors 1, 3, 10, 19, and 37, and added `pipeline-40` for behavior 11.
 8. [x] Merged the `self-hosting` sources into `packages/self-hosting.md`, retargeted every authored item identity and reference, confirmed its phase-execution, pinning, and pipeline bindings, and localized its verification evidence.
 9. [x] Merged the `verification` sources into `packages/verification.md`, retargeted every authored item identity and reference, confirmed its pinning, pipeline, release, and self-hosting bindings, localized its verification evidence, and left derived verifier-support copies for Task 13.
-10. Merge the `release` sources into `packages/release.md` and retarget all `RELEASE-*` identities and citations.
+10. [x] Merged the `release` sources into `packages/release.md`, retargeted every authored item identity and reference, confirmed its CLI, compiler, and incremental-compilation bindings, localized its verification evidence, and added `release-20` for the uncovered repository release contract.
 11. Merge `dev/continuous-integration.md` into `packages/continuous-integration.md` and retarget all `CI-*` identities and citations.
 12. Merge the `cli` sources into `packages/cli.md` and retarget all `CLI-*` identities and citations after its peer packages have stable destinations.
 13. Build once after the package migrations, refresh all six verifier-support files in each of the five committed `.slc-verify` bundles, independently verify the three reviewed pipeline bundles and both reference demos, commit the three regenerated compile-pin records, and confirm a second regeneration produces no diff without changing the locked Spex grammar dependency.

@@ -23,7 +23,7 @@ Accepted.
   normatively unchanged from 2.0.0.
 - 3.1.0's `playbook run` provisions the engine beside a filesystem artifact
   whose imports do not resolve (playbook DR-024), which changed SLC's
-  documented consumption model ([RELEASE-11](../dev/release.md#release-11)).
+  documented consumption model ([[release-11](../packages/release.md#release-11)]).
 - `3.0.0` was never installed or reviewed here; adopting it separately would
   create a mixed set for no benefit.
 
@@ -63,5 +63,5 @@ consumer path.
 - Reference and meta artifacts emitted before this adoption carry no
   `compat` member and remain loadable by the 3.1 engine.
 - The documented consumption model is global-first
-  ([RELEASE-11](../dev/release.md#release-11)); a project-local install
+  ([[release-11](../packages/release.md#release-11)]); a project-local install
   remains authoritative wherever it resolves.

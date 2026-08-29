@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Opt-in local release acceptance (RELEASE-17, RELEASE-18).
+ * Opt-in local release acceptance (release-17, release-18).
  *
  * Everything else in `release:check` is deterministic and agent-free. This
  * gate is the opposite on purpose: it packs the candidate, installs it into a

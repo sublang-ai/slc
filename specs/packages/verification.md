@@ -102,7 +102,7 @@ When checking FSM transition coverage, the slc command shall drive `script` acto
 
 #### verification-18
 
-When the slc command emits a `.ts` or `.js` module as a linked target after full or direct linking [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)] or as a `playbook` entry module [[self-hosting-15](self-hosting.md#self-hosting-15)], it shall verify that every relative import specifier in the emitted module resolves to an existing file from the module's own location, and shall fail the run with a diagnostic naming the module and each unresolvable specifier — a compile whose output cannot load is a failed compile, not a success with a latent runtime error, as exposed by the [[RELEASE-17](../dev/release.md#release-17)] acceptance gate when an interpreted link emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.
+When the slc command emits a `.ts` or `.js` module as a linked target after full or direct linking [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)] or as a `playbook` entry module [[self-hosting-15](self-hosting.md#self-hosting-15)], it shall verify that every relative import specifier in the emitted module resolves to an existing file from the module's own location, and shall fail the run with a diagnostic naming the module and each unresolvable specifier — a compile whose output cannot load is a failed compile, not a success with a latent runtime error, as exposed by the [[release-17](release.md#release-17)] acceptance gate when an interpreted link emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.
 
 ## Verification
 

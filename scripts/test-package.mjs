@@ -124,7 +124,7 @@ try {
     join(consumer, 'workflow.playbook'),
     { recursive: true },
   );
-  // Drive one Boss turn from the consumer project (RELEASE-17). The repo's
+  // Drive one Boss turn from the consumer project (release-18). The repo's
   // demo checker already exercises this boundary against the working tree;
   // doing it here proves the *published* dependency closure runs, so a
   // package that installs but cannot execute its own emitted entry fails
