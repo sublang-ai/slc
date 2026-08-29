@@ -41,7 +41,7 @@ describe('buildPhasePrompt (PHEXEC-11, PHEXEC-14, PHEXEC-15)', () => {
     expect(prompt).toContain('BLOCKED:');
   });
 
-  it('renders the update block with the prior input and diff (INCR-15, INCR-16)', () => {
+  it('renders the update block with the prior input and diff (incremental-compilation-15, incremental-compilation-16)', () => {
     const prompt = buildPhasePrompt({
       request: compileRequest({
         update: {

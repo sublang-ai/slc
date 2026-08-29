@@ -132,7 +132,7 @@ the next one to compile ordinarily. `.slc/` holds verbatim copies of
 your source and outputs — treat it as no less private, gitignore it if
 you commit the bundle, and delete it freely. Excluded invocation forms
 and the full rules are in the
-[incremental spec](specs/user/incremental-compilation.md).
+[incremental spec](specs/packages/incremental-compilation.md).
 
 ## Configuration
 

@@ -60,7 +60,7 @@ Options:
 | seed | Fixture seed. |
 `;
 
-describe('success-only incremental runner (INCR-18..25, INCR-27..29)', () => {
+describe('success-only incremental runner (incremental-compilation-18..25, incremental-compilation-27..29)', () => {
   let root: string;
   let pipelineDir: string;
   let workDir: string;
