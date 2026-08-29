@@ -48,7 +48,7 @@ Performing the produced SDLC workflow itself — hosting the compiled runtime ag
 
 ### Reserved-link handling covers the `playbook` link
 
-Playbook's authored `link.md` declares `## Formats` (`fsm` `.ts` → `playbook` `.ts`) but no `## Link Targets`, because target validation for the `playbook` format is Playbook-owned ([DR-002](002-slc-link-phases.md#playbook-example), [SELFHOST-2](../dev/self-hosting.md#selfhost-2)).
+Playbook's authored `link.md` declares `## Formats` (`fsm` `.ts` → `playbook` `.ts`) but no `## Link Targets`, because target validation for the `playbook` format is Playbook-owned ([DR-002](002-slc-link-phases.md#playbook-example), [[self-hosting-2](../packages/self-hosting.md#self-hosting-2)]).
 The `## Link Targets` exception applies to the Playbook-authored `playbook`-format link wherever it is used — both the reserved `slc` pipeline and the `playbook` pipeline — not narrowly to the name `slc`.
 `slc` resolves both through [DR-005](005-slc-self-hosting-meta-pipeline.md)'s reserved-link handling, while the rule that the linked format token differ from the object source token ([[pipeline-19](../packages/pipeline.md#pipeline-19)]) still holds.
 

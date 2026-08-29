@@ -45,7 +45,7 @@ via interpreted `slc slc` runs from the synced definitions, so every bundle's
 runtime module carries the hardened judge prompts and the `spec.compat`
 declaration; pins regenerate with exact 3.1.0 provenance. Manifest, lock,
 definitions, bundles, and pins move as one reviewed set
-([SELFHOST-11](../dev/self-hosting.md#selfhost-11)).
+([[self-hosting-11](../packages/self-hosting.md#self-hosting-11)]).
 
 ### Version-coupled consumers
 

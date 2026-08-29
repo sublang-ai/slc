@@ -34,7 +34,7 @@ Where a reserved pipeline's faked agents produce a conformant `gears` and `fsm` 
 ## Reference equivalence
 
 ### VERIFY-9
-Verifies: [SELFHOST-6](../dev/self-hosting.md#selfhost-6), [VERIFY-1](../dev/verification.md#verify-1), [VERIFY-10](../dev/verification.md#verify-10)
+Verifies: [VERIFY-1](../dev/verification.md#verify-1), [VERIFY-10](../dev/verification.md#verify-10)
 
 Where `slc playbook` output for the reference workflow exists, when the equivalence harness compares it to the manual reference package, the harness shall accept exactly when the compilations are equivalent — the same distinct direct-Captain, delegated-player, and playbook actor bindings, the same player bindings, literal target playbook ids, and dynamic target/input context metadata, the same verbatim per-actor prompt or child-input line sets, each flat or structured `fsm` conformant to its own `gears` with recursive Boss surfaces declared and its transitions reachable, and each linked module honoring the same exactly probed `legacy`, `session-v1`, or six-port `composed-v2` runtime contract profile — without requiring byte-identity, item-partition identity, or state-name identity; whereas where the profiles differ, no exact boundary matches, multiple unmarked boundaries match, a marker conflicts with the driven or callable boundary, or a required member or composed port is missing or non-callable it shall report that incompatibility, and where no produced output exists it shall skip with a notice instead of failing.
 

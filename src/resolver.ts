@@ -21,12 +21,12 @@ import type { PipelineResolver } from './pipeline.js';
 
 const requireFrom = createRequire(import.meta.url);
 
-/** The reserved meta-pipeline reference (DR-005, SELFHOST-2). */
+/** The reserved meta-pipeline reference (DR-005, self-hosting-2). */
 export const RESERVED_SLC_PIPELINE = 'slc';
 
 /**
  * The `playbook` domain pipeline, which shares the reserved `slc` pipeline's
- * Playbook-authored definitions (DR-009, SELFHOST-6).
+ * Playbook-authored definitions (DR-009, self-hosting-6).
  */
 export const RESERVED_PLAYBOOK_PIPELINE = 'playbook';
 
@@ -99,7 +99,7 @@ export function createPipelineResolver(
  * `slc/` (its `text2gears`, `gears2fsm`, and `link` phases), which back both the
  * reserved `slc` meta-pipeline and the `playbook` domain pipeline, so `slc`
  * self-hosts on Playbook's canonical source rather than a duplicate (DR-005,
- * DR-009, SELFHOST-2).
+ * DR-009, self-hosting-2).
  *
  * @throws when `@sublang/playbook` does not provide the `slc/` definitions.
  */
@@ -108,7 +108,7 @@ export function reservedSlcPipelineDir(): string {
 }
 
 /**
- * The default link target for the `playbook` pipeline (DR-014, SELFHOST-13):
+ * The default link target for the `playbook` pipeline (DR-014, self-hosting-13):
  * the installed `@sublang/playbook` runtime contract module's TypeScript
  * source, the same file the pin generator records as the link target.
  *
@@ -128,12 +128,12 @@ export function defaultPlaybookLinkTarget(): string {
  * meta-pipeline or the `playbook` domain pipeline — resolves to the shared
  * definition set, leaving every other reference to `inner`. Both names share one
  * definition set and differ only by name, hence by their DR-001 artifact
- * directory (DR-009, SELFHOST-2, SELFHOST-6).
+ * directory (DR-009, self-hosting-2, self-hosting-6).
  *
  * The shared set is the first search-root directory named `playbook` when one
  * exists — a committed vendor of Playbook's definitions, whose `slc.pins.json`
  * can pin both pipelines to compiled artifacts — otherwise the definitions the
- * installed `@sublang/playbook` provides (SELFHOST-9).
+ * installed `@sublang/playbook` provides (self-hosting-9).
  */
 export function withReservedPipelines(
   inner: PipelineResolver,

@@ -12,8 +12,8 @@ Implement [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emissio
 - [x] Artifact directories derive from the invocation working directory across full, single-phase, pass, and `.link` runs (`pipeline-7`, `pipeline-38`), with the no-nesting reuse when the working directory is already `<basename>.<pipeline>`.
 - [x] Entry sources with a foreign extension compile as raw inputs through auto-scheduled normalization (`pipeline-6`, `pipeline-34`, `pipeline-39`, [[compiler-7](../packages/compiler.md#compiler-7)]).
 - [x] Discovered passes run by default with `--no-optimize` as the escape (`pipeline-32`, `pipeline-35`, `pipeline-37`, [[compiler-8](../packages/compiler.md#compiler-8)]).
-- [x] Bare `slc playbook <source>` links against the installed `@sublang/playbook` runtime (`SELFHOST-13`, `pipeline-13`, `SELFHOST-8`).
-- [x] Full-link playbook runs emit the `<basename>.ts` entry module; `playbook run` performs it unmodified (`SELFHOST-14`, `SELFHOST-15`, `SELFHOST-16`).
+- [x] Bare `slc playbook <source>` links against the installed `@sublang/playbook` runtime (`self-hosting-13`, `pipeline-13`, `self-hosting-8`).
+- [x] Full-link playbook runs emit the `<basename>.ts` entry module; `playbook run` performs it unmodified (`self-hosting-14`, `self-hosting-15`, `self-hosting-16`).
 - [x] `demo/` carries no hand-written registry: `workflow.zh.ts` is the committed emitter output, the scripted Git step detects the repository **root** (`[ -e .git ] || git init`, initializing a nested repository when run inside a larger checkout), and the READMEs document the three-line flow.
 - [x] The reference recompile from `demo/reference/` (claude-code, claude-opus-4-8 at high effort, over the pinned vendored pipeline) reproduced the committed reference set byte-for-byte after formatting — including the entry module — and the optimizer independently derived the root-detecting command from the normalized 根目录 wording, retiring the hand-adjustment note of Task 6.
 
@@ -30,6 +30,6 @@ Implement [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emissio
 
 ## Acceptance criteria
 
-- `npm test` covers CWD placement, raw-entry normalization, default passes, the default link target, and entry emission (pipeline-38, pipeline-39, pipeline-35, SELFHOST-8, SELFHOST-16).
+- `npm test` covers CWD placement, raw-entry normalization, default passes, the default link target, and entry emission (pipeline-38, pipeline-39, pipeline-35, self-hosting-8, self-hosting-16).
 - From `demo/`, `slc playbook workflow.zh.txt` reproduces the committed bundle layout plus `workflow.zh.ts` with no flags.
 - `playbook run ./workflow.zh.ts "<task>"` reaches a terminal outcome over the demo sample, and `node demo/reference/check.mjs` passes, including the scripted step's nested initialization inside a larger checkout.

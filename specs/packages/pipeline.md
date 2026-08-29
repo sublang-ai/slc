@@ -82,7 +82,7 @@ Where a pipeline directory contains `link.md`, the slc command shall load it as 
 
 #### pipeline-11
 
-When loading `link.md`, the slc command shall read its `## Formats` (the object source format and the linked target format) and its `## Link Targets` section, whose target-form table is required — except when the linked target format is the Playbook-owned `playbook` format used by the reserved `slc` and the `playbook` pipeline, whose target validation Playbook owns and which therefore declares none, so the exception keys on that linked format and not on the pipeline name [[SELFHOST-2](../dev/self-hosting.md#selfhost-2)], [[SELFHOST-6](../dev/self-hosting.md#selfhost-6)] — and whose required symbols, supported `--link-option` names, and validation rules are optional ([DR-002](../decisions/002-slc-link-phases.md), [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
+When loading `link.md`, the slc command shall read its `## Formats` (the object source format and the linked target format) and its `## Link Targets` section, whose target-form table is required — except when the linked target format is the Playbook-owned `playbook` format used by the reserved `slc` and the `playbook` pipeline, whose target validation Playbook owns and which therefore declares none, so the exception keys on that linked format and not on the pipeline name [[self-hosting-2](self-hosting.md#self-hosting-2)], [[self-hosting-6](self-hosting.md#self-hosting-6)] — and whose required symbols, supported `--link-option` names, and validation rules are optional ([DR-002](../decisions/002-slc-link-phases.md), [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md)).
 
 #### pipeline-19
 
@@ -94,7 +94,7 @@ When invoked as `slc <pipeline>.link <object>... <target> [-o <linked-target>]`,
 
 #### pipeline-13
 
-When invoked as `slc <pipeline> <source> --link <target>`, the slc command shall run the compile chain to its exit artifact and then the link phase; when invoked without `--link`, the slc command shall stop at the compile-chain output, except where the resolved pipeline supplies a default link target [[SELFHOST-13](../dev/self-hosting.md#selfhost-13)], in which case the slc command shall run the full-link form against that default ([DR-002](../decisions/002-slc-link-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+When invoked as `slc <pipeline> <source> --link <target>`, the slc command shall run the compile chain to its exit artifact and then the link phase; when invoked without `--link`, the slc command shall stop at the compile-chain output, except where the resolved pipeline supplies a default link target [[self-hosting-13](self-hosting.md#self-hosting-13)], in which case the slc command shall run the full-link form against that default ([DR-002](../decisions/002-slc-link-phases.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 #### pipeline-14
 

@@ -57,7 +57,7 @@ byte-identical, so a rebuild could only launder identical bytes through
 nondeterministic runs. Pins regenerate with exact 4.0.0 provenance, moving
 the lockfile hash and the installed-package identities. Manifest, lock,
 definitions, bundles, and pins move as one reviewed set
-([SELFHOST-11](../dev/self-hosting.md#selfhost-11)).
+([[self-hosting-11](../packages/self-hosting.md#self-hosting-11)]).
 
 ### Agent runtimes for repository verification
 
