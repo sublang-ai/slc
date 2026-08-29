@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–2 are complete.
+In progress — repository-owner approval of both released-ID rename maps is recorded, and Tasks 1–3 are complete.
 
 ## Intent
 
@@ -66,7 +66,7 @@ The package classification audit yields this target placement, with new verifica
 | Package | External Behavior item numbers | Internal Behavior item numbers | Verification item numbers |
 | --- | --- | --- | --- |
 | `cli` | 1–5, 22, 29, 32–34, 39 | 6–12, 20–21, 30, 35, 40 | 13–19, 23–28, 31, 36–38, 41 |
-| `compiler` | 1–9 | — | new local coverage |
+| `compiler` | 1–9 | — | 10 |
 | `continuous-integration` | 1–5 | — | new local coverage |
 | `git` | 1–5 | — | 6 |
 | `incremental-compilation` | 1–8 | 9–17, 26 | 18–25, 27–29 |
@@ -78,18 +78,19 @@ The package classification audit yields this target placement, with new verifica
 | `self-hosting` | 1–3, 6, 9, 11, 13–15 | — | 4–5, 7–8, 10, 12, 16 |
 | `verification` | 1–6, 10, 12–13, 15–16, 18 | — | 7–9, 11, 14, 17, 19 |
 
-The existing behavior citations establish these peer-package edges:
+The behavior citation audit establishes these peer-package edges:
 
 | Consumer package | Peer packages |
 | --- | --- |
 | `cli` | `compiler`, `phase-execution`, `pipeline`, `self-hosting` |
+| `compiler` | `incremental-compilation`, `phase-execution`, `pinning`, `pipeline` |
 | `continuous-integration` | `release`, `self-hosting` |
 | `phase-execution` | `pipeline` |
 | `pipeline` | `phase-execution`, `self-hosting` |
 | `self-hosting` | `pinning`, `pipeline` |
 | `verification` | `release` |
 
-Package tasks shall confirm or reject the additional uncited dependency candidates exposed by package intent or prose: continuous integration to verification and pinning; compiler to pipeline, phase execution, and pinning; incremental compilation to pipeline and phase execution; phase execution to pinning and self-hosting; release to CLI, compiler, and incremental compilation; self-hosting to phase execution; and verification to pipeline and self-hosting.
+Package tasks shall confirm or reject the additional uncited dependency candidates exposed by package intent or prose: continuous integration to verification and pinning; incremental compilation to pipeline and phase execution; phase execution to pinning and self-hosting; release to CLI, compiler, and incremental compilation; self-hosting to phase execution; and verification to pipeline and self-hosting.
 They shall also add the minimal local integration or system verification needed for uncovered compiler and continuous-integration behavior, CLI item 33, phase-execution items 29 and 33, pipeline items 1, 3, 10–11, 19, and 37, and release items 1, 3–7, 9, 12–13, and 19.
 
 ## Deliverables
@@ -114,7 +115,7 @@ No unlisted legacy framework ID receives an identity mapping without a concern a
 
 1. [x] Reconciled the legacy Git workflow source into `packages/git.md`, preserving the seed-only requirements and retargeting every authored item identity and reference.
 2. [x] Reconciled the legacy licensing behavior, verification, and SPDX record into `packages/licensing.md` and `intents/000-spdx-headers.md`, preserving the seed requirements and record state while retargeting every authored item identity and reference.
-3. Merge the `compiler` sources into `packages/compiler.md` and retarget all `COMPILE-*` identities and citations.
+3. [x] Merged the `compiler` source into `packages/compiler.md`, retargeted every authored item identity and reference, bound its four peer packages, and added package-local system coverage.
 4. Merge the `incremental-compilation` sources into `packages/incremental-compilation.md` and retarget all `INCR-*` identities and citations.
 5. Merge the `pinning` sources into `packages/pinning.md` and retarget all `PIN-*` identities and citations.
 6. Merge the `phase-execution` sources into `packages/phase-execution.md` and retarget all `PHEXEC-*` identities and citations.

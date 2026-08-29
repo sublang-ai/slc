@@ -90,11 +90,11 @@ meta.md     The spec of specs
 | dev | [cli.md](dev/cli.md) | Bin wiring: resolver, Coder/Reviewer config selection, executor injection, progress reporter, stall-timeout resolution, process control |
 | test | [cli.md](test/cli.md) | Integration: version/help, reporting, progress lines, stall watchdog, exit codes, cancellation, Coder/Reviewer config and env, pinned compiled execution |
 
-### COMPILE
+### compiler
 
 | Group | File | Summary |
 | --- | --- | --- |
-| user | [compiler.md](user/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
+| package | [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
 
 ### git
 

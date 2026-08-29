@@ -24,7 +24,7 @@ Interpreted execution stays the reference semantics and the fallback, and the [D
 - [x] The SLC phase-runner facade (`PhaseInput`/`PhaseResult`/`PhaseRunner`/`createPhaseRunner`) bound to `@sublang/playbook` `PlaybookPorts`, with the `ok`/`blocked`/`error` → [DR-003](../decisions/003-slc-phase-execution.md) protocol mapping and diagnostics drain (extends `PHEXEC`)
 - [x] A `PlaybookPorts` adapter backing `callPlayer`/`callJudge` with Cligent and supplying status and telemetry sinks
 - [x] A compiled-`phase` loader and `CompiledExecutor` implementing `PhaseExecutor`, running a loaded artifact under the ports and the file capability (extends `PHEXEC`)
-- [x] Compiled selection in `runSlc`: per phase, no pin interprets, a current pin runs the compiled artifact, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets (extends `PHEXEC`, `COMPILE`; selection is execution behavior, which `PIN` deliberately excludes)
+- [x] Compiled selection in `runSlc`: per phase, no pin interprets, a current pin runs the compiled artifact, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets (extends `PHEXEC`, `compiler`; selection is execution behavior, which `PIN` deliberately excludes)
 - [x] The deferred [DR-007](../decisions/007-slc-phase-artifact-pinning.md) currency sub-check that a pinned artifact resolves to the linked `phase` format (extends `PIN`)
 - [x] A `self-hosting` spec package (`user`, `dev`, `test`), short form `SELFHOST`, for the reserved `slc` pipeline and the compiled `phase` artifact contract, registered in `map.md`, plus recognition of the reserved `slc` name and the `phase` linked format (`fsm` `.ts` → `phase` `.ts`) with [DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md) locations
 - [x] The `slc` meta-pipeline definitions consumed from `@sublang/playbook`'s `slc/`, not duplicated here (per [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)'s Playbook-owned source; Boss-approved option 2): the compile chain (`text2gears` → `gears2fsm`, auditable GEARS-to-FSM mapping) loads, chains, and infers through `slc`. Linking a runnable artifact through Playbook's reserved `link` is **not** delivered here: Playbook ships it in the `playbook` runtime contract (no `## Link Targets`, so SLC's `phase`-format link machinery rejects it), so reconciling SLC's link/artifact contract with that runtime ([SELFHOST-3](../dev/self-hosting.md#selfhost-3)) is the remaining reconciliation
@@ -62,7 +62,7 @@ Each task is one-commit-sized and updates code, specs, and tests together.
 ### C. Compiled selection ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) + [DR-007](../decisions/007-slc-phase-artifact-pinning.md))
 
 6. **Wire selection into `runSlc`.**
-   Use `evaluatePins` per phase so no pin interprets, a current pin runs the `CompiledExecutor` with grants derived from the pin closure, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets; extend `PIN` and `COMPILE`.
+   Use `evaluatePins` per phase so no pin interprets, a current pin runs the `CompiledExecutor` with grants derived from the pin closure, and a stale, malformed, or missing pin fails closed with a diagnostic and never silently interprets; extend `PIN` and `compiler`.
    Add integration tests over fixtures for each verdict path.
 
 7. **Artifact-resolves-to-`phase` currency sub-check.**
