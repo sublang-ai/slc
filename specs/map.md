@@ -145,9 +145,8 @@ meta.md     The spec of specs
 | --- | --- | --- |
 | package | [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, atomic reviewed-asset adoption, and system acceptance |
 
-### VERIFY
+### verification
 
 | Group | File | Summary |
 | --- | --- | --- |
-| dev | [verification.md](dev/verification.md) | Compilation correctness: emitted-import integrity, distinct Captain/player/child/script conformance, dynamic context wiring, pinned introspection, prompt contracts, scripted transition coverage, and artifact-local checker support |
-| test | [verification.md](test/verification.md) | Acceptance: emitted-import refusal, reference and synthetic checks, injected actor/dynamic/transition drift, runtime equivalence, and portable emitted verification artifacts |
+| package | [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, and runtime checks; portable generated tests; and emitted-module load integrity |

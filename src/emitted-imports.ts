@@ -3,7 +3,7 @@
 
 /**
  * Deterministic link-object import settlement and load-integrity checks for
- * emitted modules (PIPE-40, VERIFY-18).
+ * emitted modules (pipeline-40, verification-18).
  *
  * A linked artifact is code whose relative imports Node resolves with exact
  * specifiers — `./workflow.fsm.js` does not find `workflow.fsm.ts`. An
