@@ -46,6 +46,11 @@ Verifies: [CLI-3](../user/cli.md#cli-3), [CLI-11](../dev/cli.md#cli-11)
 
 Where `runSlc` reports an incremental `up to date` outcome, when the slc executable completes the run, the slc executable shall print `up to date` to standard output and exit zero.
 
+### CLI-42
+Verifies: [CLI-3](../user/cli.md#cli-3), [CLI-11](../dev/cli.md#cli-11)
+
+Where `runSlc` returns a successful result carrying diagnostics, when the slc executable completes the run, the slc executable shall write every returned diagnostic to standard error, keep standard output limited to artifact paths or `up to date`, and exit zero.
+
 ## Progress
 
 ### CLI-36
