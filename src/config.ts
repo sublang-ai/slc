@@ -240,8 +240,10 @@ export function createConfiguredAgentClient(
  * (cli-8, phase-execution-27): for a current pinned phase it drives the pinned `playbook`
  * artifact — resolved against its pipeline directory — through the compiled
  * executor, backing the runtime's player ports with one agent transport per
- * player id and its Captain/judge ports with one shared transport (phase-execution-25),
- * and applying the selected model as the default per-player model (phase-execution-13).
+ * player id and its Captain/judge ports with one shared transport; the dormant
+ * roleless composed-v3 path rejects its player port before that lazy player
+ * transport is constructed (phase-execution-25). The factory applies the
+ * selected model as the default per-player model (phase-execution-13).
  */
 export function createConfiguredCompiledFactory(
   selection: AgentSelection,
@@ -318,7 +320,9 @@ function runtimeContractForPin(
   // byte-identical to 3.1.0's — its major marks the SDK-topology break,
   // with cligent owning runtime versions, not a contract change — so it
   // selects the same profile (DR-020). 1.3.0 and 3.0.0 were never
-  // installed or reviewed here and stay fail-closed.
+  // installed or reviewed here and stay fail-closed. Exact Playbook 10 remains
+  // deliberately unmapped until IR-023's atomic adoption task activates the
+  // already-wired composed-v3 host together with its reviewed asset closure.
   if (
     provenance === '@sublang/playbook@0.10.0' ||
     provenance === '@sublang/playbook@1.0.0' ||

@@ -408,5 +408,20 @@ describe('createConfiguredExecutor (cli-7, cli-8)', () => {
     expect(() => compiled(choice('@sublang/playbook@4.1.0'))).toThrow(
       /unsupported pinned Playbook runtime contract/,
     );
+    // Task 2 lands the dormant schema-3 host without activating a new
+    // provenance. Every unreviewed intermediate and exact 10.0.0 itself stay
+    // fail-closed until the complete DR-024 reviewed set moves atomically.
+    for (const version of [
+      '5.0.0',
+      '6.0.0',
+      '7.0.0',
+      '8.0.0',
+      '9.0.0',
+      '10.0.0',
+    ]) {
+      expect(() => compiled(choice(`@sublang/playbook@${version}`))).toThrow(
+        `unsupported pinned Playbook runtime contract: @sublang/playbook@${version}`,
+      );
+    }
   });
 });

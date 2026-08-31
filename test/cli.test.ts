@@ -1240,11 +1240,10 @@ describe('compiled execution through the bin (cli-28)', () => {
     expect(await readFile(target, 'utf8')).toBe('compiled:prose');
   });
 
-  it('reports an unmapped pinned provenance through the phase-failure path (cli-16, cli-36)', async () => {
-    // Selecting the compiled executor throws for an unmapped provenance
-    // (phase-execution-30) instead of returning a verdict. The run must still close its
-    // progress line and name the phase and target, exactly as a stale pin
-    // does — not strand a start line behind a bare message (cli-4, cli-32).
+  it('keeps exact Playbook 10 provenance fail-closed through the phase-failure path (cli-16, cli-36)', async () => {
+    // Task 2 wires the dormant host, but selecting the compiled executor still
+    // throws for exact 10.0.0 until DR-024's complete reviewed set moves. The
+    // run must close its progress line and must invoke neither execution mode.
     const bundleDir = join(pipelineDir, 'text2gears.slc');
     await mkdir(bundleDir);
     await writeFile(
@@ -1285,8 +1284,8 @@ describe('compiled execution through the bin (cli-28)', () => {
         kind: 'file',
         locator: 'linktarget.ts',
         identity: await hashFile(join(pipelineDir, 'linktarget.ts')),
-        // Never installed or reviewed here, so it stays fail-closed.
-        provenance: '@sublang/playbook@1.3.0',
+        // Dormant host readiness does not activate exact provenance.
+        provenance: '@sublang/playbook@10.0.0',
       },
     };
     await writeFile(
@@ -1305,6 +1304,8 @@ describe('compiled execution through the bin (cli-28)', () => {
 
     const out: string[] = [];
     const err: string[] = [];
+    const interpretedRuns: string[] = [];
+    let adapterBuilds = 0;
     await mkdir(join(root, 'slc'), { recursive: true });
     await writeFile(join(root, 'slc', 'config.yaml'), 'agent: claude-code\n');
     const code = await run(['flow.text2gears', source], {
@@ -1317,11 +1318,22 @@ describe('compiled execution through the bin (cli-28)', () => {
       stdout: (t) => out.push(t),
       stderr: (t) => err.push(t),
       buildDeps: (io) =>
-        buildSlcDeps(io, undefined, (selection, opts = {}) =>
-          createConfiguredCompiledFactory(selection, {
-            ...opts,
-            adapterFactory: () => ({}) as unknown as AgentAdapter,
+        buildSlcDeps(
+          io,
+          () => ({
+            run: async (request) => {
+              interpretedRuns.push(request.kind);
+              return { status: 'error', diagnostics: ['must not interpret'] };
+            },
           }),
+          (selection, opts = {}) =>
+            createConfiguredCompiledFactory(selection, {
+              ...opts,
+              adapterFactory: () => {
+                adapterBuilds += 1;
+                return {} as AgentAdapter;
+              },
+            }),
         ),
     });
 
@@ -1340,7 +1352,10 @@ describe('compiled execution through the bin (cli-28)', () => {
     // ...and the report names the failing phase, its target, and the reason.
     expect(lines[2]).toBe(`slc: phase "text2gears" failed at "${target}"`);
     expect(lines[3]).toContain(
-      'unsupported pinned Playbook runtime contract: @sublang/playbook@1.3.0',
+      'unsupported pinned Playbook runtime contract: @sublang/playbook@10.0.0',
     );
+    expect(interpretedRuns).toEqual([]);
+    expect(adapterBuilds).toBe(0);
+    await expect(access(target)).rejects.toThrow();
   });
 });
