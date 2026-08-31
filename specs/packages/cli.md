@@ -85,7 +85,7 @@ When discovery finds neither the working-directory `slc.config.yaml` nor the use
 
 ### cli-8
 
-When the slc executable runs a pipeline, phase, or link, the executable shall inject into `runSlc` an interpreted executor built on the agent transport — the execution for every unpinned phase — and a compiled-execution factory that runs a current pinned phase's compiled `playbook` artifact, resolved against its pipeline directory, with the runtime's player ports backed by one configured agent transport per player id, its Captain and judge ports backed by one shared configured transport, and the selected model applied as the default per-player model ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [[phase-execution-25](phase-execution.md#phase-execution-25)], [[phase-execution-27](phase-execution.md#phase-execution-27)]).
+When the slc executable runs a pipeline, phase, or link, the executable shall inject into `runSlc` an interpreted executor built on the agent transport — the execution for every unpinned phase — and a compiled-execution factory that runs a current pinned phase's compiled `playbook` artifact resolved against its pipeline directory, backs `legacy`, `session-v1`, and `composed-v2` player ports with one configured agent transport per player id while making the roleless `composed-v3` player port reject without invoking a player transport, backs Captain and judge ports with one shared configured transport, and applies the selected model as the default per-player model ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), [[phase-execution-25](phase-execution.md#phase-execution-25)], [[phase-execution-27](phase-execution.md#phase-execution-27)]).
 
 ### cli-40
 
@@ -183,7 +183,13 @@ Where Reviewer configuration is supplied to the config-loader and run-config sea
 
 ### cli-28
 
-Where a pipeline directory pins a phase to a current compiled `playbook` artifact, when the slc executable runs that phase, the slc executable shall run the pinned artifact through compiled execution — writing the artifact's declared target and exiting zero — without invoking the interpreted executor for that phase [[cli-8](#cli-8)].
+Where a pipeline directory pins a phase to a current compiled `playbook` artifact, when the slc executable runs that phase, the slc executable shall apply the compiled-execution outcome for the applicable case [[cli-8](#cli-8)]:
+
+| Case | Required outcome |
+| --- | --- |
+| The artifact completes without a rejected roleless-v3 player call. | Write the artifact's declared target, exit zero, and never invoke the interpreted executor. |
+| A `legacy`, `session-v1`, or `composed-v2` fixture invokes its player port. | Use the configured agent transport and selected per-player model without invoking the interpreted executor. |
+| A `composed-v3` fixture invokes its player port. | Fail closed without invoking a player transport or the interpreted executor. |
 
 ## References
 
