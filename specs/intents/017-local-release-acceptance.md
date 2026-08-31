@@ -16,7 +16,7 @@ The surviving behavior and deterministic evidence are owned by the [`release`](.
 
 ## Deliverables
 
-- [x] The package smoke drives one Boss turn from an installed consumer project over fake ports, proving the publishable dependency closure runs [[release-18](../packages/release.md#release-18)].
+- [x] The package smoke gained an agent-free installed-consumer runtime probe over fake ports, proving the publishable dependency closure runs [[release-18](../packages/release.md#release-18)].
 - [x] The opt-in `test:acceptance` gate packs and installs the candidate, then compiles a minimal workflow and runs a compiled playbook through the installed executables with real agents [[release-17](../packages/release.md#release-17)].
 - [x] The acceptance gate builds before packing, refuses an invocation selecting no stage, binds its lineup explicitly, requires exactly the selected agent CLIs, reports missing prerequisites actionably, and remains outside continuous integration and `release:check` [[release-17](../packages/release.md#release-17)].
 - [x] The package build clears generated output first so a superseded artifact cannot reach the tarball [[release-19](../packages/release.md#release-19)].
