@@ -195,6 +195,7 @@ const parallelMachine = (
     nestedInputThrowsAfterInterrupt?: boolean;
     nestedInputUsesInitializedContext?: boolean;
     contextGuardedInterrupt?: boolean;
+    repeatedCanonicalRole?: boolean;
   } = {},
 ) => {
   const meta = (stateId: string) => ({
@@ -212,13 +213,26 @@ const parallelMachine = (
         working: {
           id: stateId,
           tags: 'playbook.busy',
-          ...meta(stateId),
+          ...(opts.repeatedCanonicalRole === true
+            ? {
+                description: stateId,
+                meta: {
+                  playbook: {
+                    stateId,
+                    description: stateId,
+                    role: 'writer',
+                  },
+                },
+              }
+            : meta(stateId)),
           invoke: {
             id: `${side}Captain`,
             src: 'player',
             input: () => ({
               stateId,
-              player: side === 'left' ? 'Writer' : 'Reviewer',
+              ...(opts.repeatedCanonicalRole === true
+                ? { role: 'writer' }
+                : { player: side === 'left' ? 'Writer' : 'Reviewer' }),
               sourceItem: side === 'left' ? 'X-1' : 'X-2',
               prompt: `${side} prompt`,
               result: {
@@ -662,6 +676,147 @@ const nestedMultiArmMachine = (
     },
   } as any);
 
+const controllerActions = [
+  'respond',
+  'resume',
+  'start',
+  'switch',
+  'dismiss',
+  'deliver',
+  'runtime',
+] as const;
+
+/** A schema-3 session controller entered from its hub without an interrupt. */
+const controllerMachine = (
+  withBossReplyWait = false,
+  deadReportingResult = false,
+  extraDecisionResult = false,
+) =>
+  setup({
+    actors: {
+      captain: fromPromise(async () => {
+        throw new Error('captain actor must be provided by the runner');
+      }),
+    },
+  }).createMachine({
+    id: 'sessionController',
+    initial: 'hub',
+    context: ({ input }: any) => ({
+      enabledPlaybooks: input.enabledPlaybooks,
+    }),
+    states: {
+      hub: {
+        id: 'hub',
+        tags: 'playbook.parked',
+        on: {
+          BOSS_TURN: { target: 'deciding' },
+          SHUTDOWN: { target: 'shutdown' },
+        },
+      },
+      deciding: {
+        id: 'deciding',
+        meta: {
+          playbook: {
+            stateId: 'deciding',
+            description: 'Choose the next session action.',
+          },
+        },
+        invoke: {
+          src: 'captain',
+          input: () => ({
+            stateId: 'deciding',
+            sourceItem: 'CONTROLLER-1',
+            prompt: 'Choose the next session action.',
+            result: {
+              respond:
+                'Reply now. Output shall include `text: <complete reply>`.',
+              resume:
+                'Resume work. Output shall include `playbookId: <catalog id>`.',
+              start:
+                'Start work. Output shall include `playbookId: <catalog id>` and `input: <request>`.',
+              switch:
+                'Switch work. Output shall include `playbookId: <catalog id>` and `input: <request>`.',
+              dismiss: 'Dismiss the active work.',
+              deliver: 'Deliver the current turn.',
+              runtime:
+                'Run a host action. Output shall include `actionId: <action id>`.',
+              ...(extraDecisionResult
+                ? { other: 'An undeclared controller action.' }
+                : {}),
+            },
+          }),
+          onDone: controllerActions.map((action) => ({
+            target: action === 'respond' ? '#hub' : '#reporting',
+            guard: ({ context, event }: any) => {
+              const output = event.output;
+              if (output.guard !== action) return false;
+              if (action === 'respond') {
+                return typeof output.text === 'string' && output.text !== '';
+              }
+              if (
+                action === 'resume' ||
+                action === 'start' ||
+                action === 'switch'
+              ) {
+                if (
+                  !context.enabledPlaybooks.some(
+                    (entry: { id: string }) => entry.id === output.playbookId,
+                  )
+                ) {
+                  return false;
+                }
+                return (
+                  action === 'resume' ||
+                  (typeof output.input === 'string' && output.input !== '')
+                );
+              }
+              return (
+                action !== 'runtime' ||
+                (typeof output.actionId === 'string' && output.actionId !== '')
+              );
+            },
+          })),
+          onError: { target: '#failed' },
+        },
+      },
+      reporting: {
+        id: 'reporting',
+        meta: {
+          playbook: {
+            stateId: 'reporting',
+            description: 'Report the settled controller action.',
+          },
+        },
+        invoke: {
+          src: 'captain',
+          input: () => ({
+            stateId: 'reporting',
+            sourceItem: 'CONTROLLER-2',
+            prompt: 'Report the settled controller action.',
+            result: { done: 'The action report is complete.' },
+          }),
+          onDone: {
+            target: '#hub',
+            guard: ({ event }: any) =>
+              deadReportingResult !== true && event.output.guard === 'done',
+          },
+          onError: { target: '#failed' },
+        },
+      },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+      ...(withBossReplyWait
+        ? {
+            awaitBossReply: {
+              id: 'awaitBossReply',
+              tags: 'playbook.parked',
+              on: { BOSS_REPLY: { target: '#hub' } },
+            },
+          }
+        : {}),
+      shutdown: { id: 'shutdown', type: 'final' },
+    },
+  } as any);
+
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 type DoneGuardArgs = {
@@ -769,6 +924,41 @@ describe('checkFsmCoverage (verification-6)', () => {
 
   it('drives explicit player leaves by entering their parallel parent', async () => {
     expect(await checkFsmCoverage({ machine: parallelMachine() })).toEqual([]);
+  });
+
+  it('rejects a repeated canonical role in a parallel group', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({ repeatedCanonicalRole: true }),
+      }),
+    ).toContain('parallel state parallelRound repeats canonical role writer');
+  });
+
+  it('drives every controller action without a Boss-reply wait', async () => {
+    expect(await checkFsmCoverage({ machine: controllerMachine() })).toEqual(
+      [],
+    );
+    expect(
+      await checkFsmCoverage({ machine: controllerMachine(true) }),
+    ).toContain('controller machine declares a Boss-reply wait state');
+  });
+
+  it('audits intermediate controller Captain result paths', async () => {
+    expect(
+      await checkFsmCoverage({ machine: controllerMachine(false, true) }),
+    ).toContain(
+      'state reporting: result "done" has no reachable accepting transition',
+    );
+  });
+
+  it('requires the exact seven-key controller decision contract', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: controllerMachine(false, false, true),
+      }),
+    ).toContain(
+      'machine declares no awaitBossReply state or branch-local Boss-reply wait state',
+    );
   });
 
   it('drives nested playbook success and failure through its public state id', async () => {

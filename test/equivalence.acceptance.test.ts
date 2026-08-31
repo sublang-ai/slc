@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { fromPromise, setup } from 'xstate';
 
 import { loadFsmModule } from '../src/verify.js';
 import {
@@ -26,7 +27,7 @@ const referenceDir = join(
   'node_modules/@sublang/playbook/reference/sdlc/code.playbook',
 );
 
-/** Loads the manual reference package as a {@link CompiledPlaybook}. */
+/** Loads the immutable Playbook-4 schema-1 reference fixture. */
 async function loadReference(): Promise<CompiledPlaybook> {
   return {
     gears: readFileSync(join(referenceDir, 'code.gears.md'), 'utf8'),
@@ -178,6 +179,429 @@ function unmarkedStrictComposedRuntime(): unknown {
   };
 }
 
+const playbook10Provenance = '@sublang/playbook@10.0.0';
+
+type Schema3FixtureKind = 'shared-factory' | 'bespoke';
+
+interface Schema3FixtureOptions {
+  kind: Schema3FixtureKind;
+  compatMode?: 'exact' | 'missing' | 'mutable' | 'accessor';
+  roles?: readonly string[];
+  concurrentRoleSets?: readonly (readonly string[])[];
+  validateOptions?: (value: unknown) => unknown;
+  result?: unknown;
+  effect?: 'player' | 'repository' | 'ledger';
+  runtimePatch?: (runtime: Record<string, unknown>) => void;
+}
+
+function assertExactDataRecord(
+  value: unknown,
+  keys: readonly string[],
+  label: string,
+): Record<string, unknown> {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    (Object.getPrototypeOf(value) !== Object.prototype &&
+      Object.getPrototypeOf(value) !== null)
+  ) {
+    throw new Error(`${label} must be a plain record`);
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (
+    Reflect.ownKeys(descriptors).length !== keys.length ||
+    keys.some((key) => {
+      const descriptor = descriptors[key];
+      return (
+        descriptor === undefined ||
+        !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
+        descriptor.enumerable !== true
+      );
+    })
+  ) {
+    throw new Error(`${label} must contain exact enumerable own data`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function schema3Fixture(options: Schema3FixtureOptions): {
+  playbook: unknown;
+  registry: Record<string, unknown>;
+  observations: { turns: number; disposals: number };
+} {
+  const roles = [...(options.roles ?? [])];
+  const concurrentRoleSets = (options.concurrentRoleSets ?? []).map((set) => [
+    ...set,
+  ]);
+  const observations = { turns: 0, disposals: 0 };
+  let lastValidated: unknown;
+
+  const factory = (construction: unknown) => {
+    const input = assertExactDataRecord(
+      construction,
+      ['configuredOptions', 'hostCapabilities'],
+      'shared-factory construction',
+    );
+    if (input.configuredOptions !== lastValidated) {
+      throw new Error('configured options did not cross by exact identity');
+    }
+    const capabilities = assertExactDataRecord(
+      input.hostCapabilities,
+      ['authority', 'repository', 'effectLedger'],
+      'host capabilities',
+    );
+    const authority = assertExactDataRecord(
+      capabilities.authority,
+      [
+        'playbookId',
+        'artifactSchema',
+        'cwd',
+        'sessionId',
+        'leaseOwnerToken',
+        'canonicalWorktree',
+        'requiredRoleIds',
+        'concurrentRoleSets',
+      ],
+      'host authority',
+    );
+    const canonicalWorktree = assertExactDataRecord(
+      authority.canonicalWorktree,
+      ['worktree', 'gitDir'],
+      'canonical worktree',
+    );
+    const repository = assertExactDataRecord(
+      capabilities.repository,
+      [
+        'identity',
+        'observe',
+        'acquire',
+        'runExclusive',
+        'runCohort',
+        'runDeferred',
+      ],
+      'repository capability',
+    );
+    const identity = assertExactDataRecord(
+      repository.identity,
+      ['worktree', 'gitDir'],
+      'repository identity',
+    );
+    const ledger = assertExactDataRecord(
+      capabilities.effectLedger,
+      ['snapshot', 'writeAhead'],
+      'effect-ledger capability',
+    );
+    if (
+      authority.playbookId !== 'synthetic-v3' ||
+      authority.artifactSchema !== 3 ||
+      authority.cwd !== canonicalWorktree.worktree ||
+      identity.worktree !== canonicalWorktree.worktree ||
+      identity.gitDir !== canonicalWorktree.gitDir ||
+      !existsSync(join(String(canonicalWorktree.worktree), '.git')) ||
+      JSON.stringify(authority.requiredRoleIds) !== JSON.stringify(roles) ||
+      JSON.stringify(authority.concurrentRoleSets) !==
+        JSON.stringify(concurrentRoleSets)
+    ) {
+      throw new Error('host authority does not match the registry/worktree');
+    }
+    const snapshot = (ledger.snapshot as () => unknown)();
+    const nextSnapshot = (ledger.snapshot as () => unknown)();
+    if (
+      snapshot === nextSnapshot ||
+      JSON.stringify(snapshot) !==
+        JSON.stringify({
+          schemaVersion: 1,
+          revision: 0,
+          boundaries: [],
+          logicalOperations: [],
+        })
+    ) {
+      throw new Error('effect-ledger snapshots must be exact and detached');
+    }
+
+    let ports: Record<string, unknown> | undefined;
+    const runtime: Record<string, unknown> = {
+      async init(session: unknown) {
+        const initialized = assertExactDataRecord(
+          session,
+          ['sessionId', 'playbookId', 'rootSessionId', 'depth', 'ports'],
+          'schema-3 session',
+        );
+        ports = assertExactDataRecord(
+          initialized.ports,
+          [
+            'callPlayer',
+            'callJudge',
+            'callCaptain',
+            'callPlaybook',
+            'emitStatus',
+            'emitTelemetry',
+          ],
+          'schema-3 ports',
+        );
+        if (
+          initialized.sessionId !== 'slc-profile-probe' ||
+          initialized.playbookId !== 'synthetic-v3' ||
+          initialized.rootSessionId !== 'slc-profile-probe' ||
+          initialized.depth !== 0 ||
+          Object.values(ports).some((member) => typeof member !== 'function')
+        ) {
+          throw new Error('schema-3 causal-root session is malformed');
+        }
+      },
+      async handleBossInput() {
+        observations.turns += 1;
+        if (options.effect === 'player') {
+          await (ports?.callPlayer as (...args: unknown[]) => Promise<unknown>)(
+            'worker',
+            'work',
+            new AbortController().signal,
+            { resume: false },
+          );
+        } else if (options.effect === 'repository') {
+          await (repository.runExclusive as () => Promise<unknown>)();
+        } else if (options.effect === 'ledger') {
+          await (ledger.writeAhead as () => Promise<unknown>)();
+        }
+        return options.result ?? { outcome: 'no-action', state: profileState };
+      },
+      async resumePlaybookCall() {
+        return { outcome: 'no-action', state: profileState };
+      },
+      async dispose() {
+        observations.disposals += 1;
+      },
+    };
+    options.runtimePatch?.(runtime);
+    return runtime;
+  };
+  const compat =
+    options.compatMode === 'mutable'
+      ? { artifactSchema: 3, runtimeAbi: 1 }
+      : Object.freeze({ artifactSchema: 3, runtimeAbi: 1 });
+  if (options.kind === 'shared-factory') {
+    if (options.compatMode === 'accessor') {
+      Object.defineProperty(factory, 'compat', {
+        get: () => compat,
+        enumerable: true,
+        configurable: false,
+      });
+    } else if (options.compatMode !== 'missing') {
+      Object.defineProperty(factory, 'compat', {
+        value: compat,
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      });
+    }
+  }
+  const runtimeProfile = Object.freeze(
+    options.kind === 'shared-factory'
+      ? { kind: 'shared-factory', compat }
+      : { kind: 'bespoke', artifactSchema: 3 },
+  );
+  const registry: Record<string, unknown> = {
+    id: 'synthetic-v3',
+    command: 'synthetic-v3',
+    intent: 'exercise the dormant schema-3 equivalence boundary',
+    artifactSchema: 3,
+    runtimeProfile,
+    requiredRoleIds: roles,
+    concurrentRoleSets,
+    validateOptions(value: unknown) {
+      lastValidated =
+        options.validateOptions === undefined
+          ? value === undefined
+            ? Object.freeze({})
+            : value
+          : options.validateOptions(value);
+      return lastValidated;
+    },
+    createRuntime(configuredOptions: unknown, hostCapabilities: unknown) {
+      return factory({ configuredOptions, hostCapabilities });
+    },
+  };
+  return {
+    playbook: { default: factory },
+    registry,
+    observations,
+  };
+}
+
+const schema3Gears = `# Synthetic schema-3 equivalence fixture
+
+Roles:
+
+- Worker
+
+## Behaviors
+
+### SYNTHETIC-1
+
+When Boss requests synthetic work, Captain shall prompt Worker:
+> Perform the synthetic work.
+`;
+
+const rolelessSchema3Gears = `# Synthetic roleless schema-3 equivalence fixture
+
+## Behaviors
+
+### SYNTHETIC-DIRECT-1
+
+When Boss requests a synthetic answer, Captain shall answer directly:
+> Answer the synthetic request.
+`;
+
+const schema3NeedsBossReply =
+  "The player's prose surfaces a clarifying question for Boss that the player cannot answer alone. Output shall include `question: <verbatim question text from the player's prose>`.";
+
+/** A complete synthetic Roles/FSM closure, independent of the schema-1 oracle. */
+function syntheticSchema3Compilation(roleless = false): CompiledPlaybook {
+  const sourceItem = roleless ? 'SYNTHETIC-DIRECT-1' : 'SYNTHETIC-1';
+  const prompt = roleless
+    ? 'Answer the synthetic request.'
+    : 'Perform the synthetic work.';
+  const machine = setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('player actor must be supplied by the runtime');
+      }),
+      captain: fromPromise(async () => {
+        throw new Error('Captain actor must be supplied by the runtime');
+      }),
+    },
+  }).createMachine({
+    id: 'syntheticSchema3',
+    initial: 'ready',
+    context: {},
+    on: {
+      BOSS_INTERRUPT: [
+        {
+          target: '#work',
+          reenter: true,
+          guard: (({ event }: { event: { targetId?: unknown } }) =>
+            event.targetId === 'work') as never,
+        },
+        {
+          target: '#ready',
+          reenter: true,
+          guard: (({ event }: { event: { targetId?: unknown } }) =>
+            event.targetId === 'ready') as never,
+        },
+      ],
+    },
+    states: {
+      ready: {
+        id: 'ready',
+        tags: 'playbook.parked',
+        on: { GO: { target: '#work' } },
+      },
+      work: {
+        id: 'work',
+        tags: 'playbook.busy',
+        meta: {
+          playbook: {
+            stateId: 'work',
+            description: 'Performing synthetic work',
+            ...(roleless ? {} : { role: 'worker' }),
+          },
+        },
+        invoke: {
+          src: roleless ? 'captain' : 'player',
+          input: () => ({
+            stateId: 'work',
+            ...(roleless ? {} : { role: 'worker' }),
+            sourceItem,
+            prompt,
+            result: {
+              done: 'The synthetic work is complete.',
+              needsBossReply: schema3NeedsBossReply,
+            },
+          }),
+          onDone: [
+            {
+              target: '#done',
+              guard: (({
+                event,
+              }: {
+                event: { output?: { guard?: unknown } };
+              }) => event.output?.guard === 'done') as never,
+            },
+            {
+              target: '#awaitBossReply',
+              guard: (({
+                event,
+              }: {
+                event: { output?: { guard?: unknown; question?: unknown } };
+              }) =>
+                event.output?.guard === 'needsBossReply' &&
+                typeof event.output.question === 'string') as never,
+            },
+          ],
+          onError: { target: '#failed' },
+        },
+      },
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        tags: 'playbook.parked',
+        on: {
+          BOSS_REPLY: [
+            {
+              target: '#work',
+              reenter: true,
+              guard: (({ event }: { event: { answer?: unknown } }) =>
+                typeof event.answer === 'string' &&
+                event.answer.trim() !== '') as never,
+            },
+            { target: '#failed' },
+          ],
+        },
+      },
+      failed: {
+        id: 'failed',
+        tags: 'playbook.parked',
+        on: { GO: { target: '#work' } },
+      },
+      done: { id: 'done', type: 'final' },
+    },
+  } as never);
+  return {
+    gears: roleless ? rolelessSchema3Gears : schema3Gears,
+    fsm: { machine, concurrentRoleSets: [] },
+    playbook: {},
+  };
+}
+
+function withSchema3Runtime(
+  compiled: CompiledPlaybook,
+  fixture: ReturnType<typeof schema3Fixture>,
+): CompiledPlaybook {
+  return {
+    ...compiled,
+    playbook: fixture.playbook,
+    registry: fixture.registry,
+    linkTargetProvenance: playbook10Provenance,
+  };
+}
+
+function schema3ProfileOptions(
+  fixture: ReturnType<typeof schema3Fixture>,
+  ...configuredOptions: [] | [unknown]
+): {
+  provenance: string;
+  registry: unknown;
+  configuredOptions?: unknown;
+} {
+  return {
+    provenance: playbook10Provenance,
+    registry: fixture.registry,
+    ...(configuredOptions.length === 0
+      ? {}
+      : { configuredOptions: configuredOptions[0] }),
+  };
+}
+
 describe('reference equivalence harness (verification-9)', () => {
   it('accepts the reference compared to itself', async () => {
     const reference = await loadReference();
@@ -278,6 +702,606 @@ describe('reference equivalence harness (verification-9)', () => {
     },
   );
 
+  it('recognizes shared and bespoke composed-v3 registries', async () => {
+    for (const kind of ['shared-factory', 'bespoke'] as const) {
+      const fixture = schema3Fixture({ kind });
+
+      expect(
+        await runtimeCapabilityProfile(
+          fixture.playbook,
+          schema3ProfileOptions(fixture),
+        ),
+      ).toBe('composed-v3');
+      expect(fixture.observations).toEqual({ turns: 1, disposals: 1 });
+    }
+  });
+
+  it('accepts an exact mutable outer profile with frozen shared compatibility', async () => {
+    const fixture = schema3Fixture({ kind: 'shared-factory' });
+    const profile = fixture.registry.runtimeProfile as Record<string, unknown>;
+    fixture.registry.runtimeProfile = {
+      kind: profile.kind,
+      compat: profile.compat,
+    };
+
+    expect(Object.isFrozen(fixture.registry.runtimeProfile)).toBe(false);
+    expect(Object.isFrozen(profile.compat)).toBe(true);
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture),
+      ),
+    ).toBe('composed-v3');
+  });
+
+  it('initializes but does not drive a role-bearing composed-v3 registry', async () => {
+    const fixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+    });
+
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture),
+      ),
+    ).toBe('composed-v3');
+    expect(fixture.observations).toEqual({ turns: 0, disposals: 1 });
+  });
+
+  it('accepts an exact roleless schema-3 compiled closure', async () => {
+    const fixture = schema3Fixture({ kind: 'shared-factory' });
+
+    expect(
+      await checkPlaybookIntegrity(
+        'roleless',
+        withSchema3Runtime(syntheticSchema3Compilation(true), fixture),
+      ),
+    ).toEqual([]);
+    expect(fixture.observations).toEqual({ turns: 1, disposals: 1 });
+  });
+
+  it('compares matching nonempty validated schema-3 option slices', async () => {
+    const schema3 = syntheticSchema3Compilation();
+    const validateOptions = (value: unknown) => {
+      const mode = (value as { mode?: unknown } | undefined)?.mode;
+      if (mode !== 'strict') throw new Error('mode must be strict');
+      return { mode };
+    };
+    const producedFixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+      validateOptions,
+    });
+    const referenceFixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+      validateOptions,
+    });
+
+    expect(
+      await checkReferenceEquivalence({
+        produced: withSchema3Runtime(schema3, producedFixture),
+        reference: withSchema3Runtime(schema3, referenceFixture),
+        configuredOptions: { mode: 'strict' },
+      }),
+    ).toEqual([]);
+  });
+
+  it('rejects unequal validated schema-3 option slices', async () => {
+    const schema3 = syntheticSchema3Compilation();
+    const producedFixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+      validateOptions: () => ({ mode: 'strict' }),
+    });
+    const referenceFixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+      validateOptions: () => ({ mode: 'relaxed' }),
+    });
+    const findings = await checkReferenceEquivalence({
+      produced: withSchema3Runtime(schema3, producedFixture),
+      reference: withSchema3Runtime(schema3, referenceFixture),
+      configuredOptions: { mode: 'requested' },
+    });
+
+    expect(findings).toContain(
+      'schema-3 validated options differ: produced {"mode":"strict"} vs reference {"mode":"relaxed"}',
+    );
+  });
+
+  it('rejects a shared-factory versus bespoke schema-3 pair', async () => {
+    const schema3 = syntheticSchema3Compilation();
+    const shared = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+    });
+    const bespoke = schema3Fixture({ kind: 'bespoke', roles: ['worker'] });
+    const findings = await checkReferenceEquivalence({
+      produced: withSchema3Runtime(schema3, shared),
+      reference: withSchema3Runtime(schema3, bespoke),
+    });
+
+    expect(findings).toContain(
+      'schema-3 runtime implementations differ: produced shared-factory vs reference bespoke',
+    );
+  });
+
+  it('rejects a composed-v3 registry mixed with the historical schema-1 closure', async () => {
+    const historical = await loadReference();
+    const fixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+    });
+
+    expect(
+      await checkPlaybookIntegrity(
+        'mixed',
+        withSchema3Runtime(historical, fixture),
+      ),
+    ).toContain(
+      'mixed: composed-v3 registry cannot close over a historical schema-1 Players declaration',
+    );
+  });
+
+  it('rejects schema-3 registry role and FSM cohort drift', async () => {
+    const schema3 = syntheticSchema3Compilation();
+    const fixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['reviewer'],
+    });
+    const fsm = schema3.fsm as Record<string, unknown>;
+    const findings = await checkPlaybookIntegrity(
+      'drifted',
+      withSchema3Runtime(
+        {
+          ...schema3,
+          fsm: {
+            ...fsm,
+            concurrentRoleSets: [['worker', 'worker']],
+          },
+        },
+        fixture,
+      ),
+    );
+
+    expect(findings).toContain(
+      'drifted: schema-3 registry requiredRoleIds ["reviewer"] do not match GEARS roles ["worker"]',
+    );
+    expect(findings).toContain(
+      'drifted: schema-3 FSM exports no valid registry-matching concurrentRoleSets array',
+    );
+  });
+
+  it.each(
+    (['shared-factory', 'bespoke'] as const).flatMap((kind) =>
+      (['legacy', 'session-v1', 'composed-v2'] as const).map(
+        (historicalProfile) => [kind, historicalProfile] as const,
+      ),
+    ),
+  )(
+    'rejects a composed-v3 %s versus historical %s profile pair',
+    async (kind, historicalProfile) => {
+      const reference = await loadReference();
+      const schema3 = syntheticSchema3Compilation();
+      const fixture = schema3Fixture({
+        kind,
+        roles: ['worker'],
+      });
+      const findings = await checkReferenceEquivalence({
+        produced: withSchema3Runtime(schema3, fixture),
+        reference: withRuntimeProfile(reference, historicalProfile),
+      });
+
+      expect(findings).toContain(
+        `runtime contract profiles differ: produced composed-v3 vs reference ${historicalProfile}`,
+      );
+    },
+  );
+
+  it('passes a detached copy of the comparison option slice to validation', async () => {
+    const configuredOptions = { mode: 'strict' };
+    const fixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+      validateOptions(value) {
+        (value as { mode: string }).mode = 'validated';
+        return value;
+      },
+    });
+
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture, configuredOptions),
+      ),
+    ).toBe('composed-v3');
+    expect(configuredOptions).toEqual({ mode: 'strict' });
+  });
+
+  it.each([
+    [
+      'validator rejection',
+      () => {
+        throw new Error('rejected configured options');
+      },
+    ],
+    ['non-plain result', () => new Date(0)],
+  ] as const)('rejects schema-3 %s', async (_label, validateOptions) => {
+    const fixture = schema3Fixture({
+      kind: 'shared-factory',
+      validateOptions,
+    });
+
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture),
+      ),
+    ).toBeNull();
+    expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
+  });
+
+  it('requires exact Playbook 10 provenance for a schema-3 registry', async () => {
+    const fixture = schema3Fixture({ kind: 'shared-factory' });
+
+    expect(
+      await runtimeCapabilityProfile(fixture.playbook, {
+        provenance: '@sublang/playbook@9.0.0',
+        registry: fixture.registry,
+      }),
+    ).toBeNull();
+    expect(
+      await runtimeCapabilityProfile(fixture.playbook, {
+        registry: fixture.registry,
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects a historical marker on an exact schema-3 registry boundary', async () => {
+    const fixture = schema3Fixture({ kind: 'shared-factory' });
+    fixture.playbook = {
+      ...(fixture.playbook as object),
+      runtimeContractProfile: 'composed-v2',
+    };
+
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture),
+      ),
+    ).toBeNull();
+    expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
+  });
+
+  it.each([
+    [
+      'mismatched shared compat',
+      (fixture: ReturnType<typeof schema3Fixture>) => {
+        fixture.registry.runtimeProfile = Object.freeze({
+          kind: 'shared-factory',
+          compat: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+        });
+      },
+    ],
+    [
+      'bespoke ABI claim',
+      (fixture: ReturnType<typeof schema3Fixture>) => {
+        fixture.registry.runtimeProfile = Object.freeze({
+          kind: 'bespoke',
+          artifactSchema: 3,
+          runtimeAbi: 1,
+        });
+      },
+    ],
+    [
+      'bespoke profile on a shared factory',
+      (fixture: ReturnType<typeof schema3Fixture>) => {
+        fixture.registry.runtimeProfile = Object.freeze({
+          kind: 'bespoke',
+          artifactSchema: 3,
+        });
+      },
+    ],
+  ] as const)(
+    'rejects a schema-3 declaration with %s',
+    async (_label, mutate) => {
+      const fixture = schema3Fixture({
+        kind: _label === 'bespoke ABI claim' ? 'bespoke' : 'shared-factory',
+      });
+      mutate(fixture);
+
+      expect(
+        await runtimeCapabilityProfile(
+          fixture.playbook,
+          schema3ProfileOptions(fixture),
+        ),
+      ).toBeNull();
+      expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
+    },
+  );
+
+  it.each(['missing', 'mutable', 'accessor'] as const)(
+    'rejects %s shared-factory compatibility',
+    async (compatMode) => {
+      const fixture = schema3Fixture({
+        kind: 'shared-factory',
+        compatMode,
+      });
+
+      expect(
+        await runtimeCapabilityProfile(
+          fixture.playbook,
+          schema3ProfileOptions(fixture),
+        ),
+      ).toBeNull();
+      expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
+    },
+  );
+
+  it('rejects an accessor-backed schema-3 implementation declaration', async () => {
+    const fixture = schema3Fixture({ kind: 'shared-factory' });
+    const registry = { ...fixture.registry };
+    Object.defineProperty(registry, 'runtimeProfile', {
+      get: () => fixture.registry.runtimeProfile,
+      enumerable: true,
+      configurable: true,
+    });
+
+    expect(
+      await runtimeCapabilityProfile(fixture.playbook, {
+        provenance: playbook10Provenance,
+        registry,
+      }),
+    ).toBeNull();
+    expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
+  });
+
+  it.each(['player', 'repository', 'ledger'] as const)(
+    'rejects a roleless schema-3 probe that invokes a governed %s effect',
+    async (effect) => {
+      const fixture = schema3Fixture({ kind: 'shared-factory', effect });
+
+      expect(
+        await runtimeCapabilityProfile(
+          fixture.playbook,
+          schema3ProfileOptions(fixture),
+        ),
+      ).toBeNull();
+      expect(fixture.observations).toEqual({ turns: 1, disposals: 1 });
+    },
+  );
+
+  it.each(['non-plain', 'extra', 'accessor', 'mismatched'] as const)(
+    'rejects %s live schema-3 capabilities before runtime construction',
+    async (drift) => {
+      const fixture = schema3Fixture({ kind: 'shared-factory' });
+      const createRuntime = fixture.registry.createRuntime as (
+        options: unknown,
+        capabilities: unknown,
+      ) => unknown;
+      fixture.registry.createRuntime = (
+        configuredOptions: unknown,
+        capabilities: unknown,
+      ) => {
+        const exact = capabilities as {
+          authority: Record<string, unknown>;
+          repository: unknown;
+          effectLedger: unknown;
+        };
+        let drifted: unknown;
+        if (drift === 'non-plain') {
+          drifted = Object.create(exact);
+        } else if (drift === 'extra') {
+          drifted = { ...exact, extra: true };
+        } else if (drift === 'mismatched') {
+          drifted = {
+            ...exact,
+            authority: { ...exact.authority, playbookId: 'wrong' },
+          };
+        } else {
+          drifted = {
+            repository: exact.repository,
+            effectLedger: exact.effectLedger,
+          };
+          Object.defineProperty(drifted, 'authority', {
+            get: () => exact.authority,
+            enumerable: true,
+          });
+        }
+        return createRuntime(configuredOptions, drifted);
+      };
+
+      expect(
+        await runtimeCapabilityProfile(
+          fixture.playbook,
+          schema3ProfileOptions(fixture),
+        ),
+      ).toBeNull();
+      expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
+    },
+  );
+
+  it('rejects a shared registry that does not pass its exact validated options', async () => {
+    const fixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+      validateOptions: () => ({ mode: 'strict' }),
+    });
+    const createRuntime = fixture.registry.createRuntime as (
+      options: unknown,
+      capabilities: unknown,
+    ) => unknown;
+    fixture.registry.createRuntime = (
+      options: unknown,
+      capabilities: unknown,
+    ) => createRuntime({ ...(options as object) }, capabilities);
+
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture, { mode: 'strict' }),
+      ),
+    ).toBeNull();
+    expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
+  });
+
+  it.each([
+    ['missing init', 'init', undefined],
+    ['non-callable turn', 'handleBossInput', true],
+    ['missing resume', 'resumePlaybookCall', undefined],
+    ['non-callable dispose', 'dispose', 'dispose'],
+  ] as const)(
+    'rejects a schema-3 runtime with %s',
+    async (_label, member, replacement) => {
+      const fixture = schema3Fixture({
+        kind: 'shared-factory',
+        runtimePatch(runtime) {
+          if (replacement === undefined) delete runtime[member];
+          else runtime[member] = replacement;
+        },
+      });
+
+      expect(
+        await runtimeCapabilityProfile(
+          fixture.playbook,
+          schema3ProfileOptions(fixture),
+        ),
+      ).toBeNull();
+      expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
+    },
+  );
+
+  it('accepts the complete valid schema-3 optional surface', async () => {
+    let adoptionCalls = 0;
+    let controlCalls = 0;
+    let unresolvedInspections = 0;
+    const fixture = schema3Fixture({
+      kind: 'shared-factory',
+      runtimePatch(runtime) {
+        runtime.exportSnapshot = () => undefined;
+        runtime.restore = async () => {};
+        runtime.adopt = async () => {
+          adoptionCalls += 1;
+        };
+        runtime.retainedGenerationMetadata = {
+          unfinishedFinalStateIds: ['unfinished'],
+        };
+        runtime.describe = () => {
+          controlCalls += 1;
+          return {};
+        };
+        runtime.apply = async () => {
+          controlCalls += 1;
+          return { disposition: 'rejected', reason: 'unused' };
+        };
+        runtime.unresolvedEffectEnvelopes = () => {
+          unresolvedInspections += 1;
+          return [
+            { kind: 'boundary', boundaryId: 'boundary-1' },
+            {
+              kind: 'logical-operation',
+              operationId: 'operation-1',
+            },
+          ];
+        };
+      },
+    });
+
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture),
+      ),
+    ).toBe('composed-v3');
+    expect(adoptionCalls).toBe(0);
+    expect(controlCalls).toBe(0);
+    expect(unresolvedInspections).toBe(1);
+  });
+
+  it.each([
+    ['unpaired snapshot', { exportSnapshot: () => undefined }],
+    ['unpaired restore', { restore: async () => {} }],
+    ['non-callable adoption', { adopt: true }],
+    [
+      'malformed retained metadata',
+      { retainedGenerationMetadata: { unfinishedFinalStateIds: [7] } },
+    ],
+    ['unpaired control surface', { describe: () => ({}) }],
+    [
+      'unpaired control application',
+      {
+        apply: async () => ({ disposition: 'rejected', reason: 'unused' }),
+      },
+    ],
+    [
+      'invalid unresolved envelope',
+      {
+        unresolvedEffectEnvelopes: () => [{ kind: 'boundary', boundaryId: 7 }],
+      },
+    ],
+  ] as const)(
+    'rejects a schema-3 runtime with %s',
+    async (_label, additions) => {
+      const fixture = schema3Fixture({
+        kind: 'shared-factory',
+        runtimePatch(runtime) {
+          Object.assign(runtime, additions);
+        },
+      });
+
+      expect(
+        await runtimeCapabilityProfile(
+          fixture.playbook,
+          schema3ProfileOptions(fixture),
+        ),
+      ).toBeNull();
+    },
+  );
+
+  it.each([
+    {
+      outcome: 'terminal',
+      state: profileState,
+      stateDescription: 7,
+    },
+    {
+      outcome: 'no-action',
+      state: profileState,
+      stateDescription: 'terminal only',
+    },
+    { outcome: 'unresolved-effect', state: profileState, extra: true },
+  ])('rejects a malformed schema-3 driven result %#', async (result) => {
+    const fixture = schema3Fixture({ kind: 'shared-factory', result });
+
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture),
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    {
+      outcome: 'terminal',
+      state: profileState,
+      stateDescription: 'complete',
+      output: { ok: true },
+    },
+    { outcome: 'unresolved-effect', state: profileState },
+  ])('accepts a profile-exact schema-3 driven result %#', async (result) => {
+    const fixture = schema3Fixture({ kind: 'shared-factory', result });
+
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture),
+      ),
+    ).toBe('composed-v3');
+  });
+
   it('recognizes a branch-local structured Boss-reply wait surface', () => {
     expect(
       hasBossReplySurface({
@@ -350,6 +1374,39 @@ When review is needed, Captain shall call playbook \`${target}\`:
     ]);
     expect([...playerLineSets(nested('security-review')).keys()]).toEqual([
       'playbook:security-review',
+    ]);
+
+    const dynamic = `## Behaviors
+
+### FLOW-2
+
+When routing is needed, Captain shall call playbook selected by \`nextPlaybookId\`:
+> <nextPlaybookInput>
+`;
+    expect([...playerLineSets(dynamic).keys()]).toEqual([
+      'playbook-context:nextPlaybookId:nextPlaybookInput',
+    ]);
+  });
+
+  it('keys schema-3 prompts by canonical local role', () => {
+    const roleful = `Roles:
+
+- Coder
+- Reviewer
+
+### FLOW-1
+
+Captain shall prompt Coder:
+> Draft it.
+
+### FLOW-2
+
+Captain shall prompt Reviewer:
+> Review it.
+`;
+    expect([...playerLineSets(roleful).keys()]).toEqual([
+      'role:coder',
+      'role:reviewer',
     ]);
   });
 
