@@ -23,6 +23,9 @@ const [
   equivalenceSource,
   verificationSource,
   coverageSource,
+  consumerSource,
+  configSource,
+  compiledExecutorSource,
 ] = await Promise.all([
   readProjectFile('.github/workflows/ci.yml'),
   readProjectFile('package.json'),
@@ -32,6 +35,9 @@ const [
   readProjectFile('test/equivalence.acceptance.test.ts'),
   readProjectFile('test/verify.test.ts'),
   readProjectFile('test/verify-coverage.test.ts'),
+  readProjectFile('test/schema-3-consumer.test.ts'),
+  readProjectFile('test/config.test.ts'),
+  readProjectFile('test/compiled-executor.test.ts'),
 ]);
 
 const workflow = parse(workflowSource);
@@ -225,6 +231,9 @@ const handwrittenFixtureTests = [
   'test/equivalence.acceptance.test.ts',
   'test/verify.test.ts',
   'test/verify-coverage.test.ts',
+  'test/schema-3-consumer.test.ts',
+  'test/config.test.ts',
+  'test/compiled-executor.test.ts',
 ];
 const requiredTestFiles = [...generatedTests, ...handwrittenFixtureTests];
 
@@ -478,6 +487,9 @@ for (const title of [
   'accepts each matching exact runtime contract profile',
   'distinguishes unmarked legacy and session-v1 init boundaries',
   'supplies the exact six-port composed-v2 probe boundary',
+  'recognizes shared and bespoke composed-v3 registries',
+  'initializes but does not drive a role-bearing composed-v3 registry',
+  'compares matching nonempty validated schema-3 option slices',
 ]) {
   requireTestCase(equivalenceSource, 'runtime-profile fixture', title);
 }
@@ -485,6 +497,9 @@ for (const title of [
   'maps nested parallel captain work and a playbook actor',
   'adds recursive topology and playbook bindings only for a structured machine',
   'captures prompt contracts from nested parallel leaves',
+  'validates schema-3 Roles and concurrent role sets',
+  'accepts a controller decision state without needsBossReply',
+  'resolves schema-3 prompt identity through the canonical role',
 ]) {
   requireTestCase(verificationSource, 'structured-verification fixture', title);
 }
@@ -492,6 +507,29 @@ requireTestCase(
   coverageSource,
   'structured-coverage fixture',
   'drives explicit player leaves by entering their parallel parent',
+);
+for (const title of [
+  'rejects a repeated canonical role in a parallel group',
+  'drives every controller action without a Boss-reply wait',
+]) {
+  requireTestCase(coverageSource, 'schema-3 coverage fixture', title);
+}
+for (const title of [
+  'exposes canonical roles, concurrency, immutable compat, and empty options (self-hosting-14, self-hosting-15, self-hosting-16)',
+  'initializes and disposes a causal root against exact live capabilities without governed effects (release-18)',
+  'plans configured-registry slash-command invocation without positional or removed run inputs (self-hosting-14, release-18)',
+]) {
+  requireTestCase(consumerSource, 'schema-3 consumer fixture', title);
+}
+requireTestCase(
+  configSource,
+  'provenance-selection fixture',
+  'binds compiled execution to the pin-recorded runtime contract',
+);
+requireTestCase(
+  compiledExecutorSource,
+  'composed-v3 phase-host fixture',
+  'constructs and drives the exact roleless composed-v3 phase-host boundary',
 );
 
 assert.equal(manifest.dependencies?.['@sublang/playbook'], '^4.0.0');

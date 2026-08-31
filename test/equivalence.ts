@@ -2,7 +2,8 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Reference-equivalence comparator (verification-9; DR-009).
+ * Reference-equivalence comparator (verification-9, verification-10; DR-009,
+ * DR-024).
  *
  * Two faithful compilations of the same workflow need not be byte-identical —
  * item partitions and state names are judgment — but they must agree on the
@@ -13,11 +14,21 @@
  * wires it to `slc playbook` output and the manual reference package.
  */
 
+import { execFile } from 'node:child_process';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
+
 import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
   checkGearsFsmConformance,
+  canonicalRoleId,
+  findConcurrentRoleSets,
   findMachineConfig,
+  inspectGearsRoleContract,
+  isControllerGears,
   parseGearsItems,
   pinIntrospection,
 } from '../src/verify.js';
@@ -37,6 +48,10 @@ export interface CompiledPlaybook {
   playbook: unknown;
   /** The `fsm` artifact source text, for coverage probing. */
   fsmSource?: string;
+  /** Exact link-target provenance supplied by the comparison fixture. */
+  linkTargetProvenance?: string;
+  /** Schema-3 Captain-hosted registry entry, when the closure has one. */
+  registry?: unknown;
 }
 
 export type RuntimeCapabilityProfile = RuntimeContractProfile;
@@ -46,8 +61,20 @@ export const RUNTIME_CONTRACT_PROFILE_EXPORT = 'runtimeContractProfile';
 
 interface RuntimeProfileInspection {
   profile: RuntimeCapabilityProfile | null;
+  implementation?: 'shared-factory' | 'bespoke';
+  validatedOptions?: unknown;
   findings: string[];
 }
+
+/** Comparison-supplied configured-option slice for schema-3 registries. */
+export interface RuntimeProfileOptions {
+  provenance?: string;
+  registry?: unknown;
+  configuredOptions?: unknown;
+}
+
+const PLAYBOOK_10_PROVENANCE = '@sublang/playbook@10.0.0';
+const execFileAsync = promisify(execFile);
 
 /**
  * Returns the linked runtime's exact observable contract profile.
@@ -60,12 +87,14 @@ interface RuntimeProfileInspection {
  */
 export async function runtimeCapabilityProfile(
   playbook: unknown,
+  options: RuntimeProfileOptions = {},
 ): Promise<RuntimeCapabilityProfile | null> {
-  return (await inspectRuntimeProfile(playbook)).profile;
+  return (await inspectRuntimeProfile(playbook, options)).profile;
 }
 
 async function inspectRuntimeProfile(
   playbook: unknown,
+  options: RuntimeProfileOptions = {},
 ): Promise<RuntimeProfileInspection> {
   const findings: string[] = [];
   if (typeof playbook !== 'object' || playbook === null) {
@@ -79,6 +108,14 @@ async function inspectRuntimeProfile(
       `linked module declares unsupported ${RUNTIME_CONTRACT_PROFILE_EXPORT} ${JSON.stringify(rawMarker)}`,
     );
     return { profile: null, findings };
+  }
+
+  const schema3Requested =
+    marker === 'composed-v3' ||
+    options.registry !== undefined ||
+    options.provenance === PLAYBOOK_10_PROVENANCE;
+  if (schema3Requested) {
+    return inspectComposedV3Profile(linked, marker, options, findings);
   }
 
   const factory = linked.default;
@@ -132,6 +169,676 @@ async function inspectRuntimeProfile(
       .join('; ')})`,
   );
   return { profile: null, findings };
+}
+
+async function inspectComposedV3Profile(
+  linked: Record<string, unknown>,
+  marker: RuntimeContractProfile | undefined,
+  options: RuntimeProfileOptions,
+  findings: string[],
+): Promise<RuntimeProfileInspection> {
+  if (options.provenance !== PLAYBOOK_10_PROVENANCE) {
+    findings.push(
+      `composed-v3 requires exact ${PLAYBOOK_10_PROVENANCE} provenance`,
+    );
+    return { profile: null, findings };
+  }
+  if (marker !== undefined && marker !== 'composed-v3') {
+    findings.push(
+      `${marker} runtime marker conflicts with schema-3 registry construction`,
+    );
+    return { profile: null, findings };
+  }
+
+  const factory = linked.default;
+  if (typeof factory !== 'function') {
+    findings.push('linked schema-3 module has no callable default export');
+    return { profile: null, findings };
+  }
+  const registry = inspectSchema3Registry(options.registry, factory);
+  findings.push(...registry.findings);
+  if (registry.entry === undefined || registry.implementation === undefined) {
+    return { profile: null, findings };
+  }
+
+  let validatedOptions: unknown;
+  try {
+    const hasConfiguredOptions = Object.prototype.hasOwnProperty.call(
+      options,
+      'configuredOptions',
+    );
+    if (hasConfiguredOptions && !isPlainJsonValue(options.configuredOptions)) {
+      findings.push('schema-3 configured option slice is not plain JSON');
+      return {
+        profile: null,
+        implementation: registry.implementation,
+        findings,
+      };
+    }
+    validatedOptions = Object.prototype.hasOwnProperty.call(
+      options,
+      'configuredOptions',
+    )
+      ? registry.entry.validateOptions(
+          cloneJsonValue(options.configuredOptions),
+        )
+      : registry.entry.validateOptions();
+  } catch (error) {
+    findings.push(`schema-3 option validation failed: ${messageOf(error)}`);
+    return {
+      profile: null,
+      implementation: registry.implementation,
+      findings,
+    };
+  }
+  if (!isPlainJsonValue(validatedOptions)) {
+    findings.push('schema-3 option validator returned non-plain JSON');
+    return {
+      profile: null,
+      implementation: registry.implementation,
+      findings,
+    };
+  }
+  if (
+    !Object.prototype.hasOwnProperty.call(options, 'configuredOptions') &&
+    canonicalJson(validatedOptions) !== '{}'
+  ) {
+    findings.push(
+      'schema-3 optionless registry must validate an absent slice to exact empty options',
+    );
+    return {
+      profile: null,
+      implementation: registry.implementation,
+      findings,
+    };
+  }
+
+  const reason = await probeComposedV3Runtime(registry.entry, validatedOptions);
+  if (reason !== '') {
+    findings.push(`composed-v3 runtime probe failed: ${reason}`);
+    return {
+      profile: null,
+      implementation: registry.implementation,
+      validatedOptions,
+      findings,
+    };
+  }
+  return {
+    profile: 'composed-v3',
+    implementation: registry.implementation,
+    validatedOptions,
+    findings,
+  };
+}
+
+interface Schema3Registry {
+  id: string;
+  artifactSchema: 3;
+  requiredRoleIds: readonly string[];
+  concurrentRoleSets: readonly (readonly string[])[];
+  validateOptions(value?: unknown): unknown;
+  createRuntime(options: unknown, hostCapabilities: unknown): unknown;
+}
+
+function inspectSchema3Registry(
+  value: unknown,
+  factory: (options: unknown) => unknown,
+): {
+  entry?: Schema3Registry;
+  implementation?: 'shared-factory' | 'bespoke';
+  findings: string[];
+} {
+  const findings: string[] = [];
+  const entry = ownDataRecord(value);
+  const required = [
+    'id',
+    'command',
+    'intent',
+    'artifactSchema',
+    'runtimeProfile',
+    'requiredRoleIds',
+    'concurrentRoleSets',
+    'validateOptions',
+    'createRuntime',
+  ] as const;
+  if (
+    entry === undefined ||
+    required.some((key) => !Object.prototype.hasOwnProperty.call(entry, key))
+  ) {
+    findings.push('linked module exposes no exact schema-3 registry entry');
+    return { findings };
+  }
+  if (
+    typeof entry.id !== 'string' ||
+    entry.id.length === 0 ||
+    typeof entry.command !== 'string' ||
+    entry.command.length === 0 ||
+    typeof entry.intent !== 'string' ||
+    entry.artifactSchema !== 3 ||
+    typeof entry.validateOptions !== 'function' ||
+    typeof entry.createRuntime !== 'function'
+  ) {
+    findings.push('schema-3 registry entry has malformed required fields');
+    return { findings };
+  }
+  const roles = schema3RoleIds(entry.requiredRoleIds);
+  const concurrent = schema3ConcurrentRoleSets(entry.concurrentRoleSets, roles);
+  if (roles === undefined || concurrent === undefined) {
+    findings.push('schema-3 registry has invalid canonical role declarations');
+    return { findings };
+  }
+
+  const profile = ownDataRecord(entry.runtimeProfile);
+  if (profile === undefined) {
+    findings.push('schema-3 runtime profile must be an own-data declaration');
+    return { findings };
+  }
+  const profileKeys = Object.keys(profile).sort();
+  let implementation: 'shared-factory' | 'bespoke' | undefined;
+  if (
+    profile.kind === 'shared-factory' &&
+    profileKeys.join(',') === 'compat,kind'
+  ) {
+    const descriptor = Object.getOwnPropertyDescriptor(factory, 'compat');
+    const compat = profile.compat;
+    const compatFields = ownDataRecord(compat, [
+      'artifactSchema',
+      'runtimeAbi',
+    ]);
+    if (
+      descriptor === undefined ||
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
+      descriptor.enumerable !== true ||
+      descriptor.writable !== false ||
+      descriptor.configurable !== false ||
+      descriptor.value !== compat ||
+      compatFields === undefined ||
+      !Object.isFrozen(compat) ||
+      compatFields.artifactSchema !== 3 ||
+      compatFields.runtimeAbi !== 1
+    ) {
+      findings.push(
+        'shared-factory schema-3 profile lacks the exact immutable factory compatibility',
+      );
+      return { findings };
+    }
+    implementation = 'shared-factory';
+  } else if (
+    profile.kind === 'bespoke' &&
+    profileKeys.join(',') === 'artifactSchema,kind' &&
+    profile.artifactSchema === 3
+  ) {
+    if (Object.prototype.hasOwnProperty.call(factory, 'compat')) {
+      findings.push(
+        'bespoke schema-3 profile must not carry a factory compatibility claim',
+      );
+      return { findings };
+    }
+    implementation = 'bespoke';
+  } else {
+    findings.push('schema-3 runtime profile declaration is not exact');
+    return { findings };
+  }
+
+  return {
+    entry: {
+      id: entry.id,
+      artifactSchema: 3,
+      requiredRoleIds: roles,
+      concurrentRoleSets: concurrent,
+      validateOptions:
+        entry.validateOptions as Schema3Registry['validateOptions'],
+      createRuntime: entry.createRuntime as Schema3Registry['createRuntime'],
+    },
+    implementation,
+    findings,
+  };
+}
+
+function schema3RoleIds(value: unknown): readonly string[] | undefined {
+  if (!isExactArray(value)) return undefined;
+  if (
+    value.some(
+      (role) =>
+        typeof role !== 'string' ||
+        !/^[a-z][a-z0-9_-]*$/.test(role) ||
+        role === 'captain',
+    ) ||
+    new Set(value).size !== value.length
+  ) {
+    return undefined;
+  }
+  return [...value] as string[];
+}
+
+function schema3ConcurrentRoleSets(
+  value: unknown,
+  roles: readonly string[] | undefined,
+): readonly (readonly string[])[] | undefined {
+  if (roles === undefined || !isExactArray(value)) return undefined;
+  const declared = new Set(roles);
+  const sets: string[][] = [];
+  for (const candidate of value) {
+    if (
+      !isExactArray(candidate) ||
+      candidate.length < 2 ||
+      candidate.some(
+        (role) => typeof role !== 'string' || !declared.has(role),
+      ) ||
+      new Set(candidate).size !== candidate.length
+    ) {
+      return undefined;
+    }
+    sets.push([...candidate] as string[]);
+  }
+  if (new Set(sets.map((set) => JSON.stringify(set))).size !== sets.length) {
+    return undefined;
+  }
+  return sets;
+}
+
+async function probeComposedV3Runtime(
+  entry: Schema3Registry,
+  validatedOptions: unknown,
+): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'slc-equivalence-v3-'));
+  try {
+    await execFileAsync('git', ['init', '--quiet', root]);
+    const worktree = await realpath(root);
+    const gitDir = await realpath(join(root, '.git'));
+    return await driveComposedV3Runtime(
+      entry,
+      validatedOptions,
+      worktree,
+      gitDir,
+    );
+  } catch (error) {
+    return messageOf(error);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+async function driveComposedV3Runtime(
+  entry: Schema3Registry,
+  validatedOptions: unknown,
+  worktree: string,
+  gitDir: string,
+): Promise<string> {
+  const repositoryOperations: string[] = [];
+  let effectWrites = 0;
+  let playerCalls = 0;
+  const recordRepository = (operation: string) => async () => {
+    repositoryOperations.push(operation);
+    return undefined;
+  };
+  const canonicalWorktree = { worktree, gitDir };
+  const hostCapabilities = {
+    authority: {
+      playbookId: entry.id,
+      artifactSchema: 3,
+      cwd: worktree,
+      sessionId: 'slc-profile-probe',
+      leaseOwnerToken: 'slc-equivalence-lease-owner',
+      canonicalWorktree,
+      requiredRoleIds: [...entry.requiredRoleIds],
+      concurrentRoleSets: entry.concurrentRoleSets.map((roles) => [...roles]),
+    },
+    repository: {
+      identity: { ...canonicalWorktree },
+      observe: recordRepository('observe'),
+      acquire: recordRepository('acquire'),
+      runExclusive: recordRepository('runExclusive'),
+      runCohort: recordRepository('runCohort'),
+      runDeferred: recordRepository('runDeferred'),
+    },
+    effectLedger: {
+      snapshot: () => emptyEffectLedger(),
+      writeAhead: async () => {
+        effectWrites += 1;
+        return emptyEffectLedger();
+      },
+    },
+  };
+  if (!isExactHostCapabilities(hostCapabilities)) {
+    return 'equivalence harness constructed malformed host capabilities';
+  }
+
+  let runtime: Record<string, unknown> | undefined;
+  let initAttempted = false;
+  let reason = '';
+  try {
+    const created = entry.createRuntime(validatedOptions, hostCapabilities);
+    if (typeof created !== 'object' || created === null) {
+      return 'registry createRuntime returned a non-object';
+    }
+    runtime = created as Record<string, unknown>;
+    const init = callable(runtime.init, 'init');
+    const handle = callable(runtime.handleBossInput, 'handleBossInput');
+    callable(runtime.resumePlaybookCall, 'resumePlaybookCall');
+    callable(runtime.dispose, 'dispose');
+    reason = inspectComposedV3OptionalSurface(runtime);
+    if (reason !== '') return reason;
+
+    const ports = probePorts(true, () => {
+      playerCalls += 1;
+    });
+    initAttempted = true;
+    await init.call(runtime, {
+      sessionId: 'slc-profile-probe',
+      playbookId: entry.id,
+      rootSessionId: 'slc-profile-probe',
+      depth: 0,
+      ports,
+    });
+    if (entry.requiredRoleIds.length === 0) {
+      const result = await handle.call(runtime, {
+        text: 'SLC runtime contract profile probe',
+        signal: new AbortController().signal,
+      });
+      if (!isPlaybookRunResult(result, 'composed-v3')) {
+        reason = 'turn did not return a valid schema-3 structured result';
+      }
+    }
+    if (
+      reason === '' &&
+      typeof runtime.unresolvedEffectEnvelopes === 'function'
+    ) {
+      const envelopes = (
+        runtime.unresolvedEffectEnvelopes as () => unknown
+      ).call(runtime);
+      if (!isUnresolvedEffectEnvelopeList(envelopes)) {
+        reason = 'unresolvedEffectEnvelopes() returned malformed data';
+      }
+    }
+  } catch (error) {
+    reason = messageOf(error);
+  } finally {
+    if (
+      initAttempted &&
+      runtime !== undefined &&
+      typeof runtime.dispose === 'function'
+    ) {
+      try {
+        await (runtime.dispose as () => Promise<void>).call(runtime);
+      } catch (error) {
+        if (reason === '') reason = `dispose failed: ${messageOf(error)}`;
+      }
+    }
+  }
+  if (
+    reason === '' &&
+    entry.requiredRoleIds.length === 0 &&
+    (playerCalls > 0 || repositoryOperations.length > 0 || effectWrites > 0)
+  ) {
+    reason = `roleless probe invoked governed host effects (players ${playerCalls}, repository ${repositoryOperations.join(', ') || 'none'}, ledger writes ${effectWrites})`;
+  }
+  return reason;
+}
+
+function inspectComposedV3OptionalSurface(
+  runtime: Record<string, unknown>,
+): string {
+  const paired = (first: string, second: string): string => {
+    const left = runtime[first];
+    const right = runtime[second];
+    if (left === undefined && right === undefined) return '';
+    return typeof left === 'function' && typeof right === 'function'
+      ? ''
+      : `${first} and ${second} must be callable together`;
+  };
+  let reason = paired('exportSnapshot', 'restore');
+  if (reason !== '') return reason;
+  reason = paired('describe', 'apply');
+  if (reason !== '') return reason;
+  if (runtime.adopt !== undefined && typeof runtime.adopt !== 'function') {
+    return 'adopt must be callable when present';
+  }
+  if (
+    runtime.unresolvedEffectEnvelopes !== undefined &&
+    typeof runtime.unresolvedEffectEnvelopes !== 'function'
+  ) {
+    return 'unresolvedEffectEnvelopes must be callable when present';
+  }
+  if (runtime.retainedGenerationMetadata !== undefined) {
+    const metadata = ownDataRecord(runtime.retainedGenerationMetadata, [
+      'unfinishedFinalStateIds',
+    ]);
+    if (
+      metadata === undefined ||
+      !isExactArray(metadata.unfinishedFinalStateIds) ||
+      metadata.unfinishedFinalStateIds.some(
+        (stateId) => typeof stateId !== 'string',
+      )
+    ) {
+      return 'retainedGenerationMetadata is malformed';
+    }
+  }
+  return '';
+}
+
+function emptyEffectLedger(): {
+  schemaVersion: 1;
+  revision: 0;
+  boundaries: [];
+  logicalOperations: [];
+} {
+  return {
+    schemaVersion: 1,
+    revision: 0,
+    boundaries: [],
+    logicalOperations: [],
+  };
+}
+
+function isExactHostCapabilities(value: unknown): boolean {
+  const capability = ownDataRecord(value, [
+    'authority',
+    'repository',
+    'effectLedger',
+  ]);
+  const authority = ownDataRecord(capability?.authority, [
+    'playbookId',
+    'artifactSchema',
+    'cwd',
+    'sessionId',
+    'leaseOwnerToken',
+    'canonicalWorktree',
+    'requiredRoleIds',
+    'concurrentRoleSets',
+  ]);
+  const canonicalWorktree = ownDataRecord(authority?.canonicalWorktree, [
+    'worktree',
+    'gitDir',
+  ]);
+  const repository = ownDataRecord(capability?.repository, [
+    'identity',
+    'observe',
+    'acquire',
+    'runExclusive',
+    'runCohort',
+    'runDeferred',
+  ]);
+  const identity = ownDataRecord(repository?.identity, ['worktree', 'gitDir']);
+  const effectLedger = ownDataRecord(capability?.effectLedger, [
+    'snapshot',
+    'writeAhead',
+  ]);
+  return (
+    authority !== undefined &&
+    canonicalWorktree !== undefined &&
+    repository !== undefined &&
+    identity !== undefined &&
+    effectLedger !== undefined &&
+    identity.worktree === canonicalWorktree.worktree &&
+    identity.gitDir === canonicalWorktree.gitDir &&
+    [
+      repository.observe,
+      repository.acquire,
+      repository.runExclusive,
+      repository.runCohort,
+      repository.runDeferred,
+      effectLedger.snapshot,
+      effectLedger.writeAhead,
+    ].every((member) => typeof member === 'function')
+  );
+}
+
+function isUnresolvedEffectEnvelopeList(value: unknown): boolean {
+  if (!isExactArray(value)) return false;
+  return value.every((envelope) => {
+    const boundary = ownDataRecord(envelope, ['kind', 'boundaryId']);
+    if (
+      boundary?.kind === 'boundary' &&
+      typeof boundary.boundaryId === 'string'
+    ) {
+      return true;
+    }
+    const logical = ownDataRecord(envelope, ['kind', 'operationId']);
+    return (
+      logical?.kind === 'logical-operation' &&
+      typeof logical.operationId === 'string'
+    );
+  });
+}
+
+function ownDataRecord(
+  value: unknown,
+  exactKeys?: readonly string[],
+): Record<string, unknown> | undefined {
+  try {
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      Array.isArray(value) ||
+      (Object.getPrototypeOf(value) !== Object.prototype &&
+        Object.getPrototypeOf(value) !== null)
+    ) {
+      return undefined;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const keys = Reflect.ownKeys(descriptors);
+    if (keys.some((key) => typeof key !== 'string')) return undefined;
+    if (
+      exactKeys !== undefined &&
+      (keys.length !== exactKeys.length ||
+        exactKeys.some(
+          (key) => !Object.prototype.hasOwnProperty.call(descriptors, key),
+        ))
+    ) {
+      return undefined;
+    }
+    const out: Record<string, unknown> = {};
+    for (const key of keys as string[]) {
+      const descriptor = descriptors[key];
+      if (
+        descriptor === undefined ||
+        !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
+        descriptor.enumerable !== true
+      ) {
+        return undefined;
+      }
+      out[key] = descriptor.value;
+    }
+    return out;
+  } catch {
+    return undefined;
+  }
+}
+
+function isExactArray(value: unknown): value is unknown[] {
+  try {
+    if (
+      !Array.isArray(value) ||
+      Object.getPrototypeOf(value) !== Array.prototype
+    ) {
+      return false;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const keys = Reflect.ownKeys(descriptors);
+    if (keys.some((key) => typeof key !== 'string')) return false;
+    const expected = [
+      ...Array.from({ length: value.length }, (_, index) => String(index)),
+      'length',
+    ];
+    if (
+      keys.length !== expected.length ||
+      expected.some(
+        (key) => !Object.prototype.hasOwnProperty.call(descriptors, key),
+      )
+    ) {
+      return false;
+    }
+    return expected.slice(0, -1).every((key) => {
+      const descriptor = descriptors[key];
+      return (
+        descriptor !== undefined &&
+        Object.prototype.hasOwnProperty.call(descriptor, 'value') &&
+        descriptor.enumerable === true
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
+function isPlainJsonValue(
+  value: unknown,
+  ancestors: Set<object> = new Set(),
+): boolean {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean'
+  ) {
+    return true;
+  }
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value !== 'object' || ancestors.has(value)) return false;
+  ancestors.add(value);
+  let valid: boolean;
+  if (Array.isArray(value)) {
+    valid =
+      isExactArray(value) &&
+      value.every((member) => isPlainJsonValue(member, ancestors));
+  } else {
+    const record = ownDataRecord(value);
+    valid =
+      record !== undefined &&
+      Object.values(record).every((member) =>
+        isPlainJsonValue(member, ancestors),
+      );
+  }
+  ancestors.delete(value);
+  return valid;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((member) => canonicalJson(member)).join(',')}]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function cloneJsonValue(value: unknown): unknown {
+  if (Array.isArray(value))
+    return value.map((member) => cloneJsonValue(member));
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, member]) => [
+        key,
+        cloneJsonValue(member),
+      ]),
+    );
+  }
+  return value;
 }
 
 function inspectFactorySurface(factory: (options: unknown) => unknown): {
@@ -244,12 +951,18 @@ function probeInitValue(profile: RuntimeContractProfile): unknown {
   };
 }
 
-function probePorts(composed: boolean): Record<string, unknown> {
+function probePorts(
+  composed: boolean,
+  onPlayerCall: () => void = () => {},
+): Record<string, unknown> {
   return {
-    callPlayer: async () => ({
-      status: 'error',
-      error: 'profile probe does not invoke players',
-    }),
+    callPlayer: async () => {
+      onPlayerCall();
+      return {
+        status: 'error',
+        error: 'profile probe does not invoke players',
+      };
+    },
     callJudge: async () => '{}',
     ...(composed
       ? {
@@ -294,7 +1007,10 @@ function isRuntimeContractProfile(
   value: unknown,
 ): value is RuntimeContractProfile {
   return (
-    value === 'legacy' || value === 'session-v1' || value === 'composed-v2'
+    value === 'legacy' ||
+    value === 'session-v1' ||
+    value === 'composed-v2' ||
+    value === 'composed-v3'
   );
 }
 
@@ -358,14 +1074,21 @@ export function normalizePromptLine(line: string): string {
  */
 export function playerLineSets(gears: string): Map<string, Set<string>> {
   const sets = new Map<string, Set<string>>();
+  const roleContract = inspectGearsRoleContract(gears);
   for (const item of parseGearsItems(gears)) {
     // A nested call is an authored playbook dependency, not a Captain player
     // prompt. Key it by target so changing `code-review` to `security-review`
     // cannot compare equal merely because both behaviors say Captain calls it.
     const participant =
-      item.playbookId === undefined
-        ? item.player
-        : `playbook:${item.playbookId}`;
+      item.playbookId !== undefined
+        ? `playbook:${item.playbookId}`
+        : item.playbookIdContext !== undefined
+          ? `playbook-context:${item.playbookIdContext}:${item.textContext ?? ''}`
+          : item.actor === 'captain'
+            ? 'Captain'
+            : roleContract.generation === 'schema-3'
+              ? `role:${canonicalRoleId(item.player)}`
+              : item.player;
     let lines = sets.get(participant);
     if (lines === undefined) {
       lines = new Set();
@@ -422,14 +1145,15 @@ export function checkSourceFaithfulness(
 export async function checkPlaybookIntegrity(
   label: string,
   compiled: CompiledPlaybook,
+  options: Pick<RuntimeProfileOptions, 'configuredOptions'> = {},
 ): Promise<string[]> {
   const findings: string[] = [];
   const config = findMachineConfig(compiled.fsm);
 
   findings.push(
-    ...checkGearsFsmConformance(compiled.gears, config).map(
-      (finding) => `${label}: ${finding}`,
-    ),
+    ...checkGearsFsmConformance(compiled.gears, config, {
+      concurrentRoleSets: findConcurrentRoleSets(compiled.fsm),
+    }).map((finding) => `${label}: ${finding}`),
   );
   findings.push(
     ...(
@@ -437,9 +1161,99 @@ export async function checkPlaybookIntegrity(
     ).map((finding) => `${label}: ${finding}`),
   );
 
-  const runtime = await inspectRuntimeProfile(compiled.playbook);
+  const runtime = await inspectRuntimeProfile(
+    compiled.playbook,
+    compiledRuntimeOptions(compiled, options),
+  );
   findings.push(...runtime.findings.map((finding) => `${label}: ${finding}`));
+
+  if (
+    runtime.profile === 'composed-v3' &&
+    typeof compiled.playbook === 'object' &&
+    compiled.playbook !== null
+  ) {
+    const factory = (compiled.playbook as Record<string, unknown>).default;
+    if (typeof factory === 'function') {
+      const registry = inspectSchema3Registry(compiled.registry, factory);
+      if (registry.entry !== undefined) {
+        findings.push(
+          ...schema3ClosureFindings(compiled, registry.entry).map(
+            (finding) => `${label}: ${finding}`,
+          ),
+        );
+      }
+    }
+  }
   return findings;
+}
+
+function schema3ClosureFindings(
+  compiled: CompiledPlaybook,
+  registry: Schema3Registry,
+): string[] {
+  const findings: string[] = [];
+  const source = inspectGearsRoleContract(compiled.gears);
+  if (source.generation === 'schema-1') {
+    findings.push(
+      'composed-v3 registry cannot close over a historical schema-1 Players declaration',
+    );
+  } else if (
+    source.generation === 'unspecified' &&
+    (registry.requiredRoleIds.length > 0 ||
+      registry.concurrentRoleSets.length > 0)
+  ) {
+    findings.push(
+      'roleless schema-3 source requires empty registry roles and concurrent sets',
+    );
+  }
+  if (
+    canonicalJson(source.roleIds) !== canonicalJson(registry.requiredRoleIds)
+  ) {
+    findings.push(
+      `schema-3 registry requiredRoleIds ${canonicalJson(registry.requiredRoleIds)} do not match GEARS roles ${canonicalJson(source.roleIds)}`,
+    );
+  }
+  if (
+    canonicalJson(source.concurrentRoleSets) !==
+    canonicalJson(registry.concurrentRoleSets)
+  ) {
+    findings.push(
+      `schema-3 registry concurrentRoleSets ${canonicalJson(registry.concurrentRoleSets)} do not match GEARS groups ${canonicalJson(source.concurrentRoleSets)}`,
+    );
+  }
+
+  const moduleConcurrentRoleSets = schema3ConcurrentRoleSets(
+    findConcurrentRoleSets(compiled.fsm),
+    registry.requiredRoleIds,
+  );
+  if (moduleConcurrentRoleSets === undefined) {
+    findings.push(
+      'schema-3 FSM exports no valid registry-matching concurrentRoleSets array',
+    );
+  } else if (
+    canonicalJson(moduleConcurrentRoleSets) !==
+    canonicalJson(registry.concurrentRoleSets)
+  ) {
+    findings.push(
+      `schema-3 registry concurrentRoleSets ${canonicalJson(registry.concurrentRoleSets)} do not match FSM export ${canonicalJson(moduleConcurrentRoleSets)}`,
+    );
+  }
+  return findings;
+}
+
+function compiledRuntimeOptions(
+  compiled: CompiledPlaybook,
+  options: Pick<RuntimeProfileOptions, 'configuredOptions'>,
+): RuntimeProfileOptions {
+  return {
+    ...(compiled.linkTargetProvenance === undefined
+      ? {}
+      : { provenance: compiled.linkTargetProvenance }),
+    ...(compiled.registry === undefined ? {} : { registry: compiled.registry }),
+    ...(Object.prototype.hasOwnProperty.call(options, 'configuredOptions')
+      ? { configuredOptions: options.configuredOptions }
+      : {}),
+  };
 }
 
 /**
@@ -451,16 +1265,43 @@ export async function checkPlaybookIntegrity(
 export async function checkReferenceEquivalence(opts: {
   produced: CompiledPlaybook;
   reference: CompiledPlaybook;
+  configuredOptions?: unknown;
 }): Promise<string[]> {
   const findings: string[] = [];
+  const comparisonOptions = Object.prototype.hasOwnProperty.call(
+    opts,
+    'configuredOptions',
+  )
+    ? { configuredOptions: opts.configuredOptions }
+    : {};
 
-  findings.push(...(await checkPlaybookIntegrity('produced', opts.produced)));
-  findings.push(...(await checkPlaybookIntegrity('reference', opts.reference)));
+  findings.push(
+    ...(await checkPlaybookIntegrity(
+      'produced',
+      opts.produced,
+      comparisonOptions,
+    )),
+  );
+  findings.push(
+    ...(await checkPlaybookIntegrity(
+      'reference',
+      opts.reference,
+      comparisonOptions,
+    )),
+  );
 
-  const [producedProfile, referenceProfile] = await Promise.all([
-    runtimeCapabilityProfile(opts.produced.playbook),
-    runtimeCapabilityProfile(opts.reference.playbook),
+  const [producedRuntime, referenceRuntime] = await Promise.all([
+    inspectRuntimeProfile(
+      opts.produced.playbook,
+      compiledRuntimeOptions(opts.produced, comparisonOptions),
+    ),
+    inspectRuntimeProfile(
+      opts.reference.playbook,
+      compiledRuntimeOptions(opts.reference, comparisonOptions),
+    ),
   ]);
+  const producedProfile = producedRuntime.profile;
+  const referenceProfile = referenceRuntime.profile;
   if (
     producedProfile !== null &&
     referenceProfile !== null &&
@@ -470,9 +1311,41 @@ export async function checkReferenceEquivalence(opts: {
       `runtime contract profiles differ: produced ${producedProfile} vs reference ${referenceProfile}`,
     );
   }
+  if (producedProfile === 'composed-v3' && referenceProfile === 'composed-v3') {
+    if (producedRuntime.implementation !== referenceRuntime.implementation) {
+      findings.push(
+        `schema-3 runtime implementations differ: produced ${producedRuntime.implementation} vs reference ${referenceRuntime.implementation}`,
+      );
+    }
+    if (
+      canonicalJson(producedRuntime.validatedOptions) !==
+      canonicalJson(referenceRuntime.validatedOptions)
+    ) {
+      findings.push(
+        `schema-3 validated options differ: produced ${canonicalJson(producedRuntime.validatedOptions)} vs reference ${canonicalJson(referenceRuntime.validatedOptions)}`,
+      );
+    }
+  }
 
   const produced = playerLineSets(opts.produced.gears);
   const reference = playerLineSets(opts.reference.gears);
+  const producedRoles = inspectGearsRoleContract(opts.produced.gears);
+  const referenceRoles = inspectGearsRoleContract(opts.reference.gears);
+  if (producedRoles.generation !== referenceRoles.generation) {
+    findings.push(
+      `source contract generations differ: produced ${producedRoles.generation} vs reference ${referenceRoles.generation}`,
+    );
+  } else if (
+    producedRoles.generation === 'schema-3' &&
+    (canonicalJson(producedRoles.roleIds) !==
+      canonicalJson(referenceRoles.roleIds) ||
+      canonicalJson(producedRoles.concurrentRoleSets) !==
+        canonicalJson(referenceRoles.concurrentRoleSets))
+  ) {
+    findings.push(
+      `schema-3 role contracts differ: produced ${canonicalJson({ roles: producedRoles.roleIds, concurrentRoleSets: producedRoles.concurrentRoleSets })} vs reference ${canonicalJson({ roles: referenceRoles.roleIds, concurrentRoleSets: referenceRoles.concurrentRoleSets })}`,
+    );
+  }
   const producedPlayers = [...produced.keys()].sort();
   const referencePlayers = [...reference.keys()].sort();
   if (producedPlayers.join(',') !== referencePlayers.join(',')) {
@@ -504,13 +1377,17 @@ export async function checkReferenceEquivalence(opts: {
     ['reference', opts.reference],
   ] as const) {
     const pins = pinIntrospection(findMachineConfig(compiled.fsm));
-    if (pins.interruptTargets.length === 0) {
+    const controller = isControllerGears(compiled.gears);
+    if (!controller && pins.interruptTargets.length === 0) {
       findings.push(`${label}: machine declares no BOSS_INTERRUPT targets`);
     }
     if (!pins.quiescent.some((state) => state.final)) {
       findings.push(`${label}: machine declares no final state`);
     }
-    if (!hasBossReplySurface(findMachineConfig(compiled.fsm))) {
+    const hasBossWait = hasBossReplySurface(findMachineConfig(compiled.fsm));
+    if (controller && hasBossWait) {
+      findings.push(`${label}: controller machine declares a Boss-reply wait`);
+    } else if (!controller && !hasBossWait) {
       findings.push(`${label}: machine declares no Boss-reply wait state`);
     }
   }

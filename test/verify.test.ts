@@ -27,6 +27,7 @@ import {
   generateFsmIntrospectionTest,
   generateGearsFsmConformanceTest,
   generatePromptContractTest,
+  inspectGearsRoleContract,
   normalizeArms,
   parseGearsItems,
   pinIntrospection,
@@ -275,6 +276,209 @@ const stateIdentity = (stateId: string) => ({
   meta: { playbook: { stateId } },
 });
 
+const schema3Gears = `# Schema-3 fixture
+
+Roles:
+
+- Coder
+- Reviewer
+
+## Behaviors
+
+### SCHEMA3-1
+Parallel group: independent-review
+
+When Boss starts the task, Captain shall prompt Coder:
+> > Preserve this quoted context.
+> Draft <topic> with <coder-llm>.
+
+Results:
+- \`done\`: Coder produced a draft.
+
+### SCHEMA3-2
+Parallel group: independent-review
+
+When Boss starts the task, Captain shall prompt Reviewer:
+> Review <topic> independently.
+
+Results:
+- \`done\`: Reviewer produced findings.
+
+### SCHEMA3-3
+
+When both roles finish, Captain shall summarize directly:
+> Summarize <topic>.
+
+Results:
+- \`done\`: Captain produced the summary.
+`;
+
+const schema3Identity = (stateId: string, role?: string) => ({
+  id: stateId,
+  meta: { playbook: { stateId, ...(role === undefined ? {} : { role }) } },
+});
+
+const schema3PlayerInput =
+  (
+    stateId: string,
+    role: string,
+    sourceItem: string,
+    prompt: string,
+    description: string,
+    stateKeyedContinuation = false,
+  ) =>
+  ({ context }: { context: Record<string, unknown> }) => {
+    const keyedQuestions = context.pendingBossQuestions as
+      | Record<string, unknown>
+      | undefined;
+    const keyedReplies = context.bossReplies as
+      | Record<string, unknown>
+      | undefined;
+    return {
+      stateId,
+      role,
+      sourceItem,
+      prompt,
+      result: {
+        done: description,
+        needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+      },
+      topic: context.topic,
+      pendingBossQuestion: stateKeyedContinuation
+        ? keyedQuestions?.[stateId]
+        : context.pendingBossQuestion,
+      bossReply: stateKeyedContinuation
+        ? keyedReplies?.[stateId]
+        : context.bossReply,
+    };
+  };
+
+const schema3Config = (): MachineConfigLike => ({
+  initial: 'ready',
+  states: {
+    ready: { ...schema3Identity('ready') },
+    independentReview: {
+      ...schema3Identity('independentReview'),
+      type: 'parallel',
+      onDone: { target: '#summarize' },
+      states: {
+        coderRegion: {
+          ...schema3Identity('coderRegion'),
+          initial: 'working',
+          states: {
+            working: {
+              ...schema3Identity('coderWork', 'coder'),
+              tags: 'playbook.busy',
+              invoke: {
+                src: 'player',
+                input: schema3PlayerInput(
+                  'coderWork',
+                  'coder',
+                  'SCHEMA3-1',
+                  '> Preserve this quoted context.\nDraft <topic> with <coder-llm>.',
+                  'Coder produced a draft.',
+                ),
+                onDone: { target: 'complete' },
+                onError: { target: '#failed' },
+              },
+            },
+            complete: {
+              ...schema3Identity('coderComplete'),
+              type: 'final',
+            },
+          },
+        },
+        reviewerRegion: {
+          ...schema3Identity('reviewerRegion'),
+          initial: 'working',
+          states: {
+            working: {
+              ...schema3Identity('reviewerWork', 'reviewer'),
+              tags: 'playbook.busy',
+              invoke: {
+                src: 'player',
+                input: schema3PlayerInput(
+                  'reviewerWork',
+                  'reviewer',
+                  'SCHEMA3-2',
+                  'Review <topic> independently.',
+                  'Reviewer produced findings.',
+                  true,
+                ),
+                onDone: { target: 'complete' },
+                onError: { target: '#failed' },
+              },
+            },
+            complete: {
+              ...schema3Identity('reviewerComplete'),
+              type: 'final',
+            },
+          },
+        },
+      },
+    },
+    summarize: {
+      ...schema3Identity('summarize'),
+      invoke: {
+        src: 'captain',
+        input: ({ context }) => ({
+          stateId: 'summarize',
+          sourceItem: 'SCHEMA3-3',
+          prompt: 'Summarize <topic>.',
+          result: {
+            done: 'Captain produced the summary.',
+            needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+          },
+          topic: context.topic,
+        }),
+      },
+    },
+    failed: { ...schema3Identity('failed') },
+    done: { ...schema3Identity('done'), type: 'final' },
+  },
+});
+
+const controllerGears = `# Controller fixture
+
+### CONTROL-1
+
+Where this source declares the session-scoped controller policy, when Boss sends a turn, Captain shall decide directly:
+> Select exactly one controller action.
+
+Results:
+- \`respond\`: Reply without an engagement action.
+- \`resume\`: Resume a retained generation.
+- \`start\`: Start a fresh engagement.
+- \`switch\`: Switch to another engagement.
+- \`dismiss\`: Dismiss the current engagement.
+- \`deliver\`: Deliver the retained result.
+- \`runtime\`: Apply a runtime control action.
+`;
+
+const controllerConfig = (): MachineConfigLike => ({
+  states: {
+    decide: {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          stateId: 'decide',
+          sourceItem: 'CONTROL-1',
+          prompt: 'Select exactly one controller action.',
+          result: {
+            respond: 'Reply without an engagement action.',
+            resume: 'Resume a retained generation.',
+            start: 'Start a fresh engagement.',
+            switch: 'Switch to another engagement.',
+            dismiss: 'Dismiss the current engagement.',
+            deliver: 'Deliver the retained result.',
+            runtime: 'Apply a runtime control action.',
+          },
+        }),
+      },
+    },
+  },
+});
+
 const structuredConfig = (): MachineConfigLike => ({
   initial: 'ready',
   states: {
@@ -473,6 +677,49 @@ When Boss provides a free-form procedure description as the Source, Captain shal
         },
       },
     ]);
+  });
+});
+
+describe('inspectGearsRoleContract', () => {
+  it('derives canonical Roles and source-ordered concurrent role sets', () => {
+    expect(inspectGearsRoleContract(schema3Gears)).toEqual({
+      generation: 'schema-3',
+      names: ['Coder', 'Reviewer'],
+      roleIds: ['coder', 'reviewer'],
+      concurrentRoleSets: [['coder', 'reviewer']],
+      findings: [],
+    });
+  });
+
+  it('rejects removed aliases and canonical role collisions', () => {
+    const source = schema3Gears.replace(
+      '- Coder\n- Reviewer',
+      '- Coder = primary\n- Reviewer | reviewer-player\n- coder',
+    );
+    expect(inspectGearsRoleContract(source).findings.join('\n')).toMatch(
+      /removed alias syntax[\s\S]*removed alias syntax[\s\S]*undeclared role "Reviewer"/,
+    );
+
+    const collision = schema3Gears.replace(
+      '- Coder\n- Reviewer',
+      '- Coder\n- coder\n- Reviewer',
+    );
+    expect(inspectGearsRoleContract(collision).findings.join('\n')).toMatch(
+      /collide as canonical role "coder"/,
+    );
+
+    const invalid = schema3Gears.replace(
+      '- Coder\n- Reviewer',
+      '- Captain\n- Code Reviewer',
+    );
+    expect(inspectGearsRoleContract(invalid).findings.join('\n')).toMatch(
+      /reserved local role "captain"[\s\S]*noncanonical local role "code reviewer"/,
+    );
+
+    const duplicateSet = `${schema3Gears}\n### SCHEMA3-4\nParallel group: duplicate-review\n\nCaptain shall prompt Coder:\n> Draft again.\n\n### SCHEMA3-5\nParallel group: duplicate-review\n\nCaptain shall prompt Reviewer:\n> Review again.\n`;
+    expect(inspectGearsRoleContract(duplicateSet).findings.join('\n')).toMatch(
+      /duplicate concurrent role set \["coder","reviewer"\]/,
+    );
   });
 });
 
@@ -686,6 +933,124 @@ describe('checkGearsFsmConformance', () => {
 
   it('accepts direct Captain work without a player binding', () => {
     expect(checkGearsFsmConformance(directGears, directConfig())).toEqual([]);
+  });
+
+  it('validates schema-3 Roles and concurrent role sets', () => {
+    expect(
+      checkGearsFsmConformance(schema3Gears, schema3Config(), {
+        concurrentRoleSets: [['coder', 'reviewer']],
+      }),
+    ).toEqual([]);
+
+    expect(pinIntrospection(schema3Config()).captain).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          state: 'coderWork',
+          actor: 'player',
+          player: '',
+          role: 'coder',
+        }),
+      ]),
+    );
+  });
+
+  it('rejects schema-3 role metadata and concurrent-set drift', () => {
+    const config = schema3Config();
+    config.states!.independentReview.states!.coderRegion.states!.working.meta =
+      {
+        playbook: { stateId: 'coderWork', role: 'reviewer' },
+      };
+    const findings = checkGearsFsmConformance(schema3Gears, config, {
+      concurrentRoleSets: [['reviewer', 'coder']],
+    }).join('\n');
+    expect(findings).toMatch(/meta\.playbook\.role "reviewer" does not match/);
+    expect(findings).toMatch(/concurrentRoleSets.*do not match GEARS groups/);
+  });
+
+  it('rejects a historical player binding substituted for a schema-3 role', () => {
+    const config = schema3Config();
+    const working = config.states!.independentReview.states!.coderRegion.states!
+      .working as {
+      meta: { playbook: { stateId: string; role?: string } };
+      invoke: {
+        input: (args: {
+          context: Record<string, unknown>;
+        }) => Record<string, unknown>;
+      };
+    };
+    delete working.meta.playbook.role;
+    const roleInput = working.invoke.input;
+    working.invoke.input = ({ context }) => {
+      const input = { ...roleInput({ context }) };
+      delete input.role;
+      return { ...input, player: 'Coder' };
+    };
+
+    const findings = checkGearsFsmConformance(schema3Gears, config, {
+      concurrentRoleSets: [['coder', 'reviewer']],
+    }).join('\n');
+    expect(findings).toMatch(/FSM role "" is not GEARS canonical role "coder"/);
+    expect(findings).toMatch(
+      /schema-3 delegated role carries removed invoke\.input\.player "Coder"/,
+    );
+  });
+
+  it('rejects a schema-3 role invoked through the Captain actor', () => {
+    const config = schema3Config();
+    const working = config.states!.independentReview.states!.coderRegion.states!
+      .working as { invoke: { src: string } };
+    working.invoke.src = 'captain';
+
+    expect(
+      checkGearsFsmConformance(schema3Gears, config, {
+        concurrentRoleSets: [['coder', 'reviewer']],
+      }).join('\n'),
+    ).toMatch(/schema-3 delegated work does not invoke the player actor/);
+  });
+
+  it('preserves historical schema-1 player bindings', () => {
+    const historical = `# Historical fixture\n\nPlayers:\n\n- Writer\n\n${gears}`;
+    expect(checkGearsFsmConformance(historical, conformantConfig())).toEqual(
+      [],
+    );
+    const historicalState = enumerateCaptainStates(conformantConfig())[0];
+    expect(historicalState).toMatchObject({ player: 'Writer' });
+    expect(historicalState).not.toHaveProperty('role');
+  });
+
+  it('accepts a controller decision state without needsBossReply', () => {
+    expect(
+      checkGearsFsmConformance(controllerGears, controllerConfig(), {
+        concurrentRoleSets: [],
+      }),
+    ).toEqual([]);
+
+    expect(
+      checkGearsFsmConformance(controllerGears, controllerConfig()),
+    ).toContain('schema-3 FSM exports no valid concurrentRoleSets array');
+    expect(
+      checkGearsFsmConformance(controllerGears, controllerConfig(), {
+        concurrentRoleSets: [['coder', 'reviewer']],
+      }).join('\n'),
+    ).toMatch(/concurrentRoleSets.*do not match GEARS groups/);
+
+    const drifted = controllerConfig();
+    const decision = drifted.states!.decide as {
+      invoke: { input: () => Record<string, unknown> };
+    };
+    const input = decision.invoke.input();
+    decision.invoke.input = () => ({
+      ...input,
+      result: {
+        ...(input.result as Record<string, string>),
+        needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+      },
+    });
+    expect(
+      checkGearsFsmConformance(controllerGears, drifted, {
+        concurrentRoleSets: [],
+      }).join('\n'),
+    ).toMatch(/controller state decide unexpectedly declares needsBossReply/);
   });
 
   it('accepts a script item realized by a matching script state (verification-15, verification-17)', () => {
@@ -1552,6 +1917,35 @@ const goodCompose = (raw: unknown): string => {
   return blocks.join('\n\n');
 };
 
+const composeSchema3Prompt = (
+  raw: unknown,
+  promptIdentity: (roleId: string) => string,
+): string => {
+  const input = raw as {
+    prompt: string;
+    topic?: string;
+    pendingBossQuestion?: { question: string };
+    bossReply?: string;
+  };
+  const blocks: string[] = [];
+  if (input.pendingBossQuestion && input.bossReply) {
+    blocks.push(
+      CONTINUATION_PREAMBLE,
+      `Boss question:\n${input.pendingBossQuestion.question}`,
+      `Boss reply:\n${input.bossReply}`,
+    );
+  }
+  let body = input.prompt;
+  if (input.topic !== undefined) {
+    body = body.replaceAll('<topic>', input.topic);
+  }
+  if (body.includes('<coder-llm>')) {
+    body = body.replaceAll('<coder-llm>', promptIdentity('coder'));
+  }
+  blocks.push(body);
+  return blocks.join('\n\n');
+};
+
 describe('prompt contract capture (verification-5)', () => {
   it('probes context reads through a recording proxy', () => {
     const reads = probeContextReads(({ context }) => ({
@@ -1601,6 +1995,27 @@ describe('prompt contract capture (verification-5)', () => {
     ]);
   });
 
+  it('captures canonical roles without relabelling historical players', () => {
+    const rows = capturePromptContract(schema3Config());
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          state: 'coderWork',
+          player: '',
+          role: 'coder',
+        }),
+        expect.objectContaining({
+          state: 'reviewerWork',
+          player: '',
+          role: 'reviewer',
+        }),
+      ]),
+    );
+    expect(capturePromptContract(contractConfig())[0]).not.toHaveProperty(
+      'role',
+    );
+  });
+
   it('derives which placeholders the composer substitutes', () => {
     expect(deriveSubstitutions(contractConfig(), goodCompose)).toEqual({
       draft: ['<audience>'],
@@ -1632,24 +2047,133 @@ describe('checkPromptComposition (verification-5)', () => {
     ).toEqual([]);
   });
 
+  it('resolves schema-3 prompt identity through the canonical role', () => {
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose: composeSchema3Prompt,
+        actor: 'player',
+      }),
+    ).toEqual([]);
+    expect(
+      deriveSubstitutions(schema3Config(), composeSchema3Prompt, 'player'),
+    ).toMatchObject({
+      coderWork: ['<topic>', '<coder-llm>'],
+      reviewerWork: ['<topic>'],
+    });
+  });
+
+  it('rejects a concrete player binding exposed by a schema-3 role composer', () => {
+    const leaking = (
+      raw: unknown,
+      promptIdentity: (roleId: string) => string,
+    ): string =>
+      `${composeSchema3Prompt(raw, promptIdentity)}\n\nPlayer binding: configured-coder`;
+
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose: leaking,
+        actor: 'player',
+      }).join('\n'),
+    ).toMatch(/exposes a concrete player binding/);
+  });
+
+  it('rejects a schema-3 prompt lookup through another role', () => {
+    const compose = (
+      raw: unknown,
+      promptIdentity: (roleId: string) => string,
+    ): string => {
+      const input = raw as { prompt: string; topic?: string };
+      return input.prompt
+        .replaceAll('<topic>', input.topic ?? '<topic>')
+        .replaceAll('<coder-llm>', promptIdentity('reviewer'));
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }).join('\n'),
+    ).toMatch(/instead of canonical local role "coder"/);
+  });
+
+  it('checks controller prompt text without inventing a Boss continuation', () => {
+    const config = controllerConfig();
+    config.states!.report = {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          stateId: 'report',
+          sourceItem: 'CONTROL-REPORT',
+          prompt: 'Report the settled controller action.',
+          result: { respond: 'Reply with the settled outcome.' },
+        }),
+      },
+    };
+    const compose = (raw: unknown): string =>
+      (raw as { prompt: string }).prompt;
+    expect(
+      checkPromptComposition({
+        config,
+        compose,
+        actor: 'captain',
+      }),
+    ).toEqual([]);
+
+    const mutated = (raw: unknown): string =>
+      `Mutated ${(raw as { prompt: string }).prompt}`;
+    expect(
+      checkPromptComposition({
+        config,
+        compose: mutated,
+        actor: 'captain',
+      }).join('\n'),
+    ).toMatch(/does not preserve the body line/);
+
+    const inventedContinuation = (raw: unknown): string =>
+      `${CONTINUATION_PREAMBLE}\n\n${compose(raw)}`;
+    expect(
+      checkPromptComposition({
+        config,
+        compose: inventedContinuation,
+        actor: 'captain',
+      }).join('\n'),
+    ).toMatch(/continuation blocks appear on an ordinary turn/);
+  });
+
   it('accepts a state-keyed branch continuation mapper', () => {
     const config: MachineConfigLike = {
       states: {
         draft: {
+          id: 'draft',
+          meta: { playbook: { stateId: 'draft', role: 'coder' } },
           invoke: {
             src: 'player',
             input: ({ context }) => {
-              const pendingBossQuestion = (
+              const candidate = (
                 context.pendingBossQuestions as
-                  | Record<string, { question: string }>
+                  | Record<
+                      string,
+                      {
+                        question: string;
+                        questionId: string;
+                        resumeStateId: string;
+                      }
+                    >
                   | undefined
               )?.draft;
+              const pendingBossQuestion =
+                candidate?.questionId === 'draft' &&
+                candidate.resumeStateId === 'draft'
+                  ? candidate
+                  : undefined;
               const bossReply = (
                 context.bossReplies as Record<string, string> | undefined
               )?.draft;
               return {
                 stateId: 'draft',
-                player: 'Writer',
+                role: 'coder',
                 sourceItem: 'GREETER-1',
                 prompt: 'Draft a short hello message for <audience>.',
                 result: {
@@ -1785,7 +2309,7 @@ describe('checkPromptComposition (verification-5)', () => {
     ).toMatch(/leaks into the player prompt/);
   });
 
-  it('rejects player binding and resume text added to a direct-Captain prompt', () => {
+  it('rejects player, role, and resume text added to a direct-Captain prompt', () => {
     const config: MachineConfigLike = {
       states: {
         route: directCaptainContract('ROUTE-1', ['Route this intent.']),
@@ -1795,6 +2319,7 @@ describe('checkPromptComposition (verification-5)', () => {
       [
         goodCompose(raw),
         'Player binding: Writer',
+        'Role binding: coder',
         'Resume the same player session for this task.',
       ].join('\n\n');
     const findings = checkPromptComposition({
@@ -1803,6 +2328,7 @@ describe('checkPromptComposition (verification-5)', () => {
       actor: 'captain',
     }).join('\n');
     expect(findings).toMatch(/introduces a player binding/);
+    expect(findings).toMatch(/introduces a role binding/);
     expect(findings).toMatch(/introduces a player resume instruction/);
   });
 
@@ -2165,10 +2691,13 @@ describe('generateGearsFsmConformanceTest', () => {
     });
     expect(emitted).toContain('import * as fsm from "./code.fsm.js"');
     expect(emitted).toContain(
-      'import { checkGearsFsmConformance, findMachineConfig } from "@sublang/slc/verify"',
+      'import { checkGearsFsmConformance, findConcurrentRoleSets, findMachineConfig } from "@sublang/slc/verify"',
     );
     expect(emitted).toContain(
-      'checkGearsFsmConformance(gears, findMachineConfig(fsm))',
+      'checkGearsFsmConformance(gears, findMachineConfig(fsm), {',
+    );
+    expect(emitted).toContain(
+      'concurrentRoleSets: findConcurrentRoleSets(fsm)',
     );
     expect(emitted).toContain('./code.gears.md');
     expect(emitted).toContain('SPDX-License-Identifier');
@@ -2241,7 +2770,7 @@ describe('emitGearsFsmConformanceTest', () => {
       expect(content).toContain('import * as fsm from "./code.fsm.js"');
       expect(content).toContain('./code.gears.md');
       expect(content).toContain(
-        'checkGearsFsmConformance(gears, findMachineConfig(fsm))',
+        'checkGearsFsmConformance(gears, findMachineConfig(fsm), {',
       );
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
