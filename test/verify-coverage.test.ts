@@ -771,6 +771,7 @@ const controllerMachine = (
     missingDecisionResult?: boolean;
     nestedInterrupt?: boolean;
     guardForm?: 'inline' | 'parameterized';
+    staleTargetLatch?: 'prior' | 'self';
   } = {},
 ) => {
   const actionGuard =
@@ -888,6 +889,7 @@ const controllerMachine = (
     initial: 'hub',
     context: ({ input }: any) => ({
       enabledPlaybooks: input.enabledPlaybooks,
+      allowDeclaredTarget: true,
     }),
     states: {
       hub: {
@@ -953,6 +955,13 @@ const controllerMachine = (
                     ? '#hub'
                     : '#reporting',
               guard,
+              ...(opts.staleTargetLatch !== undefined && action === 'start'
+                ? {
+                    actions: assign({
+                      allowDeclaredTarget: () => false,
+                    }),
+                  }
+                : {}),
             };
           }),
           onError: { target: '#failed' },
@@ -976,7 +985,21 @@ const controllerMachine = (
               prompt: 'Settle the selected host action.',
               result: { done: 'The selected host action settled.' },
             }),
-            onDone: { target: '#deciding', guard: 'done' },
+            onDone:
+              opts.staleTargetLatch !== undefined
+                ? [
+                    {
+                      target:
+                        opts.staleTargetLatch === 'self'
+                          ? '#launching'
+                          : '#deciding',
+                      guard: ({ context, event }: any) =>
+                        context.allowDeclaredTarget === true &&
+                        event.output.guard === 'done',
+                    },
+                    { target: '#hub', guard: 'done' },
+                  ]
+                : { target: '#deciding', guard: 'done' },
             onError: { target: '#failed' },
           },
         },
@@ -1178,6 +1201,25 @@ describe('checkFsmCoverage (verification-6)', () => {
       }),
     ).toEqual([]);
   });
+
+  it.each([
+    ['previously visited', 'prior', 'deciding'],
+    ['self', 'self', 'launching'],
+  ] as const)(
+    'observes a %s controller target only through the probed transition',
+    async (_label, staleTargetLatch, target) => {
+      expect(
+        await checkFsmCoverage({
+          machine: controllerMachine(false, false, false, {
+            repeatedDecisionPath: true,
+            staleTargetLatch,
+          }),
+        }),
+      ).toContain(
+        `state launching: controller result "done" did not reach its declared direct action target ${target}`,
+      );
+    },
+  );
 
   it('rejects a controller result selected by an earlier action arm', async () => {
     expect(
