@@ -57,7 +57,7 @@ meta.md       The spec of specs
 | --- | --- |
 | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
 | [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
-| [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, runtime-transition boundaries, immutable Playbook adoption, demo acceptance, and package publication checks |
+| [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, exact multi-profile runtime contracts, immutable Playbook adoption, demo acceptance, and package publication checks |
 | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
 | [incremental-compilation.md](packages/incremental-compilation.md) | Complete build history, reuse/update/ordinary selection, update context, success-only publication, rebuilds, exclusions, and fixture acceptance |
 | [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
