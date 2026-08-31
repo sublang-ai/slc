@@ -25,7 +25,6 @@ import { promisify } from 'node:util';
 import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
-  artifactSchemaForPlaybookProvenance,
   checkGearsFsmConformance,
   canonicalRoleId,
   findConcurrentRoleSets,
@@ -35,6 +34,8 @@ import {
   isControllerMachine,
   parseGearsItems,
   pinIntrospection,
+  resolveArtifactSchemaForVerification,
+  type MachineConfigLike,
 } from '../src/verify.js';
 import { checkFsmCoverage } from '../src/verify-coverage.js';
 import {
@@ -74,6 +75,7 @@ interface RuntimeProfileInspection {
 export interface RuntimeProfileOptions {
   provenance?: string;
   artifactSchema?: 1 | 3;
+  config?: MachineConfigLike;
   registry?: unknown;
   configuredOptions?: unknown;
 }
@@ -497,13 +499,33 @@ async function inspectRuntimeProfile(
   }
 
   const factory = linked.default;
-  const schema3Requested =
-    options.artifactSchema === 3 ||
-    marker === 'composed-v3' ||
-    options.registry !== undefined ||
-    options.provenance === PLAYBOOK_10_PROVENANCE ||
-    hasExactSchema3FactoryCompatibility(factory);
-  if (schema3Requested) {
+  const schemaResolution = resolveArtifactSchemaForVerification({
+    ...(options.artifactSchema === undefined
+      ? {}
+      : { artifactSchema: options.artifactSchema }),
+    ...(options.provenance === undefined
+      ? {}
+      : { provenance: options.provenance }),
+    ...(options.config === undefined ? {} : { config: options.config }),
+    linked,
+  });
+  findings.push(...schemaResolution.findings);
+  if (schemaResolution.findings.length > 0) {
+    return { profile: null, findings };
+  }
+  if (marker === 'composed-v3' && schemaResolution.artifactSchema !== 3) {
+    findings.push(
+      `composed-v3 runtime marker conflicts with selected artifact schema ${schemaResolution.artifactSchema ?? 'unclassified'}`,
+    );
+    return { profile: null, findings };
+  }
+  if (options.registry !== undefined && schemaResolution.artifactSchema !== 3) {
+    findings.push(
+      `schema-3 registry conflicts with selected artifact schema ${schemaResolution.artifactSchema ?? 'unclassified'}`,
+    );
+    return { profile: null, findings };
+  }
+  if (schemaResolution.artifactSchema === 3) {
     return inspectComposedV3Profile(linked, marker, options, findings);
   }
 
@@ -557,30 +579,6 @@ async function inspectRuntimeProfile(
       .join('; ')})`,
   );
   return { profile: null, findings };
-}
-
-function hasExactSchema3FactoryCompatibility(factory: unknown): boolean {
-  if (typeof factory !== 'function') return false;
-  const descriptor = Object.getOwnPropertyDescriptor(factory, 'compat');
-  if (
-    descriptor === undefined ||
-    !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
-    descriptor.enumerable !== true ||
-    descriptor.writable !== false ||
-    descriptor.configurable !== false
-  ) {
-    return false;
-  }
-  const compat = ownDataRecord(descriptor.value, [
-    'artifactSchema',
-    'runtimeAbi',
-  ]);
-  return (
-    compat !== undefined &&
-    Object.isFrozen(descriptor.value) &&
-    compat.artifactSchema === 3 &&
-    compat.runtimeAbi === 1
-  );
 }
 
 async function inspectComposedV3Profile(
@@ -1712,11 +1710,15 @@ export async function checkPlaybookIntegrity(
 ): Promise<string[]> {
   const findings: string[] = [];
   const config = findMachineConfig(compiled.fsm);
+  const schemaResolution = compiledSchemaResolution(compiled, config);
+  findings.push(
+    ...schemaResolution.findings.map((finding) => `${label}: ${finding}`),
+  );
 
   findings.push(
     ...checkGearsFsmConformance(compiled.gears, config, {
       concurrentRoleSets: findConcurrentRoleSets(compiled.fsm),
-      artifactSchema: compiledArtifactSchema(compiled),
+      artifactSchema: schemaResolution.artifactSchema,
     }).map((finding) => `${label}: ${finding}`),
   );
   findings.push(
@@ -1725,10 +1727,13 @@ export async function checkPlaybookIntegrity(
     ).map((finding) => `${label}: ${finding}`),
   );
 
-  const runtime = await inspectRuntimeProfile(
-    compiled.playbook,
-    compiledRuntimeOptions(compiled, options),
-  );
+  const runtime =
+    schemaResolution.findings.length === 0
+      ? await inspectRuntimeProfile(
+          compiled.playbook,
+          compiledRuntimeOptions(compiled, config, options),
+        )
+      : { profile: null, findings: [] };
   findings.push(...runtime.findings.map((finding) => `${label}: ${finding}`));
 
   if (
@@ -1810,12 +1815,11 @@ function schema3ClosureFindings(
 
 function compiledRuntimeOptions(
   compiled: CompiledPlaybook,
+  config: MachineConfigLike,
   options: Pick<RuntimeProfileOptions, 'configuredOptions'>,
 ): RuntimeProfileOptions {
   return {
-    ...(compiledArtifactSchema(compiled) === undefined
-      ? {}
-      : { artifactSchema: compiledArtifactSchema(compiled) }),
+    config,
     ...(compiled.linkTargetProvenance === undefined
       ? {}
       : { provenance: compiled.linkTargetProvenance }),
@@ -1826,12 +1830,21 @@ function compiledRuntimeOptions(
   };
 }
 
-function compiledArtifactSchema(compiled: CompiledPlaybook): 1 | 3 | undefined {
-  const registry = ownDataRecord(compiled.registry);
-  const generation = inspectGearsRoleContract(compiled.gears).generation;
-  if (registry?.artifactSchema === 3 || generation === 'schema-3') return 3;
-  if (generation === 'schema-1') return 1;
-  return artifactSchemaForPlaybookProvenance(compiled.linkTargetProvenance);
+function compiledSchemaResolution(
+  compiled: CompiledPlaybook,
+  config: MachineConfigLike,
+): { artifactSchema?: 1 | 3; findings: string[] } {
+  const linked =
+    typeof compiled.playbook === 'object' && compiled.playbook !== null
+      ? (compiled.playbook as { default?: unknown })
+      : undefined;
+  return resolveArtifactSchemaForVerification({
+    ...(compiled.linkTargetProvenance === undefined
+      ? {}
+      : { provenance: compiled.linkTargetProvenance }),
+    config,
+    ...(linked === undefined ? {} : { linked }),
+  });
 }
 
 /**
@@ -1868,14 +1881,20 @@ export async function checkReferenceEquivalence(opts: {
     )),
   );
 
+  const producedConfig = findMachineConfig(opts.produced.fsm);
+  const referenceConfig = findMachineConfig(opts.reference.fsm);
   const [producedRuntime, referenceRuntime] = await Promise.all([
     inspectRuntimeProfile(
       opts.produced.playbook,
-      compiledRuntimeOptions(opts.produced, comparisonOptions),
+      compiledRuntimeOptions(opts.produced, producedConfig, comparisonOptions),
     ),
     inspectRuntimeProfile(
       opts.reference.playbook,
-      compiledRuntimeOptions(opts.reference, comparisonOptions),
+      compiledRuntimeOptions(
+        opts.reference,
+        referenceConfig,
+        comparisonOptions,
+      ),
     ),
   ]);
   const producedProfile = producedRuntime.profile;
@@ -1943,8 +1962,6 @@ export async function checkReferenceEquivalence(opts: {
     }
   }
 
-  const producedConfig = findMachineConfig(opts.produced.fsm);
-  const referenceConfig = findMachineConfig(opts.reference.fsm);
   const producedController = isControllerMachine(producedConfig);
   const referenceController = isControllerMachine(referenceConfig);
   const producedControllerCandidate =

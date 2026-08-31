@@ -64,6 +64,15 @@ export default function createPlaybookRuntime() {
 }
 `;
 
+const SCHEMA_3_DIRECT_CAPTAIN_PLAYBOOK_MODULE = `${DIRECT_CAPTAIN_PLAYBOOK_MODULE}
+Object.defineProperty(createPlaybookRuntime, 'compat', {
+  value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+  enumerable: true,
+  writable: false,
+  configurable: false,
+});
+`;
+
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${sf} | ${se} |\n| target | ${tf} | ${te} |\n`;
 
@@ -894,6 +903,74 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         'utf8',
       ),
     ).toContain('artifactSchema: 3');
+  });
+
+  it('bakes reconciled schema findings into conformance and prompt tests', async () => {
+    const packageRoot = join(root, 'playbook-conflict');
+    const linkTarget = join(packageRoot, 'src', 'runtime.ts');
+    await mkdir(join(packageRoot, 'src'), { recursive: true });
+    await writeFile(
+      join(packageRoot, 'package.json'),
+      JSON.stringify({ name: '@sublang/playbook', version: '4.0.0' }),
+    );
+    await writeFile(linkTarget, 'export {}\n');
+    const directCaptainFsm = FSM_ARTIFACT.replaceAll(
+      "          player: 'Writer',\n",
+      '',
+    );
+
+    const result = await runSlc(['slc', source, '--link', linkTarget], {
+      resolver: withReservedPipelines(() => []),
+      executor: createInterpretedExecutor({
+        agent: writingAgent({
+          fsm: directCaptainFsm,
+          playbook: SCHEMA_3_DIRECT_CAPTAIN_PLAYBOOK_MODULE,
+        }),
+      }),
+      cwd: work,
+    });
+
+    expect(result.ok).toBe(true);
+    const verificationDir = join(work, 'code.slc');
+    for (const test of [
+      'code.gears-fsm.test.ts',
+      'code.prompt-contract.test.ts',
+    ]) {
+      expect(await readFile(join(verificationDir, test), 'utf8')).toContain(
+        'artifact schema signals disagree',
+      );
+    }
+  });
+
+  it('uses one reconciled schema for bare-run conformance and prompt tests', async () => {
+    const verificationDir = join(work, 'code.slc');
+    await mkdir(verificationDir, { recursive: true });
+    await writeFile(
+      join(verificationDir, 'code.playbook.ts'),
+      SCHEMA_3_DIRECT_CAPTAIN_PLAYBOOK_MODULE,
+    );
+    const directCaptainFsm = FSM_ARTIFACT.replaceAll(
+      "          player: 'Writer',\n",
+      '',
+    );
+
+    const result = await runSlc(['slc', source], {
+      resolver: withReservedPipelines(() => []),
+      executor: createInterpretedExecutor({
+        agent: writingAgent({ fsm: directCaptainFsm }),
+      }),
+      cwd: work,
+    });
+
+    expect(result.ok).toBe(true);
+    for (const test of [
+      'code.gears-fsm.test.ts',
+      'code.prompt-contract.test.ts',
+    ]) {
+      expect(await readFile(join(verificationDir, test), 'utf8')).toContain(
+        'artifactSchema: 3',
+      );
+    }
   });
 
   it('emits <cwd>/<basename>.ts default-exporting the registry entry after a playbook full-link (self-hosting-16)', async () => {

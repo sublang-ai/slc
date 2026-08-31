@@ -772,12 +772,27 @@ const controllerMachine = (
     nestedInterrupt?: boolean;
     guardForm?: 'inline' | 'parameterized';
     staleTargetLatch?: 'prior' | 'self';
+    contextualSharedArm?: boolean;
   } = {},
 ) => {
   const actionGuard =
     (action: (typeof controllerActions)[number]) =>
     ({ context, event }: any) => {
       const output = event.output;
+      if (
+        opts.contextualSharedArm === true &&
+        action === 'dismiss' &&
+        (output.guard === 'dismiss' || output.guard === 'deliver')
+      ) {
+        return context.controllerRoute === 'shared';
+      }
+      if (
+        opts.contextualSharedArm === true &&
+        action === 'deliver' &&
+        output.guard === 'deliver'
+      ) {
+        return false;
+      }
       if (
         output.guard !== action &&
         !(
@@ -1040,6 +1055,54 @@ const controllerMachine = (
   } as any);
 };
 
+/** A controller whose real hub is the leaf inside its root compound state. */
+const compoundControllerWithoutHubReturn = () => {
+  const flat = controllerMachine();
+  const flatConfig = flat.config as any;
+  const { shutdown, ...sessionStates } = flatConfig.states;
+  const deciding = sessionStates.deciding;
+  sessionStates.hub = {
+    ...sessionStates.hub,
+    on: {
+      ...sessionStates.hub.on,
+      SHUTDOWN: { target: '#shutdown' },
+    },
+  };
+  sessionStates.deciding = {
+    ...deciding,
+    invoke: {
+      ...deciding.invoke,
+      onDone: deciding.invoke.onDone.map((arm: any, index: number) =>
+        index === controllerActions.indexOf('start')
+          ? { ...arm, target: '#stranded' }
+          : arm,
+      ),
+    },
+  };
+  sessionStates.stranded = { id: 'stranded' };
+
+  return setup({
+    actors: {
+      captain: fromPromise(async () => {
+        throw new Error('captain actor must be provided by the runner');
+      }),
+    },
+    guards: flat.implementations.guards as any,
+  }).createMachine({
+    id: 'compoundSessionController',
+    initial: 'session',
+    context: flatConfig.context,
+    states: {
+      session: {
+        id: 'session',
+        initial: 'hub',
+        states: sessionStates,
+      },
+      shutdown,
+    },
+  } as any);
+};
+
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 type DoneGuardArgs = {
@@ -1233,6 +1296,17 @@ describe('checkFsmCoverage (verification-6)', () => {
     );
   });
 
+  it('detects a shared action arm that is selectable only under probed context', async () => {
+    const findings = await checkFsmCoverage({
+      machine: controllerMachine(false, false, false, {
+        contextualSharedArm: true,
+      }),
+    });
+    expect(findings).toContain(
+      'state deciding: controller result "deliver" selects direct arm 4, already selected by result "dismiss"',
+    );
+  });
+
   it.each(['inline', 'parameterized'] as const)(
     'accepts %s controller action guards by evaluated behavior',
     async (guardForm) => {
@@ -1255,6 +1329,16 @@ describe('checkFsmCoverage (verification-6)', () => {
       'state deciding: controller result "respond" reached neither the session hub nor a shutdown final',
     );
   }, 2_000);
+
+  it('requires a compound-root controller path to return to its leaf hub', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: compoundControllerWithoutHubReturn(),
+      }),
+    ).toContain(
+      'state deciding: controller result "start" reached neither the session hub nor a shutdown final',
+    );
+  });
 
   it('fails closed on workflow-only surfaces inside a controller', async () => {
     const findings = await checkFsmCoverage({

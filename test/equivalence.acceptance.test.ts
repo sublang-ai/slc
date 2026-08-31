@@ -238,6 +238,8 @@ interface Schema3FixtureOptions {
     | 'exact'
     | 'zero-call'
     | 'two-call'
+    | 'two-argument-construction'
+    | 'suppressed-construction-failure'
     | 'extra-construction'
     | 'restored-malformed-construction'
     | 'restored-configured-options-drift'
@@ -431,6 +433,9 @@ function schema3Fixture(options: Schema3FixtureOptions): {
     return runtime;
   };
   const linkedFactory = (...args: unknown[]) => {
+    if (options.entryMode === 'suppressed-construction-failure') {
+      throw new Error('synthetic linked factory construction failed');
+    }
     if (options.entryMode === 'restored-configured-options-drift') {
       const configuredOptions = (
         args[0] as { configuredOptions: Record<string, unknown> }
@@ -536,7 +541,15 @@ function schema3Fixture(options: Schema3FixtureOptions): {
       }
       let linkedRuntime: unknown;
       try {
-        linkedRuntime = factory(construction);
+        linkedRuntime =
+          options.entryMode === 'two-argument-construction'
+            ? factory(construction, 'unexpected')
+            : factory(construction);
+      } catch (error) {
+        if (options.entryMode !== 'suppressed-construction-failure') {
+          throw error;
+        }
+        linkedRuntime = constructRuntime(construction);
       } finally {
         if (options.entryMode === 'restored-configured-options-drift') {
           Reflect.deleteProperty(configuredRecord, 'extra');
@@ -979,7 +992,7 @@ describe('reference equivalence harness (verification-9)', () => {
         linkTargetProvenance: undefined,
       }),
     ).toContain(
-      'unaccompanied: composed-v3 requires exact @sublang/playbook@10.0.0 provenance',
+      'unaccompanied: artifact schema signals disagree (FSM historical-player structure: 1, linked factory compatibility: 3)',
     );
   });
 
@@ -992,6 +1005,37 @@ describe('reference equivalence harness (verification-9)', () => {
     expect(await checkPlaybookIntegrity('unaccompanied', compiled)).toContain(
       'unaccompanied: composed-v3 requires exact @sublang/playbook@10.0.0 provenance',
     );
+  });
+
+  it('rejects runtime-profile schema signals that disagree with FSM actor bindings', async () => {
+    const fixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+    });
+    const findings = await checkPlaybookIntegrity('conflicted', {
+      ...withSchema3Runtime(syntheticSchema3Compilation(), fixture),
+      linkTargetProvenance: '@sublang/playbook@4.0.0',
+    });
+
+    expect(findings.join('\n')).toMatch(
+      /conflicted: artifact schema signals disagree \(reviewed link-target provenance: 1, FSM role\/controller structure: 3, linked factory compatibility: 3\)/,
+    );
+    expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
+  });
+
+  it('does not use a registry artifactSchema self-declaration as schema evidence', async () => {
+    const historical = await loadReference();
+    const fixture = schema3Fixture({ kind: 'bespoke', interpose: false });
+    const findings = await checkPlaybookIntegrity('self-declared', {
+      ...historical,
+      playbook: fixture.playbook,
+      registry: fixture.registry,
+    });
+
+    expect(findings).toContain(
+      'self-declared: schema-3 registry conflicts with selected artifact schema 1',
+    );
+    expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
   });
 
   it('reports a recognized-vs-unrecognized runtime profile mismatch', async () => {
@@ -1129,6 +1173,14 @@ describe('reference equivalence harness (verification-9)', () => {
     [
       'two-call',
       'registry createRuntime invoked the linked factory 2 times, expected exactly once',
+    ],
+    [
+      'two-argument-construction',
+      'linked factory was not called with exactly one construction argument',
+    ],
+    [
+      'suppressed-construction-failure',
+      'registry createRuntime suppressed a linked-factory construction failure',
     ],
     [
       'extra-construction',
@@ -1370,7 +1422,7 @@ describe('reference equivalence harness (verification-9)', () => {
         withSchema3Runtime(historical, fixture),
       ),
     ).toContain(
-      'mixed: composed-v3 registry cannot close over a historical schema-1 Players declaration',
+      'mixed: artifact schema signals disagree (reviewed link-target provenance: 3, FSM historical-player structure: 1, linked factory compatibility: 3)',
     );
   });
 
