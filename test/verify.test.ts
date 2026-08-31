@@ -3,7 +3,7 @@
 
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,7 +38,9 @@ import {
   parseGearsItems,
   pinIntrospection,
   placeholdersIn,
+  playbookProvenanceForLinkTarget,
   probeContextReads,
+  resolveArtifactSchemaForVerification,
   type MachineConfigLike,
 } from '../src/verify.js';
 
@@ -70,6 +72,173 @@ describe('reviewed Playbook artifact schemas', () => {
   ])('leaves unsupported provenance %s unmapped', (value) => {
     expect(artifactSchemaForPlaybookProvenance(value)).toBeUndefined();
   });
+
+  it('reads provenance from the package that owns the concrete link target', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-link-provenance-'));
+    try {
+      const packageRoot = join(root, 'node_modules', '@sublang', 'playbook');
+      const linkTarget = join(packageRoot, 'src', 'runtime.ts');
+      await mkdir(join(packageRoot, 'src'), { recursive: true });
+      await writeFile(
+        join(packageRoot, 'package.json'),
+        JSON.stringify({ name: '@sublang/playbook', version: '10.0.0' }),
+      );
+      await writeFile(linkTarget, 'export {}\n');
+
+      expect(await playbookProvenanceForLinkTarget(linkTarget)).toBe(
+        '@sublang/playbook@10.0.0',
+      );
+
+      const localTarget = join(root, 'local', 'runtime.ts');
+      await mkdir(join(root, 'local'));
+      await writeFile(
+        join(root, 'local', 'package.json'),
+        JSON.stringify({ name: 'local-runtime', version: '10.0.0' }),
+      );
+      await writeFile(localTarget, 'export {}\n');
+      expect(
+        await playbookProvenanceForLinkTarget(localTarget),
+      ).toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('requires strong schema signals to agree and otherwise preserves compat-less schema 1', () => {
+    const schema3Factory = (): object => ({});
+    Object.defineProperty(schema3Factory, 'compat', {
+      value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+
+    expect(
+      resolveArtifactSchemaForVerification({
+        linked: { default: () => ({}) },
+      }),
+    ).toEqual({ artifactSchema: 1, findings: [] });
+    expect(
+      resolveArtifactSchemaForVerification({
+        provenance: '@sublang/playbook@10.0.0',
+        linked: { default: schema3Factory },
+      }),
+    ).toEqual({ artifactSchema: 3, findings: [] });
+
+    const conflict = resolveArtifactSchemaForVerification({
+      provenance: '@sublang/playbook@4.0.0',
+      linked: { default: schema3Factory },
+    });
+    expect(conflict.artifactSchema).toBeUndefined();
+    expect(conflict.findings.join('\n')).toMatch(
+      /schema signals disagree.*provenance: 1.*compatibility: 3/,
+    );
+    const unsupported = resolveArtifactSchemaForVerification({
+      provenance: '@sublang/playbook@5.0.0',
+      linked: { default: () => ({}) },
+    });
+    expect(unsupported.artifactSchema).toBeUndefined();
+    expect(unsupported.findings.join('\n')).toMatch(
+      /unsupported link-target provenance.*5\.0\.0/,
+    );
+    expect(resolveArtifactSchemaForVerification({})).toEqual({
+      findings: [],
+    });
+    const ambiguousCaptain = resolveArtifactSchemaForVerification({
+      config: {
+        states: {
+          acting: {
+            invoke: {
+              src: 'captain',
+              input: () => ({
+                sourceItem: 'CAPTAIN-1',
+                prompt: 'Decide.',
+                result: { needsBossReply: 'Need Boss.' },
+              }),
+            },
+          },
+        },
+      },
+    });
+    expect(ambiguousCaptain.artifactSchema).toBeUndefined();
+    expect(ambiguousCaptain.findings.join('\n')).toMatch(
+      /no reviewed provenance.*callable linked factory.*direct-Captain continuation/,
+    );
+  });
+
+  it.each([
+    [
+      'role and historical player',
+      {
+        states: {
+          role: {
+            invoke: {
+              src: 'player',
+              input: () => ({
+                sourceItem: 'ROLE-1',
+                role: 'coder',
+                prompt: 'Code.',
+                result: { done: 'Done.' },
+              }),
+            },
+          },
+          player: {
+            invoke: {
+              src: 'player',
+              input: () => ({
+                sourceItem: 'PLAYER-1',
+                player: 'Writer',
+                prompt: 'Write.',
+                result: { done: 'Done.' },
+              }),
+            },
+          },
+        },
+      },
+    ],
+    [
+      'controller and historical player',
+      {
+        states: {
+          controller: {
+            invoke: {
+              src: 'captain',
+              input: () => ({
+                sourceItem: 'CONTROLLER-1',
+                prompt: 'Choose.',
+                result: Object.fromEntries(
+                  CONTROLLER_ACTION_GUARDS.map((guard) => [guard, guard]),
+                ),
+              }),
+            },
+          },
+          player: {
+            invoke: {
+              src: 'player',
+              input: () => ({
+                sourceItem: 'PLAYER-1',
+                player: 'Writer',
+                prompt: 'Write.',
+                result: { done: 'Done.' },
+              }),
+            },
+          },
+        },
+      },
+    ],
+  ] as const)(
+    'rejects mixed %s actor-generation evidence',
+    (_label, config) => {
+      const resolution = resolveArtifactSchemaForVerification({
+        config,
+        linked: { default: () => ({}) },
+      });
+      expect(resolution.artifactSchema).toBeUndefined();
+      expect(resolution.findings.join('\n')).toMatch(
+        /schema signals disagree.*historical-player structure: 1.*role\/controller structure: 3/,
+      );
+    },
+  );
 });
 
 // A `gears` artifact in the `text2gears` output form (as produced for the real
@@ -1191,6 +1360,38 @@ describe('checkGearsFsmConformance', () => {
       checkGearsFsmConformance(controllerGears, drifted).join('\n'),
     ).toMatch(/controller state decide unexpectedly declares needsBossReply/);
   });
+
+  it.each([
+    ['missing', false],
+    ['extra', true],
+  ] as const)(
+    'reports a controller decision %s-key near-miss without requiring the ordinary wait key',
+    (_label, extra) => {
+      const config = controllerConfig();
+      const decision = config.states!.decide as {
+        invoke: { input: () => Record<string, unknown> };
+      };
+      const input = decision.invoke.input();
+      const result = {
+        ...(input.result as Record<string, string>),
+        ...(extra ? { other: 'Invented action.' } : {}),
+      };
+      if (!extra) delete result.runtime;
+      decision.invoke.input = () => ({ ...input, result });
+
+      const findings = checkGearsFsmConformance(controllerGears, config, {
+        concurrentRoleSets: [],
+      });
+      expect(findings).toContainEqual(
+        expect.stringContaining(
+          `controller decision contract near-miss (${extra ? 'extra "other"' : 'missing "runtime"'})`,
+        ),
+      );
+      expect(findings).not.toContainEqual(
+        expect.stringContaining('declares no needsBossReply result'),
+      );
+    },
+  );
 
   it('requires the schema-3 concurrent-role export even when no group is declared', () => {
     expect(checkGearsFsmConformance(schema3Gears, schema3Config())).toContain(
@@ -2916,7 +3117,7 @@ describe('emitPromptContractTest (verification-5)', () => {
         ],
         { cwd: artifactDir, timeout: 15_000 },
       );
-      expect(`${stdout}\n${stderr}`).toMatch(/3 passed/);
+      expect(`${stdout}\n${stderr}`).toMatch(/4 passed/);
 
       // The emission-time check executes the imported Captain composer, not
       // merely discovers its export. A body mutation must be diagnosed.
@@ -2936,6 +3137,46 @@ describe('emitPromptContractTest (verification-5)', () => {
       expect(rerun.diagnostics.join('\n')).toMatch(
         /composeCaptainPrompt|does not preserve the body line/,
       );
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it('retains schema 1 for a direct-Captain artifact with a compat-less linked factory', async () => {
+    const artifactDir = await mkdtemp(
+      join(tmpdir(), 'slc-verify-pc-captain-v1-'),
+    );
+    try {
+      await writeFile(
+        join(artifactDir, 'captain.fsm.ts'),
+        directCaptainFsmFixture,
+      );
+      await writeFile(
+        join(artifactDir, 'captain.playbook.ts'),
+        [
+          "const CONTINUATION = '" + CONTINUATION_PREAMBLE + "';",
+          'const compose = (input: any): string => {',
+          '  const blocks: string[] = [];',
+          '  if (input.pendingBossQuestion && input.bossReply) {',
+          "    if (input.pendingBossQuestion.player !== 'Captain' || 'asker' in input.pendingBossQuestion) throw new Error('wrong schema');",
+          '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
+          '  }',
+          "  blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+          "  return blocks.join('\\n\\n');",
+          '};',
+          'export const _internal = { composeCaptainPrompt: compose };',
+          'export default function createPlaybookRuntime() { return {}; }',
+          '',
+        ].join('\n'),
+      );
+
+      const { path, diagnostics } = await emitPromptContractTest({
+        artifactDir,
+        basename: 'captain',
+      });
+
+      expect(diagnostics).toEqual([]);
+      expect(await readFile(path, 'utf8')).toContain('artifactSchema: 1');
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
@@ -2994,8 +3235,13 @@ describe('emitPromptContractTest (verification-5)', () => {
       expect(ungrounded.diagnostics.join('\n')).toMatch(
         /requires artifactSchema 1 or 3/,
       );
-      expect(await readFile(ungrounded.path, 'utf8')).not.toContain(
-        'artifactSchema:',
+      const ungroundedSource = await readFile(ungrounded.path, 'utf8');
+      expect(ungroundedSource).not.toContain('artifactSchema:');
+      expect(ungroundedSource).toContain(
+        'linked factory has an own compatibility declaration that is not exact immutable schema 3/runtime ABI 1',
+      );
+      expect(ungroundedSource).toContain(
+        "it('uses consistent artifact-schema evidence'",
       );
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
@@ -3086,6 +3332,20 @@ describe('generateGearsFsmConformanceTest', () => {
       });
       expect(result.diagnostics ?? []).toEqual([]);
     }
+  });
+
+  it('bakes schema-resolution findings into generated prompt tests', () => {
+    const finding = 'reviewed provenance disagrees with factory compatibility';
+    const emitted = generatePromptContractTest({
+      basename: 'code',
+      fsmModule: './code.fsm.js',
+      verifyModule: '@sublang/slc/verify',
+      rows: [],
+      schemaFindings: [finding],
+    });
+    expect(emitted).toContain(JSON.stringify(finding));
+    expect(emitted).toContain("it('uses consistent artifact-schema evidence'");
+    expect(emitted).toContain('expect(SCHEMA_FINDINGS).toEqual([])');
   });
 
   it("exports './verify' so a generated test's @sublang/slc/verify import resolves", () => {

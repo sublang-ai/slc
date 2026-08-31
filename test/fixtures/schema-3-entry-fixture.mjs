@@ -8,11 +8,6 @@
 import { isAbsolute, join } from 'node:path';
 
 import createPlaybookRuntime from './workflow.playbook/workflow.playbook.ts';
-export {
-  lastLinkedFactoryConstruction,
-  lastLinkedFactoryRuntime,
-  linkedFactoryCallCount,
-} from './workflow.playbook/workflow.playbook.ts';
 
 const ENTRY_ID = 'workflow';
 const ENTRY_INTENT = 'Synthetic schema-3 consumer fixture.';

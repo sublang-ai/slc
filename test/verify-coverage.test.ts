@@ -768,6 +768,9 @@ const controllerMachine = (
     wrongEarlierArm?: boolean;
     cyclicNoExit?: boolean;
     unsupportedSurfaces?: boolean;
+    missingDecisionResult?: boolean;
+    nestedInterrupt?: boolean;
+    guardForm?: 'inline' | 'parameterized';
   } = {},
 ) => {
   const actionGuard =
@@ -875,6 +878,8 @@ const controllerMachine = (
     },
     guards: {
       ...guards,
+      controllerAction: ({ context, event }: any, params: any) =>
+        actionGuard(params.action)({ context, event }),
       done: ({ event }: any) =>
         deadReportingResult !== true && event.output.guard === 'done',
     } as any,
@@ -891,6 +896,9 @@ const controllerMachine = (
         on: {
           BOSS_TURN: { target: 'deciding' },
           SHUTDOWN: { target: 'shutdown' },
+          ...(opts.nestedInterrupt === true
+            ? { BOSS_INTERRUPT: { target: 'shutdown' } }
+            : {}),
         },
       },
       deciding: {
@@ -918,23 +926,35 @@ const controllerMachine = (
                 'Switch work. Output shall include `playbookId: <catalog id>` and `input: <request>`.',
               dismiss: 'Dismiss the active work.',
               deliver: 'Deliver the current turn.',
-              runtime:
-                'Run a host action. Output shall include `actionId: <action id>`.',
+              ...(opts.missingDecisionResult === true
+                ? {}
+                : {
+                    runtime:
+                      'Run a host action. Output shall include `actionId: <action id>`.',
+                  }),
               ...(extraDecisionResult
                 ? { other: 'An undeclared controller action.' }
                 : {}),
             },
           }),
-          onDone: controllerActions.map((action) => ({
-            target:
-              opts.cyclicNoExit === true ||
-              (opts.repeatedDecisionPath === true && action === 'start')
-                ? '#launching'
-                : action === 'respond'
-                  ? '#hub'
-                  : '#reporting',
-            guard: action,
-          })),
+          onDone: controllerActions.map((action) => {
+            const guard =
+              opts.guardForm === 'inline'
+                ? actionGuard(action)
+                : opts.guardForm === 'parameterized'
+                  ? { type: 'controllerAction', params: { action } }
+                  : action;
+            return {
+              target:
+                opts.cyclicNoExit === true ||
+                (opts.repeatedDecisionPath === true && action === 'start')
+                  ? '#launching'
+                  : action === 'respond'
+                    ? '#hub'
+                    : '#reporting',
+              guard,
+            };
+          }),
           onError: { target: '#failed' },
         },
       },
@@ -1167,9 +1187,20 @@ describe('checkFsmCoverage (verification-6)', () => {
         }),
       }),
     ).toContain(
-      'state deciding: controller result "dismiss" selected arm 0 instead of declared arm 4',
+      'state deciding: controller result "dismiss" selects direct arm 0, already selected by result "respond"',
     );
   });
+
+  it.each(['inline', 'parameterized'] as const)(
+    'accepts %s controller action guards by evaluated behavior',
+    async (guardForm) => {
+      expect(
+        await checkFsmCoverage({
+          machine: controllerMachine(false, false, false, { guardForm }),
+        }),
+      ).toEqual([]);
+    },
+  );
 
   it('bounds a cyclic controller graph with no hub or final exit', async () => {
     expect(
@@ -1198,15 +1229,33 @@ describe('checkFsmCoverage (verification-6)', () => {
     );
   });
 
-  it('requires the exact seven-key controller decision contract', async () => {
-    expect(
-      await checkFsmCoverage({
-        machine: controllerMachine(false, false, true),
+  it.each([
+    [
+      'missing action',
+      controllerMachine(false, false, false, {
+        missingDecisionResult: true,
+        nestedInterrupt: true,
       }),
-    ).toContain(
-      'machine declares no awaitBossReply state or branch-local Boss-reply wait state',
-    );
-  });
+      'state deciding: controller decision contract near-miss (missing "runtime")',
+    ],
+    [
+      'extra action',
+      controllerMachine(false, false, true),
+      'state deciding: controller decision contract near-miss (extra "other")',
+    ],
+  ] as const)(
+    'diagnoses a %s without selecting the controller contract',
+    async (_label, machine, nearMiss) => {
+      const findings = await checkFsmCoverage({ machine });
+      expect(findings).not.toContain(
+        'machine declares no awaitBossReply state or branch-local Boss-reply wait state',
+      );
+      expect(findings).not.toContain(
+        'machine declares no root BOSS_INTERRUPT event',
+      );
+      expect(findings).toContainEqual(expect.stringContaining(nearMiss));
+    },
+  );
 
   it('drives nested playbook success and failure through its public state id', async () => {
     expect(
@@ -1658,6 +1707,12 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
     expect(
       fsmCoverageTestTimeout({ machine: dynamicCaptainMachine() }),
     ).toBeGreaterThan(5_000);
+  });
+
+  it('budgets both the direct-target and hub settle for controller results', () => {
+    expect(fsmCoverageTestTimeout({ machine: controllerMachine() })).toBe(
+      122_200,
+    );
   });
 
   it('emits a test that reads the artifact source and runs the checker', async () => {

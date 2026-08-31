@@ -29,9 +29,11 @@ import { createActor, fromPromise } from 'xstate';
 import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
+  CONTROLLER_ACTION_GUARDS,
   INTERRUPT_EVENT,
   NEEDS_BOSS_REPLY,
   VERIFY_MODULE,
+  controllerDecisionNearMiss,
   enumerateCaptainStates,
   enumerateScriptStates,
   isControllerDecisionResult,
@@ -2569,6 +2571,7 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
   const captains = captainRefs(config);
   const playbooks = playbookRefs(config);
   const parallels = refs.filter((ref) => ref.state.type === 'parallel');
+  const controller = isControllerMachine(config);
 
   const rootInterruptProbes = transitionArms(
     (config.on ?? {})[INTERRUPT_EVENT],
@@ -2589,7 +2592,8 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
     const resultKeys = Object.keys(captain.binding.result);
     captainSettles +=
       resultKeys.reduce(
-        (total, key) => total + (key === NEEDS_BOSS_REPLY ? 4 : 1),
+        (total, key) =>
+          total + (key === NEEDS_BOSS_REPLY ? 4 : controller ? 2 : 1),
         0,
       ) * SETTLE_MS;
     // One directly selectable onError arm is driven.
@@ -2676,11 +2680,32 @@ export async function checkFsmCoverage(
   );
   const sourceCandidates = identifierLiterals(opts.sourceText ?? '');
   const isController = isControllerMachine(config);
+  const controllerNearMisses = captains.flatMap((captain) => {
+    if (
+      captain.binding.actor !== 'captain' ||
+      captain.binding.result[NEEDS_BOSS_REPLY] !== undefined
+    ) {
+      return [];
+    }
+    const nearMiss = controllerDecisionNearMiss(captain.binding.result);
+    return nearMiss === undefined ? [] : [{ captain, nearMiss }];
+  });
+  const controllerContractCandidate =
+    isController || controllerNearMisses.length > 0;
   const initialCoverageContext = initializedCoverageContext(machine);
   const controllerContext = isController ? initialCoverageContext : undefined;
 
   const parallelRefs = refs.filter((ref) => ref.state.type === 'parallel');
   findings.push(...repeatedParallelRoleFindings(refs, captains));
+  for (const { captain, nearMiss } of controllerNearMisses) {
+    const detail =
+      nearMiss.missing.length > 0
+        ? `missing ${JSON.stringify(nearMiss.missing[0])}`
+        : `extra ${JSON.stringify(nearMiss.extra[0])}`;
+    findings.push(
+      `state ${captain.binding.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
+    );
+  }
   for (const ref of parallelRefs) {
     if (!normalizeArms(ref.state.onDone).some((arm) => arm.target !== null)) {
       findings.push(`parallel state ${ref.stableId} declares no onDone join`);
@@ -2736,7 +2761,7 @@ export async function checkFsmCoverage(
   const handlesInterruptSomewhere = refs.some((ref) =>
     Object.hasOwn(ref.state.on ?? {}, INTERRUPT_EVENT),
   );
-  if (!canJump && handlesInterruptSomewhere) {
+  if (!canJump && handlesInterruptSomewhere && !controllerContractCandidate) {
     findings.push(`machine declares no root ${INTERRUPT_EVENT} event`);
   }
   if (canJump && !isController) {
@@ -2778,7 +2803,7 @@ export async function checkFsmCoverage(
   );
   if (isController && waitStates.length > 0) {
     findings.push('controller machine declares a Boss-reply wait state');
-  } else if (!isController && waitStates.length === 0) {
+  } else if (!controllerContractCandidate && waitStates.length === 0) {
     findings.push(
       `machine declares no ${AWAIT_BOSS_REPLY_STATE} state or branch-local Boss-reply wait state`,
     );
@@ -2893,6 +2918,7 @@ export async function checkFsmCoverage(
     const errorEvent = invocationEvent(machine, captain, 'error');
     const rawDoneArms = transitionArms(captain.invocation.onDone);
     const onDoneArms = normalizeArms(captain.invocation.onDone);
+    const controllerResultByArm = new Map<number, string>();
 
     // Every declared result needs an arm that explicitly accepts its complete
     // valid output. A sole unguarded arm accepts the whole local result
@@ -2970,21 +2996,14 @@ export async function checkFsmCoverage(
       let controllerDirectTarget: StateRef | undefined;
       if (isController) {
         if (isControllerDecisionResult(state.result)) {
-          const declaredArms = rawDoneArms.flatMap((arm, index) =>
-            armGuard(arm) === key ? [index] : [],
-          );
-          if (declaredArms.length !== 1) {
+          const priorResult = controllerResultByArm.get(directArm);
+          if (priorResult !== undefined) {
             findings.push(
-              `state ${stateKey}: controller result "${key}" declares ${declaredArms.length} direct action arms`,
+              `state ${stateKey}: controller result "${key}" selects direct arm ${directArm}, already selected by result "${priorResult}"`,
             );
             continue;
           }
-          if (directArm !== declaredArms[0]) {
-            findings.push(
-              `state ${stateKey}: controller result "${key}" selected arm ${directArm} instead of declared arm ${declaredArms[0]}`,
-            );
-            continue;
-          }
+          controllerResultByArm.set(directArm, key);
         }
 
         const directTarget = rawArmTarget(rawDoneArms[directArm]);
