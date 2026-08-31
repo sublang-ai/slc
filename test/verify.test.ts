@@ -1393,6 +1393,57 @@ describe('checkGearsFsmConformance', () => {
     },
   );
 
+  it('scopes controller near-miss suppression to the malformed state', () => {
+    const config = controllerConfig();
+    const decision = config.states!.decide as {
+      invoke: { input: () => Record<string, unknown> };
+    };
+    const input = decision.invoke.input();
+    const result = { ...(input.result as Record<string, string>) };
+    delete result.runtime;
+    decision.invoke.input = () => ({ ...input, result });
+    config.states!.ordinaryMissing = {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          stateId: 'ordinaryMissing',
+          sourceItem: '',
+          prompt: 'Perform ordinary work.',
+          result: { done: 'The work is complete.' },
+        }),
+      },
+    };
+    config.states!.ordinaryMalformed = {
+      invoke: {
+        src: 'captain',
+        input: () => ({
+          stateId: 'ordinaryMalformed',
+          sourceItem: '',
+          prompt: 'Perform ordinary work.',
+          result: {
+            done: 'The work is complete.',
+            needsBossReply: 'Ask Boss without the adjudicator contract.',
+          },
+        }),
+      },
+    };
+
+    const findings = checkGearsFsmConformance(controllerGears, config, {
+      concurrentRoleSets: [],
+    });
+    expect(findings).toContain(
+      'FSM state ordinaryMissing declares no needsBossReply result',
+    );
+    expect(findings).toContainEqual(
+      expect.stringContaining(
+        'FSM state ordinaryMalformed: needsBossReply description lacks',
+      ),
+    );
+    expect(findings).not.toContain(
+      'FSM state decide declares no needsBossReply result',
+    );
+  });
+
   it('requires the schema-3 concurrent-role export even when no group is declared', () => {
     expect(checkGearsFsmConformance(schema3Gears, schema3Config())).toContain(
       'schema-3 FSM exports no valid concurrentRoleSets array',

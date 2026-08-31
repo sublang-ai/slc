@@ -1340,8 +1340,9 @@ export function checkGearsFsmConformance(
       return nearMiss === undefined ? [] : [{ state, nearMiss }];
     },
   );
-  const controllerContractCandidate =
-    controller || controllerNearMisses.length > 0;
+  const controllerNearMissStates = new Set(
+    controllerNearMisses.map(({ state }) => state),
+  );
   const explicitActorStates = new Set(
     captainBindings
       .filter(({ pinActor }) => pinActor)
@@ -1654,9 +1655,10 @@ export function checkGearsFsmConformance(
           `FSM controller state ${state.stateId} unexpectedly declares ${NEEDS_BOSS_REPLY}`,
         );
       }
-    } else if (controllerContractCandidate) {
+    } else if (controllerNearMissStates.has(state)) {
       // The precise controller-domain diagnostic above owns a malformed
-      // near-controller artifact; do not suggest adding the ordinary wait key.
+      // near-controller state; do not suggest adding the ordinary wait key to
+      // that state, while retaining ordinary findings for every other state.
       continue;
     } else if (bossReply === undefined) {
       findings.push(

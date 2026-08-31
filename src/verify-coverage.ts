@@ -78,6 +78,7 @@ interface StateNodeLike {
 }
 
 interface ResolvedStateNodeLike {
+  id?: string;
   states?: Record<string, ResolvedStateNodeLike>;
   invoke?: Array<{ id?: string }>;
 }
@@ -654,6 +655,11 @@ interface DrivenActor {
   }): { unsubscribe(): void };
 }
 
+interface TransitionObservation {
+  sourceId?: string;
+  targetIds: readonly string[];
+}
+
 /** A scripted invocation resolves an output, rejects, or hangs (`null`). */
 type ScriptResult = Record<string, unknown> | Error | null;
 type CaptainScript = (input: Record<string, unknown>) => ScriptResult;
@@ -689,6 +695,7 @@ function makeActor(
   script: CaptainScript,
   playbookScript: PlaybookScript = () => null,
   restoredContext?: Record<string, unknown>,
+  observeTransition?: (transition: TransitionObservation) => void,
 ): DrivenActor {
   const coverageErrors: { eventType: string; error: unknown }[] = [];
   const workActor = fromPromise(
@@ -738,6 +745,36 @@ function makeActor(
           !('event' in inspection)
         ) {
           return;
+        }
+        const inspectedTransitions = (inspection as { _transitions?: unknown })
+          ._transitions;
+        if (
+          (inspection as { type?: unknown }).type === '@xstate.microstep' &&
+          Array.isArray(inspectedTransitions)
+        ) {
+          for (const transition of inspectedTransitions) {
+            if (typeof transition !== 'object' || transition === null) {
+              continue;
+            }
+            const source = (transition as { source?: unknown }).source;
+            const target = (transition as { target?: unknown }).target;
+            observeTransition?.({
+              ...(typeof source === 'object' &&
+              source !== null &&
+              typeof (source as { id?: unknown }).id === 'string'
+                ? { sourceId: (source as { id: string }).id }
+                : {}),
+              targetIds: Array.isArray(target)
+                ? target.flatMap((candidate) =>
+                    typeof candidate === 'object' &&
+                    candidate !== null &&
+                    typeof (candidate as { id?: unknown }).id === 'string'
+                      ? [(candidate as { id: string }).id]
+                      : [],
+                  )
+                : [],
+            });
+          }
         }
         const event = (inspection as { event?: unknown }).event;
         if (typeof event !== 'object' || event === null) return;
@@ -1952,6 +1989,8 @@ interface CaptainProbe {
   event: Record<string, unknown>;
   /** False only when a controller Captain graph has no bounded hub/final exit. */
   controllerExitPlanned?: boolean;
+  /** Targets selected by the probed controller result's actual transition. */
+  controllerDirectTransitionTargets?: () => readonly string[] | undefined;
 }
 
 function controllerCaptainProbeActor(
@@ -1999,38 +2038,55 @@ function controllerCaptainProbeActor(
     outcomes.push(...exit.following);
   }
 
+  const probedOccurrence = entry.preceding.length;
+  let controllerResultConsumed = false;
+  let controllerDirectTransitionTargets: readonly string[] | undefined;
   let occurrence = 0;
+  const actor = makeActor(
+    machine,
+    (input) => {
+      if (!gate.armed) return null;
+      const planned = outcomes[occurrence];
+      if (planned === undefined) return null;
+      const stateId =
+        typeof input.stateId === 'string' ? input.stateId : undefined;
+      const sourceItem =
+        typeof input.sourceItem === 'string' ? input.sourceItem : undefined;
+      const matchesState =
+        stateId === undefined ||
+        stateId === captainPublicStateId(planned.captain);
+      const matchesSource =
+        sourceItem === undefined ||
+        sourceItem === planned.captain.binding.sourceItem;
+      if (
+        (stateId === undefined && sourceItem === undefined) ||
+        !matchesState ||
+        !matchesSource
+      ) {
+        return null;
+      }
+      if (occurrence === probedOccurrence) {
+        controllerResultConsumed = true;
+      }
+      occurrence += 1;
+      return planned.output;
+    },
+    () => null,
+    entry.drive.context,
+    (transition) => {
+      if (
+        controllerResultConsumed &&
+        controllerDirectTransitionTargets === undefined &&
+        transition.sourceId === resolvedStateNode(machine, captain.ref)?.id
+      ) {
+        controllerDirectTransitionTargets = transition.targetIds;
+      }
+    },
+  );
   return {
-    actor: makeActor(
-      machine,
-      (input) => {
-        if (!gate.armed) return null;
-        const planned = outcomes[occurrence];
-        if (planned === undefined) return null;
-        const stateId =
-          typeof input.stateId === 'string' ? input.stateId : undefined;
-        const sourceItem =
-          typeof input.sourceItem === 'string' ? input.sourceItem : undefined;
-        const matchesState =
-          stateId === undefined ||
-          stateId === captainPublicStateId(planned.captain);
-        const matchesSource =
-          sourceItem === undefined ||
-          sourceItem === planned.captain.binding.sourceItem;
-        if (
-          (stateId === undefined && sourceItem === undefined) ||
-          !matchesState ||
-          !matchesSource
-        ) {
-          return null;
-        }
-        occurrence += 1;
-        return planned.output;
-      },
-      () => null,
-      entry.drive.context,
-    ),
+    actor,
     event: entry.drive.event,
+    controllerDirectTransitionTargets: () => controllerDirectTransitionTargets,
     ...(controllerExitPlanned === undefined ? {} : { controllerExitPlanned }),
   };
 }
@@ -2994,6 +3050,7 @@ export async function checkFsmCoverage(
       }
 
       let controllerDirectTarget: StateRef | undefined;
+      let controllerDirectTargetNodeId: string | undefined;
       if (isController) {
         if (isControllerDecisionResult(state.result)) {
           const priorResult = controllerResultByArm.get(directArm);
@@ -3011,9 +3068,14 @@ export async function checkFsmCoverage(
           directTarget === undefined
             ? undefined
             : stateRefForTarget(refs, directTarget, captain.ref);
+        controllerDirectTargetNodeId =
+          controllerDirectTarget === undefined
+            ? undefined
+            : resolvedStateNode(machine, controllerDirectTarget)?.id;
         if (
           directTarget === undefined ||
-          controllerDirectTarget === undefined
+          controllerDirectTarget === undefined ||
+          controllerDirectTargetNodeId === undefined
         ) {
           findings.push(
             `state ${stateKey}: controller result "${key}" declares no resolvable direct action target`,
@@ -3040,38 +3102,22 @@ export async function checkFsmCoverage(
         continue;
       }
       const actor = probe.actor;
-      let controllerDriveStarted = false;
-      let reachedControllerTarget = false;
-      const controllerTargetSubscription =
-        controllerDirectTarget === undefined
-          ? undefined
-          : actor.subscribe({
-              next: (snapshot) => {
-                if (
-                  controllerDriveStarted &&
-                  atState(controllerDirectTarget)(snapshot)
-                ) {
-                  reachedControllerTarget = true;
-                }
-              },
-              error: () => undefined,
-            });
       gate.armed = true;
-      controllerDriveStarted = true;
       actor.send(probe.event);
       if (
         controllerDirectTarget !== undefined &&
+        controllerDirectTargetNodeId !== undefined &&
         !(await settle(
           actor,
-          (snapshot) =>
-            reachedControllerTarget ||
-            atState(controllerDirectTarget)(snapshot),
+          () =>
+            probe
+              .controllerDirectTransitionTargets?.()
+              ?.includes(controllerDirectTargetNodeId) === true,
         ))
       ) {
         findings.push(
           `state ${stateKey}: controller result "${key}" did not reach its declared direct action target ${controllerDirectTarget.stableId}`,
         );
-        controllerTargetSubscription?.unsubscribe();
         actor.stop();
         continue;
       }
@@ -3086,7 +3132,6 @@ export async function checkFsmCoverage(
                     (initialRef !== undefined && atState(initialRef)(snapshot))
                 : leftState(captain.ref),
             );
-      controllerTargetSubscription?.unsubscribe();
       if (!transitioned) {
         findings.push(
           isController

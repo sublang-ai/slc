@@ -5,12 +5,15 @@
 // and the repository inputs that make its gates complete and reproducible.
 
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { matchesGlob } from 'node:path';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, matchesGlob } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
 import { parse } from 'yaml';
+
+import { reviewArtifact } from './verify-artifacts.mjs';
 
 const repoRoot = new URL('../', import.meta.url);
 const readProjectFile = (path) => readFile(new URL(path, repoRoot), 'utf8');
@@ -26,7 +29,6 @@ const [
   consumerSource,
   configSource,
   compiledExecutorSource,
-  artifactReviewSource,
 ] = await Promise.all([
   readProjectFile('.github/workflows/ci.yml'),
   readProjectFile('package.json'),
@@ -39,7 +41,6 @@ const [
   readProjectFile('test/schema-3-consumer.test.ts'),
   readProjectFile('test/config.test.ts'),
   readProjectFile('test/compiled-executor.test.ts'),
-  readProjectFile('scripts/verify-artifacts.mjs'),
 ]);
 
 const workflow = parse(workflowSource);
@@ -190,51 +191,145 @@ assert.deepEqual(
     'node scripts/verify-artifacts.mjs pipelines/playbook/link.slc link',
   ],
 );
-assert.match(
-  artifactReviewSource,
-  /concurrentRoleSets:\s*findConcurrentRoleSets\(fsm\)/,
-  'independent artifact review must pass the FSM concurrent-role export to conformance',
+
+// Exercise the actual independent-review orchestration through observable
+// inputs and outputs. This stays stable across formatting and implementation
+// refactors while proving the schema, conformance, and actor-routing data flow.
+const artifactReviewRoot = await mkdtemp(
+  join(tmpdir(), 'slc-ci-artifact-review-'),
 );
-assert.match(
-  artifactReviewSource,
-  /checkGearsFsmConformance\(gears, config, \{\s*concurrentRoleSets:[\s\S]*?artifactSchema === undefined[\s\S]*?\{ artifactSchema \}/,
-  'independent artifact review must pass its resolved schema to conformance',
-);
-assert.match(
-  artifactReviewSource,
-  /pins\?\.pins\?\.\[basename\]\?\.linkTarget\?\.provenance/,
-  'independent artifact review must use the reviewed artifact basename to select pin provenance',
-);
-assert.match(
-  artifactReviewSource,
-  /loadLinkedModuleForVerification\(\{\s*linkedPath,\s*fsmPath\s*\}\)/,
-  'independent artifact review must load the linked source through the NodeNext verification seam',
-);
-assert.match(
-  artifactReviewSource,
-  /resolveArtifactSchemaForVerification\(\{\s*provenance,\s*config,/,
-  'independent artifact review must reconcile its own provenance, FSM, and linked-factory schema evidence',
-);
-assert.match(
-  artifactReviewSource,
-  /findings\.push\(\s*\.\.\.schemaResolution\.findings\.map\(/,
-  'independent artifact review must make schema-resolution findings fatal',
-);
-for (const [actor, composer] of [
-  ['captain', 'composeCaptainPrompt'],
-  ['player', 'composePlayerPrompt'],
-]) {
-  assert.match(
-    artifactReviewSource,
-    new RegExp(`\\['${actor}', '${composer}'\\]`),
-    `independent artifact review must route ${actor} states through ${composer}`,
-  );
+try {
+  const artifactDir = join(artifactReviewRoot, 'synthetic.slc');
+  await mkdir(artifactDir);
+  await Promise.all([
+    writeFile(join(artifactDir, 'synthetic.gears.md'), 'synthetic gears\n'),
+    writeFile(join(artifactDir, 'synthetic.fsm.ts'), 'synthetic fsm\n'),
+    writeFile(
+      join(artifactDir, 'synthetic.playbook.ts'),
+      'synthetic linked module\n',
+    ),
+    writeFile(
+      join(artifactReviewRoot, 'slc.pins.json'),
+      JSON.stringify({
+        pins: {
+          unrelated: {
+            linkTarget: { provenance: '@sublang/playbook@4.0.0' },
+          },
+          synthetic: {
+            linkTarget: { provenance: '@sublang/playbook@10.0.0' },
+          },
+        },
+      }),
+    ),
+  ]);
+
+  const fsm = { synthetic: 'fsm module' };
+  const config = { synthetic: 'FSM actor bindings' };
+  const concurrentRoleSets = [['coder', 'reviewer']];
+  const composeCaptainPrompt = () => 'captain prompt';
+  const composePlayerPrompt = () => 'player prompt';
+  const linked = {
+    _internal: { composeCaptainPrompt, composePlayerPrompt },
+  };
+  const observed = {
+    composition: [],
+  };
+  const logs = [];
+  const result = await reviewArtifact({
+    dir: artifactDir,
+    basename: 'synthetic',
+    log: (line) => logs.push(line),
+    verification: {
+      loadFsmModule: async (path) => {
+        observed.fsmPath = path;
+        return fsm;
+      },
+      findMachineConfig: (value) => {
+        observed.configInput = value;
+        return config;
+      },
+      loadLinkedModuleForVerification: async (paths) => {
+        observed.linkedPaths = paths;
+        return linked;
+      },
+      resolveArtifactSchemaForVerification: (input) => {
+        observed.schemaInput = input;
+        return {
+          artifactSchema: 3,
+          findings: ['synthetic schema disagreement'],
+        };
+      },
+      findConcurrentRoleSets: (value) => {
+        observed.concurrentInput = value;
+        return concurrentRoleSets;
+      },
+      checkGearsFsmConformance: (gears, value, options) => {
+        observed.conformance = { gears, config: value, options };
+        return [];
+      },
+      pinIntrospection: () => ({
+        captain: [],
+        quiescent: [],
+        initial: 'idle',
+        rootOn: {},
+        interruptTargets: [],
+      }),
+      capturePromptContract: () => [],
+      checkPromptComposition: (input) => {
+        observed.composition.push(input);
+        return [];
+      },
+      checkFsmCoverage: async (value, options) => {
+        observed.coverage = { fsm: value, options };
+        return [];
+      },
+    },
+  });
+
+  const fsmPath = join(artifactDir, 'synthetic.fsm.ts');
+  assert.equal(observed.fsmPath, fsmPath);
+  assert.equal(observed.configInput, fsm);
+  assert.deepEqual(observed.linkedPaths, {
+    linkedPath: join(artifactDir, 'synthetic.playbook.ts'),
+    fsmPath,
+  });
+  assert.deepEqual(observed.schemaInput, {
+    provenance: '@sublang/playbook@10.0.0',
+    config,
+    linked,
+  });
+  assert.equal(observed.concurrentInput, fsm);
+  assert.deepEqual(observed.conformance, {
+    gears: 'synthetic gears\n',
+    config,
+    options: { concurrentRoleSets, artifactSchema: 3 },
+  });
+  assert.deepEqual(observed.composition, [
+    {
+      config,
+      compose: composeCaptainPrompt,
+      actor: 'captain',
+      artifactSchema: 3,
+    },
+    {
+      config,
+      compose: composePlayerPrompt,
+      actor: 'player',
+      artifactSchema: 3,
+    },
+  ]);
+  assert.deepEqual(observed.coverage, {
+    fsm,
+    options: { sourceText: 'synthetic fsm\n' },
+  });
+  assert.deepEqual(result, {
+    findings: ['schema: synthetic schema disagreement'],
+    passed: false,
+  });
+  assert.equal(logs.at(-1), 'FAIL: 1 finding(s)');
+} finally {
+  await rm(artifactReviewRoot, { recursive: true, force: true });
 }
-assert.match(
-  artifactReviewSource,
-  /checkPromptComposition\(\{\s*config,\s*compose,\s*actor,[\s\S]*?artifactSchema === undefined[\s\S]*?\{ artifactSchema \}/,
-  'independent artifact review must pass its resolved schema to each actor-matching composition check',
-);
 assert.deepEqual(
   step('Verify reproducible current pins')
     .run.trim()
