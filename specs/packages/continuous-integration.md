@@ -6,7 +6,7 @@
 ## Intent
 
 This package specifies the repository checks that continuously protect source quality, reviewed compiled meta-phase artifacts, reproducible pins, demos, and the publishable package.
-It covers the actual clean-checkout GitHub Actions quality job for pushes and pull requests, including the preserved runtime-transition boundary and the current immutable Playbook adoption.
+It covers the actual clean-checkout GitHub Actions quality job for pushes and pull requests, including the exact multi-profile runtime boundary and the current immutable Playbook adoption.
 Essential project-specific references are `slc`, this project's compiler; the committed Playbook meta-phase artifacts under `pipelines/playbook/`; and their pin index, `pipelines/playbook/slc.pins.json`.
 
 ## External Behavior
@@ -23,17 +23,18 @@ Where a commit is pushed or proposed by pull request, when repository continuous
 
 Where a commit is pushed or proposed by pull request, when repository continuous integration runs, the workflow shall independently review each committed Playbook meta-phase artifact with deterministic GEARS↔FSM conformance [[verification-1](verification.md#verification-1)], introspection [[verification-4](verification.md#verification-4)], prompt-contract [[verification-5](verification.md#verification-5)], and transition-coverage [[verification-6](verification.md#verification-6)] checks, regenerate the pin index through the explicit build-and-review generator [[pinning-15](pinning.md#pinning-15)], and fail unless every generated pin is current [[pinning-2](pinning.md#pinning-2)] and the regenerated index is byte-identical to the committed index.
 
-### Runtime-transition boundary
+### Runtime-contract boundary
 
 #### continuous-integration-3
 
-While the `session-v1` and `composed-v2` Playbook contracts are unavailable as an immutable dependency and the reviewed meta-phase assets remain bound to published 0.9.0, when repository continuous integration runs, the workflow shall preserve the deferred runtime boundary ([DR-010](../decisions/010-playbook-runtime-contract-evolution.md)):
+Where the repository supports multiple exact Playbook runtime contracts, when repository continuous integration runs, the workflow shall preserve their fail-closed runtime boundary ([DR-010](../decisions/010-playbook-runtime-contract-evolution.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md)):
 
 | Boundary area | Required outcome |
 | --- | --- |
-| Gate shape | Use the existing locked-install, source-quality, and full-test gates [[continuous-integration-1](#continuous-integration-1)], independently review committed artifacts through deterministic conformance [[verification-1](verification.md#verification-1)], introspection [[verification-4](verification.md#verification-4)], prompt-contract [[verification-5](verification.md#verification-5)], and transition-coverage [[verification-6](verification.md#verification-6)] checks, regenerate the pin index [[pinning-15](pinning.md#pinning-15)], and fail unless every regenerated pin remains current [[pinning-2](pinning.md#pinning-2)] and the regenerated index is byte-identical to the committed index, without a mutable sibling checkout or a new artifact-refresh step. |
-| Full suite | Exercise explicit future-profile runtime equivalence [[verification-10](verification.md#verification-10)] plus structured conformance [[verification-1](verification.md#verification-1)], introspection [[verification-4](verification.md#verification-4)], prompt-contract [[verification-5](verification.md#verification-5)], and transition-coverage [[verification-6](verification.md#verification-6)] fixtures. |
-| Reviewed assets | Confine deterministic conformance [[verification-1](verification.md#verification-1)], introspection [[verification-4](verification.md#verification-4)], prompt-contract [[verification-5](verification.md#verification-5)], and transition-coverage [[verification-6](verification.md#verification-6)] review plus pin regeneration [[pinning-15](pinning.md#pinning-15)] and currency checking [[pinning-2](pinning.md#pinning-2)] to the committed flat 0.9.0 assets. |
+| Dependency isolation | Use the locked dependency graph with no mutable sibling checkout or unaudited artifact-refresh step [[continuous-integration-1](#continuous-integration-1)]. |
+| Mapped profiles | Exercise exact `legacy`, `session-v1`, `composed-v2`, shared-factory `composed-v3`, and bespoke `composed-v3` equivalence fixtures [[verification-10](verification.md#verification-10)] together with exact provenance-driven executor selection [[phase-execution-30](phase-execution.md#phase-execution-30)]. |
+| Unmapped provenance | Exercise fail-closed compiled selection for every configured unmapped provenance, including exact Playbook 5.0.0 through 9.0.0, without profile inference or initialization retry [[phase-execution-30](phase-execution.md#phase-execution-30)]. |
+| Delegated structured semantics | Retain the structured conformance [[verification-1](verification.md#verification-1)], introspection [[verification-4](verification.md#verification-4)], prompt-contract [[verification-5](verification.md#verification-5)], and transition-coverage [[verification-6](verification.md#verification-6)] fixtures through which role-bearing schema-3 behavior is checked without pretending SLC supplies a governed phase host. |
 
 #### continuous-integration-4
 
@@ -57,6 +58,6 @@ Where the repository workflow, dependency lock, reviewed Playbook assets, and pi
 | --- | --- |
 | Source quality | Require unfiltered push and pull-request triggers, a clean repository checkout, a Node.js version satisfying the package engine, locked installation, and unconditional fail-closed formatting, lint, build, and full-suite gates [[continuous-integration-1](#continuous-integration-1)]. |
 | Reviewed artifacts | Require all twelve generated bundle tests in the full suite, the three independent artifact reviews, pin regeneration, and a byte-identical pin-index diff [[continuous-integration-2](#continuous-integration-2)]. |
-| Deferred runtime boundary | Require locked installation with no sibling checkout or unaudited artifact-refresh step, and retain the future-profile and structured-verification fixtures in the full suite [[continuous-integration-3](#continuous-integration-3)]. |
+| Runtime-contract boundary | Require locked installation with no sibling checkout or unaudited artifact-refresh step, and retain exact runtime-profile equivalence, mapped-provenance executor selection, unmapped-provenance rejection, and delegated structured-semantics fixtures in the full suite [[continuous-integration-3](#continuous-integration-3)]. |
 | Immutable 10.0.0 set | Require the Playbook 10.0.0 and Cligent 0.23.0 manifest and lock, unchanged direct Spex 0.3 authority, definitions and normalization gate, reviewed schema-3 bundles, generated tests, independent reviews, pins, and complete demo artifacts and documentation to form one set with exact 10.0.0 provenance [[continuous-integration-4](#continuous-integration-4)]. |
 | Release surfaces | Require the English reference checker, installed-package smoke, and trusted-publication workflow audit [[continuous-integration-5](#continuous-integration-5)]. |
