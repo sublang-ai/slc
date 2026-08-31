@@ -133,6 +133,36 @@ describe('reviewed Playbook artifact schemas', () => {
     expect(conflict.findings.join('\n')).toMatch(
       /schema signals disagree.*provenance: 1.*compatibility: 3/,
     );
+    const malformedFactory = (): object => ({});
+    Object.defineProperty(malformedFactory, 'compat', {
+      value: { artifactSchema: 3, runtimeAbi: 1 },
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+    const malformedWithConflict = resolveArtifactSchemaForVerification({
+      provenance: '@sublang/playbook@4.0.0',
+      config: {
+        states: {
+          role: {
+            invoke: {
+              src: 'player',
+              input: () => ({
+                sourceItem: 'ROLE-1',
+                role: 'coder',
+                prompt: 'Code.',
+                result: { done: 'Done.' },
+              }),
+            },
+          },
+        },
+      },
+      linked: { default: malformedFactory },
+    });
+    expect(malformedWithConflict.artifactSchema).toBeUndefined();
+    expect(malformedWithConflict.findings).toEqual([
+      'linked factory has an own compatibility declaration that is not exact immutable schema 3/runtime ABI 1',
+    ]);
     const unsupported = resolveArtifactSchemaForVerification({
       provenance: '@sublang/playbook@5.0.0',
       linked: { default: () => ({}) },

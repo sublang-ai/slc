@@ -23,6 +23,7 @@ export const reviewArtifact = async ({
   dir,
   basename,
   verification,
+  pinning,
   log = console.log,
 }) => {
   const {
@@ -45,15 +46,35 @@ export const reviewArtifact = async ({
   const fsmPath = join(artifactDir, `${basename}.fsm.ts`);
   const fsm = await loadFsmModule(fsmPath);
   const config = findMachineConfig(fsm);
-  const pinPath = join(artifactDir, '..', 'slc.pins.json');
   let provenance;
-  if (existsSync(pinPath)) {
+  if (pinning !== undefined) {
     try {
-      const pins = JSON.parse(readFileSync(pinPath, 'utf8'));
-      provenance = pins?.pins?.[basename]?.linkTarget?.provenance;
-    } catch {
-      // Pin parsing/currency has its own gate; an unreadable schema signal
-      // leaves the prompt checker fail-closed when the artifact is ambiguous.
+      const pipelineDir = resolve(artifactDir, '..');
+      const loaded = await pinning.loadPinFile(pipelineDir);
+      const record = loaded.file?.pins?.[basename];
+      if (record !== undefined) {
+        const verdict = (
+          await pinning.evaluatePinFile(pipelineDir, loaded.file)
+        )[basename];
+        if (verdict === undefined) {
+          throw new Error(`pin index has no verdict for ${basename}`);
+        }
+        if (verdict.status === 'current') {
+          provenance = record.linkTarget.provenance;
+        } else {
+          log(
+            `ignoring ${verdict.status} pin provenance for ${basename}: ${verdict.reason}`,
+          );
+        }
+      }
+    } catch (error) {
+      // Pin parsing/currency has its own later gate. An unreadable or stale pin
+      // is not artifact-schema evidence for the just-built bundle.
+      log(
+        `ignoring unavailable pin provenance for ${basename}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
   const linkedPath = join(artifactDir, `${basename}.playbook.ts`);
@@ -67,7 +88,7 @@ export const reviewArtifact = async ({
     }
   }
   const schemaResolution = resolveArtifactSchemaForVerification({
-    provenance,
+    ...(provenance === undefined ? {} : { provenance }),
     config,
     ...(linked === undefined ? {} : { linked }),
   });
@@ -170,8 +191,20 @@ if (
     );
     process.exitCode = 2;
   } else {
-    const verification = await import('../dist/verify.js');
-    const result = await reviewArtifact({ dir, basename, verification });
+    const [verification, pinCurrency, pins] = await Promise.all([
+      import('../dist/verify.js'),
+      import('../dist/pin-currency.js'),
+      import('../dist/pins.js'),
+    ]);
+    const result = await reviewArtifact({
+      dir,
+      basename,
+      verification,
+      pinning: {
+        evaluatePinFile: pinCurrency.evaluatePinFile,
+        loadPinFile: pins.loadPinFile,
+      },
+    });
     if (!result.passed) {
       process.exitCode = 1;
     }

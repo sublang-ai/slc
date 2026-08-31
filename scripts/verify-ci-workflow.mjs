@@ -235,55 +235,72 @@ try {
     composition: [],
   };
   const logs = [];
+  const verification = {
+    loadFsmModule: async (path) => {
+      observed.fsmPath = path;
+      return fsm;
+    },
+    findMachineConfig: (value) => {
+      observed.configInput = value;
+      return config;
+    },
+    loadLinkedModuleForVerification: async (paths) => {
+      observed.linkedPaths = paths;
+      return linked;
+    },
+    resolveArtifactSchemaForVerification: (input) => {
+      observed.schemaInput = input;
+      return {
+        artifactSchema: 3,
+        findings: ['synthetic schema disagreement'],
+      };
+    },
+    findConcurrentRoleSets: (value) => {
+      observed.concurrentInput = value;
+      return concurrentRoleSets;
+    },
+    checkGearsFsmConformance: (gears, value, options) => {
+      observed.conformance = { gears, config: value, options };
+      return [];
+    },
+    pinIntrospection: () => ({
+      captain: [],
+      quiescent: [],
+      initial: 'idle',
+      rootOn: {},
+      interruptTargets: [],
+    }),
+    capturePromptContract: () => [],
+    checkPromptComposition: (input) => {
+      observed.composition.push(input);
+      return [];
+    },
+    checkFsmCoverage: async (value, options) => {
+      observed.coverage = { fsm: value, options };
+      return [];
+    },
+  };
+  let pinVerdict = { status: 'current' };
+  const pinning = {
+    loadPinFile: async (pipelineDir) => {
+      observed.pinPipelineDir = pipelineDir;
+      return {
+        file: JSON.parse(
+          await readFile(join(pipelineDir, 'slc.pins.json'), 'utf8'),
+        ),
+      };
+    },
+    evaluatePinFile: async (pipelineDir, file) => {
+      observed.pinEvaluation = { pipelineDir, file };
+      return { synthetic: pinVerdict };
+    },
+  };
   const result = await reviewArtifact({
     dir: artifactDir,
     basename: 'synthetic',
     log: (line) => logs.push(line),
-    verification: {
-      loadFsmModule: async (path) => {
-        observed.fsmPath = path;
-        return fsm;
-      },
-      findMachineConfig: (value) => {
-        observed.configInput = value;
-        return config;
-      },
-      loadLinkedModuleForVerification: async (paths) => {
-        observed.linkedPaths = paths;
-        return linked;
-      },
-      resolveArtifactSchemaForVerification: (input) => {
-        observed.schemaInput = input;
-        return {
-          artifactSchema: 3,
-          findings: ['synthetic schema disagreement'],
-        };
-      },
-      findConcurrentRoleSets: (value) => {
-        observed.concurrentInput = value;
-        return concurrentRoleSets;
-      },
-      checkGearsFsmConformance: (gears, value, options) => {
-        observed.conformance = { gears, config: value, options };
-        return [];
-      },
-      pinIntrospection: () => ({
-        captain: [],
-        quiescent: [],
-        initial: 'idle',
-        rootOn: {},
-        interruptTargets: [],
-      }),
-      capturePromptContract: () => [],
-      checkPromptComposition: (input) => {
-        observed.composition.push(input);
-        return [];
-      },
-      checkFsmCoverage: async (value, options) => {
-        observed.coverage = { fsm: value, options };
-        return [];
-      },
-    },
+    verification,
+    pinning,
   });
 
   const fsmPath = join(artifactDir, 'synthetic.fsm.ts');
@@ -298,6 +315,15 @@ try {
     config,
     linked,
   });
+  assert.equal(observed.pinPipelineDir, artifactReviewRoot);
+  assert.equal(
+    observed.pinEvaluation.file.pins.synthetic.linkTarget.provenance,
+    '@sublang/playbook@10.0.0',
+  );
+  assert.equal(
+    observed.pinEvaluation.file.pins.unrelated.linkTarget.provenance,
+    '@sublang/playbook@4.0.0',
+  );
   assert.equal(observed.concurrentInput, fsm);
   assert.deepEqual(observed.conformance, {
     gears: 'synthetic gears\n',
@@ -327,6 +353,49 @@ try {
     passed: false,
   });
   assert.equal(logs.at(-1), 'FAIL: 1 finding(s)');
+
+  pinVerdict = { status: 'stale', reason: 'artifact bundle changed' };
+  verification.resolveArtifactSchemaForVerification = (input) => {
+    observed.staleSchemaInput = input;
+    return { artifactSchema: 3, findings: [] };
+  };
+  const staleResult = await reviewArtifact({
+    dir: artifactDir,
+    basename: 'synthetic',
+    log: (line) => logs.push(line),
+    verification,
+    pinning,
+  });
+  assert.deepEqual(observed.staleSchemaInput, { config, linked });
+  assert.deepEqual(staleResult, { findings: [], passed: true });
+  assert.ok(
+    logs.includes(
+      'ignoring stale pin provenance for synthetic: artifact bundle changed',
+    ),
+  );
+
+  pinVerdict = {
+    status: 'malformed',
+    reason: 'pin index contains malformed phase "unrelated"',
+  };
+  verification.resolveArtifactSchemaForVerification = (input) => {
+    observed.malformedSchemaInput = input;
+    return { artifactSchema: 3, findings: [] };
+  };
+  const malformedResult = await reviewArtifact({
+    dir: artifactDir,
+    basename: 'synthetic',
+    log: (line) => logs.push(line),
+    verification,
+    pinning,
+  });
+  assert.deepEqual(observed.malformedSchemaInput, { config, linked });
+  assert.deepEqual(malformedResult, { findings: [], passed: true });
+  assert.ok(
+    logs.includes(
+      'ignoring malformed pin provenance for synthetic: pin index contains malformed phase "unrelated"',
+    ),
+  );
 } finally {
   await rm(artifactReviewRoot, { recursive: true, force: true });
 }

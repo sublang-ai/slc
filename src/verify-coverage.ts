@@ -443,6 +443,26 @@ function stateRefs(config: MachineConfigLike): StateRef[] {
   return out;
 }
 
+/** The root initial state followed through every compound initial child. */
+function initialActiveRefs(
+  config: MachineConfigLike,
+  refs: readonly StateRef[],
+): StateRef[] {
+  const active: StateRef[] = [];
+  let path: string[] = [];
+  let initial = config.initial;
+  while (typeof initial === 'string') {
+    path = [...path, initial];
+    const ref = refs.find(
+      (candidate) => candidate.path.join('\u0000') === path.join('\u0000'),
+    );
+    if (ref === undefined) break;
+    active.push(ref);
+    initial = ref.state.initial;
+  }
+  return active;
+}
+
 /** Captain bindings paired with the nested state node that owns the invoke. */
 function captainRefs(config: MachineConfigLike): CaptainRef[] {
   const out: CaptainRef[] = [];
@@ -1098,16 +1118,12 @@ function entryDriveForRef(
   extraValues: readonly unknown[] = [],
   initialContext: Record<string, unknown> = initializedCoverageContext(machine),
 ): InterruptDrive | undefined {
-  const initial =
-    typeof machine.config.initial === 'string'
-      ? refs.find(
-          (ref) => ref.path.length === 1 && ref.key === machine.config.initial,
-        )
-      : undefined;
+  const initialPath = initialActiveRefs(machine.config, refs);
   const surfaces = [
-    ...(initial === undefined
-      ? []
-      : [{ source: initial, events: initial.state.on ?? {} }]),
+    ...initialPath
+      .slice()
+      .reverse()
+      .map((source) => ({ source, events: source.state.on ?? {} })),
     { source: undefined, events: machine.config.on ?? {} },
   ] as const;
   for (const { source, events } of surfaces) {
@@ -1500,6 +1516,23 @@ function doneGuardSatisfiable(
     event,
     [{ eventField: 'output', tag: 'o:', base: output }],
     [...guard.probeValues, ...extraValues],
+  );
+}
+
+/** A concrete initialized-context/output assignment selecting one done arm. */
+function controllerDoneGuardAssignment(
+  guard: ResolvedGuard,
+  event: Readonly<Record<string, unknown>>,
+  output: Record<string, unknown>,
+  extraValues: readonly unknown[],
+  initialContext: Record<string, unknown>,
+): ProbeAssignment | undefined {
+  return probeGuardAssignment(
+    guard.run,
+    event,
+    [{ eventField: 'output', tag: 'o:', base: output }],
+    [...guard.probeValues, ...extraValues],
+    { initialContext, varyExistingContext: true },
   );
 }
 
@@ -2012,12 +2045,7 @@ function controllerCaptainProbeActor(
     initialContext,
   );
   if (entry === undefined) return undefined;
-  const hub =
-    typeof machine.config.initial === 'string'
-      ? refs.find(
-          (ref) => ref.path.length === 1 && ref.key === machine.config.initial,
-        )
-      : undefined;
+  const hub = initialActiveRefs(machine.config, refs).at(-1);
   const outcomes: Array<{
     captain: CaptainRef;
     output: Record<string, unknown> | Error;
@@ -2925,20 +2953,22 @@ export async function checkFsmCoverage(
   }
 
   // Guard-free root entry events transition from the initial state.
-  const initial = typeof config.initial === 'string' ? config.initial : null;
-  const initialRef =
-    initial === null
-      ? undefined
-      : refs.find((ref) => ref.path.length === 1 && ref.key === initial);
-  const entryArms: Record<string, unknown> = {
-    ...(initial !== null ? (states[initial]?.on ?? {}) : {}),
-    ...(config.on ?? {}),
-  };
+  const initialPath = initialActiveRefs(config, refs);
+  const initialRef = initialPath.at(-1);
+  const entryArms: Record<string, unknown> = Object.assign(
+    {},
+    config.on ?? {},
+    ...initialPath.map((ref) => ref.state.on ?? {}),
+  );
   for (const [event, raw] of Object.entries(entryArms)) {
     if (event === INTERRUPT_EVENT) continue;
     const arms = normalizeArms(raw);
     const free = arms.find(
-      (arm) => !arm.guarded && arm.target !== null && arm.target !== initial,
+      (arm) =>
+        !arm.guarded &&
+        arm.target !== null &&
+        arm.target !== initialRef?.key &&
+        arm.target !== initialRef?.stableId,
     );
     if (free === undefined) continue;
     const actor = makeActor(machine, () => null);
@@ -2982,23 +3012,32 @@ export async function checkFsmCoverage(
     // otherwise orphaned key look covered.
     for (const key of Object.keys(state.result)) {
       const output = synthOutput(state, key);
-      const accepting = new Set<number>();
+      const accepting = new Map<number, ProbeAssignment | undefined>();
       for (const [index, arm] of rawDoneArms.entries()) {
         const target = onDoneArms[index]?.target ?? null;
         const rawGuard = armGuard(arm);
         if (rawGuard === undefined) {
-          if (rawDoneArms.length === 1 && target !== null) accepting.add(index);
+          if (rawDoneArms.length === 1 && target !== null) {
+            accepting.set(index, undefined);
+          }
           continue;
         }
         if (target === null || resolveGuard(machine, rawGuard) === undefined) {
           continue;
         }
         const guard = orderedArmPredicate(machine, rawDoneArms, index);
-        if (
-          guard !== undefined &&
-          doneGuardSatisfiable(guard, doneEvent, output, candidates)
-        ) {
-          accepting.add(index);
+        if (guard === undefined) continue;
+        if (isController) {
+          const assignment = controllerDoneGuardAssignment(
+            guard,
+            doneEvent,
+            output,
+            candidates,
+            initialCoverageContext,
+          );
+          if (assignment !== undefined) accepting.set(index, assignment);
+        } else if (doneGuardSatisfiable(guard, doneEvent, output, candidates)) {
+          accepting.set(index, undefined);
         }
       }
 
@@ -3009,43 +3048,66 @@ export async function checkFsmCoverage(
         continue;
       }
 
-      // Drive only when the first arm XState would inspect under the real
-      // initial context is a known accepting arm. Encountering an unresolved
-      // guard first makes driving unsafe: XState reports that error
-      // asynchronously, so the arm audit below owns the finding (c887fc4).
       let directArm: number | undefined;
-      let safeToDrive = true;
-      for (const [index, arm] of rawDoneArms.entries()) {
-        const rawGuard = armGuard(arm);
-        if (rawGuard === undefined) {
-          directArm = index;
-          break;
+      let drivenOutput = output;
+      let drivenControllerContext = controllerContext;
+      if (isController) {
+        if (isControllerDecisionResult(state.result) && accepting.size !== 1) {
+          findings.push(
+            `state ${stateKey}: controller result "${key}" selects ${accepting.size} accepting action arms`,
+          );
+          continue;
         }
-        const guard = resolveGuard(machine, rawGuard);
-        if (guard === undefined) {
-          safeToDrive = false;
-          break;
+        const selected = accepting.entries().next().value as
+          | [number, ProbeAssignment | undefined]
+          | undefined;
+        directArm = selected?.[0];
+        const assignment = selected?.[1];
+        if (assignment !== undefined) {
+          drivenOutput = assignedPayload(output, assignment, 'o:');
+          drivenControllerContext = assignment.context;
         }
-        try {
-          if (
-            guard.run({
-              context: initialCoverageContext,
-              event: { ...doneEvent, output },
-            })
-          ) {
+      } else {
+        // Drive only when the first arm XState would inspect under the real
+        // initial context is a known accepting arm. Encountering an unresolved
+        // guard first makes driving unsafe: XState reports that error
+        // asynchronously, so the arm audit below owns the finding (c887fc4).
+        let safeToDrive = true;
+        for (const [index, arm] of rawDoneArms.entries()) {
+          const rawGuard = armGuard(arm);
+          if (rawGuard === undefined) {
             directArm = index;
             break;
           }
-        } catch {
-          safeToDrive = false;
-          break;
+          const guard = resolveGuard(machine, rawGuard);
+          if (guard === undefined) {
+            safeToDrive = false;
+            break;
+          }
+          try {
+            if (
+              guard.run({
+                context: initialCoverageContext,
+                event: { ...doneEvent, output },
+              })
+            ) {
+              directArm = index;
+              break;
+            }
+          } catch {
+            safeToDrive = false;
+            break;
+          }
+        }
+        if (
+          !safeToDrive ||
+          directArm === undefined ||
+          !accepting.has(directArm)
+        ) {
+          continue;
         }
       }
-      if (
-        !safeToDrive ||
-        directArm === undefined ||
-        !accepting.has(directArm)
-      ) {
+      if (directArm === undefined) {
         continue;
       }
 
@@ -3088,13 +3150,13 @@ export async function checkFsmCoverage(
       const probe = captainProbeActor(
         machine,
         captain,
-        output,
+        drivenOutput,
         gate,
         refs,
         captains,
         playbooks,
         sourceCandidates,
-        controllerContext,
+        drivenControllerContext,
       );
       if (probe === undefined) {
         const finding = `state ${stateKey} has no reachable entry transition`;

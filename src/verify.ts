@@ -2629,6 +2629,8 @@ export function generateGearsFsmConformanceTest(opts: {
   verifyModule: string;
   /** Reviewed schema baked into roleless artifact checks when available. */
   artifactSchema?: 1 | 3;
+  /** Emission-time schema evidence that must remain empty for a valid artifact. */
+  schemaFindings?: readonly string[];
 }): string {
   return `// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
@@ -2642,7 +2644,13 @@ import { describe, expect, it } from 'vitest';
 import { checkGearsFsmConformance, findConcurrentRoleSets, findMachineConfig } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 
+const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
+
 describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('maps every GEARS item to a state with its player and verbatim prompt', () => {
     const gears = readFileSync(
       fileURLToPath(new URL(${sourceString(opts.gearsFile)}, import.meta.url)),
@@ -2679,6 +2687,8 @@ export async function emitGearsFsmConformanceTest(opts: {
   verifyModule?: string;
   /** Reviewed schema baked into roleless artifact checks when available. */
   artifactSchema?: 1 | 3;
+  /** Emission-time schema evidence that must remain empty for a valid artifact. */
+  schemaFindings?: readonly string[];
 }): Promise<string> {
   const content = generateGearsFsmConformanceTest({
     basename: opts.basename,
@@ -2690,6 +2700,7 @@ export async function emitGearsFsmConformanceTest(opts: {
     ...(opts.artifactSchema === undefined
       ? {}
       : { artifactSchema: opts.artifactSchema }),
+    schemaFindings: opts.schemaFindings,
   });
   await mkdir(opts.artifactDir, { recursive: true });
   const path = join(opts.artifactDir, `${opts.basename}.gears-fsm.test.ts`);
@@ -2976,6 +2987,7 @@ export function resolveArtifactSchemaForVerification(opts: {
   linked?: { default?: unknown };
 }): { artifactSchema?: 1 | 3; findings: string[] } {
   const candidates: { source: string; schema: 1 | 3 }[] = [];
+  const invalidSignalFindings: string[] = [];
   if (opts.artifactSchema !== undefined) {
     candidates.push({
       source: 'review-supplied artifact schema',
@@ -2984,11 +2996,9 @@ export function resolveArtifactSchemaForVerification(opts: {
   }
   const provenanceSchema = artifactSchemaForPlaybookProvenance(opts.provenance);
   if (opts.provenance !== undefined && provenanceSchema === undefined) {
-    return {
-      findings: [
-        `artifact schema has unsupported link-target provenance ${JSON.stringify(opts.provenance)}`,
-      ],
-    };
+    invalidSignalFindings.push(
+      `artifact schema has unsupported link-target provenance ${JSON.stringify(opts.provenance)}`,
+    );
   }
   if (provenanceSchema !== undefined) {
     candidates.push({
@@ -3014,6 +3024,15 @@ export function resolveArtifactSchemaForVerification(opts: {
     });
   }
 
+  if (linkedSignal?.invalidCompatibility) {
+    invalidSignalFindings.push(
+      'linked factory has an own compatibility declaration that is not exact immutable schema 3/runtime ABI 1',
+    );
+  }
+  if (invalidSignalFindings.length > 0) {
+    return { findings: invalidSignalFindings };
+  }
+
   const schemas = new Set(candidates.map(({ schema }) => schema));
   if (schemas.size > 1) {
     return {
@@ -3021,13 +3040,6 @@ export function resolveArtifactSchemaForVerification(opts: {
         `artifact schema signals disagree (${candidates
           .map(({ source, schema }) => `${source}: ${schema}`)
           .join(', ')})`,
-      ],
-    };
-  }
-  if (linkedSignal?.invalidCompatibility) {
-    return {
-      findings: [
-        'linked factory has an own compatibility declaration that is not exact immutable schema 3/runtime ABI 1',
       ],
     };
   }

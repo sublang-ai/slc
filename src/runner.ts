@@ -62,12 +62,15 @@ import {
 } from './pipeline.js';
 import { defaultPlaybookLinkTarget, isReservedPipeline } from './resolver.js';
 import {
-  artifactSchemaForPlaybookProvenance,
   emitFsmCoverageTest,
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
+  findMachineConfig,
+  loadFsmModule,
+  loadLinkedModuleForVerification,
   playbookProvenanceForLinkTarget,
+  resolveArtifactSchemaForVerification,
 } from './verify.js';
 import {
   VERIFIER_SUPPORT_MODULE,
@@ -492,7 +495,8 @@ async function emitVerification(
     ctx.linkTarget === undefined
       ? undefined
       : await playbookProvenanceForLinkTarget(ctx.linkTarget);
-  const artifactSchema = artifactSchemaForPlaybookProvenance(provenance);
+  const schemaResolution = await resolveVerificationSchema(ctx, provenance);
+  const artifactSchema = schemaResolution.artifactSchema;
   const outputs = [...result.outputs];
   const diagnostics = [...result.diagnostics];
   if (guardTarget !== undefined) {
@@ -510,6 +514,7 @@ async function emitVerification(
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
       ...(artifactSchema === undefined ? {} : { artifactSchema }),
+      schemaFindings: schemaResolution.findings,
     }),
   );
   try {
@@ -540,6 +545,7 @@ async function emitVerification(
       artifactDir: ctx.artDir,
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
+      ...(artifactSchema === undefined ? {} : { artifactSchema }),
       ...(provenance === undefined ? {} : { provenance }),
     });
     outputs.push(promptContract.path);
@@ -576,6 +582,38 @@ async function emitVerification(
     );
   }
   return { ...result, outputs, diagnostics };
+}
+
+/** Reconciles every schema witness available from one just-built artifact. */
+async function resolveVerificationSchema(
+  ctx: VerificationContext,
+  provenance: string | undefined,
+): Promise<{ artifactSchema?: 1 | 3; findings: string[] }> {
+  const fsmPath = join(ctx.artDir, `${ctx.basename}.fsm.ts`);
+  let config: ReturnType<typeof findMachineConfig> | undefined;
+  try {
+    config = findMachineConfig(await loadFsmModule(fsmPath));
+  } catch {
+    // Broken FSM loading already degrades the generated derivation checks to
+    // diagnostics; reviewed provenance remains usable conformance evidence.
+  }
+
+  let linked: { default?: unknown } | undefined;
+  try {
+    linked = (await loadLinkedModuleForVerification({
+      linkedPath: join(ctx.artDir, `${ctx.basename}.playbook.ts`),
+      fsmPath,
+    })) as { default?: unknown };
+  } catch {
+    // A missing module supplies no signal; prompt emission reports an
+    // unloadable module through its existing diagnostic.
+  }
+
+  return resolveArtifactSchemaForVerification({
+    ...(provenance === undefined ? {} : { provenance }),
+    ...(config === undefined ? {} : { config }),
+    ...(linked === undefined ? {} : { linked }),
+  });
 }
 
 interface VerificationContext {
