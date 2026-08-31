@@ -15,9 +15,11 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 import {
@@ -28,6 +30,7 @@ import {
   canonicalRoleId,
   findConcurrentRoleSets,
   findMachineConfig,
+  hasControllerDecisionNearMiss,
   inspectGearsRoleContract,
   isControllerMachine,
   parseGearsItems,
@@ -53,8 +56,6 @@ export interface CompiledPlaybook {
   linkTargetProvenance?: string;
   /** Schema-3 Captain-hosted registry entry, when the closure has one. */
   registry?: unknown;
-  /** Trusted comparison-side observations of linked-factory construction. */
-  linkedFactoryWitness?: Schema3LinkedFactoryWitness;
 }
 
 export type RuntimeCapabilityProfile = RuntimeContractProfile;
@@ -72,24 +73,394 @@ interface RuntimeProfileInspection {
 /** Comparison-supplied configured-option slice for schema-3 registries. */
 export interface RuntimeProfileOptions {
   provenance?: string;
+  artifactSchema?: 1 | 3;
   registry?: unknown;
   configuredOptions?: unknown;
-  linkedFactoryWitness?: Schema3LinkedFactoryWitness;
 }
 
-/** One synchronous invocation observed at the linked default-factory seam. */
-export interface Schema3LinkedFactoryCall {
-  readonly args: readonly unknown[];
-  readonly result: unknown;
+interface Schema3LinkedFactoryCall {
+  readonly argumentCount: number;
+  readonly construction: Schema3ConstructionArgumentObservation;
+  readonly configuredOptions: Schema3BoundaryValueObservation;
+  readonly hostCapabilities: Schema3BoundaryValueObservation;
+  completed: boolean;
+  result?: unknown;
+  error?: unknown;
 }
 
-/** Trusted loader-side witness; the candidate registry never receives it. */
-export interface Schema3LinkedFactoryWitness {
-  calls(): readonly Schema3LinkedFactoryCall[];
+type Schema3ConstructionArgumentObservation =
+  | { readonly kind: 'invalid' }
+  | {
+      readonly kind: 'record';
+      readonly prototype: unknown;
+      readonly properties: readonly {
+        readonly key: PropertyKey;
+        readonly descriptor: Readonly<PropertyDescriptor>;
+      }[];
+    };
+
+type Schema3BoundaryValueObservation =
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'atom'; readonly value: unknown }
+  | { readonly kind: 'cycle'; readonly reference: object }
+  | {
+      readonly kind: 'object';
+      readonly reference: object;
+      readonly prototype: unknown;
+      readonly properties: readonly {
+        readonly key: PropertyKey;
+        readonly descriptor:
+          | {
+              readonly kind: 'data';
+              readonly value: Schema3BoundaryValueObservation;
+              readonly writable: boolean | undefined;
+              readonly enumerable: boolean | undefined;
+              readonly configurable: boolean | undefined;
+            }
+          | {
+              readonly kind: 'accessor';
+              readonly get: (() => unknown) | undefined;
+              readonly set: ((value: unknown) => void) | undefined;
+              readonly enumerable: boolean | undefined;
+              readonly configurable: boolean | undefined;
+            };
+      }[];
+    };
+
+/** Comparator-owned linked module and the factory a registry must import. */
+export interface InterposedSchema3LinkedModule {
+  readonly playbook: unknown;
+  readonly factory: (...args: unknown[]) => unknown;
 }
 
 const PLAYBOOK_10_PROVENANCE = '@sublang/playbook@10.0.0';
 const execFileAsync = promisify(execFile);
+const linkedFactoryCalls = new WeakMap<
+  (...args: unknown[]) => unknown,
+  Schema3LinkedFactoryCall[]
+>();
+
+/**
+ * Wraps a linked default factory at the comparison boundary.
+ *
+ * The call log stays private to this module: registry code receives only the
+ * wrapper and therefore cannot manufacture evidence about whether or how it
+ * called the linked factory.
+ */
+export function interposeSchema3LinkedModule(
+  playbook: unknown,
+): InterposedSchema3LinkedModule {
+  if (typeof playbook !== 'object' || playbook === null) {
+    throw new Error('linked schema-3 module is not an object');
+  }
+  const linked = playbook as Record<string, unknown>;
+  const target = linked.default;
+  if (typeof target !== 'function') {
+    throw new Error('linked schema-3 module has no callable default export');
+  }
+  const calls: Schema3LinkedFactoryCall[] = [];
+  const factory = function (this: unknown, ...args: unknown[]): unknown {
+    const call: Schema3LinkedFactoryCall = {
+      argumentCount: args.length,
+      construction: observeSchema3ConstructionArgument(args[0]),
+      configuredOptions: observeSchema3ConstructionMember(
+        args[0],
+        'configuredOptions',
+      ),
+      hostCapabilities: observeSchema3ConstructionMember(
+        args[0],
+        'hostCapabilities',
+      ),
+      completed: false,
+    };
+    calls.push(call);
+    try {
+      const result = Reflect.apply(target, this, args);
+      call.result = result;
+      call.completed = true;
+      return result;
+    } catch (error) {
+      call.error = error;
+      throw error;
+    }
+  };
+  const compat = Object.getOwnPropertyDescriptor(target, 'compat');
+  if (compat !== undefined) Object.defineProperty(factory, 'compat', compat);
+  linkedFactoryCalls.set(factory, calls);
+  return {
+    playbook: { ...linked, default: factory },
+    factory,
+  };
+}
+
+function observeSchema3ConstructionMember(
+  construction: unknown,
+  key: string,
+): Schema3BoundaryValueObservation {
+  try {
+    if (typeof construction !== 'object' || construction === null) {
+      return Object.freeze({ kind: 'invalid' });
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(construction, key);
+    if (
+      descriptor === undefined ||
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value')
+    ) {
+      return Object.freeze({ kind: 'invalid' });
+    }
+    return observeSchema3BoundaryValue(descriptor.value);
+  } catch {
+    return Object.freeze({ kind: 'invalid' });
+  }
+}
+
+function observeSchema3BoundaryValue(
+  value: unknown,
+  ancestors = new Set<object>(),
+): Schema3BoundaryValueObservation {
+  if (
+    (typeof value !== 'object' || value === null) &&
+    typeof value !== 'function'
+  ) {
+    return Object.freeze({ kind: 'atom', value });
+  }
+  if (typeof value === 'function') {
+    return Object.freeze({ kind: 'atom', value });
+  }
+  if (ancestors.has(value)) {
+    return Object.freeze({ kind: 'cycle', reference: value });
+  }
+  try {
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(value);
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const properties = Reflect.ownKeys(descriptors).map((key) => {
+      const descriptor = Reflect.get(descriptors, key) as PropertyDescriptor;
+      const snapshot = Object.prototype.hasOwnProperty.call(descriptor, 'value')
+        ? Object.freeze({
+            kind: 'data' as const,
+            value: observeSchema3BoundaryValue(descriptor.value, nextAncestors),
+            writable: descriptor.writable,
+            enumerable: descriptor.enumerable,
+            configurable: descriptor.configurable,
+          })
+        : Object.freeze({
+            kind: 'accessor' as const,
+            get: descriptor.get,
+            set: descriptor.set,
+            enumerable: descriptor.enumerable,
+            configurable: descriptor.configurable,
+          });
+      return Object.freeze({ key, descriptor: snapshot });
+    });
+    return Object.freeze({
+      kind: 'object',
+      reference: value,
+      prototype: Object.getPrototypeOf(value),
+      properties: Object.freeze(properties),
+    });
+  } catch {
+    return Object.freeze({ kind: 'invalid' });
+  }
+}
+
+function sameSchema3BoundaryValue(
+  left: Schema3BoundaryValueObservation,
+  right: Schema3BoundaryValueObservation,
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'invalid' || right.kind === 'invalid') return false;
+  if (left.kind === 'atom' && right.kind === 'atom') {
+    return Object.is(left.value, right.value);
+  }
+  if (left.kind === 'cycle' && right.kind === 'cycle') {
+    return left.reference === right.reference;
+  }
+  if (left.kind !== 'object' || right.kind !== 'object') return false;
+  if (
+    left.reference !== right.reference ||
+    left.prototype !== right.prototype ||
+    left.properties.length !== right.properties.length
+  ) {
+    return false;
+  }
+  return left.properties.every((property, index) => {
+    const counterpart = right.properties[index];
+    if (
+      counterpart === undefined ||
+      property.key !== counterpart.key ||
+      property.descriptor.kind !== counterpart.descriptor.kind ||
+      property.descriptor.enumerable !== counterpart.descriptor.enumerable ||
+      property.descriptor.configurable !== counterpart.descriptor.configurable
+    ) {
+      return false;
+    }
+    if (
+      property.descriptor.kind === 'data' &&
+      counterpart.descriptor.kind === 'data'
+    ) {
+      return (
+        property.descriptor.writable === counterpart.descriptor.writable &&
+        sameSchema3BoundaryValue(
+          property.descriptor.value,
+          counterpart.descriptor.value,
+        )
+      );
+    }
+    return (
+      property.descriptor.kind === 'accessor' &&
+      counterpart.descriptor.kind === 'accessor' &&
+      property.descriptor.get === counterpart.descriptor.get &&
+      property.descriptor.set === counterpart.descriptor.set
+    );
+  });
+}
+
+function observeSchema3ConstructionArgument(
+  value: unknown,
+): Schema3ConstructionArgumentObservation {
+  try {
+    if (typeof value !== 'object' || value === null) {
+      return Object.freeze({ kind: 'invalid' });
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const properties = Reflect.ownKeys(descriptors).map((key) => {
+      const descriptor = Reflect.get(descriptors, key) as PropertyDescriptor;
+      const snapshot = Object.prototype.hasOwnProperty.call(descriptor, 'value')
+        ? {
+            value: descriptor.value,
+            writable: descriptor.writable,
+            enumerable: descriptor.enumerable,
+            configurable: descriptor.configurable,
+          }
+        : {
+            get: descriptor.get,
+            set: descriptor.set,
+            enumerable: descriptor.enumerable,
+            configurable: descriptor.configurable,
+          };
+      return Object.freeze({ key, descriptor: Object.freeze(snapshot) });
+    });
+    return Object.freeze({
+      kind: 'record',
+      prototype: Object.getPrototypeOf(value),
+      properties: Object.freeze(properties),
+    });
+  } catch {
+    return Object.freeze({ kind: 'invalid' });
+  }
+}
+
+/**
+ * Loads a source registry after replacing its linked-factory import with a
+ * comparator-owned interposition. The original entry remains byte-untouched.
+ */
+export async function loadInterposedSchema3Registry(
+  entryPath: string,
+  linkedPath: string,
+  playbook: unknown,
+): Promise<{ playbook: unknown; registry: unknown }> {
+  const source = await readFile(entryPath, 'utf8');
+  const imports = [
+    ...source.matchAll(/\bfrom\s+(['"])(\.\/[^'"]+\.playbook\.(?:ts|js))\1/g),
+  ];
+  if (imports.length !== 1 || imports[0][2] === undefined) {
+    throw new Error(
+      'schema-3 registry must have exactly one relative linked-factory import',
+    );
+  }
+  const specifier = imports[0][2];
+  if (resolve(dirname(entryPath), specifier) !== resolve(linkedPath)) {
+    throw new Error(
+      `schema-3 registry linked-factory import ${specifier} does not resolve to ${linkedPath}`,
+    );
+  }
+
+  const interposed = interposeSchema3LinkedModule(playbook);
+  const root = await mkdtemp(join(tmpdir(), 'slc-equivalence-registry-'));
+  const globalKey = `__slc_equivalence_factory_${randomUUID().replaceAll('-', '_')}`;
+  const extension = extname(entryPath) === '.ts' ? '.ts' : '.mjs';
+  const registryPath = join(root, `registry${extension}`);
+  const factoryPath = join(root, 'linked-factory.mjs');
+  Object.defineProperty(globalThis, globalKey, {
+    value: interposed.factory,
+    configurable: true,
+  });
+  try {
+    await writeFile(
+      factoryPath,
+      `const factory = globalThis[${JSON.stringify(globalKey)}];\nif (typeof factory !== 'function') throw new Error('comparison factory unavailable');\nexport default factory;\n`,
+    );
+    const rewritten = source.replace(
+      imports[0][0],
+      imports[0][0].replace(specifier, './linked-factory.mjs'),
+    );
+    await writeFile(registryPath, rewritten);
+    const loaded = (await import(
+      `${pathToFileURL(registryPath).href}?comparison=${randomUUID()}`
+    )) as Record<string, unknown>;
+    return { playbook: interposed.playbook, registry: loaded.default };
+  } finally {
+    Reflect.deleteProperty(globalThis, globalKey);
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Constructs one registry runtime through comparison-owned interposition and
+ * rejects any call-time drift before returning the directly linked runtime.
+ */
+export function constructInterposedSchema3Runtime(opts: {
+  playbook: unknown;
+  registry: {
+    createRuntime(options: unknown, hostCapabilities: unknown): unknown;
+  };
+  configuredOptions: unknown;
+  hostCapabilities: unknown;
+}): unknown {
+  if (typeof opts.playbook !== 'object' || opts.playbook === null) {
+    throw new Error('linked schema-3 module is not an object');
+  }
+  const factory = (opts.playbook as Record<string, unknown>).default;
+  if (typeof factory !== 'function') {
+    throw new Error('linked schema-3 module has no callable default export');
+  }
+  const calls = linkedFactoryCalls.get(factory);
+  if (calls === undefined) {
+    throw new Error(
+      'shared-factory schema-3 construction lacks comparison-owned linked-factory interposition',
+    );
+  }
+  const expectedOptions = observeSchema3BoundaryValue(opts.configuredOptions);
+  const expectedCapabilities = observeSchema3BoundaryValue(
+    opts.hostCapabilities,
+  );
+  const callOffset = calls.length;
+  let created: unknown;
+  let creationFailed = false;
+  let creationError: unknown;
+  try {
+    created = opts.registry.createRuntime(
+      opts.configuredOptions,
+      opts.hostCapabilities,
+    );
+  } catch (error) {
+    creationFailed = true;
+    creationError = error;
+  }
+  const problem = linkedFactoryConstructionProblem(
+    calls.slice(callOffset),
+    opts.configuredOptions,
+    opts.hostCapabilities,
+    expectedOptions,
+    expectedCapabilities,
+    created,
+    creationFailed,
+  );
+  if (problem !== '') throw new Error(problem);
+  if (creationFailed) throw creationError;
+  return created;
+}
 
 /**
  * Returns the linked runtime's exact observable contract profile.
@@ -125,15 +496,17 @@ async function inspectRuntimeProfile(
     return { profile: null, findings };
   }
 
+  const factory = linked.default;
   const schema3Requested =
+    options.artifactSchema === 3 ||
     marker === 'composed-v3' ||
     options.registry !== undefined ||
-    options.provenance === PLAYBOOK_10_PROVENANCE;
+    options.provenance === PLAYBOOK_10_PROVENANCE ||
+    hasExactSchema3FactoryCompatibility(factory);
   if (schema3Requested) {
     return inspectComposedV3Profile(linked, marker, options, findings);
   }
 
-  const factory = linked.default;
   if (typeof factory !== 'function') {
     findings.push('linked module has no callable default export');
     return { profile: null, findings };
@@ -184,6 +557,30 @@ async function inspectRuntimeProfile(
       .join('; ')})`,
   );
   return { profile: null, findings };
+}
+
+function hasExactSchema3FactoryCompatibility(factory: unknown): boolean {
+  if (typeof factory !== 'function') return false;
+  const descriptor = Object.getOwnPropertyDescriptor(factory, 'compat');
+  if (
+    descriptor === undefined ||
+    !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
+    descriptor.enumerable !== true ||
+    descriptor.writable !== false ||
+    descriptor.configurable !== false
+  ) {
+    return false;
+  }
+  const compat = ownDataRecord(descriptor.value, [
+    'artifactSchema',
+    'runtimeAbi',
+  ]);
+  return (
+    compat !== undefined &&
+    Object.isFrozen(descriptor.value) &&
+    compat.artifactSchema === 3 &&
+    compat.runtimeAbi === 1
+  );
 }
 
 async function inspectComposedV3Profile(
@@ -275,7 +672,7 @@ async function inspectComposedV3Profile(
     registry.entry,
     registry.implementation,
     validatedOptions,
-    options.linkedFactoryWitness,
+    linkedFactoryCalls.get(factory as (...args: unknown[]) => unknown),
   );
   if (reason !== '') {
     findings.push(`composed-v3 runtime probe failed: ${reason}`);
@@ -344,6 +741,13 @@ function inspectSchema3Registry(
     typeof entry.createRuntime !== 'function'
   ) {
     findings.push('schema-3 registry entry has malformed required fields');
+    return { findings };
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(entry, 'summaryPolicy') &&
+    !isSchema3SummaryPolicy(entry.summaryPolicy)
+  ) {
+    findings.push('schema-3 registry summaryPolicy is malformed');
     return { findings };
   }
   const roles = schema3RoleIds(entry.requiredRoleIds);
@@ -420,6 +824,23 @@ function inspectSchema3Registry(
   };
 }
 
+function isSchema3SummaryPolicy(value: unknown): boolean {
+  const policy = ownDataRecord(value, [
+    'stateCountLabels',
+    'copyPasteGuardNames',
+    'savedCountsLine',
+  ]);
+  const labels = ownDataRecord(policy?.stateCountLabels);
+  return (
+    policy !== undefined &&
+    labels !== undefined &&
+    Object.values(labels).every((label) => typeof label === 'string') &&
+    isExactArray(policy.copyPasteGuardNames) &&
+    policy.copyPasteGuardNames.every((guard) => typeof guard === 'string') &&
+    typeof policy.savedCountsLine === 'function'
+  );
+}
+
 function schema3RoleIds(value: unknown): readonly string[] | undefined {
   if (!isExactArray(value)) return undefined;
   if (
@@ -469,7 +890,7 @@ async function probeComposedV3Runtime(
   entry: Schema3Registry,
   implementation: 'shared-factory' | 'bespoke',
   validatedOptions: unknown,
-  linkedFactoryWitness: Schema3LinkedFactoryWitness | undefined,
+  factoryCalls: Schema3LinkedFactoryCall[] | undefined,
 ): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'slc-equivalence-v3-'));
   try {
@@ -480,7 +901,7 @@ async function probeComposedV3Runtime(
       entry,
       implementation,
       validatedOptions,
-      linkedFactoryWitness,
+      factoryCalls,
       worktree,
       gitDir,
     );
@@ -495,7 +916,7 @@ async function driveComposedV3Runtime(
   entry: Schema3Registry,
   implementation: 'shared-factory' | 'bespoke',
   validatedOptions: unknown,
-  linkedFactoryWitness: Schema3LinkedFactoryWitness | undefined,
+  factoryCalls: Schema3LinkedFactoryCall[] | undefined,
   worktree: string,
   gitDir: string,
 ): Promise<string> {
@@ -537,6 +958,8 @@ async function driveComposedV3Runtime(
   if (!isExactHostCapabilities(hostCapabilities)) {
     return 'equivalence harness constructed malformed host capabilities';
   }
+  const expectedOptions = observeSchema3BoundaryValue(validatedOptions);
+  const expectedCapabilities = observeSchema3BoundaryValue(hostCapabilities);
 
   let runtime: Record<string, unknown> | undefined;
   let initAttempted = false;
@@ -544,21 +967,33 @@ async function driveComposedV3Runtime(
   try {
     let callOffset: number | undefined;
     if (implementation === 'shared-factory') {
-      if (linkedFactoryWitness === undefined) {
-        return 'shared-factory schema-3 comparison lacks a trusted linked-factory witness';
+      if (factoryCalls === undefined) {
+        return 'shared-factory schema-3 comparison lacks comparison-owned linked-factory interposition';
       }
-      callOffset = linkedFactoryWitness.calls().length;
+      callOffset = factoryCalls.length;
     }
-    const created = entry.createRuntime(validatedOptions, hostCapabilities);
-    if (callOffset !== undefined && linkedFactoryWitness !== undefined) {
+    let created: unknown;
+    let creationFailed = false;
+    let creationError: unknown;
+    try {
+      created = entry.createRuntime(validatedOptions, hostCapabilities);
+    } catch (error) {
+      creationFailed = true;
+      creationError = error;
+    }
+    if (callOffset !== undefined && factoryCalls !== undefined) {
       const constructionProblem = linkedFactoryConstructionProblem(
-        linkedFactoryWitness.calls().slice(callOffset),
+        factoryCalls.slice(callOffset),
         validatedOptions,
         hostCapabilities,
+        expectedOptions,
+        expectedCapabilities,
         created,
+        creationFailed,
       );
       if (constructionProblem !== '') return constructionProblem;
     }
+    if (creationFailed) return messageOf(creationError);
     if (typeof created !== 'object' || created === null) {
       return 'registry createRuntime returned a non-object';
     }
@@ -630,20 +1065,19 @@ function linkedFactoryConstructionProblem(
   calls: readonly Schema3LinkedFactoryCall[],
   validatedOptions: unknown,
   hostCapabilities: unknown,
+  expectedOptions: Schema3BoundaryValueObservation,
+  expectedCapabilities: Schema3BoundaryValueObservation,
   registryRuntime: unknown,
+  creationFailed: boolean,
 ): string {
   if (calls.length !== 1) {
     return `registry createRuntime invoked the linked factory ${calls.length} times, expected exactly once`;
   }
-  const call = ownDataRecord(calls[0], ['args', 'result']);
-  if (
-    call === undefined ||
-    !isExactArray(call.args) ||
-    call.args.length !== 1
-  ) {
+  const call = calls[0];
+  if (call.argumentCount !== 1) {
     return 'linked factory was not called with exactly one construction argument';
   }
-  const construction = ownDataRecord(call.args[0], [
+  const construction = observedOwnDataRecord(call.construction, [
     'configuredOptions',
     'hostCapabilities',
   ]);
@@ -656,10 +1090,53 @@ function linkedFactoryConstructionProblem(
   if (construction.hostCapabilities !== hostCapabilities) {
     return 'linked factory did not receive live host capabilities by exact identity';
   }
+  if (!sameSchema3BoundaryValue(call.configuredOptions, expectedOptions)) {
+    return 'linked factory received configured options that drifted at call time';
+  }
+  if (!sameSchema3BoundaryValue(call.hostCapabilities, expectedCapabilities)) {
+    return 'linked factory received host capabilities that drifted at call time';
+  }
+  if (!call.completed) {
+    return creationFailed
+      ? ''
+      : 'registry createRuntime suppressed a linked-factory construction failure';
+  }
   if (call.result !== registryRuntime) {
     return 'registry createRuntime did not return the linked factory runtime directly';
   }
   return '';
+}
+
+function observedOwnDataRecord(
+  observation: Schema3ConstructionArgumentObservation,
+  exactKeys: readonly string[],
+): Record<string, unknown> | undefined {
+  if (
+    observation.kind !== 'record' ||
+    (observation.prototype !== Object.prototype &&
+      observation.prototype !== null) ||
+    observation.properties.length !== exactKeys.length ||
+    observation.properties.some(({ key }) => typeof key !== 'string')
+  ) {
+    return undefined;
+  }
+  const descriptors = new Map(
+    observation.properties.map(({ key, descriptor }) => [key, descriptor]),
+  );
+  if (exactKeys.some((key) => !descriptors.has(key))) return undefined;
+  const record: Record<string, unknown> = {};
+  for (const key of exactKeys) {
+    const descriptor = descriptors.get(key);
+    if (
+      descriptor === undefined ||
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
+      descriptor.enumerable !== true
+    ) {
+      return undefined;
+    }
+    record[key] = descriptor.value;
+  }
+  return record;
 }
 
 function inspectComposedV3OptionalSurface(
@@ -1239,9 +1716,7 @@ export async function checkPlaybookIntegrity(
   findings.push(
     ...checkGearsFsmConformance(compiled.gears, config, {
       concurrentRoleSets: findConcurrentRoleSets(compiled.fsm),
-      artifactSchema: artifactSchemaForPlaybookProvenance(
-        compiled.linkTargetProvenance,
-      ),
+      artifactSchema: compiledArtifactSchema(compiled),
     }).map((finding) => `${label}: ${finding}`),
   );
   findings.push(
@@ -1338,17 +1813,25 @@ function compiledRuntimeOptions(
   options: Pick<RuntimeProfileOptions, 'configuredOptions'>,
 ): RuntimeProfileOptions {
   return {
+    ...(compiledArtifactSchema(compiled) === undefined
+      ? {}
+      : { artifactSchema: compiledArtifactSchema(compiled) }),
     ...(compiled.linkTargetProvenance === undefined
       ? {}
       : { provenance: compiled.linkTargetProvenance }),
     ...(compiled.registry === undefined ? {} : { registry: compiled.registry }),
-    ...(compiled.linkedFactoryWitness === undefined
-      ? {}
-      : { linkedFactoryWitness: compiled.linkedFactoryWitness }),
     ...(Object.prototype.hasOwnProperty.call(options, 'configuredOptions')
       ? { configuredOptions: options.configuredOptions }
       : {}),
   };
+}
+
+function compiledArtifactSchema(compiled: CompiledPlaybook): 1 | 3 | undefined {
+  const registry = ownDataRecord(compiled.registry);
+  const generation = inspectGearsRoleContract(compiled.gears).generation;
+  if (registry?.artifactSchema === 3 || generation === 'schema-3') return 3;
+  if (generation === 'schema-1') return 1;
+  return artifactSchemaForPlaybookProvenance(compiled.linkTargetProvenance);
 }
 
 /**
@@ -1397,13 +1880,9 @@ export async function checkReferenceEquivalence(opts: {
   ]);
   const producedProfile = producedRuntime.profile;
   const referenceProfile = referenceRuntime.profile;
-  if (
-    producedProfile !== null &&
-    referenceProfile !== null &&
-    producedProfile !== referenceProfile
-  ) {
+  if (producedProfile !== referenceProfile) {
     findings.push(
-      `runtime contract profiles differ: produced ${producedProfile} vs reference ${referenceProfile}`,
+      `runtime contract profiles differ: produced ${producedProfile ?? 'unrecognized'} vs reference ${referenceProfile ?? 'unrecognized'}`,
     );
   }
   if (producedProfile === 'composed-v3' && referenceProfile === 'composed-v3') {
@@ -1468,6 +1947,10 @@ export async function checkReferenceEquivalence(opts: {
   const referenceConfig = findMachineConfig(opts.reference.fsm);
   const producedController = isControllerMachine(producedConfig);
   const referenceController = isControllerMachine(referenceConfig);
+  const producedControllerCandidate =
+    producedController || hasControllerDecisionNearMiss(producedConfig);
+  const referenceControllerCandidate =
+    referenceController || hasControllerDecisionNearMiss(referenceConfig);
   if (producedController !== referenceController) {
     findings.push(
       `controller classifications differ: produced ${producedController ? 'controller' : 'ordinary'} vs reference ${referenceController ? 'controller' : 'ordinary'}`,
@@ -1477,12 +1960,22 @@ export async function checkReferenceEquivalence(opts: {
   // The Boss surfaces must exist on both machines (pinIntrospection reports
   // them); captain-state counts are reported only through conformance, since
   // partitions are judgment.
-  for (const [label, config, controller] of [
-    ['produced', producedConfig, producedController],
-    ['reference', referenceConfig, referenceController],
+  for (const [label, config, controller, controllerCandidate] of [
+    [
+      'produced',
+      producedConfig,
+      producedController,
+      producedControllerCandidate,
+    ],
+    [
+      'reference',
+      referenceConfig,
+      referenceController,
+      referenceControllerCandidate,
+    ],
   ] as const) {
     const pins = pinIntrospection(config);
-    if (!controller && pins.interruptTargets.length === 0) {
+    if (!controllerCandidate && pins.interruptTargets.length === 0) {
       findings.push(`${label}: machine declares no BOSS_INTERRUPT targets`);
     }
     if (!pins.quiescent.some((state) => state.final)) {
@@ -1491,7 +1984,7 @@ export async function checkReferenceEquivalence(opts: {
     const hasBossWait = hasBossReplySurface(config);
     if (controller && hasBossWait) {
       findings.push(`${label}: controller machine declares a Boss-reply wait`);
-    } else if (!controller && !hasBossWait) {
+    } else if (!controllerCandidate && !hasBossWait) {
       findings.push(`${label}: machine declares no Boss-reply wait state`);
     }
   }

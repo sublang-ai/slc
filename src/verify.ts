@@ -134,6 +134,38 @@ export function artifactSchemaForPlaybookProvenance(
   }
 }
 
+/**
+ * Returns the Playbook package provenance that owns an invocation's concrete
+ * link target. The first package manifest above the target owns the file; a
+ * parent workspace manifest must not lend its identity to a nested local file.
+ */
+export async function playbookProvenanceForLinkTarget(
+  linkTarget: string,
+): Promise<string | undefined> {
+  let cursor = dirname(resolve(linkTarget));
+  for (;;) {
+    const manifestPath = join(cursor, 'package.json');
+    if (existsSync(manifestPath)) {
+      try {
+        const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+          name?: unknown;
+          version?: unknown;
+        };
+        return manifest.name === '@sublang/playbook' &&
+          typeof manifest.version === 'string' &&
+          manifest.version.length > 0
+          ? `${manifest.name}@${manifest.version}`
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    const parent = dirname(cursor);
+    if (parent === cursor) return undefined;
+    cursor = parent;
+  }
+}
+
 /** The minimal XState machine-config shape the introspector walks (`machine.config`). */
 export interface MachineConfigLike {
   initial?: string;
@@ -1222,6 +1254,19 @@ export function isControllerDecisionResult(result: unknown): boolean {
   );
 }
 
+/** A single missing or extra key against Playbook 10's controller domain. */
+export function controllerDecisionNearMiss(
+  result: unknown,
+): { missing: string[]; extra: string[] } | undefined {
+  if (!isStringMap(result)) return undefined;
+  const actual = Object.keys(result).filter((key) => key !== NEEDS_BOSS_REPLY);
+  const expected = new Set<string>(CONTROLLER_ACTION_GUARDS);
+  const present = new Set(actual);
+  const missing = CONTROLLER_ACTION_GUARDS.filter((key) => !present.has(key));
+  const extra = actual.filter((key) => !expected.has(key));
+  return missing.length + extra.length === 1 ? { missing, extra } : undefined;
+}
+
 /** Whether a machine contains Playbook 10's grounded controller decision state. */
 export function isControllerMachine(config: MachineConfigLike): boolean {
   return enumerateCaptainBindings(config).some(({ state, pinActor }) => {
@@ -1235,6 +1280,19 @@ export function isControllerMachine(config: MachineConfigLike): boolean {
     }
     return isControllerDecisionResult(state.result);
   });
+}
+
+/** Whether an explicit direct-Captain result is one key from the controller domain. */
+export function hasControllerDecisionNearMiss(
+  config: MachineConfigLike,
+): boolean {
+  return enumerateCaptainBindings(config).some(
+    ({ state, pinActor }) =>
+      pinActor &&
+      state.actor === 'captain' &&
+      state.result[NEEDS_BOSS_REPLY] === undefined &&
+      controllerDecisionNearMiss(state.result) !== undefined,
+  );
 }
 
 function concurrentRoleSets(value: unknown): string[][] | undefined {
@@ -1269,6 +1327,21 @@ export function checkGearsFsmConformance(
   const controller = isControllerMachine(config);
   const captainBindings = enumerateCaptainBindings(config);
   const states = captainBindings.map(({ state }) => state);
+  const controllerNearMisses = captainBindings.flatMap(
+    ({ state, pinActor }) => {
+      if (
+        !pinActor ||
+        state.actor !== 'captain' ||
+        state.result[NEEDS_BOSS_REPLY] !== undefined
+      ) {
+        return [];
+      }
+      const nearMiss = controllerDecisionNearMiss(state.result);
+      return nearMiss === undefined ? [] : [{ state, nearMiss }];
+    },
+  );
+  const controllerContractCandidate =
+    controller || controllerNearMisses.length > 0;
   const explicitActorStates = new Set(
     captainBindings
       .filter(({ pinActor }) => pinActor)
@@ -1277,6 +1350,16 @@ export function checkGearsFsmConformance(
   const playbookStates = enumeratePlaybookStates(config);
   const scriptStates = enumerateScriptStates(config);
   const findings: string[] = [];
+
+  for (const { state, nearMiss } of controllerNearMisses) {
+    const detail =
+      nearMiss.missing.length > 0
+        ? `missing ${JSON.stringify(nearMiss.missing[0])}`
+        : `extra ${JSON.stringify(nearMiss.extra[0])}`;
+    findings.push(
+      `FSM state ${state.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
+    );
+  }
 
   findings.push(...structuredStateIdentityFindings(walkStateNodes(config)));
   findings.push(...roleContract.findings);
@@ -1571,6 +1654,10 @@ export function checkGearsFsmConformance(
           `FSM controller state ${state.stateId} unexpectedly declares ${NEEDS_BOSS_REPLY}`,
         );
       }
+    } else if (controllerContractCandidate) {
+      // The precise controller-domain diagnostic above owns a malformed
+      // near-controller artifact; do not suggest adding the ordinary wait key.
+      continue;
     } else if (bossReply === undefined) {
       findings.push(
         `FSM state ${state.stateId} declares no ${NEEDS_BOSS_REPLY} result`,
@@ -2060,8 +2147,14 @@ export function checkPromptComposition(opts: {
 }): string[] {
   const findings: string[] = [];
   const controller = isControllerMachine(opts.config);
-  const inferredArtifactSchema =
-    opts.artifactSchema ?? inferPromptArtifactSchemaFromConfig(opts.config);
+  const schemaResolution = resolveArtifactSchemaForVerification({
+    config: opts.config,
+    ...(opts.artifactSchema === undefined
+      ? {}
+      : { artifactSchema: opts.artifactSchema }),
+  });
+  findings.push(...schemaResolution.findings);
+  const inferredArtifactSchema = schemaResolution.artifactSchema;
   const substitutions = deriveSubstitutions(
     opts.config,
     opts.compose,
@@ -2125,8 +2218,10 @@ export function checkPromptComposition(opts: {
     if (controller || !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)) continue;
 
     const artifactSchema =
-      inferredArtifactSchema ??
-      (state.role !== undefined ? 3 : state.player !== '' ? 1 : undefined);
+      schemaResolution.findings.length > 0
+        ? undefined
+        : (inferredArtifactSchema ??
+          (state.role !== undefined ? 3 : state.player !== '' ? 1 : undefined));
     if (artifactSchema === undefined) {
       findings.push(
         `${state.stateId}: prompt composition requires artifactSchema 1 or 3 to probe this direct-Captain continuation`,
@@ -2616,14 +2711,15 @@ export async function loadFsmModule(fsmPath: string): Promise<unknown> {
 }
 
 /**
- * Imports the generated linked TypeScript module before its sibling FSM has
- * been built to JavaScript. NodeNext source correctly names the runtime-safe
- * `./<basename>.fsm.js` edge, but emission-time verification runs while only
- * `./<basename>.fsm.ts` exists. Stage a same-directory copy whose one generated
- * module specifier points at the hashed TypeScript artifact, import that copy,
- * and remove it without changing the linked source or its production import.
+ * Imports generated linked TypeScript for emission-time, standalone, or
+ * equivalence review before its sibling FSM has been built to JavaScript.
+ * NodeNext source correctly names the runtime-safe `./<basename>.fsm.js` edge,
+ * but review may run while only `./<basename>.fsm.ts` exists. Stage a
+ * same-directory copy whose one generated module specifier points at the
+ * hashed TypeScript artifact, import that copy, and remove it without changing
+ * the linked source or its production import.
  */
-async function loadLinkedModuleForVerification(opts: {
+export async function loadLinkedModuleForVerification(opts: {
   linkedPath: string;
   fsmPath: string;
 }): Promise<unknown> {
@@ -2704,6 +2800,8 @@ export function generatePromptContractTest(opts: {
   rows: PromptContractRow[];
   /** Grounded artifact schema baked into continuation probes when available. */
   artifactSchema?: 1 | 3;
+  /** Emission-time schema evidence that must remain empty for a valid artifact. */
+  schemaFindings?: readonly string[];
   /** Present when the linked module beside the artifacts exposes its composer. */
   composer?: {
     playbookModule: string;
@@ -2780,8 +2878,13 @@ import {
 import * as fsm from ${sourceString(opts.fsmModule)};
 ${composerImports}
 const CONTRACT = ${JSON.stringify(opts.rows, null, 2)};
+const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
 
 describe(${sourceString(`${opts.basename}: prompt contract`)}, () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('matches the prompt contract pinned at build time', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
@@ -2789,28 +2892,37 @@ ${composerBlock}});
 `;
 }
 
-function inferPromptArtifactSchemaFromConfig(
-  config: MachineConfigLike,
-): 1 | 3 | undefined {
+function promptArtifactSchemaSignalsFromConfig(config: MachineConfigLike): {
+  schema1: boolean;
+  schema3: boolean;
+} {
   const states = enumerateCaptainStates(config);
-  const hasRole = states.some(({ role }) => role !== undefined);
-  const hasPlayer = states.some(({ player }) => player !== '');
-  if (isControllerMachine(config)) return 3;
-  if (hasRole && !hasPlayer) return 3;
-  if (hasPlayer && !hasRole) return 1;
-  return undefined;
+  return {
+    schema1: states.some(({ player }) => player !== ''),
+    schema3:
+      isControllerMachine(config) ||
+      states.some(({ role }) => role !== undefined),
+  };
 }
 
-function inferPromptArtifactSchemaFromLinked(linked: {
+interface LinkedArtifactSchemaSignal {
+  /** Exact immutable shared-factory compatibility is a schema-3 witness. */
+  schema?: 3;
+  /** A callable compat-less factory is the historical schema-1 fallback. */
+  historicalFallback: boolean;
+  /** An own `compat` exists but is not the exact immutable schema-3 record. */
+  invalidCompatibility: boolean;
+}
+
+function linkedArtifactSchemaSignal(linked: {
   default?: unknown;
-}): 3 | undefined {
+}): LinkedArtifactSchemaSignal {
   const factory = linked.default;
-  if (
-    (typeof factory !== 'function' &&
-      (typeof factory !== 'object' || factory === null)) ||
-    !Object.hasOwn(factory, 'compat')
-  ) {
-    return undefined;
+  if (typeof factory !== 'function') {
+    return { historicalFallback: false, invalidCompatibility: false };
+  }
+  if (!Object.hasOwn(factory, 'compat')) {
+    return { historicalFallback: true, invalidCompatibility: false };
   }
   const descriptor = Object.getOwnPropertyDescriptor(factory, 'compat');
   if (
@@ -2820,7 +2932,7 @@ function inferPromptArtifactSchemaFromLinked(linked: {
     descriptor.writable !== false ||
     descriptor.configurable !== false
   ) {
-    return undefined;
+    return { historicalFallback: false, invalidCompatibility: true };
   }
   const compat = descriptor.value;
   if (
@@ -2831,7 +2943,7 @@ function inferPromptArtifactSchemaFromLinked(linked: {
     !Object.isFrozen(compat) ||
     Object.getOwnPropertySymbols(compat).length !== 0
   ) {
-    return undefined;
+    return { historicalFallback: false, invalidCompatibility: true };
   }
   const names = Object.getOwnPropertyNames(compat);
   const artifactSchema = Object.getOwnPropertyDescriptor(
@@ -2839,7 +2951,8 @@ function inferPromptArtifactSchemaFromLinked(linked: {
     'artifactSchema',
   );
   const runtimeAbi = Object.getOwnPropertyDescriptor(compat, 'runtimeAbi');
-  return names.length === 2 &&
+  const exact =
+    names.length === 2 &&
     names.includes('artifactSchema') &&
     names.includes('runtimeAbi') &&
     artifactSchema?.enumerable === true &&
@@ -2847,9 +2960,96 @@ function inferPromptArtifactSchemaFromLinked(linked: {
     artifactSchema.value === 3 &&
     runtimeAbi?.enumerable === true &&
     Object.hasOwn(runtimeAbi, 'value') &&
-    runtimeAbi.value === 1
-    ? 3
-    : undefined;
+    runtimeAbi.value === 1;
+  return exact
+    ? { schema: 3, historicalFallback: false, invalidCompatibility: false }
+    : { historicalFallback: false, invalidCompatibility: true };
+}
+
+/** Schema decision shared by generated and standalone artifact verification. */
+export function resolveArtifactSchemaForVerification(opts: {
+  artifactSchema?: 1 | 3;
+  provenance?: unknown;
+  config?: MachineConfigLike;
+  linked?: { default?: unknown };
+}): { artifactSchema?: 1 | 3; findings: string[] } {
+  const candidates: { source: string; schema: 1 | 3 }[] = [];
+  if (opts.artifactSchema !== undefined) {
+    candidates.push({
+      source: 'review-supplied artifact schema',
+      schema: opts.artifactSchema,
+    });
+  }
+  const provenanceSchema = artifactSchemaForPlaybookProvenance(opts.provenance);
+  if (opts.provenance !== undefined && provenanceSchema === undefined) {
+    return {
+      findings: [
+        `artifact schema has unsupported link-target provenance ${JSON.stringify(opts.provenance)}`,
+      ],
+    };
+  }
+  if (provenanceSchema !== undefined) {
+    candidates.push({
+      source: 'reviewed link-target provenance',
+      schema: provenanceSchema,
+    });
+  }
+  if (opts.config !== undefined) {
+    const configSignals = promptArtifactSchemaSignalsFromConfig(opts.config);
+    if (configSignals.schema1)
+      candidates.push({ source: 'FSM historical-player structure', schema: 1 });
+    if (configSignals.schema3)
+      candidates.push({ source: 'FSM role/controller structure', schema: 3 });
+  }
+  const linkedSignal =
+    opts.linked === undefined
+      ? undefined
+      : linkedArtifactSchemaSignal(opts.linked);
+  if (linkedSignal?.schema !== undefined) {
+    candidates.push({
+      source: 'linked factory compatibility',
+      schema: linkedSignal.schema,
+    });
+  }
+
+  const schemas = new Set(candidates.map(({ schema }) => schema));
+  if (schemas.size > 1) {
+    return {
+      findings: [
+        `artifact schema signals disagree (${candidates
+          .map(({ source, schema }) => `${source}: ${schema}`)
+          .join(', ')})`,
+      ],
+    };
+  }
+  if (linkedSignal?.invalidCompatibility) {
+    return {
+      findings: [
+        'linked factory has an own compatibility declaration that is not exact immutable schema 3/runtime ABI 1',
+      ],
+    };
+  }
+  const [artifactSchema] = schemas;
+  if (artifactSchema !== undefined) {
+    return { artifactSchema, findings: [] };
+  }
+  if (linkedSignal?.historicalFallback) {
+    return { artifactSchema: 1, findings: [] };
+  }
+  const hasAmbiguousCaptainContinuation =
+    opts.config !== undefined &&
+    enumerateCaptainStates(opts.config).some(
+      (state) =>
+        state.actor === 'captain' &&
+        Object.hasOwn(state.result, NEEDS_BOSS_REPLY),
+    );
+  return hasAmbiguousCaptainContinuation
+    ? {
+        findings: [
+          'artifact schema has no reviewed provenance, generation-specific actor structure, or callable linked factory for a direct-Captain continuation',
+        ],
+      }
+    : { findings: [] };
 }
 
 /**
@@ -2872,13 +3072,21 @@ export async function emitPromptContractTest(opts: {
   verifyModule?: string;
   /** Reviewed schema when the FSM shape alone cannot distinguish generations. */
   artifactSchema?: 1 | 3;
+  /** Actual reviewed full-link target provenance, when the caller has it. */
+  provenance?: unknown;
 }): Promise<{ path: string; diagnostics: string[] }> {
   const diagnostics: string[] = [];
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const config = findMachineConfig(await loadFsmModule(fsmPath));
   const rows = capturePromptContract(config);
-  let artifactSchema =
-    opts.artifactSchema ?? inferPromptArtifactSchemaFromConfig(config);
+  let schemaResolution = resolveArtifactSchemaForVerification({
+    config,
+    ...(opts.provenance === undefined ? {} : { provenance: opts.provenance }),
+    ...(opts.artifactSchema === undefined
+      ? {}
+      : { artifactSchema: opts.artifactSchema }),
+  });
+  let artifactSchema = schemaResolution.artifactSchema;
 
   let composer:
     | {
@@ -2900,7 +3108,17 @@ export async function emitPromptContractTest(opts: {
           composePlayerPrompt?: unknown;
         };
       };
-      artifactSchema ??= inferPromptArtifactSchemaFromLinked(linked);
+      schemaResolution = resolveArtifactSchemaForVerification({
+        config,
+        linked,
+        ...(opts.provenance === undefined
+          ? {}
+          : { provenance: opts.provenance }),
+        ...(opts.artifactSchema === undefined
+          ? {}
+          : { artifactSchema: opts.artifactSchema }),
+      });
+      artifactSchema = schemaResolution.artifactSchema;
       const actors = new Set(
         enumerateCaptainStates(config).map(({ actor }) => actor),
       );
@@ -2947,12 +3165,19 @@ export async function emitPromptContractTest(opts: {
     }
   }
 
+  diagnostics.unshift(
+    ...schemaResolution.findings.map(
+      (finding) => `prompt contract: ${finding}`,
+    ),
+  );
+
   const content = generatePromptContractTest({
     basename: opts.basename,
     fsmModule: `./${opts.basename}.fsm.js`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
     rows,
     ...(artifactSchema === undefined ? {} : { artifactSchema }),
+    schemaFindings: schemaResolution.findings,
     composer,
   });
   await mkdir(opts.artifactDir, { recursive: true });

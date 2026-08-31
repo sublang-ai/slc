@@ -18,6 +18,10 @@ import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import {
+  constructInterposedSchema3Runtime,
+  loadInterposedSchema3Registry,
+} from './equivalence.js';
 import fixtureEntry, {
   createConfiguredRegistryPlan,
 } from './fixtures/schema-3-entry-fixture.mjs';
@@ -46,7 +50,6 @@ const emptyLedger = {
   boundaries: [],
   logicalOperations: [],
 };
-
 describe('dormant schema-3 registry consumer fixture', () => {
   let root: string;
   let entryPath: string;
@@ -156,7 +159,7 @@ describe('dormant schema-3 registry consumer fixture', () => {
     );
   });
 
-  it('initializes and disposes a causal root against exact live capabilities without governed effects (release-18)', async () => {
+  it('initializes and disposes one causal root against exact live capabilities without governed effects (release-21 readiness)', async () => {
     const history = await execFileAsync(
       'git',
       ['rev-list', '--count', 'HEAD'],
@@ -170,8 +173,13 @@ describe('dormant schema-3 registry consumer fixture', () => {
     expect(history.stdout.trim()).toBe('1');
     expect(status.stdout).toBe('');
 
-    const copiedModule = await import(pathToFileURL(entryPath).href);
-    const copied = copiedModule.default;
+    const linkedModule = await import(pathToFileURL(linkedPath).href);
+    const loaded = await loadInterposedSchema3Registry(
+      entryPath,
+      linkedPath,
+      linkedModule,
+    );
+    const copied = loaded.registry as typeof fixtureEntry;
     expect(copied.requiredRoleIds).toEqual(['coder', 'reviewer']);
     expect(copied.concurrentRoleSets).toEqual([['coder', 'reviewer']]);
 
@@ -216,35 +224,30 @@ describe('dormant schema-3 registry consumer fixture', () => {
       },
       writeAhead: failGovernedUse('effectLedger.writeAhead'),
     };
-    const firstLedger = effectLedger.snapshot();
-    const secondLedger = effectLedger.snapshot();
-    expect(firstLedger).toEqual(emptyLedger);
-    expect(secondLedger).toEqual(emptyLedger);
-    expect(firstLedger).not.toBe(secondLedger);
-    expect(firstLedger.boundaries).not.toBe(secondLedger.boundaries);
-    expect(firstLedger.logicalOperations).not.toBe(
-      secondLedger.logicalOperations,
-    );
-
     const hostCapabilities = { authority, repository, effectLedger };
     const options = copied.validateOptions(undefined);
-    const linkedCallCount = copiedModule.linkedFactoryCallCount();
-    const runtime = copied.createRuntime(options, hostCapabilities);
+    const snapshotsBeforeConstruction = ledgerSnapshots.length;
+    const runtime = constructInterposedSchema3Runtime({
+      playbook: loaded.playbook,
+      registry: copied,
+      configuredOptions: options,
+      hostCapabilities,
+    }) as {
+      init(session: unknown): Promise<void>;
+      handleBossInput(turn: unknown): Promise<unknown>;
+      resumePlaybookCall(call: unknown): Promise<unknown>;
+      dispose(): Promise<void>;
+    };
+    const constructionSnapshotCount =
+      ledgerSnapshots.length - snapshotsBeforeConstruction;
+    expect(constructionSnapshotCount).toBeGreaterThan(0);
+    effectLedger.snapshot();
     expect(runtime).toMatchObject({
       init: expect.any(Function),
       handleBossInput: expect.any(Function),
       resumePlaybookCall: expect.any(Function),
       dispose: expect.any(Function),
     });
-    expect(copiedModule.linkedFactoryCallCount()).toBe(linkedCallCount + 1);
-    expect(runtime).toBe(copiedModule.lastLinkedFactoryRuntime());
-    const construction = copiedModule.lastLinkedFactoryConstruction();
-    expect(construction).toEqual({
-      configuredOptions: options,
-      hostCapabilities,
-    });
-    expect(construction.configuredOptions).toBe(options);
-    expect(construction.hostCapabilities).toBe(hostCapabilities);
     expect(Object.keys(hostCapabilities)).toEqual([
       'authority',
       'repository',
@@ -312,7 +315,7 @@ describe('dormant schema-3 registry consumer fixture', () => {
     expect(statusAfter.stdout).toBe('');
   });
 
-  it('plans configured-registry slash-command invocation without positional or removed run inputs (self-hosting-14, release-18)', () => {
+  it('plans configured-registry slash-command invocation without positional or removed run inputs (self-hosting-14, release-17 readiness)', () => {
     const task = 'repair the synthetic sample';
     const configHome = join(root, 'config-home');
     const plan = createConfiguredRegistryPlan({

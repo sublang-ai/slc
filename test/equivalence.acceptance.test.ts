@@ -2,23 +2,28 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 import { fromPromise, setup } from 'xstate';
 
-import { CONTROLLER_ACTION_GUARDS, loadFsmModule } from '../src/verify.js';
+import {
+  CONTROLLER_ACTION_GUARDS,
+  artifactSchemaForPlaybookProvenance,
+  loadFsmModule,
+  loadLinkedModuleForVerification,
+} from '../src/verify.js';
 import {
   checkPlaybookIntegrity,
   checkReferenceEquivalence,
   hasBossReplySurface,
+  interposeSchema3LinkedModule,
+  loadInterposedSchema3Registry,
   playerLineSets,
   runtimeCapabilityProfile,
   type CompiledPlaybook,
   type RuntimeCapabilityProfile,
-  type Schema3LinkedFactoryCall,
-  type Schema3LinkedFactoryWitness,
 } from './equivalence.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -28,24 +33,60 @@ const referenceDir = join(
   repoRoot,
   'node_modules/@sublang/playbook/reference/sdlc/code.playbook',
 );
+const installedPlaybookVersion = (
+  JSON.parse(
+    readFileSync(
+      join(repoRoot, 'node_modules/@sublang/playbook/package.json'),
+      'utf8',
+    ),
+  ) as { version: string }
+).version;
+const installedPlaybookProvenance = `@sublang/playbook@${installedPlaybookVersion}`;
+const installedArtifactSchema = artifactSchemaForPlaybookProvenance(
+  installedPlaybookProvenance,
+);
 
 /** Loads the immutable Playbook-4 schema-1 reference fixture. */
 async function loadReference(): Promise<CompiledPlaybook> {
+  const playbook = await import(join(referenceDir, 'code.playbook.js'));
+  const schema3 =
+    installedArtifactSchema === 3
+      ? await loadInterposedSchema3Registry(
+          join(referenceDir, 'code.registry.ts'),
+          join(referenceDir, 'code.playbook.js'),
+          playbook,
+        )
+      : undefined;
   return {
     gears: readFileSync(join(referenceDir, 'code.gears.md'), 'utf8'),
     fsm: await import(join(referenceDir, 'code.fsm.js')),
-    playbook: await import(join(referenceDir, 'code.playbook.js')),
+    playbook: schema3?.playbook ?? playbook,
     fsmSource: readFileSync(join(referenceDir, 'code.fsm.ts'), 'utf8'),
+    linkTargetProvenance: installedPlaybookProvenance,
+    ...(schema3 === undefined ? {} : { registry: schema3.registry }),
   };
 }
 
 /** Loads an `slc playbook` output directory as a {@link CompiledPlaybook}. */
 async function loadProduced(dir: string): Promise<CompiledPlaybook> {
+  const linkedPath = join(dir, 'code.playbook.ts');
+  const fsmPath = join(dir, 'code.fsm.ts');
+  const playbook = await loadLinkedModuleForVerification({
+    linkedPath,
+    fsmPath,
+  });
+  const entryPath = join(dirname(dir), 'code.ts');
+  const schema3 =
+    installedArtifactSchema === 3 && existsSync(entryPath)
+      ? await loadInterposedSchema3Registry(entryPath, linkedPath, playbook)
+      : undefined;
   return {
     gears: readFileSync(join(dir, 'code.gears.md'), 'utf8'),
-    fsm: await loadFsmModule(join(dir, 'code.fsm.ts')),
-    playbook: await loadFsmModule(join(dir, 'code.playbook.ts')),
+    fsm: await loadFsmModule(fsmPath),
+    playbook: schema3?.playbook ?? playbook,
     fsmSource: readFileSync(join(dir, 'code.fsm.ts'), 'utf8'),
+    linkTargetProvenance: installedPlaybookProvenance,
+    ...(schema3 === undefined ? {} : { registry: schema3.registry }),
   };
 }
 
@@ -193,7 +234,17 @@ interface Schema3FixtureOptions {
   validateOptions?: (value: unknown) => unknown;
   result?: unknown;
   effect?: 'player' | 'repository' | 'ledger';
-  entryMode?: 'exact' | 'zero-call' | 'replacement' | 'proxy';
+  entryMode?:
+    | 'exact'
+    | 'zero-call'
+    | 'two-call'
+    | 'extra-construction'
+    | 'restored-malformed-construction'
+    | 'restored-configured-options-drift'
+    | 'restored-host-capabilities-drift'
+    | 'replacement'
+    | 'proxy';
+  interpose?: boolean;
   runtimePatch?: (runtime: Record<string, unknown>) => void;
 }
 
@@ -231,7 +282,6 @@ function assertExactDataRecord(
 function schema3Fixture(options: Schema3FixtureOptions): {
   playbook: unknown;
   registry: Record<string, unknown>;
-  linkedFactoryWitness: Schema3LinkedFactoryWitness;
   observations: { turns: number; disposals: number };
 } {
   const roles = [...(options.roles ?? [])];
@@ -239,7 +289,6 @@ function schema3Fixture(options: Schema3FixtureOptions): {
     ...set,
   ]);
   const observations = { turns: 0, disposals: 0 };
-  const linkedFactoryCalls: Schema3LinkedFactoryCall[] = [];
   let lastValidated: unknown;
 
   const constructRuntime = (construction: unknown) => {
@@ -381,13 +430,41 @@ function schema3Fixture(options: Schema3FixtureOptions): {
     options.runtimePatch?.(runtime);
     return runtime;
   };
-  const factory = (...args: unknown[]) => {
-    const result = constructRuntime(args[0]);
-    linkedFactoryCalls.push({ args: [...args], result });
-    return result;
-  };
-  const linkedFactoryWitness: Schema3LinkedFactoryWitness = {
-    calls: () => linkedFactoryCalls,
+  const linkedFactory = (...args: unknown[]) => {
+    if (options.entryMode === 'restored-configured-options-drift') {
+      const configuredOptions = (
+        args[0] as { configuredOptions: Record<string, unknown> }
+      ).configuredOptions;
+      const extra = configuredOptions.extra;
+      Reflect.deleteProperty(configuredOptions, 'extra');
+      try {
+        return constructRuntime(args[0]);
+      } finally {
+        configuredOptions.extra = extra;
+      }
+    }
+    if (options.entryMode === 'restored-host-capabilities-drift') {
+      const authority = (
+        args[0] as {
+          hostCapabilities: { authority: Record<string, unknown> };
+        }
+      ).hostCapabilities.authority;
+      const playbookId = authority.playbookId;
+      authority.playbookId = 'synthetic-v3';
+      try {
+        return constructRuntime(args[0]);
+      } finally {
+        authority.playbookId = playbookId;
+      }
+    }
+    if (options.entryMode === 'restored-malformed-construction') {
+      const construction = args[0] as Record<string, unknown>;
+      return constructRuntime({
+        configuredOptions: construction.configuredOptions,
+        hostCapabilities: construction.hostCapabilities,
+      });
+    }
+    return constructRuntime(args[0]);
   };
   const compat =
     options.compatMode === 'mutable'
@@ -395,13 +472,13 @@ function schema3Fixture(options: Schema3FixtureOptions): {
       : Object.freeze({ artifactSchema: 3, runtimeAbi: 1 });
   if (options.kind === 'shared-factory') {
     if (options.compatMode === 'accessor') {
-      Object.defineProperty(factory, 'compat', {
+      Object.defineProperty(linkedFactory, 'compat', {
         get: () => compat,
         enumerable: true,
         configurable: false,
       });
     } else if (options.compatMode !== 'missing') {
-      Object.defineProperty(factory, 'compat', {
+      Object.defineProperty(linkedFactory, 'compat', {
         value: compat,
         enumerable: true,
         writable: false,
@@ -409,6 +486,11 @@ function schema3Fixture(options: Schema3FixtureOptions): {
       });
     }
   }
+  const interposed =
+    options.interpose === false
+      ? { playbook: { default: linkedFactory }, factory: linkedFactory }
+      : interposeSchema3LinkedModule({ default: linkedFactory });
+  const factory = interposed.factory;
   const runtimeProfile = Object.freeze(
     options.kind === 'shared-factory'
       ? { kind: 'shared-factory', compat }
@@ -426,30 +508,61 @@ function schema3Fixture(options: Schema3FixtureOptions): {
       lastValidated =
         options.validateOptions === undefined
           ? value === undefined
-            ? Object.freeze({})
+            ? options.entryMode === 'restored-configured-options-drift'
+              ? {}
+              : Object.freeze({})
             : value
           : options.validateOptions(value);
       return lastValidated;
     },
     createRuntime(configuredOptions: unknown, hostCapabilities: unknown) {
-      const construction = { configuredOptions, hostCapabilities };
+      const configuredRecord = configuredOptions as Record<string, unknown>;
+      const authority = (
+        hostCapabilities as { authority: Record<string, unknown> }
+      ).authority;
+      const construction =
+        options.entryMode === 'extra-construction' ||
+        options.entryMode === 'restored-malformed-construction'
+          ? { configuredOptions, hostCapabilities, extra: true }
+          : { configuredOptions, hostCapabilities };
       if (options.entryMode === 'zero-call') {
         return constructRuntime(construction);
       }
-      const linkedRuntime = factory(construction);
+      if (options.entryMode === 'restored-configured-options-drift') {
+        configuredRecord.extra = true;
+      }
+      if (options.entryMode === 'restored-host-capabilities-drift') {
+        authority.playbookId = 'drifted-v3';
+      }
+      let linkedRuntime: unknown;
+      try {
+        linkedRuntime = factory(construction);
+      } finally {
+        if (options.entryMode === 'restored-configured-options-drift') {
+          Reflect.deleteProperty(configuredRecord, 'extra');
+        }
+        if (options.entryMode === 'restored-host-capabilities-drift') {
+          authority.playbookId = 'synthetic-v3';
+        }
+      }
+      if (options.entryMode === 'restored-malformed-construction') {
+        Reflect.deleteProperty(construction, 'extra');
+      }
+      if (options.entryMode === 'two-call') {
+        factory(construction);
+      }
       if (options.entryMode === 'replacement') {
         return constructRuntime(construction);
       }
       if (options.entryMode === 'proxy') {
-        return new Proxy(linkedRuntime, {});
+        return new Proxy(linkedRuntime as object, {});
       }
       return linkedRuntime;
     },
   };
   return {
-    playbook: { default: factory },
+    playbook: interposed.playbook,
     registry,
-    linkedFactoryWitness,
     observations,
   };
 }
@@ -599,7 +712,9 @@ function syntheticSchema3Compilation(roleless = false): CompiledPlaybook {
 }
 
 /** Same source contract with a grounded schema-3 controller decision FSM. */
-function syntheticControllerCompilation(): CompiledPlaybook {
+function syntheticControllerCompilation(
+  drift?: 'missing-action' | 'extra-action',
+): CompiledPlaybook {
   const result = {
     respond: 'Respond to Boss and return to the session hub.',
     resume: 'Resume the selected session and return to the session hub.',
@@ -608,7 +723,9 @@ function syntheticControllerCompilation(): CompiledPlaybook {
     dismiss: 'Dismiss the selected session and return to the session hub.',
     deliver: 'Deliver the selected result and return to the session hub.',
     runtime: 'Apply the selected runtime action and return to the session hub.',
+    ...(drift === 'extra-action' ? { other: 'Unsupported action.' } : {}),
   };
+  if (drift === 'missing-action') Reflect.deleteProperty(result, 'runtime');
   const selects = (key: string) =>
     (({ event }: { event: { output?: { guard?: unknown } } }) =>
       event.output?.guard === key) as never;
@@ -684,7 +801,6 @@ function withSchema3Runtime(
     ...compiled,
     playbook: fixture.playbook,
     registry: fixture.registry,
-    linkedFactoryWitness: fixture.linkedFactoryWitness,
     linkTargetProvenance: playbook10Provenance,
   };
 }
@@ -695,13 +811,11 @@ function schema3ProfileOptions(
 ): {
   provenance: string;
   registry: unknown;
-  linkedFactoryWitness: Schema3LinkedFactoryWitness;
   configuredOptions?: unknown;
 } {
   return {
     provenance: playbook10Provenance,
     registry: fixture.registry,
-    linkedFactoryWitness: fixture.linkedFactoryWitness,
     ...(configuredOptions.length === 0
       ? {}
       : { configuredOptions: configuredOptions[0] }),
@@ -822,6 +936,80 @@ describe('reference equivalence harness (verification-9)', () => {
     }
   });
 
+  it('loads a source registry through comparison-owned linked-factory interposition', async () => {
+    const entryPath = join(
+      repoRoot,
+      'test/fixtures/schema-3-entry-fixture.mjs',
+    );
+    const linkedPath = join(
+      repoRoot,
+      'test/fixtures/workflow.playbook/workflow.playbook.ts',
+    );
+    const loaded = await loadInterposedSchema3Registry(
+      entryPath,
+      linkedPath,
+      await loadFsmModule(linkedPath),
+    );
+
+    expect(
+      await runtimeCapabilityProfile(loaded.playbook, {
+        provenance: playbook10Provenance,
+        artifactSchema: 3,
+        registry: loaded.registry,
+      }),
+    ).toBe('composed-v3');
+  });
+
+  it('does not probe an unaccompanied exact schema-3 factory as composed-v2', async () => {
+    const historical = await loadReference();
+    const playbook = unmarkedStrictComposedRuntime() as {
+      default: (...args: unknown[]) => unknown;
+    };
+    Object.defineProperty(playbook.default, 'compat', {
+      value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+
+    expect(
+      await checkPlaybookIntegrity('unaccompanied', {
+        ...historical,
+        playbook,
+        linkTargetProvenance: undefined,
+      }),
+    ).toContain(
+      'unaccompanied: composed-v3 requires exact @sublang/playbook@10.0.0 provenance',
+    );
+  });
+
+  it('uses the loaded Roles contract to reject schema-3 output missing its registry closure', async () => {
+    const compiled = {
+      ...syntheticSchema3Compilation(),
+      playbook: unmarkedStrictComposedRuntime(),
+    };
+
+    expect(await checkPlaybookIntegrity('unaccompanied', compiled)).toContain(
+      'unaccompanied: composed-v3 requires exact @sublang/playbook@10.0.0 provenance',
+    );
+  });
+
+  it('reports a recognized-vs-unrecognized runtime profile mismatch', async () => {
+    const schema3 = syntheticSchema3Compilation();
+    const referenceFixture = schema3Fixture({
+      kind: 'shared-factory',
+      roles: ['worker'],
+    });
+    const findings = await checkReferenceEquivalence({
+      produced: { ...schema3, playbook: unmarkedStrictComposedRuntime() },
+      reference: withSchema3Runtime(schema3, referenceFixture),
+    });
+
+    expect(findings).toContain(
+      'runtime contract profiles differ: produced unrecognized vs reference composed-v3',
+    );
+  });
+
   it('accepts an exact mutable outer profile with frozen shared compatibility', async () => {
     const fixture = schema3Fixture({ kind: 'shared-factory' });
     const profile = fixture.registry.runtimeProfile as Record<string, unknown>;
@@ -843,7 +1031,9 @@ describe('reference equivalence harness (verification-9)', () => {
   it('accepts a host-supported optional schema-3 registry summary policy', async () => {
     const fixture = schema3Fixture({ kind: 'shared-factory' });
     fixture.registry.summaryPolicy = Object.freeze({
+      stateCountLabels: Object.freeze({ done: 'completed rounds' }),
       copyPasteGuardNames: Object.freeze(['done']),
+      savedCountsLine: () => 'Saved synthetic work.',
     });
 
     expect(
@@ -852,6 +1042,23 @@ describe('reference equivalence harness (verification-9)', () => {
         schema3ProfileOptions(fixture),
       ),
     ).toBe('composed-v3');
+  });
+
+  it('rejects a malformed optional schema-3 registry summary policy', async () => {
+    const fixture = schema3Fixture({ kind: 'shared-factory' });
+    fixture.registry.summaryPolicy = Object.freeze({
+      stateCountLabels: Object.freeze({ done: 1 }),
+      copyPasteGuardNames: Object.freeze(['done']),
+      savedCountsLine: () => 'Saved synthetic work.',
+    });
+
+    expect(
+      await runtimeCapabilityProfile(
+        fixture.playbook,
+        schema3ProfileOptions(fixture),
+      ),
+    ).toBeNull();
+    expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
   });
 
   it.each([
@@ -914,9 +1121,42 @@ describe('reference equivalence harness (verification-9)', () => {
     expect(fixture.observations).toEqual({ turns: 0, disposals: 1 });
   });
 
-  it.each(['zero-call', 'replacement', 'proxy'] as const)(
+  it.each([
+    [
+      'zero-call',
+      'registry createRuntime invoked the linked factory 0 times, expected exactly once',
+    ],
+    [
+      'two-call',
+      'registry createRuntime invoked the linked factory 2 times, expected exactly once',
+    ],
+    [
+      'extra-construction',
+      'linked factory construction is not exact own-data { configuredOptions, hostCapabilities }',
+    ],
+    [
+      'restored-malformed-construction',
+      'linked factory construction is not exact own-data { configuredOptions, hostCapabilities }',
+    ],
+    [
+      'restored-configured-options-drift',
+      'linked factory received configured options that drifted at call time',
+    ],
+    [
+      'restored-host-capabilities-drift',
+      'linked factory received host capabilities that drifted at call time',
+    ],
+    [
+      'replacement',
+      'registry createRuntime did not return the linked factory runtime directly',
+    ],
+    [
+      'proxy',
+      'registry createRuntime did not return the linked factory runtime directly',
+    ],
+  ] as const)(
     'rejects a schema-3 registry with %s linked-factory wiring',
-    async (entryMode) => {
+    async (entryMode, diagnostic) => {
       const fixture = schema3Fixture({
         kind: 'shared-factory',
         roles: ['worker'],
@@ -924,19 +1164,20 @@ describe('reference equivalence harness (verification-9)', () => {
       });
 
       expect(
-        await runtimeCapabilityProfile(
-          fixture.playbook,
-          schema3ProfileOptions(fixture),
+        await checkPlaybookIntegrity(
+          'wiring',
+          withSchema3Runtime(syntheticSchema3Compilation(), fixture),
         ),
-      ).toBeNull();
+      ).toContain(`wiring: composed-v3 runtime probe failed: ${diagnostic}`);
       expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
     },
   );
 
-  it('rejects a schema-3 comparison without a trusted linked-factory witness', async () => {
+  it('rejects a shared schema-3 registry loaded without comparison-owned factory interposition', async () => {
     const fixture = schema3Fixture({
       kind: 'shared-factory',
       roles: ['worker'],
+      interpose: false,
     });
 
     expect(
@@ -948,8 +1189,8 @@ describe('reference equivalence harness (verification-9)', () => {
     expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
   });
 
-  it('accepts a bespoke schema-3 registry without a linked-factory witness', async () => {
-    const fixture = schema3Fixture({ kind: 'bespoke' });
+  it('accepts a bespoke schema-3 registry without linked-factory interposition', async () => {
+    const fixture = schema3Fixture({ kind: 'bespoke', interpose: false });
 
     expect(
       await runtimeCapabilityProfile(fixture.playbook, {
@@ -1084,6 +1325,36 @@ describe('reference equivalence harness (verification-9)', () => {
     expect(findings).toEqual([
       'controller classifications differ: produced controller vs reference ordinary',
     ]);
+  });
+
+  it('keeps controller near-miss diagnostics free of ordinary Boss-surface advice', async () => {
+    const producedFixture = schema3Fixture({ kind: 'shared-factory' });
+    const referenceFixture = schema3Fixture({ kind: 'shared-factory' });
+    const produced = withSchema3Runtime(
+      syntheticControllerCompilation('missing-action'),
+      producedFixture,
+    );
+    const reference = withSchema3Runtime(
+      syntheticControllerCompilation('missing-action'),
+      referenceFixture,
+    );
+    const findings = await checkReferenceEquivalence({ produced, reference });
+
+    expect(findings.join('\n')).toMatch(
+      /controller decision contract near-miss \(missing "runtime"\)/,
+    );
+    expect(findings).not.toContain(
+      'produced: machine declares no BOSS_INTERRUPT targets',
+    );
+    expect(findings).not.toContain(
+      'produced: machine declares no Boss-reply wait state',
+    );
+    expect(findings).not.toContain(
+      'reference: machine declares no BOSS_INTERRUPT targets',
+    );
+    expect(findings).not.toContain(
+      'reference: machine declares no Boss-reply wait state',
+    );
   });
 
   it('rejects a composed-v3 registry mixed with the historical schema-1 closure', async () => {
@@ -1372,11 +1643,13 @@ describe('reference equivalence harness (verification-9)', () => {
       };
 
       expect(
-        await runtimeCapabilityProfile(
-          fixture.playbook,
-          schema3ProfileOptions(fixture),
+        await checkPlaybookIntegrity(
+          'drifted',
+          withSchema3Runtime(syntheticSchema3Compilation(true), fixture),
         ),
-      ).toBeNull();
+      ).toContain(
+        'drifted: composed-v3 runtime probe failed: linked factory did not receive live host capabilities by exact identity',
+      );
       expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
     },
   );
@@ -1397,11 +1670,14 @@ describe('reference equivalence harness (verification-9)', () => {
     ) => createRuntime({ ...(options as object) }, capabilities);
 
     expect(
-      await runtimeCapabilityProfile(
-        fixture.playbook,
-        schema3ProfileOptions(fixture, { mode: 'strict' }),
+      await checkPlaybookIntegrity(
+        'drifted',
+        withSchema3Runtime(syntheticSchema3Compilation(true), fixture),
+        { configuredOptions: { mode: 'strict' } },
       ),
-    ).toBeNull();
+    ).toContain(
+      'drifted: composed-v3 runtime probe failed: linked factory did not receive validated options by exact identity',
+    );
     expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
   });
 

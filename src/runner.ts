@@ -67,6 +67,7 @@ import {
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
+  playbookProvenanceForLinkTarget,
 } from './verify.js';
 import {
   VERIFIER_SUPPORT_MODULE,
@@ -207,8 +208,8 @@ async function runFull(
   return executeSteps(steps, pipeline, deps, {
     incremental: incrementalRun(invocation, artDir, source),
     hostTargets: verificationHostTargets(verification),
-    complete: (result, guardTarget, pinFile) =>
-      emitVerification(result, verification, guardTarget, pinFile),
+    complete: (result, guardTarget) =>
+      emitVerification(result, verification, guardTarget),
   });
 }
 
@@ -395,6 +396,7 @@ async function runFullLink(
     plan,
     artDir,
     basename,
+    linkTarget: resolve(cwd, invocation.linkTarget),
   };
   return executeSteps(steps, pipeline, deps, {
     incremental: incrementalRun(invocation, artDir, source),
@@ -402,12 +404,11 @@ async function runFullLink(
       ...verificationHostTargets(verification),
       ...(entryPath === null ? [] : [{ path: entryPath }]),
     ],
-    complete: async (result, guardTarget, pinFile) => {
+    complete: async (result, guardTarget) => {
       const verified = await emitVerification(
         result,
         verification,
         guardTarget,
-        pinFile,
       );
 
       if (verified.ok && entryCandidate !== null && entryAliasesSource) {
@@ -479,7 +480,6 @@ async function emitVerification(
   result: SlcResult,
   ctx: VerificationContext,
   guardTarget?: CompletionTargetGuard,
-  pinFile?: PinFile,
 ): Promise<SlcResult> {
   if (!result.ok) return result;
   const hostTargets = verificationHostTargets(ctx);
@@ -488,9 +488,11 @@ async function emitVerification(
     (artifact) => artifact.phase.target.format === 'fsm',
   );
   if (fsm === undefined) throw new Error('verification plan lost its FSM');
-  const artifactSchema = artifactSchemaForPlaybookProvenance(
-    pinFile?.pins[fsm.phase.name]?.linkTarget.provenance,
-  );
+  const provenance =
+    ctx.linkTarget === undefined
+      ? undefined
+      : await playbookProvenanceForLinkTarget(ctx.linkTarget);
+  const artifactSchema = artifactSchemaForPlaybookProvenance(provenance);
   const outputs = [...result.outputs];
   const diagnostics = [...result.diagnostics];
   if (guardTarget !== undefined) {
@@ -538,7 +540,7 @@ async function emitVerification(
       artifactDir: ctx.artDir,
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
-      ...(artifactSchema === undefined ? {} : { artifactSchema }),
+      ...(provenance === undefined ? {} : { provenance }),
     });
     outputs.push(promptContract.path);
     diagnostics.push(
@@ -584,6 +586,8 @@ interface VerificationContext {
   }[];
   artDir: string;
   basename: string;
+  /** Concrete full-link target whose owning package is this artifact's provenance. */
+  linkTarget?: string;
 }
 
 /** Exact deterministic writes attempted by {@link emitVerification}. */

@@ -195,6 +195,46 @@ assert.match(
   /concurrentRoleSets:\s*findConcurrentRoleSets\(fsm\)/,
   'independent artifact review must pass the FSM concurrent-role export to conformance',
 );
+assert.match(
+  artifactReviewSource,
+  /checkGearsFsmConformance\(gears, config, \{\s*concurrentRoleSets:[\s\S]*?artifactSchema === undefined[\s\S]*?\{ artifactSchema \}/,
+  'independent artifact review must pass its resolved schema to conformance',
+);
+assert.match(
+  artifactReviewSource,
+  /pins\?\.pins\?\.\[basename\]\?\.linkTarget\?\.provenance/,
+  'independent artifact review must use the reviewed artifact basename to select pin provenance',
+);
+assert.match(
+  artifactReviewSource,
+  /loadLinkedModuleForVerification\(\{\s*linkedPath,\s*fsmPath\s*\}\)/,
+  'independent artifact review must load the linked source through the NodeNext verification seam',
+);
+assert.match(
+  artifactReviewSource,
+  /resolveArtifactSchemaForVerification\(\{\s*provenance,\s*config,/,
+  'independent artifact review must reconcile its own provenance, FSM, and linked-factory schema evidence',
+);
+assert.match(
+  artifactReviewSource,
+  /findings\.push\(\s*\.\.\.schemaResolution\.findings\.map\(/,
+  'independent artifact review must make schema-resolution findings fatal',
+);
+for (const [actor, composer] of [
+  ['captain', 'composeCaptainPrompt'],
+  ['player', 'composePlayerPrompt'],
+]) {
+  assert.match(
+    artifactReviewSource,
+    new RegExp(`\\['${actor}', '${composer}'\\]`),
+    `independent artifact review must route ${actor} states through ${composer}`,
+  );
+}
+assert.match(
+  artifactReviewSource,
+  /checkPromptComposition\(\{\s*config,\s*compose,\s*actor,[\s\S]*?artifactSchema === undefined[\s\S]*?\{ artifactSchema \}/,
+  'independent artifact review must pass its resolved schema to each actor-matching composition check',
+);
 assert.deepEqual(
   step('Verify reproducible current pins')
     .run.trim()
@@ -523,8 +563,8 @@ for (const title of [
 }
 for (const title of [
   'exposes canonical roles, concurrency, immutable compat, and empty options (self-hosting-14, self-hosting-15, self-hosting-16)',
-  'initializes and disposes a causal root against exact live capabilities without governed effects (release-18)',
-  'plans configured-registry slash-command invocation without positional or removed run inputs (self-hosting-14, release-18)',
+  'initializes and disposes one causal root against exact live capabilities without governed effects (release-21 readiness)',
+  'plans configured-registry slash-command invocation without positional or removed run inputs (self-hosting-14, release-17 readiness)',
 ]) {
   requireTestCase(consumerSource, 'schema-3 consumer fixture', title);
 }

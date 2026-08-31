@@ -13,10 +13,6 @@ const CONCURRENT_ROLE_SETS = Object.freeze([
 ]);
 const COMPAT = Object.freeze({ artifactSchema: 3, runtimeAbi: 1 });
 
-let callCount = 0;
-let lastConstruction: Record<string, unknown> | undefined;
-let lastRuntime: Record<string, unknown> | undefined;
-
 function exactPlainRecord(
   value: unknown,
   keys: readonly string[],
@@ -249,9 +245,6 @@ export function createPlaybookRuntime(
   exactPlainRecord(configuredOptions, [], 'configured options');
   assertHostCapabilities(hostCapabilities);
   assertEmptyLedger(hostCapabilities.effectLedger.snapshot());
-  callCount += 1;
-  lastConstruction = construction;
-
   let session: Record<string, unknown> | undefined;
   let disposed = false;
   const runtime = {
@@ -311,7 +304,6 @@ export function createPlaybookRuntime(
       disposed = true;
     },
   };
-  lastRuntime = runtime;
   return runtime;
 }
 
@@ -321,17 +313,5 @@ Object.defineProperty(createPlaybookRuntime, 'compat', {
   writable: false,
   configurable: false,
 });
-
-export function linkedFactoryCallCount() {
-  return callCount;
-}
-
-export function lastLinkedFactoryConstruction() {
-  return lastConstruction;
-}
-
-export function lastLinkedFactoryRuntime() {
-  return lastRuntime;
-}
 
 export default createPlaybookRuntime;

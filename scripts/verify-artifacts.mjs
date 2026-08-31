@@ -15,7 +15,6 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import {
-  artifactSchemaForPlaybookProvenance,
   capturePromptContract,
   checkFsmCoverage,
   checkGearsFsmConformance,
@@ -23,7 +22,9 @@ import {
   findConcurrentRoleSets,
   findMachineConfig,
   loadFsmModule,
+  loadLinkedModuleForVerification,
   pinIntrospection,
+  resolveArtifactSchemaForVerification,
 } from '../dist/verify.js';
 
 const [dir, basename] = process.argv.slice(2);
@@ -42,18 +43,35 @@ const fsmPath = join(artifactDir, `${basename}.fsm.ts`);
 const fsm = await loadFsmModule(fsmPath);
 const config = findMachineConfig(fsm);
 const pinPath = join(artifactDir, '..', 'slc.pins.json');
-let artifactSchema;
+let provenance;
 if (existsSync(pinPath)) {
   try {
     const pins = JSON.parse(readFileSync(pinPath, 'utf8'));
-    artifactSchema = artifactSchemaForPlaybookProvenance(
-      pins?.pins?.[basename]?.linkTarget?.provenance,
-    );
+    provenance = pins?.pins?.[basename]?.linkTarget?.provenance;
   } catch {
     // Pin parsing/currency has its own gate; an unreadable schema signal leaves
     // the prompt checker fail-closed when the artifact shape is ambiguous.
   }
 }
+const linkedPath = join(artifactDir, `${basename}.playbook.ts`);
+let linked;
+let linkedLoadError;
+if (existsSync(linkedPath)) {
+  try {
+    linked = await loadLinkedModuleForVerification({ linkedPath, fsmPath });
+  } catch (error) {
+    linkedLoadError = error;
+  }
+}
+const schemaResolution = resolveArtifactSchemaForVerification({
+  provenance,
+  config,
+  ...(linked === undefined ? {} : { linked }),
+});
+const artifactSchema = schemaResolution.artifactSchema;
+findings.push(
+  ...schemaResolution.findings.map((finding) => `schema: ${finding}`),
+);
 
 section('gears↔fsm conformance');
 const conformance = checkGearsFsmConformance(gears, config, {
@@ -86,27 +104,33 @@ for (const row of rows) {
     `  ${row.state}: reads [${row.reads.join(', ')}] placeholders [${row.placeholders.join(', ')}]`,
   );
 }
-const linkedPath = join(artifactDir, `${basename}.playbook.ts`);
 if (existsSync(linkedPath)) {
-  try {
-    const linked = await loadFsmModule(linkedPath);
-    const compose = linked._internal?.composePlayerPrompt;
-    if (typeof compose === 'function') {
+  if (linked !== undefined) {
+    for (const [actor, exportName] of [
+      ['captain', 'composeCaptainPrompt'],
+      ['player', 'composePlayerPrompt'],
+    ]) {
+      const compose = linked._internal?.[exportName];
+      if (typeof compose !== 'function') {
+        console.log(`linked module exposes no _internal.${exportName}`);
+        continue;
+      }
       const composition = checkPromptComposition({
         config,
         compose,
+        actor,
         ...(artifactSchema === undefined ? {} : { artifactSchema }),
       });
       findings.push(...composition.map((f) => `composition: ${f}`));
       console.log(
-        composition.length === 0 ? 'composition ok' : composition.join('\n'),
+        composition.length === 0
+          ? `${actor} composition ok`
+          : composition.join('\n'),
       );
-    } else {
-      console.log('linked module exposes no _internal.composePlayerPrompt');
     }
-  } catch (error) {
-    findings.push(`linked module failed to import: ${error.message}`);
-    console.log(`linked module failed to import: ${error.message}`);
+  } else {
+    findings.push(`linked module failed to import: ${linkedLoadError.message}`);
+    console.log(`linked module failed to import: ${linkedLoadError.message}`);
   }
 } else {
   console.log('no linked module beside the artifacts');

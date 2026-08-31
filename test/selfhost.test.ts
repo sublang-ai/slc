@@ -39,6 +39,31 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const PLAYBOOK_MODULE =
   'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
+// A linked module with the historical direct-Captain composer surface. The
+// full-link provenance tests use this instead of activating schema-3 entry
+// emission, while still exercising prompt-contract schema plumbing.
+const DIRECT_CAPTAIN_PLAYBOOK_MODULE = `const CONTINUATION_PREAMBLE =
+  'You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.';
+
+const composeCaptainPrompt = (input) => {
+  const blocks = [];
+  if (input.pendingBossQuestion !== undefined && input.bossReply !== undefined) {
+    blocks.push(
+      CONTINUATION_PREAMBLE,
+      \`Boss question:\\n\${input.pendingBossQuestion.question}\`,
+      \`Boss reply:\\n\${input.bossReply}\`,
+    );
+  }
+  blocks.push(input.prompt);
+  return blocks.join('\\n\\n');
+};
+
+export const _internal = { composeCaptainPrompt };
+export default function createPlaybookRuntime() {
+  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };
+}
+`;
+
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${sf} | ${se} |\n| target | ${tf} | ${te} |\n`;
 
@@ -151,7 +176,12 @@ export const machine = setup({
 // real createPlaybookRuntime module — so verification emission runs end to end
 // (self-hosting-3, verification-8).
 const writingAgent = (
-  opts: { prompts?: string[]; gears?: string } = {},
+  opts: {
+    prompts?: string[];
+    gears?: string;
+    fsm?: string;
+    playbook?: string;
+  } = {},
 ): AgentClient => ({
   run: async ({ prompt }) => {
     opts.prompts?.push(prompt);
@@ -159,9 +189,9 @@ const writingAgent = (
     if (match) {
       const target = match[1].trim();
       const content = target.endsWith('.playbook.ts')
-        ? PLAYBOOK_MODULE
+        ? (opts.playbook ?? PLAYBOOK_MODULE)
         : target.endsWith('.fsm.ts')
-          ? FSM_ARTIFACT
+          ? (opts.fsm ?? FSM_ARTIFACT)
           : target.endsWith('.md')
             ? (opts.gears ?? GEARS_ARTIFACT)
             : 'export default 1;\n';
@@ -774,6 +804,96 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
       true,
     );
+  });
+
+  it.each([
+    ['4.0.0', 1],
+    ['10.0.0', 3],
+  ] as const)(
+    'bakes the concrete Playbook %s link target as schema %s',
+    async (version, artifactSchema) => {
+      const packageRoot = join(root, `playbook-${version}`);
+      const linkTarget = join(packageRoot, 'src', 'runtime.ts');
+      await mkdir(join(packageRoot, 'src'), { recursive: true });
+      await writeFile(
+        join(packageRoot, 'package.json'),
+        JSON.stringify({ name: '@sublang/playbook', version }),
+      );
+      await writeFile(linkTarget, 'export {}\n');
+      const directCaptainFsm = FSM_ARTIFACT.replaceAll(
+        "          player: 'Writer',\n",
+        '',
+      );
+
+      const result = await runSlc(['slc', source, '--link', linkTarget], {
+        resolver: withReservedPipelines(() => []),
+        executor: createInterpretedExecutor({
+          agent: writingAgent({
+            fsm: directCaptainFsm,
+            playbook: DIRECT_CAPTAIN_PLAYBOOK_MODULE,
+          }),
+        }),
+        cwd: work,
+      });
+
+      expect(result.ok).toBe(true);
+      const verificationDir = join(work, 'code.slc');
+      expect(
+        await readFile(join(verificationDir, 'code.gears-fsm.test.ts'), 'utf8'),
+      ).toContain(`artifactSchema: ${artifactSchema}`);
+      expect(
+        await readFile(
+          join(verificationDir, 'code.prompt-contract.test.ts'),
+          'utf8',
+        ),
+      ).toContain(`artifactSchema: ${artifactSchema}`);
+    },
+  );
+
+  it('does not use the compiled FSM phase pin as full-link artifact provenance', async () => {
+    const packageRoot = join(root, 'playbook-custom-10');
+    const linkTarget = join(packageRoot, 'src', 'runtime.ts');
+    await mkdir(join(packageRoot, 'src'), { recursive: true });
+    await writeFile(
+      join(packageRoot, 'package.json'),
+      JSON.stringify({ name: '@sublang/playbook', version: '10.0.0' }),
+    );
+    await writeFile(linkTarget, 'export {}\n');
+    const directCaptainFsm = FSM_ARTIFACT.replaceAll(
+      "          player: 'Writer',\n",
+      '',
+    );
+    const executor = createInterpretedExecutor({
+      agent: writingAgent({
+        fsm: directCaptainFsm,
+        playbook: DIRECT_CAPTAIN_PLAYBOOK_MODULE,
+      }),
+    });
+    const selectedProvenances: (string | undefined)[] = [];
+
+    const result = await runSlc(['slc', source, '--link', linkTarget], {
+      resolver: (reference) =>
+        reference === 'slc' ? [join(repoRoot, 'pipelines', 'playbook')] : [],
+      executor,
+      compiled: ({ record }) => {
+        selectedProvenances.push(record.linkTarget.provenance);
+        return executor;
+      },
+      cwd: work,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(selectedProvenances).toContain('@sublang/playbook@4.0.0');
+    const verificationDir = join(work, 'code.slc');
+    expect(
+      await readFile(join(verificationDir, 'code.gears-fsm.test.ts'), 'utf8'),
+    ).toContain('artifactSchema: 3');
+    expect(
+      await readFile(
+        join(verificationDir, 'code.prompt-contract.test.ts'),
+        'utf8',
+      ),
+    ).toContain('artifactSchema: 3');
   });
 
   it('emits <cwd>/<basename>.ts default-exporting the registry entry after a playbook full-link (self-hosting-16)', async () => {
