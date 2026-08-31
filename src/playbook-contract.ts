@@ -423,10 +423,7 @@ function dataRecord(value: unknown): Record<string, unknown> | null {
   for (const [key, descriptor] of Object.entries(
     Object.getOwnPropertyDescriptors(value),
   )) {
-    if (
-      !descriptor.enumerable ||
-      !Object.prototype.hasOwnProperty.call(descriptor, 'value')
-    ) {
+    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
       return null;
     }
     out[key] = descriptor.value;
@@ -488,28 +485,16 @@ function isJsonValue(
   return valid;
 }
 
-function isJsonArray(
-  value: readonly unknown[],
-  ancestors: Set<object>,
-): boolean {
-  const values = denseArrayDataValues(value);
-  return (
-    values !== null && values.every((item) => isJsonValue(item, ancestors))
-  );
-}
-
 function enumerableDataValues(value: object): readonly unknown[] | null {
   if (Object.getOwnPropertySymbols(value).length > 0) return null;
   const values: unknown[] = [];
   for (const descriptor of Object.values(
     Object.getOwnPropertyDescriptors(value),
   )) {
-    if (
-      !descriptor.enumerable ||
-      !Object.prototype.hasOwnProperty.call(descriptor, 'value')
-    ) {
+    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
       return null;
     }
+    if (!descriptor.enumerable) continue;
     values.push(descriptor.value);
   }
   return values;
@@ -517,42 +502,76 @@ function enumerableDataValues(value: object): readonly unknown[] | null {
 
 function isStringArray(value: unknown): value is readonly string[] {
   if (!Array.isArray(value)) return false;
-  const values = denseArrayDataValues(value);
-  return values !== null && values.every((item) => typeof item === 'string');
+  if (!hasOnlyOwnDataProperties(value)) return false;
+  for (let index = 0; index < value.length; index++) {
+    const descriptor = inheritedPropertyDescriptor(value, String(index));
+    if (descriptor === null) return false;
+    if (descriptor === undefined) continue;
+    if (
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
+      typeof descriptor.value !== 'string'
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
-/** Returns dense own data elements, rejecting accessors and extra array data. */
-function denseArrayDataValues(
-  value: readonly unknown[],
-): readonly unknown[] | null {
-  if (Object.getOwnPropertySymbols(value).length > 0) return null;
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
-  if (
-    lengthDescriptor === undefined ||
-    lengthDescriptor.enumerable === true ||
-    !Object.prototype.hasOwnProperty.call(lengthDescriptor, 'value') ||
-    !Number.isSafeInteger(lengthDescriptor.value) ||
-    lengthDescriptor.value < 0
-  ) {
-    return null;
-  }
-  const length = lengthDescriptor.value as number;
-  if (Object.keys(descriptors).length !== length + 1) return null;
+function hasOnlyOwnDataProperties(value: object): boolean {
+  return Reflect.ownKeys(value).every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return (
+      descriptor !== undefined &&
+      Object.prototype.hasOwnProperty.call(descriptor, 'value')
+    );
+  });
+}
 
-  const values: unknown[] = [];
-  for (let index = 0; index < length; index++) {
+function inheritedPropertyDescriptor(
+  value: object,
+  key: PropertyKey,
+): PropertyDescriptor | null | undefined {
+  let owner: object | null = value;
+  const seen = new Set<object>();
+  while (owner !== null) {
+    if (seen.has(owner)) return null;
+    seen.add(owner);
+    const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+    if (descriptor !== undefined) return descriptor;
+    owner = Object.getPrototypeOf(owner) as object | null;
+  }
+  return undefined;
+}
+
+function isJsonArray(
+  value: readonly unknown[],
+  ancestors: Set<object>,
+): boolean {
+  if (Object.getOwnPropertySymbols(value).length > 0) return false;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (let index = 0; index < value.length; index++) {
     const descriptor = descriptors[String(index)];
     if (
       descriptor === undefined ||
-      descriptor.enumerable !== true ||
-      !Object.prototype.hasOwnProperty.call(descriptor, 'value')
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
+      !isJsonValue(descriptor.value, ancestors)
     ) {
-      return null;
+      return false;
     }
-    values.push(descriptor.value);
   }
-  return values;
+  return Object.entries(descriptors).every(([key, descriptor]) => {
+    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+      return false;
+    }
+    if (!descriptor.enumerable) return true;
+    const index = Number(key);
+    return (
+      Number.isSafeInteger(index) &&
+      index >= 0 &&
+      index < value.length &&
+      String(index) === key
+    );
+  });
 }
 
 function isPlainRecord(value: object): value is Record<string, unknown> {

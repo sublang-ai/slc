@@ -113,7 +113,7 @@ describe('structured PlaybookRunResult validation', () => {
   });
 
   it.each(['activeStateIds', 'tags'] as const)(
-    'rejects sparse, accessor-backed, and extra-property %s arrays in both composed profiles',
+    'rejects accessor-backed %s arrays without tightening historical data shapes',
     (field) => {
       const sparse: string[] = [];
       sparse.length = 1;
@@ -126,37 +126,46 @@ describe('structured PlaybookRunResult validation', () => {
       const extra = Object.assign(['ready'], { extra: 'not array data' });
 
       for (const profile of ['composed-v2', 'composed-v3'] as const) {
-        for (const value of [sparse, accessor, extra]) {
-          expect(
-            isPlaybookRunResult(
-              {
-                outcome: 'quiescent',
-                state: { ...structuredState, [field]: value },
-              },
-              profile,
-            ),
-          ).toBe(false);
-        }
+        const result = (value: string[]) =>
+          isPlaybookRunResult(
+            {
+              outcome: 'quiescent',
+              state: { ...structuredState, [field]: value },
+            },
+            profile,
+          );
+        expect(result(accessor)).toBe(false);
+        expect(result(sparse)).toBe(true);
+        expect(result(extra)).toBe(true);
       }
     },
   );
 
-  it.each(['data', 'accessor'] as const)(
-    'rejects a non-enumerable %s member in recursive state and terminal output',
-    (kind) => {
+  it.each([
+    ['data', true],
+    ['accessor', false],
+  ] as const)(
+    'accepts hidden data and rejects hidden accessors (%s case)',
+    (kind, expected) => {
+      const hiddenDescriptor = (): PropertyDescriptor =>
+        kind === 'data'
+          ? { value: 'secret', enumerable: false }
+          : { get: () => 'secret', enumerable: false };
       const hiddenRecord = (): Record<string, unknown> => {
         const value: Record<string, unknown> = {};
-        Object.defineProperty(
-          value,
-          'hidden',
-          kind === 'data'
-            ? { value: 'secret', enumerable: false }
-            : { get: () => 'secret', enumerable: false },
-        );
+        Object.defineProperty(value, 'hidden', hiddenDescriptor());
         return value;
       };
+      const hiddenArray: unknown[] = [];
+      Object.defineProperty(hiddenArray, 'hidden', hiddenDescriptor());
 
       for (const profile of ['composed-v2', 'composed-v3'] as const) {
+        const hiddenOutput = Object.defineProperty(
+          { outcome: 'terminal', state: structuredState },
+          'output',
+          hiddenDescriptor(),
+        );
+        expect(isPlaybookRunResult(hiddenOutput, profile)).toBe(expected);
         expect(
           isPlaybookRunResult(
             {
@@ -165,7 +174,7 @@ describe('structured PlaybookRunResult validation', () => {
             },
             profile,
           ),
-        ).toBe(false);
+        ).toBe(expected);
         expect(
           isPlaybookRunResult(
             {
@@ -175,7 +184,17 @@ describe('structured PlaybookRunResult validation', () => {
             },
             profile,
           ),
-        ).toBe(false);
+        ).toBe(expected);
+        expect(
+          isPlaybookRunResult(
+            {
+              outcome: 'terminal',
+              state: structuredState,
+              output: hiddenArray,
+            },
+            profile,
+          ),
+        ).toBe(expected);
       }
     },
   );
@@ -271,7 +290,6 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
 
   it.each([
     'missing',
-    'bespoke',
     'inherited',
     'accessor',
     'writable',
@@ -304,14 +322,6 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
       };
       switch (kind) {
         case 'missing':
-          break;
-        case 'bespoke':
-          Object.defineProperty(factory, 'runtimeProfile', {
-            value: Object.freeze({ kind: 'bespoke', artifactSchema: 3 }),
-            enumerable: true,
-            writable: false,
-            configurable: false,
-          });
           break;
         case 'inherited': {
           const parent = Object.create(
@@ -438,7 +448,11 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
     },
   );
 
-  it.each(['options-only wrapper', 'required configured option'] as const)(
+  it.each([
+    'options-only wrapper',
+    'required configured option',
+    'required host authority',
+  ] as const)(
     'does not retry a composed-v3 factory that rejects the exact construction as %s',
     async (kind) => {
       let constructions = 0;
@@ -449,9 +463,19 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
         } else {
           const argument = args[0] as {
             configuredOptions?: { required?: unknown };
+            hostCapabilities?: { authority?: unknown };
           };
-          if (argument.configuredOptions?.required === undefined) {
+          if (
+            kind === 'required configured option' &&
+            argument.configuredOptions?.required === undefined
+          ) {
             throw new Error('required configured option is absent');
+          }
+          if (
+            kind === 'required host authority' &&
+            argument.hostCapabilities?.authority === undefined
+          ) {
+            throw new Error('required host authority is absent');
           }
         }
         throw new Error('fixture accepted an unsupported construction');
@@ -486,18 +510,19 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
       );
 
       expect(result.status).toBe('error');
-      expect(result.diagnostics.join('\n')).toContain(
+      const diagnostic =
         kind === 'options-only wrapper'
           ? 'options-only wrapper'
-          : 'required configured option is absent',
-      );
+          : kind === 'required configured option'
+            ? 'required configured option is absent'
+            : 'required host authority is absent';
+      expect(result.diagnostics.join('\n')).toContain(diagnostic);
       expect(constructions).toBe(1);
       expect(playerTransports).toBe(0);
     },
   );
 
   it.each([
-    ['AUTHORITY', /authority/i],
     ['REPOSITORY_EXCLUSIVE', /repository/i],
     ['REPOSITORY_DEFERRED', /repository/i],
     ['EFFECT_WRITE', /effect/i],

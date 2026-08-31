@@ -321,7 +321,7 @@ function runtimeContractForPin(
   // with cligent owning runtime versions, not a contract change — so it
   // selects the same profile (DR-020). 1.3.0 and 3.0.0 were never
   // installed or reviewed here and stay fail-closed. Exact Playbook 10 remains
-  // deliberately unmapped until IR-023's atomic adoption task activates the
+  // deliberately unmapped until DR-024's atomic adoption activates the
   // already-wired composed-v3 host together with its reviewed asset closure.
   if (
     provenance === '@sublang/playbook@0.10.0' ||

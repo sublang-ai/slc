@@ -61,9 +61,6 @@ function createPlaybookRuntime(...args) {
     ['repository', 'effectLedger'],
     'host capabilities',
   );
-  if (Object.hasOwn(construction.hostCapabilities, 'authority')) {
-    throw new Error('the roleless phase host supplied Captain authority');
-  }
 
   const { repository, effectLedger } = construction.hostCapabilities;
   exactPlainRecord(repository, ['runExclusive', 'runDeferred'], 'repository');
@@ -148,11 +145,6 @@ function createPlaybookRuntime(...args) {
       const request = JSON.parse(line.slice(marker.length));
       const content = (await readFile(request.source, 'utf8')).trim();
 
-      if (content === 'AUTHORITY') {
-        throw new Error(
-          'schema-3 roleless phase host has no authority capability',
-        );
-      }
       if (content === 'REPOSITORY_EXCLUSIVE') {
         await repository.runExclusive(async () => {
           throw new Error('repository operation was invoked');
