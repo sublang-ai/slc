@@ -75,6 +75,7 @@ For `composed-v3` phase execution only, it supersedes [DR-005](005-slc-self-host
 - Playbook 5.0.0 through 9.0.0 remain deliberately unsupported until a later decision reviews and maps an exact contract.
 - The phase host acquires an explicit fail-closed repository and effect-ledger boundary and treats any unresolved effect as a failed compiler phase.
 - A role-bearing phase that ran compiled under `composed-v2` does not migrate directly to compiled `composed-v3`: it must retain its complete historical dependency closure, remove its pin and run interpreted, refactor delegated work to direct Captain work, or run the emitted role-bearing artifact through a full Playbook schema-3 host until a later decision supplies SLC's governed repository and effect-ledger host.
+- The automatic installed-package acceptance flow no longer executes a compiled Boss turn; it retains consumer-side engine resolution and schema-3 construction, initialization, and disposal coverage, while compiled-turn execution from an installed consumer moves to the opt-in real Playbook host so SLC does not substitute for Playbook's governed repository and effect-ledger protocol [[release-18](../packages/release.md#release-18)].
 - A schema-3 entry is still emitted without hand-written runtime wiring, but it must be enabled and role-bound in Playbook configuration before Boss invokes its slash command.
 
 ## References
