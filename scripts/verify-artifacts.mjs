@@ -15,10 +15,12 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import {
+  artifactSchemaForPlaybookProvenance,
   capturePromptContract,
   checkFsmCoverage,
   checkGearsFsmConformance,
   checkPromptComposition,
+  findConcurrentRoleSets,
   findMachineConfig,
   loadFsmModule,
   pinIntrospection,
@@ -39,9 +41,25 @@ const gears = readFileSync(join(artifactDir, `${basename}.gears.md`), 'utf8');
 const fsmPath = join(artifactDir, `${basename}.fsm.ts`);
 const fsm = await loadFsmModule(fsmPath);
 const config = findMachineConfig(fsm);
+const pinPath = join(artifactDir, '..', 'slc.pins.json');
+let artifactSchema;
+if (existsSync(pinPath)) {
+  try {
+    const pins = JSON.parse(readFileSync(pinPath, 'utf8'));
+    artifactSchema = artifactSchemaForPlaybookProvenance(
+      pins?.pins?.[basename]?.linkTarget?.provenance,
+    );
+  } catch {
+    // Pin parsing/currency has its own gate; an unreadable schema signal leaves
+    // the prompt checker fail-closed when the artifact shape is ambiguous.
+  }
+}
 
 section('gears↔fsm conformance');
-const conformance = checkGearsFsmConformance(gears, config);
+const conformance = checkGearsFsmConformance(gears, config, {
+  concurrentRoleSets: findConcurrentRoleSets(fsm),
+  ...(artifactSchema === undefined ? {} : { artifactSchema }),
+});
 findings.push(...conformance.map((f) => `conformance: ${f}`));
 console.log(conformance.length === 0 ? 'ok' : conformance.join('\n'));
 
@@ -74,7 +92,11 @@ if (existsSync(linkedPath)) {
     const linked = await loadFsmModule(linkedPath);
     const compose = linked._internal?.composePlayerPrompt;
     if (typeof compose === 'function') {
-      const composition = checkPromptComposition({ config, compose });
+      const composition = checkPromptComposition({
+        config,
+        compose,
+        ...(artifactSchema === undefined ? {} : { artifactSchema }),
+      });
       findings.push(...composition.map((f) => `composition: ${f}`));
       console.log(
         composition.length === 0 ? 'composition ok' : composition.join('\n'),

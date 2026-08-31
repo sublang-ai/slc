@@ -12,8 +12,12 @@ import { promisify } from 'node:util';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
+import { defaultComposePlayerPrompt } from '../node_modules/@sublang/playbook/src/xstate-playbook-runtime.js';
+
 import {
+  CONTROLLER_ACTION_GUARDS,
   CONTINUATION_PREAMBLE,
+  artifactSchemaForPlaybookProvenance,
   capturePromptContract,
   checkGearsFsmConformance,
   checkPromptComposition,
@@ -28,6 +32,8 @@ import {
   generateGearsFsmConformanceTest,
   generatePromptContractTest,
   inspectGearsRoleContract,
+  isControllerDecisionResult,
+  isControllerMachine,
   normalizeArms,
   parseGearsItems,
   pinIntrospection,
@@ -38,6 +44,33 @@ import {
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+
+describe('reviewed Playbook artifact schemas', () => {
+  it.each([
+    ['@sublang/playbook@0.10.0', 1],
+    ['@sublang/playbook@1.0.0', 1],
+    ['@sublang/playbook@2.0.0', 1],
+    ['@sublang/playbook@3.1.0', 1],
+    ['@sublang/playbook@4.0.0', 1],
+    ['@sublang/playbook@10.0.0', 3],
+  ] as const)(
+    'maps exact reviewed provenance %s to schema %s',
+    (value, schema) => {
+      expect(artifactSchemaForPlaybookProvenance(value)).toBe(schema);
+    },
+  );
+
+  it.each([
+    undefined,
+    '@sublang/playbook@0.9.0',
+    '@sublang/playbook@4',
+    '@sublang/playbook@5.0.0',
+    '@sublang/playbook@9.0.0',
+    '@sublang/playbook@10.0.1',
+  ])('leaves unsupported provenance %s unmapped', (value) => {
+    expect(artifactSchemaForPlaybookProvenance(value)).toBeUndefined();
+  });
+});
 
 // A `gears` artifact in the `text2gears` output form (as produced for the real
 // greeter sample): `### <ID>`, a "Captain shall prompt <Player>" line, and a
@@ -716,10 +749,122 @@ describe('inspectGearsRoleContract', () => {
       /reserved local role "captain"[\s\S]*noncanonical local role "code reviewer"/,
     );
 
+    const nonAscii = schema3Gears.replace(
+      '- Coder\n- Reviewer',
+      '- 编码者\n- Reviewer',
+    );
+    expect(inspectGearsRoleContract(nonAscii).findings.join('\n')).toMatch(
+      /noncanonical local role "编码者"/,
+    );
+
     const duplicateSet = `${schema3Gears}\n### SCHEMA3-4\nParallel group: duplicate-review\n\nCaptain shall prompt Coder:\n> Draft again.\n\n### SCHEMA3-5\nParallel group: duplicate-review\n\nCaptain shall prompt Reviewer:\n> Review again.\n`;
     expect(inspectGearsRoleContract(duplicateSet).findings.join('\n')).toMatch(
       /duplicate concurrent role set \["coder","reviewer"\]/,
     );
+  });
+
+  it('preserves historical quoted Players composites without treating aliases as bindings', () => {
+    const historical = [
+      'Players:',
+      '',
+      '- `编码者`',
+      '- `提交者` = `编码者` | `审查者`',
+      '',
+    ].join('\n');
+    expect(inspectGearsRoleContract(historical)).toEqual({
+      generation: 'schema-1',
+      names: ['编码者'],
+      roleIds: ['编码者'],
+      concurrentRoleSets: [],
+      findings: [],
+    });
+  });
+
+  it('detects duplicate concurrent sets regardless of source member order', () => {
+    const reorderedDuplicate = `${schema3Gears}
+### SCHEMA3-4
+
+Parallel group: duplicate-review
+
+Captain shall prompt Reviewer:
+> Review again.
+
+### SCHEMA3-5
+
+Parallel group: duplicate-review
+
+Captain shall prompt Coder:
+> Draft again.
+`;
+    expect(
+      inspectGearsRoleContract(reorderedDuplicate).findings.join('\n'),
+    ).toMatch(/duplicate concurrent role set \["coder","reviewer"\]/);
+  });
+});
+
+describe('controller machine discrimination', () => {
+  const result = Object.fromEntries(
+    CONTROLLER_ACTION_GUARDS.map((guard) => [guard, `${guard} action`]),
+  );
+
+  it('recognizes only the exact Playbook 10 decision-result guard set', () => {
+    expect(isControllerDecisionResult(result)).toBe(true);
+    expect(
+      isControllerDecisionResult({
+        ...result,
+        needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+      }),
+    ).toBe(true);
+    expect(
+      isControllerDecisionResult({ ...result, unexpected: 'extra action' }),
+    ).toBe(false);
+    const missing = { ...result };
+    delete missing.runtime;
+    expect(isControllerDecisionResult(missing)).toBe(false);
+    expect(isControllerDecisionResult({ ...result, runtime: 1 })).toBe(false);
+  });
+
+  it('grounds controller identity in an explicit Captain decision state', () => {
+    expect(isControllerMachine(controllerConfig())).toBe(true);
+    const ordinary = controllerConfig();
+    const decide = ordinary.states!.decide as {
+      invoke: { input: () => Record<string, unknown> };
+    };
+    decide.invoke.input = () => ({
+      stateId: 'decide',
+      sourceItem: 'CONTROL-1',
+      prompt: 'This prose mentions session-scoped controller policy.',
+      result: { respond: 'ordinary result' },
+    });
+    expect(isControllerMachine(ordinary)).toBe(false);
+
+    const malformedSuperset = controllerConfig();
+    const malformedDecision = malformedSuperset.states!.decide as {
+      invoke: { input: () => Record<string, unknown> };
+    };
+    malformedDecision.invoke.input = () => ({
+      stateId: 'decide',
+      sourceItem: 'CONTROL-1',
+      prompt: 'Choose the controller action.',
+      result: { ...result, unexpected: 1 },
+    });
+    expect(isControllerMachine(malformedSuperset)).toBe(false);
+  });
+
+  it('retains controller identity while diagnosing an invented Boss wait', () => {
+    const drifted = controllerConfig();
+    const decision = drifted.states!.decide as {
+      invoke: { input: () => Record<string, unknown> };
+    };
+    const input = decision.invoke.input();
+    decision.invoke.input = () => ({
+      ...input,
+      result: {
+        ...(input.result as Record<string, string>),
+        needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+      },
+    });
+    expect(isControllerMachine(drifted)).toBe(true);
   });
 });
 
@@ -1010,9 +1155,11 @@ describe('checkGearsFsmConformance', () => {
 
   it('preserves historical schema-1 player bindings', () => {
     const historical = `# Historical fixture\n\nPlayers:\n\n- Writer\n\n${gears}`;
-    expect(checkGearsFsmConformance(historical, conformantConfig())).toEqual(
-      [],
-    );
+    expect(
+      checkGearsFsmConformance(historical, conformantConfig(), {
+        concurrentRoleSets: [['unrelated', 'schema3-only-export']],
+      }),
+    ).toEqual([]);
     const historicalState = enumerateCaptainStates(conformantConfig())[0];
     expect(historicalState).toMatchObject({ player: 'Writer' });
     expect(historicalState).not.toHaveProperty('role');
@@ -1020,19 +1167,13 @@ describe('checkGearsFsmConformance', () => {
 
   it('accepts a controller decision state without needsBossReply', () => {
     expect(
-      checkGearsFsmConformance(controllerGears, controllerConfig(), {
-        concurrentRoleSets: [],
-      }),
-    ).toEqual([]);
-
-    expect(
       checkGearsFsmConformance(controllerGears, controllerConfig()),
     ).toContain('schema-3 FSM exports no valid concurrentRoleSets array');
     expect(
       checkGearsFsmConformance(controllerGears, controllerConfig(), {
-        concurrentRoleSets: [['coder', 'reviewer']],
-      }).join('\n'),
-    ).toMatch(/concurrentRoleSets.*do not match GEARS groups/);
+        concurrentRoleSets: [],
+      }),
+    ).toEqual([]);
 
     const drifted = controllerConfig();
     const decision = drifted.states!.decide as {
@@ -1047,10 +1188,27 @@ describe('checkGearsFsmConformance', () => {
       },
     });
     expect(
-      checkGearsFsmConformance(controllerGears, drifted, {
-        concurrentRoleSets: [],
-      }).join('\n'),
+      checkGearsFsmConformance(controllerGears, drifted).join('\n'),
     ).toMatch(/controller state decide unexpectedly declares needsBossReply/);
+  });
+
+  it('requires the schema-3 concurrent-role export even when no group is declared', () => {
+    expect(checkGearsFsmConformance(schema3Gears, schema3Config())).toContain(
+      'schema-3 FSM exports no valid concurrentRoleSets array',
+    );
+
+    const sequentialRoles = schema3Gears.replaceAll(
+      'Parallel group: independent-review\n',
+      '',
+    );
+    expect(
+      checkGearsFsmConformance(sequentialRoles, schema3Config()),
+    ).toContain('schema-3 FSM exports no valid concurrentRoleSets array');
+    expect(
+      checkGearsFsmConformance(sequentialRoles, schema3Config(), {
+        concurrentRoleSets: [],
+      }),
+    ).toEqual([]);
   });
 
   it('accepts a script item realized by a matching script state (verification-15, verification-17)', () => {
@@ -2039,12 +2197,18 @@ describe('prompt contract capture (verification-5)', () => {
 
 describe('checkPromptComposition (verification-5)', () => {
   it('accepts a composer following the link contract', () => {
+    const arities: number[] = [];
+    const historicalCompose = (...args: unknown[]): string => {
+      arities.push(args.length);
+      return goodCompose(args[0]);
+    };
     expect(
       checkPromptComposition({
         config: contractConfig(),
-        compose: goodCompose,
+        compose: historicalCompose,
       }),
     ).toEqual([]);
+    expect(new Set(arities)).toEqual(new Set([1]));
   });
 
   it('resolves schema-3 prompt identity through the canonical role', () => {
@@ -2060,6 +2224,51 @@ describe('checkPromptComposition (verification-5)', () => {
     ).toMatchObject({
       coderWork: ['<topic>', '<coder-llm>'],
       reviewerWork: ['<topic>'],
+    });
+  });
+
+  it('accepts the installed default composer without requiring a role-identity call', () => {
+    const config: MachineConfigLike = {
+      states: {
+        work: {
+          id: 'work',
+          meta: { playbook: { stateId: 'work', role: 'coder' } },
+          invoke: {
+            src: 'player',
+            input: ({ context }) => ({
+              stateId: 'work',
+              role: 'coder',
+              sourceItem: 'ROLE-1',
+              prompt: 'Address <name>.',
+              result: {
+                done: 'The player finished.',
+                needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+              },
+              name: context.name,
+              ...(context.pendingBossQuestion && context.bossReply
+                ? {
+                    pendingBossQuestion: context.pendingBossQuestion,
+                    bossReply: context.bossReply,
+                  }
+                : {}),
+            }),
+          },
+        },
+      },
+    };
+    const compose = defaultComposePlayerPrompt as unknown as (
+      input: unknown,
+      promptIdentity: (roleId: string) => string,
+    ) => string;
+
+    // The installed composer treats its second argument as placeholder-field
+    // metadata. The verifier's callable identity lookup must therefore expose
+    // no Function.name property that can capture the <name> token.
+    expect(
+      checkPromptComposition({ config, compose, actor: 'player' }),
+    ).toEqual([]);
+    expect(deriveSubstitutions(config, compose, 'player')).toEqual({
+      work: ['<name>'],
     });
   });
 
@@ -2243,7 +2452,12 @@ describe('checkPromptComposition (verification-5)', () => {
         : body;
     };
     expect(
-      checkPromptComposition({ config, compose, actor: 'captain' }),
+      checkPromptComposition({
+        config,
+        compose,
+        actor: 'captain',
+        artifactSchema: 1,
+      }),
     ).toEqual([]);
     expect(deriveSubstitutions(config, compose, 'captain')).toEqual({
       route: ['<enabled-playbooks>'],
@@ -2326,6 +2540,7 @@ describe('checkPromptComposition (verification-5)', () => {
       config,
       compose,
       actor: 'captain',
+      artifactSchema: 1,
     }).join('\n');
     expect(findings).toMatch(/introduces a player binding/);
     expect(findings).toMatch(/introduces a role binding/);
@@ -2346,8 +2561,71 @@ describe('checkPromptComposition (verification-5)', () => {
         config,
         compose: goodCompose,
         actor: 'captain',
+        artifactSchema: 1,
       }),
     ).toEqual([]);
+  });
+
+  it('uses schema-specific direct-Captain continuation records and one composer argument', () => {
+    for (const artifactSchema of [1, 3] as const) {
+      const config: MachineConfigLike = {
+        states: {
+          route: directCaptainContract('ROUTE-1', ['Route this intent.']),
+        },
+      };
+      const arities: number[] = [];
+      const pending: unknown[] = [];
+      const compose = (...args: unknown[]): string => {
+        arities.push(args.length);
+        const input = args[0] as ComposerInput;
+        if (input.pendingBossQuestion !== undefined) {
+          pending.push(input.pendingBossQuestion);
+        }
+        return goodCompose(input);
+      };
+
+      expect(
+        checkPromptComposition({
+          config,
+          compose,
+          actor: 'captain',
+          artifactSchema,
+        }),
+      ).toEqual([]);
+      expect(new Set(arities)).toEqual(new Set([1]));
+      expect(pending).toEqual([
+        artifactSchema === 1
+          ? {
+              player: 'Captain',
+              questionId: 'route',
+              resumeStateId: 'route',
+              sourceItem: 'ROUTE-1',
+              question: '«question»',
+            }
+          : {
+              asker: { kind: 'captain' },
+              questionId: 'route',
+              resumeStateId: 'route',
+              sourceItem: 'ROUTE-1',
+              question: '«question»',
+            },
+      ]);
+    }
+  });
+
+  it('requires a grounded schema for an otherwise ambiguous direct-Captain continuation', () => {
+    const config: MachineConfigLike = {
+      states: {
+        route: directCaptainContract('ROUTE-1', ['Route this intent.']),
+      },
+    };
+    expect(
+      checkPromptComposition({
+        config,
+        compose: goodCompose,
+        actor: 'captain',
+      }).join('\n'),
+    ).toMatch(/requires artifactSchema 1 or 3/);
   });
 
   it('flags continuation blocks on an ordinary turn', () => {
@@ -2615,6 +2893,7 @@ describe('emitPromptContractTest (verification-5)', () => {
         artifactDir,
         basename: 'captain',
         verifyModule: join(repoRoot, 'dist/verify.js'),
+        artifactSchema: 1,
       });
 
       expect(diagnostics).toEqual([]);
@@ -2622,6 +2901,7 @@ describe('emitPromptContractTest (verification-5)', () => {
       const content = await readFile(path, 'utf8');
       expect(content).toContain('_internal.composeCaptainPrompt');
       expect(content).toContain("actor: 'captain'");
+      expect(content).toContain('artifactSchema: 1');
       expect(content).toContain('CAPTAIN_SUBSTITUTED');
       expect(content).toContain('"<boss-intent>"');
 
@@ -2651,9 +2931,71 @@ describe('emitPromptContractTest (verification-5)', () => {
         artifactDir,
         basename: 'captain',
         verifyModule: join(repoRoot, 'dist/verify.js'),
+        artifactSchema: 1,
       });
       expect(rerun.diagnostics.join('\n')).toMatch(
         /composeCaptainPrompt|does not preserve the body line/,
+      );
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it('infers schema 3 for a direct-Captain composer only from exact immutable factory compatibility', async () => {
+    const artifactDir = await mkdtemp(
+      join(tmpdir(), 'slc-verify-pc-captain-v3-'),
+    );
+    try {
+      await writeFile(
+        join(artifactDir, 'captain.fsm.ts'),
+        directCaptainFsmFixture,
+      );
+      const linkedPath = join(artifactDir, 'captain.playbook.ts');
+      const linkedSource = [
+        "const CONTINUATION = '" + CONTINUATION_PREAMBLE + "';",
+        'const compose = (input: any): string => {',
+        '  const blocks: string[] = [];',
+        '  if (input.pendingBossQuestion && input.bossReply) {',
+        "    if (input.pendingBossQuestion.asker?.kind !== 'captain' || 'player' in input.pendingBossQuestion) throw new Error('wrong schema');",
+        '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
+        '  }',
+        "  blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+        "  return blocks.join('\\n\\n');",
+        '};',
+        'function createPlaybookRuntime() { return {}; }',
+        "Object.defineProperty(createPlaybookRuntime, 'compat', {",
+        '  value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),',
+        '  enumerable: true, writable: false, configurable: false,',
+        '});',
+        'export const _internal = { composeCaptainPrompt: compose };',
+        'export default createPlaybookRuntime;',
+        '',
+      ].join('\n');
+      await writeFile(linkedPath, linkedSource);
+
+      const { path, diagnostics } = await emitPromptContractTest({
+        artifactDir,
+        basename: 'captain',
+      });
+      expect(diagnostics).toEqual([]);
+      expect(await readFile(path, 'utf8')).toContain('artifactSchema: 3');
+
+      await writeFile(
+        linkedPath,
+        linkedSource.replace(
+          'value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 })',
+          'value: { artifactSchema: 3, runtimeAbi: 1 }',
+        ),
+      );
+      const ungrounded = await emitPromptContractTest({
+        artifactDir,
+        basename: 'captain',
+      });
+      expect(ungrounded.diagnostics.join('\n')).toMatch(
+        /requires artifactSchema 1 or 3/,
+      );
+      expect(await readFile(ungrounded.path, 'utf8')).not.toContain(
+        'artifactSchema:',
       );
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
@@ -2688,6 +3030,7 @@ describe('generateGearsFsmConformanceTest', () => {
       fsmModule: './code.fsm.js',
       gearsFile: './code.gears.md',
       verifyModule: '@sublang/slc/verify',
+      artifactSchema: 3,
     });
     expect(emitted).toContain('import * as fsm from "./code.fsm.js"');
     expect(emitted).toContain(
@@ -2699,6 +3042,7 @@ describe('generateGearsFsmConformanceTest', () => {
     expect(emitted).toContain(
       'concurrentRoleSets: findConcurrentRoleSets(fsm)',
     );
+    expect(emitted).toContain('artifactSchema: 3');
     expect(emitted).toContain('./code.gears.md');
     expect(emitted).toContain('SPDX-License-Identifier');
   });

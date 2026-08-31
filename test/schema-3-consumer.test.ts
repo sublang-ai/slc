@@ -2,7 +2,15 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import { execFile } from 'node:child_process';
-import { copyFile, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,14 +20,25 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import fixtureEntry, {
   createConfiguredRegistryPlan,
-  createPlaybookRuntime,
 } from './fixtures/schema-3-entry-fixture.mjs';
+import createPlaybookRuntime from './fixtures/workflow.playbook/workflow.playbook.ts';
+
+const linkedFixtureFactory =
+  createPlaybookRuntime as typeof createPlaybookRuntime & {
+    readonly compat: Readonly<{ artifactSchema: 3; runtimeAbi: 1 }>;
+  };
 
 const execFileAsync = promisify(execFile);
 const fixturePath = join(
   dirname(fileURLToPath(import.meta.url)),
   'fixtures',
   'schema-3-entry-fixture.mjs',
+);
+const linkedFixturePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'fixtures',
+  'workflow.playbook',
+  'workflow.playbook.ts',
 );
 const emptyLedger = {
   schemaVersion: 1,
@@ -31,20 +50,31 @@ const emptyLedger = {
 describe('dormant schema-3 registry consumer fixture', () => {
   let root: string;
   let entryPath: string;
+  let linkedPath: string;
   let worktree: string;
   let gitDir: string;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'slc-schema-3-consumer-'));
     entryPath = join(root, 'workflow.mjs');
+    linkedPath = join(root, 'workflow.playbook', 'workflow.playbook.ts');
+    await mkdir(dirname(linkedPath), { recursive: true });
     await copyFile(fixturePath, entryPath);
+    await copyFile(linkedFixturePath, linkedPath);
     await writeFile(join(root, 'baseline.txt'), 'schema-3 fixture baseline\n');
     await execFileAsync('git', ['init', '--quiet', '--initial-branch=main'], {
       cwd: root,
     });
-    await execFileAsync('git', ['add', 'baseline.txt', 'workflow.mjs'], {
-      cwd: root,
-    });
+    await execFileAsync(
+      'git',
+      [
+        'add',
+        'baseline.txt',
+        'workflow.mjs',
+        'workflow.playbook/workflow.playbook.ts',
+      ],
+      { cwd: root },
+    );
     await execFileAsync(
       'git',
       [
@@ -83,6 +113,7 @@ describe('dormant schema-3 registry consumer fixture', () => {
     expect(fixtureEntry).toMatchObject({
       id: 'workflow',
       command: 'workflow',
+      intent: 'Synthetic schema-3 consumer fixture.',
       artifactSchema: 3,
       requiredRoleIds: ['coder', 'reviewer'],
       concurrentRoleSets: [['coder', 'reviewer']],
@@ -92,18 +123,23 @@ describe('dormant schema-3 registry consumer fixture', () => {
       compat: { artifactSchema: 3, runtimeAbi: 1 },
     });
     expect(fixtureEntry.runtimeProfile.compat).toBe(
-      createPlaybookRuntime.compat,
+      linkedFixtureFactory.compat,
     );
-    expect(Object.isFrozen(createPlaybookRuntime.compat)).toBe(true);
+    expect(Object.isFrozen(linkedFixtureFactory.compat)).toBe(true);
     expect(
-      Object.getOwnPropertyDescriptor(createPlaybookRuntime, 'compat'),
+      Object.getOwnPropertyDescriptor(linkedFixtureFactory, 'compat'),
     ).toEqual({
-      value: createPlaybookRuntime.compat,
+      value: linkedFixtureFactory.compat,
       enumerable: true,
       writable: false,
       configurable: false,
     });
     expect(fixtureEntry.createRuntime).toHaveLength(2);
+    const entrySource = readFileSync(fixturePath, 'utf8');
+    expect(entrySource).toContain(
+      "import createPlaybookRuntime from './workflow.playbook/workflow.playbook.ts';",
+    );
+    expect(entrySource).not.toMatch(/\b(?:Proxy|withRoleBinding)\b/);
 
     const absent = fixtureEntry.validateOptions(undefined);
     const explicit = fixtureEntry.validateOptions({});
@@ -166,16 +202,17 @@ describe('dormant schema-3 registry consumer fixture', () => {
       runCohort: failGovernedUse('repository.runCohort'),
       runDeferred: failGovernedUse('repository.runDeferred'),
     };
-    let snapshotReads = 0;
+    const ledgerSnapshots: (typeof emptyLedger)[] = [];
     const effectLedger = {
       snapshot() {
-        snapshotReads += 1;
-        return {
+        const snapshot = {
           schemaVersion: 1,
           revision: 0,
-          boundaries: [],
-          logicalOperations: [],
+          boundaries: [] as [],
+          logicalOperations: [] as [],
         };
+        ledgerSnapshots.push(snapshot);
+        return snapshot;
       },
       writeAhead: failGovernedUse('effectLedger.writeAhead'),
     };
@@ -191,6 +228,7 @@ describe('dormant schema-3 registry consumer fixture', () => {
 
     const hostCapabilities = { authority, repository, effectLedger };
     const options = copied.validateOptions(undefined);
+    const linkedCallCount = copiedModule.linkedFactoryCallCount();
     const runtime = copied.createRuntime(options, hostCapabilities);
     expect(runtime).toMatchObject({
       init: expect.any(Function),
@@ -198,6 +236,8 @@ describe('dormant schema-3 registry consumer fixture', () => {
       resumePlaybookCall: expect.any(Function),
       dispose: expect.any(Function),
     });
+    expect(copiedModule.linkedFactoryCallCount()).toBe(linkedCallCount + 1);
+    expect(runtime).toBe(copiedModule.lastLinkedFactoryRuntime());
     const construction = copiedModule.lastLinkedFactoryConstruction();
     expect(construction).toEqual({
       configuredOptions: options,
@@ -213,30 +253,63 @@ describe('dormant schema-3 registry consumer fixture', () => {
     expect(repository.identity).not.toBe(canonicalWorktree);
     expect(repository.identity).toEqual(canonicalWorktree);
 
-    const portUses: string[] = [];
-    const failPortUse = (name: string) => async () => {
-      portUses.push(name);
+    const callPortUses: string[] = [];
+    const failCallPortUse = (name: string) => async () => {
+      callPortUses.push(name);
       throw new Error(`${name} must not be used by the consumer probe`);
     };
+    const emissions: unknown[] = [];
     await runtime.init({
       sessionId,
       playbookId: copied.id,
       rootSessionId: sessionId,
       depth: 0,
       ports: {
-        callPlayer: failPortUse('callPlayer'),
-        callCaptain: failPortUse('callCaptain'),
-        callJudge: failPortUse('callJudge'),
-        callPlaybook: failPortUse('callPlaybook'),
-        emitStatus: failPortUse('emitStatus'),
-        emitTelemetry: failPortUse('emitTelemetry'),
+        callPlayer: failCallPortUse('callPlayer'),
+        callCaptain: failCallPortUse('callCaptain'),
+        callJudge: failCallPortUse('callJudge'),
+        callPlaybook: failCallPortUse('callPlaybook'),
+        emitStatus: async (message: unknown, data: unknown) => {
+          emissions.push({ kind: 'status', message, data });
+        },
+        emitTelemetry: async (event: unknown) => {
+          emissions.push({ kind: 'telemetry', event });
+        },
       },
     });
     await runtime.dispose();
 
-    expect(portUses).toEqual([]);
+    expect(callPortUses).toEqual([]);
     expect(governedUses).toEqual([]);
-    expect(snapshotReads).toBe(2);
+    expect(emissions).toContainEqual({
+      kind: 'telemetry',
+      event: {
+        topic: 'playbook.trace',
+        payload: { type: 'session.started' },
+      },
+    });
+    expect(ledgerSnapshots.length).toBeGreaterThanOrEqual(2);
+    for (const snapshot of ledgerSnapshots)
+      expect(snapshot).toEqual(emptyLedger);
+    expect(new Set(ledgerSnapshots).size).toBe(ledgerSnapshots.length);
+    expect(
+      new Set(ledgerSnapshots.map(({ boundaries }) => boundaries)).size,
+    ).toBe(ledgerSnapshots.length);
+    expect(
+      new Set(ledgerSnapshots.map(({ logicalOperations }) => logicalOperations))
+        .size,
+    ).toBe(ledgerSnapshots.length);
+
+    const historyAfter = await execFileAsync(
+      'git',
+      ['rev-list', '--count', 'HEAD'],
+      { cwd: root },
+    );
+    const statusAfter = await execFileAsync('git', ['status', '--porcelain'], {
+      cwd: root,
+    });
+    expect(historyAfter.stdout.trim()).toBe('1');
+    expect(statusAfter.stdout).toBe('');
   });
 
   it('plans configured-registry slash-command invocation without positional or removed run inputs (self-hosting-14, release-18)', () => {
