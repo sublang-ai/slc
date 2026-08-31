@@ -62,6 +62,7 @@ import {
 } from './pipeline.js';
 import { defaultPlaybookLinkTarget, isReservedPipeline } from './resolver.js';
 import {
+  artifactSchemaForPlaybookProvenance,
   emitFsmCoverageTest,
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
@@ -206,8 +207,8 @@ async function runFull(
   return executeSteps(steps, pipeline, deps, {
     incremental: incrementalRun(invocation, artDir, source),
     hostTargets: verificationHostTargets(verification),
-    complete: (result, guardTarget) =>
-      emitVerification(result, verification, guardTarget),
+    complete: (result, guardTarget, pinFile) =>
+      emitVerification(result, verification, guardTarget, pinFile),
   });
 }
 
@@ -401,11 +402,12 @@ async function runFullLink(
       ...verificationHostTargets(verification),
       ...(entryPath === null ? [] : [{ path: entryPath }]),
     ],
-    complete: async (result, guardTarget) => {
+    complete: async (result, guardTarget, pinFile) => {
       const verified = await emitVerification(
         result,
         verification,
         guardTarget,
+        pinFile,
       );
 
       if (verified.ok && entryCandidate !== null && entryAliasesSource) {
@@ -477,6 +479,7 @@ async function emitVerification(
   result: SlcResult,
   ctx: VerificationContext,
   guardTarget?: CompletionTargetGuard,
+  pinFile?: PinFile,
 ): Promise<SlcResult> {
   if (!result.ok) return result;
   const hostTargets = verificationHostTargets(ctx);
@@ -485,6 +488,9 @@ async function emitVerification(
     (artifact) => artifact.phase.target.format === 'fsm',
   );
   if (fsm === undefined) throw new Error('verification plan lost its FSM');
+  const artifactSchema = artifactSchemaForPlaybookProvenance(
+    pinFile?.pins[fsm.phase.name]?.linkTarget.provenance,
+  );
   const outputs = [...result.outputs];
   const diagnostics = [...result.diagnostics];
   if (guardTarget !== undefined) {
@@ -501,6 +507,7 @@ async function emitVerification(
       artifactDir: ctx.artDir,
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
+      ...(artifactSchema === undefined ? {} : { artifactSchema }),
     }),
   );
   try {
@@ -531,6 +538,7 @@ async function emitVerification(
       artifactDir: ctx.artDir,
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
+      ...(artifactSchema === undefined ? {} : { artifactSchema }),
     });
     outputs.push(promptContract.path);
     diagnostics.push(
@@ -572,7 +580,7 @@ interface VerificationContext {
   pipeline: string;
   plan: readonly {
     path: string;
-    phase: { target: { format: string; ext: string } };
+    phase: { name: string; target: { format: string; ext: string } };
   }[];
   artDir: string;
   basename: string;
@@ -680,6 +688,7 @@ type CompletionTargetGuard = (path: string) => Promise<void>;
 type CompleteRun = (
   result: SlcResult,
   guardTarget: CompletionTargetGuard,
+  pinFile: PinFile | undefined,
 ) => Promise<SlcResult>;
 
 interface ExecuteStepsOptions {
@@ -1122,7 +1131,7 @@ async function executeSteps(
       ? { outcome: 'up-to-date' as const }
       : {}),
   };
-  const completed = await complete(selected, guardCompletionTarget);
+  const completed = await complete(selected, guardCompletionTarget, pinFile);
   return state === undefined
     ? completed
     : publishIncremental(completed, state, steps);

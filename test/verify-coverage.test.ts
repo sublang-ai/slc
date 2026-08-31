@@ -196,6 +196,8 @@ const parallelMachine = (
     nestedInputUsesInitializedContext?: boolean;
     contextGuardedInterrupt?: boolean;
     repeatedCanonicalRole?: boolean;
+    sequentialSameRole?: boolean;
+    nestedCrossRegionRepeatedRole?: boolean;
   } = {},
 ) => {
   const meta = (stateId: string) => ({
@@ -205,6 +207,10 @@ const parallelMachine = (
   const branch = (side: 'left' | 'right') => {
     const stateId = `${side}Work`;
     const waitId = `${side}Wait`;
+    const usesWriterRole =
+      opts.repeatedCanonicalRole === true ||
+      (opts.sequentialSameRole === true && side === 'left') ||
+      (opts.nestedCrossRegionRepeatedRole === true && side === 'right');
     return {
       id: `${side}Branch`,
       initial: 'working',
@@ -213,7 +219,7 @@ const parallelMachine = (
         working: {
           id: stateId,
           tags: 'playbook.busy',
-          ...(opts.repeatedCanonicalRole === true
+          ...(usesWriterRole
             ? {
                 description: stateId,
                 meta: {
@@ -230,7 +236,7 @@ const parallelMachine = (
             src: 'player',
             input: () => ({
               stateId,
-              ...(opts.repeatedCanonicalRole === true
+              ...(usesWriterRole
                 ? { role: 'writer' }
                 : { player: side === 'left' ? 'Writer' : 'Reviewer' }),
               sourceItem: side === 'left' ? 'X-1' : 'X-2',
@@ -284,6 +290,72 @@ const parallelMachine = (
           type: 'final',
           ...meta(`${side}Complete`),
         },
+        ...(opts.sequentialSameRole === true && side === 'left'
+          ? {
+              revision: {
+                id: 'leftRevision',
+                meta: {
+                  playbook: {
+                    stateId: 'leftRevision',
+                    description: 'leftRevision',
+                    role: 'writer',
+                  },
+                },
+                invoke: {
+                  src: 'player',
+                  input: () => ({
+                    stateId: 'leftRevision',
+                    role: 'writer',
+                    sourceItem: 'X-1-REVISION',
+                    prompt: 'Revise the left result.',
+                    result: { ok: 'The revision is complete.' },
+                  }),
+                  onDone: { target: 'complete' },
+                  onError: { target: '#failed' },
+                },
+              },
+            }
+          : {}),
+        ...(opts.nestedCrossRegionRepeatedRole === true && side === 'left'
+          ? {
+              nestedSplit: {
+                id: 'leftNestedSplit',
+                type: 'parallel',
+                states: {
+                  writerRegion: {
+                    initial: 'working',
+                    states: {
+                      working: {
+                        id: 'nestedWriterWork',
+                        meta: {
+                          playbook: {
+                            stateId: 'nestedWriterWork',
+                            description: 'nestedWriterWork',
+                            role: 'writer',
+                          },
+                        },
+                        invoke: {
+                          src: 'player',
+                          input: () => ({
+                            stateId: 'nestedWriterWork',
+                            role: 'writer',
+                            sourceItem: 'X-NESTED',
+                            prompt: 'Nested writer work.',
+                            result: { ok: 'Nested work is complete.' },
+                          }),
+                          onDone: { target: 'complete' },
+                          onError: { target: '#failed' },
+                        },
+                      },
+                      complete: { type: 'final' },
+                    },
+                  },
+                  observerRegion: { type: 'final' },
+                },
+                onDone: { target: 'complete' },
+              },
+            }
+          : {}),
       },
     };
   };
@@ -691,13 +763,121 @@ const controllerMachine = (
   withBossReplyWait = false,
   deadReportingResult = false,
   extraDecisionResult = false,
-) =>
-  setup({
+  opts: {
+    repeatedDecisionPath?: boolean;
+    wrongEarlierArm?: boolean;
+    cyclicNoExit?: boolean;
+    unsupportedSurfaces?: boolean;
+  } = {},
+) => {
+  const actionGuard =
+    (action: (typeof controllerActions)[number]) =>
+    ({ context, event }: any) => {
+      const output = event.output;
+      if (
+        output.guard !== action &&
+        !(
+          opts.wrongEarlierArm === true &&
+          action === 'respond' &&
+          output.guard === 'dismiss'
+        )
+      ) {
+        return false;
+      }
+      if (action === 'respond') {
+        return (
+          output.guard === 'dismiss' ||
+          (typeof output.text === 'string' && output.text !== '')
+        );
+      }
+      if (action === 'resume' || action === 'start' || action === 'switch') {
+        if (
+          !context.enabledPlaybooks.some(
+            (entry: { id: string }) => entry.id === output.playbookId,
+          )
+        ) {
+          return false;
+        }
+        return (
+          action === 'resume' ||
+          (typeof output.input === 'string' && output.input !== '')
+        );
+      }
+      return (
+        action !== 'runtime' ||
+        (typeof output.actionId === 'string' && output.actionId !== '')
+      );
+    };
+  const guards = Object.fromEntries(
+    controllerActions.map((action) => [action, actionGuard(action)]),
+  );
+  const invalidStates =
+    opts.unsupportedSurfaces === true
+      ? {
+          delegated: {
+            id: 'delegated',
+            meta: {
+              playbook: {
+                stateId: 'delegated',
+                description: 'Invalid delegated controller work.',
+                role: 'writer',
+              },
+            },
+            invoke: {
+              src: 'player',
+              input: () => ({
+                stateId: 'delegated',
+                role: 'writer',
+                sourceItem: 'CONTROLLER-PLAYER',
+                prompt: 'Invalid delegated work.',
+                result: { done: 'The delegated work is complete.' },
+              }),
+              onDone: { target: '#hub' },
+              onError: { target: '#failed' },
+            },
+          },
+          child: {
+            id: 'child',
+            invoke: {
+              src: 'playbook',
+              input: () => ({
+                stateId: 'child',
+                playbookId: 'coverage-child-playbook',
+                text: 'Invalid nested controller work.',
+              }),
+              onDone: { target: '#hub' },
+              onError: { target: '#failed' },
+            },
+          },
+          split: {
+            id: 'split',
+            type: 'parallel',
+            states: {
+              left: { type: 'final' },
+              right: { type: 'final' },
+            },
+            onDone: { target: '#hub' },
+          },
+        }
+      : {};
+
+  return setup({
     actors: {
       captain: fromPromise(async () => {
         throw new Error('captain actor must be provided by the runner');
       }),
+      player: fromPromise(async () => {
+        throw new Error('player actor must be provided by the runner');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('playbook actor must be provided by the runner');
+      }),
     },
+    guards: {
+      ...guards,
+      done: ({ event }: any) =>
+        deadReportingResult !== true && event.output.guard === 'done',
+    } as any,
   }).createMachine({
     id: 'sessionController',
     initial: 'hub',
@@ -746,39 +926,41 @@ const controllerMachine = (
             },
           }),
           onDone: controllerActions.map((action) => ({
-            target: action === 'respond' ? '#hub' : '#reporting',
-            guard: ({ context, event }: any) => {
-              const output = event.output;
-              if (output.guard !== action) return false;
-              if (action === 'respond') {
-                return typeof output.text === 'string' && output.text !== '';
-              }
-              if (
-                action === 'resume' ||
-                action === 'start' ||
-                action === 'switch'
-              ) {
-                if (
-                  !context.enabledPlaybooks.some(
-                    (entry: { id: string }) => entry.id === output.playbookId,
-                  )
-                ) {
-                  return false;
-                }
-                return (
-                  action === 'resume' ||
-                  (typeof output.input === 'string' && output.input !== '')
-                );
-              }
-              return (
-                action !== 'runtime' ||
-                (typeof output.actionId === 'string' && output.actionId !== '')
-              );
-            },
+            target:
+              opts.cyclicNoExit === true ||
+              (opts.repeatedDecisionPath === true && action === 'start')
+                ? '#launching'
+                : action === 'respond'
+                  ? '#hub'
+                  : '#reporting',
+            guard: action,
           })),
           onError: { target: '#failed' },
         },
       },
+      ...((opts.repeatedDecisionPath === true ||
+        opts.cyclicNoExit === true) && {
+        launching: {
+          id: 'launching',
+          meta: {
+            playbook: {
+              stateId: 'launching',
+              description: 'Settle the selected host action.',
+            },
+          },
+          invoke: {
+            src: 'captain',
+            input: () => ({
+              stateId: 'launching',
+              sourceItem: 'CONTROLLER-3',
+              prompt: 'Settle the selected host action.',
+              result: { done: 'The selected host action settled.' },
+            }),
+            onDone: { target: '#deciding', guard: 'done' },
+            onError: { target: '#failed' },
+          },
+        },
+      }),
       reporting: {
         id: 'reporting',
         meta: {
@@ -795,14 +977,11 @@ const controllerMachine = (
             prompt: 'Report the settled controller action.',
             result: { done: 'The action report is complete.' },
           }),
-          onDone: {
-            target: '#hub',
-            guard: ({ event }: any) =>
-              deadReportingResult !== true && event.output.guard === 'done',
-          },
+          onDone: { target: '#hub', guard: 'done' },
           onError: { target: '#failed' },
         },
       },
+      ...invalidStates,
       failed: { id: 'failed', tags: 'playbook.parked' },
       ...(withBossReplyWait
         ? {
@@ -816,6 +995,7 @@ const controllerMachine = (
       shutdown: { id: 'shutdown', type: 'final' },
     },
   } as any);
+};
 
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -934,6 +1114,24 @@ describe('checkFsmCoverage (verification-6)', () => {
     ).toContain('parallel state parallelRound repeats canonical role writer');
   });
 
+  it('allows sequential uses of one role inside a single parallel region', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({ sequentialSameRole: true }),
+      }),
+    ).not.toContain(
+      'parallel state parallelRound repeats canonical role writer',
+    );
+  });
+
+  it('detects a role repeated across outer regions through a nested parallel', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: parallelMachine({ nestedCrossRegionRepeatedRole: true }),
+      }),
+    ).toContain('parallel state parallelRound repeats canonical role writer');
+  });
+
   it('drives every controller action without a Boss-reply wait', async () => {
     expect(await checkFsmCoverage({ machine: controllerMachine() })).toEqual(
       [],
@@ -948,6 +1146,55 @@ describe('checkFsmCoverage (verification-6)', () => {
       await checkFsmCoverage({ machine: controllerMachine(false, true) }),
     ).toContain(
       'state reporting: result "done" has no reachable accepting transition',
+    );
+  });
+
+  it('scripts repeated controller-state occurrences in path order', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, {
+          repeatedDecisionPath: true,
+        }),
+      }),
+    ).toEqual([]);
+  });
+
+  it('rejects a controller result selected by an earlier action arm', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, {
+          wrongEarlierArm: true,
+        }),
+      }),
+    ).toContain(
+      'state deciding: controller result "dismiss" selected arm 0 instead of declared arm 4',
+    );
+  });
+
+  it('bounds a cyclic controller graph with no hub or final exit', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, {
+          cyclicNoExit: true,
+        }),
+      }),
+    ).toContain(
+      'state deciding: controller result "respond" reached neither the session hub nor a shutdown final',
+    );
+  }, 2_000);
+
+  it('fails closed on workflow-only surfaces inside a controller', async () => {
+    const findings = await checkFsmCoverage({
+      machine: controllerMachine(false, false, false, {
+        unsupportedSurfaces: true,
+      }),
+    });
+    expect(findings).toEqual(
+      expect.arrayContaining([
+        'controller machine declares delegated-player invocation',
+        'controller machine declares nested-playbook invocation',
+        'controller machine declares parallel state',
+      ]),
     );
   });
 

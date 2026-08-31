@@ -23,12 +23,13 @@ import { promisify } from 'node:util';
 import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
+  artifactSchemaForPlaybookProvenance,
   checkGearsFsmConformance,
   canonicalRoleId,
   findConcurrentRoleSets,
   findMachineConfig,
   inspectGearsRoleContract,
-  isControllerGears,
+  isControllerMachine,
   parseGearsItems,
   pinIntrospection,
 } from '../src/verify.js';
@@ -52,6 +53,8 @@ export interface CompiledPlaybook {
   linkTargetProvenance?: string;
   /** Schema-3 Captain-hosted registry entry, when the closure has one. */
   registry?: unknown;
+  /** Trusted comparison-side observations of linked-factory construction. */
+  linkedFactoryWitness?: Schema3LinkedFactoryWitness;
 }
 
 export type RuntimeCapabilityProfile = RuntimeContractProfile;
@@ -71,6 +74,18 @@ export interface RuntimeProfileOptions {
   provenance?: string;
   registry?: unknown;
   configuredOptions?: unknown;
+  linkedFactoryWitness?: Schema3LinkedFactoryWitness;
+}
+
+/** One synchronous invocation observed at the linked default-factory seam. */
+export interface Schema3LinkedFactoryCall {
+  readonly args: readonly unknown[];
+  readonly result: unknown;
+}
+
+/** Trusted loader-side witness; the candidate registry never receives it. */
+export interface Schema3LinkedFactoryWitness {
+  calls(): readonly Schema3LinkedFactoryCall[];
 }
 
 const PLAYBOOK_10_PROVENANCE = '@sublang/playbook@10.0.0';
@@ -195,7 +210,10 @@ async function inspectComposedV3Profile(
     findings.push('linked schema-3 module has no callable default export');
     return { profile: null, findings };
   }
-  const registry = inspectSchema3Registry(options.registry, factory);
+  const registry = inspectSchema3Registry(
+    options.registry,
+    factory as (options: unknown) => unknown,
+  );
   findings.push(...registry.findings);
   if (registry.entry === undefined || registry.implementation === undefined) {
     return { profile: null, findings };
@@ -253,7 +271,12 @@ async function inspectComposedV3Profile(
     };
   }
 
-  const reason = await probeComposedV3Runtime(registry.entry, validatedOptions);
+  const reason = await probeComposedV3Runtime(
+    registry.entry,
+    registry.implementation,
+    validatedOptions,
+    options.linkedFactoryWitness,
+  );
   if (reason !== '') {
     findings.push(`composed-v3 runtime probe failed: ${reason}`);
     return {
@@ -301,9 +324,11 @@ function inspectSchema3Registry(
     'validateOptions',
     'createRuntime',
   ] as const;
+  const allowed = new Set<string>([...required, 'summaryPolicy']);
   if (
     entry === undefined ||
-    required.some((key) => !Object.prototype.hasOwnProperty.call(entry, key))
+    required.some((key) => !Object.prototype.hasOwnProperty.call(entry, key)) ||
+    Object.keys(entry).some((key) => !allowed.has(key))
   ) {
     findings.push('linked module exposes no exact schema-3 registry entry');
     return { findings };
@@ -312,7 +337,7 @@ function inspectSchema3Registry(
     typeof entry.id !== 'string' ||
     entry.id.length === 0 ||
     typeof entry.command !== 'string' ||
-    entry.command.length === 0 ||
+    entry.command !== entry.id ||
     typeof entry.intent !== 'string' ||
     entry.artifactSchema !== 3 ||
     typeof entry.validateOptions !== 'function' ||
@@ -431,7 +456,10 @@ function schema3ConcurrentRoleSets(
     }
     sets.push([...candidate] as string[]);
   }
-  if (new Set(sets.map((set) => JSON.stringify(set))).size !== sets.length) {
+  if (
+    new Set(sets.map((set) => JSON.stringify([...set].sort()))).size !==
+    sets.length
+  ) {
     return undefined;
   }
   return sets;
@@ -439,7 +467,9 @@ function schema3ConcurrentRoleSets(
 
 async function probeComposedV3Runtime(
   entry: Schema3Registry,
+  implementation: 'shared-factory' | 'bespoke',
   validatedOptions: unknown,
+  linkedFactoryWitness: Schema3LinkedFactoryWitness | undefined,
 ): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'slc-equivalence-v3-'));
   try {
@@ -448,7 +478,9 @@ async function probeComposedV3Runtime(
     const gitDir = await realpath(join(root, '.git'));
     return await driveComposedV3Runtime(
       entry,
+      implementation,
       validatedOptions,
+      linkedFactoryWitness,
       worktree,
       gitDir,
     );
@@ -461,7 +493,9 @@ async function probeComposedV3Runtime(
 
 async function driveComposedV3Runtime(
   entry: Schema3Registry,
+  implementation: 'shared-factory' | 'bespoke',
   validatedOptions: unknown,
+  linkedFactoryWitness: Schema3LinkedFactoryWitness | undefined,
   worktree: string,
   gitDir: string,
 ): Promise<string> {
@@ -508,7 +542,23 @@ async function driveComposedV3Runtime(
   let initAttempted = false;
   let reason = '';
   try {
+    let callOffset: number | undefined;
+    if (implementation === 'shared-factory') {
+      if (linkedFactoryWitness === undefined) {
+        return 'shared-factory schema-3 comparison lacks a trusted linked-factory witness';
+      }
+      callOffset = linkedFactoryWitness.calls().length;
+    }
     const created = entry.createRuntime(validatedOptions, hostCapabilities);
+    if (callOffset !== undefined && linkedFactoryWitness !== undefined) {
+      const constructionProblem = linkedFactoryConstructionProblem(
+        linkedFactoryWitness.calls().slice(callOffset),
+        validatedOptions,
+        hostCapabilities,
+        created,
+      );
+      if (constructionProblem !== '') return constructionProblem;
+    }
     if (typeof created !== 'object' || created === null) {
       return 'registry createRuntime returned a non-object';
     }
@@ -574,6 +624,42 @@ async function driveComposedV3Runtime(
     reason = `roleless probe invoked governed host effects (players ${playerCalls}, repository ${repositoryOperations.join(', ') || 'none'}, ledger writes ${effectWrites})`;
   }
   return reason;
+}
+
+function linkedFactoryConstructionProblem(
+  calls: readonly Schema3LinkedFactoryCall[],
+  validatedOptions: unknown,
+  hostCapabilities: unknown,
+  registryRuntime: unknown,
+): string {
+  if (calls.length !== 1) {
+    return `registry createRuntime invoked the linked factory ${calls.length} times, expected exactly once`;
+  }
+  const call = ownDataRecord(calls[0], ['args', 'result']);
+  if (
+    call === undefined ||
+    !isExactArray(call.args) ||
+    call.args.length !== 1
+  ) {
+    return 'linked factory was not called with exactly one construction argument';
+  }
+  const construction = ownDataRecord(call.args[0], [
+    'configuredOptions',
+    'hostCapabilities',
+  ]);
+  if (construction === undefined) {
+    return 'linked factory construction is not exact own-data { configuredOptions, hostCapabilities }';
+  }
+  if (construction.configuredOptions !== validatedOptions) {
+    return 'linked factory did not receive validated options by exact identity';
+  }
+  if (construction.hostCapabilities !== hostCapabilities) {
+    return 'linked factory did not receive live host capabilities by exact identity';
+  }
+  if (call.result !== registryRuntime) {
+    return 'registry createRuntime did not return the linked factory runtime directly';
+  }
+  return '';
 }
 
 function inspectComposedV3OptionalSurface(
@@ -1153,6 +1239,9 @@ export async function checkPlaybookIntegrity(
   findings.push(
     ...checkGearsFsmConformance(compiled.gears, config, {
       concurrentRoleSets: findConcurrentRoleSets(compiled.fsm),
+      artifactSchema: artifactSchemaForPlaybookProvenance(
+        compiled.linkTargetProvenance,
+      ),
     }).map((finding) => `${label}: ${finding}`),
   );
   findings.push(
@@ -1174,7 +1263,10 @@ export async function checkPlaybookIntegrity(
   ) {
     const factory = (compiled.playbook as Record<string, unknown>).default;
     if (typeof factory === 'function') {
-      const registry = inspectSchema3Registry(compiled.registry, factory);
+      const registry = inspectSchema3Registry(
+        compiled.registry,
+        factory as (options: unknown) => unknown,
+      );
       if (registry.entry !== undefined) {
         findings.push(
           ...schema3ClosureFindings(compiled, registry.entry).map(
@@ -1250,6 +1342,9 @@ function compiledRuntimeOptions(
       ? {}
       : { provenance: compiled.linkTargetProvenance }),
     ...(compiled.registry === undefined ? {} : { registry: compiled.registry }),
+    ...(compiled.linkedFactoryWitness === undefined
+      ? {}
+      : { linkedFactoryWitness: compiled.linkedFactoryWitness }),
     ...(Object.prototype.hasOwnProperty.call(options, 'configuredOptions')
       ? { configuredOptions: options.configuredOptions }
       : {}),
@@ -1369,22 +1464,31 @@ export async function checkReferenceEquivalence(opts: {
     }
   }
 
+  const producedConfig = findMachineConfig(opts.produced.fsm);
+  const referenceConfig = findMachineConfig(opts.reference.fsm);
+  const producedController = isControllerMachine(producedConfig);
+  const referenceController = isControllerMachine(referenceConfig);
+  if (producedController !== referenceController) {
+    findings.push(
+      `controller classifications differ: produced ${producedController ? 'controller' : 'ordinary'} vs reference ${referenceController ? 'controller' : 'ordinary'}`,
+    );
+  }
+
   // The Boss surfaces must exist on both machines (pinIntrospection reports
   // them); captain-state counts are reported only through conformance, since
   // partitions are judgment.
-  for (const [label, compiled] of [
-    ['produced', opts.produced],
-    ['reference', opts.reference],
+  for (const [label, config, controller] of [
+    ['produced', producedConfig, producedController],
+    ['reference', referenceConfig, referenceController],
   ] as const) {
-    const pins = pinIntrospection(findMachineConfig(compiled.fsm));
-    const controller = isControllerGears(compiled.gears);
+    const pins = pinIntrospection(config);
     if (!controller && pins.interruptTargets.length === 0) {
       findings.push(`${label}: machine declares no BOSS_INTERRUPT targets`);
     }
     if (!pins.quiescent.some((state) => state.final)) {
       findings.push(`${label}: machine declares no final state`);
     }
-    const hasBossWait = hasBossReplySurface(findMachineConfig(compiled.fsm));
+    const hasBossWait = hasBossReplySurface(config);
     if (controller && hasBossWait) {
       findings.push(`${label}: controller machine declares a Boss-reply wait`);
     } else if (!controller && !hasBossWait) {

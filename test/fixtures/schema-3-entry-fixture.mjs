@@ -7,14 +7,19 @@
 
 import { isAbsolute, join } from 'node:path';
 
+import createPlaybookRuntime from './workflow.playbook/workflow.playbook.ts';
+export {
+  lastLinkedFactoryConstruction,
+  lastLinkedFactoryRuntime,
+  linkedFactoryCallCount,
+} from './workflow.playbook/workflow.playbook.ts';
+
 const ENTRY_ID = 'workflow';
+const ENTRY_INTENT = 'Synthetic schema-3 consumer fixture.';
 const REQUIRED_ROLE_IDS = Object.freeze(['coder', 'reviewer']);
 const CONCURRENT_ROLE_SETS = Object.freeze([
   Object.freeze(['coder', 'reviewer']),
 ]);
-const COMPAT = Object.freeze({ artifactSchema: 3, runtimeAbi: 1 });
-
-let lastConstruction;
 
 function exactPlainRecord(value, keys, label) {
   if (
@@ -39,231 +44,11 @@ function exactPlainRecord(value, keys, label) {
   }
 }
 
-function assertExactArray(value, length, label) {
-  if (
-    !Array.isArray(value) ||
-    Object.getPrototypeOf(value) !== Array.prototype ||
-    Object.getOwnPropertySymbols(value).length !== 0
-  ) {
-    throw new Error(`${label} is not an exact array`);
-  }
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const indexes = Array.from({ length }, (_, index) => String(index));
-  if (
-    value.length !== length ||
-    Object.keys(descriptors).length !== length + 1 ||
-    !Object.hasOwn(descriptors, 'length') ||
-    !indexes.every(
-      (index) =>
-        Object.hasOwn(descriptors, index) &&
-        descriptors[index].enumerable &&
-        Object.hasOwn(descriptors[index], 'value'),
-    )
-  ) {
-    throw new Error(`${label} does not have the exact array shape`);
-  }
-}
-
-function exactStringArray(value, expected, label) {
-  assertExactArray(value, expected.length, label);
-  if (value.some((item, index) => item !== expected[index])) {
-    throw new Error(`${label} does not match the registry declaration`);
-  }
-}
-
-function exactConcurrentRoleSets(value, label) {
-  assertExactArray(value, CONCURRENT_ROLE_SETS.length, label);
-  value.forEach((set, index) =>
-    exactStringArray(set, CONCURRENT_ROLE_SETS[index], `${label}[${index}]`),
-  );
-}
-
-function assertCallableRecord(value, keys, label) {
-  exactPlainRecord(value, keys, label);
-  if (keys.some((key) => typeof value[key] !== 'function')) {
-    throw new Error(`${label} contains a non-callable operation`);
-  }
-}
-
-function assertHostCapabilities(hostCapabilities) {
-  exactPlainRecord(
-    hostCapabilities,
-    ['authority', 'repository', 'effectLedger'],
-    'host capabilities',
-  );
-  const { authority, repository, effectLedger } = hostCapabilities;
-  exactPlainRecord(
-    authority,
-    [
-      'playbookId',
-      'artifactSchema',
-      'cwd',
-      'sessionId',
-      'leaseOwnerToken',
-      'canonicalWorktree',
-      'requiredRoleIds',
-      'concurrentRoleSets',
-    ],
-    'authority',
-  );
-  exactPlainRecord(
-    authority.canonicalWorktree,
-    ['worktree', 'gitDir'],
-    'canonical worktree',
-  );
-  if (
-    authority.playbookId !== ENTRY_ID ||
-    authority.artifactSchema !== 3 ||
-    typeof authority.cwd !== 'string' ||
-    authority.cwd !== authority.canonicalWorktree.worktree ||
-    typeof authority.sessionId !== 'string' ||
-    authority.sessionId === '' ||
-    typeof authority.leaseOwnerToken !== 'string' ||
-    authority.leaseOwnerToken === '' ||
-    typeof authority.canonicalWorktree.worktree !== 'string' ||
-    !isAbsolute(authority.canonicalWorktree.worktree) ||
-    typeof authority.canonicalWorktree.gitDir !== 'string' ||
-    !isAbsolute(authority.canonicalWorktree.gitDir)
-  ) {
-    throw new Error('authority does not match the schema-3 registry session');
-  }
-  exactStringArray(
-    authority.requiredRoleIds,
-    REQUIRED_ROLE_IDS,
-    'authority required roles',
-  );
-  exactConcurrentRoleSets(
-    authority.concurrentRoleSets,
-    'authority concurrent role sets',
-  );
-
-  exactPlainRecord(
-    repository,
-    [
-      'identity',
-      'observe',
-      'acquire',
-      'runExclusive',
-      'runCohort',
-      'runDeferred',
-    ],
-    'repository',
-  );
-  exactPlainRecord(
-    repository.identity,
-    ['worktree', 'gitDir'],
-    'repository identity',
-  );
-  if (
-    repository.identity.worktree !== authority.canonicalWorktree.worktree ||
-    repository.identity.gitDir !== authority.canonicalWorktree.gitDir
-  ) {
-    throw new Error('repository identity does not match canonical worktree');
-  }
-  for (const operation of [
-    'observe',
-    'acquire',
-    'runExclusive',
-    'runCohort',
-    'runDeferred',
-  ]) {
-    if (typeof repository[operation] !== 'function') {
-      throw new Error(`repository ${operation} is not callable`);
-    }
-  }
-
-  assertCallableRecord(
-    effectLedger,
-    ['snapshot', 'writeAhead'],
-    'effect ledger',
-  );
-}
-
 export function validateOptions(value) {
   if (value !== undefined) {
     exactPlainRecord(value, [], 'configured options');
   }
   return {};
-}
-
-export function createPlaybookRuntime(construction) {
-  if (arguments.length !== 1) {
-    throw new Error('linked factory requires exactly one construction object');
-  }
-  exactPlainRecord(
-    construction,
-    ['configuredOptions', 'hostCapabilities'],
-    'linked-factory construction',
-  );
-  exactPlainRecord(construction.configuredOptions, [], 'configured options');
-  assertHostCapabilities(construction.hostCapabilities);
-  lastConstruction = construction;
-
-  let session;
-  let disposed = false;
-  return {
-    async init(value) {
-      if (session !== undefined || disposed) {
-        throw new Error('schema-3 fixture initialized out of order');
-      }
-      exactPlainRecord(
-        value,
-        ['sessionId', 'playbookId', 'rootSessionId', 'depth', 'ports'],
-        'causal-root session',
-      );
-      const { authority } = construction.hostCapabilities;
-      if (
-        value.sessionId !== authority.sessionId ||
-        value.rootSessionId !== value.sessionId ||
-        value.playbookId !== ENTRY_ID ||
-        value.depth !== 0 ||
-        Object.hasOwn(value, 'parentSessionId') ||
-        Object.hasOwn(value, 'parentCallId')
-      ) {
-        throw new Error('schema-3 fixture received a non-root session');
-      }
-      assertCallableRecord(
-        value.ports,
-        [
-          'callPlayer',
-          'callCaptain',
-          'callJudge',
-          'callPlaybook',
-          'emitStatus',
-          'emitTelemetry',
-        ],
-        'runtime ports',
-      );
-      session = value;
-    },
-    async handleBossInput() {
-      throw new Error(
-        'role-bearing consumer fixture must not receive a Boss turn',
-      );
-    },
-    async resumePlaybookCall() {
-      throw new Error(
-        'role-bearing consumer fixture must not resume a child call',
-      );
-    },
-    async dispose() {
-      if (session === undefined || disposed) {
-        throw new Error('schema-3 fixture disposed out of order');
-      }
-      disposed = true;
-    },
-  };
-}
-
-Object.defineProperty(createPlaybookRuntime, 'compat', {
-  value: COMPAT,
-  enumerable: true,
-  writable: false,
-  configurable: false,
-});
-
-export function lastLinkedFactoryConstruction() {
-  return lastConstruction;
 }
 
 export function createConfiguredRegistryPlan({
@@ -325,7 +110,7 @@ const entry = {
   },
   requiredRoleIds: [...REQUIRED_ROLE_IDS],
   concurrentRoleSets: CONCURRENT_ROLE_SETS.map((set) => [...set]),
-  intent: 'Synthetic schema-3 consumer fixture.',
+  intent: ENTRY_INTENT,
   validateOptions,
   createRuntime(options, hostCapabilities) {
     if (arguments.length !== 2) {

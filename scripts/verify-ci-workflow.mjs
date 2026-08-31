@@ -26,6 +26,7 @@ const [
   consumerSource,
   configSource,
   compiledExecutorSource,
+  artifactReviewSource,
 ] = await Promise.all([
   readProjectFile('.github/workflows/ci.yml'),
   readProjectFile('package.json'),
@@ -38,6 +39,7 @@ const [
   readProjectFile('test/schema-3-consumer.test.ts'),
   readProjectFile('test/config.test.ts'),
   readProjectFile('test/compiled-executor.test.ts'),
+  readProjectFile('scripts/verify-artifacts.mjs'),
 ]);
 
 const workflow = parse(workflowSource);
@@ -187,6 +189,11 @@ assert.deepEqual(
     'node scripts/verify-artifacts.mjs pipelines/playbook/gears2fsm.slc gears2fsm',
     'node scripts/verify-artifacts.mjs pipelines/playbook/link.slc link',
   ],
+);
+assert.match(
+  artifactReviewSource,
+  /concurrentRoleSets:\s*findConcurrentRoleSets\(fsm\)/,
+  'independent artifact review must pass the FSM concurrent-role export to conformance',
 );
 assert.deepEqual(
   step('Verify reproducible current pins')

@@ -34,6 +34,8 @@ import {
   VERIFY_MODULE,
   enumerateCaptainStates,
   enumerateScriptStates,
+  isControllerDecisionResult,
+  isControllerMachine,
   loadFsmModule,
   normalizeArms,
   type CaptainState,
@@ -255,15 +257,6 @@ const MAX_PARALLEL_COMBINATIONS = 64;
 const COVERAGE_PLAYBOOK_ID = 'coverage-child-playbook';
 const COVERAGE_PLAYBOOK_INPUT = 'coverage: complete the child request';
 const COVERAGE_FINAL_RESPONSE = 'coverage: completed response';
-const CONTROLLER_ACTION_RESULTS = [
-  'respond',
-  'resume',
-  'start',
-  'switch',
-  'dismiss',
-  'deliver',
-  'runtime',
-] as const;
 const COVERAGE_ENABLED_PLAYBOOKS = [
   {
     id: COVERAGE_PLAYBOOK_ID,
@@ -341,17 +334,20 @@ function initializedCoverageContext(
   };
 }
 
-/** Payload fields a result description requires, per the adjudicator convention. */
-const REQUIRED_FIELD = /Output shall include `([A-Za-z_][A-Za-z0-9_]*):/g;
+/** The `Output shall include` clause a result description declares. */
+const OUTPUT_CLAUSE = /Output shall include\s+(.+)$/;
+/** Every backticked `field:` property named inside that clause. */
+const REQUIRED_FIELD = /`([A-Za-z_$][A-Za-z0-9_$]*):/g;
 
 /** Structured fields named by the generic Captain result contracts. */
 const STRUCTURED_RESULT_FIELD =
   /\b(response|question|remainingPlan|nextPlaybookId|nextPlaybookInput)\b/g;
 
 function requiredFields(description: string): string[] {
+  const clause = OUTPUT_CLAUSE.exec(description)?.[1] ?? '';
   return [
     ...new Set([
-      ...[...description.matchAll(REQUIRED_FIELD)].map((match) => match[1]),
+      ...[...clause.matchAll(REQUIRED_FIELD)].map((match) => match[1]),
       ...[...description.matchAll(STRUCTURED_RESULT_FIELD)].map(
         (match) => match[1],
       ),
@@ -529,19 +525,6 @@ function captainRefs(config: MachineConfigLike): CaptainRef[] {
     });
   }
   return out;
-}
-
-function isControllerDecision(captain: CaptainRef): boolean {
-  const resultKeys = Object.keys(captain.binding.result);
-  const results = new Set(resultKeys);
-  return (
-    resultKeys.length === CONTROLLER_ACTION_RESULTS.length &&
-    CONTROLLER_ACTION_RESULTS.every((key) => results.has(key))
-  );
-}
-
-function controllerMachine(captains: readonly CaptainRef[]): boolean {
-  return captains.some(isControllerDecision);
 }
 
 function playbookRefs(config: MachineConfigLike): PlaybookRef[] {
@@ -1074,6 +1057,7 @@ function entryDriveForRef(
   refs: readonly StateRef[],
   target: StateRef,
   extraValues: readonly unknown[] = [],
+  initialContext: Record<string, unknown> = initializedCoverageContext(machine),
 ): InterruptDrive | undefined {
   const initial =
     typeof machine.config.initial === 'string'
@@ -1087,8 +1071,6 @@ function entryDriveForRef(
       : [{ source: initial, events: initial.state.on ?? {} }]),
     { source: undefined, events: machine.config.on ?? {} },
   ] as const;
-  const initialContext = initializedCoverageContext(machine);
-
   for (const { source, events } of surfaces) {
     for (const [eventType, raw] of Object.entries(events)) {
       if (eventType === INTERRUPT_EVENT) continue;
@@ -1527,37 +1509,43 @@ function parallelBranchCaptains(
   return selected;
 }
 
-function nearestParallelAncestor(ref: StateRef): StateRef | undefined {
-  let ancestor = ref.parent;
-  while (ancestor !== undefined) {
-    if (ancestor.state.type === 'parallel') return ancestor;
-    ancestor = ancestor.parent;
-  }
-  return undefined;
-}
-
 function repeatedParallelRoleFindings(
+  refs: readonly StateRef[],
   captains: readonly CaptainRef[],
 ): string[] {
-  const rolesByParallel = new Map<string, Set<string>>();
   const findings: string[] = [];
-  for (const captain of captains) {
-    if (captain.binding.actor !== 'player') continue;
-    const role = captain.binding.role?.trim().toLowerCase();
-    if (role === undefined || role === '') continue;
-    const parallel = nearestParallelAncestor(captain.ref);
-    if (parallel === undefined) continue;
-    const key = stateRefKey(parallel);
-    const roles = rolesByParallel.get(key) ?? new Set<string>();
-    if (roles.has(role)) {
-      const finding = `parallel state ${parallel.stableId} repeats canonical role ${role}`;
-      if (!findings.includes(finding)) findings.push(finding);
-    } else {
-      roles.add(role);
-      rolesByParallel.set(key, roles);
+  for (const parallel of refs.filter((ref) => ref.state.type === 'parallel')) {
+    const regions = refs.filter((ref) => ref.parent === parallel);
+    const priorRoles = new Set<string>();
+    for (const region of regions) {
+      // Sequential appearances inside one region are never concurrent. Fold
+      // the complete descendant region to a set, then compare across siblings;
+      // nested parallel descendants are therefore visible to their ancestors
+      // and are also checked independently at their own parallel boundary.
+      const regionRoles = new Set(
+        captains.flatMap((captain) => {
+          if (
+            captain.binding.actor !== 'player' ||
+            (!sameStateRef(captain.ref, region) &&
+              !isDescendantOf(captain.ref, region))
+          ) {
+            return [];
+          }
+          const role = captain.binding.role?.trim().toLowerCase();
+          return role === undefined || role === '' ? [] : [role];
+        }),
+      );
+      for (const role of regionRoles) {
+        if (priorRoles.has(role)) {
+          findings.push(
+            `parallel state ${parallel.stableId} repeats canonical role ${role}`,
+          );
+        }
+      }
+      for (const role of regionRoles) priorRoles.add(role);
     }
   }
-  return findings;
+  return [...new Set(findings)];
 }
 
 function scriptedOutputs(
@@ -1808,6 +1796,7 @@ function controllerCaptainEntryPlan(
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
   candidates: readonly unknown[],
+  initialContext: Record<string, unknown>,
 ): ControllerCaptainEntryPlan | undefined {
   const queue: Array<{
     captain: CaptainRef;
@@ -1815,7 +1804,13 @@ function controllerCaptainEntryPlan(
     preceding: ControllerCaptainEntryPlan['preceding'];
   }> = [];
   for (const captain of captains) {
-    const drive = entryDriveForRef(machine, refs, captain.ref, candidates);
+    const drive = entryDriveForRef(
+      machine,
+      refs,
+      captain.ref,
+      candidates,
+      initialContext,
+    );
     if (drive?.satisfiable === true) {
       queue.push({ captain, drive, preceding: [] });
     }
@@ -1839,7 +1834,7 @@ function controllerCaptainEntryPlan(
         refs,
         current.captain,
         output,
-        initializedCoverageContext(machine),
+        initialContext,
       );
       const nextCaptain = captains.find(
         (candidate) =>
@@ -1863,7 +1858,22 @@ function controllerCaptainEntryPlan(
   return undefined;
 }
 
-/** Scripts downstream controller Captains until the path returns to its hub. */
+/**
+ * Finds one bounded downstream Captain path to the controller hub or final.
+ * A Captain state is expanded at most once: its outgoing edges depend only on
+ * the fixed initialized context and synthesized result output, so revisiting
+ * it cannot uncover a new route and would turn a broken cyclic controller into
+ * exponential work.
+ */
+interface ControllerCaptainExitPlan {
+  following: ControllerCaptainEntryPlan['preceding'];
+  /**
+   * `dead` means a Captain-only graph was exhausted; `runtime` leaves a
+   * non-Captain target to the bounded actor settle below.
+   */
+  outcome: 'planned' | 'dead' | 'runtime';
+}
+
 function controllerCaptainExitPlan(
   machine: MachineLike,
   captain: CaptainRef,
@@ -1871,41 +1881,75 @@ function controllerCaptainExitPlan(
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
   hub: StateRef | undefined,
-  visited = new Set<string>(),
-): ControllerCaptainEntryPlan['preceding'] | undefined {
-  const target = directTargetRef(
+  initialContext: Record<string, unknown>,
+): ControllerCaptainExitPlan {
+  const firstTarget = directTargetRef(
     machine,
     refs,
     captain,
     output,
-    initializedCoverageContext(machine),
+    initialContext,
   );
-  if (target === undefined) return undefined;
-  if (sameStateRef(target, hub) || target.state.type === 'final') return [];
+  if (firstTarget === undefined) return { following: [], outcome: 'dead' };
+  if (sameStateRef(firstTarget, hub) || firstTarget.state.type === 'final') {
+    return { following: [], outcome: 'planned' };
+  }
 
-  const nextCaptain = captains.find((candidate) =>
-    sameStateRef(candidate.ref, target),
+  const firstCaptain = captains.find((candidate) =>
+    sameStateRef(candidate.ref, firstTarget),
   );
-  if (nextCaptain === undefined) return undefined;
-  const nextKey = stateRefKey(nextCaptain.ref);
-  if (visited.has(nextKey)) return undefined;
-  const nextVisited = new Set(visited).add(nextKey);
-  for (const resultKey of Object.keys(nextCaptain.binding.result)) {
-    const nextOutput = synthOutput(nextCaptain.binding, resultKey);
-    const remainder = controllerCaptainExitPlan(
-      machine,
-      nextCaptain,
-      nextOutput,
-      refs,
-      captains,
-      hub,
-      nextVisited,
-    );
-    if (remainder !== undefined) {
-      return [{ captain: nextCaptain, output: nextOutput }, ...remainder];
+  if (firstCaptain === undefined) {
+    return { following: [], outcome: 'runtime' };
+  }
+
+  const queue: Array<{
+    captain: CaptainRef;
+    following: ControllerCaptainEntryPlan['preceding'];
+  }> = [{ captain: firstCaptain, following: [] }];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined) break;
+    const currentKey = stateRefKey(current.captain.ref);
+    if (visited.has(currentKey)) continue;
+    visited.add(currentKey);
+
+    for (const resultKey of Object.keys(current.captain.binding.result)) {
+      const nextOutput = synthOutput(current.captain.binding, resultKey);
+      const following = [
+        ...current.following,
+        { captain: current.captain, output: nextOutput },
+      ];
+      const nextRef = directTargetRef(
+        machine,
+        refs,
+        current.captain,
+        nextOutput,
+        initialContext,
+      );
+      if (nextRef === undefined) continue;
+      if (sameStateRef(nextRef, hub) || nextRef.state.type === 'final') {
+        return { following, outcome: 'planned' };
+      }
+      const nextCaptain = captains.find((candidate) =>
+        sameStateRef(candidate.ref, nextRef),
+      );
+      if (
+        nextCaptain !== undefined &&
+        !visited.has(stateRefKey(nextCaptain.ref))
+      ) {
+        queue.push({ captain: nextCaptain, following });
+      }
     }
   }
-  return undefined;
+  return { following: [], outcome: 'dead' };
+}
+
+interface CaptainProbe {
+  actor: DrivenActor;
+  event: Record<string, unknown>;
+  /** False only when a controller Captain graph has no bounded hub/final exit. */
+  controllerExitPlanned?: boolean;
 }
 
 function controllerCaptainProbeActor(
@@ -1916,13 +1960,15 @@ function controllerCaptainProbeActor(
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
   candidates: readonly unknown[],
-): { actor: DrivenActor; event: Record<string, unknown> } | undefined {
+  initialContext: Record<string, unknown>,
+): CaptainProbe | undefined {
   const entry = controllerCaptainEntryPlan(
     machine,
     captain,
     refs,
     captains,
     candidates,
+    initialContext,
   );
   if (entry === undefined) return undefined;
   const hub =
@@ -1935,6 +1981,7 @@ function controllerCaptainProbeActor(
     captain: CaptainRef;
     output: Record<string, unknown> | Error;
   }> = [...entry.preceding, { captain, output: result }];
+  let controllerExitPlanned: boolean | undefined;
   if (!(result instanceof Error)) {
     const exit = controllerCaptainExitPlan(
       machine,
@@ -1943,45 +1990,46 @@ function controllerCaptainProbeActor(
       refs,
       captains,
       hub,
+      initialContext,
     );
-    if (exit !== undefined) outcomes.push(...exit);
+    controllerExitPlanned =
+      exit.outcome === 'runtime' ? undefined : exit.outcome === 'planned';
+    outcomes.push(...exit.following);
   }
 
-  const byState = new Map(
-    outcomes.map(({ captain: state, output }) => [
-      captainPublicStateId(state),
-      output,
-    ]),
-  );
-  const bySource = new Map(
-    outcomes.map(({ captain: state, output }) => [
-      state.binding.sourceItem,
-      output,
-    ]),
-  );
-  const used = new Set<string>();
+  let occurrence = 0;
   return {
     actor: makeActor(
       machine,
       (input) => {
         if (!gate.armed) return null;
+        const planned = outcomes[occurrence];
+        if (planned === undefined) return null;
         const stateId =
           typeof input.stateId === 'string' ? input.stateId : undefined;
         const sourceItem =
           typeof input.sourceItem === 'string' ? input.sourceItem : undefined;
-        const key = stateId ?? sourceItem;
-        if (key === undefined || used.has(key)) return null;
-        const outcome =
-          (stateId === undefined ? undefined : byState.get(stateId)) ??
-          (sourceItem === undefined ? undefined : bySource.get(sourceItem));
-        if (outcome === undefined) return null;
-        used.add(key);
-        return outcome;
+        const matchesState =
+          stateId === undefined ||
+          stateId === captainPublicStateId(planned.captain);
+        const matchesSource =
+          sourceItem === undefined ||
+          sourceItem === planned.captain.binding.sourceItem;
+        if (
+          (stateId === undefined && sourceItem === undefined) ||
+          !matchesState ||
+          !matchesSource
+        ) {
+          return null;
+        }
+        occurrence += 1;
+        return planned.output;
       },
       () => null,
       entry.drive.context,
     ),
     event: entry.drive.event,
+    ...(controllerExitPlanned === undefined ? {} : { controllerExitPlanned }),
   };
 }
 
@@ -1994,8 +2042,9 @@ function captainProbeActor(
   captains: readonly CaptainRef[],
   playbooks: readonly PlaybookRef[],
   interruptValues: readonly unknown[],
-): { actor: DrivenActor; event: Record<string, unknown> } | undefined {
-  if (controllerMachine(captains)) {
+  controllerContext?: Record<string, unknown>,
+): CaptainProbe | undefined {
+  if (controllerContext !== undefined) {
     return controllerCaptainProbeActor(
       machine,
       captain,
@@ -2004,6 +2053,7 @@ function captainProbeActor(
       refs,
       captains,
       interruptValues,
+      controllerContext,
     );
   }
   const predecessor = captainPredecessorPlan(
@@ -2625,10 +2675,12 @@ export async function checkFsmCoverage(
     captains.map((captain) => [stateRefKey(captain.ref), captain]),
   );
   const sourceCandidates = identifierLiterals(opts.sourceText ?? '');
-  const isController = controllerMachine(captains);
+  const isController = isControllerMachine(config);
+  const initialCoverageContext = initializedCoverageContext(machine);
+  const controllerContext = isController ? initialCoverageContext : undefined;
 
   const parallelRefs = refs.filter((ref) => ref.state.type === 'parallel');
-  findings.push(...repeatedParallelRoleFindings(captains));
+  findings.push(...repeatedParallelRoleFindings(refs, captains));
   for (const ref of parallelRefs) {
     if (!normalizeArms(ref.state.onDone).some((arm) => arm.target !== null)) {
       findings.push(`parallel state ${ref.stableId} declares no onDone join`);
@@ -2658,6 +2710,23 @@ export async function checkFsmCoverage(
     findings.push('machine declares no final state');
   }
 
+  const controllerHasPlayer =
+    isController &&
+    captains.some((captain) => captain.binding.actor === 'player');
+  const controllerHasPlaybook = isController && playbooks.length > 0;
+  const controllerHasParallel = isController && parallelRefs.length > 0;
+  if (controllerHasPlayer) {
+    findings.push('controller machine declares delegated-player invocation');
+  }
+  if (controllerHasPlaybook) {
+    findings.push('controller machine declares nested-playbook invocation');
+  }
+  if (controllerHasParallel) {
+    findings.push('controller machine declares parallel state');
+  }
+  const unsupportedController =
+    controllerHasPlayer || controllerHasPlaybook || controllerHasParallel;
+
   const rootArms = normalizeArms((config.on ?? {})[INTERRUPT_EVENT]);
   const canJump = rootArms.length > 0;
   // A workflow without pre-emption declares no interrupt surface at all
@@ -2670,7 +2739,7 @@ export async function checkFsmCoverage(
   if (!canJump && handlesInterruptSomewhere) {
     findings.push(`machine declares no root ${INTERRUPT_EVENT} event`);
   }
-  if (canJump) {
+  if (canJump && !isController) {
     for (const playbook of playbooks) {
       findings.push(
         ...(await probePlaybookInvocation(
@@ -2808,6 +2877,12 @@ export async function checkFsmCoverage(
     ...(ref.configId === undefined ? [] : [ref.configId]),
   ]);
 
+  // Playbook 10 controllers are host decision loops. Player delegation,
+  // nested playbook invocation, and parallel regions are invalid controller
+  // surfaces, so their explicit findings above own the result; do not mask
+  // them by trying the ordinary workflow drivers against an unsupported shape.
+  if (unsupportedController) return findings;
+
   for (const captain of captains) {
     if (!canJump && !isController) break;
     const state = captain.binding;
@@ -2872,7 +2947,7 @@ export async function checkFsmCoverage(
         try {
           if (
             guard.run({
-              context: initializedCoverageContext(machine),
+              context: initialCoverageContext,
               event: { ...doneEvent, output },
             })
           ) {
@@ -2892,6 +2967,42 @@ export async function checkFsmCoverage(
         continue;
       }
 
+      let controllerDirectTarget: StateRef | undefined;
+      if (isController) {
+        if (isControllerDecisionResult(state.result)) {
+          const declaredArms = rawDoneArms.flatMap((arm, index) =>
+            armGuard(arm) === key ? [index] : [],
+          );
+          if (declaredArms.length !== 1) {
+            findings.push(
+              `state ${stateKey}: controller result "${key}" declares ${declaredArms.length} direct action arms`,
+            );
+            continue;
+          }
+          if (directArm !== declaredArms[0]) {
+            findings.push(
+              `state ${stateKey}: controller result "${key}" selected arm ${directArm} instead of declared arm ${declaredArms[0]}`,
+            );
+            continue;
+          }
+        }
+
+        const directTarget = rawArmTarget(rawDoneArms[directArm]);
+        controllerDirectTarget =
+          directTarget === undefined
+            ? undefined
+            : stateRefForTarget(refs, directTarget, captain.ref);
+        if (
+          directTarget === undefined ||
+          controllerDirectTarget === undefined
+        ) {
+          findings.push(
+            `state ${stateKey}: controller result "${key}" declares no resolvable direct action target`,
+          );
+          continue;
+        }
+      }
+
       const gate: ArmingGate = { armed: false };
       const probe = captainProbeActor(
         machine,
@@ -2902,6 +3013,7 @@ export async function checkFsmCoverage(
         captains,
         playbooks,
         sourceCandidates,
+        controllerContext,
       );
       if (probe === undefined) {
         const finding = `state ${stateKey} has no reachable entry transition`;
@@ -2909,16 +3021,53 @@ export async function checkFsmCoverage(
         continue;
       }
       const actor = probe.actor;
+      let controllerDriveStarted = false;
+      let reachedControllerTarget = false;
+      const controllerTargetSubscription =
+        controllerDirectTarget === undefined
+          ? undefined
+          : actor.subscribe({
+              next: (snapshot) => {
+                if (
+                  controllerDriveStarted &&
+                  atState(controllerDirectTarget)(snapshot)
+                ) {
+                  reachedControllerTarget = true;
+                }
+              },
+              error: () => undefined,
+            });
       gate.armed = true;
+      controllerDriveStarted = true;
       actor.send(probe.event);
-      const transitioned = await settle(
-        actor,
-        isController
-          ? (snapshot) =>
-              snapshot.status === 'done' ||
-              (initialRef !== undefined && atState(initialRef)(snapshot))
-          : leftState(captain.ref),
-      );
+      if (
+        controllerDirectTarget !== undefined &&
+        !(await settle(
+          actor,
+          (snapshot) =>
+            reachedControllerTarget ||
+            atState(controllerDirectTarget)(snapshot),
+        ))
+      ) {
+        findings.push(
+          `state ${stateKey}: controller result "${key}" did not reach its declared direct action target ${controllerDirectTarget.stableId}`,
+        );
+        controllerTargetSubscription?.unsubscribe();
+        actor.stop();
+        continue;
+      }
+      const transitioned =
+        isController && probe.controllerExitPlanned === false
+          ? false
+          : await settle(
+              actor,
+              isController
+                ? (snapshot) =>
+                    snapshot.status === 'done' ||
+                    (initialRef !== undefined && atState(initialRef)(snapshot))
+                : leftState(captain.ref),
+            );
+      controllerTargetSubscription?.unsubscribe();
       if (!transitioned) {
         findings.push(
           isController
@@ -2985,6 +3134,7 @@ export async function checkFsmCoverage(
           captains,
           playbooks,
           sourceCandidates,
+          controllerContext,
         );
         if (blankProbe === undefined) {
           const finding = `state ${stateKey} has no reachable entry transition`;
@@ -3100,7 +3250,7 @@ export async function checkFsmCoverage(
       try {
         if (
           guard.run({
-            context: initializedCoverageContext(machine),
+            context: initialCoverageContext,
             event: { ...errorEvent, error: forcedError },
           })
         ) {
@@ -3130,6 +3280,7 @@ export async function checkFsmCoverage(
       captains,
       playbooks,
       sourceCandidates,
+      controllerContext,
     );
     if (probe === undefined) {
       const finding = `state ${stateKey} has no reachable entry transition`;
