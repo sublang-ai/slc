@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Compatibility types for Playbook's evolving pre-1.0 runtime contract.
+ * Compatibility types for Playbook's evolving runtime contracts.
  *
  * The installed `@sublang/playbook` now supplies the composed six-port
  * contract, so the retired 0.9 profile is frozen here as local structural
@@ -62,7 +62,11 @@ export interface CaptainResult {
   error?: string;
 }
 
-export type RuntimeContractProfile = 'legacy' | 'session-v1' | 'composed-v2';
+export type RuntimeContractProfile =
+  | 'legacy'
+  | 'session-v1'
+  | 'composed-v2'
+  | 'composed-v3';
 
 export type JsonValue =
   | null
@@ -148,6 +152,21 @@ export type PlaybookRunResult =
       pendingCall: PlaybookPendingCall;
     };
 
+/** The schema-3 structured result extends v2 only at exact variant seams. */
+export type Schema3PlaybookRunResult =
+  | Exclude<PlaybookRunResult, { outcome: 'terminal' }>
+  | {
+      outcome: 'terminal';
+      state: PlaybookState;
+      stateDescription?: string;
+      output?: JsonValue;
+    }
+  | { outcome: 'unresolved-effect'; state: PlaybookState };
+
+export type CompatiblePlaybookRunResult =
+  | PlaybookRunResult
+  | Schema3PlaybookRunResult;
+
 /** The six source-owned ports, additive over the locked four-port contract. */
 export interface CompatiblePlaybookPorts extends LegacyPlaybookPorts {
   callPlayer(
@@ -223,12 +242,12 @@ export interface SessionPlaybookRuntime {
   handleBossInput(turn: {
     text: string;
     signal: AbortSignal;
-  }): Promise<PlaybookRunResult | void>;
+  }): Promise<CompatiblePlaybookRunResult | void>;
   resumePlaybookCall?(input: {
     callId: string;
     result: PlaybookCallResult;
     signal: AbortSignal;
-  }): Promise<PlaybookRunResult>;
+  }): Promise<CompatiblePlaybookRunResult>;
   dispose(): Promise<void>;
 }
 
@@ -243,13 +262,65 @@ export type CompatiblePlaybookRuntime =
   | SessionV1PlaybookRuntime
   | SessionPlaybookRuntime;
 
-export type CompatiblePlaybookRuntimeFactory<Options = unknown> = (
-  options: Options,
-) => CompatiblePlaybookRuntime;
+/** Exact shared-factory compatibility required by the schema-3 phase host. */
+export interface ComposedV3FactoryCompat {
+  readonly artifactSchema: 3;
+  readonly runtimeAbi: 1;
+}
 
+export interface EmptyEffectLedgerSnapshot {
+  schemaVersion: 1;
+  revision: 0;
+  boundaries: readonly [];
+  logicalOperations: readonly [];
+}
+
+/** The deliberately narrow repository seam owned by SLC's roleless host. */
+export interface PhaseHostRepository {
+  runExclusive(...args: readonly unknown[]): Promise<never>;
+  runDeferred(...args: readonly unknown[]): Promise<never>;
+}
+
+/** The immutable-empty/read-only effect seam owned by SLC's roleless host. */
+export interface PhaseHostEffectLedger {
+  snapshot(): EmptyEffectLedgerSnapshot;
+  writeAhead(...args: readonly unknown[]): Promise<never>;
+}
+
+/** No authority capability enters SLC's root phase host (DR-024). */
+export interface ComposedV3PhaseHostCapabilities {
+  repository: PhaseHostRepository;
+  effectLedger: PhaseHostEffectLedger;
+}
+
+export interface ComposedV3FactoryInput {
+  configuredOptions: Record<string, never>;
+  hostCapabilities: ComposedV3PhaseHostCapabilities;
+}
+
+export type CompatiblePlaybookRuntimeFactory<Options = unknown> = ((
+  options: Options,
+) => CompatiblePlaybookRuntime) & {
+  readonly compat?: unknown;
+};
+
+export function isPlaybookRunResult(value: unknown): value is PlaybookRunResult;
 export function isPlaybookRunResult(
   value: unknown,
-): value is PlaybookRunResult {
+  profile: 'composed-v2',
+): value is PlaybookRunResult;
+export function isPlaybookRunResult(
+  value: unknown,
+  profile: 'composed-v3',
+): value is Schema3PlaybookRunResult;
+export function isPlaybookRunResult(
+  value: unknown,
+  profile: 'composed-v2' | 'composed-v3',
+): value is CompatiblePlaybookRunResult;
+export function isPlaybookRunResult(
+  value: unknown,
+  profile: 'composed-v2' | 'composed-v3' = 'composed-v2',
+): value is CompatiblePlaybookRunResult {
   try {
     const fields = dataRecord(value);
     if (fields === null || typeof fields.outcome !== 'string') return false;
@@ -266,7 +337,15 @@ export function isPlaybookRunResult(
         );
       case 'terminal':
         return (
-          hasExactKeys(fields, ['outcome', 'state', 'output']) &&
+          hasExactKeys(
+            fields,
+            profile === 'composed-v3'
+              ? ['outcome', 'state', 'stateDescription', 'output']
+              : ['outcome', 'state', 'output'],
+          ) &&
+          (profile !== 'composed-v3' ||
+            fields.stateDescription === undefined ||
+            typeof fields.stateDescription === 'string') &&
           (fields.output === undefined || isJsonValue(fields.output))
         );
       case 'suspended': {
@@ -284,6 +363,11 @@ export function isPlaybookRunResult(
           nonEmptyString(pendingCall.childSessionId)
         );
       }
+      case 'unresolved-effect':
+        return (
+          profile === 'composed-v3' &&
+          hasExactKeys(fields, ['outcome', 'state'])
+        );
       default:
         return false;
     }
@@ -310,10 +394,8 @@ function isPlaybookState(value: unknown): value is PlaybookState {
   }
   if (
     typeof fields.quiescent !== 'boolean' ||
-    !Array.isArray(fields.activeStateIds) ||
-    !fields.activeStateIds.every((item) => typeof item === 'string') ||
-    !Array.isArray(fields.tags) ||
-    !fields.tags.every((item) => typeof item === 'string') ||
+    !isStringArray(fields.activeStateIds) ||
+    !isStringArray(fields.tags) ||
     typeof fields.status !== 'string' ||
     !['active', 'done', 'error', 'stopped'].includes(fields.status) ||
     (fields.stateId !== undefined && !nonEmptyString(fields.stateId))
@@ -341,7 +423,12 @@ function dataRecord(value: unknown): Record<string, unknown> | null {
   for (const [key, descriptor] of Object.entries(
     Object.getOwnPropertyDescriptors(value),
   )) {
-    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) return null;
+    if (
+      !descriptor.enumerable ||
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value')
+    ) {
+      return null;
+    }
     out[key] = descriptor.value;
   }
   return out;
@@ -405,28 +492,10 @@ function isJsonArray(
   value: readonly unknown[],
   ancestors: Set<object>,
 ): boolean {
-  if (Object.getOwnPropertySymbols(value).length > 0) return false;
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  for (let index = 0; index < value.length; index++) {
-    const descriptor = descriptors[String(index)];
-    if (
-      descriptor === undefined ||
-      !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
-      !isJsonValue(descriptor.value, ancestors)
-    ) {
-      return false;
-    }
-  }
-  return Object.entries(descriptors).every(([key, descriptor]) => {
-    if (!descriptor.enumerable) return true;
-    const index = Number(key);
-    return (
-      Number.isSafeInteger(index) &&
-      index >= 0 &&
-      index < value.length &&
-      String(index) === key
-    );
-  });
+  const values = denseArrayDataValues(value);
+  return (
+    values !== null && values.every((item) => isJsonValue(item, ancestors))
+  );
 }
 
 function enumerableDataValues(value: object): readonly unknown[] | null {
@@ -435,8 +504,50 @@ function enumerableDataValues(value: object): readonly unknown[] | null {
   for (const descriptor of Object.values(
     Object.getOwnPropertyDescriptors(value),
   )) {
-    if (!descriptor.enumerable) continue;
-    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+    if (
+      !descriptor.enumerable ||
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value')
+    ) {
+      return null;
+    }
+    values.push(descriptor.value);
+  }
+  return values;
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  if (!Array.isArray(value)) return false;
+  const values = denseArrayDataValues(value);
+  return values !== null && values.every((item) => typeof item === 'string');
+}
+
+/** Returns dense own data elements, rejecting accessors and extra array data. */
+function denseArrayDataValues(
+  value: readonly unknown[],
+): readonly unknown[] | null {
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+  if (
+    lengthDescriptor === undefined ||
+    lengthDescriptor.enumerable === true ||
+    !Object.prototype.hasOwnProperty.call(lengthDescriptor, 'value') ||
+    !Number.isSafeInteger(lengthDescriptor.value) ||
+    lengthDescriptor.value < 0
+  ) {
+    return null;
+  }
+  const length = lengthDescriptor.value as number;
+  if (Object.keys(descriptors).length !== length + 1) return null;
+
+  const values: unknown[] = [];
+  for (let index = 0; index < length; index++) {
+    const descriptor = descriptors[String(index)];
+    if (
+      descriptor === undefined ||
+      descriptor.enumerable !== true ||
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value')
+    ) {
       return null;
     }
     values.push(descriptor.value);

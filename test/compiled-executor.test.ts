@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
+import { execFile } from 'node:child_process';
 import {
   mkdtemp,
   readFile,
@@ -13,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -23,10 +25,17 @@ import type { ExecuteRequest } from '../src/execution.js';
 import type { AgentClient } from '../src/interpreter.js';
 import { isPlaybookRunResult } from '../src/playbook-contract.js';
 
+const execFileAsync = promisify(execFile);
+
 const fixture = join(
   dirname(fileURLToPath(import.meta.url)),
   'fixtures',
   'phase-fixture.mjs',
+);
+const composedV3Fixture = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'fixtures',
+  'phase-v3-fixture.mjs',
 );
 
 // An agent transport that is never invoked by the fixture (it only does file IO),
@@ -102,6 +111,74 @@ describe('structured PlaybookRunResult validation', () => {
     expect(() => isPlaybookRunResult(proxy)).not.toThrow();
     expect(isPlaybookRunResult(proxy)).toBe(false);
   });
+
+  it.each(['activeStateIds', 'tags'] as const)(
+    'rejects sparse, accessor-backed, and extra-property %s arrays in both composed profiles',
+    (field) => {
+      const sparse: string[] = [];
+      sparse.length = 1;
+      const accessor: string[] = [];
+      Object.defineProperty(accessor, '0', {
+        get: () => 'ready',
+        enumerable: true,
+        configurable: true,
+      });
+      const extra = Object.assign(['ready'], { extra: 'not array data' });
+
+      for (const profile of ['composed-v2', 'composed-v3'] as const) {
+        for (const value of [sparse, accessor, extra]) {
+          expect(
+            isPlaybookRunResult(
+              {
+                outcome: 'quiescent',
+                state: { ...structuredState, [field]: value },
+              },
+              profile,
+            ),
+          ).toBe(false);
+        }
+      }
+    },
+  );
+
+  it.each(['data', 'accessor'] as const)(
+    'rejects a non-enumerable %s member in recursive state and terminal output',
+    (kind) => {
+      const hiddenRecord = (): Record<string, unknown> => {
+        const value: Record<string, unknown> = {};
+        Object.defineProperty(
+          value,
+          'hidden',
+          kind === 'data'
+            ? { value: 'secret', enumerable: false }
+            : { get: () => 'secret', enumerable: false },
+        );
+        return value;
+      };
+
+      for (const profile of ['composed-v2', 'composed-v3'] as const) {
+        expect(
+          isPlaybookRunResult(
+            {
+              outcome: 'quiescent',
+              state: { ...structuredState, value: hiddenRecord() },
+            },
+            profile,
+          ),
+        ).toBe(false);
+        expect(
+          isPlaybookRunResult(
+            {
+              outcome: 'terminal',
+              state: structuredState,
+              output: hiddenRecord(),
+            },
+            profile,
+          ),
+        ).toBe(false);
+      }
+    },
+  );
 });
 
 // Integration: a compiled `playbook` artifact driven non-interactively through
@@ -135,6 +212,420 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
     };
     return fixtureExecutor().run(request, new AbortController().signal);
   };
+
+  const runComposedV3Fixture = async (sourceContent: string) => {
+    let playerTransports = 0;
+    await writeFile(join(root, 'src.md'), sourceContent);
+    const executor = createCompiledExecutor({
+      artifactPath: composedV3Fixture,
+      runRoot: root,
+      runtimeContract: 'composed-v3',
+      player: () => {
+        playerTransports += 1;
+        return idleAgent;
+      },
+      judge: idleAgent,
+      createSessionId: () => 'schema-3-session',
+      playbookId: 'schema-3-phase',
+    });
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: 'src.md',
+        target: 'out.ts',
+      },
+      new AbortController().signal,
+    );
+    return { result, playerTransports };
+  };
+
+  it('constructs and drives the exact roleless composed-v3 phase-host boundary', async () => {
+    // `root` is an isolated non-Git directory. The physical fixture itself
+    // checks the exact factory descriptor and argument, detached synchronous
+    // ledger snapshots, the authority-free capability shape, causal-root six
+    // ports, and non-observation of the optional schema-3 control surface.
+    const { result, playerTransports } =
+      await runComposedV3Fixture('hello schema 3');
+
+    expect(result).toEqual({ status: 'ok', diagnostics: [] });
+    expect(playerTransports).toBe(0);
+    expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe(
+      'compiled-v3:hello schema 3',
+    );
+  });
+
+  it('drives the same roleless composed-v3 fixture inside a Git worktree', async () => {
+    await execFileAsync('git', ['init', '--quiet'], { cwd: root });
+
+    const { result, playerTransports } = await runComposedV3Fixture(
+      'hello schema 3 in git',
+    );
+
+    expect(result).toEqual({ status: 'ok', diagnostics: [] });
+    expect(playerTransports).toBe(0);
+    expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe(
+      'compiled-v3:hello schema 3 in git',
+    );
+  });
+
+  it.each([
+    'missing',
+    'bespoke',
+    'inherited',
+    'accessor',
+    'writable',
+    'configurable',
+    'non-enumerable',
+    'unfrozen',
+    'non-enumerable-member',
+    'wrong',
+    'extra',
+  ] as const)(
+    'rejects a %s composed-v3 compatibility declaration before construction',
+    async (kind) => {
+      let constructions = 0;
+      const factory = () => {
+        constructions += 1;
+        return {
+          async init() {},
+          async handleBossInput() {
+            return { outcome: 'no-action', state: structuredState };
+          },
+          async dispose() {},
+        };
+      };
+      const exact = Object.freeze({ artifactSchema: 3, runtimeAbi: 1 });
+      const define = (
+        descriptor: PropertyDescriptor,
+        target: object = factory,
+      ): void => {
+        Object.defineProperty(target, 'compat', descriptor);
+      };
+      switch (kind) {
+        case 'missing':
+          break;
+        case 'bespoke':
+          Object.defineProperty(factory, 'runtimeProfile', {
+            value: Object.freeze({ kind: 'bespoke', artifactSchema: 3 }),
+            enumerable: true,
+            writable: false,
+            configurable: false,
+          });
+          break;
+        case 'inherited': {
+          const parent = Object.create(
+            Object.getPrototypeOf(factory),
+          ) as object;
+          define(
+            {
+              value: exact,
+              enumerable: true,
+              writable: false,
+              configurable: false,
+            },
+            parent,
+          );
+          Object.setPrototypeOf(factory, parent);
+          break;
+        }
+        case 'accessor':
+          define({ get: () => exact, enumerable: true, configurable: false });
+          break;
+        case 'writable':
+          define({
+            value: exact,
+            enumerable: true,
+            writable: true,
+            configurable: false,
+          });
+          break;
+        case 'configurable':
+          define({
+            value: exact,
+            enumerable: true,
+            writable: false,
+            configurable: true,
+          });
+          break;
+        case 'non-enumerable':
+          define({
+            value: exact,
+            enumerable: false,
+            writable: false,
+            configurable: false,
+          });
+          break;
+        case 'unfrozen':
+          define({
+            value: { artifactSchema: 3, runtimeAbi: 1 },
+            enumerable: true,
+            writable: false,
+            configurable: false,
+          });
+          break;
+        case 'non-enumerable-member': {
+          const value = Object.defineProperties(
+            {},
+            {
+              artifactSchema: {
+                value: 3,
+                enumerable: false,
+                writable: false,
+                configurable: false,
+              },
+              runtimeAbi: {
+                value: 1,
+                enumerable: true,
+                writable: false,
+                configurable: false,
+              },
+            },
+          );
+          define({
+            value: Object.freeze(value),
+            enumerable: true,
+            writable: false,
+            configurable: false,
+          });
+          break;
+        }
+        case 'wrong':
+          define({
+            value: Object.freeze({ artifactSchema: 3, runtimeAbi: 2 }),
+            enumerable: true,
+            writable: false,
+            configurable: false,
+          });
+          break;
+        case 'extra':
+          define({
+            value: Object.freeze({
+              artifactSchema: 3,
+              runtimeAbi: 1,
+              inferred: true,
+            }),
+            enumerable: true,
+            writable: false,
+            configurable: false,
+          });
+          break;
+      }
+
+      const executor = createCompiledExecutor({
+        artifactPath: 'ignored',
+        runRoot: root,
+        runtimeContract: 'composed-v3',
+        player: idleAgent,
+        judge: idleAgent,
+        loadFactory: async () => factory as never,
+      });
+      const result = await executor.run(
+        {
+          kind: 'compile',
+          definitionPath: join(root, 'phase.md'),
+          source: 'src.md',
+          target: 'out.ts',
+        },
+        new AbortController().signal,
+      );
+
+      expect(result.status).toBe('error');
+      expect(result.diagnostics.join('\n')).toMatch(
+        /composed-v3|compat|artifactSchema|runtimeAbi/i,
+      );
+      expect(constructions).toBe(0);
+    },
+  );
+
+  it.each(['options-only wrapper', 'required configured option'] as const)(
+    'does not retry a composed-v3 factory that rejects the exact construction as %s',
+    async (kind) => {
+      let constructions = 0;
+      const factory = (...args: unknown[]) => {
+        constructions += 1;
+        if (kind === 'options-only wrapper') {
+          if (args.length !== 0) throw new Error('options-only wrapper');
+        } else {
+          const argument = args[0] as {
+            configuredOptions?: { required?: unknown };
+          };
+          if (argument.configuredOptions?.required === undefined) {
+            throw new Error('required configured option is absent');
+          }
+        }
+        throw new Error('fixture accepted an unsupported construction');
+      };
+      Object.defineProperty(factory, 'compat', {
+        value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      });
+      let playerTransports = 0;
+      const executor = createCompiledExecutor({
+        artifactPath: 'ignored',
+        runRoot: root,
+        runtimeContract: 'composed-v3',
+        player: () => {
+          playerTransports += 1;
+          return idleAgent;
+        },
+        judge: idleAgent,
+        loadFactory: async () => factory as never,
+      });
+
+      const result = await executor.run(
+        {
+          kind: 'compile',
+          definitionPath: join(root, 'phase.md'),
+          source: 'src.md',
+          target: 'out.ts',
+        },
+        new AbortController().signal,
+      );
+
+      expect(result.status).toBe('error');
+      expect(result.diagnostics.join('\n')).toContain(
+        kind === 'options-only wrapper'
+          ? 'options-only wrapper'
+          : 'required configured option is absent',
+      );
+      expect(constructions).toBe(1);
+      expect(playerTransports).toBe(0);
+    },
+  );
+
+  it.each([
+    ['AUTHORITY', /authority/i],
+    ['REPOSITORY_EXCLUSIVE', /repository/i],
+    ['REPOSITORY_DEFERRED', /repository/i],
+    ['EFFECT_WRITE', /effect/i],
+    ['PLAYER', /composed-v3|player|delegated role/i],
+  ] as const)(
+    'fails closed when a roleless composed-v3 fixture requests %s',
+    async (sourceContent, diagnostic) => {
+      const { result, playerTransports } =
+        await runComposedV3Fixture(sourceContent);
+
+      expect(result.status).toBe('error');
+      expect(result.diagnostics.join('\n')).toMatch(diagnostic);
+      expect(result.diagnostics.join('\n')).not.toContain(
+        'repository operation was invoked',
+      );
+      expect(playerTransports).toBe(0);
+    },
+  );
+
+  it.each([
+    [
+      'composed-v3 terminal stateDescription',
+      'composed-v3',
+      {
+        outcome: 'terminal',
+        state: structuredState,
+        stateDescription: 'finished cleanly',
+      },
+      'ok',
+      undefined,
+    ],
+    [
+      'composed-v3 non-string stateDescription',
+      'composed-v3',
+      {
+        outcome: 'terminal',
+        state: structuredState,
+        stateDescription: 7,
+      },
+      'error',
+      /invalid run result/i,
+    ],
+    [
+      'composed-v3 stateDescription on a non-terminal variant',
+      'composed-v3',
+      {
+        outcome: 'quiescent',
+        state: structuredState,
+        stateDescription: 'not terminal',
+      },
+      'error',
+      /invalid run result/i,
+    ],
+    [
+      'composed-v3 unresolved effect',
+      'composed-v3',
+      { outcome: 'unresolved-effect', state: structuredState },
+      'error',
+      /unresolved.?effect/i,
+    ],
+    [
+      'composed-v3 unresolved effect with an extra field',
+      'composed-v3',
+      {
+        outcome: 'unresolved-effect',
+        state: structuredState,
+        error: { name: 'Error', message: 'not allowed' },
+      },
+      'error',
+      /invalid run result/i,
+    ],
+    [
+      'composed-v2 terminal stateDescription',
+      'composed-v2',
+      {
+        outcome: 'terminal',
+        state: structuredState,
+        stateDescription: 'schema-3-only field',
+      },
+      'error',
+      /invalid run result/i,
+    ],
+  ] as const)(
+    'maps a %s profile-exact structured result',
+    async (_name, runtimeContract, outcome, status, diagnostic) => {
+      const target = join(root, 'out.ts');
+      const factory = () => ({
+        async init() {},
+        async handleBossInput() {
+          await writeFile(target, 'fresh');
+          return outcome;
+        },
+        async resumePlaybookCall() {
+          return { outcome: 'no-action', state: structuredState };
+        },
+        async dispose() {},
+      });
+      Object.defineProperty(factory, 'compat', {
+        value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      });
+      const executor = createCompiledExecutor({
+        artifactPath: 'ignored',
+        runRoot: root,
+        runtimeContract,
+        player: idleAgent,
+        judge: idleAgent,
+        loadFactory: async () => factory as never,
+      });
+
+      const result = await executor.run(
+        {
+          kind: 'compile',
+          definitionPath: join(root, 'phase.md'),
+          source: 'src.md',
+          target,
+        },
+        new AbortController().signal,
+      );
+
+      expect(result.status).toBe(status);
+      if (diagnostic !== undefined) {
+        expect(result.diagnostics.join('\n')).toMatch(diagnostic);
+      }
+    },
+  );
 
   it('seeds and drives a compile request through the fixture runtime (phase-execution-29)', async () => {
     const result = await runFixture('hello');

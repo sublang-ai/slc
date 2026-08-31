@@ -52,13 +52,14 @@ import {
 } from './phase-runner.js';
 import type { PhaseInput, PhaseResult } from './phase-runner.js';
 import {
+  type CompatiblePlaybookRunResult,
   isPlaybookRunResult,
   type ComposedPlaybookPorts,
+  type ComposedV3FactoryInput,
   type CompatiblePlaybookPorts,
   type CompatiblePlaybookRuntime,
   type CompatiblePlaybookRuntimeFactory,
   type PlaybookSessionV1,
-  type PlaybookRunResult,
   type PlaybookSession,
   type PlayerCallOptions,
   type RuntimeContractProfile,
@@ -85,6 +86,110 @@ export async function loadPlaybookRuntime(
     );
   }
   return create as CompatiblePlaybookRuntimeFactory;
+}
+
+const COMPOSED_V3_COMPAT_ERROR =
+  'compiled composed-v3 factory requires immutable compatibility { artifactSchema: 3, runtimeAbi: 1 }';
+const COMPOSED_V3_REPOSITORY_ERROR =
+  'compiled composed-v3 phase host does not support repository operations';
+const COMPOSED_V3_EFFECT_ERROR =
+  'compiled composed-v3 phase host does not support effect-ledger writes';
+
+/**
+ * Constructs exactly the profile selected by reviewed provenance. The dormant
+ * v3 branch is intentionally reachable only through an explicit profile until
+ * the atomic Playbook 10 adoption maps that provenance (IR-023 Task 4).
+ */
+function constructRuntime(
+  factory: CompatiblePlaybookRuntimeFactory,
+  contract: RuntimeContractProfile,
+): CompatiblePlaybookRuntime {
+  if (contract !== 'composed-v3') return factory({});
+  requireComposedV3Compatibility(factory);
+  return (factory as CompatiblePlaybookRuntimeFactory<ComposedV3FactoryInput>)(
+    composedV3FactoryInput(),
+  );
+}
+
+/** Fails closed without reading a compatibility accessor or invoking a factory. */
+function requireComposedV3Compatibility(
+  factory: CompatiblePlaybookRuntimeFactory,
+): void {
+  let valid = false;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(factory, 'compat');
+    if (
+      descriptor !== undefined &&
+      Object.prototype.hasOwnProperty.call(descriptor, 'value') &&
+      descriptor.enumerable === true &&
+      descriptor.writable === false &&
+      descriptor.configurable === false
+    ) {
+      const compat = descriptor.value;
+      if (isPlainObject(compat) && Object.isFrozen(compat)) {
+        const names = Object.getOwnPropertyNames(compat);
+        const symbols = Object.getOwnPropertySymbols(compat);
+        const artifactSchema = Object.getOwnPropertyDescriptor(
+          compat,
+          'artifactSchema',
+        );
+        const runtimeAbi = Object.getOwnPropertyDescriptor(
+          compat,
+          'runtimeAbi',
+        );
+        valid =
+          names.length === 2 &&
+          names.includes('artifactSchema') &&
+          names.includes('runtimeAbi') &&
+          symbols.length === 0 &&
+          artifactSchema !== undefined &&
+          artifactSchema.enumerable === true &&
+          Object.prototype.hasOwnProperty.call(artifactSchema, 'value') &&
+          artifactSchema.value === 3 &&
+          runtimeAbi !== undefined &&
+          runtimeAbi.enumerable === true &&
+          Object.prototype.hasOwnProperty.call(runtimeAbi, 'value') &&
+          runtimeAbi.value === 1;
+      }
+    }
+  } catch {
+    // A hostile proxy is an invalid declaration, not a control-plane error.
+  }
+  if (!valid) throw new TypeError(COMPOSED_V3_COMPAT_ERROR);
+}
+
+/** Builds one fresh, plain, capability-bearing argument for a v3 factory. */
+function composedV3FactoryInput(): ComposedV3FactoryInput {
+  const rejectRepository = (): Promise<never> =>
+    Promise.reject(new Error(COMPOSED_V3_REPOSITORY_ERROR));
+  const rejectEffectWrite = (): Promise<never> =>
+    Promise.reject(new Error(COMPOSED_V3_EFFECT_ERROR));
+  return {
+    configuredOptions: {},
+    hostCapabilities: {
+      repository: {
+        runExclusive: rejectRepository,
+        runDeferred: rejectRepository,
+      },
+      effectLedger: {
+        snapshot: () => ({
+          schemaVersion: 1,
+          revision: 0,
+          boundaries: [],
+          logicalOperations: [],
+        }),
+        writeAhead: rejectEffectWrite,
+      },
+    },
+  };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  return prototype === Object.prototype || prototype === null;
 }
 
 /**
@@ -190,7 +295,7 @@ export function createCompiledExecutor(opts: {
       const result = mapVoidContractFailedState(
         driven,
         lastFsmState,
-        runtimeContract !== 'composed-v2',
+        runtimeContract === 'legacy' || runtimeContract === 'session-v1',
       );
       const mapped = mapPhaseResult(result);
       return {
@@ -250,7 +355,7 @@ async function drivePhase(
   let runtime: CompatiblePlaybookRuntime;
   try {
     const factory = await load(artifactPath);
-    runtime = factory({});
+    runtime = constructRuntime(factory, runtimeContract);
   } catch (error) {
     return {
       status: 'error',
@@ -315,13 +420,14 @@ async function disposeRuntime(
 function rootSession(
   identity: { sessionId: string; playbookId: string },
   ports: CompatiblePlaybookPorts,
+  contract: 'composed-v2' | 'composed-v3',
 ): PlaybookSession {
   return {
     sessionId: identity.sessionId,
     playbookId: identity.playbookId,
     rootSessionId: identity.sessionId,
     depth: 0,
-    ports: composedPorts(ports),
+    ports: composedPorts(ports, contract),
   };
 }
 
@@ -351,35 +457,46 @@ function sessionV1Ports(
   };
 }
 
-function composedPorts(ports: CompatiblePlaybookPorts): ComposedPlaybookPorts {
+function composedPorts(
+  ports: CompatiblePlaybookPorts,
+  contract: 'composed-v2' | 'composed-v3',
+): ComposedPlaybookPorts {
   return {
-    callPlayer: (playerId, prompt, signal, options) =>
-      preserveControlPlaneRejection('callPlayer', signal, () =>
+    callPlayer: (playerId, prompt, signal, options) => {
+      if (contract === 'composed-v3') {
+        return Promise.reject(
+          new Error(
+            'compiled composed-v3 phase host does not support delegated role calls',
+          ),
+        );
+      }
+      return preserveControlPlaneRejection(contract, 'callPlayer', signal, () =>
         ports.callPlayer(
           playerId,
           prompt,
           signal,
           requirePlayerCallOptions(options),
         ),
-      ),
+      );
+    },
     callCaptain: (prompt, signal, options) =>
-      preserveControlPlaneRejection('callCaptain', signal, () =>
+      preserveControlPlaneRejection(contract, 'callCaptain', signal, () =>
         ports.callCaptain(prompt, signal, options),
       ),
     callJudge: (prompt, signal) =>
-      preserveControlPlaneRejection('callJudge', signal, () =>
+      preserveControlPlaneRejection(contract, 'callJudge', signal, () =>
         ports.callJudge(prompt, signal),
       ),
     callPlaybook: (request, signal) =>
-      preserveControlPlaneRejection('callPlaybook', signal, () =>
+      preserveControlPlaneRejection(contract, 'callPlaybook', signal, () =>
         ports.callPlaybook(request, signal),
       ),
     emitStatus: (message, data) =>
-      preserveControlPlaneRejection('emitStatus', undefined, () =>
+      preserveControlPlaneRejection(contract, 'emitStatus', undefined, () =>
         ports.emitStatus(message, data),
       ),
     emitTelemetry: (event) =>
-      preserveControlPlaneRejection('emitTelemetry', undefined, () =>
+      preserveControlPlaneRejection(contract, 'emitTelemetry', undefined, () =>
         ports.emitTelemetry(event),
       ),
   };
@@ -393,6 +510,7 @@ function composedPorts(ports: CompatiblePlaybookPorts): ComposedPlaybookPorts {
  * nullish rejection a stable Error identity before it crosses the boundary.
  */
 async function preserveControlPlaneRejection<T>(
+  contract: 'composed-v2' | 'composed-v3',
   port: keyof ComposedPlaybookPorts,
   signal: AbortSignal | undefined,
   call: () => Promise<T>,
@@ -407,7 +525,7 @@ async function preserveControlPlaneRejection<T>(
       throw error;
     }
     throw new Error(
-      `compiled composed-v2 ${port} port rejected without an error`,
+      `compiled ${contract} ${port} port rejected without an error`,
       { cause: error },
     );
   }
@@ -447,7 +565,9 @@ function runtimeInitValue(
         ports: sessionV1Ports(ports),
       };
     case 'composed-v2':
-      return rootSession(identity, ports);
+      return rootSession(identity, ports, contract);
+    case 'composed-v3':
+      return rootSession(identity, ports, contract);
   }
 }
 
@@ -476,7 +596,7 @@ function mapRuntimeOutcome(
   produced: boolean,
   contract: RuntimeContractProfile,
 ): PhaseResult {
-  if (contract !== 'composed-v2') {
+  if (contract === 'legacy' || contract === 'session-v1') {
     return result === undefined
       ? legacyOutputResult(produced)
       : {
@@ -489,10 +609,10 @@ function mapRuntimeOutcome(
   if (result === undefined) {
     return {
       status: 'error',
-      diagnostics: ['compiled composed-v2 runtime returned no run result'],
+      diagnostics: [`compiled ${contract} runtime returned no run result`],
     };
   }
-  if (!isPlaybookRunResult(result)) {
+  if (!isPlaybookRunResult(result, contract)) {
     return {
       status: 'error',
       diagnostics: ['compiled runtime returned an invalid run result'],
@@ -526,7 +646,7 @@ function legacyOutputResult(produced: boolean): PhaseResult {
 }
 
 function structuredOutputResult(
-  result: PlaybookRunResult,
+  result: CompatiblePlaybookRunResult,
   produced: boolean,
 ): PhaseResult {
   switch (result.outcome) {
@@ -559,6 +679,11 @@ function structuredOutputResult(
         diagnostics: [
           `compiled runtime suspended for unsupported nested playbook call ${result.pendingCall.callId}`,
         ],
+      };
+    case 'unresolved-effect':
+      return {
+        status: 'error',
+        diagnostics: ['compiled runtime stopped with an unresolved effect'],
       };
   }
 }
