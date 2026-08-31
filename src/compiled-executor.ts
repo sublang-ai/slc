@@ -3,7 +3,8 @@
 
 /**
  * Compiled phase execution: load a `playbook` artifact and drive it host-side
- * (phase-execution-23, phase-execution-24, phase-execution-25; DR-005).
+ * (phase-execution-23, phase-execution-24, phase-execution-25,
+ * phase-execution-49; DR-005, DR-024).
  *
  * {@link loadPlaybookRuntime} imports a compiled `playbook` module and returns
  * its `createPlaybookRuntime` factory. {@link createCompiledExecutor} adapts it
@@ -12,11 +13,12 @@
  * non-interactive turn (`init` -> `handleBossInput` -> `dispose`), and maps a
  * structured result when present or the bounded legacy host-observable outcome
  * otherwise. The pin-selected contract profile chooses the exact legacy,
- * traced-session, or composed-session init shape without a retry heuristic
- * (DR-010, DR-011). The host-only `drainDiagnostics` stays host-side;
- * human status and non-trace operational telemetry become diagnostics. Like
- * interpreted execution, a compiled phase writes through its agents
- * (`callPlayer`) and relies on the DR-003 generic checks, which defend the
+ * traced-session, composed-session, or roleless schema-3 construction and init
+ * shape without a retry heuristic (DR-010, DR-011, DR-024). The host-only
+ * `drainDiagnostics` stays host-side; human status and non-trace operational
+ * telemetry become diagnostics. Older compiled profiles may write through
+ * `callPlayer`; roleless schema-3 rejects that port and uses direct Captain
+ * work. Every profile relies on the DR-003 generic checks, which defend the
  * protected inputs (not the full write scope); `slc` adds no host-side
  * write-scope enforcement.
  *
@@ -98,7 +100,7 @@ const COMPOSED_V3_EFFECT_ERROR =
 /**
  * Constructs exactly the profile selected by reviewed provenance. The dormant
  * v3 branch is intentionally reachable only through an explicit profile until
- * the atomic Playbook 10 adoption maps that provenance (IR-023 Task 4).
+ * the atomic Playbook 10 adoption maps that provenance (DR-024).
  */
 function constructRuntime(
   factory: CompatiblePlaybookRuntimeFactory,
