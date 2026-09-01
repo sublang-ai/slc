@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted
+Superseded by [DR-027](027-complete-playbook-10-activation.md): the deferred activation completed.
 
 ## Context
 

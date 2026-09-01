@@ -85,7 +85,7 @@ When discovery finds neither the working-directory `slc.config.yaml` nor the use
 
 ### cli-8
 
-When the slc executable runs a pipeline, phase, or link, the executable shall inject into `runSlc` an interpreted executor built on the agent transport — the execution for every unpinned phase — and a compiled-execution factory that runs a current pin whose provenance decision maps to `legacy` or `composed-v2` through its artifact resolved against the pipeline directory, backs each player port with one configured agent transport per player id, backs Captain and judge ports with one shared configured transport, applies the selected model as the default per-player model, and rejects every unmapped provenance before artifact execution without interpreting that pinned phase ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-025](../decisions/025-defer-playbook-10-activation.md), [[phase-execution-25](phase-execution.md#phase-execution-25)], [[phase-execution-27](phase-execution.md#phase-execution-27)], [[phase-execution-30](phase-execution.md#phase-execution-30)]).
+When the slc executable runs a pipeline, phase, or link, the executable shall inject into `runSlc` an interpreted executor built on the agent transport — the execution for every unpinned phase — and a compiled-execution factory that runs a current pin whose provenance decision maps to `legacy`, `composed-v2`, or `composed-v3` through its artifact resolved against the pipeline directory, backs each `legacy` and `composed-v2` player port with one configured agent transport per player id while the roleless `composed-v3` player port rejects without an agent transport, backs every profile's Captain and judge ports with one shared configured transport, applies the selected model as the default per-player model, and rejects every unmapped provenance before artifact execution without interpreting that pinned phase ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), [[phase-execution-25](phase-execution.md#phase-execution-25)], [[phase-execution-27](phase-execution.md#phase-execution-27)], [[phase-execution-30](phase-execution.md#phase-execution-30)]).
 
 ### cli-40
 
@@ -187,8 +187,8 @@ Where a pipeline directory pins a phase to a current compiled `playbook` artifac
 
 | Case | Required outcome |
 | --- | --- |
-| The pin's provenance decision maps to `legacy` or `composed-v2` and the artifact completes. | Write the artifact's declared target, exit zero, use the configured agent transport and selected per-player model for any player call, and never invoke the interpreted executor. |
-| The pin carries an unmapped provenance, including exact `@sublang/playbook@10.0.0`. | Fail closed before artifact execution without invoking a player transport or the interpreted executor. |
+| The pin's provenance decision maps to `legacy`, `composed-v2`, or `composed-v3` and the artifact completes. | Write the artifact's declared target, exit zero, use the configured agent transport and selected per-player model for any player call, and never invoke the interpreted executor. |
+| The pin carries an unmapped provenance, including exact `@sublang/playbook@9.0.0`. | Fail closed before artifact execution without invoking a player transport or the interpreted executor. |
 
 ## References
 
