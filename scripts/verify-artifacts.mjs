@@ -10,7 +10,7 @@
 //
 //   node scripts/verify-artifacts.mjs <artifactDir> <basename>
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +31,7 @@ export const reviewArtifact = async ({
     checkFsmCoverage,
     checkGearsFsmConformance,
     checkPromptComposition,
+    enumerateCaptainStates,
     findConcurrentRoleSets,
     findMachineConfig,
     loadFsmModule,
@@ -123,6 +124,11 @@ export const reviewArtifact = async ({
 
   section('prompt contract');
   const rows = capturePromptContract(config);
+  const promptActors = new Set(
+    enumerateCaptainStates(config)
+      .map(({ actor }) => actor)
+      .filter((actor) => actor === 'captain' || actor === 'player'),
+  );
   for (const row of rows) {
     log(
       `  ${row.state}: reads [${row.reads.join(', ')}] placeholders [${row.placeholders.join(', ')}]`,
@@ -134,9 +140,12 @@ export const reviewArtifact = async ({
         ['captain', 'composeCaptainPrompt'],
         ['player', 'composePlayerPrompt'],
       ]) {
+        if (!promptActors.has(actor)) continue;
         const compose = linked._internal?.[exportName];
         if (typeof compose !== 'function') {
-          log(`linked module exposes no _internal.${exportName}`);
+          const message = `linked module exposes no _internal.${exportName} required by ${actor} states`;
+          findings.push(message);
+          log(message);
           continue;
         }
         const composition = checkPromptComposition({
@@ -161,7 +170,13 @@ export const reviewArtifact = async ({
       log(`linked module failed to import: ${message}`);
     }
   } else {
-    log('no linked module beside the artifacts');
+    const message = 'no linked module beside the artifacts';
+    findings.push(
+      promptActors.size === 0
+        ? message
+        : `${message}; composition cannot be reviewed for ${[...promptActors].join(' and ')} states`,
+    );
+    log(message);
   }
 
   section('transition coverage');
@@ -182,7 +197,7 @@ export const reviewArtifact = async ({
 
 if (
   process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 ) {
   const [dir, basename] = process.argv.slice(2);
   if (!dir || !basename) {

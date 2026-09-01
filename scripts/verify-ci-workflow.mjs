@@ -5,7 +5,14 @@
 // and the repository inputs that make its gates complete and reproducible.
 
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, matchesGlob } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -235,6 +242,13 @@ try {
     composition: [],
   };
   const logs = [];
+  let actorKinds = ['captain', 'player'];
+  const injectedFindings = {
+    schema: ['synthetic schema disagreement'],
+    conformance: [],
+    composition: [],
+    coverage: [],
+  };
   const verification = {
     loadFsmModule: async (path) => {
       observed.fsmPath = path;
@@ -252,16 +266,17 @@ try {
       observed.schemaInput = input;
       return {
         artifactSchema: 3,
-        findings: ['synthetic schema disagreement'],
+        findings: injectedFindings.schema,
       };
     },
+    enumerateCaptainStates: () => actorKinds.map((actor) => ({ actor })),
     findConcurrentRoleSets: (value) => {
       observed.concurrentInput = value;
       return concurrentRoleSets;
     },
     checkGearsFsmConformance: (gears, value, options) => {
       observed.conformance = { gears, config: value, options };
-      return [];
+      return injectedFindings.conformance;
     },
     pinIntrospection: () => ({
       captain: [],
@@ -273,11 +288,11 @@ try {
     capturePromptContract: () => [],
     checkPromptComposition: (input) => {
       observed.composition.push(input);
-      return [];
+      return injectedFindings.composition;
     },
     checkFsmCoverage: async (value, options) => {
       observed.coverage = { fsm: value, options };
-      return [];
+      return injectedFindings.coverage;
     },
   };
   let pinVerdict = { status: 'current' };
@@ -353,6 +368,78 @@ try {
     passed: false,
   });
   assert.equal(logs.at(-1), 'FAIL: 1 finding(s)');
+
+  injectedFindings.schema = [];
+  for (const [kind, message, expected] of [
+    ['conformance', 'synthetic conformance drift', 'conformance'],
+    ['composition', 'synthetic prompt drift', 'composition'],
+    ['coverage', 'synthetic unreachable arm', 'coverage'],
+  ]) {
+    if (kind === 'composition') actorKinds = ['captain'];
+    injectedFindings[kind] = [message];
+    const findingResult = await reviewArtifact({
+      dir: artifactDir,
+      basename: 'synthetic',
+      log: (line) => logs.push(line),
+      verification,
+      pinning,
+    });
+    assert.deepEqual(findingResult, {
+      findings: [`${expected}: ${message}`],
+      passed: false,
+    });
+    assert.equal(logs.at(-1), 'FAIL: 1 finding(s)');
+    injectedFindings[kind] = [];
+    actorKinds = ['captain', 'player'];
+  }
+
+  delete linked._internal.composePlayerPrompt;
+  const missingComposerResult = await reviewArtifact({
+    dir: artifactDir,
+    basename: 'synthetic',
+    log: (line) => logs.push(line),
+    verification,
+    pinning,
+  });
+  assert.deepEqual(missingComposerResult, {
+    findings: [
+      'linked module exposes no _internal.composePlayerPrompt required by player states',
+    ],
+    passed: false,
+  });
+
+  actorKinds = ['captain'];
+  const irrelevantComposerResult = await reviewArtifact({
+    dir: artifactDir,
+    basename: 'synthetic',
+    log: (line) => logs.push(line),
+    verification,
+    pinning,
+  });
+  assert.deepEqual(irrelevantComposerResult, { findings: [], passed: true });
+  actorKinds = ['captain', 'player'];
+  linked._internal.composePlayerPrompt = composePlayerPrompt;
+
+  const linkedPath = join(artifactDir, 'synthetic.playbook.ts');
+  const hiddenLinkedPath = `${linkedPath}.missing`;
+  actorKinds = [];
+  await rename(linkedPath, hiddenLinkedPath);
+  try {
+    const missingLinkedResult = await reviewArtifact({
+      dir: artifactDir,
+      basename: 'synthetic',
+      log: (line) => logs.push(line),
+      verification,
+      pinning,
+    });
+    assert.deepEqual(missingLinkedResult, {
+      findings: ['no linked module beside the artifacts'],
+      passed: false,
+    });
+  } finally {
+    await rename(hiddenLinkedPath, linkedPath);
+  }
+  actorKinds = ['captain', 'player'];
 
   pinVerdict = { status: 'stale', reason: 'artifact bundle changed' };
   verification.resolveArtifactSchemaForVerification = (input) => {
