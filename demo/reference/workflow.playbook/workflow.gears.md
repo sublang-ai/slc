@@ -1,4 +1,4 @@
-# Two-Agent Code-and-Review Workflow
+# Two-Agent Change-and-Review Workflow
 
 Roles:
 
@@ -11,7 +11,7 @@ Roles:
 
 When Boss gives the input task and work has not begun, Captain shall run:
 
-> test -e .git || git init
+> [ -e .git ] || git init
 
 Results:
 - `ok`: The command exited with status zero.
@@ -23,6 +23,8 @@ When the current directory is the root of its own Git repository and the input t
 
 > Modify the code in the current directory as the input task requires.
 > Commit the change to Git.
+> The input task:
+> <input-task>
 
 ### WORKFLOW-3
 

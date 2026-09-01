@@ -85,7 +85,7 @@ function validateOptions(value: unknown): RuntimeOptions {
 const entry = {
   id: 'workflow',
   command: 'workflow',
-  intent: 'Two-Agent Code-and-Review Workflow — Roles:',
+  intent: 'Two-Agent Change-and-Review Workflow — Roles:',
   artifactSchema: 3,
   runtimeProfile: 'composed-v3',
   concurrentRoleSets: [] as readonly (readonly string[])[],

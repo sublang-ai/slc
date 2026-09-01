@@ -1,7 +1,7 @@
 import { assign, fromPromise, setup } from 'xstate';
 
 /*
- * Compiled from the GEARS package "Two-Agent Code-and-Review Workflow"
+ * Compiled from the GEARS package "Two-Agent Change-and-Review Workflow"
  * (items WORKFLOW-1 .. WORKFLOW-7).
  *
  * Object artifact only: it defines the machine, actor contracts, and typed
@@ -49,6 +49,8 @@ export type PlayerInput = {
   readonly sourceItem: string;
   readonly prompt: string;
   readonly result: Readonly<Record<string, string>>;
+  /** Backs the `<input-task>` prompt placeholder of WORKFLOW-2. */
+  readonly inputTask?: string;
   /** Backs the `<reviewFindings>` prompt placeholder of WORKFLOW-4. */
   readonly reviewFindings?: string;
   /** Backs the `<coderJudgment>` prompt placeholders of WORKFLOW-5 and WORKFLOW-7. */
@@ -84,6 +86,8 @@ export type ScriptOutput =
 /* -- Machine context, events, and input ----------------------------------- */
 
 export type WorkflowContext = {
+  /** The input task Boss gave with the entry event; backs `<input-task>`. */
+  readonly inputTask?: string;
   /** Review loops started so far; WORKFLOW-3 allows the first and the second. */
   readonly reviewLoops: number;
   /** Judgments made in the current loop; WORKFLOW-5 argues below three. */
@@ -97,7 +101,7 @@ export type WorkflowContext = {
 };
 
 export type WorkflowEvent =
-  | { readonly type: 'START' }
+  | { readonly type: 'START'; readonly inputTask: string }
   | { readonly type: 'BOSS_INTERRUPT'; readonly targetId: InterruptTargetId }
   | {
       readonly type: 'BOSS_REPLY';
@@ -131,7 +135,7 @@ const AWAIT_BOSS_REPLY_DESCRIPTION =
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const hasText = (value: unknown): boolean =>
+const hasText = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
 /** Narrows an unknown XState event's `output` to the declared player contract. */
@@ -233,7 +237,7 @@ const INTERRUPT_TARGET_IDS = [
 const interruptPreconditions: Readonly<
   Record<InterruptTargetId, (context: WorkflowContext) => boolean>
 > = {
-  implement: () => true,
+  implement: (context) => hasText(context.inputTask),
   review: () => true,
   judgeFindings: (context) => hasText(context.reviewFindings),
   argue: (context) => hasText(context.coderJudgment),
@@ -331,7 +335,8 @@ export const workflowMachine = setup({
   },
   actions: {
     startRun: assign(
-      (): Partial<WorkflowContext> => ({
+      ({ context, event }): Partial<WorkflowContext> => ({
+        inputTask: event.type === 'START' ? event.inputTask : context.inputTask,
         reviewLoops: 0,
         judgmentCount: 0,
         reviewFindings: undefined,
@@ -476,7 +481,7 @@ export const workflowMachine = setup({
         input: (): ScriptInput => ({
           stateId: 'setup',
           sourceItem: 'WORKFLOW-1',
-          command: 'test -e .git || git init',
+          command: '[ -e .git ] || git init',
           result: {
             ok: 'The command exited with status zero.',
             failed: 'The command exited with a nonzero status.',
@@ -517,11 +522,16 @@ export const workflowMachine = setup({
           prompt: [
             'Modify the code in the current directory as the input task requires.',
             'Commit the change to Git.',
+            'The input task:',
+            '<input-task>',
           ].join('\n'),
           result: {
             done: COMPLETED_BEHAVIOR,
             needsBossReply: NEEDS_BOSS_REPLY,
           },
+          ...(context.inputTask !== undefined
+            ? { inputTask: context.inputTask }
+            : {}),
           ...(context.pendingBossQuestion !== undefined
             ? { pendingBossQuestion: context.pendingBossQuestion }
             : {}),
