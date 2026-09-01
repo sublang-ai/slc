@@ -310,6 +310,10 @@ describe('pin generation (pinning-16, pinning-19)', () => {
     );
     await writeReviewedBundle('pipelines/playbook/');
     await write('pipelines/playbook/link/code.ts', 'link target bytes\n');
+    await write(
+      'pipelines/playbook/runtime/dependency.ts',
+      'export const runtime = true;\n',
+    );
 
     const record = await generatePinRecord(
       pipelineDir,
@@ -318,6 +322,13 @@ describe('pin generation (pinning-16, pinning-19)', () => {
         artifact: 'text2gears.slc/text2gears.playbook.ts',
         artifactBundle: 'text2gears.slc',
         linkTarget: { kind: 'file', locator: 'link/code.ts' },
+        runtimeDependencies: [
+          {
+            kind: 'file',
+            locator: 'runtime/dependency.ts',
+            provenance: 'fixture-runtime',
+          },
+        ],
       },
       boundary,
     );
@@ -329,6 +340,14 @@ describe('pin generation (pinning-16, pinning-19)', () => {
       {
         path: '../../package-lock.json',
         hash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      },
+    ]);
+    expect(record.runtimeDependencies).toEqual([
+      {
+        kind: 'file',
+        locator: 'runtime/dependency.ts',
+        identity: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        provenance: 'fixture-runtime',
       },
     ]);
 
@@ -381,6 +400,18 @@ describe('pin generation (pinning-16, pinning-19)', () => {
         text2gears: ['reference/gears.md', 'reference/gears.md'],
       }),
       /duplicate|closures/,
+    ],
+    [
+      'a closure path resolving to the definition',
+      pinInputs({ text2gears: ['./text2gears.md'] }),
+      /closures\.text2gears\[0\].*definition/,
+    ],
+    [
+      'distinct closure paths resolving to one member',
+      pinInputs({
+        text2gears: ['reference/gears.md', './reference/gears.md'],
+      }),
+      /closures\.text2gears\[1\].*another closure member/,
     ],
     ['an empty closure path', pinInputs({ text2gears: [''] }), /non-empty/],
     [

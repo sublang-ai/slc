@@ -64,7 +64,7 @@ Options:
 const pinInputs = (closures: Record<string, string[]>): string =>
   `${JSON.stringify({ schema: PIN_INPUTS_SCHEMA, closures }, null, 2)}\n`;
 
-describe('success-only incremental runner (incremental-compilation-18..25, incremental-compilation-27..32)', () => {
+describe('success-only incremental runner (incremental-compilation-18..25, incremental-compilation-27..33)', () => {
   let root: string;
   let pipelineDir: string;
   let workDir: string;
@@ -403,6 +403,76 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
     expect(result.outcome).toBe('up-to-date');
     expect(calls).toHaveLength(0);
     expect((await loadBuildHistory(artDir))?.build).toBe(1);
+  });
+
+  it('ignores sidecar presentation and well-formed unrelated entries for identity (incremental-compilation-33)', async () => {
+    const references = join(pipelineDir, 'references');
+    await mkdir(references);
+    await writeFile(join(references, 'a.md'), 'grammar a\n');
+    await writeFile(join(references, 'b.md'), 'grammar b\n');
+    const sidecar = join(pipelineDir, PIN_INPUTS_FILE);
+    await writeFile(sidecar, pinInputs({ text2middle: ['references/a.md'] }));
+    await runSlc(['flow', source], deps(fake([])));
+
+    await writeFile(
+      sidecar,
+      JSON.stringify({
+        schema: PIN_INPUTS_SCHEMA,
+        closures: { text2middle: ['references/a.md'] },
+      }),
+    );
+    const presentationCalls: ExecuteRequest[] = [];
+    const presentation = await runSlc(
+      ['flow', source],
+      deps(fake(presentationCalls)),
+    );
+
+    expect(presentation).toMatchObject({ ok: true, outcome: 'up-to-date' });
+    expect(presentationCalls).toHaveLength(0);
+    expect((await loadBuildHistory(artDir))?.build).toBe(1);
+
+    await writeFile(
+      sidecar,
+      JSON.stringify({
+        schema: PIN_INPUTS_SCHEMA,
+        closures: {
+          text2middle: ['references/a.md'],
+          unused: ['references/b.md'],
+        },
+      }),
+    );
+    const unrelatedCalls: ExecuteRequest[] = [];
+    const unrelated = await runSlc(
+      ['flow', source],
+      deps(fake(unrelatedCalls)),
+    );
+
+    expect(unrelated).toMatchObject({ ok: true, outcome: 'up-to-date' });
+    expect(unrelatedCalls).toHaveLength(0);
+    expect((await loadBuildHistory(artDir))?.build).toBe(1);
+  });
+
+  it('defaults an unpinned sidecar to the pipeline boundary (incremental-compilation-29)', async () => {
+    await writeFile(join(root, 'outside.md'), 'outside input\n');
+    await writeFile(
+      join(pipelineDir, PIN_INPUTS_FILE),
+      pinInputs({ text2middle: ['../outside.md'] }),
+    );
+    const calls: ExecuteRequest[] = [];
+
+    const result = await runSlc(['flow', source], deps(fake(calls)));
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(
+      calls.every(
+        (request) => request.kind !== 'compile' || request.update === undefined,
+      ),
+    ).toBe(true);
+    expect(result.diagnostics.join('\n')).toContain(
+      'slc: build history not recorded:',
+    );
+    expect(await loadBuildHistory(artDir)).toBeNull();
   });
 
   it.each([

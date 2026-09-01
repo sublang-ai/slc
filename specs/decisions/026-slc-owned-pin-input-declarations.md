@@ -17,15 +17,17 @@ The declaration source also contributes to incremental input identity and target
 ## Decision
 
 - A pipeline may contain an SLC-owned `slc.pin-inputs.json` semantic-input declaration beside `slc.pins.json`.
-- The sidecar shall be a regular non-symbolic-link strict-JSON file with schema `sublang.slc.pin-inputs.v1`, no unknown fields, and one `closures` object mapping portable phase or pass names, including reserved `link`, to arrays of unique relative POSIX-style paths.
+- The sidecar shall be a regular non-symbolic-link strict-JSON file with schema `sublang.slc.pin-inputs.v1`, no unknown fields, and one `closures` object mapping portable phase or pass names, including reserved `link`, to arrays of unique literal relative POSIX-style path locators.
 - Each `closures` entry shall list the phase's complete flattened local semantic-input closure other than the definition itself; its paths use the pipeline directory's coordinate system and must resolve inside the same recorded or generation-time path boundary as every other local pin path.
+- When an entry is applicable, its members' lexically normalized absolute host paths shall be distinct from the selected definition and one another or closure derivation shall reject it.
 - A present entry is authoritative for that phase: closure derivation adds the separately recorded definition and the entry's paths without reading any `## Pin Inputs` section for transitive expansion.
 - Where the sidecar or the phase's entry is absent, closure derivation shall retain [DR-007](007-slc-phase-artifact-pinning.md)'s existing transitive inline `## Pin Inputs` behavior.
 - The same applicable declaration shall govern pin generation, pin-currency validation, incremental input identity, and protected local-input discovery; explicit Markdown reference inputs that are not the phase definition retain their inline transitive declarations.
-- The applicable sidecar entry's canonical resolved member-locator set and exact member bytes — but not unrelated entries or JSON presentation — shall contribute to incremental identity, and the sidecar path remains protected from output aliasing.
+- The complete sidecar shall remain one strict structural unit, while only the applicable entry's canonical resolved member-locator set and exact member bytes — not well-formed unrelated entries or JSON presentation — shall contribute to incremental identity, and the sidecar path remains protected from output aliasing.
+- Where ordinary execution has no pin index supplying a recorded boundary, sidecar closure derivation shall use the pipeline directory as its path boundary; widening requires a generation-time boundary that is then recorded in the pin index.
 - A pin key shall bind its definition by portable POSIX basename rather than by its complete locator: phase `<phase>` requires a definition basename `<phase>.md`, while the definition locator may resolve anywhere inside the path boundary.
 - Artifact-bundle and linked-entry paths remain the canonical pipeline-local `<phase>.slc` and `<phase>.slc/<phase>.playbook.ts` paths.
-- External definition locators do not change pipeline discovery in this decision: execution shall fail closed unless the selected phase definition resolves to the pin-recorded definition locator, leaving activation of installed-package definition resolution to the later de-vendoring cutover.
+- External definition locators do not change pipeline discovery in this decision: execution shall fail closed unless the selected phase definition and pin-recorded definition locator identify the same physical file, leaving activation of installed-package definition resolution to the later de-vendoring cutover.
 
 This decision narrowly supersedes [DR-007](007-slc-phase-artifact-pinning.md)'s requirement that the root closure declaration live in the definition body and that the complete definition locator equal `<phase>.md`.
 It supersedes [DR-021](021-incremental-compilation.md)'s inline-only phase-definition closure source while retaining its inline behavior for explicit Markdown references.

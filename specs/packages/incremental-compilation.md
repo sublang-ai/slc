@@ -70,7 +70,7 @@ While an eligible run has a valid active marker, when its first phase is selecte
 
 #### incremental-compilation-13
 
-When an eligible run computes a compile phase's current identities, the slc command shall hash in this order: chained-input exact bytes, definition exact bytes, explicit-reference exact bytes, then the phase definition's applicable local closure [[pinning-17](pinning.md#pinning-17)] — for a sidecar entry, an unambiguously framed identity of the phase key and resolved closure-member locators encoded as canonical pipeline-relative POSIX paths in ascending UTF-8 byte order followed by the members' exact-byte hashes in that order, and for an inline declaration, the closure members' exact bytes in transitive declaration order — followed by the Markdown references' transitive inline `## Pin Inputs` closure bytes [[phase-execution-15](phase-execution.md#phase-execution-15)], [[phase-execution-33](phase-execution.md#phase-execution-33)]; for a link phase it shall hash ordered object locators and bytes, the link definition [[phase-execution-2](phase-execution.md#phase-execution-2)] and its applicable local closure under the same sidecar-or-inline rule, link-target locator and content [[pipeline-12](pipeline.md#pipeline-12)], and ordered option pairs with unambiguous framing [[pipeline-14](pipeline.md#pipeline-14)] ([DR-026](../decisions/026-slc-owned-pin-input-declarations.md)).
+When an eligible run computes a compile phase's current identities, the slc command shall constrain local closure paths to the recorded pin boundary when present and otherwise to the pipeline directory, and hash in this order: chained-input exact bytes, definition exact bytes, explicit-reference exact bytes, then the phase definition's applicable local closure [[pinning-17](pinning.md#pinning-17)] — for a sidecar entry, an unambiguously framed identity of the phase key and resolved closure-member locators encoded as canonical pipeline-relative POSIX paths in ascending UTF-8 byte order followed by the members' exact-byte hashes in that order, with no well-formed unrelated entry or JSON presentation contributing, and for an inline declaration, the closure members' exact bytes in transitive declaration order — followed by the Markdown references' transitive inline `## Pin Inputs` closure bytes [[phase-execution-15](phase-execution.md#phase-execution-15)], [[phase-execution-33](phase-execution.md#phase-execution-33)]; for a link phase it shall hash ordered object locators and bytes, the link definition [[phase-execution-2](phase-execution.md#phase-execution-2)] and its applicable local closure under the same boundary and sidecar-or-inline rules, link-target locator and content [[pipeline-12](pipeline.md#pipeline-12)], and ordered option pairs with unambiguous framing [[pipeline-14](pipeline.md#pipeline-14)] ([DR-026](../decisions/026-slc-owned-pin-input-declarations.md)).
 
 #### incremental-compilation-14
 
@@ -142,7 +142,7 @@ While malformed `.slc` state structurally prevents fresh history from being reco
 
 #### incremental-compilation-29
 
-Where an unpinned phase's declared local-input identity cannot be derived or read, when an eligible invocation runs, the phase shall execute ordinarily, the compile shall remain successful, and history publication shall be skipped with an advisory diagnostic [[incremental-compilation-14](#incremental-compilation-14)], [[incremental-compilation-17](#incremental-compilation-17)].
+Where an unpinned phase's declared local-input identity cannot be derived or read — including where an unpinned sidecar member escapes the pipeline-directory boundary — when an eligible invocation runs, the phase shall execute ordinarily, the compile shall remain successful, and history publication shall be skipped with an advisory diagnostic [[incremental-compilation-13](#incremental-compilation-13)], [[incremental-compilation-14](#incremental-compilation-14)], [[incremental-compilation-17](#incremental-compilation-17)].
 
 #### incremental-compilation-30
 
@@ -155,3 +155,12 @@ While a fixture pipeline has an active build whose phase definition uses a `slc.
 #### incremental-compilation-32
 
 While a fixture pipeline has an active build whose phase definition uses a multi-member `slc.pin-inputs.json` closure entry, when only the entry's array order changes, the next eligible invocation shall preserve the same identity and select Reuse [[incremental-compilation-13](#incremental-compilation-13)], [[incremental-compilation-14](#incremental-compilation-14)].
+
+#### incremental-compilation-33
+
+While a fixture pipeline has an active build whose phase definition uses a `slc.pin-inputs.json` closure entry, when the suite applies each sidecar-only change below and runs the next eligible invocation, the invocation shall preserve the phase identities, select Reuse, report `up to date`, and publish no new build [[incremental-compilation-2](#incremental-compilation-2)], [[incremental-compilation-13](#incremental-compilation-13)], [[incremental-compilation-14](#incremental-compilation-14)]:
+
+| Case | Sidecar-only change |
+| --- | --- |
+| Presentation | Change only the valid JSON presentation. |
+| Unrelated entry | Add one well-formed entry that is not applicable to a scheduled phase. |
