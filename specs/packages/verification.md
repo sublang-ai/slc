@@ -48,7 +48,8 @@ When a compilation-correctness check selects the artifact schema used by generat
 
 | Evidence case | Required schema decision |
 | --- | --- |
-| A running full-link compile knows the concrete link target's owning package, or standalone review has the artifact's own matching pin. | Map only exact reviewed link-target provenance according to the supported entry contracts [[self-hosting-15](self-hosting.md#self-hosting-15)] and report unsupported present provenance; never substitute the pin of a compiler phase that produced an intermediate artifact. |
+| A running full-link compile knows the concrete link target's owning package, or standalone review has the artifact's own matching pin whose currency validator reports current [[pinning-2](pinning.md#pinning-2)]. | Map only exact reviewed link-target provenance according to the supported entry contracts [[self-hosting-15](self-hosting.md#self-hosting-15)] and report unsupported present provenance; never substitute the pin of a compiler phase that produced an intermediate artifact. |
+| Standalone review finds an artifact pin record whose currency verdict is stale or malformed [[pinning-3](pinning.md#pinning-3)], [[pinning-5](pinning.md#pinning-5)]. | Exclude that record's provenance from the schema decision and decide from the artifact's other valid signals without replacing the pin validator's verdict. |
 | The FSM contains historical `invoke.input.player` bindings and no schema-3 role binding or controller. | Supply a schema-1 actor-generation signal. |
 | The FSM contains a schema-3 `invoke.input.role` binding or controller [[verification-20](#verification-20)] and no historical player binding. | Supply a schema-3 actor-generation signal. |
 | The FSM contains both historical player and schema-3 role or controller structure. | Report conflicting actor-generation signals. |

@@ -3,7 +3,14 @@
 
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +53,27 @@ import {
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+
+describe('standalone artifact review entry', () => {
+  it('recognizes a symlinked script path as the CLI main module', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-review-entry-'));
+    try {
+      const script = join(root, 'verify-artifacts.mjs');
+      await symlink(join(repoRoot, 'scripts', 'verify-artifacts.mjs'), script);
+
+      await expect(
+        execFileAsync(process.execPath, [script]),
+      ).rejects.toMatchObject({
+        code: 2,
+        stderr: expect.stringContaining(
+          'usage: node scripts/verify-artifacts.mjs',
+        ),
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('reviewed Playbook artifact schemas', () => {
   it.each([
