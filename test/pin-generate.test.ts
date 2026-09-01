@@ -295,7 +295,7 @@ describe('pin generation (pinning-16, pinning-19)', () => {
     });
   });
 
-  it('pins a sectionless installed definition from a flattened sidecar closure (pinning-8, pinning-10, pinning-16)', async () => {
+  it('pins a sectionless installed definition from a flattened sidecar closure (pinning-8, pinning-10, pinning-16, pinning-22)', async () => {
     const pipelineDir = join(dir, 'pipelines', 'playbook');
     const definition = '../../node_modules/@sublang/playbook/slc/text2gears.md';
     const boundary = { boundary: '../..' };
@@ -368,7 +368,7 @@ describe('pin generation (pinning-16, pinning-19)', () => {
     });
   });
 
-  const invalidSidecars: Array<[string, string, RegExp]> = [
+  const invalidSidecars: Array<[string, string, RegExp, boolean?]> = [
     ['invalid JSON', '{ not JSON', /JSON/],
     [
       'an unsupported schema',
@@ -405,6 +405,7 @@ describe('pin generation (pinning-16, pinning-19)', () => {
       'a closure path resolving to the definition',
       pinInputs({ text2gears: ['./text2gears.md'] }),
       /closures\.text2gears\[0\].*definition/,
+      true,
     ],
     [
       'distinct closure paths resolving to one member',
@@ -412,6 +413,7 @@ describe('pin generation (pinning-16, pinning-19)', () => {
         text2gears: ['reference/gears.md', './reference/gears.md'],
       }),
       /closures\.text2gears\[1\].*another closure member/,
+      true,
     ],
     ['an empty closure path', pinInputs({ text2gears: [''] }), /non-empty/],
     [
@@ -425,7 +427,7 @@ describe('pin generation (pinning-16, pinning-19)', () => {
       /POSIX|path/,
     ],
     [
-      'a boundary-escaping closure path',
+      'a boundary-escaping closure path (pinning-22)',
       pinInputs({ text2gears: ['../outside.md'] }),
       /boundary/,
     ],
@@ -433,14 +435,20 @@ describe('pin generation (pinning-16, pinning-19)', () => {
 
   it.each(invalidSidecars)(
     'rejects %s sidecar in generation and currency validation (pinning-19)',
-    async (_label, content, reason) => {
+    async (_label, content, reason, staleDefinition = false) => {
       await writeFixture();
       const record = await generatePinRecord(dir, spec);
       await writePinFile(dir, { text2gears: record });
       await write(PIN_INPUTS_FILE, content);
+      if (staleDefinition) {
+        await write('text2gears.md', 'independently stale definition\n');
+      }
 
       const result = await evaluatePins(dir);
       const verdict = result.verdicts?.text2gears;
+      if (staleDefinition) {
+        expect(verdict?.status).toBe('malformed');
+      }
       expect(
         result.malformed ??
           (verdict as { reason?: string } | undefined)?.reason,

@@ -7,8 +7,8 @@
  *
  * A pipeline's optional `slc.pin-inputs.json` maps a phase or pass name to its
  * complete flattened local semantic-input closure, excluding the separately
- * recorded definition. The loader is strict and validates every declared path
- * against the same boundary used by pin generation or currency validation.
+ * recorded definition. Strict loading validates every declared path; tolerant
+ * inspection also retains independently valid paths for runtime protection.
  */
 
 import { lstat, readFile } from 'node:fs/promises';
@@ -36,6 +36,14 @@ export interface LoadedPinInputs {
   file?: PinInputsFile;
 }
 
+/** A tolerant boundary inspection used by runtime protected-input discovery. */
+export interface InspectedPinInputs extends LoadedPinInputs {
+  /** Resolved members by entry and source order; invalid members stay absent. */
+  resolvedClosures: Record<string, Array<string | undefined>>;
+  /** First boundary failure in file order, when any member is invalid. */
+  issue?: PinError;
+}
+
 /**
  * Loads and validates `<pipelineDir>/slc.pin-inputs.json` (pinning-18).
  *
@@ -45,6 +53,65 @@ export interface LoadedPinInputs {
 export async function loadPinInputsFile(
   pipelineDir: string,
   boundary: string,
+): Promise<LoadedPinInputs> {
+  const inspected = await inspectPinInputsFile(pipelineDir, boundary);
+  if (inspected.issue !== undefined) {
+    throw inspected.issue;
+  }
+  if (inspected.path === undefined || inspected.file === undefined) {
+    return {};
+  }
+  return { path: inspected.path, file: inspected.file };
+}
+
+/**
+ * Reads the complete sidecar structure and inspects every member boundary.
+ *
+ * Unlike {@link loadPinInputsFile}, a member boundary failure is returned with
+ * every independently valid resolved member. Structural failures still throw
+ * because no trustworthy entry/member list can be recovered from them.
+ */
+export async function inspectPinInputsFile(
+  pipelineDir: string,
+  boundary: string,
+): Promise<InspectedPinInputs> {
+  const loaded = await readPinInputsFile(pipelineDir);
+  const resolvedClosures: Record<
+    string,
+    Array<string | undefined>
+  > = Object.create(null) as Record<string, Array<string | undefined>>;
+  if (loaded.file === undefined) {
+    return { resolvedClosures };
+  }
+
+  let issue: PinError | undefined;
+  for (const [phase, closure] of Object.entries(loaded.file.closures)) {
+    const resolved: Array<string | undefined> = [];
+    resolvedClosures[phase] = resolved;
+    for (let index = 0; index < closure.length; index++) {
+      try {
+        resolved[index] = resolvePinPath(
+          pipelineDir,
+          boundary,
+          closure[index],
+          `${loaded.path}.closures.${phase}[${index}]`,
+        );
+      } catch (error) {
+        if (!(error instanceof PinError)) throw error;
+        issue ??= error;
+      }
+    }
+  }
+  return {
+    ...loaded,
+    resolvedClosures,
+    ...(issue === undefined ? {} : { issue }),
+  };
+}
+
+/** Reads and structurally validates the sidecar without resolving members. */
+async function readPinInputsFile(
+  pipelineDir: string,
 ): Promise<LoadedPinInputs> {
   const path = join(pipelineDir, PIN_INPUTS_FILE);
   let info;
@@ -74,16 +141,6 @@ export async function loadPinInputsFile(
     );
   }
   const file = parsePinInputsFile(source, path);
-  for (const [phase, closure] of Object.entries(file.closures)) {
-    for (let index = 0; index < closure.length; index++) {
-      resolvePinPath(
-        pipelineDir,
-        boundary,
-        closure[index],
-        `${path}.closures.${phase}[${index}]`,
-      );
-    }
-  }
   return { path, file };
 }
 

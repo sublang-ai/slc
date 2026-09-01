@@ -2,23 +2,28 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Semantic-input closure derivation for the pin-currency validator (pinning-2, pinning-4;
- * DR-007).
+ * Semantic-input closure derivation for pin generation, currency, incremental
+ * identity, and protected-input discovery (pinning-17, pinning-21; DR-026).
  *
  * A pinned phase's semantic-input closure is its definition plus the complete
  * flattened paths in a matching `slc.pin-inputs.json` entry, when present.
  * Without that entry, the legacy declaration remains every local file
  * transitively cited by inline `## Pin Inputs` sections. Explicit Markdown
  * references select no phase entry and therefore always retain inline
- * transitive derivation (pinning-17). The derived closure is compared — as a set
- * of resolved paths — to the recorded definition plus semanticInputs; any
- * difference is a stale verdict (pinning-4). See specs/packages/pinning.md.
+ * transitive derivation (pinning-17). Strict callers reject an incomplete
+ * closure; protected-input discovery can retain its independently resolved
+ * in-boundary members (phase-execution-50). See specs/packages/pinning.md.
  */
 
 import { readFile } from 'node:fs/promises';
 
 import { findSection } from './markdown.js';
-import { loadPinInputsFile, PIN_INPUTS_FILE } from './pin-inputs.js';
+import {
+  inspectPinInputsFile,
+  PIN_INPUTS_FILE,
+  type InspectedPinInputs,
+  type LoadedPinInputs,
+} from './pin-inputs.js';
 import { resolvePinPath } from './pin-paths.js';
 import { PinError, type PinRecord } from './pins.js';
 
@@ -29,6 +34,14 @@ const INLINE_CODE = /`([^`]+)`/g;
 export interface DerivedClosure {
   paths: Set<string>;
   declaration: 'sidecar' | 'inline';
+}
+
+/** A complete closure or the safely resolved subset of an incomplete one. */
+export interface InspectedClosure {
+  paths: Set<string>;
+  declaration?: 'sidecar' | 'inline';
+  complete: boolean;
+  issue?: PinError;
 }
 
 /** Extracts the inline-code paths cited by a `## Pin Inputs` section (DR-007). */
@@ -63,6 +76,7 @@ export async function deriveClosure(
   definitionPath: string,
   phase?: string,
   observePath?: (path: string) => void,
+  pinInputs?: LoadedPinInputs,
 ): Promise<Set<string>> {
   return (
     await deriveClosureWithDeclaration(
@@ -71,6 +85,7 @@ export async function deriveClosure(
       definitionPath,
       phase,
       observePath,
+      pinInputs,
     )
   ).paths;
 }
@@ -82,9 +97,52 @@ export async function deriveClosureWithDeclaration(
   definitionPath: string,
   phase?: string,
   observePath?: (path: string) => void,
+  pinInputs?: LoadedPinInputs,
 ): Promise<DerivedClosure> {
+  const inspected = await inspectClosureWithDeclaration(
+    pipelineDir,
+    boundary,
+    definitionPath,
+    phase,
+    observePath,
+    pinInputs,
+  );
+  if (inspected.issue !== undefined) {
+    throw inspected.issue;
+  }
+  if (inspected.declaration === undefined) {
+    throw new Error('complete closure inspection has no declaration');
+  }
+  return { paths: inspected.paths, declaration: inspected.declaration };
+}
+
+/**
+ * Inspects closure derivation without discarding independently safe members.
+ *
+ * Strict generation and currency callers use {@link deriveClosureWithDeclaration},
+ * which throws the first issue. Runtime protection consumes this structured
+ * result even when `complete` is false, while incremental identity does not.
+ */
+export async function inspectClosureWithDeclaration(
+  pipelineDir: string,
+  boundary: string,
+  definitionPath: string,
+  phase?: string,
+  observePath?: (path: string) => void,
+  pinInputs?: LoadedPinInputs,
+): Promise<InspectedClosure> {
+  let inspectedPinInputs: InspectedPinInputs | undefined;
+  let loaded = pinInputs;
   if (phase !== undefined) {
-    const loaded = await loadPinInputsFile(pipelineDir, boundary);
+    if (loaded === undefined) {
+      try {
+        inspectedPinInputs = await inspectPinInputsFile(pipelineDir, boundary);
+        loaded = inspectedPinInputs;
+      } catch (error) {
+        if (!(error instanceof PinError)) throw error;
+        return { paths: new Set<string>(), complete: false, issue: error };
+      }
+    }
     if (
       loaded.file !== undefined &&
       Object.hasOwn(loaded.file.closures, phase)
@@ -93,39 +151,62 @@ export async function deriveClosureWithDeclaration(
         observePath?.(loaded.path);
       }
       const closure = new Set<string>();
-      addResolvedPath(
-        closure,
-        pipelineDir,
-        boundary,
-        definitionPath,
-        'definition.path',
-        observePath,
-      );
-      const declared = loaded.file.closures[phase];
-      for (let index = 0; index < declared.length; index++) {
-        const field = `${PIN_INPUTS_FILE}.closures.${phase}[${index}]`;
-        const resolved = resolvePinPath(
+      let issue = inspectedPinInputs?.issue;
+      try {
+        addResolvedPath(
+          closure,
           pipelineDir,
           boundary,
-          declared[index],
-          field,
+          definitionPath,
+          'definition.path',
+          observePath,
         );
+      } catch (error) {
+        if (!(error instanceof PinError)) throw error;
+        issue ??= error;
+      }
+      const declared = loaded.file.closures[phase];
+      const inspectedMembers = inspectedPinInputs?.resolvedClosures[phase];
+      for (let index = 0; index < declared.length; index++) {
+        const field = `${PIN_INPUTS_FILE}.closures.${phase}[${index}]`;
+        let resolved = inspectedMembers?.[index];
+        if (inspectedMembers === undefined) {
+          try {
+            resolved = resolvePinPath(
+              pipelineDir,
+              boundary,
+              declared[index],
+              field,
+            );
+          } catch (error) {
+            if (!(error instanceof PinError)) throw error;
+            issue ??= error;
+          }
+        }
+        if (resolved === undefined) continue;
         if (closure.has(resolved)) {
-          throw new PinError(
+          issue ??= new PinError(
             'pin-invalid',
             `${field} resolves to the definition or another closure member`,
           );
+        } else {
+          closure.add(resolved);
         }
-        closure.add(resolved);
         observePath?.(resolved);
       }
-      return { paths: closure, declaration: 'sidecar' };
+      return {
+        paths: closure,
+        declaration: 'sidecar',
+        complete: issue === undefined,
+        ...(issue === undefined ? {} : { issue }),
+      };
     }
   }
 
   const closure = new Set<string>();
   const seen = new Set<string>();
   const queue: string[] = [definitionPath];
+  let issue = inspectedPinInputs?.issue;
 
   while (queue.length > 0) {
     const rel = queue.shift() as string;
@@ -134,12 +215,14 @@ export async function deriveClosureWithDeclaration(
     }
     seen.add(rel);
 
-    const resolved = resolvePinPath(
-      pipelineDir,
-      boundary,
-      rel,
-      PIN_INPUT_FIELD,
-    );
+    let resolved: string;
+    try {
+      resolved = resolvePinPath(pipelineDir, boundary, rel, PIN_INPUT_FIELD);
+    } catch (error) {
+      if (!(error instanceof PinError)) throw error;
+      issue ??= error;
+      continue;
+    }
     closure.add(resolved);
     observePath?.(resolved);
 
@@ -158,7 +241,12 @@ export async function deriveClosureWithDeclaration(
       }
     }
   }
-  return { paths: closure, declaration: 'inline' };
+  return {
+    paths: closure,
+    declaration: 'inline',
+    complete: issue === undefined,
+    ...(issue === undefined ? {} : { issue }),
+  };
 }
 
 /**
@@ -172,6 +260,7 @@ export async function closureMatchesRecord(
   record: PinRecord,
   phase?: string,
   observePath?: (path: string) => void,
+  pinInputs?: LoadedPinInputs,
 ): Promise<boolean> {
   const derived = await deriveClosure(
     pipelineDir,
@@ -179,7 +268,18 @@ export async function closureMatchesRecord(
     record.definition.path,
     phase,
     observePath,
+    pinInputs,
   );
+  return derivedClosureMatchesRecord(pipelineDir, boundary, record, derived);
+}
+
+/** Compares one already-derived closure with the paths recorded by a pin. */
+export function derivedClosureMatchesRecord(
+  pipelineDir: string,
+  boundary: string,
+  record: PinRecord,
+  derived: ReadonlySet<string>,
+): boolean {
   const recorded = new Set<string>();
   recorded.add(
     resolvePinPath(
@@ -222,7 +322,7 @@ async function readIfPresent(absolutePath: string): Promise<string | null> {
   }
 }
 
-function setsEqual(a: Set<string>, b: Set<string>): boolean {
+function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   if (a.size !== b.size) {
     return false;
   }

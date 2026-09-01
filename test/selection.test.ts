@@ -21,6 +21,7 @@ import type {
 } from '../src/execution.js';
 import { hashFile } from '../src/hash.js';
 import { evaluatePins, hashTree } from '../src/pin-currency.js';
+import { PIN_INPUTS_FILE, PIN_INPUTS_SCHEMA } from '../src/pin-inputs.js';
 import {
   PINS_FILE,
   PIN_HASH_ALGORITHM,
@@ -258,10 +259,8 @@ describe('compiled selection and pin-input safety (phase-execution-28, phase-exe
       'node_modules/@sublang/playbook/slc/text2gears.md',
     );
     await mkdir(dirname(installedDefinition), { recursive: true });
-    await writeFile(
-      installedDefinition,
-      await readFile(join(pipelineDir, 'text2gears.md')),
-    );
+    const definitionBytes = await readFile(join(pipelineDir, 'text2gears.md'));
+    await symlink(join(pipelineDir, 'text2gears.md'), installedDefinition);
     record.definition = {
       path: '../node_modules/@sublang/playbook/slc/text2gears.md',
       hash: await hashFile(installedDefinition),
@@ -271,6 +270,14 @@ describe('compiled selection and pin-input safety (phase-execution-28, phase-exe
     compiled.calls.length = 0;
     selections.length = 0;
 
+    const reuseControl = await runSlc(['flow', source], deps());
+    expect(reuseControl).toMatchObject({ ok: true, outcome: 'up-to-date' });
+    expect(interpreted.calls).toHaveLength(0);
+    expect(compiled.calls).toHaveLength(0);
+    expect(selections).toHaveLength(0);
+
+    await rm(installedDefinition);
+    await writeFile(installedDefinition, definitionBytes);
     const result = await runSlc(['flow', source], deps());
 
     expect(result.ok).toBe(false);
@@ -407,27 +414,30 @@ describe('compiled selection and pin-input safety (phase-execution-28, phase-exe
     expect(compiled.calls).toHaveLength(0);
   });
 
-  it('fails closed when an unselected pin record is malformed', async () => {
+  it('fails closed when an unselected stale pin has a malformed sidecar closure', async () => {
     const record = await writeCurrentPin();
-    const unrelated: PinRecord = {
-      ...record,
-      definition: { path: 'gears2fsm.md', hash: 'not-a-hash' },
-      artifact: {
-        path: 'gears2fsm.slc/gears2fsm.playbook.ts',
-        hash: record.artifact.hash,
-      },
-      artifactBundle: {
-        path: 'gears2fsm.slc',
-        hash: record.artifactBundle.hash,
-      },
-    };
+    const unrelated = await writeCurrentPin('gears2fsm');
     await writePins({ text2gears: record, gears2fsm: unrelated });
+    await writeFile(
+      join(pipelineDir, PIN_INPUTS_FILE),
+      JSON.stringify({
+        schema: PIN_INPUTS_SCHEMA,
+        closures: { gears2fsm: ['./gears2fsm.md'] },
+      }),
+    );
+    await writeFile(
+      join(pipelineDir, 'gears2fsm.md'),
+      `${await readFile(join(pipelineDir, 'gears2fsm.md'), 'utf8')}\n<!-- independently stale -->\n`,
+    );
 
     const result = await runPhase();
     expect(result.ok).toBe(false);
-    expect(result.diagnostics.join('\n')).toMatch(/malformed/);
+    expect(result.diagnostics.join('\n')).toMatch(
+      /closures\.gears2fsm\[0\].*definition/,
+    );
     expect(interpreted.calls).toHaveLength(0);
     expect(compiled.calls).toHaveLength(0);
+    expect(selections).toHaveLength(0);
   });
 
   it('fails closed for an unparseable pin file', async () => {

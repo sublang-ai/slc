@@ -64,7 +64,7 @@ meta.md       The spec of specs
 | [incremental-compilation.md](packages/incremental-compilation.md) | Complete build history, sidecar-aware input identity, reuse/update/ordinary selection, update context, success-only publication, rebuilds, exclusions, and fixture acceptance |
 | [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
 | [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, compiled runtime profiles, pin selection, status streaming, and the agent-stall watchdog |
-| [pinning.md](packages/pinning.md) | Pin-currency validation and generation: SLC-owned closure declarations, boundary-contained definitions, current/stale/malformed verdicts, and fixture acceptance |
+| [pinning.md](packages/pinning.md) | Closure derivation, pin-currency validation, and generation: SLC-owned declarations, context-selected path boundaries, boundary-contained definitions, currency verdicts, and fixture acceptance |
 | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, link-object import settlement, pass and normalization scheduling, and system acceptance |
 | [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |
 | [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, atomic reviewed-asset adoption, and system acceptance |

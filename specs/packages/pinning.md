@@ -8,7 +8,7 @@
 This package specifies SLC-owned semantic-input closure declarations and derivation, explicit build-and-review pin generation, and the host-side validator that decides whether a pipeline's committed compiled-phase pins are current under [DR-007](../decisions/007-slc-phase-artifact-pinning.md) and [DR-026](../decisions/026-slc-owned-pin-input-declarations.md).
 Given a pipeline directory, the validator reads `slc.pins.json`, the optional SLC-owned `slc.pin-inputs.json` semantic-input declaration, and the committed inputs they identify, and reports for each pinned phase a verdict of current, stale, or malformed.
 It runs no compiled artifact and selects no execution strategy — that is the compiled executor's role under [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) — but beyond existing and matching its recorded hash, the compiled artifact must resolve to the linked `playbook` format, recognized from its committed bytes, or the phase is stale.
-Verification exercises generation and validation end-to-end over fixture pipeline directories and ordinary committed files because pin currency is decided from bytes and paths without running a compiled artifact.
+Verification exercises closure derivation during generation, validation, incremental-identity discovery, and protected-input discovery over fixture pipeline directories and ordinary committed files.
 Essential project-specific references are `slc`, this project's compiler; the `slc.pins.json` pin file and currency contract of [DR-007](../decisions/007-slc-phase-artifact-pinning.md); and the reserved `slc.link` phase and `playbook` artifact of [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md).
 
 ## External Behavior
@@ -19,7 +19,7 @@ Essential project-specific references are `slc`, this project's compiler; the `s
 
 Where a pipeline directory contains no `slc.pins.json`, when the validator evaluates the pipeline, the validator shall report no pins and treat every phase as unpinned, without raising an error ([DR-007](../decisions/007-slc-phase-artifact-pinning.md)).
 
-### Currency
+### Closure derivation
 
 #### pinning-17
 
@@ -30,9 +30,21 @@ When closure derivation derives a phase or pass's semantic-input closure, it sha
 | A well-formed `slc.pin-inputs.json` contains a `closures` entry keyed by the phase or pass name whose lexically normalized absolute host paths are distinct from the definition and one another. | Exactly the entry's complete flattened set of pipeline-relative paths, without transitive expansion from any `## Pin Inputs` section. |
 | The sidecar or the keyed entry is absent. | Every path in the definition's `## Pin Inputs` section and the transitive `## Pin Inputs` sections of its local Markdown inputs, terminating at non-Markdown and sectionless Markdown inputs. |
 
+#### pinning-21
+
+When semantic-input closure derivation resolves the supplied definition or a local semantic-input locator, it shall require the locator to remain inside the applicable path boundary selected by context ([DR-026](../decisions/026-slc-owned-pin-input-declarations.md)):
+
+| Context | Applicable path boundary |
+| --- | --- |
+| Explicit pin generation | The requested generation boundary, defaulting to the pipeline directory. |
+| Pin-currency validation, incremental-identity discovery, or protected-input discovery with a loaded `slc.pins.json` | The recorded `pathBoundary.path`. |
+| Incremental-identity or protected-input discovery without `slc.pins.json` | The pipeline directory. |
+
+### Currency
+
 #### pinning-18
 
-Where `slc.pin-inputs.json` is present, when pin generation or pin-currency validation loads it, the loader shall accept only a regular non-symbolic-link strict-JSON file with schema `sublang.slc.pin-inputs.v1`, no unknown fields, and a `closures` object whose keys are `link` or portable phase/pass names and whose values contain only unique literal non-empty relative POSIX-style path locators resolving inside the recorded validation boundary or the requested generation boundary that defaults to the pipeline directory, and shall otherwise refuse generation or report the pin malformed with a diagnostic naming the offending field and no phase current ([DR-026](../decisions/026-slc-owned-pin-input-declarations.md)).
+Where `slc.pin-inputs.json` is present, when pin generation or pin-currency validation loads it, the loader shall accept only a regular non-symbolic-link strict-JSON file with schema `sublang.slc.pin-inputs.v1`, no unknown fields, and a `closures` object whose keys are `link` or portable phase/pass names and whose values contain only unique literal non-empty relative POSIX-style path locators valid under the applicable boundary [[pinning-21](#pinning-21)], and shall otherwise refuse generation or report the pin malformed with a diagnostic naming the offending field and no phase current ([DR-026](../decisions/026-slc-owned-pin-input-declarations.md)).
 
 #### pinning-2
 
@@ -110,8 +122,22 @@ Where a fixture phase records an external input as a bare URL or an unvendored m
 
 #### pinning-16
 
-Where fixture phases include an inline-declared definition and a matching-basename definition outside the pipeline directory whose complete closure is declared by `slc.pin-inputs.json`, and each has a `.playbook.ts` artifact and reviewed artifact bundle directly containing the canonical local FSM, GEARS, and four verification files, local executable runtime dependencies, and a link target committed inside its boundary, when the build-and-review flow generates and writes each pin, the validator shall report both phases current [[pinning-15](#pinning-15)] under the applicable declaration [[pinning-17](#pinning-17)].
+Where fixture phases include an inline-declared definition and a matching-basename definition outside the pipeline directory whose complete closure is declared by `slc.pin-inputs.json`, and each has a `.playbook.ts` artifact and reviewed artifact bundle directly containing the canonical local FSM, GEARS, and four verification files, local executable runtime dependencies, and a link target committed inside its applicable boundary [[pinning-21](#pinning-21)], when the build-and-review flow generates and writes each pin, the validator shall report both phases current [[pinning-15](#pinning-15)] under the applicable declaration [[pinning-17](#pinning-17)].
 
 #### pinning-19
 
-Where fixture `slc.pin-inputs.json` files exercise a symbolic link, invalid JSON, an unsupported schema, an unknown or wrong-typed field, a non-portable closure key, a duplicate literal closure path, a member locator lexically normalizing to the definition locator, two distinct literal member locators lexically normalizing to one absolute host path, and an empty, absolute, backslash-containing, or boundary-escaping closure path, when pin-currency validation and pin generation process each fixture, the validator shall report the pin malformed with no phase current and the generator shall refuse, each with a diagnostic naming the offending field [[pinning-18](#pinning-18)], [[pinning-20](#pinning-20)].
+Where fixture `slc.pin-inputs.json` files exercise a symbolic link, invalid JSON, an unsupported schema, an unknown or wrong-typed field, a non-portable closure key, a duplicate literal closure path, a member locator lexically normalizing to the definition locator, two distinct literal member locators lexically normalizing to one absolute host path, and an empty, absolute, backslash-containing, or boundary-escaping closure path under the applicable boundary [[pinning-21](#pinning-21)], with each normalized-path collision paired with an independently stale recorded definition, when pin-currency validation and pin generation process each fixture, the validator shall report the pin malformed with no phase current and the generator shall refuse, each with a diagnostic naming the offending field [[pinning-18](#pinning-18)], [[pinning-20](#pinning-20)].
+
+### Closure-derivation acceptance
+
+#### pinning-22
+
+Where fixture pipelines exercise every closure-derivation context below, when the integration suite resolves their declared members, each context shall use its applicable path boundary [[pinning-21](#pinning-21)]:
+
+| Context | Required result |
+| --- | --- |
+| Pin generation without an explicit boundary | A pipeline-local member is admitted and a parent member is refused. |
+| Pin generation with a wider requested boundary | A member inside that wider boundary is admitted and recorded. |
+| Pin-currency validation | The recorded boundary admits the same external member. |
+| Incremental-identity and protected-input discovery with a pin index | The recorded boundary admits an external member. |
+| Incremental-identity and protected-input discovery without a pin index | The pipeline boundary leaves a parent member underivable. |

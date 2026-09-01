@@ -44,8 +44,8 @@ import { type Invocation, parseInvocation } from './invocation.js';
 import { unifiedLineDiff } from './line-diff.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
 import {
-  deriveClosureWithDeclaration,
-  type DerivedClosure,
+  inspectClosureWithDeclaration,
+  type InspectedClosure,
 } from './pin-closure.js';
 import { PIN_INPUTS_FILE } from './pin-inputs.js';
 import { resolvePinPath } from './pin-paths.js';
@@ -1360,22 +1360,25 @@ async function declaredInputPaths(
       continue;
     }
     const locator = relative(pipeline.dir, absolute).split(sep).join('/');
-    let closure: DerivedClosure;
-    const observed = new Set<string>();
+    let closure: InspectedClosure;
     try {
-      closure = await deriveClosureWithDeclaration(
+      closure = await inspectClosureWithDeclaration(
         pipeline.dir,
         boundary,
         locator,
         root.phase,
-        (path) => observed.add(path),
       );
     } catch {
-      // This derivation exists only for incremental identity and best-effort
-      // target protection. Pin generation/currency remain fail-closed, while an
-      // otherwise interpretable phase degrades to Ordinary execution.
+      // An unexpected inspection failure still degrades runner-only identity
+      // to Ordinary execution; structured PinError outcomes retain safe paths.
       complete = false;
-      for (const path of observed) {
+      continue;
+    }
+    if (!closure.complete) {
+      // An incomplete closure is unusable for identity, but every independently
+      // resolved in-boundary member remains protected from output aliasing.
+      complete = false;
+      for (const path of closure.paths) {
         const absolutePath = resolve(path);
         if (seen.has(absolutePath)) continue;
         seen.add(absolutePath);
