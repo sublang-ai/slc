@@ -17,40 +17,59 @@ import * as playbook from './link.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'link',
+    state: 'linking',
     sourceItem: 'LINK-1',
     player: '',
-    reads: ['bossReply', 'pendingBossQuestion'],
+    reads: ['bossReply', 'pendingBossQuestion', 'source', 'target'],
     wires: {
+      source: ['source'],
+      target: ['target'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
     placeholders: [
-      '<PlaybookRuntimeOptions>',
+      '<source>',
+      '<target>',
       '<void>',
       '<PlaybookRunResult>',
+      '<PlaybookEffectLedger>',
+      '<PlaybookRuntimeOptions>',
+      '<Options>',
       '<PlayerResult>',
       '<CaptainResult>',
       '<string>',
       '<PlaybookCallStart>',
-      '<playerName>',
+      '<n>',
+      '<pendingBossQuestion.question>',
+      '<bossReply>',
       '<remaining-plan>',
       '<completed-call-results>',
+      '<field>',
       '<stateId>',
       '<status>',
+      '<acceptedOutcome>',
+      '<Role>',
+      '<label>',
+      '<PlaybookControlReceipt>',
+      '<EVENT_TYPE>',
       '<state>',
       '<#>',
     ],
   },
 ];
+const SCHEMA_FINDINGS = [];
 
 describe('link: prompt contract', () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('matches the prompt contract pinned at build time', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    link: [],
+    linking: ['<source>', '<target>'],
   };
 
   const composeCaptain = (
@@ -65,6 +84,7 @@ describe('link: prompt contract', () => {
         config: findMachineConfig(fsm),
         compose: composeCaptain,
         actor: 'captain',
+        artifactSchema: 3,
       }),
     ).toEqual([]);
   });

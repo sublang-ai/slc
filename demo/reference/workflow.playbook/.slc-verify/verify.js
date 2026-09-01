@@ -32,6 +32,47 @@ import { hashFile } from './hash.js';
  */
 export const NEEDS_BOSS_REPLY = 'needsBossReply';
 export const BOSS_QUESTION_MARKER = 'Output shall include `question:';
+/** Artifact schema selected only by a complete reviewed Playbook provenance. */
+export function artifactSchemaForPlaybookProvenance(provenance) {
+  switch (provenance) {
+    case '@sublang/playbook@0.10.0':
+    case '@sublang/playbook@1.0.0':
+    case '@sublang/playbook@2.0.0':
+    case '@sublang/playbook@3.1.0':
+    case '@sublang/playbook@4.0.0':
+      return 1;
+    case '@sublang/playbook@10.0.0':
+      return 3;
+    default:
+      return undefined;
+  }
+}
+/**
+ * Returns the Playbook package provenance that owns an invocation's concrete
+ * link target. The first package manifest above the target owns the file; a
+ * parent workspace manifest must not lend its identity to a nested local file.
+ */
+export async function playbookProvenanceForLinkTarget(linkTarget) {
+  let cursor = dirname(resolve(linkTarget));
+  for (;;) {
+    const manifestPath = join(cursor, 'package.json');
+    if (existsSync(manifestPath)) {
+      try {
+        const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+        return manifest.name === '@sublang/playbook' &&
+          typeof manifest.version === 'string' &&
+          manifest.version.length > 0
+          ? `${manifest.name}@${manifest.version}`
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    const parent = dirname(cursor);
+    if (parent === cursor) return undefined;
+    cursor = parent;
+  }
+}
 const ITEM_HEADING = /^###\s+([A-Za-z][\w-]*)\s*$/;
 // The `text2gears` item form names a delegated player as "Captain shall prompt
 // <Player>" (or a "relay ... to <Player>" variant); English players are
@@ -44,6 +85,7 @@ const ITEM_PLAYBOOK =
   /Captain shall call playbook\s+(?:`([^`]+)`|"([^"]+)"|“([^”]+)”|([A-Za-z0-9][\w.-]*))\s*:/;
 const ITEM_DYNAMIC_PLAYBOOK =
   /Captain shall call playbook selected by\s+`([^`]+)`\s*:/;
+const PARALLEL_GROUP = /^Parallel group:\s*(\S(?:.*\S)?)\s*$/;
 const DYNAMIC_TEXT = /^<([A-Za-z_$][A-Za-z0-9_$]*)>$/;
 // An optimizer-introduced script item runs a shell command without any agent
 // (text2gears.md "Script behaviors"; DR-013). The clause is fixed machine
@@ -120,6 +162,9 @@ export function parseGearsItems(gears) {
               ...(dynamicText === null ? {} : { textContext: dynamicText[1] }),
             }
           : {}),
+        ...(current.parallelGroup !== ''
+          ? { parallelGroup: current.parallelGroup }
+          : {}),
         ...(current.resultDeclared
           ? { result: Object.fromEntries(current.results) }
           : {}),
@@ -141,6 +186,7 @@ export function parseGearsItems(gears) {
         script: false,
         playbookId: '',
         playbookIdContext: '',
+        parallelGroup: '',
         prompt: [],
         resultsEligible: false,
         resultDeclared: false,
@@ -209,6 +255,10 @@ export function parseGearsItems(gears) {
       continue;
     }
     if (line.trim() !== '') current.resultsEligible = false;
+    const parallelGroup = PARALLEL_GROUP.exec(line.trim());
+    if (parallelGroup !== null && current.parallelGroup === '') {
+      current.parallelGroup = parallelGroup[1];
+    }
     const player = ITEM_PLAYER.exec(line);
     if (player !== null && current.player === '') {
       current.player =
@@ -236,6 +286,166 @@ export function parseGearsItems(gears) {
   }
   flush();
   return items;
+}
+const ROLE_DECLARATION = /^(?:#{1,6}\s+(Roles|Players)|(Roles|Players):)\s*$/;
+/** Canonical lowercase local-role id used by schema-3 artifacts. */
+export function canonicalRoleId(name) {
+  return name.toLowerCase();
+}
+function declarationName(value) {
+  const match = /^[`"“]?([^`"”]+?)[`"”]?\s*$/.exec(value.trim());
+  return match?.[1].trim() || undefined;
+}
+/** Parses Roles/Players plus source-derived concurrent role sets without host bindings. */
+export function inspectGearsRoleContract(gears) {
+  const findings = [];
+  const declarations = [];
+  let active;
+  for (const line of gears.split('\n')) {
+    const heading = ROLE_DECLARATION.exec(line.trim());
+    if (heading !== null) {
+      active = {
+        kind: heading[1] ?? heading[2],
+        names: [],
+      };
+      declarations.push(active);
+      continue;
+    }
+    if (active === undefined) continue;
+    if (line.trim() === '') continue;
+    const bullet = /^-\s+(.*)$/.exec(line.trim());
+    if (bullet === null) {
+      active = undefined;
+      continue;
+    }
+    const declaration = bullet[1].trim();
+    if (active.kind === 'Roles' && /[=|]/.test(declaration)) {
+      findings.push(
+        `Roles declaration ${JSON.stringify(declaration)} uses removed alias syntax`,
+      );
+      continue;
+    }
+    // Historical schema-1 Players may declare a composite launcher choice
+    // (`Committer = Coder | Reviewer`). It is not one concrete player binding
+    // and therefore does not enter the source-order player list, including
+    // when every name is backtick- or quote-delimited.
+    if (active.kind === 'Players' && declaration.includes('=')) continue;
+    const name = declarationName(declaration);
+    if (name === undefined) {
+      findings.push(
+        `malformed ${active.kind} declaration ${JSON.stringify(declaration)}`,
+      );
+      continue;
+    }
+    active.names.push(name);
+  }
+  const kinds = new Set(declarations.map(({ kind }) => kind));
+  if (declarations.length > 1) {
+    findings.push('GEARS declares more than one Roles/Players section');
+  }
+  if (kinds.size > 1) {
+    findings.push('GEARS mixes Roles and Players declarations');
+  }
+  const selected = declarations[0];
+  const generation =
+    selected?.kind === 'Roles'
+      ? 'schema-3'
+      : selected?.kind === 'Players'
+        ? 'schema-1'
+        : 'unspecified';
+  const names = selected?.names ?? [];
+  const roleIds = names.map(canonicalRoleId);
+  if (generation === 'schema-3') {
+    const byCanonical = new Map();
+    for (let index = 0; index < names.length; index += 1) {
+      const name = names[index];
+      const roleId = roleIds[index];
+      const existing = byCanonical.get(roleId);
+      if (existing !== undefined) {
+        findings.push(
+          existing === name
+            ? `Roles declaration repeats ${JSON.stringify(name)}`
+            : `Roles declarations ${JSON.stringify(existing)} and ${JSON.stringify(name)} collide as canonical role ${JSON.stringify(roleId)}`,
+        );
+      } else {
+        byCanonical.set(roleId, name);
+      }
+      // A canonical local role id is the declared name lowercased. Playbook 10
+      // explicitly admits non-English role names ("quote non-English names
+      // (e.g., `作者`)"), and a script without case - Chinese among them -
+      // lowercases to itself, so an ASCII-only class would reject exactly the
+      // names the definition sanctions. Require instead that the id be genuinely
+      // canonical: already lowercase, carrying no whitespace or separator that
+      // would make it ambiguous as an identifier.
+      if (
+        roleId.length === 0 ||
+        roleId !== roleId.toLowerCase() ||
+        /[\s.,;:/\\'"`()[\]{}<>|]/u.test(roleId)
+      ) {
+        findings.push(
+          `Roles declaration ${JSON.stringify(name)} derives noncanonical local role ${JSON.stringify(roleId)}`,
+        );
+      } else if (roleId === 'captain') {
+        findings.push('Roles declaration uses reserved local role "captain"');
+      }
+    }
+  }
+  const groups = new Map();
+  if (generation === 'schema-3') {
+    const declared = new Set(roleIds);
+    for (const item of parseGearsItems(gears)) {
+      if (item.actor === 'player') {
+        const roleId = canonicalRoleId(item.player);
+        if (!declared.has(roleId)) {
+          findings.push(
+            `GEARS item ${item.id} delegates to undeclared role ${JSON.stringify(item.player)}`,
+          );
+        }
+      }
+      if (item.parallelGroup === undefined) continue;
+      if (item.actor !== 'player') {
+        findings.push(
+          `parallel group ${JSON.stringify(item.parallelGroup)} contains non-role item ${item.id}`,
+        );
+        continue;
+      }
+      const roleId = canonicalRoleId(item.player);
+      const members = groups.get(item.parallelGroup) ?? [];
+      if (members.includes(roleId)) {
+        findings.push(
+          `parallel group ${JSON.stringify(item.parallelGroup)} repeats canonical role ${JSON.stringify(roleId)}`,
+        );
+      }
+      members.push(roleId);
+      groups.set(item.parallelGroup, members);
+    }
+    const groupByMembers = new Map();
+    for (const [group, members] of groups) {
+      if (members.length < 2) {
+        findings.push(
+          `parallel group ${JSON.stringify(group)} contains fewer than two roles`,
+        );
+      }
+      // A concurrent role set is unordered for duplicate detection even
+      // though its source member order remains significant in the FSM export.
+      const signature = JSON.stringify([...members].sort());
+      const existing = groupByMembers.get(signature);
+      if (existing !== undefined) {
+        findings.push(
+          `parallel groups ${JSON.stringify(existing)} and ${JSON.stringify(group)} duplicate concurrent role set ${signature}`,
+        );
+      } else {
+        groupByMembers.set(signature, group);
+      }
+    }
+  }
+  return {
+    generation,
+    names,
+    roleIds,
+    concurrentRoleSets: [...groups.values()],
+    findings,
+  };
 }
 /** Walks every state node depth-first in declaration order. */
 function walkStateNodes(config) {
@@ -287,6 +497,12 @@ function metadataStateId(state) {
   if (typeof playbook !== 'object' || playbook === null) return undefined;
   const stateId = playbook.stateId;
   return isNonEmptyString(stateId) ? stateId : undefined;
+}
+function metadataRole(state) {
+  if (typeof state.meta !== 'object' || state.meta === null) return undefined;
+  const playbook = state.meta.playbook;
+  if (typeof playbook !== 'object' || playbook === null) return undefined;
+  return playbook.role;
 }
 function stateIdConsistencyFindings(node, inputStateId) {
   if (!isNonEmptyString(inputStateId)) return [];
@@ -391,12 +607,12 @@ function enumerateCaptainBindings(config) {
       ) {
         continue;
       }
-      // Published artifacts used `captain` for every work call and carried a
-      // player field. Preserve that shape as delegated work until regeneration.
-      // In the new model, direct Captain work omits player and delegated work
-      // names the `player` actor explicitly.
+      // Published schema-1 artifacts carried a concrete player field. Schema 3
+      // carries only its canonical local role and repeats it in public metadata.
       const actor =
-        source === 'player' || Object.hasOwn(fields, 'player')
+        source === 'player' ||
+        Object.hasOwn(fields, 'player') ||
+        Object.hasOwn(fields, 'role')
           ? 'player'
           : 'captain';
       const pinActor =
@@ -407,8 +623,48 @@ function enumerateCaptainBindings(config) {
           'invoke.input.sourceItem is not a non-empty string',
         );
       }
-      if (actor === 'player' && typeof fields.player !== 'string') {
-        bindingFindings.push('invoke.input.player is not a string');
+      if (actor === 'player') {
+        const hasPlayer = Object.hasOwn(fields, 'player');
+        const hasRole = Object.hasOwn(fields, 'role');
+        if (hasPlayer && hasRole) {
+          bindingFindings.push(
+            'invoke.input carries both historical player and schema-3 role',
+          );
+        }
+        if (hasRole && typeof fields.role !== 'string') {
+          bindingFindings.push('invoke.input.role is not a string');
+        }
+        if (hasRole && source !== 'player') {
+          bindingFindings.push(
+            'schema-3 delegated work does not invoke the player actor',
+          );
+        }
+        if (!hasRole && typeof fields.player !== 'string') {
+          bindingFindings.push('invoke.input.player is not a string');
+        }
+        const publicRole = metadataRole(node.state);
+        if (hasRole) {
+          if (typeof publicRole !== 'string') {
+            bindingFindings.push(
+              'state.meta.playbook.role is not a string for schema-3 delegated work',
+            );
+          } else if (publicRole !== fields.role) {
+            bindingFindings.push(
+              `state.meta.playbook.role ${JSON.stringify(publicRole)} does not match invoke.input.role ${JSON.stringify(fields.role)}`,
+            );
+          }
+        } else if (publicRole !== undefined) {
+          bindingFindings.push(
+            'historical delegated-player state unexpectedly declares state.meta.playbook.role',
+          );
+        }
+      } else if (
+        Object.hasOwn(fields, 'role') ||
+        metadataRole(node.state) !== undefined
+      ) {
+        bindingFindings.push(
+          'direct-Captain state unexpectedly declares a role binding',
+        );
       }
       if (typeof fields.prompt !== 'string') {
         bindingFindings.push('invoke.input.prompt is not a string');
@@ -437,6 +693,7 @@ function enumerateCaptainBindings(config) {
             : '',
           actor,
           player: typeof fields.player === 'string' ? fields.player : '',
+          ...(typeof fields.role === 'string' ? { role: fields.role } : {}),
           prompt: typeof fields.prompt === 'string' ? fields.prompt : '',
           result: resultMap(fields.result),
           ...nestedStatePath(node),
@@ -737,6 +994,73 @@ function statePlaybookSignature(state) {
         state.textContext ?? null,
       ]);
 }
+/** Exact action guards of Playbook 10's controller decision result. */
+export const CONTROLLER_ACTION_GUARDS = [
+  'respond',
+  'resume',
+  'start',
+  'switch',
+  'dismiss',
+  'deliver',
+  'runtime',
+];
+/** Whether a result map has the exact Playbook 10 controller domain union. */
+export function isControllerDecisionResult(result) {
+  if (!isStringMap(result)) return false;
+  const keys = Object.keys(result).filter((key) => key !== NEEDS_BOSS_REPLY);
+  return (
+    keys.length === CONTROLLER_ACTION_GUARDS.length &&
+    CONTROLLER_ACTION_GUARDS.every((guard) => Object.hasOwn(result, guard))
+  );
+}
+/** A single missing or extra key against Playbook 10's controller domain. */
+export function controllerDecisionNearMiss(result) {
+  if (!isStringMap(result)) return undefined;
+  const actual = Object.keys(result).filter((key) => key !== NEEDS_BOSS_REPLY);
+  const expected = new Set(CONTROLLER_ACTION_GUARDS);
+  const present = new Set(actual);
+  const missing = CONTROLLER_ACTION_GUARDS.filter((key) => !present.has(key));
+  const extra = actual.filter((key) => !expected.has(key));
+  return missing.length + extra.length === 1 ? { missing, extra } : undefined;
+}
+/** Whether a machine contains Playbook 10's grounded controller decision state. */
+export function isControllerMachine(config) {
+  return enumerateCaptainBindings(config).some(({ state, pinActor }) => {
+    if (!pinActor || state.actor !== 'captain') return false;
+    if (
+      state.bindingFindings?.includes(
+        'invoke.input.result is not a string-valued object',
+      )
+    ) {
+      return false;
+    }
+    return isControllerDecisionResult(state.result);
+  });
+}
+/** Whether an explicit direct-Captain result is one key from the controller domain. */
+export function hasControllerDecisionNearMiss(config) {
+  return enumerateCaptainBindings(config).some(
+    ({ state, pinActor }) =>
+      pinActor &&
+      state.actor === 'captain' &&
+      state.result[NEEDS_BOSS_REPLY] === undefined &&
+      controllerDecisionNearMiss(state.result) !== undefined,
+  );
+}
+function concurrentRoleSets(value) {
+  if (!Array.isArray(value)) return undefined;
+  const sets = [];
+  for (const candidate of value) {
+    if (
+      !Array.isArray(candidate) ||
+      candidate.some((role) => typeof role !== 'string')
+    ) {
+      return undefined;
+    }
+    sets.push([...candidate]);
+  }
+  return sets;
+}
 /**
  * Checks GEARS↔FSM conformance and returns human-readable findings (empty when
  * conformant): every GEARS item maps to one state with the same player and the
@@ -744,10 +1068,28 @@ function statePlaybookSignature(state) {
  * captain state's `result` map declares the Boss-reply suspension key with its
  * adjudicator contract (verification-1, verification-3; DR-009).
  */
-export function checkGearsFsmConformance(gears, config) {
+export function checkGearsFsmConformance(gears, config, options = {}) {
   const items = parseGearsItems(gears);
+  const roleContract = inspectGearsRoleContract(gears);
+  const controller = isControllerMachine(config);
   const captainBindings = enumerateCaptainBindings(config);
   const states = captainBindings.map(({ state }) => state);
+  const controllerNearMisses = captainBindings.flatMap(
+    ({ state, pinActor }) => {
+      if (
+        !pinActor ||
+        state.actor !== 'captain' ||
+        state.result[NEEDS_BOSS_REPLY] !== undefined
+      ) {
+        return [];
+      }
+      const nearMiss = controllerDecisionNearMiss(state.result);
+      return nearMiss === undefined ? [] : [{ state, nearMiss }];
+    },
+  );
+  const controllerNearMissStates = new Set(
+    controllerNearMisses.map(({ state }) => state),
+  );
   const explicitActorStates = new Set(
     captainBindings
       .filter(({ pinActor }) => pinActor)
@@ -756,7 +1098,33 @@ export function checkGearsFsmConformance(gears, config) {
   const playbookStates = enumeratePlaybookStates(config);
   const scriptStates = enumerateScriptStates(config);
   const findings = [];
+  for (const { state, nearMiss } of controllerNearMisses) {
+    const detail =
+      nearMiss.missing.length > 0
+        ? `missing ${JSON.stringify(nearMiss.missing[0])}`
+        : `extra ${JSON.stringify(nearMiss.extra[0])}`;
+    findings.push(
+      `FSM state ${state.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
+    );
+  }
   findings.push(...structuredStateIdentityFindings(walkStateNodes(config)));
+  findings.push(...roleContract.findings);
+  const requiresConcurrentRoleSets =
+    roleContract.generation === 'schema-3' ||
+    controller ||
+    options.artifactSchema === 3;
+  if (requiresConcurrentRoleSets) {
+    const actual = concurrentRoleSets(options.concurrentRoleSets);
+    if (actual === undefined) {
+      findings.push('schema-3 FSM exports no valid concurrentRoleSets array');
+    } else if (
+      JSON.stringify(actual) !== JSON.stringify(roleContract.concurrentRoleSets)
+    ) {
+      findings.push(
+        `schema-3 FSM concurrentRoleSets ${JSON.stringify(actual)} do not match GEARS groups ${JSON.stringify(roleContract.concurrentRoleSets)}`,
+      );
+    }
+  }
   for (const item of items) {
     findings.push(
       ...(item.resultFindings ?? []).map(
@@ -950,10 +1318,31 @@ export function checkGearsFsmConformance(gears, config) {
         `${item.id}: FSM actor "${state.actor}" is not GEARS actor "${item.actor}"`,
       );
     }
-    if (item.actor === 'player' && state.player !== item.player) {
-      findings.push(
-        `${item.id}: FSM player "${state.player}" is not GEARS player "${item.player}"`,
-      );
+    if (item.actor === 'player') {
+      if (roleContract.generation === 'schema-3') {
+        const expectedRole = canonicalRoleId(item.player);
+        if (state.role !== expectedRole) {
+          findings.push(
+            `${item.id}: FSM role ${JSON.stringify(state.role ?? '')} is not GEARS canonical role ${JSON.stringify(expectedRole)}`,
+          );
+        }
+        if (state.player !== '') {
+          findings.push(
+            `${item.id}: schema-3 delegated role carries removed invoke.input.player ${JSON.stringify(state.player)}`,
+          );
+        }
+      } else {
+        if (state.player !== item.player) {
+          findings.push(
+            `${item.id}: FSM player "${state.player}" is not GEARS player "${item.player}"`,
+          );
+        }
+        if (state.role !== undefined) {
+          findings.push(
+            `${item.id}: historical delegated player unexpectedly carries invoke.input.role ${JSON.stringify(state.role)}`,
+          );
+        }
+      }
     }
     if (state.prompt !== item.prompt) {
       findings.push(`${item.id}: FSM prompt is not the GEARS prompt verbatim`);
@@ -993,11 +1382,19 @@ export function checkGearsFsmConformance(gears, config) {
         `FSM state ${state.stateId} references unknown GEARS item ${state.sourceItem}`,
       );
     }
-    // Every captain-invoking state supports Boss-reply suspension: its result
-    // map carries `needsBossReply` with the adjudicator-facing contract text
-    // (gears2fsm.md; verification-3).
     const bossReply = state.result[NEEDS_BOSS_REPLY];
-    if (bossReply === undefined) {
+    if (controller) {
+      if (bossReply !== undefined) {
+        findings.push(
+          `FSM controller state ${state.stateId} unexpectedly declares ${NEEDS_BOSS_REPLY}`,
+        );
+      }
+    } else if (controllerNearMissStates.has(state)) {
+      // The precise controller-domain diagnostic above owns a malformed
+      // near-controller state; do not suggest adding the ordinary wait key to
+      // that state, while retaining ordinary findings for every other state.
+      continue;
+    } else if (bossReply === undefined) {
       findings.push(
         `FSM state ${state.stateId} declares no ${NEEDS_BOSS_REPLY} result`,
       );
@@ -1123,6 +1520,7 @@ export function pinIntrospection(config) {
         : {}),
       sourceItem: binding.state.sourceItem,
       player: binding.state.player,
+      ...(binding.state.role !== undefined ? { role: binding.state.role } : {}),
       resultKeys: Object.keys(binding.state.result).sort(),
       onDone: normalizeArms(binding.invoke.onDone),
       onError: normalizeArms(binding.invoke.onError),
@@ -1214,6 +1612,8 @@ export const BOSS_REPLY_LABEL = 'Boss reply:';
 // keep self-hosting prompt bodies free to quote either marker verbatim.
 const PLAYER_BINDING_MARKER =
   /\bplayer\s+binding\b|(?:^|\n)[ \t]*player[ \t]*:[ \t]*(?=\S)/gi;
+const ROLE_BINDING_MARKER =
+  /\brole\s+binding\b|(?:^|\n)[ \t]*role[ \t]*:[ \t]*(?=\S)/gi;
 const PLAYER_RESUME_MARKER =
   /\b(?:resume|resuming)\b[^\n]{0,120}\bplayer(?:'s)?\b|\bplayer(?:'s)?\b[^\n]{0,120}\b(?:resume|resuming)\b/gi;
 const PLACEHOLDER = /<[^\s<>`]{1,60}>/g;
@@ -1303,6 +1703,7 @@ export function capturePromptContract(config) {
       state: state.stateId,
       sourceItem: state.sourceItem,
       player: state.player,
+      ...(state.role !== undefined ? { role: state.role } : {}),
       reads,
       wires,
       placeholders: placeholdersIn(state.prompt),
@@ -1324,7 +1725,11 @@ export function deriveSubstitutions(config, compose, actor) {
     if (typeof inputFn !== 'function') continue;
     try {
       const reads = probeContextReads(inputFn);
-      const composed = compose(inputFn({ context: ordinaryContext(reads) }));
+      const composed = composeForState(
+        compose,
+        state,
+        inputFn({ context: ordinaryContext(reads) }),
+      );
       if (typeof composed !== 'string') {
         out[state.stateId] = [];
         continue;
@@ -1335,8 +1740,9 @@ export function deriveSubstitutions(config, compose, actor) {
       // hide valid evidence, while merely deleting a token still cannot
       // masquerade as substitution.
       const evidenced = new Set();
+      const promptReads = promptSentinelFields(state, reads);
       for (const line of state.prompt.split('\n')) {
-        for (const token of matchPromptBody(line, composed, reads)
+        for (const token of matchPromptBody(line, composed, promptReads)
           ?.substitutions ?? []) {
           evidenced.add(token);
         }
@@ -1360,6 +1766,15 @@ export function deriveSubstitutions(config, compose, actor) {
  */
 export function checkPromptComposition(opts) {
   const findings = [];
+  const controller = isControllerMachine(opts.config);
+  const schemaResolution = resolveArtifactSchemaForVerification({
+    config: opts.config,
+    ...(opts.artifactSchema === undefined
+      ? {}
+      : { artifactSchema: opts.artifactSchema }),
+  });
+  findings.push(...schemaResolution.findings);
+  const inferredArtifactSchema = schemaResolution.artifactSchema;
   const substitutions = deriveSubstitutions(
     opts.config,
     opts.compose,
@@ -1367,15 +1782,21 @@ export function checkPromptComposition(opts) {
   );
   const composerName =
     opts.actor === 'captain' ? 'composeCaptainPrompt' : 'composePlayerPrompt';
-  for (const binding of enumerateCaptainBindings(opts.config)) {
+  const bindings = enumerateCaptainBindings(opts.config);
+  for (const binding of bindings) {
     const { state, inputFn } = binding;
     if (opts.actor !== undefined && state.actor !== opts.actor) continue;
     if (typeof inputFn !== 'function') continue;
     const reads = probeContextReads(inputFn);
+    const promptReads = promptSentinelFields(state, reads);
     const substituted = substitutions[state.stateId] ?? [];
     let ordinary;
     try {
-      ordinary = opts.compose(inputFn({ context: ordinaryContext(reads) }));
+      ordinary = composeForState(
+        opts.compose,
+        state,
+        inputFn({ context: ordinaryContext(reads) }),
+      );
       if (typeof ordinary !== 'string') {
         throw new Error(`${composerName} returned a non-string value`);
       }
@@ -1386,9 +1807,9 @@ export function checkPromptComposition(opts) {
       continue;
     }
     findings.push(
-      ...bodyFindings(state, ordinary, substituted, reads, 'ordinary'),
+      ...bodyFindings(state, ordinary, substituted, promptReads, 'ordinary'),
     );
-    pushUnique(findings, ...directCaptainControlFindings(state, ordinary));
+    pushUnique(findings, ...promptControlFindings(state, ordinary));
     // A self-hosted playbook's domain body may legitimately quote the
     // adjudicator contract or the continuation texts (it instructs a compiler
     // about them); only occurrences the composer ADDS beyond the body's own
@@ -1411,15 +1832,36 @@ export function checkPromptComposition(opts) {
         `${state.stateId}: continuation blocks appear on an ordinary turn`,
       );
     }
+    // Controllers own no Boss-reply wait. A missing ordinary result is already
+    // diagnosed by conformance, so do not fabricate a continuation contract.
+    if (controller || !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)) continue;
+    const artifactSchema =
+      schemaResolution.findings.length > 0
+        ? undefined
+        : (inferredArtifactSchema ??
+          (state.role !== undefined ? 3 : state.player !== '' ? 1 : undefined));
+    if (artifactSchema === undefined) {
+      findings.push(
+        `${state.stateId}: prompt composition requires artifactSchema 1 or 3 to probe this direct-Captain continuation`,
+      );
+      continue;
+    }
     // A Boss-reply continuation turn: the thunk carries the pending question
     // and reply, and the composer opens with the exact preamble and labelled
     // Q&A blocks before the domain body (gears2fsm.md, link.md).
     const question = sentinelFor('question');
     const reply = sentinelFor('bossReply');
     const pendingBossQuestion = {
+      ...(artifactSchema === 3
+        ? state.actor === 'captain'
+          ? { asker: { kind: 'captain' } }
+          : { asker: { kind: 'role', roleId: state.role ?? '' } }
+        : {
+            player: state.actor === 'captain' ? 'Captain' : state.player,
+          }),
+      questionId: state.stateId,
       resumeStateId: state.stateId,
       sourceItem: state.sourceItem,
-      player: state.player,
       question,
     };
     let continuation;
@@ -1436,7 +1878,7 @@ export function checkPromptComposition(opts) {
           bossReplies: { [state.stateId]: reply },
         },
       });
-      continuation = opts.compose(input);
+      continuation = composeForState(opts.compose, state, input);
       if (typeof continuation !== 'string') {
         throw new Error(`${composerName} returned a non-string value`);
       }
@@ -1457,7 +1899,7 @@ export function checkPromptComposition(opts) {
         `${state.stateId}: a continuation turn does not open with the exact preamble`,
       );
     }
-    const bodyStart = bodyIndex(state, continuation, substituted, reads);
+    const bodyStart = bodyIndex(state, continuation, substituted, promptReads);
     const questionBlock = `${BOSS_QUESTION_LABEL}\n${question}`;
     const replyBlock = `${BOSS_REPLY_LABEL}\n${reply}`;
     for (const [label, value] of [
@@ -1487,26 +1929,79 @@ export function checkPromptComposition(opts) {
       );
     }
     findings.push(
-      ...bodyFindings(state, continuation, substituted, reads, 'continuation'),
+      ...bodyFindings(
+        state,
+        continuation,
+        substituted,
+        promptReads,
+        'continuation',
+      ),
     );
-    pushUnique(findings, ...directCaptainControlFindings(state, continuation));
+    pushUnique(findings, ...promptControlFindings(state, continuation));
   }
   return findings;
 }
-function directCaptainControlFindings(state, composed) {
-  if (state.actor !== 'captain') return [];
+function promptSentinelFields(state, reads) {
+  return state.role === undefined
+    ? [...reads]
+    : [...reads, `promptIdentity:${state.role}`];
+}
+function composeForState(compose, state, input) {
+  // Schema-1 composers and the shared default composer use their second
+  // positional argument as a placeholder-field map. A callable proxy with a
+  // property-clean view is therefore both an invocation-scoped schema-3 lookup
+  // and an empty map to historical/default composition, without Function.name,
+  // Function.length, or Function.prototype token collisions.
+  const lookup = (roleId) => {
+    if (state.role === undefined) {
+      throw new Error(
+        `prompt identity lookup used role ${JSON.stringify(roleId)} for a direct-Captain or historical state`,
+      );
+    }
+    if (roleId !== state.role) {
+      throw new Error(
+        `prompt identity lookup used role ${JSON.stringify(roleId)} instead of canonical local role ${JSON.stringify(state.role)}`,
+      );
+    }
+    return sentinelFor(`promptIdentity:${roleId}`);
+  };
+  const promptIdentity = new Proxy(lookup, {
+    get: () => undefined,
+    has: () => false,
+    ownKeys: () => [],
+    getOwnPropertyDescriptor: () => undefined,
+  });
+  return state.actor === 'player' && state.role !== undefined
+    ? compose(input, promptIdentity)
+    : compose(input);
+}
+function promptControlFindings(state, composed) {
   const findings = [];
-  if (
+  const introducesPlayerBinding =
     patternOccurrences(composed, PLAYER_BINDING_MARKER) >
-    patternOccurrences(state.prompt, PLAYER_BINDING_MARKER)
-  ) {
+    patternOccurrences(state.prompt, PLAYER_BINDING_MARKER);
+  if (state.actor === 'captain' && introducesPlayerBinding) {
     findings.push(
       `${state.stateId}: composeCaptainPrompt introduces a player binding into a direct-Captain prompt`,
     );
+  } else if (state.role !== undefined && introducesPlayerBinding) {
+    findings.push(
+      `${state.stateId}: composePlayerPrompt exposes a concrete player binding in a schema-3 delegated-role prompt`,
+    );
   }
   if (
+    state.actor === 'captain' &&
+    patternOccurrences(composed, ROLE_BINDING_MARKER) >
+      patternOccurrences(state.prompt, ROLE_BINDING_MARKER)
+  ) {
+    findings.push(
+      `${state.stateId}: composeCaptainPrompt introduces a role binding into a direct-Captain prompt`,
+    );
+  }
+  if (
+    state.actor === 'captain' &&
     patternOccurrences(composed, PLAYER_RESUME_MARKER) >
-    patternOccurrences(state.prompt, PLAYER_RESUME_MARKER)
+      patternOccurrences(state.prompt, PLAYER_RESUME_MARKER)
   ) {
     findings.push(
       `${state.stateId}: composeCaptainPrompt introduces a player resume instruction into a direct-Captain prompt`,
@@ -1670,6 +2165,11 @@ export function findMachineConfig(fsmModule) {
     'fsm module exports no XState machine with a `.config.states`',
   );
 }
+/** Reads the schema-3 cohort declaration from an imported FSM module. */
+export function findConcurrentRoleSets(fsmModule) {
+  if (typeof fsmModule !== 'object' || fsmModule === null) return undefined;
+  return fsmModule.concurrentRoleSets;
+}
 /**
  * Builds a per-artifact vitest module that fails when the compiled FSM drifts
  * from its GEARS source: it reads the artifact's `gears` file and the machine its
@@ -1686,16 +2186,31 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { checkGearsFsmConformance, findMachineConfig } from ${sourceString(opts.verifyModule)};
+import { checkGearsFsmConformance, findConcurrentRoleSets, findMachineConfig } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 
+const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
+
 describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('maps every GEARS item to a state with its player and verbatim prompt', () => {
     const gears = readFileSync(
       fileURLToPath(new URL(${sourceString(opts.gearsFile)}, import.meta.url)),
       'utf8',
     );
-    expect(checkGearsFsmConformance(gears, findMachineConfig(fsm))).toEqual([]);
+    expect(
+      checkGearsFsmConformance(gears, findMachineConfig(fsm), {
+        concurrentRoleSets: findConcurrentRoleSets(fsm),
+        ${
+          opts.artifactSchema === undefined
+            ? ''
+            : `artifactSchema: ${opts.artifactSchema},`
+        }
+      }),
+    ).toEqual([]);
   });
 });
 `;
@@ -1715,6 +2230,10 @@ export async function emitGearsFsmConformanceTest(opts) {
     fsmModule: `./${opts.basename}.fsm.js`,
     gearsFile: `./${opts.basename}.gears.md`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
+    ...(opts.artifactSchema === undefined
+      ? {}
+      : { artifactSchema: opts.artifactSchema }),
+    schemaFindings: opts.schemaFindings,
   });
   await mkdir(opts.artifactDir, { recursive: true });
   const path = join(opts.artifactDir, `${opts.basename}.gears-fsm.test.ts`);
@@ -1736,14 +2255,15 @@ export async function loadFsmModule(fsmPath) {
   return import(url.href);
 }
 /**
- * Imports the generated linked TypeScript module before its sibling FSM has
- * been built to JavaScript. NodeNext source correctly names the runtime-safe
- * `./<basename>.fsm.js` edge, but emission-time verification runs while only
- * `./<basename>.fsm.ts` exists. Stage a same-directory copy whose one generated
- * module specifier points at the hashed TypeScript artifact, import that copy,
- * and remove it without changing the linked source or its production import.
+ * Imports generated linked TypeScript for emission-time, standalone, or
+ * equivalence review before its sibling FSM has been built to JavaScript.
+ * NodeNext source correctly names the runtime-safe `./<basename>.fsm.js` edge,
+ * but review may run while only `./<basename>.fsm.ts` exists. Stage a
+ * same-directory copy whose one generated module specifier points at the
+ * hashed TypeScript artifact, import that copy, and remove it without changing
+ * the linked source or its production import.
  */
-async function loadLinkedModuleForVerification(opts) {
+export async function loadLinkedModuleForVerification(opts) {
   const linkedSource = await readFile(opts.linkedPath, 'utf8');
   const fsmStem = basename(opts.fsmPath, '.ts');
   const runtimeSpecifier = `./${fsmStem}.js`;
@@ -1832,6 +2352,11 @@ const ${compose} = (
         config: findMachineConfig(fsm),
         compose: ${compose},
         actor: '${actor}',
+        ${
+          opts.artifactSchema === undefined
+            ? ''
+            : `artifactSchema: ${opts.artifactSchema},`
+        }
       }),
     ).toEqual([]);
   });
@@ -1866,13 +2391,155 @@ import {
 import * as fsm from ${sourceString(opts.fsmModule)};
 ${composerImports}
 const CONTRACT = ${JSON.stringify(opts.rows, null, 2)};
+const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
 
 describe(${sourceString(`${opts.basename}: prompt contract`)}, () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('matches the prompt contract pinned at build time', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
 ${composerBlock}});
 `;
+}
+function promptArtifactSchemaSignalsFromConfig(config) {
+  const states = enumerateCaptainStates(config);
+  return {
+    schema1: states.some(({ player }) => player !== ''),
+    schema3:
+      isControllerMachine(config) ||
+      states.some(({ role }) => role !== undefined),
+  };
+}
+function linkedArtifactSchemaSignal(linked) {
+  const factory = linked.default;
+  if (typeof factory !== 'function') {
+    return { historicalFallback: false, invalidCompatibility: false };
+  }
+  if (!Object.hasOwn(factory, 'compat')) {
+    return { historicalFallback: true, invalidCompatibility: false };
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(factory, 'compat');
+  if (
+    descriptor === undefined ||
+    !Object.hasOwn(descriptor, 'value') ||
+    descriptor.enumerable !== true ||
+    descriptor.writable !== false ||
+    descriptor.configurable !== false
+  ) {
+    return { historicalFallback: false, invalidCompatibility: true };
+  }
+  const compat = descriptor.value;
+  if (
+    typeof compat !== 'object' ||
+    compat === null ||
+    Array.isArray(compat) ||
+    Object.getPrototypeOf(compat) !== Object.prototype ||
+    !Object.isFrozen(compat) ||
+    Object.getOwnPropertySymbols(compat).length !== 0
+  ) {
+    return { historicalFallback: false, invalidCompatibility: true };
+  }
+  const names = Object.getOwnPropertyNames(compat);
+  const artifactSchema = Object.getOwnPropertyDescriptor(
+    compat,
+    'artifactSchema',
+  );
+  const runtimeAbi = Object.getOwnPropertyDescriptor(compat, 'runtimeAbi');
+  const exact =
+    names.length === 2 &&
+    names.includes('artifactSchema') &&
+    names.includes('runtimeAbi') &&
+    artifactSchema?.enumerable === true &&
+    Object.hasOwn(artifactSchema, 'value') &&
+    artifactSchema.value === 3 &&
+    runtimeAbi?.enumerable === true &&
+    Object.hasOwn(runtimeAbi, 'value') &&
+    runtimeAbi.value === 1;
+  return exact
+    ? { schema: 3, historicalFallback: false, invalidCompatibility: false }
+    : { historicalFallback: false, invalidCompatibility: true };
+}
+/** Schema decision shared by generated and standalone artifact verification. */
+export function resolveArtifactSchemaForVerification(opts) {
+  const candidates = [];
+  const invalidSignalFindings = [];
+  if (opts.artifactSchema !== undefined) {
+    candidates.push({
+      source: 'review-supplied artifact schema',
+      schema: opts.artifactSchema,
+    });
+  }
+  const provenanceSchema = artifactSchemaForPlaybookProvenance(opts.provenance);
+  if (opts.provenance !== undefined && provenanceSchema === undefined) {
+    invalidSignalFindings.push(
+      `artifact schema has unsupported link-target provenance ${JSON.stringify(opts.provenance)}`,
+    );
+  }
+  if (provenanceSchema !== undefined) {
+    candidates.push({
+      source: 'reviewed link-target provenance',
+      schema: provenanceSchema,
+    });
+  }
+  if (opts.config !== undefined) {
+    const configSignals = promptArtifactSchemaSignalsFromConfig(opts.config);
+    if (configSignals.schema1)
+      candidates.push({ source: 'FSM historical-player structure', schema: 1 });
+    if (configSignals.schema3)
+      candidates.push({ source: 'FSM role/controller structure', schema: 3 });
+  }
+  const linkedSignal =
+    opts.linked === undefined
+      ? undefined
+      : linkedArtifactSchemaSignal(opts.linked);
+  if (linkedSignal?.schema !== undefined) {
+    candidates.push({
+      source: 'linked factory compatibility',
+      schema: linkedSignal.schema,
+    });
+  }
+  if (linkedSignal?.invalidCompatibility) {
+    invalidSignalFindings.push(
+      'linked factory has an own compatibility declaration that is not exact immutable schema 3/runtime ABI 1',
+    );
+  }
+  if (invalidSignalFindings.length > 0) {
+    return { findings: invalidSignalFindings };
+  }
+  const schemas = new Set(candidates.map(({ schema }) => schema));
+  if (schemas.size > 1) {
+    return {
+      findings: [
+        `artifact schema signals disagree (${candidates
+          .map(({ source, schema }) => `${source}: ${schema}`)
+          .join(', ')})`,
+      ],
+    };
+  }
+  const [artifactSchema] = schemas;
+  if (artifactSchema !== undefined) {
+    return { artifactSchema, findings: [] };
+  }
+  if (linkedSignal?.historicalFallback) {
+    return { artifactSchema: 1, findings: [] };
+  }
+  const hasAmbiguousCaptainContinuation =
+    opts.config !== undefined &&
+    enumerateCaptainStates(opts.config).some(
+      (state) =>
+        state.actor === 'captain' &&
+        Object.hasOwn(state.result, NEEDS_BOSS_REPLY),
+    );
+  return hasAmbiguousCaptainContinuation
+    ? {
+        findings: [
+          'artifact schema has no reviewed provenance, generation-specific actor structure, or callable linked factory for a direct-Captain continuation',
+        ],
+      }
+    : { findings: [] };
 }
 /**
  * Emits the prompt-contract test beside a compiled `playbook` artifact
@@ -1893,6 +2560,14 @@ export async function emitPromptContractTest(opts) {
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const config = findMachineConfig(await loadFsmModule(fsmPath));
   const rows = capturePromptContract(config);
+  let schemaResolution = resolveArtifactSchemaForVerification({
+    config,
+    ...(opts.provenance === undefined ? {} : { provenance: opts.provenance }),
+    ...(opts.artifactSchema === undefined
+      ? {}
+      : { artifactSchema: opts.artifactSchema }),
+  });
+  let artifactSchema = schemaResolution.artifactSchema;
   let composer;
   const linkedPath = join(opts.artifactDir, `${opts.basename}.playbook.ts`);
   if (existsSync(linkedPath)) {
@@ -1901,6 +2576,17 @@ export async function emitPromptContractTest(opts) {
         linkedPath,
         fsmPath,
       });
+      schemaResolution = resolveArtifactSchemaForVerification({
+        config,
+        linked,
+        ...(opts.provenance === undefined
+          ? {}
+          : { provenance: opts.provenance }),
+        ...(opts.artifactSchema === undefined
+          ? {}
+          : { artifactSchema: opts.artifactSchema }),
+      });
+      artifactSchema = schemaResolution.artifactSchema;
       const actors = new Set(
         enumerateCaptainStates(config).map(({ actor }) => actor),
       );
@@ -1922,6 +2608,7 @@ export async function emitPromptContractTest(opts) {
           config,
           compose: typedCompose,
           actor,
+          ...(artifactSchema === undefined ? {} : { artifactSchema }),
         });
         diagnostics.push(
           ...findings.map((finding) => `prompt contract: ${finding}`),
@@ -1942,11 +2629,18 @@ export async function emitPromptContractTest(opts) {
       );
     }
   }
+  diagnostics.unshift(
+    ...schemaResolution.findings.map(
+      (finding) => `prompt contract: ${finding}`,
+    ),
+  );
   const content = generatePromptContractTest({
     basename: opts.basename,
     fsmModule: `./${opts.basename}.fsm.js`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
     rows,
+    ...(artifactSchema === undefined ? {} : { artifactSchema }),
+    schemaFindings: schemaResolution.findings,
     composer,
   });
   await mkdir(opts.artifactDir, { recursive: true });

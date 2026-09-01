@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { AgentAdapter, AgentOptions } from '@sublang/cligent';
 import { describe, expect, it } from 'vitest';
@@ -408,20 +409,70 @@ describe('createConfiguredExecutor (cli-7, cli-8)', () => {
     expect(() => compiled(choice('@sublang/playbook@4.1.0'))).toThrow(
       /unsupported pinned Playbook runtime contract/,
     );
-    // Task 2 lands the dormant schema-3 host without activating a new
-    // provenance. Every unreviewed intermediate and exact 10.0.0 itself stay
-    // fail-closed until the complete DR-024 reviewed set moves atomically.
-    for (const version of [
-      '5.0.0',
-      '6.0.0',
-      '7.0.0',
-      '8.0.0',
-      '9.0.0',
-      '10.0.0',
-    ]) {
+    // The DR-024 reviewed set has moved atomically, so exact 10.0.0 now
+    // selects the schema-3 `composed-v3` profile. Reviewing 10.0.0 establishes
+    // no contract identity for an intermediate release, so every unreviewed
+    // version between 4.0.0 and 10.0.0 stays fail-closed.
+    expect(typeof compiled(choice('@sublang/playbook@10.0.0')).run).toBe(
+      'function',
+    );
+    for (const version of ['5.0.0', '6.0.0', '7.0.0', '8.0.0', '9.0.0']) {
       expect(() => compiled(choice(`@sublang/playbook@${version}`))).toThrow(
         `unsupported pinned Playbook runtime contract: @sublang/playbook@${version}`,
       );
+    }
+  });
+
+  it('constructs an exact 10.0.0 pin as schema-3 and every mapped older pin as schema-1', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-config-v3-'));
+    const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
+    const definitionPath = join(dir, 'phase.md');
+    const source = join(dir, 'source.md');
+    await writeFile(definitionPath, 'compiled phase definition');
+    await writeFile(source, 'hello schema 3');
+    const compiled = createConfiguredCompiledFactory(
+      { agent: 'codex' },
+      { adapterFactory: () => fakeAdapter('codex'), cwd: dir },
+    );
+    // One roleless schema-3 artifact drives both provenances: it accepts only
+    // the exact `{ configuredOptions, hostCapabilities }` construction, so the
+    // outcome witnesses which profile the pin actually bound.
+    const choice = (provenance: string): CompiledSelection =>
+      ({
+        phase: 'text2gears',
+        pipelineDir: fixtures,
+        record: {
+          artifact: { path: 'phase-v3-fixture.mjs' },
+          linkTarget: { provenance },
+        },
+      }) as unknown as CompiledSelection;
+    const run = (provenance: string, target: string) =>
+      compiled(choice(provenance)).run(
+        { kind: 'compile', definitionPath, source, target },
+        new AbortController().signal,
+      );
+
+    try {
+      const schema3Target = join(dir, 'schema-3.ts');
+      await expect(
+        run('@sublang/playbook@10.0.0', schema3Target),
+      ).resolves.toEqual({ status: 'ok', diagnostics: [] });
+      expect(await readFile(schema3Target, 'utf8')).toBe(
+        'compiled-v3:hello schema 3',
+      );
+
+      // 4.0.0 keeps DR-020's `composed-v2` empty-object construction: the
+      // schema-3 artifact refuses it instead of being silently upgraded.
+      const schema1 = await run(
+        '@sublang/playbook@4.0.0',
+        join(dir, 'schema-1.ts'),
+      );
+      expect(schema1.status).toBe('error');
+      expect(schema1.diagnostics.join('\n')).toContain(
+        'factory argument does not have the exact own-data shape',
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });

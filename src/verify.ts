@@ -531,7 +531,18 @@ export function inspectGearsRoleContract(gears: string): GearsRoleContract {
       } else {
         byCanonical.set(roleId, name);
       }
-      if (!/^[a-z][a-z0-9_-]*$/.test(roleId)) {
+      // A canonical local role id is the declared name lowercased. Playbook 10
+      // explicitly admits non-English role names ("quote non-English names
+      // (e.g., `作者`)"), and a script without case - Chinese among them -
+      // lowercases to itself, so an ASCII-only class would reject exactly the
+      // names the definition sanctions. Require instead that the id be genuinely
+      // canonical: already lowercase, carrying no whitespace or separator that
+      // would make it ambiguous as an identifier.
+      if (
+        roleId.length === 0 ||
+        roleId !== roleId.toLowerCase() ||
+        /[\s.,;:/\\'"`()[\]{}<>|]/u.test(roleId)
+      ) {
         findings.push(
           `Roles declaration ${JSON.stringify(name)} derives noncanonical local role ${JSON.stringify(roleId)}`,
         );

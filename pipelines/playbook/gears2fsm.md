@@ -18,12 +18,6 @@ Target is an object artifact only: it defines the machine, actor contracts, and 
 | source | gears  | .md       |
 | target | fsm    | .ts       |
 
-## Pin Inputs
-
-- `text2gears.md`
-- `link.md`
-- `../../package-lock.json`
-
 ## Setup
 
 The artifact shall use XState v5's `setup(...)` then `.createMachine(...)` [[10]].
@@ -42,7 +36,7 @@ map for every actor kind the GEARS artifact uses, using typed actor logic such
 as `fromPromise<Output, Input>(...)` [[11]]:
 
 - `captain` for direct work performed by Captain;
-- `player` for work Captain delegates to a named player;
+- `player` for work Captain delegates to a named role;
 - `playbook` for a nested playbook call; and
 - `script` for a deterministic shell script an
   [optimizer-introduced script item](text2gears.md#script-behaviors-optimizer-introduced)
@@ -79,7 +73,7 @@ comment delimiters into a TypeScript target.
 `PlayerInput` shall be a typed object with at least:
 
 - `stateId`: the stable id of the invoking working leaf;
-- `player`: the [player](text2gears.md#players) Captain is to invoke;
+- `role`: the canonical lowercase local id derived from the [role](text2gears.md#roles) Captain is to delegate;
 - `sourceItem`: the GEARS item ID this state realizes;
 - `prompt`: the source item's full final prompt, verbatim;
 - `result`: a record whose keys are the valid guard names this invocation may return.
@@ -173,6 +167,7 @@ The default never applies to an item carrying a `Results:` label, and it does
 not license inferring any richer contract from prose.
 The item's blockquote alone becomes `invoke.input.prompt`; the `Results:`
 label and bullets shall never enter that prompt.
+A `>` that remains at the start of a prompt line after removing the outer GEARS blockquote marker is literal quoted-context content and shall remain in `invoke.input.prompt` unchanged.
 Each result description shall name every additional output field its accepting
 guard requires, using the exact case-sensitive property names. For example, a
 delegation or continuing-call description whose guard reads the planned child
@@ -199,6 +194,50 @@ Both direct-Captain states additionally receive the universal
 `needsBossReply` result. Their guards and actions shall use those exact
 case-sensitive names so the compiled adjudication contract remains stable.
 
+For a controller playbook — one whose Source declares DR-029's session-scoped
+controller policy: a session Captain that runs for the whole host session,
+receives every Boss turn, and operates the working playbooks from outside the
+engagement stack (DR-029) — the compiler shall apply the additive
+controller decision-state class below. The class joins the stable compiler
+contract beside the decide-call-observe vocabulary above; that vocabulary and
+the universal `needsBossReply` rule stay untouched for the artifacts that
+consume them.
+The controller machine shall be a session loop, not a finite errand: a
+quiescent conversational hub (tag `playbook.parked`) receives each Boss turn;
+the controller decision state decides it over the closed action set; a
+`respond` selection settles its turn in the decision call itself, its
+validated `text` being the turn's captain speech; an acting selection's host
+settlement becomes the outcome report grounding one closing-reply call; and
+the machine returns to the hub for the next turn. Returning to the hub after
+a settled turn completes the session loop's turn; it is not the idle-hub
+routing that [Transitions](#transitions) reserves for recovery.
+Because the hub receives every Boss turn, a controller state carries no
+Boss-reply suspension: the compiler shall not add `needsBossReply` to a
+controller machine's `invoke.input.result` maps — a clarifying question to
+Boss is a `respond` selection.
+The machine shall declare no terminal result output and shall keep exactly
+one reachable `type: 'final'` shutdown state entered only by the host's
+teardown event. The completion rule of
+[Errors and termination](#errors-and-termination) applies unamended: its
+output clause binds only where Source declares a terminal result, which a
+controller Source does not.
+The controller decision state's direct-Captain result contract discriminates
+the closed action set of DR-029 as extended by DR-038. Its guard discriminants
+are a stable compiler contract, not names the compiler may invent — `respond`, `resume`,
+`start`, `switch`, `dismiss`, `deliver`, and `runtime` — with each guard's
+required payload fields:
+
+- `respond` requires `text`;
+- `resume` requires `playbookId` and carries no `input`;
+- `start` and `switch` each require `playbookId` and `input`;
+- `runtime` requires `actionId`;
+- `dismiss` and `deliver` require none — a `deliver` result in particular
+  carries no text payload: the host is authoritative for the delivered text,
+  so the contract declares no field for it.
+
+The decision state's guards and actions shall use those exact case-sensitive
+names so the compiled controller contract remains stable.
+
 ## States
 
 Each state shall declare:
@@ -206,20 +245,25 @@ Each state shall declare:
 - a stable `id` (for `#id` targeting and Boss interrupts);
 - an intuitive state key (the property name under `states: { ... }`);
 - a one-line `description` (for inspector tools and documentation);
-- JSON-safe `meta: { playbook: { stateId, description } }` repeating its
-  stable id and description so linked runtimes can discover active public
-  identities through `snapshot.getMeta()` without private XState nodes;
+- JSON-safe `meta: { playbook: { stateId, description, role? } }` naming the
+  state's public playbook identity per the identity rule below and repeating
+  its description so linked runtimes can discover active public
+  identities through `snapshot.getMeta()` without private XState nodes. A
+  delegated-role state shall also carry the canonical lowercase source role id in
+  `meta.playbook.role`; every other state shall omit `role`;
 - if it invokes the direct `captain` actor: `invoke.input` carrying
   `sourceItem`, `prompt`, and `result` (per [Setup](#setup));
 - if it invokes the delegated `player` actor: `invoke.input` additionally
-  carrying `player`;
+  carrying the same source-derived `role` as `meta.playbook.role`;
 - if it invokes the `script` actor: `invoke.input` carrying `stateId`,
   `sourceItem`, `command`, and `result` (per [Setup](#setup)) — no `prompt`
-  and no `player`.
+  and no `role`.
 
 The source item ID shall live in `invoke.input.sourceItem`, not in a comment — this keeps the GEARS-to-state mapping machine-readable.
-A delegated state's `invoke.input.player` shall match its source item's named
-player. A direct Captain state shall not invent a `Captain` player binding.
+
+Outside a parallel group's regions, a state's `meta.playbook.stateId` shall equal its state key — the one identity a factory-backed linked runtime indexes by.
+A delegated state's `invoke.input.role` shall match the canonical lowercase id of its source item's named role.
+A direct Captain state shall not invent a `Captain` role binding.
 
 Every invoking working leaf — sequential or parallel, whatever its actor
 kind — shall carry the tag `playbook.busy`: the shared quiescence helper
@@ -241,7 +285,7 @@ invoke: {
     src: 'player',
     input: ({ context }): PlayerInput => ({
         stateId: '<stable-state-id>',
-        player: 'Reviewer',
+        role: 'reviewer',
         sourceItem: '<ITEM-A>',
         prompt: [
             'Flag any issues or improvements (numbered; no duplication).',
@@ -259,17 +303,17 @@ invoke: {
 
 For an item in which Captain acts directly, the corresponding invocation uses
 `src: 'captain'` and a `CaptainInput` with the same static mapping fields but no
-`player` field.
+`role` field.
 
 ## Mapping
 
 Each Source spec item shall map to exactly one state in Target.
 A state's `invoke.input.sourceItem` shall be that item's ID, and `invoke.input.prompt` shall carry the item's prompt verbatim.
 
-An item written as direct Captain work shall map to exactly one `captain`
-invocation. An item that prompts or relays to a named player shall map to
-exactly one `player` invocation. A nested-call item shall map to exactly one
-`playbook` invocation. A script item (`Captain shall run:`) shall map to
+An item written as direct Captain work shall map to exactly one `captain` invocation.
+An item that prompts or relays to a named role shall map to exactly one `player` invocation.
+A nested-call item shall map to exactly one `playbook` invocation.
+A script item (`Captain shall run:`) shall map to
 exactly one `script` invocation whose `input.command` carries the blockquote
 verbatim and whose `result` preserves the item's two guards in declared order.
 The compiler shall not infer one actor kind from a
@@ -293,9 +337,13 @@ Each member shall be a delegated-player item; a direct-Captain or nested-call
 member is malformed because those actor kinds share one Captain control lane or one
 pending-child slot. Each region shall contain a delegated-player working leaf
 and a local final state; the working leaf retains the item's stable state id,
-`sourceItem`, player, prompt, and result contract.
+`sourceItem`, role, prompt, and result contract.
+The members' canonical role ids shall be pairwise distinct; a repeated role in one group is malformed.
 The parallel parent shall use `onDone` as the join, which XState takes only
 after every region reaches final.
+
+The artifact shall export `concurrentRoleSets` as a deeply readonly array containing one role-id array per parallel group in first-item source order, with each inner array following that group's item order.
+An artifact with no parallel group shall export an empty array.
 
 Each branch shall assign only its own staged result.
 The join shall promote all staged results atomically before later work begins,
@@ -487,8 +535,8 @@ the number of sequential child calls without an arbitrary runtime call limit.
 Prompts shall pass only the **specific extracted fields** the player needs.
 The compiler shall not dump `JSON.stringify(lastResult)` or any opaque blob: it leaks internal `guard` strings, wastes tokens, and confuses the LLM.
 
-Player bindings and per-run parameters shall flow in via the machine's `input` and be copied into context at start-up.
-The artifact shall not bake in player bindings, model names, or per-run values.
+Player bindings and prompt identities shall enter only through `PlaybookSession.roleBindings` at runtime call, prompt, and trace boundaries.
+The artifact shall not bake them into machine input, options, or context; model names and other host settings shall remain host policy rather than persisted FSM state.
 Host-owned configuration such as an enabled-playbook catalog shall remain
 immutable machine input/context for the session. Boss events and actor outputs
 shall not carry, replace, append to, or otherwise overwrite that catalog.
@@ -545,7 +593,7 @@ Phases may set typed routing fields so terminal outcomes return to the originati
 
 ## Boss control
 
-[Boss](text2gears.md#players) input enters the machine through three surfaces: pre-emptive interrupts on active states, typed entry events on idle or recoverable states, and Boss replies to player questions that suspended the FSM in a dedicated wait state.
+[Boss](text2gears.md#roles) input enters the machine through three surfaces: pre-emptive interrupts on active states, typed entry events on idle or recoverable states, and Boss replies to delegated-role questions that suspended the FSM in a dedicated wait state.
 
 ### Boss interrupts
 
@@ -561,6 +609,11 @@ context precondition required to enter that target safely. It shall not jump
 into a working or reassessment state with missing intent, prior result, plan,
 or other required context and shall not invent defaults merely to make an
 interrupt target executable.
+Control-action discovery probes these guards with optional textual fields
+omitted. Before applying a string operation such as `trim()`, a generated
+guard shall narrow the field to a string; a missing required textual field
+shall make the guard return false, never throw, so the control view remains
+total and omits an action whose payload the runtime cannot source.
 XState automatically stops the current state's invoked actor on transition [[2]].
 Where the default Captain's routing state accepts a fresh intent while another
 state or Boss-reply wait is active, its `BOSS_INTERRUPT` event shall carry a
@@ -594,11 +647,21 @@ cannot supply alone, the machine shall suspend that task in a quiescent wait
 state and resume the same task with the Q+A in the next prompt.
 This is a third Boss surface alongside `BOSS_INTERRUPT` and Boss entry events.
 
-Every captain- and player-invoking state supports this path.
+Every captain- and player-invoking state supports this path, with one
+exception the compiler shall apply, not infer: the states of a controller
+machine ([Setup](#setup), controller decision-state class) carry no
+Boss-reply suspension, because its hub already receives every Boss turn and a
+clarifying question to Boss is a `respond` selection over the closed action
+set. The rule below is therefore universal over workflow states and silent
+about that class; in particular, adding `needsBossReply` to the controller
+decision state would add an eighth outcome to a closed seven-action contract
+whose guard discriminants [Setup](#setup) fixes, and is nonconformant.
 There is no source-level opt-in annotation and no `needsBossReply` result metadata in GEARS output.
 The FSM compiler shall preserve the GEARS blockquote as the state's domain `prompt` body and shall not inject any Boss-question instruction into `invoke.input.prompt`.
+This preservation includes every literal leading `>` carried inside the outer GEARS blockquote for quoted runtime context.
 
-For every captain- and player-invoking state, the compiler shall add
+For every captain- and player-invoking state outside a controller machine,
+the compiler shall add
 `needsBossReply` to the state's `invoke.input.result` map.
 The description shall be the standard adjudicator-facing text:
 
@@ -612,12 +675,12 @@ the colon as the JSON field name.
 The linked runtime composes player prompts per [link.md "Player prompt composition"](link.md#player-prompt-composition), without adding a player-visible Boss-question instruction.
 
 The question record shall be
-`{ questionId, resumeStateId, sourceItem, player, question }`.
+`{ questionId, resumeStateId, sourceItem, asker, question }`, where `asker` is exactly `{ kind: 'captain' }` or `{ kind: 'role', roleId }`.
 `questionId` and `resumeStateId` shall both equal the stable working-leaf
 `stateId`.
-`questionId`, `resumeStateId`, and `sourceItem` shall come from the suspended
-working leaf's stable invocation metadata. `player` shall come from a delegated
-`PlayerInput`, or be the literal `Captain` for a direct-Captain state. Only
+`questionId`, `resumeStateId`, and `sourceItem` shall come from the suspended working leaf's stable invocation metadata.
+A delegated `PlayerInput` shall produce the role asker with its canonical local role id, while a direct-Captain state shall produce the Captain asker without inventing a role.
+Only
 `question` shall come from adjudicated actor output.
 
 A machine with at most one active Captain or player task may use the scalar
@@ -688,6 +751,20 @@ an unhandled runtime error.
 
 Every machine shall declare at least one `type: 'final'` state (typically `done`) reachable on completion.
 A never-terminating machine is a defect: the runner has no completion signal.
+
+At least one is a floor, not a ceiling. A final state's `description` is the
+machine's published terminal meaning: a host that cannot read the machine's
+output quotes that description to report what the run did. It shall therefore
+be true of every arm that enters the state and of no other terminal outcome.
+Where Source declares more than one terminal outcome — an approval that
+completes the workflow and a failure the workflow reports to its caller
+instead of parking — each outcome shall get its own `type: 'final'` state
+whose description names it. Routing an approval arm and a failure, abort, or
+invalid-result arm into one final state is a defect of the same kind as a
+wrong result field, because the quoting host cannot detect the difference.
+This constrains only published meaning: the declared machine `output` still
+derives its status and fields from typed context, so a caller that does read
+the output is unaffected.
 
 Where Source declares a JSON-safe terminal result, the setup types shall
 declare that output and the root machine shall derive it from typed context

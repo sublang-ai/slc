@@ -8,7 +8,9 @@
 
 import createPlaybookRuntime from './workflow.playbook/workflow.playbook.ts';
 
-type RuntimeOptions = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
+type FactoryInput = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
+type RuntimeOptions = FactoryInput['configuredOptions'];
+type HostCapabilities = FactoryInput['hostCapabilities'];
 
 const ALLOWED_OPTION_KEYS: readonly string[] = ['cwd'];
 
@@ -83,16 +85,24 @@ function validateOptions(value: unknown): RuntimeOptions {
 const entry = {
   id: 'workflow',
   command: 'workflow',
-  intent:
-    'Two-Agent Task Workflow — Use two agents to carry out the input task.',
+  intent: 'Two-Agent Code-and-Review Workflow — Roles:',
+  artifactSchema: 3,
+  runtimeProfile: 'composed-v3',
+  concurrentRoleSets: [] as readonly (readonly string[])[],
   requiredRoleIds: [...REQUIRED_ROLE_IDS],
   validateOptions,
-  createRuntime(options: { captainOptions?: unknown }) {
+  createRuntime(
+    options: { captainOptions?: unknown },
+    hostCapabilities: HostCapabilities,
+  ) {
     const validated = validateOptions(options.captainOptions);
     return withRoleBinding(
       createPlaybookRuntime({
-        ...validated,
-        cwd: validated.cwd ?? process.cwd(),
+        configuredOptions: {
+          ...validated,
+          cwd: validated.cwd ?? process.cwd(),
+        },
+        hostCapabilities,
       }),
     );
   },

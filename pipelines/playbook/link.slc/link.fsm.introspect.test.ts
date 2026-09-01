@@ -13,7 +13,7 @@ const PINNED = {
   initial: 'ready',
   captain: [
     {
-      state: 'link',
+      state: 'linking',
       actor: 'captain',
       sourceItem: 'LINK-1',
       player: '',
@@ -50,10 +50,15 @@ const PINNED = {
       state: 'ready',
       final: false,
       on: {
-        BOSS_REQUEST: [
+        BOSS_INTENT: [
           {
             index: 0,
-            target: 'link',
+            target: 'linking',
+            guarded: true,
+          },
+          {
+            index: 1,
+            target: null,
             guarded: false,
           },
         ],
@@ -66,12 +71,24 @@ const PINNED = {
         BOSS_REPLY: [
           {
             index: 0,
-            target: 'link',
+            target: 'linking',
             guarded: true,
           },
           {
             index: 1,
             target: 'failed',
+            guarded: false,
+          },
+        ],
+        BOSS_INTENT: [
+          {
+            index: 0,
+            target: 'linking',
+            guarded: true,
+          },
+          {
+            index: 1,
+            target: null,
             guarded: false,
           },
         ],
@@ -81,10 +98,15 @@ const PINNED = {
       state: 'failed',
       final: false,
       on: {
-        BOSS_REQUEST: [
+        BOSS_INTENT: [
           {
             index: 0,
-            target: 'link',
+            target: 'linking',
+            guarded: true,
+          },
+          {
+            index: 1,
+            target: null,
             guarded: false,
           },
         ],
@@ -100,12 +122,12 @@ const PINNED = {
     BOSS_INTERRUPT: [
       {
         index: 0,
-        target: 'link',
+        target: 'linking',
         guarded: true,
       },
     ],
   },
-  interruptTargets: ['link'],
+  interruptTargets: ['linking'],
 };
 
 describe('link: FSM introspection', () => {

@@ -1,6 +1,7 @@
 /** A GEARS spec item with its acting prompt and optional source-owned results. */
 export interface GearsItem {
   id: string;
+  /** Source-spelled delegated participant; schema 3 canonicalizes it as a role. */
   player: string;
   prompt: string;
   /**
@@ -14,6 +15,8 @@ export interface GearsItem {
   playbookIdContext?: string;
   /** Context field supplying a dynamic nested-playbook input. */
   textContext?: string;
+  /** Source-declared parallel group, when this item is a concurrent member. */
+  parallelGroup?: string;
   /** Ordered source-owned domain guard contract, when explicitly declared. */
   result?: Record<string, string>;
   /** Malformed result-metadata details retained for fail-closed reporting. */
@@ -29,7 +32,10 @@ export interface CaptainState {
    * never in captain-binding enumeration or pins.
    */
   actor: 'captain' | 'player' | 'script';
+  /** Immutable schema-1 delegated-player binding. */
   player: string;
+  /** Canonical schema-3 local-role binding. */
+  role?: string;
   prompt: string;
   /** The state's per-state guard contract: result key to description. */
   result: Record<string, string>;
@@ -75,6 +81,18 @@ export interface PlaybookInvocationState {
  */
 export declare const NEEDS_BOSS_REPLY = 'needsBossReply';
 export declare const BOSS_QUESTION_MARKER = 'Output shall include `question:';
+/** Artifact schema selected only by a complete reviewed Playbook provenance. */
+export declare function artifactSchemaForPlaybookProvenance(
+  provenance: unknown,
+): 1 | 3 | undefined;
+/**
+ * Returns the Playbook package provenance that owns an invocation's concrete
+ * link target. The first package manifest above the target owns the file; a
+ * parent workspace manifest must not lend its identity to a nested local file.
+ */
+export declare function playbookProvenanceForLinkTarget(
+  linkTarget: string,
+): Promise<string | undefined>;
 /** The minimal XState machine-config shape the introspector walks (`machine.config`). */
 export interface MachineConfigLike {
   initial?: string;
@@ -110,6 +128,20 @@ interface StateLike {
  * blockquoted acting prompt, and optional ordered `Results:` metadata.
  */
 export declare function parseGearsItems(gears: string): GearsItem[];
+/** The source generation and canonical role/cohort declaration of one GEARS artifact. */
+export interface GearsRoleContract {
+  generation: 'schema-1' | 'schema-3' | 'unspecified';
+  names: string[];
+  roleIds: string[];
+  concurrentRoleSets: string[][];
+  findings: string[];
+}
+/** Canonical lowercase local-role id used by schema-3 artifacts. */
+export declare function canonicalRoleId(name: string): string;
+/** Parses Roles/Players plus source-derived concurrent role sets without host bindings. */
+export declare function inspectGearsRoleContract(
+  gears: string,
+): GearsRoleContract;
 /**
  * Enumerates a machine's direct-Captain and delegated-player states, reading
  * `invoke.input` under a stub context to recover the static source binding.
@@ -130,6 +162,37 @@ export declare function enumeratePlaybookStates(
 export declare function enumerateScriptStates(
   config: MachineConfigLike,
 ): ScriptInvocationState[];
+/** Module-level schema-3 declarations needed beside the machine config. */
+export interface GearsFsmConformanceOptions {
+  concurrentRoleSets?: unknown;
+  /** Reviewed artifact schema for roleless non-controller machines. */
+  artifactSchema?: 1 | 3;
+}
+/** Exact action guards of Playbook 10's controller decision result. */
+export declare const CONTROLLER_ACTION_GUARDS: readonly [
+  'respond',
+  'resume',
+  'start',
+  'switch',
+  'dismiss',
+  'deliver',
+  'runtime',
+];
+/** Whether a result map has the exact Playbook 10 controller domain union. */
+export declare function isControllerDecisionResult(result: unknown): boolean;
+/** A single missing or extra key against Playbook 10's controller domain. */
+export declare function controllerDecisionNearMiss(result: unknown):
+  | {
+      missing: string[];
+      extra: string[];
+    }
+  | undefined;
+/** Whether a machine contains Playbook 10's grounded controller decision state. */
+export declare function isControllerMachine(config: MachineConfigLike): boolean;
+/** Whether an explicit direct-Captain result is one key from the controller domain. */
+export declare function hasControllerDecisionNearMiss(
+  config: MachineConfigLike,
+): boolean;
 /**
  * Checks GEARS↔FSM conformance and returns human-readable findings (empty when
  * conformant): every GEARS item maps to one state with the same player and the
@@ -140,6 +203,7 @@ export declare function enumerateScriptStates(
 export declare function checkGearsFsmConformance(
   gears: string,
   config: MachineConfigLike,
+  options?: GearsFsmConformanceOptions,
 ): string[];
 /** The `gears2fsm`-mandated root pre-emption event name. */
 export declare const INTERRUPT_EVENT = 'BOSS_INTERRUPT';
@@ -180,6 +244,8 @@ export interface IntrospectionPins {
     actor?: 'captain' | 'player';
     sourceItem: string;
     player: string;
+    /** Canonical schema-3 role; absent for historical schema-1 pins. */
+    role?: string;
     resultKeys: string[];
     onDone: TransitionArm[];
     onError: TransitionArm[];
@@ -237,6 +303,8 @@ export interface PromptContractRow {
   state: string;
   sourceItem: string;
   player: string;
+  /** Canonical schema-3 role; absent for historical schema-1 rows. */
+  role?: string;
   /** Context fields the state's input thunk reads. */
   reads: string[];
   /** Input fields carrying a read context field's value, by sentinel tracing. */
@@ -269,7 +337,7 @@ export declare function capturePromptContract(
  */
 export declare function deriveSubstitutions(
   config: MachineConfigLike,
-  compose: (input: unknown) => string,
+  compose: PromptComposer,
   actor?: CaptainState['actor'],
 ): Record<string, string[]>;
 /**
@@ -282,10 +350,17 @@ export declare function deriveSubstitutions(
  */
 export declare function checkPromptComposition(opts: {
   config: MachineConfigLike;
-  compose: (input: unknown) => string;
+  compose: PromptComposer;
   /** Restricts the check to the states served by the matching composer. */
   actor?: CaptainState['actor'];
+  /** Grounded linked-artifact schema for otherwise ambiguous direct Captain states. */
+  artifactSchema?: 1 | 3;
 }): string[];
+type PromptIdentity = (roleId: string) => string;
+type PromptComposer = (
+  input: unknown,
+  promptIdentity: PromptIdentity,
+) => string;
 /**
  * Package-export default for direct emitter callers. Full reserved-pipeline
  * runs override it with the artifact-local verifier support module.
@@ -301,6 +376,8 @@ export declare const VERIFY_MODULE = '@sublang/slc/verify';
 export declare function findMachineConfig(
   fsmModule: unknown,
 ): MachineConfigLike;
+/** Reads the schema-3 cohort declaration from an imported FSM module. */
+export declare function findConcurrentRoleSets(fsmModule: unknown): unknown;
 /**
  * Builds a per-artifact vitest module that fails when the compiled FSM drifts
  * from its GEARS source: it reads the artifact's `gears` file and the machine its
@@ -316,6 +393,10 @@ export declare function generateGearsFsmConformanceTest(opts: {
   gearsFile: string;
   /** Import specifier for this checker, relative to the test. */
   verifyModule: string;
+  /** Reviewed schema baked into roleless artifact checks when available. */
+  artifactSchema?: 1 | 3;
+  /** Emission-time schema evidence that must remain empty for a valid artifact. */
+  schemaFindings?: readonly string[];
 }): string;
 /**
  * Emits the GEARS↔FSM conformance test as `slc` output beside a compiled
@@ -331,6 +412,10 @@ export declare function emitGearsFsmConformanceTest(opts: {
   basename: string;
   /** Checker import specifier; defaults to {@link VERIFY_MODULE}. */
   verifyModule?: string;
+  /** Reviewed schema baked into roleless artifact checks when available. */
+  artifactSchema?: 1 | 3;
+  /** Emission-time schema evidence that must remain empty for a valid artifact. */
+  schemaFindings?: readonly string[];
 }): Promise<string>;
 /**
  * Imports a produced `fsm` artifact module for emission-time derivation. The
@@ -341,6 +426,19 @@ export declare function emitGearsFsmConformanceTest(opts: {
  * module cache.
  */
 export declare function loadFsmModule(fsmPath: string): Promise<unknown>;
+/**
+ * Imports generated linked TypeScript for emission-time, standalone, or
+ * equivalence review before its sibling FSM has been built to JavaScript.
+ * NodeNext source correctly names the runtime-safe `./<basename>.fsm.js` edge,
+ * but review may run while only `./<basename>.fsm.ts` exists. Stage a
+ * same-directory copy whose one generated module specifier points at the
+ * hashed TypeScript artifact, import that copy, and remove it without changing
+ * the linked source or its production import.
+ */
+export declare function loadLinkedModuleForVerification(opts: {
+  linkedPath: string;
+  fsmPath: string;
+}): Promise<unknown>;
 /**
  * Builds a per-artifact vitest module that fails when the machine's structure
  * drifts from the topology pinned at build time (verification-4).
@@ -363,6 +461,10 @@ export declare function generatePromptContractTest(opts: {
   fsmModule: string;
   verifyModule: string;
   rows: PromptContractRow[];
+  /** Grounded artifact schema baked into continuation probes when available. */
+  artifactSchema?: 1 | 3;
+  /** Emission-time schema evidence that must remain empty for a valid artifact. */
+  schemaFindings?: readonly string[];
   /** Present when the linked module beside the artifacts exposes its composer. */
   composer?: {
     playbookModule: string;
@@ -370,6 +472,18 @@ export declare function generatePromptContractTest(opts: {
     player?: Record<string, string[]>;
   };
 }): string;
+/** Schema decision shared by generated and standalone artifact verification. */
+export declare function resolveArtifactSchemaForVerification(opts: {
+  artifactSchema?: 1 | 3;
+  provenance?: unknown;
+  config?: MachineConfigLike;
+  linked?: {
+    default?: unknown;
+  };
+}): {
+  artifactSchema?: 1 | 3;
+  findings: string[];
+};
 /**
  * Emits the prompt-contract test beside a compiled `playbook` artifact
  * (verification-5): derives and pins the per-state contract from the physical
@@ -388,6 +502,10 @@ export declare function emitPromptContractTest(opts: {
   artifactDir: string;
   basename: string;
   verifyModule?: string;
+  /** Reviewed schema when the FSM shape alone cannot distinguish generations. */
+  artifactSchema?: 1 | 3;
+  /** Actual reviewed full-link target provenance, when the caller has it. */
+  provenance?: unknown;
 }): Promise<{
   path: string;
   diagnostics: string[];

@@ -20,7 +20,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { parseGearsItems } from './verify.js';
+import { inspectGearsRoleContract, parseGearsItems } from './verify.js';
 
 /** Options for {@link emitEntryModule}. */
 export interface EmitEntryModuleOptions {
@@ -59,6 +59,11 @@ export async function emitEntryModule(
     (item) => item.actor === 'script',
   );
   const intent = deriveIntent(text) ?? opts.basename;
+  // A `Roles:` source compiles to a schema-3 artifact whose linked factory
+  // takes configured options plus live host capabilities; a `Players:` source
+  // keeps the schema-1 entry contract (DR-024).
+  const roleContract = inspectGearsRoleContract(gears);
+  const schema3 = roleContract.generation === 'schema-3';
   const path = join(opts.cwd, `${opts.basename}.ts`);
   await writeFile(
     path,
@@ -68,6 +73,8 @@ export async function emitEntryModule(
       players,
       hasScript,
       intent,
+      schema3,
+      concurrentRoleSets: schema3 ? roleContract.concurrentRoleSets : [],
     }),
     'utf8',
   );
@@ -75,17 +82,21 @@ export async function emitEntryModule(
 }
 
 /**
- * The gears `Players:` declaration, verbatim in source order (self-hosting-15).
- * Alias declarations (`` `A` = `B` | `C` ``) are launcher options, not
- * required roles, and are excluded.
+ * The gears role declaration, verbatim in source order (self-hosting-15).
+ * Playbook 10 renames the section `Players:` to `Roles:` and removes aliasing;
+ * both headings are read so schema-1 and schema-3 sources emit the same way.
+ * A schema-1 alias declaration (`` `A` = `B` | `C` ``) is a launcher option,
+ * not a required role, and is excluded.
  */
 export function declaredPlayers(gears: string): string[] {
   const players: string[] = [];
   let inBlock = false;
   for (const line of gears.split('\n')) {
-    // Gears render the declaration either as a `Players:` line or as a
-    // markdown `Players` heading; both carry the same source declaration.
-    if (/^(?:#{1,6}\s+Players|Players:)\s*$/.test(line.trim())) {
+    // Gears render the declaration either as a `Players:`/`Roles:` line or as
+    // the matching markdown heading; all carry the same source declaration.
+    if (
+      /^(?:#{1,6}\s+(?:Players|Roles)|(?:Players|Roles):)\s*$/.test(line.trim())
+    ) {
       inBlock = true;
       continue;
     }
@@ -137,11 +148,33 @@ function renderEntryModule(spec: {
   players: readonly string[];
   hasScript: boolean;
   intent: string;
+  schema3: boolean;
+  concurrentRoleSets: readonly (readonly string[])[];
 }): string {
   const allowed = spec.hasScript ? `['cwd']` : `[]`;
   const cwdWiring = spec.hasScript
     ? `{\n      ...validated,\n      cwd: validated.cwd ?? process.cwd(),\n    }`
     : `validated`;
+  // A schema-3 linked factory takes exactly `configuredOptions` and live
+  // `hostCapabilities`; a schema-1 factory keeps its single options argument
+  // under its own historical dependency closure (DR-024).
+  // Both aliases come from the artifact's own factory signature, so the entry
+  // imports no host-owned type: a schema-3 input carries `configuredOptions`
+  // and `hostCapabilities`, a schema-1 input is the options object itself.
+  const runtimeOptionsAlias = spec.schema3
+    ? `type RuntimeOptions = FactoryInput['configuredOptions'];\ntype HostCapabilities = FactoryInput['hostCapabilities'];`
+    : `type RuntimeOptions = FactoryInput;`;
+  const schema3Param = spec.schema3
+    ? `,\n    hostCapabilities: HostCapabilities`
+    : '';
+  const factoryArgument = spec.schema3
+    ? `{\n      configuredOptions: ${cwdWiring},\n      hostCapabilities,\n    }`
+    : cwdWiring;
+  const schemaMembers = spec.schema3
+    ? `\n  artifactSchema: 3,\n  runtimeProfile: 'composed-v3',\n  concurrentRoleSets: ${JSON.stringify(
+        spec.concurrentRoleSets,
+      )} as readonly (readonly string[])[],`
+    : '';
   return `// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 //
@@ -152,7 +185,8 @@ function renderEntryModule(spec: {
 
 import createPlaybookRuntime from './${spec.bundleLeaf}/${spec.basename}.playbook.ts';
 
-type RuntimeOptions = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
+type FactoryInput = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
+${runtimeOptionsAlias}
 
 const ALLOWED_OPTION_KEYS: readonly string[] = ${allowed};
 
@@ -227,12 +261,12 @@ function validateOptions(value: unknown): RuntimeOptions {
 const entry = {
   id: ${sourceString(spec.basename)},
   command: ${sourceString(spec.basename)},
-  intent: ${sourceString(spec.intent)},
+  intent: ${sourceString(spec.intent)},${schemaMembers}
   requiredRoleIds: [...REQUIRED_ROLE_IDS],
   validateOptions,
-  createRuntime(options: { captainOptions?: unknown }) {
+  createRuntime(options: { captainOptions?: unknown }${schema3Param}) {
     const validated = validateOptions(options.captainOptions);
-    return withRoleBinding(createPlaybookRuntime(${cwdWiring}));
+    return withRoleBinding(createPlaybookRuntime(${factoryArgument}));
   },
 };
 

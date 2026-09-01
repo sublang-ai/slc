@@ -9,16 +9,28 @@ import { describe, expect, it } from 'vitest';
 
 import {
   checkGearsFsmConformance,
+  findConcurrentRoleSets,
   findMachineConfig,
 } from './.slc-verify/verify.js';
 import * as fsm from './gears2fsm.fsm.js';
 
+const SCHEMA_FINDINGS = [];
+
 describe('gears2fsm: GEARS↔FSM conformance', () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('maps every GEARS item to a state with its player and verbatim prompt', () => {
     const gears = readFileSync(
       fileURLToPath(new URL('./gears2fsm.gears.md', import.meta.url)),
       'utf8',
     );
-    expect(checkGearsFsmConformance(gears, findMachineConfig(fsm))).toEqual([]);
+    expect(
+      checkGearsFsmConformance(gears, findMachineConfig(fsm), {
+        concurrentRoleSets: findConcurrentRoleSets(fsm),
+        artifactSchema: 3,
+      }),
+    ).toEqual([]);
   });
 });

@@ -18,20 +18,9 @@ import * as playbook from './workflow.playbook.js';
 const CONTRACT = [
   {
     state: 'implement',
-    sourceItem: 'IMPL-1',
-    player: 'Coder',
-    reads: ['bossReply', 'pendingBossQuestion', 'task'],
-    wires: {
-      task: ['task'],
-      pendingBossQuestion: ['pendingBossQuestion'],
-      bossReply: ['bossReply'],
-    },
-    placeholders: ['<task>'],
-  },
-  {
-    state: 'review',
-    sourceItem: 'REVIEW-1',
-    player: 'Reviewer',
+    sourceItem: 'WORKFLOW-2',
+    player: '',
+    role: 'coder',
     reads: ['bossReply', 'pendingBossQuestion'],
     wires: {
       pendingBossQuestion: ['pendingBossQuestion'],
@@ -40,54 +29,88 @@ const CONTRACT = [
     placeholders: [],
   },
   {
-    state: 'judge',
-    sourceItem: 'JUDGE-1',
-    player: 'Coder',
-    reads: ['bossReply', 'findings', 'pendingBossQuestion'],
+    state: 'review',
+    sourceItem: 'WORKFLOW-3',
+    player: '',
+    role: 'reviewer',
+    reads: ['bossReply', 'pendingBossQuestion'],
     wires: {
-      findings: ['findings'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
-    placeholders: ['<findings>'],
+    placeholders: [],
+  },
+  {
+    state: 'judgeFindings',
+    sourceItem: 'WORKFLOW-4',
+    player: '',
+    role: 'coder',
+    reads: ['bossReply', 'pendingBossQuestion', 'reviewFindings'],
+    wires: {
+      reviewFindings: ['reviewFindings'],
+      pendingBossQuestion: ['pendingBossQuestion'],
+      bossReply: ['bossReply'],
+    },
+    placeholders: ['<reviewFindings>'],
   },
   {
     state: 'argue',
-    sourceItem: 'ARGUE-1',
-    player: 'Reviewer',
-    reads: ['bossReply', 'judgment', 'pendingBossQuestion'],
+    sourceItem: 'WORKFLOW-5',
+    player: '',
+    role: 'reviewer',
+    reads: ['bossReply', 'coderJudgment', 'pendingBossQuestion'],
     wires: {
-      judgment: ['judgment'],
+      coderJudgment: ['coderJudgment'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
-    placeholders: ['<judgment>'],
+    placeholders: ['<coderJudgment>'],
   },
   {
-    state: 'reimplement',
-    sourceItem: 'IMPL-2',
-    player: 'Coder',
-    reads: ['bossReply', 'conclusion', 'pendingBossQuestion'],
+    state: 'judgeArgument',
+    sourceItem: 'WORKFLOW-6',
+    player: '',
+    role: 'coder',
+    reads: ['bossReply', 'pendingBossQuestion', 'reviewerArgument'],
     wires: {
-      conclusion: ['conclusion'],
+      reviewerArgument: ['reviewerArgument'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
-    placeholders: ['<conclusion>'],
+    placeholders: ['<reviewerArgument>'],
+  },
+  {
+    state: 'apply',
+    sourceItem: 'WORKFLOW-7',
+    player: '',
+    role: 'coder',
+    reads: ['bossReply', 'coderJudgment', 'pendingBossQuestion'],
+    wires: {
+      coderJudgment: ['coderJudgment'],
+      pendingBossQuestion: ['pendingBossQuestion'],
+      bossReply: ['bossReply'],
+    },
+    placeholders: ['<coderJudgment>'],
   },
 ];
+const SCHEMA_FINDINGS = [];
 
 describe('workflow: prompt contract', () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('matches the prompt contract pinned at build time', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
 
   const PLAYER_SUBSTITUTED = {
-    implement: ['<task>'],
+    implement: [],
     review: [],
-    judge: ['<findings>'],
-    argue: ['<judgment>'],
-    reimplement: ['<conclusion>'],
+    judgeFindings: ['<reviewFindings>'],
+    argue: ['<coderJudgment>'],
+    judgeArgument: ['<reviewerArgument>'],
+    apply: ['<coderJudgment>'],
   };
 
   const composePlayer = (
@@ -102,6 +125,7 @@ describe('workflow: prompt contract', () => {
         config: findMachineConfig(fsm),
         compose: composePlayer,
         actor: 'player',
+        artifactSchema: 3,
       }),
     ).toEqual([]);
   });

@@ -34,6 +34,7 @@ import {
   emitPromptContractTest,
   enumerateCaptainStates,
   enumeratePlaybookStates,
+  findConcurrentRoleSets,
   findMachineConfig,
   generateFsmIntrospectionTest,
   generateGearsFsmConformanceTest,
@@ -976,12 +977,28 @@ describe('inspectGearsRoleContract', () => {
       /reserved local role "captain"[\s\S]*noncanonical local role "code reviewer"/,
     );
 
+    // Playbook 10 admits non-English role names ("quote non-English names
+    // (e.g., `作者`)"), and a script without case lowercases to itself, so a
+    // Chinese name derives a canonical id and is accepted. The shipped Chinese
+    // demo depends on this: an ASCII-only class would make it uncompilable.
     const nonAscii = schema3Gears.replace(
       '- Coder\n- Reviewer',
       '- 编码者\n- Reviewer',
     );
-    expect(inspectGearsRoleContract(nonAscii).findings.join('\n')).toMatch(
-      /noncanonical local role "编码者"/,
+    const nonAsciiContract = inspectGearsRoleContract(nonAscii);
+    expect(nonAsciiContract.findings.join('\n')).not.toMatch(
+      /noncanonical local role/,
+    );
+    expect(nonAsciiContract.roleIds).toContain('编码者');
+
+    // A name that is not canonical for a reason other than its script - here an
+    // embedded separator - is still rejected.
+    const spaced = schema3Gears.replace(
+      '- Coder\n- Reviewer',
+      '- Code Reviewer\n- Reviewer',
+    );
+    expect(inspectGearsRoleContract(spaced).findings.join('\n')).toMatch(
+      /noncanonical local role "code reviewer"/,
     );
 
     const duplicateSet = `${schema3Gears}\n### SCHEMA3-4\nParallel group: duplicate-review\n\nCaptain shall prompt Coder:\n> Draft again.\n\n### SCHEMA3-5\nParallel group: duplicate-review\n\nCaptain shall prompt Reviewer:\n> Review again.\n`;
@@ -2059,14 +2076,42 @@ describe('conformance against the reference artifacts', () => {
       join(referenceDir, 'code.gears.md'),
       'utf8',
     );
+    // Playbook 10's reference is a schema-3 `Roles` workflow: two delegated
+    // Coder phases (CODE-1, CODE-3) each followed by a literal nested `review`
+    // call (CODE-2, CODE-4).
     const items = parseGearsItems(referenceGears);
-    expect(items).toHaveLength(19);
+    expect(items.map((item) => item.id)).toEqual([
+      'CODE-1',
+      'CODE-2',
+      'CODE-3',
+      'CODE-4',
+    ]);
+    expect(inspectGearsRoleContract(referenceGears)).toMatchObject({
+      generation: 'schema-3',
+      roleIds: ['coder'],
+      concurrentRoleSets: [],
+      findings: [],
+    });
+    const fsm = await referenceFsm();
+    // Playbook 10.0.0's shipped reference does not satisfy its own gears2fsm
+    // definition, which requires that "the artifact shall export
+    // `concurrentRoleSets` as a deeply readonly array"; `code.fsm.ts` declares
+    // role `coder` yet exports no such array, and the two nested `review` calls
+    // do not carry their GEARS prompt verbatim. The conformance checker is
+    // correct to report all three, and every artifact this repository compiles
+    // exports `concurrentRoleSets` and passes cleanly. Pinning the exact
+    // findings keeps the checker honest about upstream while making any change
+    // in either the checker or a later Playbook release visible here.
     expect(
-      checkGearsFsmConformance(
-        referenceGears,
-        findMachineConfig(await referenceFsm()),
-      ),
-    ).toEqual([]);
+      checkGearsFsmConformance(referenceGears, findMachineConfig(fsm), {
+        artifactSchema: 3,
+        concurrentRoleSets: findConcurrentRoleSets(fsm),
+      }),
+    ).toEqual([
+      'schema-3 FSM exports no valid concurrentRoleSets array',
+      'CODE-2: FSM playbook text is not the GEARS prompt verbatim',
+      'CODE-4: FSM playbook text is not the GEARS prompt verbatim',
+    ]);
   });
 });
 
@@ -2199,21 +2244,53 @@ describe('pinIntrospection (verification-4)', () => {
     });
   });
 
-  it('pins the reference machine: 19 captain states, 21 interrupt targets', async () => {
+  it('pins the reference machine: two delegated Coder phases and two review calls', async () => {
     const pins = pinIntrospection(findMachineConfig(await referenceFsm()));
-    expect(pins.captain).toHaveLength(19);
+    expect(pins.initial).toBe('ready');
     // Declaration order in the reference is not item order; coverage is a set.
-    expect(pins.captain.map((state) => state.sourceItem).sort()).toEqual(
-      Array.from({ length: 19 }, (_, i) => `CODE-${i + 1}`).sort(),
-    );
-    expect(pins.interruptTargets).toHaveLength(21);
+    expect(pins.captain.map((state) => state.sourceItem).sort()).toEqual([
+      'CODE-1',
+      'CODE-3',
+    ]);
+    expect(pins.captain.map((state) => state.state)).toEqual([
+      'runFirstPhase',
+      'runIrTask',
+    ]);
+    // Schema-3 delegation binds the canonical local role, never a player.
+    for (const state of pins.captain) {
+      expect(state).toMatchObject({ actor: 'player', role: 'coder' });
+      expect(state.player).toBe('');
+    }
+    // The nested calls are literal `review` targets carrying their items.
+    expect(
+      pins.playbook?.map(({ state, playbookId, sourceItem }) => ({
+        state,
+        playbookId,
+        sourceItem,
+      })),
+    ).toEqual([
+      {
+        state: 'reviewFirstCommit',
+        playbookId: 'review',
+        sourceItem: 'CODE-2',
+      },
+      { state: 'reviewIrTask', playbookId: 'review', sourceItem: 'CODE-4' },
+    ]);
+    // Playbook 10's `code` reference exposes no root interrupt surface; the
+    // jumpable set belongs to the separate controller `captain` playbook.
+    expect(pins.rootOn).toEqual({});
+    expect(pins.interruptTargets).toEqual([]);
     expect(pins.quiescent.map((state) => state.state)).toEqual([
       'ready',
       'awaitBossReply',
       'failed',
+      'reportedReviewFailure',
       'done',
     ]);
-    // Every captain state declares Boss-reply suspension and error wiring.
+    expect(
+      pins.quiescent.filter(({ final }) => final).map(({ state }) => state),
+    ).toEqual(['reportedReviewFailure', 'done']);
+    // Every acting state declares Boss-reply suspension and error wiring.
     for (const state of pins.captain) {
       expect(state.resultKeys).toContain('needsBossReply');
       expect(state.onError.length).toBeGreaterThan(0);
@@ -3043,7 +3120,22 @@ describe('checkPromptComposition (verification-5)', () => {
     };
     const config = findMachineConfig(fsm);
     const rows = capturePromptContract(config);
-    expect(rows).toHaveLength(19);
+    expect(
+      rows.map(({ state, sourceItem, player, role }) => ({
+        state,
+        sourceItem,
+        player,
+        role,
+      })),
+    ).toEqual([
+      {
+        state: 'runFirstPhase',
+        sourceItem: 'CODE-1',
+        player: '',
+        role: 'coder',
+      },
+      { state: 'runIrTask', sourceItem: 'CODE-3', player: '', role: 'coder' },
+    ]);
     expect(
       checkPromptComposition({
         config,
@@ -3054,9 +3146,19 @@ describe('checkPromptComposition (verification-5)', () => {
       config,
       playbook._internal.composePlayerPrompt,
     );
-    // The reference substitutes <#> on IR states and player models on commits.
-    expect(substituted.continueIr).toEqual(['<#>']);
-    expect(substituted.commitJoint).toEqual(['<coder-llm>', '<reviewer-llm>']);
+    // The reference substitutes the relayed intent and run results on every
+    // phase, <#> on the IR-task phase, and the Coder model on both commits.
+    expect(substituted.runFirstPhase).toEqual([
+      '<caller-input>',
+      '<run-results>',
+      '<coder-llm>',
+    ]);
+    expect(substituted.runIrTask).toEqual([
+      '<ir-task>',
+      '<run-results>',
+      '<#>',
+      '<coder-llm>',
+    ]);
   });
 });
 

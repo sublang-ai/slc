@@ -17,14 +17,11 @@ import * as playbook from './gears2fsm.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'transform',
-    sourceItem: 'GEARS2FSM-1',
+    state: 'transformSource',
+    sourceItem: 'G2F-1',
     player: '',
-    reads: ['bossReply', 'pendingBossQuestion'],
-    wires: {
-      pendingBossQuestion: ['pendingBossQuestion'],
-      bossReply: ['bossReply'],
-    },
+    reads: ['pendingBossQuestion'],
+    wires: {},
     placeholders: [
       '<model>',
       '<boss-intent>',
@@ -39,14 +36,19 @@ const CONTRACT = [
     ],
   },
 ];
+const SCHEMA_FINDINGS = [];
 
 describe('gears2fsm: prompt contract', () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('matches the prompt contract pinned at build time', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    transform: [],
+    transformSource: [],
   };
 
   const composeCaptain = (
@@ -61,6 +63,7 @@ describe('gears2fsm: prompt contract', () => {
         config: findMachineConfig(fsm),
         compose: composeCaptain,
         actor: 'captain',
+        artifactSchema: 3,
       }),
     ).toEqual([]);
   });

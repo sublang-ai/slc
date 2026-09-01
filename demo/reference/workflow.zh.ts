@@ -8,11 +8,13 @@
 
 import createPlaybookRuntime from './workflow.zh.playbook/workflow.zh.playbook.ts';
 
-type RuntimeOptions = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
+type FactoryInput = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
+type RuntimeOptions = FactoryInput['configuredOptions'];
+type HostCapabilities = FactoryInput['hostCapabilities'];
 
 const ALLOWED_OPTION_KEYS: readonly string[] = ['cwd'];
 
-const REQUIRED_ROLE_IDS: readonly string[] = ['编码者', '审查者'];
+const REQUIRED_ROLE_IDS: readonly string[] = ['编码者', '评审者'];
 
 const ROLE_ID_BY_RESOLVED: ReadonlyMap<string, string> = new Map(
   REQUIRED_ROLE_IDS.map((id): [string, string] => [id.toLowerCase(), id]),
@@ -83,15 +85,24 @@ function validateOptions(value: unknown): RuntimeOptions {
 const entry = {
   id: 'workflow.zh',
   command: 'workflow.zh',
-  intent: '两个 agent 的任务工作流 — 用两个 agent 来完成输入的任务。',
+  intent: '用两个agent完成输入的任务 — Roles:',
+  artifactSchema: 3,
+  runtimeProfile: 'composed-v3',
+  concurrentRoleSets: [] as readonly (readonly string[])[],
   requiredRoleIds: [...REQUIRED_ROLE_IDS],
   validateOptions,
-  createRuntime(options: { captainOptions?: unknown }) {
+  createRuntime(
+    options: { captainOptions?: unknown },
+    hostCapabilities: HostCapabilities,
+  ) {
     const validated = validateOptions(options.captainOptions);
     return withRoleBinding(
       createPlaybookRuntime({
-        ...validated,
-        cwd: validated.cwd ?? process.cwd(),
+        configuredOptions: {
+          ...validated,
+          cwd: validated.cwd ?? process.cwd(),
+        },
+        hostCapabilities,
       }),
     );
   },

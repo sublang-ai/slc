@@ -13,24 +13,29 @@ const PINNED = {
   initial: 'ready',
   captain: [
     {
-      state: 'transform',
+      state: 'transformSource',
       actor: 'captain',
-      sourceItem: 'GEARS2FSM-1',
+      sourceItem: 'G2F-1',
       player: '',
-      resultKeys: ['done', 'needsBossReply'],
+      resultKeys: ['compiled', 'needsBossReply', 'rejected'],
       onDone: [
         {
           index: 0,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 1,
           target: 'awaitBossReply',
           guarded: true,
         },
         {
+          index: 1,
+          target: 'compiled',
+          guarded: true,
+        },
+        {
           index: 2,
+          target: 'rejected',
+          guarded: true,
+        },
+        {
+          index: 3,
           target: 'failed',
           guarded: false,
         },
@@ -50,11 +55,11 @@ const PINNED = {
       state: 'ready',
       final: false,
       on: {
-        BOSS_REQUEST: [
+        TRANSFORMATION_REQUEST: [
           {
             index: 0,
-            target: 'transform',
-            guarded: false,
+            target: 'transformSource',
+            guarded: true,
           },
         ],
       },
@@ -66,7 +71,7 @@ const PINNED = {
         BOSS_REPLY: [
           {
             index: 0,
-            target: 'transform',
+            target: 'transformSource',
             guarded: true,
           },
           {
@@ -81,17 +86,22 @@ const PINNED = {
       state: 'failed',
       final: false,
       on: {
-        BOSS_REQUEST: [
+        TRANSFORMATION_REQUEST: [
           {
             index: 0,
-            target: 'transform',
-            guarded: false,
+            target: 'transformSource',
+            guarded: true,
           },
         ],
       },
     },
     {
-      state: 'done',
+      state: 'compiled',
+      final: true,
+      on: {},
+    },
+    {
+      state: 'rejected',
       final: true,
       on: {},
     },
@@ -100,12 +110,12 @@ const PINNED = {
     BOSS_INTERRUPT: [
       {
         index: 0,
-        target: 'transform',
+        target: 'transformSource',
         guarded: true,
       },
     ],
   },
-  interruptTargets: ['transform'],
+  interruptTargets: ['transformSource'],
 };
 
 describe('gears2fsm: FSM introspection', () => {
