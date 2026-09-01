@@ -41,8 +41,12 @@ import {
   type TreeEntryRecord,
 } from './hash.js';
 import { resolvesToPlaybook } from './phase-runner.js';
-import { closureMatchesRecord } from './pin-closure.js';
-import { loadPinInputsFile } from './pin-inputs.js';
+import {
+  closureMatchesRecord,
+  deriveClosure,
+  derivedClosureMatchesRecord,
+} from './pin-closure.js';
+import { loadPinInputsFile, type LoadedPinInputs } from './pin-inputs.js';
 import { resolvePinPath } from './pin-paths.js';
 import {
   PinError,
@@ -142,7 +146,7 @@ export async function evaluatePinFile(
       phase,
       record,
       opts,
-      true,
+      pinInputs,
     );
   }
   const malformedPhase = Object.entries(verdicts).find(
@@ -177,7 +181,7 @@ export async function evaluatePin(
   record: PinRecord,
   opts: PinEvaluationOptions = {},
 ): Promise<PinVerdict> {
-  return evaluatePinRecord(pipelineDir, file, phase, record, opts, false);
+  return evaluatePinRecord(pipelineDir, file, phase, record, opts);
 }
 
 async function evaluatePinRecord(
@@ -186,7 +190,7 @@ async function evaluatePinRecord(
   phase: string,
   record: PinRecord,
   opts: PinEvaluationOptions,
-  sidecarValidated: boolean,
+  preloadedPinInputs?: LoadedPinInputs,
 ): Promise<PinVerdict> {
   const boundary = file.pathBoundary.path;
   try {
@@ -228,14 +232,26 @@ async function evaluatePinRecord(
     }
 
     // A present sidecar is structural pin metadata. Validate its complete
-    // shape and boundary before any byte-currency check so malformed input is
-    // never masked by an independently stale recorded file (pinning-18).
-    if (!sidecarValidated) {
-      const pinInputs = await loadPinInputsFile(pipelineDir, boundary);
-      if (pinInputs.path !== undefined) {
-        opts.observePath?.(pinInputs.path);
-      }
+    // shape and boundary, then prederive an applicable sidecar entry, before
+    // any byte-currency check so malformed input is never masked by an
+    // independently stale recorded file (pinning-18, pinning-20).
+    const pinInputs =
+      preloadedPinInputs ?? (await loadPinInputsFile(pipelineDir, boundary));
+    if (pinInputs.path !== undefined) {
+      opts.observePath?.(pinInputs.path);
     }
+    const derivedSidecarClosure =
+      pinInputs.file !== undefined &&
+      Object.hasOwn(pinInputs.file.closures, phase)
+        ? await deriveClosure(
+            pipelineDir,
+            boundary,
+            record.definition.path,
+            phase,
+            opts.observePath,
+            pinInputs,
+          )
+        : undefined;
 
     // Currency (stale) checks. resolvePinPath throws PinError for a bad path,
     // which the catch below maps to malformed (pinning-5).
@@ -283,15 +299,23 @@ async function evaluatePinRecord(
     if (artifactFormat !== null) {
       return stale(artifactFormat);
     }
-    if (
-      !(await closureMatchesRecord(
-        pipelineDir,
-        boundary,
-        record,
-        phase,
-        opts.observePath,
-      ))
-    ) {
+    const closureMatches =
+      derivedSidecarClosure === undefined
+        ? await closureMatchesRecord(
+            pipelineDir,
+            boundary,
+            record,
+            phase,
+            opts.observePath,
+            pinInputs,
+          )
+        : derivedClosureMatchesRecord(
+            pipelineDir,
+            boundary,
+            record,
+            derivedSidecarClosure,
+          );
+    if (!closureMatches) {
       return stale(
         'the semantic-input closure differs from its applicable sidecar or inline declaration',
       );

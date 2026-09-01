@@ -26,6 +26,7 @@ import {
 } from '../src/interpreter.js';
 import { createReviewingAgent } from '../src/reviewing-agent.js';
 import { PIN_INPUTS_FILE, PIN_INPUTS_SCHEMA } from '../src/pin-inputs.js';
+import { PINS_FILE, PIN_HASH_ALGORITHM, PIN_SCHEMA } from '../src/pins.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
 
 const phase = (
@@ -452,11 +453,11 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
     expect((await loadBuildHistory(artDir))?.build).toBe(1);
   });
 
-  it('defaults an unpinned sidecar to the pipeline boundary (incremental-compilation-29)', async () => {
-    await writeFile(join(root, 'outside.md'), 'outside input\n');
+  it('selects the runtime sidecar boundary from the pin index (incremental-compilation-29, pinning-22)', async () => {
+    await writeFile(join(root, 'outside.final.md'), 'outside input\n');
     await writeFile(
       join(pipelineDir, PIN_INPUTS_FILE),
-      pinInputs({ text2middle: ['../outside.md'] }),
+      pinInputs({ middle2final: ['../outside.final.md'] }),
     );
     const calls: ExecuteRequest[] = [];
 
@@ -473,6 +474,49 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
       'slc: build history not recorded:',
     );
     expect(await loadBuildHistory(artDir)).toBeNull();
+
+    await writeFile(
+      join(pipelineDir, PINS_FILE),
+      JSON.stringify({
+        schema: PIN_SCHEMA,
+        hashAlgorithm: PIN_HASH_ALGORITHM,
+        pathBoundary: { path: '..' },
+        pins: {},
+      }),
+    );
+    const widenedCalls: ExecuteRequest[] = [];
+    const widened = await runSlc(['flow', source], deps(fake(widenedCalls)));
+
+    expect(widened.ok).toBe(true);
+    expect(widenedCalls).toHaveLength(2);
+    expect(widened.diagnostics.join('\n')).not.toContain(
+      'slc: build history not recorded:',
+    );
+    expect((await loadBuildHistory(artDir))?.build).toBe(1);
+
+    const reuseCalls: ExecuteRequest[] = [];
+    const reused = await runSlc(['flow', source], deps(fake(reuseCalls)));
+    expect(reused).toMatchObject({ ok: true, outcome: 'up-to-date' });
+    expect(reuseCalls).toHaveLength(0);
+
+    const protectionCalls: ExecuteRequest[] = [];
+    const protectedResult = await runSlc(
+      [
+        'flow.middle2final',
+        join(artDir, 'case.middle.md'),
+        '-o',
+        join(root, 'outside.final.md'),
+      ],
+      deps(fake(protectionCalls)),
+    );
+    expect(protectedResult.ok).toBe(false);
+    expect(protectedResult.diagnostics.join('\n')).toContain(
+      'aliases protected input',
+    );
+    expect(protectionCalls).toHaveLength(0);
+    expect(await readFile(join(root, 'outside.final.md'), 'utf8')).toBe(
+      'outside input\n',
+    );
   });
 
   it.each([
@@ -504,29 +548,44 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
     },
   );
 
-  it('retains valid declared inputs when a later citation is invalid', async () => {
-    const references = join(pipelineDir, 'references');
-    const protectedInput = join(references, 'protected.md');
-    const middle = join(workDir, 'case.middle.md');
-    await mkdir(references);
-    await writeFile(protectedInput, 'protected input\n');
-    await writeFile(middle, 'middle input\n');
-    await writeFile(
-      join(pipelineDir, 'middle2final.md'),
-      `${phase('middle', '.md', 'final', '.md')}\n## Pin Inputs\n\n- \`references/protected.md\`\n- \`../outside.md\`\n`,
-    );
-    const calls: ExecuteRequest[] = [];
+  it.each(['inline', 'sidecar'] as const)(
+    'protects a valid %s member declared after an invalid locator (phase-execution-50)',
+    async (declaration) => {
+      const references = join(pipelineDir, 'references');
+      const protectedInput = join(references, 'protected.md');
+      const middle = join(workDir, 'case.middle.md');
+      await mkdir(references);
+      await writeFile(protectedInput, 'protected input\n');
+      await writeFile(middle, 'middle input\n');
+      await writeFile(
+        join(pipelineDir, 'middle2final.md'),
+        declaration === 'inline'
+          ? `${phase('middle', '.md', 'final', '.md')}\n## Pin Inputs\n\n- \`../outside.md\`\n- \`references/protected.md\`\n`
+          : `${phase('middle', '.md', 'final', '.md')}\n`,
+      );
+      if (declaration === 'sidecar') {
+        await writeFile(
+          join(pipelineDir, PIN_INPUTS_FILE),
+          pinInputs({
+            middle2final: ['../outside.md', 'references/protected.md'],
+          }),
+        );
+      }
+      const calls: ExecuteRequest[] = [];
 
-    const result = await runSlc(
-      ['flow.middle2final', middle, '-o', protectedInput],
-      deps(fake(calls)),
-    );
+      const result = await runSlc(
+        ['flow.middle2final', middle, '-o', protectedInput],
+        deps(fake(calls)),
+      );
 
-    expect(result.ok).toBe(false);
-    expect(result.diagnostics.join('\n')).toContain('aliases protected input');
-    expect(calls).toHaveLength(0);
-    expect(await readFile(protectedInput, 'utf8')).toBe('protected input\n');
-  });
+      expect(result.ok).toBe(false);
+      expect(result.diagnostics.join('\n')).toContain(
+        'aliases protected input',
+      );
+      expect(calls).toHaveLength(0);
+      expect(await readFile(protectedInput, 'utf8')).toBe('protected input\n');
+    },
+  );
 
   it('includes an explicit normalization reference in compile identity', async () => {
     await runSlc(['flow', source, '--normalize'], deps(fake([])));
