@@ -33,10 +33,12 @@ const { basename, players } = profile;
 const bundle = join(here, `${basename}.playbook`);
 const entry = join(here, `${basename}.ts`);
 
-// The optimize pass rewrites the Git check into this exact agent-free
-// script (demo READMEs, DR-013): present in the optimized gears and its
-// FSM, absent from the raw gears.
-const SCRIPT_COMMAND = '[ -e .git ] || git init';
+// The optimize pass rewrites the Git check into an agent-free script (demo
+// READMEs, DR-013): present in the optimized gears and its FSM, absent from the
+// raw gears. The pass chooses the shell spelling of the guard - `[ -e .git ]`
+// and `test -e .git` are both correct - so match the semantics it must carry,
+// a conditional guard around `git init`, rather than one compile's phrasing.
+const SCRIPT_PATTERN = /(?:\[ *-e +\.git *\]|test +-e +\.git) *\|\| *git init/;
 
 let failures = 0;
 
@@ -97,13 +99,12 @@ const rawGears = await readFile(
 const fsm = await readFile(join(bundle, `${basename}.fsm.ts`), 'utf8');
 report(
   'optimized gears carries the script item',
-  gears.includes(`> ${SCRIPT_COMMAND}`),
+  gears
+    .split('\n')
+    .some((line) => line.startsWith('> ') && SCRIPT_PATTERN.test(line)),
 );
-report('FSM carries the same script command', fsm.includes(SCRIPT_COMMAND));
-report(
-  'raw gears predates the optimization',
-  !rawGears.includes(SCRIPT_COMMAND),
-);
+report('FSM carries the same script command', SCRIPT_PATTERN.test(fsm));
+report('raw gears predates the optimization', !SCRIPT_PATTERN.test(rawGears));
 
 // Stage 4 — import and drive the emitted entry over fake host ports. This
 // exercises the same entry/runtime boundary `playbook run` consumes without
@@ -120,9 +121,31 @@ try {
   const seenPlayers = [];
   const playerPrompts = [];
   const judgeReplies = ['{"guard":"done"}', '{"guard":"clean"}'];
-  const runtime = registryEntry.createRuntime({
-    captainOptions: { cwd: workdir },
-  });
+  // A schema-3 entry takes configured options plus live host capabilities; the
+  // repository and effect-ledger seams fail closed here exactly as the compiled
+  // phase host supplies them (DR-024).
+  const rejectRepository = () =>
+    Promise.reject(new Error('demo smoke supplies no repository capability'));
+  const rejectEffectWrite = () =>
+    Promise.reject(new Error('demo smoke supplies no effect ledger'));
+  const runtime = registryEntry.createRuntime(
+    { captainOptions: { cwd: workdir } },
+    {
+      repository: {
+        runExclusive: rejectRepository,
+        runDeferred: rejectRepository,
+      },
+      effectLedger: {
+        snapshot: () => ({
+          schemaVersion: 1,
+          revision: 0,
+          boundaries: [],
+          logicalOperations: [],
+        }),
+        writeAhead: rejectEffectWrite,
+      },
+    },
+  );
   const sessionId = `demo-${lang}-smoke`;
   await runtime.init({
     sessionId,

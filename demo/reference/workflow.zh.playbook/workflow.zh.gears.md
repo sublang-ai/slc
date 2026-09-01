@@ -1,67 +1,89 @@
-# 两个 agent 的任务工作流
+# 用两个agent完成输入的任务
 
-Players:
+Roles:
 
 - `编码者`
-- `审查者`
+- `评审者`
 
-### REPO-1
+## 意图
 
-当工作流开始时，Captain shall run:
+用两个 agent 完成 Boss 输入的任务：`编码者` 按任务要求修改当前目录的代码并提交 Git，`评审者` 对提交的 commit 进行 review 并提出合理问题，交回 `编码者` 做判断；`编码者` 可以接受或拒绝但要讲清楚原因，两个 agent 争论直至达成一致（争论不超过 2 轮，即至多到总计第 3 次判断后不再争论），再由 `编码者` 按结论修改代码、再次提交。
+依此循环，直到 review 没有任何问题后结束；循环次数不超过 2 次。
+开始工作前，当前目录须已是一个 Git 仓库的根目录。
+
+## 行为
+
+### WORKFLOW-1
+
+当 Boss 给出输入的任务时，Captain shall run:
 
 > [ -e .git ] || git init
 
 Results:
-- `ok`: 命令以状态码零退出。
-- `failed`: 命令以非零状态码退出。
+- `ok`: 命令以状态 0 退出。
+- `failed`: 命令以非 0 状态退出。
 
-### IMPL-1
+### WORKFLOW-2
 
-当 Boss 给出输入任务且当前目录是 Git 仓库根目录时，Captain shall prompt `编码者`：
+当 Git 仓库准备就绪时，Captain shall prompt `编码者`:
 
-> 按输入任务的要求修改当前目录的代码：<task>。
-> 将改动提交到 Git。
+> 按 Boss 输入的任务要求对当前目录的代码进行修改。
+> 将修改提交Git。
 
-### REVIEW-1
+### WORKFLOW-3
 
-当 `编码者` 已提交改动时，Captain shall prompt `审查者`：
+如果已进行的循环次数少于 2 次，当 `编码者` 完成一次提交（首次提交，或按结论再次提交）时，Captain shall prompt `评审者`:
 
-> 审查当前目录中的最新 commit。
-> 就其提出合理的问题。
-
-Results:
-- `findings`: `审查者` 提出了合理的问题并交回给 `编码者`。输出应包含 `findings: <逐字的问题内容>`。
-- `clean`: `审查者` 没有提出任何问题，工作流结束。
-
-### JUDGE-1
-
-当 `审查者` 已提出问题并交回给 `编码者` 时，Captain shall prompt `编码者`：
-
-> 对 `审查者` 提出的问题做判断：<findings>。
-> 对每个问题给出接受或拒绝，并逐一说明原因。
+> 对 `编码者` 提交的 commit 进行 review。
+> 提出合理问题。
 
 Results:
-- `agreed`: `编码者` 与 `审查者` 就问题达成一致。输出应包含 `conclusion: <达成一致后要做的改动>`。
-- `disagreed`: `编码者` 判断后仍存在分歧。输出应包含 `judgment: <编码者接受或拒绝的决定及原因>` 与 `conclusion: <编码者当前打算做的改动>`。
+- `issues`: `评审者` 提出了问题，交回 `编码者` 做判断。输出应包含 `reviewFindings: <评审者提出的全部问题>`。
+- `clean`: review 没有任何问题，流程结束。
 
-### ARGUE-1
+### WORKFLOW-4
 
-当 `编码者` 已对问题做出判断、仍存在分歧、且 `编码者` 累计判断次数少于三次时，Captain shall prompt `审查者`：
+当 `评审者` 提出的问题交回 `编码者` 做判断时，Captain shall prompt `编码者`:
 
-> 考虑 `编码者` 对你所提问题的判断：<judgment>。
-> 对你仍不认同的问题据理力争。
+> 以下是 `评审者` 提出的问题：
+> <reviewFindings>
+> 对这些问题做判断：可以接受或拒绝，但要讲清楚原因。
 
 Results:
-- `findings`: `审查者` 保留尚未解决的问题，交由 `编码者` 再次判断。输出应包含 `findings: <尚未解决的问题>`。
-- `agreed`: `审查者` 接受 `编码者` 的判断，不再有争议问题。
+- `accept`: `编码者` 接受了 `评审者` 的问题，双方达成一致。
+- `reject`: `编码者` 拒绝了 `评审者` 的问题，并讲清楚了原因。输出应包含 `coderJudgment: <编码者的判断及其原因>`。
 
-### IMPL-2
+### WORKFLOW-5
 
-当 `编码者` 与 `审查者` 已结束讨论（达成一致或在第三次判断之后）且已完成的 review 循环少于两次时，Captain shall prompt `编码者`：
+如果 `编码者` 的判断次数少于 3 次（争论不超过 2 轮），当 `编码者` 拒绝 `评审者` 的问题时，Captain shall prompt `评审者`:
 
-> 按结论修改当前目录的代码：<conclusion>。
-> 将改动提交到 Git。
+> 以下是 `编码者` 的判断及其原因：
+> <coderJudgment>
+> 与 `编码者` 争论，直至达成一致。
+
+Results:
+- `dispute`: 尚未达成一致，`评审者` 继续争论。输出应包含 `reviewerRebuttal: <评审者继续争论的理由>`。
+- `agreed`: 双方达成一致。
+
+### WORKFLOW-6
+
+当 `评审者` 继续争论时，Captain shall prompt `编码者`:
+
+> 以下是 `评审者` 继续争论的理由：
+> <reviewerRebuttal>
+> 再次做判断：可以接受或拒绝，但要讲清楚原因。
+
+Results:
+- `accept`: `编码者` 接受了 `评审者` 的理由，双方达成一致。
+- `reject`: `编码者` 仍然拒绝，并讲清楚了原因。输出应包含 `coderJudgment: <编码者的判断及其原因>`。
+
+### WORKFLOW-7
+
+当双方达成一致，或 `编码者` 已做出总计第 3 次判断而不再争论时，Captain shall prompt `编码者`:
+
+> 按结论修改代码。
+> 再次提交。
 
 ## Optimizations
 
-- REPO-1: direct Captain → script
+- WORKFLOW-1: direct Captain → script

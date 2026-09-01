@@ -15,8 +15,9 @@ const PINNED = {
     {
       state: 'implement',
       actor: 'player',
-      sourceItem: 'IMPL-1',
-      player: 'Coder',
+      sourceItem: 'WORKFLOW-2',
+      player: '',
+      role: 'coder',
       resultKeys: ['done', 'needsBossReply'],
       onDone: [
         {
@@ -26,16 +27,11 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'failed',
-          guarded: true,
-        },
-        {
-          index: 2,
           target: 'review',
           guarded: true,
         },
         {
-          index: 3,
+          index: 2,
           target: 'failed',
           guarded: false,
         },
@@ -52,8 +48,9 @@ const PINNED = {
     {
       state: 'review',
       actor: 'player',
-      sourceItem: 'REVIEW-1',
-      player: 'Reviewer',
+      sourceItem: 'WORKFLOW-3',
+      player: '',
+      role: 'reviewer',
       resultKeys: ['clean', 'findings', 'needsBossReply'],
       onDone: [
         {
@@ -63,21 +60,16 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'judgeFindings',
           guarded: true,
         },
         {
           index: 2,
-          target: 'judge',
+          target: 'reviewedClean',
           guarded: true,
         },
         {
           index: 3,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 4,
           target: 'failed',
           guarded: false,
         },
@@ -92,11 +84,12 @@ const PINNED = {
       on: {},
     },
     {
-      state: 'judge',
+      state: 'judgeFindings',
       actor: 'player',
-      sourceItem: 'JUDGE-1',
-      player: 'Coder',
-      resultKeys: ['agreed', 'disagreed', 'needsBossReply'],
+      sourceItem: 'WORKFLOW-4',
+      player: '',
+      role: 'coder',
+      resultKeys: ['judged', 'needsBossReply'],
       onDone: [
         {
           index: 0,
@@ -105,36 +98,11 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'failed',
-          guarded: true,
-        },
-        {
-          index: 2,
-          target: 'reimplement',
-          guarded: true,
-        },
-        {
-          index: 3,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 4,
           target: 'argue',
           guarded: true,
         },
         {
-          index: 5,
-          target: 'reimplement',
-          guarded: true,
-        },
-        {
-          index: 6,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 7,
+          index: 2,
           target: 'failed',
           guarded: false,
         },
@@ -151,9 +119,10 @@ const PINNED = {
     {
       state: 'argue',
       actor: 'player',
-      sourceItem: 'ARGUE-1',
-      player: 'Reviewer',
-      resultKeys: ['agreed', 'findings', 'needsBossReply'],
+      sourceItem: 'WORKFLOW-5',
+      player: '',
+      role: 'reviewer',
+      resultKeys: ['agreement', 'argument', 'needsBossReply'],
       onDone: [
         {
           index: 0,
@@ -162,26 +131,16 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'judgeArgument',
           guarded: true,
         },
         {
           index: 2,
-          target: 'judge',
+          target: 'apply',
           guarded: true,
         },
         {
           index: 3,
-          target: 'reimplement',
-          guarded: true,
-        },
-        {
-          index: 4,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 5,
           target: 'failed',
           guarded: false,
         },
@@ -196,10 +155,49 @@ const PINNED = {
       on: {},
     },
     {
-      state: 'reimplement',
+      state: 'judgeArgument',
       actor: 'player',
-      sourceItem: 'IMPL-2',
-      player: 'Coder',
+      sourceItem: 'WORKFLOW-6',
+      player: '',
+      role: 'coder',
+      resultKeys: ['judged', 'needsBossReply'],
+      onDone: [
+        {
+          index: 0,
+          target: 'awaitBossReply',
+          guarded: true,
+        },
+        {
+          index: 1,
+          target: 'argue',
+          guarded: true,
+        },
+        {
+          index: 2,
+          target: 'apply',
+          guarded: true,
+        },
+        {
+          index: 3,
+          target: 'failed',
+          guarded: false,
+        },
+      ],
+      onError: [
+        {
+          index: 0,
+          target: 'failed',
+          guarded: false,
+        },
+      ],
+      on: {},
+    },
+    {
+      state: 'apply',
+      actor: 'player',
+      sourceItem: 'WORKFLOW-7',
+      player: '',
+      role: 'coder',
       resultKeys: ['done', 'needsBossReply'],
       onDone: [
         {
@@ -209,12 +207,12 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'review',
           guarded: true,
         },
         {
           index: 2,
-          target: 'review',
+          target: 'loopLimitReached',
           guarded: true,
         },
         {
@@ -241,14 +239,14 @@ const PINNED = {
         START: [
           {
             index: 0,
-            target: 'repoSetup',
+            target: 'setup',
             guarded: false,
           },
         ],
       },
     },
     {
-      state: 'repoSetup',
+      state: 'setup',
       final: false,
       on: {},
     },
@@ -259,32 +257,32 @@ const PINNED = {
         BOSS_REPLY: [
           {
             index: 0,
-            target: 'failed',
-            guarded: true,
-          },
-          {
-            index: 1,
             target: 'implement',
             guarded: true,
           },
           {
-            index: 2,
+            index: 1,
             target: 'review',
             guarded: true,
           },
           {
-            index: 3,
-            target: 'judge',
+            index: 2,
+            target: 'judgeFindings',
             guarded: true,
           },
           {
-            index: 4,
+            index: 3,
             target: 'argue',
             guarded: true,
           },
           {
+            index: 4,
+            target: 'judgeArgument',
+            guarded: true,
+          },
+          {
             index: 5,
-            target: 'reimplement',
+            target: 'apply',
             guarded: true,
           },
           {
@@ -302,20 +300,65 @@ const PINNED = {
         START: [
           {
             index: 0,
-            target: 'repoSetup',
+            target: 'setup',
             guarded: false,
           },
         ],
       },
     },
     {
-      state: 'done',
+      state: 'reviewedClean',
+      final: true,
+      on: {},
+    },
+    {
+      state: 'loopLimitReached',
       final: true,
       on: {},
     },
   ],
-  rootOn: {},
-  interruptTargets: [],
+  rootOn: {
+    BOSS_INTERRUPT: [
+      {
+        index: 0,
+        target: 'implement',
+        guarded: true,
+      },
+      {
+        index: 1,
+        target: 'review',
+        guarded: true,
+      },
+      {
+        index: 2,
+        target: 'judgeFindings',
+        guarded: true,
+      },
+      {
+        index: 3,
+        target: 'argue',
+        guarded: true,
+      },
+      {
+        index: 4,
+        target: 'judgeArgument',
+        guarded: true,
+      },
+      {
+        index: 5,
+        target: 'apply',
+        guarded: true,
+      },
+    ],
+  },
+  interruptTargets: [
+    'implement',
+    'review',
+    'judgeFindings',
+    'argue',
+    'judgeArgument',
+    'apply',
+  ],
 };
 
 describe('workflow: FSM introspection', () => {

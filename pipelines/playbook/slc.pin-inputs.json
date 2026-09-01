@@ -1,0 +1,32 @@
+{
+  "schema": "sublang.slc.pin-inputs.v1",
+  "closures": {
+    "text2gears": [
+      "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
+      "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
+      "../../package-lock.json"
+    ],
+    "gears2fsm": [
+      "../../node_modules/@sublang/playbook/slc/text2gears.md",
+      "../../node_modules/@sublang/playbook/slc/link.md",
+      "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
+      "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
+      "../../package-lock.json"
+    ],
+    "link": [
+      "../../node_modules/@sublang/playbook/slc/text2gears.md",
+      "../../node_modules/@sublang/playbook/slc/gears2fsm.md",
+      "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
+      "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
+      "../../package-lock.json"
+    ],
+    "optimize": [
+      "../../node_modules/@sublang/playbook/slc/text2gears.md",
+      "../../node_modules/@sublang/playbook/slc/gears2fsm.md",
+      "../../node_modules/@sublang/playbook/slc/link.md",
+      "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
+      "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
+      "../../package-lock.json"
+    ]
+  }
+}

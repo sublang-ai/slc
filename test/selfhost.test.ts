@@ -180,6 +180,124 @@ export const machine = setup({
 });
 `;
 
+// The Playbook 10 (schema-3) form of the same workflow: the source declares
+// canonical `Roles:`, the machine invokes the `player` actor with the canonical
+// lowercase local role id, and the delegated state repeats that id in
+// `state.meta.playbook.role` (DR-024). A bare `playbook` run links against the
+// installed `@sublang/playbook@10.0.0`, whose provenance is schema 3, so only
+// this pair lets the emitted verification settle on one artifact schema.
+const SCHEMA_3_GEARS_ARTIFACT = `# Flow
+
+Roles:
+
+- Writer
+
+## Behaviors
+
+### FLOW-1
+
+When Boss starts the flow, Captain shall prompt Writer:
+> Do the work.
+`;
+
+const SCHEMA_3_FSM_ARTIFACT = `import { assign, fromPromise, setup } from 'xstate';
+
+// The workflow declares no parallel group, so the cohort declaration is empty.
+export const concurrentRoleSets: readonly (readonly string[])[] = [];
+
+export const machine = setup({
+  actors: {
+    player: fromPromise(async () => {
+      throw new Error('player actor must be provided by the runner');
+    }),
+  },
+}).createMachine({
+  id: 'flow',
+  initial: 'ready',
+  context: {},
+  on: {
+    BOSS_INTERRUPT: [
+      {
+        target: '#work',
+        reenter: true,
+        guard: ({ event }) => event.targetId === 'work',
+      },
+    ],
+  },
+  states: {
+    ready: { id: 'ready', on: { GO: { target: 'work' } } },
+    work: {
+      id: 'work',
+      meta: { playbook: { stateId: 'work', role: 'writer' } },
+      invoke: {
+        src: 'player',
+        input: ({ context }) => ({
+          role: 'writer',
+          sourceItem: 'FLOW-1',
+          prompt: 'Do the work.',
+          result: {
+            ok: 'The work is done.',
+            needsBossReply:
+              'The role asks Boss. Output shall include \`question: <text>\`.',
+          },
+          pendingBossQuestion: context.pendingBossQuestion,
+          bossReply: context.bossReply,
+        }),
+        onDone: [
+          { target: '#done', guard: ({ event }) => event.output.guard === 'ok' },
+          {
+            target: '#awaitBossReply',
+            guard: ({ event }) =>
+              event.output.guard === 'needsBossReply' &&
+              typeof event.output.question === 'string',
+            actions: assign({
+              pendingBossQuestion: ({ event }) => ({
+                asker: { kind: 'role', roleId: 'writer' },
+                questionId: 'work',
+                resumeStateId: 'work',
+                sourceItem: 'FLOW-1',
+                question: event.output.question,
+              }),
+            }),
+          },
+        ],
+        onError: { target: '#failed' },
+      },
+    },
+    awaitBossReply: {
+      id: 'awaitBossReply',
+      on: {
+        BOSS_REPLY: [
+          {
+            target: '#work',
+            reenter: true,
+            guard: ({ context, event }) =>
+              context.pendingBossQuestion?.resumeStateId === 'work' &&
+              typeof event.answer === 'string' &&
+              event.answer.trim() !== '',
+            actions: assign({ bossReply: ({ event }) => event.answer }),
+          },
+          { target: '#failed' },
+        ],
+      },
+    },
+    failed: { id: 'failed', on: { GO: { target: 'work' } } },
+    done: { id: 'done', type: 'final' },
+  },
+});
+`;
+
+// The schema-3 linked artifact a Playbook 10 link emits: a shared factory
+// carrying the exact immutable compatibility record (DR-024).
+const SCHEMA_3_PLAYBOOK_MODULE = `${PLAYBOOK_MODULE}
+Object.defineProperty(createPlaybookRuntime, 'compat', {
+  value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+  enumerable: true,
+  writable: false,
+  configurable: false,
+});
+`;
+
 // An agent that writes the prompt's declared target, emitting realistic
 // artifacts per target kind — a gears package, a conformant machine, and a
 // real createPlaybookRuntime module — so verification emission runs end to end
@@ -707,7 +825,22 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
   });
 
   it('runs generated verification in a project with no SLC installation', async () => {
-    const result = await runSlc(['playbook', source], deps());
+    // A Playbook 10 compile: canonical `Roles:`, an `invoke.input.role`
+    // binding, and a shared-factory linked module, all agreeing with the
+    // schema-3 provenance of the default `@sublang/playbook@10.0.0` link
+    // target, so the emitted schema reconciliation reports no finding
+    // (DR-024).
+    const result = await runSlc(['playbook', source], {
+      resolver: withReservedPipelines(() => []),
+      executor: createInterpretedExecutor({
+        agent: writingAgent({
+          gears: SCHEMA_3_GEARS_ARTIFACT,
+          fsm: SCHEMA_3_FSM_ARTIFACT,
+          playbook: SCHEMA_3_PLAYBOOK_MODULE,
+        }),
+      }),
+      cwd: work,
+    });
     expect(result.ok).toBe(true);
     await writeFile(
       join(root, 'package.json'),
@@ -731,6 +864,16 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       expect(sourceText).not.toMatch(/from\s+["']\.\/code\.fsm\.ts["']/);
       expect(sourceText).not.toContain('@sublang/slc/verify');
     }
+    // Provenance, FSM role bindings, and factory compatibility all witness
+    // schema 3, so conformance pins that schema with the declared cohorts and
+    // the prompt contract pins the canonical role rather than a player
+    // (DR-024).
+    expect(
+      await readFile(join(artDir, 'code.gears-fsm.test.ts'), 'utf8'),
+    ).toContain('artifactSchema: 3');
+    expect(
+      await readFile(join(artDir, 'code.prompt-contract.test.ts'), 'utf8'),
+    ).toContain('"role": "writer"');
 
     const { stdout, stderr } = await execFileAsync(
       process.execPath,
@@ -860,12 +1003,17 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
   );
 
   it('does not use the compiled FSM phase pin as full-link artifact provenance', async () => {
-    const packageRoot = join(root, 'playbook-custom-10');
+    // The compiling phases run from the repository's own pinned bundles, whose
+    // link-target provenance is exact Playbook 10.0.0 (schema 3). This run's
+    // artifact links against a reviewed Playbook 4.0.0 package (schema 1), and
+    // verification must pin the artifact's own link target, not the compiler's
+    // phase pin (DR-024).
+    const packageRoot = join(root, 'playbook-custom-4');
     const linkTarget = join(packageRoot, 'src', 'runtime.ts');
     await mkdir(join(packageRoot, 'src'), { recursive: true });
     await writeFile(
       join(packageRoot, 'package.json'),
-      JSON.stringify({ name: '@sublang/playbook', version: '10.0.0' }),
+      JSON.stringify({ name: '@sublang/playbook', version: '4.0.0' }),
     );
     await writeFile(linkTarget, 'export {}\n');
     const directCaptainFsm = FSM_ARTIFACT.replaceAll(
@@ -892,17 +1040,21 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     });
 
     expect(result.ok).toBe(true);
-    expect(selectedProvenances).toContain('@sublang/playbook@4.0.0');
+    // Every compiled phase this run selected carries the schema-3 pin ...
+    expect(new Set(selectedProvenances)).toEqual(
+      new Set(['@sublang/playbook@10.0.0']),
+    );
     const verificationDir = join(work, 'code.slc');
-    expect(
-      await readFile(join(verificationDir, 'code.gears-fsm.test.ts'), 'utf8'),
-    ).toContain('artifactSchema: 3');
-    expect(
-      await readFile(
-        join(verificationDir, 'code.prompt-contract.test.ts'),
-        'utf8',
-      ),
-    ).toContain('artifactSchema: 3');
+    // ... while the emitted verification pins the artifact's own schema-1
+    // link-target provenance.
+    for (const test of [
+      'code.gears-fsm.test.ts',
+      'code.prompt-contract.test.ts',
+    ]) {
+      const emitted = await readFile(join(verificationDir, test), 'utf8');
+      expect(emitted).toContain('artifactSchema: 1');
+      expect(emitted).not.toContain('artifactSchema: 3');
+    }
   });
 
   it('bakes reconciled schema findings into conformance and prompt tests', async () => {

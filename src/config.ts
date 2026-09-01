@@ -302,7 +302,7 @@ function configuredReviewingClient(
 
 function runtimeContractForPin(
   choice: CompiledSelection,
-): 'legacy' | 'composed-v2' {
+): 'legacy' | 'composed-v2' | 'composed-v3' {
   const provenance = choice.record.linkTarget.provenance;
   if (provenance === undefined || provenance === '@sublang/playbook@0.9.0') {
     return 'legacy';
@@ -320,9 +320,12 @@ function runtimeContractForPin(
   // byte-identical to 3.1.0's — its major marks the SDK-topology break,
   // with cligent owning runtime versions, not a contract change — so it
   // selects the same profile (DR-020). 1.3.0 and 3.0.0 were never
-  // installed or reviewed here and stay fail-closed. Exact Playbook 10 remains
-  // deliberately unmapped until DR-024's atomic adoption activates the
-  // already-wired composed-v3 host together with its reviewed asset closure.
+  // installed or reviewed here and stay fail-closed. Exact Playbook 10.0.0
+  // ships schema-3 linked artifacts whose Captain-hosted factory takes
+  // configured options plus live host capabilities, so it selects the
+  // composed-v3 profile (DR-024). 5.0.0 through 9.0.0 were never reviewed
+  // here and stay fail-closed: reviewing 10.0.0 establishes no contract
+  // identity for an intermediate release.
   if (
     provenance === '@sublang/playbook@0.10.0' ||
     provenance === '@sublang/playbook@1.0.0' ||
@@ -331,6 +334,9 @@ function runtimeContractForPin(
     provenance === '@sublang/playbook@4.0.0'
   ) {
     return 'composed-v2';
+  }
+  if (provenance === '@sublang/playbook@10.0.0') {
+    return 'composed-v3';
   }
   throw new Error(
     `unsupported pinned Playbook runtime contract: ${provenance}`,

@@ -161,7 +161,13 @@ function requireComposedV3Compatibility(
 }
 
 /** Builds one fresh, plain, capability-bearing argument for a v3 factory. */
-function composedV3FactoryInput(): ComposedV3FactoryInput {
+/**
+ * The exact schema-3 factory input the compiled host supplies: empty configured
+ * options plus live host capabilities whose repository and effect-ledger seams
+ * fail closed (DR-024). Exported so verification drives the same construction
+ * the host performs rather than a divergent copy.
+ */
+export function composedV3FactoryInput(): ComposedV3FactoryInput {
   const rejectRepository = (): Promise<never> =>
     Promise.reject(new Error(COMPOSED_V3_REPOSITORY_ERROR));
   const rejectEffectWrite = (): Promise<never> =>

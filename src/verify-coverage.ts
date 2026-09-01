@@ -1245,6 +1245,20 @@ function minedLiterals(fn: unknown): string[] {
 // into the candidate pool.
 const IDENTIFIER_LITERAL = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;
 
+// Bound comparisons (cycle limits, retry counters, exit statuses) route on
+// integers that neither the string miner nor the generic value pool supplies:
+// GENERIC_VALUES carries only 1, and minedLiterals matches quoted text alone. A
+// machine gating on `>= 2` or `=== 0` is therefore reported unsatisfiable purely
+// for want of a candidate. Mining the artifact's own integers recovers exactly
+// the bounds it routes on.
+function numericLiterals(sourceText: string): number[] {
+  return [
+    ...new Set(
+      (sourceText.match(/(?<![\w.$])\d+(?![\w.$])/g) ?? []).map(Number),
+    ),
+  ];
+}
+
 /** Mines identifier-like string literals from an artifact's source text. */
 export function identifierLiterals(sourceText: string): string[] {
   const literals =
@@ -2150,7 +2164,13 @@ function captainProbeActor(
     captains,
   );
   if (predecessor === undefined) {
-    const drive =
+    // A root BOSS_INTERRUPT makes the interrupt route PREFERRED, not exclusive.
+    // A state legitimately outside the interrupt target set - every script
+    // state, since a script state is not agent-invoking and so cannot receive a
+    // Boss turn - is still entered by its own typed entry event. Falling back to
+    // the entry drive keeps such a state auditable instead of reporting it
+    // unreachable.
+    const interruptDrive =
       transitionArms((machine.config.on ?? {})[INTERRUPT_EVENT]).length > 0
         ? interruptDriveForRef(
             machine,
@@ -2159,6 +2179,10 @@ function captainProbeActor(
             captainInterruptTarget(captain),
             interruptValues,
           )
+        : undefined;
+    const drive =
+      interruptDrive?.satisfiable === true
+        ? interruptDrive
         : entryDriveForRef(machine, refs, captain.ref, interruptValues);
     if (drive === undefined || !drive.satisfiable) return undefined;
     return {
@@ -2762,7 +2786,10 @@ export async function checkFsmCoverage(
   const captainByRef = new Map(
     captains.map((captain) => [stateRefKey(captain.ref), captain]),
   );
-  const sourceCandidates = identifierLiterals(opts.sourceText ?? '');
+  const sourceCandidates = [
+    ...identifierLiterals(opts.sourceText ?? ''),
+    ...numericLiterals(opts.sourceText ?? ''),
+  ];
   const isController = isControllerMachine(config);
   const controllerNearMisses = captains.flatMap((captain) => {
     if (

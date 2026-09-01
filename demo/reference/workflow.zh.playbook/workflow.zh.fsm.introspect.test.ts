@@ -13,25 +13,59 @@ const PINNED = {
   initial: 'ready',
   captain: [
     {
-      state: 'implement',
+      state: 'implementChange',
       actor: 'player',
-      sourceItem: 'IMPL-1',
-      player: '编码者',
+      sourceItem: 'WORKFLOW-2',
+      player: '',
+      role: '编码者',
       resultKeys: ['done', 'needsBossReply'],
       onDone: [
         {
           index: 0,
-          target: 'awaitBossReply',
+          target: 'reviewCommit',
           guarded: true,
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'awaitBossReply',
           guarded: true,
         },
         {
           index: 2,
-          target: 'review',
+          target: 'failed',
+          guarded: false,
+        },
+      ],
+      onError: [
+        {
+          index: 0,
+          target: 'failed',
+          guarded: false,
+        },
+      ],
+      on: {},
+    },
+    {
+      state: 'reviewCommit',
+      actor: 'player',
+      sourceItem: 'WORKFLOW-3',
+      player: '',
+      role: '评审者',
+      resultKeys: ['clean', 'issues', 'needsBossReply'],
+      onDone: [
+        {
+          index: 0,
+          target: 'judgeFindings',
+          guarded: true,
+        },
+        {
+          index: 1,
+          target: 'reviewClean',
+          guarded: true,
+        },
+        {
+          index: 2,
+          target: 'awaitBossReply',
           guarded: true,
         },
         {
@@ -50,30 +84,31 @@ const PINNED = {
       on: {},
     },
     {
-      state: 'review',
+      state: 'judgeFindings',
       actor: 'player',
-      sourceItem: 'REVIEW-1',
-      player: '审查者',
-      resultKeys: ['clean', 'findings', 'needsBossReply'],
+      sourceItem: 'WORKFLOW-4',
+      player: '',
+      role: '编码者',
+      resultKeys: ['accept', 'needsBossReply', 'reject'],
       onDone: [
         {
           index: 0,
-          target: 'awaitBossReply',
+          target: 'reviseByConclusion',
           guarded: true,
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'debateJudgment',
           guarded: true,
         },
         {
           index: 2,
-          target: 'judge',
+          target: 'reviseByConclusion',
           guarded: true,
         },
         {
           index: 3,
-          target: 'done',
+          target: 'awaitBossReply',
           guarded: true,
         },
         {
@@ -92,49 +127,30 @@ const PINNED = {
       on: {},
     },
     {
-      state: 'judge',
+      state: 'debateJudgment',
       actor: 'player',
-      sourceItem: 'JUDGE-1',
-      player: '编码者',
-      resultKeys: ['agreed', 'disagreed', 'needsBossReply'],
+      sourceItem: 'WORKFLOW-5',
+      player: '',
+      role: '评审者',
+      resultKeys: ['agreed', 'dispute', 'needsBossReply'],
       onDone: [
         {
           index: 0,
-          target: 'awaitBossReply',
+          target: 'rejudgeRebuttal',
           guarded: true,
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'reviseByConclusion',
           guarded: true,
         },
         {
           index: 2,
-          target: 'reimplement',
+          target: 'awaitBossReply',
           guarded: true,
         },
         {
           index: 3,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 4,
-          target: 'argue',
-          guarded: true,
-        },
-        {
-          index: 5,
-          target: 'reimplement',
-          guarded: true,
-        },
-        {
-          index: 6,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 7,
           target: 'failed',
           guarded: false,
         },
@@ -149,39 +165,35 @@ const PINNED = {
       on: {},
     },
     {
-      state: 'argue',
+      state: 'rejudgeRebuttal',
       actor: 'player',
-      sourceItem: 'ARGUE-1',
-      player: '审查者',
-      resultKeys: ['agreed', 'findings', 'needsBossReply'],
+      sourceItem: 'WORKFLOW-6',
+      player: '',
+      role: '编码者',
+      resultKeys: ['accept', 'needsBossReply', 'reject'],
       onDone: [
         {
           index: 0,
-          target: 'awaitBossReply',
+          target: 'reviseByConclusion',
           guarded: true,
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'debateJudgment',
           guarded: true,
         },
         {
           index: 2,
-          target: 'judge',
+          target: 'reviseByConclusion',
           guarded: true,
         },
         {
           index: 3,
-          target: 'reimplement',
+          target: 'awaitBossReply',
           guarded: true,
         },
         {
           index: 4,
-          target: 'done',
-          guarded: true,
-        },
-        {
-          index: 5,
           target: 'failed',
           guarded: false,
         },
@@ -196,25 +208,26 @@ const PINNED = {
       on: {},
     },
     {
-      state: 'reimplement',
+      state: 'reviseByConclusion',
       actor: 'player',
-      sourceItem: 'IMPL-2',
-      player: '编码者',
+      sourceItem: 'WORKFLOW-7',
+      player: '',
+      role: '编码者',
       resultKeys: ['done', 'needsBossReply'],
       onDone: [
         {
           index: 0,
-          target: 'awaitBossReply',
+          target: 'reviewCommit',
           guarded: true,
         },
         {
           index: 1,
-          target: 'failed',
+          target: 'cycleLimitReached',
           guarded: true,
         },
         {
           index: 2,
-          target: 'review',
+          target: 'awaitBossReply',
           guarded: true,
         },
         {
@@ -238,17 +251,17 @@ const PINNED = {
       state: 'ready',
       final: false,
       on: {
-        START: [
+        BOSS_TASK: [
           {
             index: 0,
-            target: 'repoSetup',
-            guarded: false,
+            target: 'ensureRepository',
+            guarded: true,
           },
         ],
       },
     },
     {
-      state: 'repoSetup',
+      state: 'ensureRepository',
       final: false,
       on: {},
     },
@@ -259,32 +272,32 @@ const PINNED = {
         BOSS_REPLY: [
           {
             index: 0,
-            target: 'failed',
+            target: 'implementChange',
             guarded: true,
           },
           {
             index: 1,
-            target: 'implement',
+            target: 'reviewCommit',
             guarded: true,
           },
           {
             index: 2,
-            target: 'review',
+            target: 'judgeFindings',
             guarded: true,
           },
           {
             index: 3,
-            target: 'judge',
+            target: 'debateJudgment',
             guarded: true,
           },
           {
             index: 4,
-            target: 'argue',
+            target: 'rejudgeRebuttal',
             guarded: true,
           },
           {
             index: 5,
-            target: 'reimplement',
+            target: 'reviseByConclusion',
             guarded: true,
           },
           {
@@ -299,23 +312,68 @@ const PINNED = {
       state: 'failed',
       final: false,
       on: {
-        START: [
+        BOSS_TASK: [
           {
             index: 0,
-            target: 'repoSetup',
-            guarded: false,
+            target: 'ensureRepository',
+            guarded: true,
           },
         ],
       },
     },
     {
-      state: 'done',
+      state: 'reviewClean',
+      final: true,
+      on: {},
+    },
+    {
+      state: 'cycleLimitReached',
       final: true,
       on: {},
     },
   ],
-  rootOn: {},
-  interruptTargets: [],
+  rootOn: {
+    BOSS_INTERRUPT: [
+      {
+        index: 0,
+        target: 'implementChange',
+        guarded: true,
+      },
+      {
+        index: 1,
+        target: 'reviewCommit',
+        guarded: true,
+      },
+      {
+        index: 2,
+        target: 'judgeFindings',
+        guarded: true,
+      },
+      {
+        index: 3,
+        target: 'debateJudgment',
+        guarded: true,
+      },
+      {
+        index: 4,
+        target: 'rejudgeRebuttal',
+        guarded: true,
+      },
+      {
+        index: 5,
+        target: 'reviseByConclusion',
+        guarded: true,
+      },
+    ],
+  },
+  interruptTargets: [
+    'implementChange',
+    'reviewCommit',
+    'judgeFindings',
+    'debateJudgment',
+    'rejudgeRebuttal',
+    'reviseByConclusion',
+  ],
 };
 
 describe('workflow.zh: FSM introspection', () => {

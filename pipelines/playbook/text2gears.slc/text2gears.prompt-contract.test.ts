@@ -17,19 +17,18 @@ import * as playbook from './text2gears.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'transform',
-    sourceItem: 'TEXT2GEARS-1',
+    state: 'transformSource',
+    sourceItem: 'T2G-1',
     player: '',
-    reads: ['bossReply', 'pendingBossQuestion'],
-    wires: {
-      pendingBossQuestion: ['pendingBossQuestion'],
-      bossReply: ['bossReply'],
-    },
+    reads: ['pendingBossQuestion'],
+    wires: {},
     placeholders: [
       '<ITEM-ID>',
       '<behavior>',
-      '<Player>',
+      '<Role>',
+      '<coder-output>',
       '<placeholder>',
+      '<field>',
       '<stable-kebab-case-id>',
       '<playbook-id>',
       '<playbook-id-context>',
@@ -37,14 +36,19 @@ const CONTRACT = [
     ],
   },
 ];
+const SCHEMA_FINDINGS = [];
 
 describe('text2gears: prompt contract', () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('matches the prompt contract pinned at build time', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    transform: [],
+    transformSource: [],
   };
 
   const composeCaptain = (
@@ -59,6 +63,7 @@ describe('text2gears: prompt contract', () => {
         config: findMachineConfig(fsm),
         compose: composeCaptain,
         actor: 'captain',
+        artifactSchema: 3,
       }),
     ).toEqual([]);
   });

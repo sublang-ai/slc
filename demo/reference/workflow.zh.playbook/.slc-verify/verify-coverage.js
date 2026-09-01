@@ -6,11 +6,13 @@
  *
  * {@link checkFsmCoverage} drives the artifact's machine with scripted Captain
  * and nested-playbook actors and returns findings when a declared transition
- * is not reachable: every Captain result key must fire a transition out (with
- * `needsBossReply` suspending in the Boss-reply wait state and resuming on
- * `BOSS_REPLY`), nested calls must transition on success and failure, every
- * `onError` arm must land on its target, every `BOSS_INTERRUPT` target must be
- * enterable, and guard-free root entry events must transition.
+ * is not reachable: every ordinary Captain result key must fire a transition
+ * out (with `needsBossReply` suspending in the Boss-reply wait state and
+ * resuming on `BOSS_REPLY`), every controller action must return to its session
+ * hub or shutdown final without a wait, nested calls must transition on success
+ * and failure, every `onError` arm must land on its target, every
+ * `BOSS_INTERRUPT` target must be enterable, and guard-free root entry events
+ * must transition.
  * Context-dependent `onDone` arms that a jumped-in actor cannot satisfy are
  * covered by deterministic guard-satisfiability probing — candidate values
  * mined from the guard's own source — so an unsatisfiable arm is still flagged.
@@ -23,11 +25,15 @@ import { createActor, fromPromise } from 'xstate';
 import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
+  CONTROLLER_ACTION_GUARDS,
   INTERRUPT_EVENT,
   NEEDS_BOSS_REPLY,
   VERIFY_MODULE,
+  controllerDecisionNearMiss,
   enumerateCaptainStates,
   enumerateScriptStates,
+  isControllerDecisionResult,
+  isControllerMachine,
   loadFsmModule,
   normalizeArms,
 } from './verify.js';
@@ -216,15 +222,18 @@ function initializedCoverageContext(machine, dynamic) {
     ...coverageGuardContext(dynamic),
   };
 }
-/** Payload fields a result description requires, per the adjudicator convention. */
-const REQUIRED_FIELD = /Output shall include `([A-Za-z_][A-Za-z0-9_]*):/g;
+/** The `Output shall include` clause a result description declares. */
+const OUTPUT_CLAUSE = /Output shall include\s+(.+)$/;
+/** Every backticked `field:` property named inside that clause. */
+const REQUIRED_FIELD = /`([A-Za-z_$][A-Za-z0-9_$]*):/g;
 /** Structured fields named by the generic Captain result contracts. */
 const STRUCTURED_RESULT_FIELD =
   /\b(response|question|remainingPlan|nextPlaybookId|nextPlaybookInput)\b/g;
 function requiredFields(description) {
+  const clause = OUTPUT_CLAUSE.exec(description)?.[1] ?? '';
   return [
     ...new Set([
-      ...[...description.matchAll(REQUIRED_FIELD)].map((match) => match[1]),
+      ...[...clause.matchAll(REQUIRED_FIELD)].map((match) => match[1]),
       ...[...description.matchAll(STRUCTURED_RESULT_FIELD)].map(
         (match) => match[1],
       ),
@@ -233,6 +242,14 @@ function requiredFields(description) {
 }
 function synthesizedFieldValue(field) {
   switch (field) {
+    case 'text':
+      return COVERAGE_FINAL_RESPONSE;
+    case 'playbookId':
+      return COVERAGE_PLAYBOOK_ID;
+    case 'input':
+      return COVERAGE_PLAYBOOK_INPUT;
+    case 'actionId':
+      return 'coverage-runtime-action';
     case 'question':
       return 'What should happen next?';
     case 'remainingPlan':
@@ -296,6 +313,22 @@ function stateRefs(config) {
   };
   visit(config.states ?? {});
   return out;
+}
+/** The root initial state followed through every compound initial child. */
+function initialActiveRefs(config, refs) {
+  const active = [];
+  let path = [];
+  let initial = config.initial;
+  while (typeof initial === 'string') {
+    path = [...path, initial];
+    const ref = refs.find(
+      (candidate) => candidate.path.join('\u0000') === path.join('\u0000'),
+    );
+    if (ref === undefined) break;
+    active.push(ref);
+    initial = ref.state.initial;
+  }
+  return active;
 }
 /** Captain bindings paired with the nested state node that owns the invoke. */
 function captainRefs(config) {
@@ -480,6 +513,7 @@ function makeActor(
   script,
   playbookScript = () => null,
   restoredContext,
+  observeTransition,
 ) {
   const coverageErrors = [];
   const workActor = fromPromise(async ({ input }) => {
@@ -517,6 +551,35 @@ function makeActor(
         !('event' in inspection)
       ) {
         return;
+      }
+      const inspectedTransitions = inspection._transitions;
+      if (
+        inspection.type === '@xstate.microstep' &&
+        Array.isArray(inspectedTransitions)
+      ) {
+        for (const transition of inspectedTransitions) {
+          if (typeof transition !== 'object' || transition === null) {
+            continue;
+          }
+          const source = transition.source;
+          const target = transition.target;
+          observeTransition?.({
+            ...(typeof source === 'object' &&
+            source !== null &&
+            typeof source.id === 'string'
+              ? { sourceId: source.id }
+              : {}),
+            targetIds: Array.isArray(target)
+              ? target.flatMap((candidate) =>
+                  typeof candidate === 'object' &&
+                  candidate !== null &&
+                  typeof candidate.id === 'string'
+                    ? [candidate.id]
+                    : [],
+                )
+              : [],
+          });
+        }
       }
       const event = inspection.event;
       if (typeof event !== 'object' || event === null) return;
@@ -768,6 +831,67 @@ function interruptDriveForRef(
         satisfiable: true,
       };
 }
+/** A bounded satisfying initial/root event that enters one Captain state. */
+function entryDriveForRef(
+  machine,
+  refs,
+  target,
+  extraValues = [],
+  initialContext = initializedCoverageContext(machine),
+) {
+  const initialPath = initialActiveRefs(machine.config, refs);
+  const surfaces = [
+    ...initialPath
+      .slice()
+      .reverse()
+      .map((source) => ({ source, events: source.state.on ?? {} })),
+    { source: undefined, events: machine.config.on ?? {} },
+  ];
+  for (const { source, events } of surfaces) {
+    for (const [eventType, raw] of Object.entries(events)) {
+      if (eventType === INTERRUPT_EVENT) continue;
+      const arms = transitionArms(raw);
+      for (const [armIndex, arm] of arms.entries()) {
+        const rawTarget = rawArmTarget(arm);
+        if (
+          rawTarget === undefined ||
+          !sameStateRef(stateRefForTarget(refs, rawTarget, source), target)
+        ) {
+          continue;
+        }
+        const guard = orderedArmPredicate(machine, arms, armIndex);
+        if (guard === undefined) continue;
+        const base = { type: eventType };
+        const assignment = probeGuardAssignment(
+          guard.run,
+          {},
+          [{ tag: 'e:', base }],
+          [
+            ...guard.probeValues,
+            ...refs.flatMap((ref) => [
+              ref.key,
+              ref.stableId,
+              ...(ref.configId === undefined ? [] : [ref.configId]),
+            ]),
+            ...extraValues,
+          ],
+          {
+            initialContext,
+            varyExistingContext: true,
+          },
+        );
+        if (assignment !== undefined) {
+          return {
+            event: assignedPayload(base, assignment, 'e:'),
+            context: assignment.context,
+            satisfiable: true,
+          };
+        }
+      }
+    }
+  }
+  return undefined;
+}
 /** The arm XState selects for one concrete invocation output and context. */
 function directlySelectedArm(
   machine,
@@ -835,6 +959,19 @@ function minedLiterals(fn) {
 // identifier-like string literals recover them without dragging prompt prose
 // into the candidate pool.
 const IDENTIFIER_LITERAL = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;
+// Bound comparisons (cycle limits, retry counters, exit statuses) route on
+// integers that neither the string miner nor the generic value pool supplies:
+// GENERIC_VALUES carries only 1, and minedLiterals matches quoted text alone. A
+// machine gating on `>= 2` or `=== 0` is therefore reported unsatisfiable purely
+// for want of a candidate. Mining the artifact's own integers recovers exactly
+// the bounds it routes on.
+function numericLiterals(sourceText) {
+  return [
+    ...new Set(
+      (sourceText.match(/(?<![\w.$])\d+(?![\w.$])/g) ?? []).map(Number),
+    ),
+  ];
+}
 /** Mines identifier-like string literals from an artifact's source text. */
 export function identifierLiterals(sourceText) {
   const literals =
@@ -1044,6 +1181,22 @@ function doneGuardSatisfiable(guard, event, output, extraValues) {
     [...guard.probeValues, ...extraValues],
   );
 }
+/** A concrete initialized-context/output assignment selecting one done arm. */
+function controllerDoneGuardAssignment(
+  guard,
+  event,
+  output,
+  extraValues,
+  initialContext,
+) {
+  return probeGuardAssignment(
+    guard.run,
+    event,
+    [{ eventField: 'output', tag: 'o:', base: output }],
+    [...guard.probeValues, ...extraValues],
+    { initialContext, varyExistingContext: true },
+  );
+}
 function errorGuardSatisfiable(guard, event, error, extraValues) {
   return probeGuardSatisfiable(
     guard.run,
@@ -1076,6 +1229,41 @@ function parallelBranchCaptains(parallel, refs, captains) {
     if (captain !== undefined) selected.push(captain);
   }
   return selected;
+}
+function repeatedParallelRoleFindings(refs, captains) {
+  const findings = [];
+  for (const parallel of refs.filter((ref) => ref.state.type === 'parallel')) {
+    const regions = refs.filter((ref) => ref.parent === parallel);
+    const priorRoles = new Set();
+    for (const region of regions) {
+      // Sequential appearances inside one region are never concurrent. Fold
+      // the complete descendant region to a set, then compare across siblings;
+      // nested parallel descendants are therefore visible to their ancestors
+      // and are also checked independently at their own parallel boundary.
+      const regionRoles = new Set(
+        captains.flatMap((captain) => {
+          if (
+            captain.binding.actor !== 'player' ||
+            (!sameStateRef(captain.ref, region) &&
+              !isDescendantOf(captain.ref, region))
+          ) {
+            return [];
+          }
+          const role = captain.binding.role?.trim().toLowerCase();
+          return role === undefined || role === '' ? [] : [role];
+        }),
+      );
+      for (const role of regionRoles) {
+        if (priorRoles.has(role)) {
+          findings.push(
+            `parallel state ${parallel.stableId} repeats canonical role ${role}`,
+          );
+        }
+      }
+      for (const role of regionRoles) priorRoles.add(role);
+    }
+  }
+  return [...new Set(findings)];
 }
 function scriptedOutputs(entries) {
   const calls = new Map();
@@ -1257,6 +1445,224 @@ function captainPredecessorPlan(machine, target, playbooks, refs, captains) {
   }
   return undefined;
 }
+/**
+ * Finds a controller path from a hub event to an acting state. Controller-only
+ * intermediate states are entered through earlier Captain results rather than
+ * through the ordinary workflow interrupt surface.
+ */
+function controllerCaptainEntryPlan(
+  machine,
+  target,
+  refs,
+  captains,
+  candidates,
+  initialContext,
+) {
+  const queue = [];
+  for (const captain of captains) {
+    const drive = entryDriveForRef(
+      machine,
+      refs,
+      captain.ref,
+      candidates,
+      initialContext,
+    );
+    if (drive?.satisfiable === true) {
+      queue.push({ captain, drive, preceding: [] });
+    }
+  }
+  const visited = new Set();
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined) break;
+    const key = stateRefKey(current.captain.ref);
+    if (visited.has(key)) continue;
+    visited.add(key);
+    if (sameStateRef(current.captain.ref, target.ref)) {
+      return { drive: current.drive, preceding: current.preceding };
+    }
+    for (const resultKey of Object.keys(current.captain.binding.result)) {
+      const output = synthOutput(current.captain.binding, resultKey);
+      const nextRef = directTargetRef(
+        machine,
+        refs,
+        current.captain,
+        output,
+        initialContext,
+      );
+      const nextCaptain = captains.find(
+        (candidate) =>
+          nextRef !== undefined && sameStateRef(candidate.ref, nextRef),
+      );
+      if (
+        nextCaptain !== undefined &&
+        !visited.has(stateRefKey(nextCaptain.ref))
+      ) {
+        queue.push({
+          captain: nextCaptain,
+          drive: current.drive,
+          preceding: [
+            ...current.preceding,
+            { captain: current.captain, output },
+          ],
+        });
+      }
+    }
+  }
+  return undefined;
+}
+function controllerCaptainExitPlan(
+  machine,
+  captain,
+  output,
+  refs,
+  captains,
+  hub,
+  initialContext,
+) {
+  const firstTarget = directTargetRef(
+    machine,
+    refs,
+    captain,
+    output,
+    initialContext,
+  );
+  if (firstTarget === undefined) return { following: [], outcome: 'dead' };
+  if (sameStateRef(firstTarget, hub) || firstTarget.state.type === 'final') {
+    return { following: [], outcome: 'planned' };
+  }
+  const firstCaptain = captains.find((candidate) =>
+    sameStateRef(candidate.ref, firstTarget),
+  );
+  if (firstCaptain === undefined) {
+    return { following: [], outcome: 'runtime' };
+  }
+  const queue = [{ captain: firstCaptain, following: [] }];
+  const visited = new Set();
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined) break;
+    const currentKey = stateRefKey(current.captain.ref);
+    if (visited.has(currentKey)) continue;
+    visited.add(currentKey);
+    for (const resultKey of Object.keys(current.captain.binding.result)) {
+      const nextOutput = synthOutput(current.captain.binding, resultKey);
+      const following = [
+        ...current.following,
+        { captain: current.captain, output: nextOutput },
+      ];
+      const nextRef = directTargetRef(
+        machine,
+        refs,
+        current.captain,
+        nextOutput,
+        initialContext,
+      );
+      if (nextRef === undefined) continue;
+      if (sameStateRef(nextRef, hub) || nextRef.state.type === 'final') {
+        return { following, outcome: 'planned' };
+      }
+      const nextCaptain = captains.find((candidate) =>
+        sameStateRef(candidate.ref, nextRef),
+      );
+      if (
+        nextCaptain !== undefined &&
+        !visited.has(stateRefKey(nextCaptain.ref))
+      ) {
+        queue.push({ captain: nextCaptain, following });
+      }
+    }
+  }
+  return { following: [], outcome: 'dead' };
+}
+function controllerCaptainProbeActor(
+  machine,
+  captain,
+  result,
+  gate,
+  refs,
+  captains,
+  candidates,
+  initialContext,
+) {
+  const entry = controllerCaptainEntryPlan(
+    machine,
+    captain,
+    refs,
+    captains,
+    candidates,
+    initialContext,
+  );
+  if (entry === undefined) return undefined;
+  const hub = initialActiveRefs(machine.config, refs).at(-1);
+  const outcomes = [...entry.preceding, { captain, output: result }];
+  let controllerExitPlanned;
+  if (!(result instanceof Error)) {
+    const exit = controllerCaptainExitPlan(
+      machine,
+      captain,
+      result,
+      refs,
+      captains,
+      hub,
+      initialContext,
+    );
+    controllerExitPlanned =
+      exit.outcome === 'runtime' ? undefined : exit.outcome === 'planned';
+    outcomes.push(...exit.following);
+  }
+  const probedOccurrence = entry.preceding.length;
+  let controllerResultConsumed = false;
+  let controllerDirectTransitionTargets;
+  let occurrence = 0;
+  const actor = makeActor(
+    machine,
+    (input) => {
+      if (!gate.armed) return null;
+      const planned = outcomes[occurrence];
+      if (planned === undefined) return null;
+      const stateId =
+        typeof input.stateId === 'string' ? input.stateId : undefined;
+      const sourceItem =
+        typeof input.sourceItem === 'string' ? input.sourceItem : undefined;
+      const matchesState =
+        stateId === undefined ||
+        stateId === captainPublicStateId(planned.captain);
+      const matchesSource =
+        sourceItem === undefined ||
+        sourceItem === planned.captain.binding.sourceItem;
+      if (
+        (stateId === undefined && sourceItem === undefined) ||
+        !matchesState ||
+        !matchesSource
+      ) {
+        return null;
+      }
+      if (occurrence === probedOccurrence) {
+        controllerResultConsumed = true;
+      }
+      occurrence += 1;
+      return planned.output;
+    },
+    () => null,
+    entry.drive.context,
+    (transition) => {
+      if (
+        controllerResultConsumed &&
+        controllerDirectTransitionTargets === undefined &&
+        transition.sourceId === resolvedStateNode(machine, captain.ref)?.id
+      ) {
+        controllerDirectTransitionTargets = transition.targetIds;
+      }
+    },
+  );
+  return {
+    actor,
+    event: entry.drive.event,
+    controllerDirectTransitionTargets: () => controllerDirectTransitionTargets,
+    ...(controllerExitPlanned === undefined ? {} : { controllerExitPlanned }),
+  };
+}
 function captainProbeActor(
   machine,
   captain,
@@ -1266,7 +1672,20 @@ function captainProbeActor(
   captains,
   playbooks,
   interruptValues,
+  controllerContext,
 ) {
+  if (controllerContext !== undefined) {
+    return controllerCaptainProbeActor(
+      machine,
+      captain,
+      result,
+      gate,
+      refs,
+      captains,
+      interruptValues,
+      controllerContext,
+    );
+  }
   const predecessor = captainPredecessorPlan(
     machine,
     captain,
@@ -1275,13 +1694,27 @@ function captainProbeActor(
     captains,
   );
   if (predecessor === undefined) {
-    const drive = interruptDriveForRef(
-      machine,
-      refs,
-      captain.ref,
-      captainInterruptTarget(captain),
-      interruptValues,
-    );
+    // A root BOSS_INTERRUPT makes the interrupt route PREFERRED, not exclusive.
+    // A state legitimately outside the interrupt target set - every script
+    // state, since a script state is not agent-invoking and so cannot receive a
+    // Boss turn - is still entered by its own typed entry event. Falling back to
+    // the entry drive keeps such a state auditable instead of reporting it
+    // unreachable.
+    const interruptDrive =
+      transitionArms((machine.config.on ?? {})[INTERRUPT_EVENT]).length > 0
+        ? interruptDriveForRef(
+            machine,
+            refs,
+            captain.ref,
+            captainInterruptTarget(captain),
+            interruptValues,
+          )
+        : undefined;
+    const drive =
+      interruptDrive?.satisfiable === true
+        ? interruptDrive
+        : entryDriveForRef(machine, refs, captain.ref, interruptValues);
+    if (drive === undefined || !drive.satisfiable) return undefined;
     return {
       actor: makeActor(
         machine,
@@ -1314,6 +1747,7 @@ function captainProbeActor(
     entryId,
     interruptValues,
   );
+  if (!drive.satisfiable) return undefined;
   const actor = makeActor(
     machine,
     (input) => {
@@ -1755,6 +2189,7 @@ export function fsmCoverageTestTimeout(fsmModule) {
   const captains = captainRefs(config);
   const playbooks = playbookRefs(config);
   const parallels = refs.filter((ref) => ref.state.type === 'parallel');
+  const controller = isControllerMachine(config);
   const rootInterruptProbes = transitionArms(
     (config.on ?? {})[INTERRUPT_EVENT],
   ).length;
@@ -1773,7 +2208,8 @@ export function fsmCoverageTestTimeout(fsmModule) {
     const resultKeys = Object.keys(captain.binding.result);
     captainSettles +=
       resultKeys.reduce(
-        (total, key) => total + (key === NEEDS_BOSS_REPLY ? 4 : 1),
+        (total, key) =>
+          total + (key === NEEDS_BOSS_REPLY ? 4 : controller ? 2 : 1),
         0,
       ) * SETTLE_MS;
     // One directly selectable onError arm is driven.
@@ -1848,8 +2284,36 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
   const captainByRef = new Map(
     captains.map((captain) => [stateRefKey(captain.ref), captain]),
   );
-  const sourceCandidates = identifierLiterals(opts.sourceText ?? '');
+  const sourceCandidates = [
+    ...identifierLiterals(opts.sourceText ?? ''),
+    ...numericLiterals(opts.sourceText ?? ''),
+  ];
+  const isController = isControllerMachine(config);
+  const controllerNearMisses = captains.flatMap((captain) => {
+    if (
+      captain.binding.actor !== 'captain' ||
+      captain.binding.result[NEEDS_BOSS_REPLY] !== undefined
+    ) {
+      return [];
+    }
+    const nearMiss = controllerDecisionNearMiss(captain.binding.result);
+    return nearMiss === undefined ? [] : [{ captain, nearMiss }];
+  });
+  const controllerContractCandidate =
+    isController || controllerNearMisses.length > 0;
+  const initialCoverageContext = initializedCoverageContext(machine);
+  const controllerContext = isController ? initialCoverageContext : undefined;
   const parallelRefs = refs.filter((ref) => ref.state.type === 'parallel');
+  findings.push(...repeatedParallelRoleFindings(refs, captains));
+  for (const { captain, nearMiss } of controllerNearMisses) {
+    const detail =
+      nearMiss.missing.length > 0
+        ? `missing ${JSON.stringify(nearMiss.missing[0])}`
+        : `extra ${JSON.stringify(nearMiss.extra[0])}`;
+    findings.push(
+      `state ${captain.binding.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
+    );
+  }
   for (const ref of parallelRefs) {
     if (!normalizeArms(ref.state.onDone).some((arm) => arm.target !== null)) {
       findings.push(`parallel state ${ref.stableId} declares no onDone join`);
@@ -1876,6 +2340,22 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
   if (finalStates.length === 0) {
     findings.push('machine declares no final state');
   }
+  const controllerHasPlayer =
+    isController &&
+    captains.some((captain) => captain.binding.actor === 'player');
+  const controllerHasPlaybook = isController && playbooks.length > 0;
+  const controllerHasParallel = isController && parallelRefs.length > 0;
+  if (controllerHasPlayer) {
+    findings.push('controller machine declares delegated-player invocation');
+  }
+  if (controllerHasPlaybook) {
+    findings.push('controller machine declares nested-playbook invocation');
+  }
+  if (controllerHasParallel) {
+    findings.push('controller machine declares parallel state');
+  }
+  const unsupportedController =
+    controllerHasPlayer || controllerHasPlaybook || controllerHasParallel;
   const rootArms = normalizeArms((config.on ?? {})[INTERRUPT_EVENT]);
   const canJump = rootArms.length > 0;
   // A workflow without pre-emption declares no interrupt surface at all
@@ -1885,10 +2365,10 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
   const handlesInterruptSomewhere = refs.some((ref) =>
     Object.hasOwn(ref.state.on ?? {}, INTERRUPT_EVENT),
   );
-  if (!canJump && handlesInterruptSomewhere) {
+  if (!canJump && handlesInterruptSomewhere && !controllerContractCandidate) {
     findings.push(`machine declares no root ${INTERRUPT_EVENT} event`);
   }
-  if (canJump) {
+  if (canJump && !isController) {
     for (const playbook of playbooks) {
       findings.push(
         ...(await probePlaybookInvocation(
@@ -1925,7 +2405,9 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
       (tagsOf(ref.state).includes('playbook.parked') &&
         ref.state.on?.[BOSS_REPLY_EVENT] !== undefined),
   );
-  if (waitStates.length === 0) {
+  if (isController && waitStates.length > 0) {
+    findings.push('controller machine declares a Boss-reply wait state');
+  } else if (!controllerContractCandidate && waitStates.length === 0) {
     findings.push(
       `machine declares no ${AWAIT_BOSS_REPLY_STATE} state or branch-local Boss-reply wait state`,
     );
@@ -1988,20 +2470,22 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
     }
   }
   // Guard-free root entry events transition from the initial state.
-  const initial = typeof config.initial === 'string' ? config.initial : null;
-  const initialRef =
-    initial === null
-      ? undefined
-      : refs.find((ref) => ref.path.length === 1 && ref.key === initial);
-  const entryArms = {
-    ...(initial !== null ? (states[initial]?.on ?? {}) : {}),
-    ...(config.on ?? {}),
-  };
+  const initialPath = initialActiveRefs(config, refs);
+  const initialRef = initialPath.at(-1);
+  const entryArms = Object.assign(
+    {},
+    config.on ?? {},
+    ...initialPath.map((ref) => ref.state.on ?? {}),
+  );
   for (const [event, raw] of Object.entries(entryArms)) {
     if (event === INTERRUPT_EVENT) continue;
     const arms = normalizeArms(raw);
     const free = arms.find(
-      (arm) => !arm.guarded && arm.target !== null && arm.target !== initial,
+      (arm) =>
+        !arm.guarded &&
+        arm.target !== null &&
+        arm.target !== initialRef?.key &&
+        arm.target !== initialRef?.stableId,
     );
     if (free === undefined) continue;
     const actor = makeActor(machine, () => null);
@@ -2019,8 +2503,13 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
     ref.stableId,
     ...(ref.configId === undefined ? [] : [ref.configId]),
   ]);
+  // Playbook 10 controllers are host decision loops. Player delegation,
+  // nested playbook invocation, and parallel regions are invalid controller
+  // surfaces, so their explicit findings above own the result; do not mask
+  // them by trying the ordinary workflow drivers against an unsupported shape.
+  if (unsupportedController) return findings;
   for (const captain of captains) {
-    if (!canJump) break;
+    if (!canJump && !isController) break;
     const state = captain.binding;
     const stateKey = state.stateId;
     const stateId = captainPublicStateId(captain);
@@ -2029,29 +2518,39 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
     const errorEvent = invocationEvent(machine, captain, 'error');
     const rawDoneArms = transitionArms(captain.invocation.onDone);
     const onDoneArms = normalizeArms(captain.invocation.onDone);
+    const controllerResultByArm = new Map();
     // Every declared result needs an arm that explicitly accepts its complete
     // valid output. A sole unguarded arm accepts the whole local result
     // contract; an array's unguarded arm is a fallback and cannot make an
     // otherwise orphaned key look covered.
     for (const key of Object.keys(state.result)) {
       const output = synthOutput(state, key);
-      const accepting = new Set();
+      const accepting = new Map();
       for (const [index, arm] of rawDoneArms.entries()) {
         const target = onDoneArms[index]?.target ?? null;
         const rawGuard = armGuard(arm);
         if (rawGuard === undefined) {
-          if (rawDoneArms.length === 1 && target !== null) accepting.add(index);
+          if (rawDoneArms.length === 1 && target !== null) {
+            accepting.set(index, undefined);
+          }
           continue;
         }
         if (target === null || resolveGuard(machine, rawGuard) === undefined) {
           continue;
         }
         const guard = orderedArmPredicate(machine, rawDoneArms, index);
-        if (
-          guard !== undefined &&
-          doneGuardSatisfiable(guard, doneEvent, output, candidates)
-        ) {
-          accepting.add(index);
+        if (guard === undefined) continue;
+        if (isController) {
+          const assignment = controllerDoneGuardAssignment(
+            guard,
+            doneEvent,
+            output,
+            candidates,
+            initialCoverageContext,
+          );
+          if (assignment !== undefined) accepting.set(index, assignment);
+        } else if (doneGuardSatisfiable(guard, doneEvent, output, candidates)) {
+          accepting.set(index, undefined);
         }
       }
       if (accepting.size === 0) {
@@ -2060,62 +2559,153 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
         );
         continue;
       }
-      // Drive only when the first arm XState would inspect under the real
-      // initial context is a known accepting arm. Encountering an unresolved
-      // guard first makes driving unsafe: XState reports that error
-      // asynchronously, so the arm audit below owns the finding (c887fc4).
       let directArm;
-      let safeToDrive = true;
-      for (const [index, arm] of rawDoneArms.entries()) {
-        const rawGuard = armGuard(arm);
-        if (rawGuard === undefined) {
-          directArm = index;
-          break;
+      let drivenOutput = output;
+      let drivenControllerContext = controllerContext;
+      if (isController) {
+        if (isControllerDecisionResult(state.result) && accepting.size !== 1) {
+          findings.push(
+            `state ${stateKey}: controller result "${key}" selects ${accepting.size} accepting action arms`,
+          );
+          continue;
         }
-        const guard = resolveGuard(machine, rawGuard);
-        if (guard === undefined) {
-          safeToDrive = false;
-          break;
+        const selected = accepting.entries().next().value;
+        directArm = selected?.[0];
+        const assignment = selected?.[1];
+        if (assignment !== undefined) {
+          drivenOutput = assignedPayload(output, assignment, 'o:');
+          drivenControllerContext = assignment.context;
         }
-        try {
-          if (
-            guard.run({
-              context: initializedCoverageContext(machine),
-              event: { ...doneEvent, output },
-            })
-          ) {
+      } else {
+        // Drive only when the first arm XState would inspect under the real
+        // initial context is a known accepting arm. Encountering an unresolved
+        // guard first makes driving unsafe: XState reports that error
+        // asynchronously, so the arm audit below owns the finding (c887fc4).
+        let safeToDrive = true;
+        for (const [index, arm] of rawDoneArms.entries()) {
+          const rawGuard = armGuard(arm);
+          if (rawGuard === undefined) {
             directArm = index;
             break;
           }
-        } catch {
-          safeToDrive = false;
-          break;
+          const guard = resolveGuard(machine, rawGuard);
+          if (guard === undefined) {
+            safeToDrive = false;
+            break;
+          }
+          try {
+            if (
+              guard.run({
+                context: initialCoverageContext,
+                event: { ...doneEvent, output },
+              })
+            ) {
+              directArm = index;
+              break;
+            }
+          } catch {
+            safeToDrive = false;
+            break;
+          }
+        }
+        if (
+          !safeToDrive ||
+          directArm === undefined ||
+          !accepting.has(directArm)
+        ) {
+          continue;
         }
       }
-      if (
-        !safeToDrive ||
-        directArm === undefined ||
-        !accepting.has(directArm)
-      ) {
+      if (directArm === undefined) {
         continue;
+      }
+      let controllerDirectTarget;
+      let controllerDirectTargetNodeId;
+      if (isController) {
+        if (isControllerDecisionResult(state.result)) {
+          const priorResult = controllerResultByArm.get(directArm);
+          if (priorResult !== undefined) {
+            findings.push(
+              `state ${stateKey}: controller result "${key}" selects direct arm ${directArm}, already selected by result "${priorResult}"`,
+            );
+            continue;
+          }
+          controllerResultByArm.set(directArm, key);
+        }
+        const directTarget = rawArmTarget(rawDoneArms[directArm]);
+        controllerDirectTarget =
+          directTarget === undefined
+            ? undefined
+            : stateRefForTarget(refs, directTarget, captain.ref);
+        controllerDirectTargetNodeId =
+          controllerDirectTarget === undefined
+            ? undefined
+            : resolvedStateNode(machine, controllerDirectTarget)?.id;
+        if (
+          directTarget === undefined ||
+          controllerDirectTarget === undefined ||
+          controllerDirectTargetNodeId === undefined
+        ) {
+          findings.push(
+            `state ${stateKey}: controller result "${key}" declares no resolvable direct action target`,
+          );
+          continue;
+        }
       }
       const gate = { armed: false };
       const probe = captainProbeActor(
         machine,
         captain,
-        output,
+        drivenOutput,
         gate,
         refs,
         captains,
         playbooks,
         sourceCandidates,
+        drivenControllerContext,
       );
+      if (probe === undefined) {
+        const finding = `state ${stateKey} has no reachable entry transition`;
+        if (!findings.includes(finding)) findings.push(finding);
+        continue;
+      }
       const actor = probe.actor;
       gate.armed = true;
       actor.send(probe.event);
-      const left = await settle(actor, leftState(captain.ref));
-      if (!left) {
-        findings.push(`state ${stateKey}: result "${key}" fired no transition`);
+      if (
+        controllerDirectTarget !== undefined &&
+        controllerDirectTargetNodeId !== undefined &&
+        !(await settle(
+          actor,
+          () =>
+            probe
+              .controllerDirectTransitionTargets?.()
+              ?.includes(controllerDirectTargetNodeId) === true,
+        ))
+      ) {
+        findings.push(
+          `state ${stateKey}: controller result "${key}" did not reach its declared direct action target ${controllerDirectTarget.stableId}`,
+        );
+        actor.stop();
+        continue;
+      }
+      const transitioned =
+        isController && probe.controllerExitPlanned === false
+          ? false
+          : await settle(
+              actor,
+              isController
+                ? (snapshot) =>
+                    snapshot.status === 'done' ||
+                    (initialRef !== undefined && atState(initialRef)(snapshot))
+                : leftState(captain.ref),
+            );
+      if (!transitioned) {
+        findings.push(
+          isController
+            ? `state ${stateKey}: controller result "${key}" reached neither the session hub nor a shutdown final`
+            : `state ${stateKey}: result "${key}" fired no transition`,
+        );
       } else if (key === NEEDS_BOSS_REPLY) {
         const waitTarget =
           rawArmTarget(rawDoneArms[directArm]) ?? onDoneArms[directArm]?.target;
@@ -2173,7 +2763,13 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
           captains,
           playbooks,
           sourceCandidates,
+          controllerContext,
         );
+        if (blankProbe === undefined) {
+          const finding = `state ${stateKey} has no reachable entry transition`;
+          if (!findings.includes(finding)) findings.push(finding);
+          continue;
+        }
         const blank = blankProbe.actor;
         blankGate.armed = true;
         blank.send(blankProbe.event);
@@ -2276,7 +2872,7 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
       try {
         if (
           guard.run({
-            context: initializedCoverageContext(machine),
+            context: initialCoverageContext,
             event: { ...errorEvent, error: forcedError },
           })
         ) {
@@ -2305,7 +2901,13 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
       captains,
       playbooks,
       sourceCandidates,
+      controllerContext,
     );
+    if (probe === undefined) {
+      const finding = `state ${stateKey} has no reachable entry transition`;
+      if (!findings.includes(finding)) findings.push(finding);
+      continue;
+    }
     const actor = probe.actor;
     gate.armed = true;
     actor.send(probe.event);

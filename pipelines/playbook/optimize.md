@@ -24,12 +24,6 @@ pass trades a compile-time rewrite for cheaper, deterministic runtime steps.
 | source | gears  | .md       |
 | target | gears  | .md       |
 
-## Pin Inputs
-
-- `text2gears.md`
-- `gears2fsm.md`
-- `../../package-lock.json`
-
 ## Eligibility
 
 The pass shall rewrite an item only when **all** of the following hold:

@@ -17,77 +17,86 @@ import * as playbook from './workflow.zh.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'implement',
-    sourceItem: 'IMPL-1',
-    player: '编码者',
-    reads: ['bossReply', 'pendingBossQuestion', 'task'],
+    state: 'implementChange',
+    sourceItem: 'WORKFLOW-2',
+    player: '',
+    role: '编码者',
+    reads: ['bossIntent', 'pendingBossQuestion'],
     wires: {
-      task: ['task'],
-      pendingBossQuestion: ['pendingBossQuestion'],
-      bossReply: ['bossReply'],
-    },
-    placeholders: ['<task>'],
-  },
-  {
-    state: 'review',
-    sourceItem: 'REVIEW-1',
-    player: '审查者',
-    reads: ['bossReply', 'pendingBossQuestion'],
-    wires: {
-      pendingBossQuestion: ['pendingBossQuestion'],
-      bossReply: ['bossReply'],
+      bossIntent: ['bossIntent'],
     },
     placeholders: [],
   },
   {
-    state: 'judge',
-    sourceItem: 'JUDGE-1',
-    player: '编码者',
-    reads: ['bossReply', 'findings', 'pendingBossQuestion'],
-    wires: {
-      findings: ['findings'],
-      pendingBossQuestion: ['pendingBossQuestion'],
-      bossReply: ['bossReply'],
-    },
-    placeholders: ['<findings>'],
+    state: 'reviewCommit',
+    sourceItem: 'WORKFLOW-3',
+    player: '',
+    role: '评审者',
+    reads: ['pendingBossQuestion'],
+    wires: {},
+    placeholders: [],
   },
   {
-    state: 'argue',
-    sourceItem: 'ARGUE-1',
-    player: '审查者',
-    reads: ['bossReply', 'judgment', 'pendingBossQuestion'],
+    state: 'judgeFindings',
+    sourceItem: 'WORKFLOW-4',
+    player: '',
+    role: '编码者',
+    reads: ['pendingBossQuestion', 'reviewFindings'],
     wires: {
-      judgment: ['judgment'],
-      pendingBossQuestion: ['pendingBossQuestion'],
-      bossReply: ['bossReply'],
+      reviewFindings: ['reviewFindings'],
     },
-    placeholders: ['<judgment>'],
+    placeholders: ['<reviewFindings>'],
   },
   {
-    state: 'reimplement',
-    sourceItem: 'IMPL-2',
-    player: '编码者',
-    reads: ['bossReply', 'conclusion', 'pendingBossQuestion'],
+    state: 'debateJudgment',
+    sourceItem: 'WORKFLOW-5',
+    player: '',
+    role: '评审者',
+    reads: ['coderJudgment', 'pendingBossQuestion'],
     wires: {
-      conclusion: ['conclusion'],
-      pendingBossQuestion: ['pendingBossQuestion'],
-      bossReply: ['bossReply'],
+      coderJudgment: ['coderJudgment'],
     },
-    placeholders: ['<conclusion>'],
+    placeholders: ['<coderJudgment>'],
+  },
+  {
+    state: 'rejudgeRebuttal',
+    sourceItem: 'WORKFLOW-6',
+    player: '',
+    role: '编码者',
+    reads: ['pendingBossQuestion', 'reviewerRebuttal'],
+    wires: {
+      reviewerRebuttal: ['reviewerRebuttal'],
+    },
+    placeholders: ['<reviewerRebuttal>'],
+  },
+  {
+    state: 'reviseByConclusion',
+    sourceItem: 'WORKFLOW-7',
+    player: '',
+    role: '编码者',
+    reads: ['pendingBossQuestion'],
+    wires: {},
+    placeholders: [],
   },
 ];
+const SCHEMA_FINDINGS = [];
 
 describe('workflow.zh: prompt contract', () => {
+  it('uses consistent artifact-schema evidence', () => {
+    expect(SCHEMA_FINDINGS).toEqual([]);
+  });
+
   it('matches the prompt contract pinned at build time', () => {
     expect(capturePromptContract(findMachineConfig(fsm))).toEqual(CONTRACT);
   });
 
   const PLAYER_SUBSTITUTED = {
-    implement: ['<task>'],
-    review: [],
-    judge: ['<findings>'],
-    argue: ['<judgment>'],
-    reimplement: ['<conclusion>'],
+    implementChange: [],
+    reviewCommit: [],
+    judgeFindings: ['<reviewFindings>'],
+    debateJudgment: ['<coderJudgment>'],
+    rejudgeRebuttal: ['<reviewerRebuttal>'],
+    reviseByConclusion: [],
   };
 
   const composePlayer = (
@@ -102,6 +111,7 @@ describe('workflow.zh: prompt contract', () => {
         config: findMachineConfig(fsm),
         compose: composePlayer,
         actor: 'player',
+        artifactSchema: 3,
       }),
     ).toEqual([]);
   });

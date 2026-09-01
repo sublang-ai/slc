@@ -1242,16 +1242,15 @@ describe('compiled execution through the bin (cli-28)', () => {
 
   it.each([
     ['unreviewed Playbook 1.3 provenance', '@sublang/playbook@1.3.0'],
-    [
-      'exact Playbook 10 provenance before atomic activation',
-      '@sublang/playbook@10.0.0',
-    ],
+    ['unreviewed Playbook 9 provenance', '@sublang/playbook@9.0.0'],
   ] as const)(
     'keeps %s fail-closed through the phase-failure path (cli-16, cli-36)',
     async (_label, provenance) => {
-      // The 1.3.0 case permanently guards unmapped-provenance reporting. The
-      // exact-10 case additionally guards Task 2 dormancy until DR-024's
-      // complete reviewed set moves. Both must invoke neither execution mode.
+      // Both cases guard unmapped-provenance reporting: 1.3.0 was never
+      // installed or reviewed here, and 5.0.0 through 9.0.0 stay unmapped
+      // because reviewing exact 10.0.0 establishes no contract identity for an
+      // intermediate release (DR-024). Neither may invoke either execution
+      // mode.
       const bundleDir = join(pipelineDir, 'text2gears.slc');
       await mkdir(bundleDir);
       await writeFile(
@@ -1369,4 +1368,275 @@ describe('compiled execution through the bin (cli-28)', () => {
       await expect(access(target)).rejects.toThrow();
     },
   );
+
+  /**
+   * Pins `text2gears` to a compiled bundle carrying `artifact` bytes, recording
+   * `provenance` on the pin's link target so the run selects exactly the
+   * profile that provenance maps to. The pin evaluates *current* — a stale one
+   * never reaches the factory.
+   */
+  const pinCompiledArtifact = async (
+    artifact: string,
+    provenance: string,
+  ): Promise<void> => {
+    const bundleDir = join(pipelineDir, 'text2gears.slc');
+    await mkdir(bundleDir);
+    await writeFile(join(bundleDir, 'text2gears.playbook.ts'), artifact);
+    for (const name of [
+      'text2gears.fsm.ts',
+      'text2gears.gears.md',
+      'text2gears.gears-fsm.test.ts',
+      'text2gears.fsm.introspect.test.ts',
+      'text2gears.prompt-contract.test.ts',
+      'text2gears.fsm.coverage.test.ts',
+    ]) {
+      await writeFile(join(bundleDir, name), `fixture: ${name}\n`);
+    }
+    await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target bytes\n');
+    const record: PinRecord = {
+      definition: {
+        path: 'text2gears.md',
+        hash: await hashFile(join(pipelineDir, 'text2gears.md')),
+      },
+      artifact: {
+        path: 'text2gears.slc/text2gears.playbook.ts',
+        hash: await hashFile(join(bundleDir, 'text2gears.playbook.ts')),
+      },
+      artifactBundle: {
+        path: 'text2gears.slc',
+        hash: await hashTree(bundleDir),
+      },
+      semanticInputs: [],
+      externalInputs: [],
+      runtimeDependencies: [],
+      linkTarget: {
+        kind: 'file',
+        locator: 'linktarget.ts',
+        identity: await hashFile(join(pipelineDir, 'linktarget.ts')),
+        provenance,
+      },
+    };
+    await writeFile(
+      join(pipelineDir, PINS_FILE),
+      JSON.stringify(
+        {
+          schema: PIN_SCHEMA,
+          hashAlgorithm: PIN_HASH_ALGORITHM,
+          pathBoundary: { path: '.' },
+          pins: { text2gears: record },
+        },
+        null,
+        2,
+      ),
+    );
+  };
+
+  /** Runs the pinned phase through the bin over the production compiled factory. */
+  const runPinnedPhase = async (): Promise<{
+    code: number;
+    out: string;
+    lines: string[];
+    interpretedRuns: string[];
+    adapterBuilds: number;
+  }> => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const interpretedRuns: string[] = [];
+    let adapterBuilds = 0;
+    // Pre-create the user config so first-run seeding (DR-015) stays out of
+    // the stderr expectations.
+    await mkdir(join(root, 'slc'), { recursive: true });
+    await writeFile(join(root, 'slc', 'config.yaml'), 'agent: claude-code\n');
+    const code = await run(['flow.text2gears', source], {
+      env: {
+        SLC_AGENT: 'claude-code',
+        SLC_PIPELINE_PATH: pipelinesRoot,
+        XDG_CONFIG_HOME: root,
+      },
+      cwd: root,
+      stdout: (t) => out.push(t),
+      stderr: (t) => err.push(t),
+      buildDeps: (io) =>
+        buildSlcDeps(
+          io,
+          // The interpreted executor must stay unused for the pinned phase.
+          () => ({
+            run: async (request) => {
+              interpretedRuns.push(request.kind);
+              return { status: 'error', diagnostics: ['must not interpret'] };
+            },
+          }),
+          // The production factory, with adapter construction faked out so no
+          // real agent CLI is touched.
+          (selection, opts = {}) =>
+            createConfiguredCompiledFactory(selection, {
+              ...opts,
+              adapterFactory: () => {
+                adapterBuilds += 1;
+                return {} as AgentAdapter;
+              },
+            }),
+        ),
+    });
+    return {
+      code,
+      out: out.join(''),
+      lines: err
+        .join('')
+        .split('\n')
+        .filter((l) => l !== ''),
+      interpretedRuns,
+      adapterBuilds,
+    };
+  };
+
+  it('rejects a compat-less factory under exact Playbook 10 provenance (cli-16, cli-36)', async () => {
+    // Exact 10.0.0 selects `composed-v3` (DR-024), so a schema-1-shaped
+    // factory — one carrying no immutable `createPlaybookRuntime.compat` — is
+    // refused at construction instead of being driven as an empty-options
+    // legacy runtime.
+    await pinCompiledArtifact(
+      'export default function createPlaybookRuntime() {\n' +
+        '  return { async init() {}, async handleBossInput() {}, async dispose() {} };\n' +
+        '}\n',
+      '@sublang/playbook@10.0.0',
+    );
+
+    const { code, out, lines, interpretedRuns, adapterBuilds } =
+      await runPinnedPhase();
+
+    expect(code).toBe(1);
+    expect(out).toBe('');
+    const target = join(root, 'onboarding.flow', 'onboarding.gears.md');
+    // The start line is closed by a ✗ carrying the elapsed time...
+    expect(lines[0]).toBe(`→ text2gears (writing ${target})`);
+    expect(lines[1]).toMatch(
+      /^✗ text2gears failed at .+onboarding\.gears\.md \(\d+s\)$/,
+    );
+    // ...and the report names the failing phase, its target, and the reason.
+    expect(lines[2]).toBe(`slc: phase "text2gears" failed at "${target}"`);
+    expect(lines[3]).toContain(
+      'compiled artifact failed to load: compiled composed-v3 factory ' +
+        'requires immutable compatibility { artifactSchema: 3, runtimeAbi: 1 }',
+    );
+    expect(interpretedRuns).toEqual([]);
+    // No player transport is built for the roleless composed-v3 path; only the
+    // eager shared Captain/judge transport is.
+    expect(adapterBuilds).toBe(1);
+    await expect(access(target)).rejects.toThrow();
+  });
+
+  it('constructs a schema-3 artifact with exact configured options and host capabilities (cli-28)', async () => {
+    // A minimal compiled schema-3 `playbook` artifact: it reports the factory
+    // input and root session the host supplied, then writes its target.
+    await pinCompiledArtifact(
+      [
+        "import { writeFile } from 'node:fs/promises';",
+        'function createPlaybookRuntime(input) {',
+        '  let session;',
+        '  const rejection = async (call) => {',
+        '    try {',
+        '      await call();',
+        "      return 'resolved';",
+        '    } catch (error) { return error.message; }',
+        '  };',
+        '  return {',
+        '    async init(value) { session = value; },',
+        '    async handleBossInput({ text, signal }) {',
+        "      const marker = 'Request: ';",
+        '      const line = text.split(String.fromCharCode(10)).find((l) => l.startsWith(marker));',
+        '      const { target } = JSON.parse(line.slice(marker.length));',
+        '      const { configuredOptions, hostCapabilities } = input;',
+        '      const report = {',
+        '        inputKeys: Object.keys(input).sort(),',
+        '        configuredOptionKeys: Object.keys(configuredOptions).sort(),',
+        '        capabilityKeys: Object.keys(hostCapabilities).sort(),',
+        '        sessionDepth: session.depth,',
+        '        rootIsSelf: session.rootSessionId === session.sessionId,',
+        '        portNames: Object.keys(session.ports).sort(),',
+        '        ledger: hostCapabilities.effectLedger.snapshot(),',
+        '        runExclusive: await rejection(() => hostCapabilities.repository.runExclusive(() => {})),',
+        '        runDeferred: await rejection(() => hostCapabilities.repository.runDeferred(() => {})),',
+        '        writeAhead: await rejection(() => hostCapabilities.effectLedger.writeAhead({})),',
+        "        callRole: await rejection(() => session.ports.callPlayer('coder', 'x', signal, { resume: false })),",
+        '      };',
+        '      await writeFile(target, JSON.stringify(report));',
+        '      return {',
+        "        outcome: 'terminal',",
+        '        state: {',
+        "          value: 'done',",
+        "          activeStateIds: ['done'],",
+        '          tags: [],',
+        "          status: 'done',",
+        '          quiescent: true,',
+        "          stateId: 'done',",
+        '        },',
+        "        stateDescription: 'the phase wrote its artifact',",
+        '        output: null,',
+        '      };',
+        '    },',
+        '    async dispose() {},',
+        '  };',
+        '}',
+        // Playbook 10 shared factories declare their schema through an
+        // immutable own `compat` record (DR-024).
+        "Object.defineProperty(createPlaybookRuntime, 'compat', {",
+        '  value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),',
+        '  enumerable: true,',
+        '  writable: false,',
+        '  configurable: false,',
+        '});',
+        'export default createPlaybookRuntime;',
+        '',
+      ].join('\n'),
+      '@sublang/playbook@10.0.0',
+    );
+
+    const { code, out, lines, interpretedRuns, adapterBuilds } =
+      await runPinnedPhase();
+
+    const target = join(root, 'onboarding.flow', 'onboarding.gears.md');
+    expect(lines).toEqual([
+      `→ text2gears (writing ${target})`,
+      expect.stringMatching(/^✓ text2gears wrote .+ \(\d+s\)$/) as unknown,
+    ]);
+    expect(code).toBe(0);
+    expect(out).toContain(target);
+    expect(interpretedRuns).toEqual([]);
+    // The delegated-role port fails closed before any player transport is
+    // built, so only the eager shared Captain/judge transport exists.
+    expect(adapterBuilds).toBe(1);
+    // The host supplies exactly two members — empty configured options plus
+    // live capabilities whose repository and ledger-write seams fail closed —
+    // over the same six-port composed root session (DR-024).
+    expect(JSON.parse(await readFile(target, 'utf8'))).toEqual({
+      inputKeys: ['configuredOptions', 'hostCapabilities'],
+      configuredOptionKeys: [],
+      capabilityKeys: ['effectLedger', 'repository'],
+      sessionDepth: 0,
+      rootIsSelf: true,
+      portNames: [
+        'callCaptain',
+        'callJudge',
+        'callPlaybook',
+        'callPlayer',
+        'emitStatus',
+        'emitTelemetry',
+      ],
+      ledger: {
+        schemaVersion: 1,
+        revision: 0,
+        boundaries: [],
+        logicalOperations: [],
+      },
+      runExclusive:
+        'compiled composed-v3 phase host does not support repository operations',
+      runDeferred:
+        'compiled composed-v3 phase host does not support repository operations',
+      writeAhead:
+        'compiled composed-v3 phase host does not support effect-ledger writes',
+      callRole:
+        'compiled composed-v3 phase host does not support delegated role calls',
+    });
+  });
 });

@@ -223,6 +223,9 @@ function unmarkedStrictComposedRuntime(): unknown {
 }
 
 const playbook10Provenance = '@sublang/playbook@10.0.0';
+// The newest reviewed schema-1 link target: the historical generation's own
+// exact provenance, now that the installed reference package is schema-3.
+const playbook4Provenance = '@sublang/playbook@4.0.0';
 
 type Schema3FixtureKind = 'shared-factory' | 'bespoke';
 
@@ -724,6 +727,138 @@ function syntheticSchema3Compilation(roleless = false): CompiledPlaybook {
   };
 }
 
+const schema1Gears = `# Synthetic schema-1 equivalence fixture
+
+Players:
+
+- Worker
+
+## Behaviors
+
+### SYNTHETIC-1
+
+When Boss requests synthetic work, Captain shall prompt Worker:
+> Perform the synthetic work.
+`;
+
+/**
+ * A complete immutable historical schema-1 `Players` closure (verification-11).
+ *
+ * Playbook 10's released reference package is a schema-3 `Roles` compilation,
+ * so the historical generation — `invoke.input.player`, no role metadata, and
+ * a pre-10 reviewed link target — needs its own fixture. It carries exact
+ * `@sublang/playbook@4.0.0` provenance so the schema-1 continuation, not a
+ * schema-3 signal, selects the artifact schema.
+ */
+function historicalSchema1Compilation(): CompiledPlaybook {
+  const machine = setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('player actor must be supplied by the runtime');
+      }),
+    },
+  }).createMachine({
+    id: 'syntheticSchema1',
+    initial: 'ready',
+    context: {},
+    on: {
+      BOSS_INTERRUPT: [
+        {
+          target: '#work',
+          reenter: true,
+          guard: (({ event }: { event: { targetId?: unknown } }) =>
+            event.targetId === 'work') as never,
+        },
+        {
+          target: '#ready',
+          reenter: true,
+          guard: (({ event }: { event: { targetId?: unknown } }) =>
+            event.targetId === 'ready') as never,
+        },
+      ],
+    },
+    states: {
+      ready: {
+        id: 'ready',
+        tags: 'playbook.parked',
+        on: { GO: { target: '#work' } },
+      },
+      work: {
+        id: 'work',
+        tags: 'playbook.busy',
+        meta: {
+          playbook: {
+            stateId: 'work',
+            description: 'Performing synthetic work',
+          },
+        },
+        invoke: {
+          src: 'player',
+          input: () => ({
+            stateId: 'work',
+            player: 'Worker',
+            sourceItem: 'SYNTHETIC-1',
+            prompt: 'Perform the synthetic work.',
+            result: {
+              done: 'The synthetic work is complete.',
+              needsBossReply: schema3NeedsBossReply,
+            },
+          }),
+          onDone: [
+            {
+              target: '#done',
+              guard: (({
+                event,
+              }: {
+                event: { output?: { guard?: unknown } };
+              }) => event.output?.guard === 'done') as never,
+            },
+            {
+              target: '#awaitBossReply',
+              guard: (({
+                event,
+              }: {
+                event: { output?: { guard?: unknown; question?: unknown } };
+              }) =>
+                event.output?.guard === 'needsBossReply' &&
+                typeof event.output.question === 'string') as never,
+            },
+          ],
+          onError: { target: '#failed' },
+        },
+      },
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        tags: 'playbook.parked',
+        on: {
+          BOSS_REPLY: [
+            {
+              target: '#work',
+              reenter: true,
+              guard: (({ event }: { event: { answer?: unknown } }) =>
+                typeof event.answer === 'string' &&
+                event.answer.trim() !== '') as never,
+            },
+            { target: '#failed' },
+          ],
+        },
+      },
+      failed: {
+        id: 'failed',
+        tags: 'playbook.parked',
+        on: { GO: { target: '#work' } },
+      },
+      done: { id: 'done', type: 'final' },
+    },
+  } as never);
+  return {
+    gears: schema1Gears,
+    fsm: { machine },
+    playbook: {},
+    linkTargetProvenance: playbook4Provenance,
+  };
+}
+
 /** Same source contract with a grounded schema-3 controller decision FSM. */
 function syntheticControllerCompilation(
   drift?: 'missing-action' | 'extra-action',
@@ -838,13 +973,28 @@ function schema3ProfileOptions(
 describe('reference equivalence harness (verification-9)', () => {
   it('accepts the reference compared to itself', async () => {
     const reference = await loadReference();
-    expect(
-      await checkReferenceEquivalence({ produced: reference, reference }),
-    ).toEqual([]);
+    // Playbook 10.0.0's shipped reference does not satisfy its own gears2fsm
+    // definition (no exported `concurrentRoleSets` despite declaring role
+    // `coder`, and two nested `review` calls whose text is not the GEARS prompt
+    // verbatim), and it declares no BOSS_INTERRUPT targets. Comparing it to
+    // itself still establishes equivalence: every finding appears identically
+    // on both sides, so nothing distinguishes produced from reference.
+    const findings = await checkReferenceEquivalence({
+      produced: reference,
+      reference,
+    });
+    const produced = findings
+      .filter((finding) => finding.startsWith('produced: '))
+      .map((finding) => finding.slice('produced: '.length));
+    const mirrored = findings
+      .filter((finding) => finding.startsWith('reference: '))
+      .map((finding) => finding.slice('reference: '.length));
+    expect(produced).toEqual(mirrored);
+    expect(findings).toHaveLength(produced.length + mirrored.length);
   });
 
   it('accepts each matching exact runtime contract profile', async () => {
-    const reference = await loadReference();
+    const reference = historicalSchema1Compilation();
     for (const profile of ['legacy', 'session-v1', 'composed-v2'] as const) {
       const compiled = withRuntimeProfile(reference, profile);
       expect(await runtimeCapabilityProfile(compiled.playbook)).toBe(profile);
@@ -864,7 +1014,7 @@ describe('reference equivalence harness (verification-9)', () => {
   ] as const)(
     'rejects a %s vs %s runtime contract mismatch',
     async (producedProfile, referenceProfile) => {
-      const reference = await loadReference();
+      const reference = historicalSchema1Compilation();
       const findings = await checkReferenceEquivalence({
         produced: withRuntimeProfile(reference, producedProfile),
         reference: withRuntimeProfile(reference, referenceProfile),
@@ -877,9 +1027,16 @@ describe('reference equivalence harness (verification-9)', () => {
 
   it('detects the composed profile on the released reference runtime', async () => {
     const reference = await loadReference();
-    expect(await runtimeCapabilityProfile(reference.playbook)).toBe(
-      'composed-v2',
-    );
+    // Playbook 10 ships the reference as a schema-3 Captain-hosted closure, so
+    // the released runtime is reached only through its registry entry under
+    // exact 10.0.0 provenance; no probe may fall through to `composed-v2`.
+    expect(
+      await runtimeCapabilityProfile(reference.playbook, {
+        provenance: installedPlaybookProvenance,
+        registry: reference.registry,
+      }),
+    ).toBe('composed-v3');
+    expect(await runtimeCapabilityProfile(reference.playbook)).toBeNull();
   });
 
   it('distinguishes unmarked legacy and session-v1 init boundaries', async () => {
@@ -926,7 +1083,7 @@ describe('reference equivalence harness (verification-9)', () => {
   ] as const)(
     'rejects an inconsistent marker: %s',
     async (_name, playbook, expected) => {
-      const reference = await loadReference();
+      const reference = historicalSchema1Compilation();
       const compiled = { ...reference, playbook };
       expect(await runtimeCapabilityProfile(playbook)).toBeNull();
       expect(await checkPlaybookIntegrity('marked', compiled)).toContain(
@@ -974,7 +1131,7 @@ describe('reference equivalence harness (verification-9)', () => {
   });
 
   it('does not probe an unaccompanied exact schema-3 factory as composed-v2', async () => {
-    const historical = await loadReference();
+    const historical = historicalSchema1Compilation();
     const playbook = unmarkedStrictComposedRuntime() as {
       default: (...args: unknown[]) => unknown;
     };
@@ -1024,7 +1181,7 @@ describe('reference equivalence harness (verification-9)', () => {
   });
 
   it('does not use a registry artifactSchema self-declaration as schema evidence', async () => {
-    const historical = await loadReference();
+    const historical = historicalSchema1Compilation();
     const fixture = schema3Fixture({ kind: 'bespoke', interpose: false });
     const findings = await checkPlaybookIntegrity('self-declared', {
       ...historical,
@@ -1410,7 +1567,7 @@ describe('reference equivalence harness (verification-9)', () => {
   });
 
   it('rejects a composed-v3 registry mixed with the historical schema-1 closure', async () => {
-    const historical = await loadReference();
+    const historical = historicalSchema1Compilation();
     const fixture = schema3Fixture({
       kind: 'shared-factory',
       roles: ['worker'],
@@ -1464,7 +1621,7 @@ describe('reference equivalence harness (verification-9)', () => {
   )(
     'rejects a composed-v3 %s versus historical %s profile pair',
     async (kind, historicalProfile) => {
-      const reference = await loadReference();
+      const reference = historicalSchema1Compilation();
       const schema3 = syntheticSchema3Compilation();
       const fixture = schema3Fixture({
         kind,
@@ -1916,7 +2073,7 @@ describe('reference equivalence harness (verification-9)', () => {
     const drifted: CompiledPlaybook = {
       ...reference,
       gears: reference.gears.replaceAll(
-        "> Think thoroughly — don't just approve or reject.",
+        '> Do not implement a later task in this phase.',
         '> Think about it.',
       ),
     };
@@ -1924,27 +2081,40 @@ describe('reference equivalence harness (verification-9)', () => {
       produced: drifted,
       reference,
     });
-    expect(findings.join('\n')).toMatch(/lacks the line/);
-    expect(findings.join('\n')).toMatch(/adds the line "Think about it\."/);
+    expect(findings).toContain(
+      'role:coder: produced gears lacks the line "Do not implement a later task in this phase."',
+    );
+    expect(findings).toContain(
+      'role:coder: produced gears adds the line "Think about it."',
+    );
   });
 
-  it('rejects a compilation that loses a player', async () => {
+  it('rejects a compilation that loses a participant', async () => {
     const reference = await loadReference();
+    // Collapsing the authored `review` child call into another Coder prompt
+    // drops a distinct participant, the schema-3 analogue of the historical
+    // player-collapse drift.
     const drifted: CompiledPlaybook = {
       ...reference,
-      gears: reference.gears.replaceAll('Committer', 'Reviewer'),
+      gears: reference.gears.replaceAll(
+        'Captain shall call playbook `review`:',
+        'Captain shall prompt Coder:',
+      ),
     };
     const findings = await checkReferenceEquivalence({
       produced: drifted,
       reference,
     });
-    expect(findings.join('\n')).toMatch(/player sets differ/);
+    expect(findings).toContain(
+      'player sets differ: produced [role:coder] vs reference [playbook:review, role:coder]',
+    );
+    expect([...playerLineSets(drifted.gears).keys()]).toEqual(['role:coder']);
   });
 
-  it('binds the reference prompt lines to Coder, Reviewer, and Committer', async () => {
+  it('binds the reference prompt lines to the coder role and the review child', async () => {
     const reference = await loadReference();
     const players = [...playerLineSets(reference.gears).keys()].sort();
-    expect(players).toEqual(['Coder', 'Committer', 'Reviewer']);
+    expect(players).toEqual(['playbook:review', 'role:coder']);
   });
 
   it('keys nested calls by playbook target rather than Captain', () => {

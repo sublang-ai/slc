@@ -15,6 +15,7 @@ interface MachineLike {
   root?: ResolvedStateNodeLike;
 }
 interface ResolvedStateNodeLike {
+  id?: string;
   states?: Record<string, ResolvedStateNodeLike>;
   invoke?: Array<{
     id?: string;

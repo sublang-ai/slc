@@ -18,30 +18,24 @@ The second phase (spec items → state machine) is out of scope.
 | source | text   | .md       |
 | target | gears  | .md       |
 
-## Pin Inputs
+## Roles
 
-- `../../node_modules/@sublang/spex/scaffold/specs/meta.md`
-- `../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md`
-- `../../package-lock.json`
+Roles name playbook-local delegated work functions.
 
-## Players
-
-Players name AI agents and the user.
-
-Two default players:
+Two fixed actors remain outside the role list:
 
 - Boss: the human user
 - Captain: the coordinating agent
 
-Source may declare additional players in an opening `Players:` section.
-A player may alias other players with `=` and `|`; Boss picks one at runtime.
+Source may declare delegated roles in an opening `Roles:` section.
+Each role shall be unique and shall not alias another role; concrete player selection and sharing belong to explicit host configuration.
+Role names shall also be unique after canonical lowercase-id derivation, so declarations such as `Coder` and `coder` reject rather than collapse to one manifest role.
 E.g.:
 
 - Coder
 - Reviewer
-- Committer = Coder | Reviewer
 
-Capitalize English player names (e.g., `Writer`); quote non-English names (e.g., `作者`) when needed to distinguish from prose.
+Capitalize English role names (e.g., `Writer`); quote non-English names (e.g., `作者`) when needed to distinguish from prose.
 
 ## Behaviors
 
@@ -53,15 +47,15 @@ will not be visible to downstream compilers or verification.
 The behavior kind shall be one of:
 
 - direct Captain work, written `Captain shall <behavior>:` without naming a
-  delegated player;
-- delegated player work, written `Captain shall prompt <Player>:` or the
-  existing `Captain shall relay ... to <Player> ...:` form; or
+  delegated role;
+- delegated-role work, written `Captain shall prompt <Role>:` or the
+  existing `Captain shall relay ... to <Role> ...:` form; or
 - a literal or dynamic nested playbook call as defined below.
 
 Direct Captain work means the coordinating Captain performs the behavior
 itself. It shall not be rewritten as `Captain shall prompt Captain`, because
-Captain is a distinct runtime actor rather than a player binding.
-Delegated work shall name the declared player that receives the prompt.
+Captain is a distinct runtime actor rather than a role binding.
+Delegated work shall name the declared role that receives the prompt.
 Prompts shall be blockquoted, one point per line.
 When Source already supplies the complete blockquoted acting prompt for a
 behavior, text2gears shall preserve those prompt lines exactly (apart from the
@@ -70,6 +64,20 @@ invariants, result fields, or continuation mechanics into that blockquote.
 Those requirements remain in the item's condition or `Results:` metadata.
 Adding control-oriented prompt lines merely to restate them changes the
 Boss-visible contract and is nonconformant.
+
+### Authored prompt fragments
+
+Source may compose one acting prompt from authored Markdown instruction blocks and runtime context that it explicitly says to relay in quotes (`>`).
+A fenced `markdown` block introduced as an instruction or prompt is an authored static prompt fragment: its fence delimiters are Source syntax, while every interior line and blank line is prompt content preserved after documented Markdown unescaping.
+
+An instruction fence and a relayed-context fragment that apply to one behavior shall appear in the target blockquote in their Source order.
+Distinct non-empty fragments shall be separated by one blank prompt line unless Source explicitly supplies a different boundary.
+text2gears shall not move a shared instruction ahead of behavior-specific context, move quoted evidence after an instruction that Source says follows the evidence, or otherwise regroup fragments for convenience.
+
+Where Source says that a runtime value is relayed in quotes, the leading `>` is prompt content rather than Source-only blockquote syntax.
+If Source supplies a blockquoted template for that relay, text2gears shall keep one literal leading `>` on every quoted line; the target GEARS line therefore uses its outer blockquote marker followed by the literal marker, such as `> > Coder output: <coder-output>`.
+If Source names the relayed value but supplies no template, text2gears shall emit its canonical typed placeholder on a line beginning with literal `> ` and shall not summarize, paraphrase, or invent a value in its place.
+An ordinary Source blockquote that specifies a complete acting prompt without requiring quoted relay retains the existing rule above: its one leading marker is Source syntax and is not prompt content.
 
 Source statements that assign active-leaf routing, call identity, suspension,
 or return matching to the host describe execution preconditions rather than
@@ -145,6 +153,11 @@ A single-outcome producer then declares exactly one bullet naming the
 property; this consumed-output case is the sole one in which a
 single-outcome behavior carries a `Results:` label.
 
+Where a later prompt relays a delegated player's whole final response as quoted context, the producer shall declare that property in the exact annotated form `` `<field>: <verbatim final text>` ``.
+The annotation makes the field runtime-owned: the adjudicator selects the result guard, while the linked runtime carries the player's canonical final text into that field instead of asking a judge to reproduce it.
+A distinct typed field extracted from that response remains judge-authored even when a later prompt quotes its exact value; quoting a field does not turn it into the player's whole final response.
+One property name shall not be annotated as verbatim in one result contract and judge-authored in another; text2gears shall choose distinct properties or report that the Source cannot be represented by the current contract.
+
 Result metadata is compiler control data, not part of the acting agent's
 prompt.
 text2gears shall not put guard names, result-property schema, JSON control
@@ -197,10 +210,11 @@ heading.
 Every item in one parallel group shall receive the same completed-prior-group
 inputs; no item prompt may depend on another member's result from the current
 group.
-Every member shall delegate to a named player, and the source shall permit
-those members to resolve to distinct players. Direct-Captain work shares one
+Every member shall delegate to a distinct named role; a group that repeats one canonical role is malformed because one role resolves to one player.
+Direct-Captain work shares one
 Captain session and nested calls share one pending-child stack slot, so neither
-kind may receive parallel-group metadata. If Source explicitly requires either
+kind may receive parallel-group metadata.
+If Source explicitly requires either
 unsupported kind to run concurrently, text2gears shall report that the source
 cannot be represented rather than silently serialize it or emit metadata the
 next phase cannot compile.
@@ -208,11 +222,11 @@ next phase cannot compile.
 Example:
 
 ```markdown
-### DISCUSS-1
+### DECIDE-1
 
 Parallel group: initial-proposals
 
-When Boss gives a topic, Captain shall prompt Host:
+When Boss gives a topic, Captain shall prompt Coder:
 
 > Propose your design independently.
 ```
@@ -298,20 +312,21 @@ prose, acting prompts, and result descriptions follow the Source language,
 read per the matching localization of the GEARS definition [[1]].
 The four `Captain shall` acting-clause forms defined above (direct,
 delegated, nested playbook call, and script), guard names, and the
-`Players:` and `Results:` labels are fixed machine syntax and stay in this
+`Roles:` and `Results:` labels are fixed machine syntax and stay in this
 exact English form regardless of Source language.
 
 ## Transformation-spec sources
 
 A Source may itself be the normative specification of a transformation — e.g., a compiler phase definition, as when a meta pipeline compiles this file.
-Such a Source declares no players and prompts none; its implied procedure is that Captain performs the specified transformation on request.
+Such a Source declares no roles and prompts none; its implied procedure is that Captain performs the specified transformation on request.
 Compose Captain-acting spec items for it: when a transformation request names the specification's source and target, Captain shall carry out the transformation as specified.
-Prompts shall carry the specification's normative requirements as instructions to Captain — deduplicated, one point per line — without inventing players, triggers, or requirements the specification does not state.
+Prompts shall carry the specification's normative requirements as instructions to Captain — deduplicated, one point per line — without inventing roles, triggers, or requirements the specification does not state.
 
 ## Composition
 
 Source snippets may overlap or duplicate.
 When composing them into a spec item, text2gears shall deduplicate identical prompt lines.
+It shall not deduplicate across distinct authored fragments when doing so would erase a fragment boundary or change the Source-ordered prompt.
 
 Each spec item addresses one state behavior and carries its full final prompt (the static part).
 Cross-item duplication is acceptable: spec items are compiled artifacts; Source is what users maintain.
