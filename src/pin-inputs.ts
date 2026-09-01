@@ -69,7 +69,8 @@ export async function loadPinInputsFile(
  *
  * Unlike {@link loadPinInputsFile}, a member boundary failure is returned with
  * every independently valid resolved member. Structural failures still throw
- * because no trustworthy entry/member list can be recovered from them.
+ * because no trustworthy sidecar member list can be recovered; closure
+ * inspection may separately recover inline paths for conservative protection.
  */
 export async function inspectPinInputsFile(
   pipelineDir: string,

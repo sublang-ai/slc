@@ -200,7 +200,7 @@ While interpreting a phase, when the agent adds, removes, or renames a phase fil
 
 #### phase-execution-40
 
-Where a phase target aliases a source, pin index, inline- or sidecar-declared local semantic input — including one independently discovered after another locator makes closure derivation incomplete [[phase-execution-50](#phase-execution-50)] — pinned local artifact or dependency, installed verifier-support source, or other protected input, has multiple hard links, or enters an exact `.slc` or `.slc-verify` component, when the slc command runs the phase, it shall refuse before invoking the executor and leave the protected bytes unchanged [[phase-execution-39](#phase-execution-39)].
+Where a phase target aliases a source, pin index, inline- or sidecar-declared local semantic input — including one independently discovered after another locator makes closure derivation incomplete, or an inline member independently discovered despite a structurally invalid sidecar [[phase-execution-50](#phase-execution-50)] — pinned local artifact or dependency, installed verifier-support source, or other protected input, has multiple hard links, or enters an exact `.slc` or `.slc-verify` component, when the slc command runs the phase, it shall refuse before invoking the executor and leave the protected bytes unchanged [[phase-execution-39](#phase-execution-39)].
 
 #### phase-execution-41
 

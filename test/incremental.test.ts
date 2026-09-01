@@ -548,9 +548,30 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
     },
   );
 
-  it.each(['inline', 'sidecar'] as const)(
-    'protects a valid %s member declared after an invalid locator (phase-execution-50)',
-    async (declaration) => {
+  const incompleteProtectionCases: Array<
+    [label: string, inlineCitations: string[], sidecar?: string]
+  > = [
+    [
+      'inline member after an invalid locator',
+      ['../outside.md', 'references/protected.md'],
+    ],
+    [
+      'sidecar member after an invalid locator',
+      [],
+      pinInputs({
+        middle2final: ['../outside.md', 'references/protected.md'],
+      }),
+    ],
+    [
+      'inline member despite a structurally invalid sidecar',
+      ['references/protected.md'],
+      '{ not JSON',
+    ],
+  ];
+
+  it.each(incompleteProtectionCases)(
+    'protects a valid %s (phase-execution-40, phase-execution-50)',
+    async (_label, inlineCitations, sidecar) => {
       const references = join(pipelineDir, 'references');
       const protectedInput = join(references, 'protected.md');
       const middle = join(workDir, 'case.middle.md');
@@ -559,17 +580,16 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
       await writeFile(middle, 'middle input\n');
       await writeFile(
         join(pipelineDir, 'middle2final.md'),
-        declaration === 'inline'
-          ? `${phase('middle', '.md', 'final', '.md')}\n## Pin Inputs\n\n- \`../outside.md\`\n- \`references/protected.md\`\n`
-          : `${phase('middle', '.md', 'final', '.md')}\n`,
+        `${phase('middle', '.md', 'final', '.md')}${
+          inlineCitations.length === 0
+            ? ''
+            : `\n## Pin Inputs\n\n${inlineCitations
+                .map((citation) => `- \`${citation}\``)
+                .join('\n')}\n`
+        }`,
       );
-      if (declaration === 'sidecar') {
-        await writeFile(
-          join(pipelineDir, PIN_INPUTS_FILE),
-          pinInputs({
-            middle2final: ['../outside.md', 'references/protected.md'],
-          }),
-        );
+      if (sidecar !== undefined) {
+        await writeFile(join(pipelineDir, PIN_INPUTS_FILE), sidecar);
       }
       const calls: ExecuteRequest[] = [];
 
