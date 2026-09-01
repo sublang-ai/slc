@@ -1,4 +1,4 @@
-# Two-Agent Code-and-Review Workflow
+# Two-Agent Change-and-Review Workflow
 
 Roles:
 
@@ -20,6 +20,8 @@ When the current directory is the root of its own Git repository and the input t
 
 > Modify the code in the current directory as the input task requires.
 > Commit the change to Git.
+> The input task:
+> <input-task>
 
 ### WORKFLOW-3
 

@@ -1,14 +1,24 @@
 import { assign, fromPromise, setup } from 'xstate';
 
-/** 源: `Roles:` — 规范小写本地 id。 */
-export type RoleId = '编码者' | '评审者';
+/*
+ * 由 GEARS 包「用两个agent完成输入的任务」编译而来（WORKFLOW-1 .. WORKFLOW-7）。
+ *
+ * 仅对象产物：定义状态机、actor 契约与类型化输入；不绑定 runner，
+ * 也不提供任何具体的 actor 实现。
+ */
+
+/* -- 角色与稳定状态标识 --------------------------------------------------- */
+
+/** 源 `Roles:` — 规范小写本地 id（中文名小写即其自身）。 */
+export type RoleId = '编码者' | '审查者';
 
 const CODER_ROLE = '编码者';
-const REVIEWER_ROLE = '评审者';
+const REVIEWER_ROLE = '审查者';
 
-/** 源 WORKFLOW-3: 循环次数不超过 2 次。 */
+/** 源 `## 意图` / WORKFLOW-3: 循环次数不超过 2 次。 */
 const REVIEW_CYCLE_LIMIT = 2;
-/** 源 WORKFLOW-5: 至多到总计第 3 次判断后不再争论。 */
+
+/** 源 `## 意图` / WORKFLOW-5: 至多到本次循环中总计第 3 次判断后不再争论。 */
 const JUDGMENT_LIMIT = 3;
 
 /** 可被 BOSS_REPLY 恢复的工作叶（仅代理调用状态；脚本状态不注册）。 */
@@ -46,6 +56,8 @@ const DEFAULT_SINGLE_OUTCOME_DESCRIPTION =
 const AWAIT_BOSS_REPLY_DESCRIPTION =
   "Waiting for Boss to answer the acting agent's question.";
 
+/* -- 共享边界类型 --------------------------------------------------------- */
+
 export interface SerializedError {
   name: string;
   message: string;
@@ -64,15 +76,21 @@ export interface PendingBossQuestion {
   question: string;
 }
 
+/* -- player actor 契约 ---------------------------------------------------- */
+
 export interface PlayerInput {
   stateId: ResumableStateId;
   role: RoleId;
   sourceItem: string;
   prompt: string;
   result: Record<string, string>;
-  bossIntent?: string;
+  /** 支撑 WORKFLOW-2 的 `<inputTask>` 占位符。 */
+  inputTask?: string;
+  /** 支撑 WORKFLOW-4 的 `<reviewFindings>` 占位符。 */
   reviewFindings?: string;
+  /** 支撑 WORKFLOW-5 与 WORKFLOW-7 的 `<coderJudgment>` 占位符。 */
   coderJudgment?: string;
+  /** 支撑 WORKFLOW-6 的 `<reviewerRebuttal>` 占位符。 */
   reviewerRebuttal?: string;
   pendingBossQuestion?: PendingBossQuestion;
   bossReply?: string;
@@ -82,11 +100,13 @@ export type PlayerOutput =
   | { guard: 'done' }
   | { guard: 'issues'; reviewFindings: string }
   | { guard: 'clean' }
-  | { guard: 'accept' }
+  | { guard: 'accept'; coderJudgment: string }
   | { guard: 'reject'; coderJudgment: string }
   | { guard: 'dispute'; reviewerRebuttal: string }
   | { guard: 'agreed' }
   | { guard: 'needsBossReply'; question: string };
+
+/* -- script actor 契约 ---------------------------------------------------- */
 
 export interface ScriptInput {
   stateId: 'ensureRepository';
@@ -99,13 +119,19 @@ export type ScriptOutput =
   | { guard: 'ok'; exitStatus: number }
   | { guard: 'failed'; exitStatus: number };
 
+/* -- 机器输入、上下文与事件 ----------------------------------------------- */
+
 export interface WorkflowInput {
-  bossIntent?: string;
+  /** Boss 输入的任务；由入口事件携带的确切 Boss 文本填充。 */
+  inputTask?: string;
 }
 
 export interface WorkflowContext {
-  bossIntent: string;
+  /** Boss 输入的任务，支撑 WORKFLOW-2 的 `<inputTask>`。 */
+  inputTask: string;
+  /** 已开始的 review 循环次数；WORKFLOW-3 限制不超过 2 次。 */
   loopCount: number;
+  /** 本次循环中 `编码者` 已做出的判断次数；WORKFLOW-5 限制少于 3 次。 */
   judgmentCount: number;
   reviewFindings: string;
   coderJudgment: string;
@@ -116,15 +142,17 @@ export interface WorkflowContext {
 }
 
 export type WorkflowEvent =
-  | { type: 'BOSS_TASK'; bossIntent?: string }
+  | { type: 'BOSS_TASK'; inputTask?: string }
   | { type: 'BOSS_INTERRUPT'; targetId: InterruptTargetId }
-  | { type: 'BOSS_REPLY'; answer: string; questionId?: ResumableStateId };
+  | { type: 'BOSS_REPLY'; answer: string; questionId?: string };
 
 interface LeafIdentity {
   stateId: ResumableStateId;
   sourceItem: string;
   roleId: RoleId;
 }
+
+/* -- 结构化收窄辅助 ------------------------------------------------------- */
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -137,6 +165,7 @@ const readOutput = (event: unknown): Record<string, unknown> | undefined => {
   return isRecord(event.output) ? event.output : undefined;
 };
 
+/** 把未知事件的 `output` 结构化收窄到本包声明的 player 契约。 */
 const readPlayerOutput = (event: unknown): PlayerOutput | undefined => {
   const output = readOutput(event);
   if (output === undefined) return undefined;
@@ -147,13 +176,15 @@ const readPlayerOutput = (event: unknown): PlayerOutput | undefined => {
       return { guard: 'done' };
     case 'clean':
       return { guard: 'clean' };
-    case 'accept':
-      return { guard: 'accept' };
     case 'agreed':
       return { guard: 'agreed' };
     case 'issues':
       return nonEmptyString(output.reviewFindings)
         ? { guard: 'issues', reviewFindings: output.reviewFindings }
+        : undefined;
+    case 'accept':
+      return nonEmptyString(output.coderJudgment)
+        ? { guard: 'accept', coderJudgment: output.coderJudgment }
         : undefined;
     case 'reject':
       return nonEmptyString(output.coderJudgment)
@@ -175,6 +206,7 @@ const readPlayerOutput = (event: unknown): PlayerOutput | undefined => {
 const playerGuardIs = (event: unknown, guard: PlayerOutput['guard']): boolean =>
   readPlayerOutput(event)?.guard === guard;
 
+/** 把未知事件的 `output` 结构化收窄到本包声明的 script 契约。 */
 const readScriptOutput = (event: unknown): ScriptOutput | undefined => {
   const output = readOutput(event);
   if (output === undefined) return undefined;
@@ -187,9 +219,9 @@ const readScriptOutput = (event: unknown): ScriptOutput | undefined => {
   return undefined;
 };
 
-const readBossTaskIntent = (event: unknown): string | undefined => {
+const readBossTaskInput = (event: unknown): string | undefined => {
   if (!isRecord(event) || event.type !== 'BOSS_TASK') return undefined;
-  return nonEmptyString(event.bossIntent) ? event.bossIntent : undefined;
+  return nonEmptyString(event.inputTask) ? event.inputTask : undefined;
 };
 
 const readBossReply = (
@@ -229,6 +261,8 @@ const normalizeError = (error: unknown): SerializedError => {
   };
 };
 
+/* -- Boss 控制辅助 -------------------------------------------------------- */
+
 /** 进入 targetId 所需的类型化上下文前置条件（源条件）。 */
 const canEnterTarget = (
   context: WorkflowContext,
@@ -236,7 +270,7 @@ const canEnterTarget = (
 ): boolean => {
   switch (stateId) {
     case 'implementChange':
-      return nonEmptyString(context.bossIntent);
+      return nonEmptyString(context.inputTask);
     case 'reviewCommit':
       return context.loopCount < REVIEW_CYCLE_LIMIT;
     case 'judgeFindings':
@@ -249,7 +283,7 @@ const canEnterTarget = (
     case 'rejudgeRebuttal':
       return nonEmptyString(context.reviewerRebuttal);
     case 'reviseByConclusion':
-      return context.judgmentCount >= 1;
+      return nonEmptyString(context.coderJudgment);
   }
 };
 
@@ -287,10 +321,12 @@ const bossInterrupts = (ids: readonly InterruptTargetId[]) =>
   );
 
 const bossTaskEntry = {
-  guard: 'hasBossIntent',
+  guard: 'hasInputTask',
   target: '#ensureRepository',
   actions: ['applyBossTask', 'clearBossReplyContext'],
 } as const;
+
+/* -- 状态机 --------------------------------------------------------------- */
 
 export const workflowMachine = setup({
   types: {
@@ -307,11 +343,10 @@ export const workflowMachine = setup({
     }),
   },
   guards: {
-    hasBossIntent: ({ context, event }) =>
-      nonEmptyString(readBossTaskIntent(event) ?? context.bossIntent),
+    hasInputTask: ({ context, event }) =>
+      nonEmptyString(readBossTaskInput(event) ?? context.inputTask),
     isScriptOk: ({ event }) => readScriptOutput(event)?.guard === 'ok',
     isScriptFailed: ({ event }) => readScriptOutput(event)?.guard === 'failed',
-    isDone: ({ event }) => playerGuardIs(event, 'done'),
     isIssues: ({ event }) => playerGuardIs(event, 'issues'),
     isClean: ({ event }) => playerGuardIs(event, 'clean'),
     isAccept: ({ event }) => playerGuardIs(event, 'accept'),
@@ -349,12 +384,13 @@ export const workflowMachine = setup({
   },
   actions: {
     applyBossTask: assign(({ context, event }) => ({
-      bossIntent: readBossTaskIntent(event) ?? context.bossIntent,
+      inputTask: readBossTaskInput(event) ?? context.inputTask,
       loopCount: 0,
       judgmentCount: 0,
       reviewFindings: '',
       coderJudgment: '',
       reviewerRebuttal: '',
+      lastError: undefined,
     })),
     beginReviewCycle: assign({
       loopCount: ({ context }) => context.loopCount + 1,
@@ -371,7 +407,8 @@ export const workflowMachine = setup({
     }),
     rememberCoderJudgment: assign(({ event }) => {
       const output = readPlayerOutput(event);
-      return output !== undefined && output.guard === 'reject'
+      return output !== undefined &&
+        (output.guard === 'accept' || output.guard === 'reject')
         ? { coderJudgment: output.coderJudgment }
         : {};
     }),
@@ -411,7 +448,7 @@ export const workflowMachine = setup({
       return {
         lastError: {
           name: 'ScriptNonZeroExit',
-          message: `WORKFLOW-1 的命令以非 0 状态退出（exitStatus: ${exitStatus}）。`,
+          message: `WORKFLOW-1 的命令以非零状态码退出（exitStatus: ${exitStatus}）。`,
         },
       };
     }),
@@ -432,7 +469,7 @@ export const workflowMachine = setup({
 }).createMachine({
   id: 'workflowZh',
   context: ({ input }): WorkflowContext => ({
-    bossIntent: input.bossIntent ?? '',
+    inputTask: input.inputTask ?? '',
     loopCount: 0,
     judgmentCount: 0,
     reviewFindings: '',
@@ -461,13 +498,13 @@ export const workflowMachine = setup({
     ensureRepository: {
       id: 'ensureRepository',
       description:
-        '当 Boss 给出输入的任务时，确保当前目录是 Git 仓库的根目录。',
+        '当 Boss 给出输入的任务、工作尚未开始时，确保当前目录本身是 Git 仓库的根目录。',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
           stateId: 'ensureRepository',
           description:
-            '当 Boss 给出输入的任务时，确保当前目录是 Git 仓库的根目录。',
+            '当 Boss 给出输入的任务、工作尚未开始时，确保当前目录本身是 Git 仓库的根目录。',
         },
       },
       invoke: {
@@ -477,8 +514,8 @@ export const workflowMachine = setup({
           sourceItem: 'WORKFLOW-1',
           command: '[ -e .git ] || git init',
           result: {
-            ok: '命令以状态 0 退出。',
-            failed: '命令以非 0 状态退出。',
+            ok: '命令以状态码零退出。',
+            failed: '命令以非零状态码退出。',
           },
         }),
         onDone: [
@@ -496,13 +533,13 @@ export const workflowMachine = setup({
     implementChange: {
       id: 'implementChange',
       description:
-        '当 Git 仓库准备就绪时，由 `编码者` 按任务要求修改代码并提交 Git。',
+        '当 Git 仓库准备就绪时，由 `编码者` 按 Boss 输入的任务要求修改代码并提交 Git。',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
           stateId: 'implementChange',
           description:
-            '当 Git 仓库准备就绪时，由 `编码者` 按任务要求修改代码并提交 Git。',
+            '当 Git 仓库准备就绪时，由 `编码者` 按 Boss 输入的任务要求修改代码并提交 Git。',
           role: CODER_ROLE,
         },
       },
@@ -515,18 +552,25 @@ export const workflowMachine = setup({
           prompt: [
             '按 Boss 输入的任务要求对当前目录的代码进行修改。',
             '将修改提交Git。',
+            '输入的任务：',
+            '<inputTask>',
           ].join('\n'),
           result: {
             done: DEFAULT_SINGLE_OUTCOME_DESCRIPTION,
             needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
           },
-          bossIntent: context.bossIntent,
+          inputTask: context.inputTask,
           ...bossReplyFields(context, 'implementChange'),
         }),
         onDone: [
           {
-            guard: 'isDone',
+            guard: 'isDoneAndCycleAvailable',
             target: 'reviewCommit',
+            actions: ['clearBossReplyContext'],
+          },
+          {
+            guard: 'isDoneAndCycleLimitReached',
+            target: 'cycleLimitReached',
             actions: ['clearBossReplyContext'],
           },
           {
@@ -551,14 +595,14 @@ export const workflowMachine = setup({
     reviewCommit: {
       id: 'reviewCommit',
       description:
-        '当 `编码者` 完成一次提交时，由 `评审者` review 该 commit 并提出合理问题。',
+        '如果已进行的循环次数少于 2 次，当 `编码者` 完成一次提交时，由 `审查者` review 该 commit 并提出合理问题。',
       tags: ['playbook.busy'],
       entry: ['beginReviewCycle'],
       meta: {
         playbook: {
           stateId: 'reviewCommit',
           description:
-            '当 `编码者` 完成一次提交时，由 `评审者` review 该 commit 并提出合理问题。',
+            '如果已进行的循环次数少于 2 次，当 `编码者` 完成一次提交时，由 `审查者` review 该 commit 并提出合理问题。',
           role: REVIEWER_ROLE,
         },
       },
@@ -574,7 +618,7 @@ export const workflowMachine = setup({
           ].join('\n'),
           result: {
             issues:
-              '`评审者` 提出了问题，交回 `编码者` 做判断。输出应包含 `reviewFindings: <评审者提出的全部问题>`。',
+              '`审查者` 提出了问题，交回 `编码者` 做判断。输出应包含 `reviewFindings: <verbatim final text>`。',
             clean: 'review 没有任何问题，流程结束。',
             needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
           },
@@ -613,14 +657,14 @@ export const workflowMachine = setup({
     judgeFindings: {
       id: 'judgeFindings',
       description:
-        '当 `评审者` 提出的问题交回 `编码者` 做判断时，由 `编码者` 接受或拒绝并讲清楚原因。',
+        '当 `审查者` 把提出的问题交回 `编码者` 做判断时，由 `编码者` 接受或拒绝并讲清楚原因。',
       tags: ['playbook.busy'],
       entry: ['countJudgment'],
       meta: {
         playbook: {
           stateId: 'judgeFindings',
           description:
-            '当 `评审者` 提出的问题交回 `编码者` 做判断时，由 `编码者` 接受或拒绝并讲清楚原因。',
+            '当 `审查者` 把提出的问题交回 `编码者` 做判断时，由 `编码者` 接受或拒绝并讲清楚原因。',
           role: CODER_ROLE,
         },
       },
@@ -631,14 +675,15 @@ export const workflowMachine = setup({
           role: CODER_ROLE,
           sourceItem: 'WORKFLOW-4',
           prompt: [
-            '以下是 `评审者` 提出的问题：',
+            '以下是 `审查者` 对你的提交提出的问题：',
             '<reviewFindings>',
             '对这些问题做判断：可以接受或拒绝，但要讲清楚原因。',
           ].join('\n'),
           result: {
-            accept: '`编码者` 接受了 `评审者` 的问题，双方达成一致。',
+            accept:
+              '`编码者` 接受了 `审查者` 的问题，双方达成一致。输出应包含 `coderJudgment: <verbatim final text>`。',
             reject:
-              '`编码者` 拒绝了 `评审者` 的问题，并讲清楚了原因。输出应包含 `coderJudgment: <编码者的判断及其原因>`。',
+              '`编码者` 拒绝了 `审查者` 的问题，并讲清楚了原因。输出应包含 `coderJudgment: <verbatim final text>`。',
             needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
           },
           reviewFindings: context.reviewFindings,
@@ -648,7 +693,7 @@ export const workflowMachine = setup({
           {
             guard: 'isAccept',
             target: 'reviseByConclusion',
-            actions: ['clearBossReplyContext'],
+            actions: ['rememberCoderJudgment', 'clearBossReplyContext'],
           },
           {
             guard: 'isRejectAndDebatable',
@@ -682,13 +727,13 @@ export const workflowMachine = setup({
     debateJudgment: {
       id: 'debateJudgment',
       description:
-        '如果判断次数少于 3 次，当 `编码者` 拒绝问题时，由 `评审者` 与其争论直至达成一致。',
+        '如果 `编码者` 在本次循环中的判断次数少于 3 次，当其拒绝问题时，由 `审查者` 判断是否同意并与其争论。',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
           stateId: 'debateJudgment',
           description:
-            '如果判断次数少于 3 次，当 `编码者` 拒绝问题时，由 `评审者` 与其争论直至达成一致。',
+            '如果 `编码者` 在本次循环中的判断次数少于 3 次，当其拒绝问题时，由 `审查者` 判断是否同意并与其争论。',
           role: REVIEWER_ROLE,
         },
       },
@@ -701,12 +746,13 @@ export const workflowMachine = setup({
           prompt: [
             '以下是 `编码者` 的判断及其原因：',
             '<coderJudgment>',
-            '与 `编码者` 争论，直至达成一致。',
+            '判断你是否同意 `编码者` 的判断。',
+            '若不同意，就与 `编码者` 争论，直至达成一致。',
           ].join('\n'),
           result: {
             dispute:
-              '尚未达成一致，`评审者` 继续争论。输出应包含 `reviewerRebuttal: <评审者继续争论的理由>`。',
-            agreed: '双方达成一致。',
+              '`审查者` 不同意 `编码者` 的判断，继续与其争论。输出应包含 `reviewerRebuttal: <verbatim final text>`。',
+            agreed: '`审查者` 同意 `编码者` 的判断，双方达成一致。',
             needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
           },
           coderJudgment: context.coderJudgment,
@@ -745,14 +791,14 @@ export const workflowMachine = setup({
     rejudgeRebuttal: {
       id: 'rejudgeRebuttal',
       description:
-        '当 `评审者` 继续争论时，由 `编码者` 再次接受或拒绝并讲清楚原因。',
+        '当 `审查者` 继续与 `编码者` 争论时，由 `编码者` 再次接受或拒绝并讲清楚原因。',
       tags: ['playbook.busy'],
       entry: ['countJudgment'],
       meta: {
         playbook: {
           stateId: 'rejudgeRebuttal',
           description:
-            '当 `评审者` 继续争论时，由 `编码者` 再次接受或拒绝并讲清楚原因。',
+            '当 `审查者` 继续与 `编码者` 争论时，由 `编码者` 再次接受或拒绝并讲清楚原因。',
           role: CODER_ROLE,
         },
       },
@@ -763,14 +809,15 @@ export const workflowMachine = setup({
           role: CODER_ROLE,
           sourceItem: 'WORKFLOW-6',
           prompt: [
-            '以下是 `评审者` 继续争论的理由：',
+            '以下是 `审查者` 继续争论的理由：',
             '<reviewerRebuttal>',
-            '再次做判断：可以接受或拒绝，但要讲清楚原因。',
+            '再次对 `审查者` 的问题做判断：可以接受或拒绝，但要讲清楚原因。',
           ].join('\n'),
           result: {
-            accept: '`编码者` 接受了 `评审者` 的理由，双方达成一致。',
+            accept:
+              '`编码者` 接受了 `审查者` 的理由，双方达成一致。输出应包含 `coderJudgment: <verbatim final text>`。',
             reject:
-              '`编码者` 仍然拒绝，并讲清楚了原因。输出应包含 `coderJudgment: <编码者的判断及其原因>`。',
+              '`编码者` 仍然拒绝，并讲清楚了原因。输出应包含 `coderJudgment: <verbatim final text>`。',
             needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
           },
           reviewerRebuttal: context.reviewerRebuttal,
@@ -780,7 +827,7 @@ export const workflowMachine = setup({
           {
             guard: 'isAccept',
             target: 'reviseByConclusion',
-            actions: ['clearBossReplyContext'],
+            actions: ['rememberCoderJudgment', 'clearBossReplyContext'],
           },
           {
             guard: 'isRejectAndDebatable',
@@ -814,13 +861,13 @@ export const workflowMachine = setup({
     reviseByConclusion: {
       id: 'reviseByConclusion',
       description:
-        '当双方达成一致，或 `编码者` 已做出总计第 3 次判断而不再争论时，由 `编码者` 按结论修改代码并再次提交。',
+        '当双方达成一致，或 `编码者` 已做出本次循环中总计第 3 次判断而不再争论时，由 `编码者` 按结论修改代码并再次提交。',
       tags: ['playbook.busy'],
       meta: {
         playbook: {
           stateId: 'reviseByConclusion',
           description:
-            '当双方达成一致，或 `编码者` 已做出总计第 3 次判断而不再争论时，由 `编码者` 按结论修改代码并再次提交。',
+            '当双方达成一致，或 `编码者` 已做出本次循环中总计第 3 次判断而不再争论时，由 `编码者` 按结论修改代码并再次提交。',
           role: CODER_ROLE,
         },
       },
@@ -830,11 +877,17 @@ export const workflowMachine = setup({
           stateId: 'reviseByConclusion',
           role: CODER_ROLE,
           sourceItem: 'WORKFLOW-7',
-          prompt: ['按结论修改代码。', '再次提交。'].join('\n'),
+          prompt: [
+            '以下是本次 review 的结论：',
+            '<coderJudgment>',
+            '按结论修改当前目录的代码。',
+            '将修改再次提交Git。',
+          ].join('\n'),
           result: {
             done: DEFAULT_SINGLE_OUTCOME_DESCRIPTION,
             needsBossReply: NEEDS_BOSS_REPLY_DESCRIPTION,
           },
+          coderJudgment: context.coderJudgment,
           ...bossReplyFields(context, 'reviseByConclusion'),
         }),
         onDone: [
@@ -886,12 +939,12 @@ export const workflowMachine = setup({
     },
     failed: {
       id: 'failed',
-      description: '流程失败，等待 Boss 以新的任务恢复。',
+      description: '流程失败，等待 Boss 以新的输入任务恢复。',
       tags: ['playbook.parked'],
       meta: {
         playbook: {
           stateId: 'failed',
-          description: '流程失败，等待 Boss 以新的任务恢复。',
+          description: '流程失败，等待 Boss 以新的输入任务恢复。',
         },
       },
       on: {
@@ -912,11 +965,13 @@ export const workflowMachine = setup({
     cycleLimitReached: {
       id: 'cycleLimitReached',
       type: 'final',
-      description: '循环次数已达 2 次上限，review 未确认无问题，流程结束。',
+      description:
+        '循环次数已达 2 次上限，最后一次提交未经 review 确认无问题，流程结束。',
       meta: {
         playbook: {
           stateId: 'cycleLimitReached',
-          description: '循环次数已达 2 次上限，review 未确认无问题，流程结束。',
+          description:
+            '循环次数已达 2 次上限，最后一次提交未经 review 确认无问题，流程结束。',
         },
       },
     },

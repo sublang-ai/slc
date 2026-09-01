@@ -27,11 +27,16 @@ const PINNED = {
         },
         {
           index: 1,
-          target: 'awaitBossReply',
+          target: 'cycleLimitReached',
           guarded: true,
         },
         {
           index: 2,
+          target: 'awaitBossReply',
+          guarded: true,
+        },
+        {
+          index: 3,
           target: 'failed',
           guarded: false,
         },
@@ -50,7 +55,7 @@ const PINNED = {
       actor: 'player',
       sourceItem: 'WORKFLOW-3',
       player: '',
-      role: '评审者',
+      role: '审查者',
       resultKeys: ['clean', 'issues', 'needsBossReply'],
       onDone: [
         {
@@ -131,7 +136,7 @@ const PINNED = {
       actor: 'player',
       sourceItem: 'WORKFLOW-5',
       player: '',
-      role: '评审者',
+      role: '审查者',
       resultKeys: ['agreed', 'dispute', 'needsBossReply'],
       onDone: [
         {

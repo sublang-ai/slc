@@ -21,17 +21,17 @@ const CONTRACT = [
     sourceItem: 'WORKFLOW-2',
     player: '',
     role: '编码者',
-    reads: ['bossIntent', 'pendingBossQuestion'],
+    reads: ['inputTask', 'pendingBossQuestion'],
     wires: {
-      bossIntent: ['bossIntent'],
+      inputTask: ['inputTask'],
     },
-    placeholders: [],
+    placeholders: ['<inputTask>'],
   },
   {
     state: 'reviewCommit',
     sourceItem: 'WORKFLOW-3',
     player: '',
-    role: '评审者',
+    role: '审查者',
     reads: ['pendingBossQuestion'],
     wires: {},
     placeholders: [],
@@ -51,7 +51,7 @@ const CONTRACT = [
     state: 'debateJudgment',
     sourceItem: 'WORKFLOW-5',
     player: '',
-    role: '评审者',
+    role: '审查者',
     reads: ['coderJudgment', 'pendingBossQuestion'],
     wires: {
       coderJudgment: ['coderJudgment'],
@@ -74,9 +74,11 @@ const CONTRACT = [
     sourceItem: 'WORKFLOW-7',
     player: '',
     role: '编码者',
-    reads: ['pendingBossQuestion'],
-    wires: {},
-    placeholders: [],
+    reads: ['coderJudgment', 'pendingBossQuestion'],
+    wires: {
+      coderJudgment: ['coderJudgment'],
+    },
+    placeholders: ['<coderJudgment>'],
   },
 ];
 const SCHEMA_FINDINGS = [];
@@ -91,12 +93,12 @@ describe('workflow.zh: prompt contract', () => {
   });
 
   const PLAYER_SUBSTITUTED = {
-    implementChange: [],
+    implementChange: ['<inputTask>'],
     reviewCommit: [],
     judgeFindings: ['<reviewFindings>'],
     debateJudgment: ['<coderJudgment>'],
     rejudgeRebuttal: ['<reviewerRebuttal>'],
-    reviseByConclusion: [],
+    reviseByConclusion: ['<coderJudgment>'],
   };
 
   const composePlayer = (

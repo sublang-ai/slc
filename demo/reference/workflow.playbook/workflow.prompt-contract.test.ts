@@ -21,12 +21,13 @@ const CONTRACT = [
     sourceItem: 'WORKFLOW-2',
     player: '',
     role: 'coder',
-    reads: ['bossReply', 'pendingBossQuestion'],
+    reads: ['bossReply', 'inputTask', 'pendingBossQuestion'],
     wires: {
+      inputTask: ['inputTask'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
-    placeholders: [],
+    placeholders: ['<input-task>'],
   },
   {
     state: 'review',
@@ -105,7 +106,7 @@ describe('workflow: prompt contract', () => {
   });
 
   const PLAYER_SUBSTITUTED = {
-    implement: [],
+    implement: ['<input-task>'],
     review: [],
     judgeFindings: ['<reviewFindings>'],
     argue: ['<coderJudgment>'],

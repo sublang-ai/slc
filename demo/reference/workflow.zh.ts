@@ -14,7 +14,7 @@ type HostCapabilities = FactoryInput['hostCapabilities'];
 
 const ALLOWED_OPTION_KEYS: readonly string[] = ['cwd'];
 
-const REQUIRED_ROLE_IDS: readonly string[] = ['编码者', '评审者'];
+const REQUIRED_ROLE_IDS: readonly string[] = ['编码者', '审查者'];
 
 const ROLE_ID_BY_RESOLVED: ReadonlyMap<string, string> = new Map(
   REQUIRED_ROLE_IDS.map((id): [string, string] => [id.toLowerCase(), id]),
@@ -85,7 +85,7 @@ function validateOptions(value: unknown): RuntimeOptions {
 const entry = {
   id: 'workflow.zh',
   command: 'workflow.zh',
-  intent: '用两个agent完成输入的任务 — Roles:',
+  intent: 'Roles:',
   artifactSchema: 3,
   runtimeProfile: 'composed-v3',
   concurrentRoleSets: [] as readonly (readonly string[])[],
