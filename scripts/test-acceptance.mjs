@@ -24,9 +24,11 @@
  *
  * The compile stage uses the maintainer's own slc agent configuration
  * (`~/.config/slc/config.yaml`, or `SLC_AGENT`/`SLC_MODEL`/`SLC_EFFORT`); the
- * run stage binds every role explicitly — `claude` unless `ACCEPTANCE_PLAYER`
- * / `ACCEPTANCE_CAPTAIN` name `<adapter>[:<model>][@<effort>]` specs — so the
- * maintainer's own `run.*` playbook config never changes what the gate tests.
+ * run stage writes a scratch Playbook configuration that enables the compiled
+ * entry and binds every role and the Captain explicitly — `claude` unless
+ * `ACCEPTANCE_PLAYER` / `ACCEPTANCE_CAPTAIN` name
+ * `<adapter>[:<model>][@<effort>]` specs — so the maintainer's own playbook
+ * config never changes what the gate tests.
  */
 
 import { execFileSync, spawn } from 'node:child_process';
@@ -46,12 +48,14 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { stringify } from 'yaml';
+
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
-// Playbook 4 installs no agent SDK (DR-020): cligent declares them as
-// optional peers, so a consumer's closure carries none. Which package backs
-// which adapter is cligent's to publish, so read it from the descriptor
-// rather than restating a map that could drift.
+// Playbook 10 installs no agent SDK (the DR-020 topology, retained by
+// DR-024): cligent declares them as optional peers, so a consumer's closure
+// carries none. Which package backs which adapter is cligent's to publish, so
+// read it from the descriptor rather than restating a map that could drift.
 const { AGENT_RUNTIME_TARGETS } = await import('@sublang/cligent');
 const args = new Set(process.argv.slice(2));
 
@@ -124,6 +128,22 @@ function specAdapter(spec) {
   return spec.split('@')[0].split(':')[0];
 }
 
+/**
+ * Splits an `<adapter>[:<model>][@<effort>]` spec into an inline agent block
+ * for the scratch Playbook configuration.
+ */
+function agentBlock(spec) {
+  const [head, ...effortParts] = spec.split('@');
+  const [adapter, ...modelParts] = head.split(':');
+  const model = modelParts.join(':');
+  const effort = effortParts.join('@');
+  return {
+    adapter,
+    ...(model === '' ? {} : { model }),
+    ...(effort === '' ? {} : { effort }),
+  };
+}
+
 /** The spec bound to every required role, overridable per run. */
 function playerSpec() {
   return process.env.ACCEPTANCE_PLAYER ?? DEFAULT_AGENT;
@@ -137,10 +157,10 @@ function captainSpec() {
 /**
  * The CLIs this run will actually invoke.
  *
- * The gate binds every role explicitly ({@link runStage}), so this is exactly
- * the set the run will invoke — the maintainer's own `run.*` playbook config
- * never participates, and the check cannot ask for an agent the run will not
- * use or miss one it will.
+ * The gate binds every role explicitly in a scratch configuration
+ * ({@link runStage}), so this is exactly the set the run will invoke — the
+ * maintainer's own playbook config never participates, and the check cannot
+ * ask for an agent the run will not use or miss one it will.
  */
 function requiredAgentClis() {
   const adapters = new Set(
@@ -298,7 +318,7 @@ function installCandidate(scratch) {
   if (absent !== '') {
     fail(
       `the installed cligent cannot find ${absent}`,
-      'playbook 4 supplies no agent SDK; the consumer install must',
+      'playbook 10 supplies no agent SDK; the consumer install must',
     );
   }
   ok(
@@ -534,20 +554,28 @@ function referenceSource() {
  * `source` names what to run: the artifacts the compile stage just produced
  * (the default, so the gate proves this compiler's own output executes), or
  * the committed reference set when `--run-only` skips the compile.
+ *
+ * Playbook 10 removed the positional registry-module argument from
+ * `playbook run` (DR-024): the gate enables the entry in a scratch
+ * configuration under `playbooks.<id>.from`, binds every declared role to its
+ * own explicitly configured player plus the Captain, points the installed
+ * host at that configuration alone through `XDG_CONFIG_HOME`, and invokes
+ * the entry's effective slash command (release-17).
  */
-function runStage(consumer, source) {
+function runStage(consumer, scratch, source) {
   step(`run the ${source.label} playbook with real agents`);
   const playbook = installedBin(consumer, '@sublang/playbook', 'playbook');
 
   const work = join(consumer, 'run');
   mkdirSync(work);
-  cpSync(source.entry, join(work, `${source.basename}.ts`));
+  const entryPath = join(work, `${source.basename}.ts`);
+  cpSync(source.entry, entryPath);
   cpSync(source.bundle, join(work, `${source.basename}.playbook`), {
     recursive: true,
   });
   cpSync(join(repoRoot, 'demo', 'sample.c'), join(work, 'sample.c'));
 
-  const roles = JSON.parse(
+  const described = JSON.parse(
     execFileSync(
       process.execPath,
       [
@@ -555,50 +583,89 @@ function runStage(consumer, source) {
         '--eval',
         [
           `const entry = (await import('./${source.basename}.ts')).default;`,
-          'process.stdout.write(JSON.stringify(entry.requiredRoleIds ?? []));',
+          'process.stdout.write(JSON.stringify({',
+          '  command: entry.command ?? entry.id,',
+          '  roles: entry.requiredRoleIds ?? [],',
+          '}));',
         ].join('\n'),
       ],
       { cwd: work, encoding: 'utf8' },
     ),
   );
+  const roles = described.roles;
   if (roles.length === 0) fail('the entry under test declares no roles');
   ok('entry declares its required roles', roles.join(', '));
 
-  // Bind every role explicitly rather than letting any stay unset: `playbook
-  // run` resolves an unset role through the maintainer's own `run.player`,
-  // `run.players`, and `run.captain` config before its built-in fallback, so
-  // an implicit lineup would make both this run and the prerequisite check
-  // depend on a personal file. Flags outrank that config, so the gate is the
-  // same on every machine.
-  const lineup = [];
-  for (const role of roles) {
-    lineup.push('--player', `${role}=${playerSpec()}`);
-  }
-  lineup.push('--captain', captainSpec());
+  // Enable and bind the entry in a scratch Playbook configuration rather than
+  // letting any role stay unset: the host reads one config at
+  // `${XDG_CONFIG_HOME:-~/.config}/playbook/playbook.config.yaml`, so an
+  // isolated XDG_CONFIG_HOME makes the run independent of the maintainer's
+  // personal file and the gate the same on every machine. Each role binds its
+  // own stable player, keeping role conversations isolated like the old
+  // per-role bindings. (The override reaches spawned agent CLIs too; the
+  // supported adapters keep their auth under HOME-based paths, so sign-in
+  // state is unaffected.)
+  const configHome = join(scratch, 'config-home');
+  const players = {};
+  const bindings = {};
+  roles.forEach((role, index) => {
+    const playerId = `acceptance.role-${index + 1}`;
+    players[playerId] = agentBlock(playerSpec());
+    bindings[role] = playerId;
+  });
+  const configPath = join(configHome, 'playbook', 'playbook.config.yaml');
+  mkdirSync(dirname(configPath), { recursive: true });
+  writeFileSync(
+    configPath,
+    stringify({
+      captain: agentBlock(captainSpec()),
+      players,
+      playbooks: {
+        [described.command]: {
+          from: entryPath,
+          roles: bindings,
+        },
+      },
+    }),
+  );
   ok(
-    'lineup bound explicitly',
+    'lineup bound explicitly in a scratch config',
     `players ${playerSpec()}, captain ${captainSpec()}`,
   );
 
   const started = Date.now();
   const stdout = execFileSync(
     process.execPath,
-    [playbook, 'run', `./${source.basename}.ts`, RUN_TASK, ...lineup, '--json'],
-    { cwd: work, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] },
+    [playbook, 'run', '--json', `/${described.command} ${RUN_TASK}`],
+    {
+      cwd: work,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'inherit'],
+      env: { ...process.env, XDG_CONFIG_HOME: configHome },
+    },
   );
   ok(
     'playbook run exited zero',
     `${Math.round((Date.now() - started) / 1000)}s`,
   );
 
+  // `--json` prints exactly one `{"sessionId":"…","reply":"…"}` object; the
+  // reached final state's meaning arrives as the Captain's Boss-facing reply
+  // prose, so the terminal evidence this gate pins is behavioral — the
+  // scripted repository, the landed commits, and the repaired sample below.
   const envelope = JSON.parse(stdout.slice(stdout.lastIndexOf('\n{') + 1));
-  if (envelope.outcome !== 'terminal') {
+  if (
+    typeof envelope.sessionId !== 'string' ||
+    envelope.sessionId === '' ||
+    typeof envelope.reply !== 'string' ||
+    envelope.reply === ''
+  ) {
     fail(
-      'run did not reach a terminal outcome',
-      JSON.stringify(envelope).slice(0, 200),
+      'playbook run did not print the sessionId/reply envelope',
+      stdout.slice(0, 200),
     );
   }
-  ok('reached the terminal outcome');
+  ok('Captain replied', envelope.reply.slice(0, 80).replaceAll('\n', ' '));
 
   if (!existsSync(join(work, '.git'))) {
     fail('the scripted step did not initialize a repository');
@@ -652,7 +719,7 @@ try {
   const compiled = runCompile ? compileStage(consumer) : referenceSource();
   if (runCompile) await upToDateStage(consumer, compiled);
   if (runUpdate) await updateStage(consumer, compiled);
-  if (runWorkflow) runStage(consumer, compiled);
+  if (runWorkflow) runStage(consumer, scratch, compiled);
   console.log(
     `\nacceptance passed (${[
       runCompile ? 'compile + reuse' : null,

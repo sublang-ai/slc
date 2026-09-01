@@ -124,26 +124,63 @@ try {
     join(consumer, 'workflow.playbook'),
     { recursive: true },
   );
-  // Drive one Boss turn from the consumer project (release-18). The repo's
-  // demo checker already exercises this boundary against the working tree;
-  // doing it here proves the *published* dependency closure runs, so a
-  // package that installs but cannot execute its own emitted entry fails
-  // before publication. Fake ports keep it deterministic and agent-free —
-  // the scripted Git state is the only actor that does real work.
+  // Exercise the quiescent schema-3 consumer lifecycle from the installed
+  // project (release-18): import the committed reference entry through its
+  // artifact-local dependencies, construct its runtime once with validated
+  // configured options and exact live host capabilities, initialize one
+  // causal-root session, and dispose it. No compiled Boss turn runs here —
+  // SLC does not substitute for Playbook's governed repository and
+  // effect-ledger protocol (DR-024); compiled-turn execution belongs to the
+  // opt-in acceptance gate. This still proves the *published* dependency
+  // closure resolves the shared engine beside the artifact, loads the
+  // emitted entry, and honors the exact two-argument schema-3 boundary.
   mkdirSync(join(consumer, 'work'));
   writeFileSync(
     join(consumer, 'smoke.mjs'),
     [
-      "import { access } from 'node:fs/promises';",
       "import { join } from 'node:path';",
       "await import('@sublang/slc');",
       "await import('@sublang/slc/verify');",
       "const entry = (await import('./workflow.ts')).default;",
       "if (entry.id !== 'workflow') throw new Error('external entry did not load');",
+      "if (entry.artifactSchema !== 3 || entry.runtimeProfile !== 'composed-v3') {",
+      "  throw new Error('installed entry does not advertise the schema-3 composed-v3 contract');",
+      '}',
+      'if (entry.createRuntime.length !== 2) {',
+      "  throw new Error('installed entry does not separate configured options from host capabilities');",
+      '}',
       "const workdir = join(process.cwd(), 'work');",
-      'const seenPlayers = [];',
-      'const judgeReplies = [\'{"guard":"done"}\', \'{"guard":"clean"}\'];',
-      'const runtime = entry.createRuntime({ captainOptions: { cwd: workdir } });',
+      'const governedUses = [];',
+      'const failGoverned = (name) => async () => {',
+      '  governedUses.push(name);',
+      '  throw new Error(`${name} must not be used without a Boss turn`);',
+      '};',
+      'const runtime = entry.createRuntime(',
+      '  { captainOptions: { cwd: workdir } },',
+      '  {',
+      '    repository: {',
+      "      runExclusive: failGoverned('repository.runExclusive'),",
+      "      runDeferred: failGoverned('repository.runDeferred'),",
+      '    },',
+      '    effectLedger: {',
+      '      snapshot: () => ({',
+      '        schemaVersion: 1,',
+      '        revision: 0,',
+      '        boundaries: [],',
+      '        logicalOperations: [],',
+      '      }),',
+      "      writeAhead: failGoverned('effectLedger.writeAhead'),",
+      '    },',
+      '  },',
+      ');',
+      "if (typeof runtime.handleBossInput !== 'function' || typeof runtime.dispose !== 'function') {",
+      "  throw new Error('constructed runtime is missing its required surface');",
+      '}',
+      'const callPortUses = [];',
+      'const failCallPort = (name) => async () => {',
+      '  callPortUses.push(name);',
+      '  throw new Error(`${name} must not be used without a Boss turn`);',
+      '};',
       "const sessionId = 'package-smoke';",
       'await runtime.init({',
       '  sessionId,',
@@ -151,33 +188,18 @@ try {
       '  rootSessionId: sessionId,',
       '  depth: 0,',
       '  ports: {',
-      '    callPlayer: async (playerId) => {',
-      '      seenPlayers.push(playerId);',
-      "      return { status: 'ok', finalText: 'done' };",
-      '    },',
-      "    callCaptain: async () => { throw new Error('unexpected Captain call'); },",
-      '    callJudge: async () => {',
-      '      const reply = judgeReplies.shift();',
-      "      if (reply === undefined) throw new Error('unexpected judge call');",
-      '      return reply;',
-      '    },',
-      "    callPlaybook: async () => { throw new Error('unexpected playbook call'); },",
+      "    callPlayer: failCallPort('callPlayer'),",
+      "    callCaptain: failCallPort('callCaptain'),",
+      "    callJudge: failCallPort('callJudge'),",
+      "    callPlaybook: failCallPort('callPlaybook'),",
       '    emitStatus: async () => {},',
       '    emitTelemetry: async () => {},',
       '  },',
       '});',
-      'const result = await runtime.handleBossInput({',
-      "  text: 'package smoke task',",
-      '  signal: new AbortController().signal,',
-      '});',
       'await runtime.dispose();',
-      "if (result.outcome !== 'terminal') {",
-      '  throw new Error(`installed entry settled ${result.outcome}, expected terminal`);',
+      'if (callPortUses.length > 0 || governedUses.length > 0) {',
+      "  throw new Error(`quiescent lifecycle used ${[...callPortUses, ...governedUses].join(', ')}`);",
       '}',
-      'if (seenPlayers.length === 0) {',
-      "  throw new Error('installed entry drove no player call');",
-      '}',
-      "await access(join(workdir, '.git'));",
     ].join('\n'),
   );
   execFileSync(process.execPath, ['smoke.mjs'], {

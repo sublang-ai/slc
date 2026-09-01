@@ -179,10 +179,10 @@ step finds `.git` and passes through. Copy the entry (`workflow.ts`)
 **together with** its `workflow.playbook/` directory; the two move as a
 pair. With a global install (playbook 3.1+) the engine needs nothing
 more — `playbook run` links it beside the artifact on its first run
-there — but playbook 4 ships no agent SDK, so the SDKs your lineup
+there — but playbook 10 ships no agent SDK, so the SDKs your lineup
 uses must sit alongside that global install. If that project's
 `package.json` declares `@sublang/playbook`, install it there instead
-(`npm install --save-dev @sublang/playbook@4`) together with those
+(`npm install --save-dev @sublang/playbook@10`) together with those
 SDKs, as this demo's own manifest declares them: a declared dependency
 is authoritative, so provisioning refuses rather than shadow a missing
 install, and a global SDK is invisible to a project's nested cligent.
