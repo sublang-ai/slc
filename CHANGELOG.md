@@ -11,6 +11,55 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-01
+
+### Changed
+
+- **Breaking: the `playbook` pipeline compiles for Playbook 10's schema-3
+  contract.** Exact `@sublang/playbook@10.0.0` provenance selects the
+  `composed-v3` runtime profile; sources declare `Roles` instead of
+  `Players`; compiled artifacts carry artifact schema 3 with the
+  shared-factory compatibility record and separate
+  `{ configuredOptions, hostCapabilities }` construction; emitted entries
+  are enabled through Playbook configuration and invoked by their slash
+  command rather than as a positional `playbook run` argument. All three
+  meta-phase bundles were rebuilt through real interpreted runs, pins were
+  regenerated over the synchronized byte-identical definitions with
+  [DR-026](specs/decisions/026-slc-owned-pin-input-declarations.md)
+  sidecar pin-input declarations, and Cligent 0.23 became the
+  runtime-version authority
+  ([DR-024](specs/decisions/024-playbook-10-schema-3-adoption.md),
+  [DR-027](specs/decisions/027-complete-playbook-10-activation.md)).
+
+- **The activation is complete rather than half-landed.** The package
+  specs, the definitions guard, the CI audit, the installed-package
+  smoke, the opt-in live acceptance script, and the demo manifest now all
+  describe the one Playbook 10 set; no Playbook 4 authority or
+  dormant-readiness framing remains
+  ([DR-027](specs/decisions/027-complete-playbook-10-activation.md),
+  [IR-024](specs/intents/024-complete-playbook-10-activation.md)).
+
+### Fixed
+
+- **Both demo reference sets are regenerated and checker-clean.** The
+  previous rebuilds shipped a first player prompt that never received the
+  Boss task (en) and a reviewer role renamed against source (zh). Fresh
+  real-agent compiles — with the task relay carried as a typed
+  `<inputTask>` placeholder and a deterministic textual Boss entry event —
+  pass every stage of `demo/reference/check.mjs` in both languages,
+  including the runtime smoke and the independent artifact review.
+
+- **Governed worktree capabilities now match the engine contract.**
+  `src/host-capabilities.ts` classifies by the boundary's declared
+  dispositions with real `git status --porcelain` projections, attaches
+  `commitOid` only to `one-descendant-commit`, distinguishes ancestry
+  errors from non-ancestry, serializes exclusive operations, funds the
+  engine's one corrective semantic re-ask, and binds deferred Boss
+  questions instead of hard-erroring. An uncommitted rewrite under an
+  `unchanged` disposition — previously green-lit by an empty projection —
+  now stays unresolved; 18 new integration tests drive real Git
+  worktrees through the installed engine's own validators.
+
 ## [0.5.0] - 2026-08-28
 
 ### Added
@@ -170,7 +219,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/sublang-ai/slc/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/sublang-ai/slc/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sublang-ai/slc/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sublang-ai/slc/compare/v0.2.0...v0.3.0
