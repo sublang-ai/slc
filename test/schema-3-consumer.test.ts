@@ -112,7 +112,7 @@ describe('dormant schema-3 registry consumer fixture', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it('exposes canonical roles, concurrency, immutable compat, and empty options (self-hosting-14, self-hosting-15, self-hosting-16)', () => {
+  it('exposes dormant schema-3 roles, concurrency, immutable compat, and empty options (release-22)', () => {
     expect(fixtureEntry).toMatchObject({
       id: 'workflow',
       command: 'workflow',
@@ -159,7 +159,7 @@ describe('dormant schema-3 registry consumer fixture', () => {
     );
   });
 
-  it('initializes and disposes one causal root against exact live capabilities without governed effects (release-21 readiness)', async () => {
+  it('initializes and disposes one causal root against exact live capabilities without governed effects (release-22)', async () => {
     const history = await execFileAsync(
       'git',
       ['rev-list', '--count', 'HEAD'],
@@ -315,7 +315,7 @@ describe('dormant schema-3 registry consumer fixture', () => {
     expect(statusAfter.stdout).toBe('');
   });
 
-  it('plans configured-registry slash-command invocation without positional or removed run inputs (self-hosting-14, release-17 readiness)', () => {
+  it('plans deferred Playbook 10 configured-registry slash-command invocation without positional or removed run inputs (DR-024, DR-025)', () => {
     const task = 'repair the synthetic sample';
     const configHome = join(root, 'config-home');
     const plan = createConfiguredRegistryPlan({

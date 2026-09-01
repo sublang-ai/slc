@@ -813,9 +813,9 @@ for (const title of [
   requireTestCase(coverageSource, 'schema-3 coverage fixture', title);
 }
 for (const title of [
-  'exposes canonical roles, concurrency, immutable compat, and empty options (self-hosting-14, self-hosting-15, self-hosting-16)',
-  'initializes and disposes one causal root against exact live capabilities without governed effects (release-21 readiness)',
-  'plans configured-registry slash-command invocation without positional or removed run inputs (self-hosting-14, release-17 readiness)',
+  'exposes dormant schema-3 roles, concurrency, immutable compat, and empty options (release-22)',
+  'initializes and disposes one causal root against exact live capabilities without governed effects (release-22)',
+  'plans deferred Playbook 10 configured-registry slash-command invocation without positional or removed run inputs (DR-024, DR-025)',
 ]) {
   requireTestCase(consumerSource, 'schema-3 consumer fixture', title);
 }
