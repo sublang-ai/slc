@@ -3,13 +3,14 @@
 
 /**
  * Pin generation: the explicit build-and-review flow that writes `slc.pins.json`
- * (pinning-15; DR-007).
+ * (pinning-15, pinning-17; DR-007, DR-026).
  *
  * This is the inverse of the currency validator: given a built and reviewed
  * compiled artifact, {@link generatePinRecord} records — over committed bytes —
  * the definition, compiled entry module and reviewed artifact bundle, the
- * semantic-input closure derived from the definition's `## Pin Inputs`, and the
- * link-target identity, so the resulting record validates as current.
+ * semantic-input closure derived from its applicable sidecar or inline
+ * declaration, and the link-target identity, so the resulting record validates
+ * as current.
  * {@link writePinFile} writes the pin index for a pipeline directory. Generation
  * is invoked only by an explicit build-and-review step, never during an ordinary
  * pipeline run; `slc` does not regenerate or rewrite pins per invocation
@@ -18,6 +19,7 @@
 
 import { writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename as posixBasename } from 'node:path/posix';
 
 import { messageOf } from './errors.js';
 import { hashFile } from './hash.js';
@@ -40,7 +42,7 @@ import { resolveRuntimePackage } from './runtime-package.js';
 
 /** The committed inputs that produced one compiled phase, to pin (DR-007). */
 export interface PinSpec {
-  /** Pipeline-dir-relative path to the phase definition. */
+  /** Portable pipeline-relative locator to the phase definition, inside the boundary. */
   definition: string;
   /** Pipeline-dir-relative path to the compiled `.playbook.ts` entry module. */
   artifact: string;
@@ -70,16 +72,16 @@ export interface PinGenerateOptions {
   /**
    * The recorded path boundary, a relative POSIX path from the pipeline
    * directory; defaults to `.`. A wider boundary (e.g. `../..`) lets a pin
-   * record a link target outside the pipeline directory, such as the installed
-   * package module the artifacts were linked against.
+   * record a definition, semantic input, dependency, or link target outside the
+   * pipeline directory, such as an installed package module.
    */
   boundary?: string;
 }
 
 /**
  * Generates a current {@link PinRecord} for one phase from its committed inputs
- * (pinning-15). The definition is recorded separately; the rest of its `## Pin Inputs`
- * closure becomes the enumerated `semanticInputs`.
+ * (pinning-15). The definition is recorded separately; the rest of its
+ * applicable sidecar or inline closure becomes the enumerated `semanticInputs`.
  */
 export async function generatePinRecord(
   pipelineDir: string,
@@ -93,7 +95,12 @@ export async function generatePinRecord(
     spec.definition,
     'definition',
   );
-  const closure = await deriveClosure(pipelineDir, boundary, spec.definition);
+  const closure = await deriveClosure(
+    pipelineDir,
+    boundary,
+    spec.definition,
+    phaseName(spec.definition),
+  );
 
   const semanticInputs = await Promise.all(
     [...closure]
@@ -241,4 +248,9 @@ export async function writePinFile(
 
 function toPosix(path: string): string {
   return path.split(sep).join('/');
+}
+
+function phaseName(definitionPath: string): string {
+  const name = posixBasename(definitionPath);
+  return name.endsWith('.md') ? name.slice(0, -'.md'.length) : name;
 }

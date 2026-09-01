@@ -6,7 +6,7 @@
 ## Intent
 
 This package specifies the host-side validator that decides whether a pipeline's committed compiled-phase pins are current under [DR-007](../decisions/007-slc-phase-artifact-pinning.md).
-Given a pipeline directory, the validator reads `slc.pins.json` and the committed inputs it records, and reports for each pinned phase a verdict of current, stale, or malformed.
+Given a pipeline directory, the validator reads `slc.pins.json`, the optional SLC-owned `slc.pin-inputs.json` semantic-input declaration, and the committed inputs they identify, and reports for each pinned phase a verdict of current, stale, or malformed.
 It runs no compiled artifact and selects no execution strategy — that is the compiled executor's role under [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) — but beyond existing and matching its recorded hash, the compiled artifact must resolve to the linked `playbook` format, recognized from its committed bytes, or the phase is stale.
 Verification evaluates fixture pipeline directories end-to-end over a committed `slc.pins.json` and the inputs it records, using ordinary committed files because the validator decides currency from bytes and paths and runs no compiled artifact.
 Essential project-specific references are `slc`, this project's compiler; the `slc.pins.json` pin file and currency contract of [DR-007](../decisions/007-slc-phase-artifact-pinning.md); and the reserved `slc.link` phase and `playbook` artifact of [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md).
@@ -21,9 +21,22 @@ Where a pipeline directory contains no `slc.pins.json`, when the validator evalu
 
 ### Currency
 
+#### pinning-17
+
+When pin generation, pin-currency validation, or incremental input-identity and protection discovery derives a phase or pass's semantic-input closure, it shall add the separately recorded definition and select the remaining local closure by the applicable declaration case ([DR-026](../decisions/026-slc-owned-pin-input-declarations.md)):
+
+| Declaration case | Remaining local closure |
+| --- | --- |
+| A well-formed `slc.pin-inputs.json` contains a `closures` entry keyed by the phase or pass name. | Exactly the entry's complete flattened set of unique pipeline-relative paths, without transitive expansion from any `## Pin Inputs` section. |
+| The sidecar or the keyed entry is absent. | Every path in the definition's `## Pin Inputs` section and the transitive `## Pin Inputs` sections of its local Markdown inputs, terminating at non-Markdown and sectionless Markdown inputs. |
+
+#### pinning-18
+
+Where `slc.pin-inputs.json` is present, when pin generation or pin-currency validation loads it, the loader shall accept only a regular non-symbolic-link strict-JSON file with schema `sublang.slc.pin-inputs.v1`, no unknown fields, and a `closures` object whose keys are `link` or portable phase/pass names and whose values contain only unique non-empty relative POSIX-style paths resolving inside the applicable path boundary, and shall otherwise refuse generation or report the pin malformed with a diagnostic naming the offending field and no phase current ([DR-026](../decisions/026-slc-owned-pin-input-declarations.md)).
+
 #### pinning-2
 
-Where a pipeline directory's `slc.pins.json` is well-formed and, for a phase or format-preserving pass, the portable phase/pass map key matches the record's canonical definition basename, artifact-bundle, and artifact paths, the recorded definition, compiled artifact, semantic inputs, and local runtime dependencies each resolve inside the recorded path boundary and match their recorded exact-byte or canonical tree SHA-256 identities, every package runtime-dependency specifier resolves from the compiled entry module to its recorded locator, the compiled artifact is a `.playbook.ts` module that resolves to the linked `playbook` format [[self-hosting-3](self-hosting.md#self-hosting-3)], its recorded artifact-bundle directory directly contains that entry module plus its canonical local FSM, GEARS, and four verification files, has the matching deterministic tree hash, and contains no symbolic links or unsupported entries, the recorded link-target locator resolves and its identity matches the recorded identity, the recorded semantic-input closure equals the closure derived from the definition's `## Pin Inputs` section, and every recorded external input carries a well-formed immutable content-addressed identity, when the validator evaluates that phase or pass, the validator shall report it current ([DR-007](../decisions/007-slc-phase-artifact-pinning.md)).
+Where a pipeline directory's `slc.pins.json` is well-formed and, for a phase or format-preserving pass, the portable phase/pass map key requires and matches the recorded definition's portable POSIX basename `<key>.md` and the record's canonical artifact-bundle and artifact paths, the recorded definition, compiled artifact, semantic inputs, and local runtime dependencies each resolve inside the recorded path boundary and match their recorded exact-byte or canonical tree SHA-256 identities, every package runtime-dependency specifier resolves from the compiled entry module to its recorded locator, the compiled artifact is a `.playbook.ts` module that resolves to the linked `playbook` format [[self-hosting-3](self-hosting.md#self-hosting-3)], its recorded artifact-bundle directory directly contains that entry module plus its canonical local FSM, GEARS, and four verification files, has the matching deterministic tree hash, and contains no symbolic links or unsupported entries, the recorded link-target locator resolves and its identity matches the recorded identity, the recorded semantic-input closure equals the closure derived from the applicable declaration [[pinning-17](#pinning-17)], and every recorded external input carries a well-formed immutable content-addressed identity, when the validator evaluates that phase or pass, the validator shall report it current ([DR-007](../decisions/007-slc-phase-artifact-pinning.md), [DR-026](../decisions/026-slc-owned-pin-input-declarations.md)).
 
 #### pinning-3
 
@@ -31,7 +44,7 @@ Where a phase's recorded definition, compiled artifact, artifact bundle, semanti
 
 #### pinning-4
 
-Where a phase's recorded semantic-input closure differs from the closure derived from the definition's `## Pin Inputs` section and the transitive `## Pin Inputs` of its local Markdown inputs, when the validator evaluates that phase, the validator shall report it stale with a diagnostic naming the closure difference ([DR-007](../decisions/007-slc-phase-artifact-pinning.md)).
+Where a phase's recorded semantic-input closure differs from the closure derived from its applicable sidecar or inline declaration [[pinning-17](#pinning-17)], when the validator evaluates that phase, the validator shall report it stale with a diagnostic naming the closure difference ([DR-007](../decisions/007-slc-phase-artifact-pinning.md), [DR-026](../decisions/026-slc-owned-pin-input-declarations.md)).
 
 #### pinning-13
 
@@ -51,7 +64,7 @@ Where a phase records external content, the validator shall report that phase cu
 
 #### pinning-15
 
-When the build-and-review flow generates a pin for a built and reviewed compiled artifact, it shall record over committed bytes the definition, the compiled `.playbook.ts` artifact entry module, its reviewed artifact-bundle tree directly containing the canonical local FSM, GEARS, and four verification files, the semantic-input closure derived from the definition's `## Pin Inputs`, every local executable runtime dependency outside the bundle, and the link-target identity — recording a widened path boundary when a dependency or link target lies outside the pipeline directory, such as an installed package module — so the written pin validates as current; where an installed package owns a versioned runtime or linked-format contract, the repository's generation flow shall reject a version that differs from both the dependency lock and the accepted contract version; an ordinary pipeline run shall neither generate nor rewrite a pin ([DR-007](../decisions/007-slc-phase-artifact-pinning.md)).
+When the build-and-review flow generates a pin for a built and reviewed compiled artifact, it shall record over committed bytes the definition, the compiled `.playbook.ts` artifact entry module, its reviewed artifact-bundle tree directly containing the canonical local FSM, GEARS, and four verification files, the semantic-input closure derived from the applicable declaration [[pinning-17](#pinning-17)], every local executable runtime dependency outside the bundle, and the link-target identity — recording a widened path boundary when the definition, a semantic input, a dependency, or a link target lies outside the pipeline directory, such as an installed package module — so the written pin validates as current; where an installed package owns a versioned runtime or linked-format contract, the repository's generation flow shall reject a version that differs from both the dependency lock and the accepted contract version; an ordinary pipeline run shall neither generate nor rewrite a pin ([DR-007](../decisions/007-slc-phase-artifact-pinning.md), [DR-026](../decisions/026-slc-owned-pin-input-declarations.md)).
 
 ## Verification
 
@@ -65,7 +78,7 @@ Where a fixture pipeline directory has no `slc.pins.json`, when the validator ev
 
 #### pinning-8
 
-Where fixture pipeline directories' `slc.pins.json` records respectively a transform phase and a portable format-preserving pass such as `optimize` whose map key matches its canonical definition basename, artifact-bundle, and artifact paths, whose definition, compiled `.playbook.ts` artifact, artifact-bundle tree directly containing that entry plus its canonical local FSM, GEARS, and four verification files, semantic inputs, runtime dependencies, link-target identity, semantic-input closure, and external inputs all match the committed files, and whose compiled artifact resolves to the linked `playbook` format, when the validator evaluates each, the validator shall report that phase or pass current [[pinning-2](#pinning-2)].
+Where fixture pipeline directories' `slc.pins.json` records an inline-declared transform phase, a portable format-preserving pass such as `optimize`, and a sidecar-declared phase whose matching-basename definition lies outside the pipeline directory but inside its recorded boundary, whose map keys match their definition basenames and canonical artifact-bundle and artifact paths, whose definition, compiled `.playbook.ts` artifact, artifact-bundle tree directly containing that entry plus its canonical local FSM, GEARS, and four verification files, semantic inputs, runtime dependencies, link-target identity, semantic-input closure, and external inputs all match the committed files, and whose compiled artifact resolves to the linked `playbook` format, when the validator evaluates each, the validator shall report that phase or pass current [[pinning-2](#pinning-2)] under the applicable declaration [[pinning-17](#pinning-17)].
 
 #### pinning-9
 
@@ -73,7 +86,7 @@ Where a fixture phase's committed definition, compiled artifact, any file in its
 
 #### pinning-10
 
-Where a fixture phase's recorded semantic-input closure omits or adds a file relative to the definition's `## Pin Inputs` closure, when the validator evaluates it, the validator shall report that phase stale, naming the closure difference [[pinning-4](#pinning-4)].
+Where fixture phases' recorded semantic-input closures omit or add a file relative to their applicable sidecar and inline declarations [[pinning-17](#pinning-17)], when the validator evaluates them, the validator shall report each phase stale, naming the closure difference [[pinning-4](#pinning-4)].
 
 #### pinning-14
 
@@ -93,4 +106,8 @@ Where a fixture phase records an external input as a bare URL or an unvendored m
 
 #### pinning-16
 
-Where a fixture phase's definition, its `## Pin Inputs` closure, a `.playbook.ts` artifact and reviewed artifact bundle directly containing the canonical local FSM, GEARS, and four verification files, its local executable runtime dependencies, and a link target are committed, when the build-and-review flow generates and writes the pin, the validator shall report that phase current [[pinning-15](#pinning-15)].
+Where fixture phases include an inline-declared definition and a matching-basename definition outside the pipeline directory whose complete closure is declared by `slc.pin-inputs.json`, and each has a `.playbook.ts` artifact and reviewed artifact bundle directly containing the canonical local FSM, GEARS, and four verification files, local executable runtime dependencies, and a link target committed inside its boundary, when the build-and-review flow generates and writes each pin, the validator shall report both phases current [[pinning-15](#pinning-15)] under the applicable declaration [[pinning-17](#pinning-17)].
+
+#### pinning-19
+
+Where fixture `slc.pin-inputs.json` files exercise a symbolic link, invalid JSON, an unsupported schema, an unknown or wrong-typed field, a non-portable closure key, a duplicate closure path, and an empty, absolute, backslash-containing, or boundary-escaping closure path, when pin-currency validation and pin generation load each fixture, the validator shall report the pin malformed with no phase current and the generator shall refuse, each with a diagnostic naming the offending field [[pinning-18](#pinning-18)].

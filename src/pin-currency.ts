@@ -23,7 +23,7 @@
 
 import { lstat, readFile, readdir, readlink } from 'node:fs/promises';
 import {
-  basename,
+  basename as hostBasename,
   dirname,
   isAbsolute,
   join,
@@ -31,6 +31,7 @@ import {
   resolve,
   sep,
 } from 'node:path';
+import { basename as posixBasename } from 'node:path/posix';
 
 import {
   hashFile,
@@ -41,6 +42,7 @@ import {
 } from './hash.js';
 import { resolvesToPlaybook } from './phase-runner.js';
 import { closureMatchesRecord } from './pin-closure.js';
+import { loadPinInputsFile } from './pin-inputs.js';
 import { resolvePinPath } from './pin-paths.js';
 import {
   PinError,
@@ -100,22 +102,48 @@ export async function evaluatePins(pipelineDir: string): Promise<PinsResult> {
     return {};
   }
 
-  const verdicts = await evaluatePinFile(pipelineDir, loaded.file);
-  return { path: loaded.path, verdicts };
+  try {
+    const verdicts = await evaluatePinFile(pipelineDir, loaded.file);
+    return { path: loaded.path, verdicts };
+  } catch (error) {
+    if (error instanceof PinError) {
+      return { path: loaded.path, malformed: error.message };
+    }
+    throw error;
+  }
 }
 
-/** Evaluates every record and prevents one malformed record from coexisting with a current one. */
+/**
+ * Validates the shared sidecar, then evaluates every record and prevents one
+ * malformed record from coexisting with a current one.
+ *
+ * @throws {PinError} when shared sidecar metadata is malformed at file level.
+ */
 export async function evaluatePinFile(
   pipelineDir: string,
   file: PinFile,
   opts: PinEvaluationOptions = {},
 ): Promise<Record<string, PinVerdict>> {
+  const pinInputs = await loadPinInputsFile(
+    pipelineDir,
+    file.pathBoundary.path,
+  );
+  if (pinInputs.path !== undefined) {
+    opts.observePath?.(pinInputs.path);
+  }
   const verdicts: Record<string, PinVerdict> = Object.create(null) as Record<
     string,
     PinVerdict
   >;
   for (const [phase, record] of Object.entries(file.pins)) {
-    verdicts[phase] = await evaluatePin(pipelineDir, file, phase, record, opts);
+    verdicts[phase] = await evaluatePinRecord(
+      pipelineDir,
+      file,
+      phase,
+      record,
+      opts,
+      true,
+    );
   }
   const malformedPhase = Object.entries(verdicts).find(
     ([, verdict]) => verdict.status === 'malformed',
@@ -148,6 +176,17 @@ export async function evaluatePin(
   phase: string,
   record: PinRecord,
   opts: PinEvaluationOptions = {},
+): Promise<PinVerdict> {
+  return evaluatePinRecord(pipelineDir, file, phase, record, opts, false);
+}
+
+async function evaluatePinRecord(
+  pipelineDir: string,
+  file: PinFile,
+  phase: string,
+  record: PinRecord,
+  opts: PinEvaluationOptions,
+  sidecarValidated: boolean,
 ): Promise<PinVerdict> {
   const boundary = file.pathBoundary.path;
   try {
@@ -186,6 +225,16 @@ export async function evaluatePin(
     );
     if (bundleMalformed !== null) {
       return malformed(bundleMalformed);
+    }
+
+    // A present sidecar is structural pin metadata. Validate its complete
+    // shape and boundary before any byte-currency check so malformed input is
+    // never masked by an independently stale recorded file (pinning-18).
+    if (!sidecarValidated) {
+      const pinInputs = await loadPinInputsFile(pipelineDir, boundary);
+      if (pinInputs.path !== undefined) {
+        opts.observePath?.(pinInputs.path);
+      }
     }
 
     // Currency (stale) checks. resolvePinPath throws PinError for a bad path,
@@ -239,11 +288,12 @@ export async function evaluatePin(
         pipelineDir,
         boundary,
         record,
+        phase,
         opts.observePath,
       ))
     ) {
       return stale(
-        "the semantic-input closure differs from the definition's ## Pin Inputs",
+        'the semantic-input closure differs from its applicable sidecar or inline declaration',
       );
     }
     const linkStale = await linkTargetStale(
@@ -289,8 +339,8 @@ function phaseRecordMalformed(phase: string, record: PinRecord): string | null {
   const expectedDefinition = `${phase}.md`;
   const expectedBundle = `${phase}.slc`;
   const expectedArtifact = `${expectedBundle}/${phase}.playbook.ts`;
-  if (record.definition.path !== expectedDefinition) {
-    return `pin key "${phase}" requires definition path "${expectedDefinition}"`;
+  if (posixBasename(record.definition.path) !== expectedDefinition) {
+    return `pin key "${phase}" requires definition basename "${expectedDefinition}"`;
   }
   if (record.artifactBundle.path !== expectedBundle) {
     return `pin key "${phase}" requires artifactBundle path "${expectedBundle}"`;
@@ -385,7 +435,7 @@ export async function artifactBundleLayoutIssue(
   bundleRoot: string,
   artifactPath: string,
 ): Promise<string | null> {
-  const entry = basename(artifactPath);
+  const entry = hostBasename(artifactPath);
   if (!entry.endsWith('.playbook.ts')) {
     return `artifact is not a canonical .playbook.ts entry module (${entry})`;
   }

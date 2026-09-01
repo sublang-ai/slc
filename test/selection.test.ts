@@ -20,7 +20,7 @@ import type {
   PhaseExecutor,
 } from '../src/execution.js';
 import { hashFile } from '../src/hash.js';
-import { hashTree } from '../src/pin-currency.js';
+import { evaluatePins, hashTree } from '../src/pin-currency.js';
 import {
   PINS_FILE,
   PIN_HASH_ALGORITHM,
@@ -146,14 +146,17 @@ describe('compiled selection and pin-input safety (phase-execution-28, phase-exe
     return record;
   };
 
-  const writePins = async (pins: Record<string, unknown>): Promise<void> => {
+  const writePins = async (
+    pins: Record<string, unknown>,
+    pathBoundary = '.',
+  ): Promise<void> => {
     await writeFile(
       join(pipelineDir, PINS_FILE),
       JSON.stringify(
         {
           schema: PIN_SCHEMA,
           hashAlgorithm: PIN_HASH_ALGORITHM,
-          pathBoundary: { path: '.' },
+          pathBoundary: { path: pathBoundary },
           pins,
         },
         null,
@@ -189,6 +192,37 @@ describe('compiled selection and pin-input safety (phase-execution-28, phase-exe
     expect(selections[0]?.record.artifact.path).toBe(
       'text2gears.slc/text2gears.playbook.ts',
     );
+  });
+
+  it('keeps a current external-definition pin dormant until resolution selects it (phase-execution-28)', async () => {
+    const record = await writeCurrentPin();
+    const installedDefinition = join(
+      root,
+      'node_modules/@sublang/playbook/slc/text2gears.md',
+    );
+    await mkdir(dirname(installedDefinition), { recursive: true });
+    await writeFile(
+      installedDefinition,
+      await readFile(join(pipelineDir, 'text2gears.md')),
+    );
+    record.definition = {
+      path: '../node_modules/@sublang/playbook/slc/text2gears.md',
+      hash: await hashFile(installedDefinition),
+    };
+    await writePins({ text2gears: record }, '..');
+
+    expect((await evaluatePins(pipelineDir)).verdicts?.text2gears).toEqual({
+      status: 'current',
+    });
+    const result = await runPhase();
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toMatch(
+      /pin-recorded definition.*selected pipeline definition/,
+    );
+    expect(interpreted.calls).toHaveLength(0);
+    expect(compiled.calls).toHaveLength(0);
+    expect(selections).toHaveLength(0);
   });
 
   it('never selects a pipeline pass pin for the built-in normalizer', async () => {

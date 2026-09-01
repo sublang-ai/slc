@@ -39,11 +39,16 @@ import {
   pathsAlias,
   runPhase,
 } from './execution.js';
-import { hashBytes, isHash, type Hash } from './hash.js';
+import { compareUtf8, hashBytes, isHash, type Hash } from './hash.js';
 import { type Invocation, parseInvocation } from './invocation.js';
 import { unifiedLineDiff } from './line-diff.js';
 import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
-import { deriveClosure } from './pin-closure.js';
+import {
+  deriveClosureWithDeclaration,
+  type DerivedClosure,
+} from './pin-closure.js';
+import { PIN_INPUTS_FILE } from './pin-inputs.js';
+import { resolvePinPath } from './pin-paths.js';
 import type { ProgressSink } from './progress.js';
 import { evaluatePin, evaluatePinFile, hashTree } from './pin-currency.js';
 import {
@@ -708,8 +713,16 @@ interface StepIdentity {
 
 interface DeclaredInputs {
   paths: string[];
+  /** Canonical identities contributed only by authoritative sidecar entries. */
+  declarationHashes: Hash[];
   /** False when a runner-only incremental closure could not be derived. */
   complete: boolean;
+}
+
+interface DeclaredInputRoot {
+  path: string;
+  /** Present only for the phase definition; explicit references stay inline-declared. */
+  phase?: string;
 }
 
 type StepMode =
@@ -850,36 +863,39 @@ async function executeSteps(
   opts: ExecuteStepsOptions = {},
 ): Promise<SlcResult> {
   const complete = opts.complete ?? (async (result: SlcResult) => result);
-  const pinInputs = new Set<string>([join(pipeline.dir, PINS_FILE)]);
+  const pinInputs = new Set<string>([
+    join(pipeline.dir, PINS_FILE),
+    join(pipeline.dir, PIN_INPUTS_FILE),
+  ]);
   let pinFile: PinFile | undefined;
   try {
     pinFile = (await loadPinFile(pipeline.dir)).file;
+    if (pinFile !== undefined) {
+      const verdicts = await evaluatePinFile(pipeline.dir, pinFile, {
+        observePath: (path) => pinInputs.add(resolve(path)),
+      });
+      const malformed = Object.entries(verdicts).find(
+        ([, verdict]) => verdict.status === 'malformed',
+      );
+      if (malformed !== undefined) {
+        return {
+          ok: false,
+          outputs: [],
+          diagnostics: [
+            `pin is malformed: ${
+              malformed[1].status === 'malformed'
+                ? malformed[1].reason
+                : 'invalid pin index'
+            }`,
+          ],
+        };
+      }
+    }
   } catch (error) {
     if (error instanceof PinError) {
       return { ok: false, outputs: [], diagnostics: [error.message] };
     }
     throw error;
-  }
-  if (pinFile !== undefined) {
-    const verdicts = await evaluatePinFile(pipeline.dir, pinFile, {
-      observePath: (path) => pinInputs.add(resolve(path)),
-    });
-    const malformed = Object.entries(verdicts).find(
-      ([, verdict]) => verdict.status === 'malformed',
-    );
-    if (malformed !== undefined) {
-      return {
-        ok: false,
-        outputs: [],
-        diagnostics: [
-          `pin is malformed: ${
-            malformed[1].status === 'malformed'
-              ? malformed[1].reason
-              : 'invalid pin index'
-          }`,
-        ],
-      };
-    }
   }
 
   const definitions = [
@@ -963,12 +979,44 @@ async function executeSteps(
             step,
             state,
             index,
-            stepDeclared.complete ? stepDeclared.paths : null,
+            stepDeclared.complete ? stepDeclared : null,
           );
     const mode =
       state === undefined
         ? ({ mode: 'ordinary' } as const)
         : await selectStepMode(step, index, target, identity, state);
+
+    // External definition locators are pin-capable before pipeline discovery
+    // is cut over to select them. Until then, never let a current pin certify
+    // one definition while this step executes or reuses another (DR-026).
+    let definitionIssue: string | null;
+    try {
+      definitionIssue = await selectedPinDefinitionIssue(
+        step,
+        pipeline.dir,
+        pinFile,
+      );
+    } catch (error) {
+      definitionIssue = messageOf(error);
+    }
+    if (definitionIssue !== null) {
+      const startedAt = Date.now();
+      deps.progress?.({ kind: 'phase-start', phase: step.phase, target });
+      deps.progress?.({
+        kind: 'phase-fail',
+        phase: step.phase,
+        target,
+        elapsedMs: Date.now() - startedAt,
+      });
+      diagnostics.push(
+        formatFailureReport({
+          phase: step.phase,
+          target,
+          reasons: [definitionIssue],
+        }),
+      );
+      return { ok: false, outputs, diagnostics };
+    }
 
     // Reuse still honors pin currency, but it constructs no executor because
     // no phase runs. A stale/malformed pin can never be bypassed by history.
@@ -1237,7 +1285,7 @@ async function stepIdentity(
   step: PhaseStep,
   state: IncrementalState,
   index: number,
-  declared: readonly string[] | null,
+  declared: DeclaredInputs | null,
 ): Promise<StepIdentity | null> {
   if (declared === null) return null;
   try {
@@ -1256,8 +1304,9 @@ async function stepIdentity(
         inputs: [
           hashBytes(chainedInput),
           ...rootHashes,
+          ...declared.declarationHashes,
           ...(await Promise.all(
-            declared.map(async (path) => hashBytes(await readFile(path))),
+            declared.paths.map(async (path) => hashBytes(await readFile(path))),
           )),
         ],
       };
@@ -1275,9 +1324,10 @@ async function stepIdentity(
       );
     }
     inputs.push(hashBytes(await readFile(step.request.definitionPath)));
+    inputs.push(...declared.declarationHashes);
     inputs.push(
       ...(await Promise.all(
-        declared.map(async (path) => hashBytes(await readFile(path))),
+        declared.paths.map(async (path) => hashBytes(await readFile(path))),
       )),
     );
 
@@ -1318,10 +1368,14 @@ async function stepDeclaredInputs(
   pipeline: Pipeline,
   pinFile: PinFile | undefined,
 ): Promise<DeclaredInputs> {
-  const roots =
-    step.request.kind === 'compile'
-      ? [step.request.definitionPath, ...(step.request.references ?? [])]
-      : [step.request.definitionPath];
+  const roots: DeclaredInputRoot[] = [
+    { path: step.request.definitionPath, phase: step.pinKey },
+  ];
+  if (step.request.kind === 'compile') {
+    for (const reference of step.request.references ?? []) {
+      roots.push({ path: reference });
+    }
+  }
   return declaredInputPaths(pipeline, pinFile, roots);
 }
 
@@ -1329,39 +1383,75 @@ async function stepDeclaredInputs(
 async function declaredInputPaths(
   pipeline: Pipeline,
   pinFile: PinFile | undefined,
-  roots: readonly string[],
+  roots: readonly DeclaredInputRoot[],
 ): Promise<DeclaredInputs> {
   const boundary = pinFile?.pathBoundary.path ?? '.';
-  const base = new Set(roots.map((path) => resolve(path)));
+  const base = new Set(roots.map((root) => resolve(root.path)));
   const seen = new Set(base);
   const inputs: string[] = [];
+  const declarationHashes: Hash[] = [];
   let complete = true;
   const normalize = resolve(normalizeDefinitionPath());
   for (const root of roots) {
-    const absolute = resolve(root);
+    const absolute = resolve(root.path);
     if (!absolute.toLowerCase().endsWith('.md') || absolute === normalize) {
       continue;
     }
     const locator = relative(pipeline.dir, absolute).split(sep).join('/');
-    const closure = new Set<string>();
+    let closure: DerivedClosure;
+    const observed = new Set<string>();
     try {
-      await deriveClosure(pipeline.dir, boundary, locator, (path) =>
-        closure.add(path),
+      closure = await deriveClosureWithDeclaration(
+        pipeline.dir,
+        boundary,
+        locator,
+        root.phase,
+        (path) => observed.add(path),
       );
     } catch {
       // This derivation exists only for incremental identity and best-effort
       // target protection. Pin generation/currency remain fail-closed, while an
       // otherwise interpretable phase degrades to Ordinary execution.
       complete = false;
+      for (const path of observed) {
+        const absolutePath = resolve(path);
+        if (seen.has(absolutePath)) continue;
+        seen.add(absolutePath);
+        inputs.push(absolutePath);
+      }
+      continue;
     }
-    for (const path of closure) {
+    if (closure.declaration === 'sidecar' && root.phase !== undefined) {
+      const members = [...closure.paths]
+        .map((path) => resolve(path))
+        .filter((path) => path !== absolute)
+        .map((path) => ({
+          path,
+          locator: relative(pipeline.dir, path).split(sep).join('/'),
+        }))
+        .sort((left, right) => compareUtf8(left.locator, right.locator));
+      declarationHashes.push(
+        framedHash(
+          'sidecar-closure-v1',
+          root.phase,
+          ...members.map((member) => member.locator),
+        ),
+      );
+      for (const member of members) {
+        if (seen.has(member.path)) continue;
+        seen.add(member.path);
+        inputs.push(member.path);
+      }
+      continue;
+    }
+    for (const path of closure.paths) {
       const absolutePath = resolve(path);
       if (seen.has(absolutePath)) continue;
       seen.add(absolutePath);
       inputs.push(absolutePath);
     }
   }
-  return { paths: inputs, complete };
+  return { paths: inputs, declarationHashes, complete };
 }
 
 async function selectStepMode(
@@ -1442,6 +1532,43 @@ async function reusePinFailure(
   return verdict.status === 'current'
     ? null
     : [`pin is ${verdict.status}: ${verdict.reason}`];
+}
+
+/**
+ * Keeps external-definition pinning dormant until pipeline discovery selects
+ * the same definition locator (phase-execution-27; DR-026).
+ */
+async function selectedPinDefinitionIssue(
+  step: PhaseStep,
+  pipelineDir: string,
+  pinFile: PinFile | undefined,
+): Promise<string | null> {
+  const record = ownPin(pinFile, step.pinKey);
+  if (
+    pinFile === undefined ||
+    step.pinKey === undefined ||
+    record === undefined
+  ) {
+    return null;
+  }
+  const verdict = await evaluatePin(pipelineDir, pinFile, step.pinKey, record);
+  if (verdict.status !== 'current') return null;
+
+  const recorded = resolvePinPath(
+    pipelineDir,
+    pinFile.pathBoundary.path,
+    record.definition.path,
+    'definition',
+  );
+  const selected = resolve(step.request.definitionPath);
+  if (recorded === selected) return null;
+
+  const selectedLocator = relative(pipelineDir, selected).split(sep).join('/');
+  return (
+    `pin-recorded definition "${record.definition.path}" does not match ` +
+    `selected pipeline definition "${selectedLocator}"; ` +
+    'external-definition execution remains disabled until pipeline resolution selects the recorded locator'
+  );
 }
 
 /**

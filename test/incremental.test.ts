@@ -25,6 +25,7 @@ import {
   type AgentClient,
 } from '../src/interpreter.js';
 import { createReviewingAgent } from '../src/reviewing-agent.js';
+import { PIN_INPUTS_FILE, PIN_INPUTS_SCHEMA } from '../src/pin-inputs.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
 
 const phase = (
@@ -60,7 +61,10 @@ Options:
 | seed | Fixture seed. |
 `;
 
-describe('success-only incremental runner (incremental-compilation-18..25, incremental-compilation-27..29)', () => {
+const pinInputs = (closures: Record<string, string[]>): string =>
+  `${JSON.stringify({ schema: PIN_INPUTS_SCHEMA, closures }, null, 2)}\n`;
+
+describe('success-only incremental runner (incremental-compilation-18..25, incremental-compilation-27..32)', () => {
   let root: string;
   let pipelineDir: string;
   let workDir: string;
@@ -306,6 +310,99 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
       update: expect.any(Object) as object,
     });
     expect((await loadBuildHistory(artDir))?.build).toBe(3);
+  });
+
+  it('uses a flattened sidecar closure for locator identity, exact bytes, Update, and input protection (incremental-compilation-30..31, phase-execution-40)', async () => {
+    const references = join(pipelineDir, 'references');
+    const grammar = join(references, 'grammar.md');
+    const replacement = join(references, 'replacement.md');
+    await mkdir(references);
+    await writeFile(grammar, 'grammar one\n');
+    await writeFile(replacement, 'grammar one\n');
+    await writeFile(
+      join(pipelineDir, PIN_INPUTS_FILE),
+      pinInputs({ text2middle: ['references/grammar.md'] }),
+    );
+    await runSlc(['flow', source], deps(fake([])));
+
+    await writeFile(
+      join(pipelineDir, PIN_INPUTS_FILE),
+      pinInputs({ text2middle: ['references/replacement.md'] }),
+    );
+    const relocatedCalls: ExecuteRequest[] = [];
+    const relocated = await runSlc(
+      ['flow', source],
+      deps(fake(relocatedCalls)),
+    );
+
+    expect(relocated.ok).toBe(true);
+    expect(relocatedCalls).toHaveLength(1);
+    expect(relocatedCalls[0]).toMatchObject({
+      kind: 'compile',
+      definitionPath: join(pipelineDir, 'text2middle.md'),
+      update: expect.any(Object) as object,
+    });
+    expect((await loadBuildHistory(artDir))?.build).toBe(2);
+
+    await writeFile(replacement, 'grammar two\n');
+    const changedCalls: ExecuteRequest[] = [];
+    const changed = await runSlc(['flow', source], deps(fake(changedCalls)));
+
+    expect(changed.ok).toBe(true);
+    expect(changedCalls).toHaveLength(1);
+    expect(changedCalls[0]).toMatchObject({
+      kind: 'compile',
+      definitionPath: join(pipelineDir, 'text2middle.md'),
+      update: expect.any(Object) as object,
+    });
+    expect((await loadBuildHistory(artDir))?.build).toBe(3);
+
+    await writeFile(
+      join(pipelineDir, PIN_INPUTS_FILE),
+      pinInputs({
+        text2middle: ['references/replacement.md'],
+        middle2final: ['references/replacement.md'],
+      }),
+    );
+    const protectedCalls: ExecuteRequest[] = [];
+    const protectedResult = await runSlc(
+      ['flow.middle2final', join(artDir, 'case.middle.md'), '-o', replacement],
+      deps(fake(protectedCalls)),
+    );
+    expect(protectedResult.ok).toBe(false);
+    expect(protectedResult.diagnostics.join('\n')).toContain(
+      'aliases protected input',
+    );
+    expect(protectedCalls).toHaveLength(0);
+    expect(await readFile(replacement, 'utf8')).toBe('grammar two\n');
+  });
+
+  it('treats sidecar closure order as non-semantic (incremental-compilation-32)', async () => {
+    const references = join(pipelineDir, 'references');
+    await mkdir(references);
+    await writeFile(join(references, 'a.md'), 'grammar a\n');
+    await writeFile(join(references, 'b.md'), 'grammar b\n');
+    await writeFile(
+      join(pipelineDir, PIN_INPUTS_FILE),
+      pinInputs({
+        text2middle: ['references/a.md', 'references/b.md'],
+      }),
+    );
+    await runSlc(['flow', source], deps(fake([])));
+
+    await writeFile(
+      join(pipelineDir, PIN_INPUTS_FILE),
+      pinInputs({
+        text2middle: ['references/b.md', 'references/a.md'],
+      }),
+    );
+    const calls: ExecuteRequest[] = [];
+    const result = await runSlc(['flow', source], deps(fake(calls)));
+
+    expect(result.ok).toBe(true);
+    expect(result.outcome).toBe('up-to-date');
+    expect(calls).toHaveLength(0);
+    expect((await loadBuildHistory(artDir))?.build).toBe(1);
   });
 
   it.each([
