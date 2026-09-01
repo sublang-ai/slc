@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted
+Accepted as the future atomic design; activation is deferred under [DR-025](025-defer-playbook-10-activation.md).
 
 ## Context
 

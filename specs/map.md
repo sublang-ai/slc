@@ -49,7 +49,7 @@ meta.md       The spec of specs
 | [DR-021](decisions/021-incremental-compilation.md) | 021-incremental-compilation.md | Incremental compilation through complete versioned snapshots, exact phase reuse, and ordinary execution with prior-input/diff update context |
 | [DR-022](decisions/022-two-agent-reviewed-compilation.md) | 022-two-agent-reviewed-compilation.md | Opt-in independent review/fix/re-review for transformation-performing compilation calls |
 | [DR-023](decisions/023-host-settled-link-object-imports.md) | 023-host-settled-link-object-imports.md | Generic post-link settlement and reporting of declared-object import extensions from materialized siblings |
-| [DR-024](decisions/024-playbook-10-schema-3-adoption.md) | 024-playbook-10-schema-3-adoption.md | Playbook 10 adoption: exact schema-3 `composed-v3`, Roles migration, mandatory bundle rebuild, Cligent 0.23 authority, and atomic reviewed assets |
+| [DR-024](decisions/024-playbook-10-schema-3-adoption.md) | 024-playbook-10-schema-3-adoption.md | Playbook 10 adoption (activation deferred under [DR-025](decisions/025-defer-playbook-10-activation.md)): exact schema-3 `composed-v3`, Roles migration, mandatory bundle rebuild, Cligent 0.23 authority, and atomic reviewed assets |
 | [DR-025](decisions/025-defer-playbook-10-activation.md) | 025-defer-playbook-10-activation.md | Playbook 10 activation deferred without a scheduled delivery owner; Playbook 4 and Cligent 0.18 remain current while schema-3 readiness stays dormant |
 
 ## Packages
