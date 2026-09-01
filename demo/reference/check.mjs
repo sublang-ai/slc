@@ -6,8 +6,16 @@
 // English set (workflow.*), `node check.mjs zh` the Chinese set
 // (workflow.zh.*). Each stage prints its verdict; any failure exits 1.
 
-import { execFile } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { execFile, execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -120,33 +128,69 @@ try {
   const registryEntry = loaded.default;
   const seenPlayers = [];
   const playerPrompts = [];
-  const judgeReplies = ['{"guard":"done"}', '{"guard":"clean"}'];
-  // A schema-3 entry takes configured options plus live host capabilities; the
-  // repository and effect-ledger seams fail closed here exactly as the compiled
-  // phase host supplies them (DR-024).
-  const rejectRepository = () =>
-    Promise.reject(new Error('demo smoke supplies no repository capability'));
-  const rejectEffectWrite = () =>
-    Promise.reject(new Error('demo smoke supplies no effect ledger'));
+  // Playbook 10 classifies each Boss turn before any work starts: the idle hub
+  // admits the turn only once the judge names the entry event, so the first
+  // reply is that classification and the rest are the per-state result guards.
+  const judgeReplies = [
+    '{"type":"START"}',
+    '{"guard":"done"}',
+    '{"guard":"clean"}',
+  ];
+  // A schema-3 entry takes configured options plus live host capabilities. The
+  // demo smoke supplies a real repository capability so the optimize pass's
+  // agent-free `git init` script actually runs against the scratch worktree,
+  // and a minimal in-memory effect ledger. Both mirror the engine's contract
+  // rather than failing closed, because stage 4 asserts the script's effect.
+  // SLC's own host-capability implementation drives the governed script
+  // against the scratch worktree, so this smoke exercises real behavior rather
+  // than a harness-local reimplementation of the engine contract.
+  // SLC's own host-capability implementation drives the governed player
+  // boundary against the scratch worktree, so this smoke exercises real
+  // behavior rather than a harness-local reimplementation of the engine
+  // contract.
+  const {
+    worktreeHostCapabilities,
+    observeWorktree,
+    classifyGitChange,
+    NULL_GIT_OID,
+  } = await import(
+    pathToFileURL(join(repoRoot, 'dist/host-capabilities.js')).href
+  );
   const runtime = registryEntry.createRuntime(
     { captainOptions: { cwd: workdir } },
-    {
-      repository: {
-        runExclusive: rejectRepository,
-        runDeferred: rejectRepository,
-      },
-      effectLedger: {
-        snapshot: () => ({
-          schemaVersion: 1,
-          revision: 0,
-          boundaries: [],
-          logicalOperations: [],
+    worktreeHostCapabilities({
+      playbookId: basename,
+      classify: (baseline, after) =>
+        classifyGitChange({
+          baseline,
+          after,
+          run: (args) =>
+            execFileSync('git', args, {
+              cwd: workdir,
+              encoding: 'utf8',
+              stdio: ['ignore', 'pipe', 'ignore'],
+            }),
         }),
-        writeAhead: rejectEffectWrite,
+      observe: () => {
+        let head = NULL_GIT_OID;
+        try {
+          head = execFileSync('git', ['rev-parse', 'HEAD'], {
+            cwd: workdir,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+          }).trim();
+        } catch {
+          // no repository, or no commit yet
+        }
+        return observeWorktree({
+          worktree: workdir,
+          gitDir: join(workdir, '.git'),
+          head,
+        });
       },
-    },
+    }),
   );
-  const sessionId = `demo-${lang}-smoke`;
+  const sessionId = randomUUID();
   await runtime.init({
     sessionId,
     playbookId: basename,
@@ -156,6 +200,25 @@ try {
       callPlayer: async (playerId, prompt) => {
         seenPlayers.push(playerId);
         playerPrompts.push(prompt);
+        // The Coder's state is governed with a `one-descendant-commit`
+        // repository disposition, so the stand-in must actually commit: the
+        // boundary this smoke exercises exists to classify that commit, and a
+        // player that only returns text leaves the outcome unresolved.
+        if (seenPlayers.length === 1) {
+          const git = (...args) =>
+            execFileSync('git', args, { cwd: workdir, stdio: 'ignore' });
+          await writeFile(join(workdir, 'change.txt'), 'demo change\n', 'utf8');
+          git('add', '-A');
+          git(
+            '-c',
+            'user.name=Demo Smoke',
+            '-c',
+            'user.email=smoke@sublang.ai',
+            'commit',
+            '-m',
+            'demo: smoke change',
+          );
+        }
         return { status: 'ok', finalText: 'done' };
       },
       callCaptain: async () => {
@@ -178,6 +241,8 @@ try {
     signal: new AbortController().signal,
   });
   await runtime.dispose();
+  if (result.outcome !== 'terminal')
+    console.error('  DEBUG outcome:', JSON.stringify(result).slice(0, 400));
   report('entry/runtime smoke reaches terminal', result.outcome === 'terminal');
   report(
     'entry maps runtime role ids to documented players',
