@@ -194,6 +194,29 @@ describe('compiled selection and pin-input safety (phase-execution-28, phase-exe
     );
   });
 
+  it('accepts an in-boundary definition symlink to the selected file (phase-execution-28)', async () => {
+    const record = await writeCurrentPin();
+    const aliases = join(pipelineDir, 'aliases');
+    const definitionAlias = join(aliases, 'text2gears.md');
+    await mkdir(aliases);
+    await symlink('../text2gears.md', definitionAlias);
+    record.definition = {
+      path: 'aliases/text2gears.md',
+      hash: await hashFile(definitionAlias),
+    };
+    await writePins({ text2gears: record });
+
+    expect((await evaluatePins(pipelineDir)).verdicts?.text2gears).toEqual({
+      status: 'current',
+    });
+    const result = await runPhase();
+
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    expect(compiled.calls).toHaveLength(1);
+    expect(interpreted.calls).toHaveLength(0);
+    expect(selections).toHaveLength(1);
+  });
+
   it('keeps a current external-definition pin dormant until resolution selects it (phase-execution-28)', async () => {
     const record = await writeCurrentPin();
     const installedDefinition = join(
@@ -215,6 +238,40 @@ describe('compiled selection and pin-input safety (phase-execution-28, phase-exe
       status: 'current',
     });
     const result = await runPhase();
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.join('\n')).toMatch(
+      /pin-recorded definition.*selected pipeline definition/,
+    );
+    expect(interpreted.calls).toHaveLength(0);
+    expect(compiled.calls).toHaveLength(0);
+    expect(selections).toHaveLength(0);
+  });
+
+  it('does not let Reuse bypass the external-definition dormancy guard (phase-execution-28)', async () => {
+    const record = await writeCurrentPin();
+    const first = await runSlc(['flow', source], deps());
+    expect(first.ok, first.diagnostics.join('\n')).toBe(true);
+
+    const installedDefinition = join(
+      root,
+      'node_modules/@sublang/playbook/slc/text2gears.md',
+    );
+    await mkdir(dirname(installedDefinition), { recursive: true });
+    await writeFile(
+      installedDefinition,
+      await readFile(join(pipelineDir, 'text2gears.md')),
+    );
+    record.definition = {
+      path: '../node_modules/@sublang/playbook/slc/text2gears.md',
+      hash: await hashFile(installedDefinition),
+    };
+    await writePins({ text2gears: record }, '..');
+    interpreted.calls.length = 0;
+    compiled.calls.length = 0;
+    selections.length = 0;
+
+    const result = await runSlc(['flow', source], deps());
 
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toMatch(

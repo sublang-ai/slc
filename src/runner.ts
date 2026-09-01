@@ -986,38 +986,6 @@ async function executeSteps(
         ? ({ mode: 'ordinary' } as const)
         : await selectStepMode(step, index, target, identity, state);
 
-    // External definition locators are pin-capable before pipeline discovery
-    // is cut over to select them. Until then, never let a current pin certify
-    // one definition while this step executes or reuses another (DR-026).
-    let definitionIssue: string | null;
-    try {
-      definitionIssue = await selectedPinDefinitionIssue(
-        step,
-        pipeline.dir,
-        pinFile,
-      );
-    } catch (error) {
-      definitionIssue = messageOf(error);
-    }
-    if (definitionIssue !== null) {
-      const startedAt = Date.now();
-      deps.progress?.({ kind: 'phase-start', phase: step.phase, target });
-      deps.progress?.({
-        kind: 'phase-fail',
-        phase: step.phase,
-        target,
-        elapsedMs: Date.now() - startedAt,
-      });
-      diagnostics.push(
-        formatFailureReport({
-          phase: step.phase,
-          target,
-          reasons: [definitionIssue],
-        }),
-      );
-      return { ok: false, outputs, diagnostics };
-    }
-
     // Reuse still honors pin currency, but it constructs no executor because
     // no phase runs. A stale/malformed pin can never be bypassed by history.
     if (mode.mode === 'reuse') {
@@ -1026,7 +994,7 @@ async function executeSteps(
       }
       let reasons: string[] | null;
       try {
-        reasons = await reusePinFailure(step.pinKey, pipeline.dir, pinFile);
+        reasons = await reusePinFailure(step, pipeline.dir, pinFile);
       } catch (error) {
         reasons = [messageOf(error)];
       }
@@ -1077,13 +1045,7 @@ async function executeSteps(
     // phase and target from the report (cli-4, cli-32, phase-execution-27).
     let selection: Strategy;
     try {
-      selection = await selectExecutor(
-        step.phase,
-        step.pinKey,
-        pipeline.dir,
-        pinFile,
-        deps,
-      );
+      selection = await selectExecutor(step, pipeline.dir, pinFile, deps);
     } catch (error) {
       selection = { kind: 'fail', reasons: [messageOf(error)] };
     }
@@ -1520,29 +1482,10 @@ function sameHashes(left: readonly Hash[], right: readonly Hash[]): boolean {
 }
 
 async function reusePinFailure(
-  pinKey: string | undefined,
-  pipelineDir: string,
-  pinFile: PinFile | undefined,
-): Promise<string[] | null> {
-  const record = ownPin(pinFile, pinKey);
-  if (pinFile === undefined || pinKey === undefined || record === undefined) {
-    return null;
-  }
-  const verdict = await evaluatePin(pipelineDir, pinFile, pinKey, record);
-  return verdict.status === 'current'
-    ? null
-    : [`pin is ${verdict.status}: ${verdict.reason}`];
-}
-
-/**
- * Keeps external-definition pinning dormant until pipeline discovery selects
- * the same definition locator (phase-execution-27; DR-026).
- */
-async function selectedPinDefinitionIssue(
   step: PhaseStep,
   pipelineDir: string,
   pinFile: PinFile | undefined,
-): Promise<string | null> {
+): Promise<string[] | null> {
   const record = ownPin(pinFile, step.pinKey);
   if (
     pinFile === undefined ||
@@ -1552,8 +1495,28 @@ async function selectedPinDefinitionIssue(
     return null;
   }
   const verdict = await evaluatePin(pipelineDir, pinFile, step.pinKey, record);
-  if (verdict.status !== 'current') return null;
+  if (verdict.status !== 'current') {
+    return [`pin is ${verdict.status}: ${verdict.reason}`];
+  }
+  const definitionIssue = await currentPinDefinitionIssue(
+    step,
+    pipelineDir,
+    pinFile,
+    record,
+  );
+  return definitionIssue === null ? null : [definitionIssue];
+}
 
+/**
+ * Keeps external-definition pinning dormant until pipeline discovery selects
+ * the same physical definition (phase-execution-27; DR-026).
+ */
+async function currentPinDefinitionIssue(
+  step: PhaseStep,
+  pipelineDir: string,
+  pinFile: PinFile,
+  record: PinRecord,
+): Promise<string | null> {
   const recorded = resolvePinPath(
     pipelineDir,
     pinFile.pathBoundary.path,
@@ -1561,13 +1524,13 @@ async function selectedPinDefinitionIssue(
     'definition',
   );
   const selected = resolve(step.request.definitionPath);
-  if (recorded === selected) return null;
+  if (await pathsAlias(recorded, selected)) return null;
 
   const selectedLocator = relative(pipelineDir, selected).split(sep).join('/');
   return (
     `pin-recorded definition "${record.definition.path}" does not match ` +
     `selected pipeline definition "${selectedLocator}"; ` +
-    'external-definition execution remains disabled until pipeline resolution selects the recorded locator'
+    'external-definition execution remains disabled until pipeline resolution selects the same physical definition'
   );
 }
 
@@ -1688,30 +1651,46 @@ type Strategy =
  * interpreted.
  */
 async function selectExecutor(
-  phase: string,
-  pinKey: string | undefined,
+  step: PhaseStep,
   pipelineDir: string,
   pinFile: PinFile | undefined,
   deps: SlcDeps,
 ): Promise<Strategy> {
-  const record = ownPin(pinFile, pinKey);
-  if (pinFile === undefined || pinKey === undefined || record === undefined) {
+  const record = ownPin(pinFile, step.pinKey);
+  if (
+    pinFile === undefined ||
+    step.pinKey === undefined ||
+    record === undefined
+  ) {
     return { kind: 'run', executor: deps.executor };
   }
 
-  const verdict = await evaluatePin(pipelineDir, pinFile, pinKey, record);
+  const verdict = await evaluatePin(pipelineDir, pinFile, step.pinKey, record);
   if (verdict.status === 'current') {
+    const definitionIssue = await currentPinDefinitionIssue(
+      step,
+      pipelineDir,
+      pinFile,
+      record,
+    );
+    if (definitionIssue !== null) {
+      return { kind: 'fail', reasons: [definitionIssue] };
+    }
     if (deps.compiled === undefined) {
       return {
         kind: 'fail',
         reasons: [
-          `phase "${phase}" is pinned to a compiled artifact, but this host has no compiled executor configured`,
+          `phase "${step.phase}" is pinned to a compiled artifact, but this host has no compiled executor configured`,
         ],
       };
     }
     return {
       kind: 'run',
-      executor: deps.compiled({ phase: pinKey, pipelineDir, record }),
+      executor: deps.compiled({
+        phase: step.pinKey,
+        pipelineDir,
+        record,
+      }),
     };
   }
   return {
