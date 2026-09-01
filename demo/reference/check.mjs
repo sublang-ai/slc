@@ -128,14 +128,11 @@ try {
   const registryEntry = loaded.default;
   const seenPlayers = [];
   const playerPrompts = [];
-  // Playbook 10 classifies each Boss turn before any work starts: the idle hub
-  // admits the turn only once the judge names the entry event, so the first
-  // reply is that classification and the rest are the per-state result guards.
-  const judgeReplies = [
-    '{"type":"START"}',
-    '{"guard":"done"}',
-    '{"guard":"clean"}',
-  ];
+  // The linked artifact declares its textual Boss entry event (`entryEvent`),
+  // so a fresh Boss turn enters deterministically with the exact task text and
+  // spends no judge call; the primed replies are only the per-state result
+  // guards — the Coder's single completion guard, then the clean review.
+  const judgeReplies = ['{"guard":"done"}', '{"guard":"clean"}'];
   // A schema-3 entry takes configured options plus live host capabilities. The
   // demo smoke supplies a real repository capability so the optimize pass's
   // agent-free `git init` script actually runs against the scratch worktree,
@@ -148,46 +145,35 @@ try {
   // boundary against the scratch worktree, so this smoke exercises real
   // behavior rather than a harness-local reimplementation of the engine
   // contract.
-  const {
-    worktreeHostCapabilities,
-    observeWorktree,
-    classifyGitChange,
-    NULL_GIT_OID,
-  } = await import(
-    pathToFileURL(join(repoRoot, 'dist/host-capabilities.js')).href
-  );
+  const { worktreeHostCapabilities, observeGitWorktree, classifyGitChange } =
+    await import(
+      pathToFileURL(join(repoRoot, 'dist/host-capabilities.js')).href
+    );
+  const gitObserve = (args) =>
+    execFileSync('git', args, {
+      cwd: workdir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
   const runtime = registryEntry.createRuntime(
     { captainOptions: { cwd: workdir } },
     worktreeHostCapabilities({
       playbookId: basename,
-      classify: (baseline, after) =>
+      classify: (baseline, after, context) =>
         classifyGitChange({
           baseline,
           after,
-          run: (args) =>
-            execFileSync('git', args, {
-              cwd: workdir,
-              encoding: 'utf8',
-              stdio: ['ignore', 'pipe', 'ignore'],
-            }),
+          dispositions: context.dispositions,
+          run: gitObserve,
         }),
-      observe: () => {
-        let head = NULL_GIT_OID;
-        try {
-          head = execFileSync('git', ['rev-parse', 'HEAD'], {
-            cwd: workdir,
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'ignore'],
-          }).trim();
-        } catch {
-          // no repository, or no commit yet
-        }
-        return observeWorktree({
+      // A real status-derived projection: an empty one would assert a clean
+      // worktree and let an uncommitted change pass as `unchanged`.
+      observe: () =>
+        observeGitWorktree({
           worktree: workdir,
           gitDir: join(workdir, '.git'),
-          head,
-        });
-      },
+          run: gitObserve,
+        }),
     }),
   );
   const sessionId = randomUUID();
