@@ -813,9 +813,9 @@ for (const title of [
   requireTestCase(coverageSource, 'schema-3 coverage fixture', title);
 }
 for (const title of [
-  'exposes dormant schema-3 roles, concurrency, immutable compat, and empty options (release-22)',
+  'exposes schema-3 roles, concurrency, immutable compat, and empty options (release-22)',
   'initializes and disposes one causal root against exact live capabilities without governed effects (release-22)',
-  'plans deferred Playbook 10 configured-registry slash-command invocation without positional or removed run inputs (DR-024, DR-025)',
+  'plans Playbook 10 configured-registry slash-command invocation without positional or removed run inputs (DR-024, DR-027)',
 ]) {
   requireTestCase(consumerSource, 'schema-3 consumer fixture', title);
 }
@@ -830,9 +830,9 @@ requireTestCase(
   'constructs and drives the exact roleless composed-v3 phase-host boundary',
 );
 
-assert.equal(manifest.dependencies?.['@sublang/playbook'], '^4.0.0');
+assert.equal(manifest.dependencies?.['@sublang/playbook'], '^10.0.0');
 const lockedPlaybook = lock.packages?.['node_modules/@sublang/playbook'];
-assert.equal(lockedPlaybook?.version, '4.0.0');
+assert.equal(lockedPlaybook?.version, '10.0.0');
 assert.equal(
   lockedPlaybook.link,
   undefined,
@@ -841,8 +841,8 @@ assert.equal(
 const playbookArchive = new URL(lockedPlaybook.resolved);
 assert.equal(playbookArchive.protocol, 'https:');
 assert.ok(
-  playbookArchive.pathname.endsWith('/playbook-4.0.0.tgz'),
-  'Playbook lock does not resolve the 4.0.0 registry archive',
+  playbookArchive.pathname.endsWith('/playbook-10.0.0.tgz'),
+  'Playbook lock does not resolve the 10.0.0 registry archive',
 );
 assert.match(
   lockedPlaybook.integrity,
@@ -852,12 +852,12 @@ assert.match(
 assert.deepEqual(Object.keys(pins.pins).sort(), bundles.slice().sort());
 for (const bundle of bundles) {
   const pin = pins.pins[bundle];
-  assert.equal(pin.linkTarget?.provenance, '@sublang/playbook@4.0.0');
+  assert.equal(pin.linkTarget?.provenance, '@sublang/playbook@10.0.0');
   assert.ok(
     pin.runtimeDependencies?.some(
-      (dependency) => dependency.provenance === '@sublang/playbook@4.0.0',
+      (dependency) => dependency.provenance === '@sublang/playbook@10.0.0',
     ),
-    `${bundle} pin is missing Playbook 4.0.0 runtime provenance`,
+    `${bundle} pin is missing Playbook 10.0.0 runtime provenance`,
   );
 }
 

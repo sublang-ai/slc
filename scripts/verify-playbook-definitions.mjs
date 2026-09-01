@@ -2,28 +2,18 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 // continuous-integration-4 / self-hosting-11: prove that the definitions
-// vendored for compiled pin selection carry the immutable Playbook 4.0.0
-// normative content. SLC adds only its explicit Pin Inputs, whose exact lists
-// are part of the pin closure.
+// vendored for compiled pin selection carry the immutable Playbook 10.0.0
+// normative content byte-identically. SLC-owned pin-input declarations live
+// in the slc.pin-inputs.json sidecar (DR-026), not inside the definitions.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const expectedPlaybookVersion = '4.0.0';
+const expectedPlaybookVersion = '10.0.0';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const pipelineDir = join(repoRoot, 'pipelines', 'playbook');
-
-const pinInputs = {
-  text2gears: [
-    '../../node_modules/@sublang/spex/scaffold/specs/meta.md',
-    '../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md',
-    '../../package-lock.json',
-  ],
-  gears2fsm: ['text2gears.md', 'link.md', '../../package-lock.json'],
-  link: ['text2gears.md', 'gears2fsm.md', '../../package-lock.json'],
-  optimize: ['text2gears.md', 'gears2fsm.md', '../../package-lock.json'],
-};
+const definitions = ['text2gears', 'gears2fsm', 'link', 'optimize'];
 
 const rootPackage = readJson(join(repoRoot, 'package.json'));
 const lock = readJson(join(repoRoot, 'package-lock.json'));
@@ -52,57 +42,23 @@ if (installedPlaybook.version !== expectedPlaybookVersion) {
 }
 
 let failed = false;
-for (const [name, expectedInputs] of Object.entries(pinInputs)) {
+for (const name of definitions) {
   const filename = `${name}.md`;
-  const upstreamPath = join(playbookRoot, 'slc', filename);
-  const vendoredPath = join(pipelineDir, filename);
-  const upstream = readFileSync(upstreamPath, 'utf8');
-  const vendored = readFileSync(vendoredPath, 'utf8');
-
-  try {
-    const { normative, inputs } = withoutPinInputs(vendored, vendoredPath);
-    const expectedSection = `${expectedInputs.map((input) => `- \`${input}\``).join('\n')}\n`;
-    if (inputs !== expectedSection) {
-      throw new Error(
-        `unexpected Pin Inputs${firstDifference(expectedSection, inputs)}`,
-      );
-    }
-    if (normative !== upstream) {
-      throw new Error(
-        `normative content differs from installed @sublang/playbook@${expectedPlaybookVersion}${firstDifference(upstream, normative)}`,
-      );
-    }
+  const upstream = readFileSync(join(playbookRoot, 'slc', filename), 'utf8');
+  const vendored = readFileSync(join(pipelineDir, filename), 'utf8');
+  if (vendored === upstream) {
     console.log(
       `${filename}: matches @sublang/playbook@${expectedPlaybookVersion}`,
     );
-  } catch (error) {
+  } else {
     failed = true;
-    console.error(`${filename}: ${errorMessage(error)}`);
+    console.error(
+      `${filename}: differs from installed @sublang/playbook@${expectedPlaybookVersion}${firstDifference(upstream, vendored)}`,
+    );
   }
 }
 
 if (failed) process.exitCode = 1;
-
-function withoutPinInputs(source, path) {
-  const marker = '\n## Pin Inputs\n\n';
-  const sectionStart = source.indexOf(marker);
-  if (sectionStart === -1) {
-    throw new Error(`missing one explicit ## Pin Inputs section in ${path}`);
-  }
-  if (source.indexOf(marker, sectionStart + marker.length) !== -1) {
-    throw new Error(`multiple ## Pin Inputs sections in ${path}`);
-  }
-
-  const sectionEnd = source.indexOf('\n## ', sectionStart + marker.length);
-  if (sectionEnd === -1) {
-    throw new Error(`## Pin Inputs must precede another level-two section`);
-  }
-
-  return {
-    inputs: source.slice(sectionStart + marker.length, sectionEnd),
-    normative: source.slice(0, sectionStart) + source.slice(sectionEnd),
-  };
-}
 
 function firstDifference(expected, actual) {
   const expectedLines = expected.split('\n');
@@ -118,8 +74,4 @@ function firstDifference(expected, actual) {
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
-}
-
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
 }

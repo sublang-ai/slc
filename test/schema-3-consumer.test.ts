@@ -50,7 +50,7 @@ const emptyLedger = {
   boundaries: [],
   logicalOperations: [],
 };
-describe('dormant schema-3 registry consumer fixture', () => {
+describe('schema-3 registry consumer fixture', () => {
   let root: string;
   let entryPath: string;
   let linkedPath: string;
@@ -112,7 +112,7 @@ describe('dormant schema-3 registry consumer fixture', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it('exposes dormant schema-3 roles, concurrency, immutable compat, and empty options (release-22)', () => {
+  it('exposes schema-3 roles, concurrency, immutable compat, and empty options (release-22)', () => {
     expect(fixtureEntry).toMatchObject({
       id: 'workflow',
       command: 'workflow',
@@ -315,7 +315,7 @@ describe('dormant schema-3 registry consumer fixture', () => {
     expect(statusAfter.stdout).toBe('');
   });
 
-  it('plans deferred Playbook 10 configured-registry slash-command invocation without positional or removed run inputs (DR-024, DR-025)', () => {
+  it('plans Playbook 10 configured-registry slash-command invocation without positional or removed run inputs (DR-024, DR-027)', () => {
     const task = 'repair the synthetic sample';
     const configHome = join(root, 'config-home');
     const plan = createConfiguredRegistryPlan({
