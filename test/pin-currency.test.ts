@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { hashFile } from '../src/hash.js';
 import { evaluatePin, evaluatePins, hashTree } from '../src/pin-currency.js';
+import { PIN_INPUTS_FILE } from '../src/pin-inputs.js';
 import {
   PINS_FILE,
   PIN_HASH_ALGORITHM,
@@ -446,6 +447,23 @@ describe('evaluatePins (pinning-1, pinning-5)', () => {
     await write(PINS_FILE, '{ not json');
     const result = await evaluatePins(dir);
     expect(result.malformed).toBeDefined();
+    expect(result.verdicts).toBeUndefined();
+  });
+
+  it('reports a malformed sidecar beside an empty pin index (pinning-18)', async () => {
+    await write(
+      PINS_FILE,
+      JSON.stringify({
+        schema: PIN_SCHEMA,
+        hashAlgorithm: PIN_HASH_ALGORITHM,
+        pathBoundary: { path: '.' },
+        pins: {},
+      }),
+    );
+    await write(PIN_INPUTS_FILE, '{ not JSON');
+
+    const result = await evaluatePins(dir);
+    expect(result.malformed).toMatch(/valid JSON/);
     expect(result.verdicts).toBeUndefined();
   });
 

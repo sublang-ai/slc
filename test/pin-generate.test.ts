@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -9,13 +16,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { evaluatePins } from '../src/pin-currency.js';
 import { generatePinRecord, writePinFile } from '../src/pin-generate.js';
+import { PIN_INPUTS_FILE, PIN_INPUTS_SCHEMA } from '../src/pin-inputs.js';
 import { PINS_FILE } from '../src/pins.js';
 
 /** A compiled artifact that resolves to the linked `playbook` format (pinning-13). */
 const PHASE_ARTIFACT =
   'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
-describe('pin generation (pinning-16)', () => {
+const pinInputs = (closures: Record<string, string[]>): string =>
+  `${JSON.stringify({ schema: PIN_INPUTS_SCHEMA, closures }, null, 2)}\n`;
+
+describe('pin generation (pinning-16, pinning-19)', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -282,5 +293,170 @@ describe('pin generation (pinning-16)', () => {
       status: 'stale',
       reason: expect.stringMatching(/linkTarget changed/) as string,
     });
+  });
+
+  it('pins a sectionless installed definition from a flattened sidecar closure (pinning-8, pinning-10, pinning-16)', async () => {
+    const pipelineDir = join(dir, 'pipelines', 'playbook');
+    const definition = '../../node_modules/@sublang/playbook/slc/text2gears.md';
+    const boundary = { boundary: '../..' };
+    await write(
+      'node_modules/@sublang/playbook/slc/text2gears.md',
+      '# Installed text2gears definition\n\nNo repository-local pin section.\n',
+    );
+    await write('package-lock.json', '{"lockfileVersion":3}\n');
+    await write(
+      `pipelines/playbook/${PIN_INPUTS_FILE}`,
+      pinInputs({ text2gears: ['../../package-lock.json'] }),
+    );
+    await writeReviewedBundle('pipelines/playbook/');
+    await write('pipelines/playbook/link/code.ts', 'link target bytes\n');
+
+    const record = await generatePinRecord(
+      pipelineDir,
+      {
+        definition,
+        artifact: 'text2gears.slc/text2gears.playbook.ts',
+        artifactBundle: 'text2gears.slc',
+        linkTarget: { kind: 'file', locator: 'link/code.ts' },
+      },
+      boundary,
+    );
+    expect(record.definition).toMatchObject({
+      path: definition,
+      hash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/) as string,
+    });
+    expect(record.semanticInputs).toEqual([
+      {
+        path: '../../package-lock.json',
+        hash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      },
+    ]);
+
+    await writePinFile(pipelineDir, { text2gears: record }, boundary);
+    expect((await evaluatePins(pipelineDir)).verdicts?.text2gears).toEqual({
+      status: 'current',
+    });
+
+    await write(
+      `pipelines/playbook/${PIN_INPUTS_FILE}`,
+      pinInputs({ text2gears: [] }),
+    );
+    expect(
+      (await evaluatePins(pipelineDir)).verdicts?.text2gears,
+    ).toMatchObject({
+      status: 'stale',
+      reason: expect.stringMatching(/closure/) as string,
+    });
+  });
+
+  const invalidSidecars: Array<[string, string, RegExp]> = [
+    ['invalid JSON', '{ not JSON', /JSON/],
+    [
+      'an unsupported schema',
+      JSON.stringify({ schema: 'sublang.slc.pin-inputs.v0', closures: {} }),
+      /schema/,
+    ],
+    [
+      'an unknown field',
+      JSON.stringify({
+        schema: PIN_INPUTS_SCHEMA,
+        closures: {},
+        extra: true,
+      }),
+      /extra/,
+    ],
+    [
+      'a wrong-typed closures field',
+      JSON.stringify({ schema: PIN_INPUTS_SCHEMA, closures: [] }),
+      /closures/,
+    ],
+    [
+      'a non-portable closure key',
+      pinInputs({ '../text2gears': [] }),
+      /closures|phase/,
+    ],
+    [
+      'a duplicate closure path',
+      pinInputs({
+        text2gears: ['reference/gears.md', 'reference/gears.md'],
+      }),
+      /duplicate|closures/,
+    ],
+    ['an empty closure path', pinInputs({ text2gears: [''] }), /non-empty/],
+    [
+      'an absolute closure path',
+      pinInputs({ text2gears: ['/etc/passwd'] }),
+      /relative|path/,
+    ],
+    [
+      'a backslash-containing closure path',
+      pinInputs({ text2gears: ['reference\\gears.md'] }),
+      /POSIX|path/,
+    ],
+    [
+      'a boundary-escaping closure path',
+      pinInputs({ text2gears: ['../outside.md'] }),
+      /boundary/,
+    ],
+  ];
+
+  it.each(invalidSidecars)(
+    'rejects %s sidecar in generation and currency validation (pinning-19)',
+    async (_label, content, reason) => {
+      await writeFixture();
+      const record = await generatePinRecord(dir, spec);
+      await writePinFile(dir, { text2gears: record });
+      await write(PIN_INPUTS_FILE, content);
+
+      const result = await evaluatePins(dir);
+      const verdict = result.verdicts?.text2gears;
+      expect(
+        result.malformed ??
+          (verdict as { reason?: string } | undefined)?.reason,
+      ).toMatch(reason);
+      expect(
+        Object.values(result.verdicts ?? {}).some(
+          (candidate) => candidate.status === 'current',
+        ),
+      ).toBe(false);
+      await expect(generatePinRecord(dir, spec)).rejects.toThrow(reason);
+    },
+  );
+
+  it('reports a malformed sidecar before an independently stale record (pinning-18)', async () => {
+    await writeFixture();
+    const record = await generatePinRecord(dir, spec);
+    await writePinFile(dir, { text2gears: record });
+    await write(PIN_INPUTS_FILE, '{ not JSON');
+    await write('text2gears.md', 'changed definition bytes\n');
+
+    const result = await evaluatePins(dir);
+    expect(result.malformed).toMatch(/JSON/);
+    expect(result.verdicts).toBeUndefined();
+  });
+
+  it('rejects a symbolic-link sidecar in generation and currency validation (pinning-19)', async () => {
+    await writeFixture();
+    const record = await generatePinRecord(dir, spec);
+    await writePinFile(dir, { text2gears: record });
+    await write('pin-inputs-target.json', pinInputs({ text2gears: [] }));
+    await symlink(
+      join(dir, 'pin-inputs-target.json'),
+      join(dir, PIN_INPUTS_FILE),
+    );
+
+    const result = await evaluatePins(dir);
+    const verdict = result.verdicts?.text2gears;
+    expect(
+      result.malformed ?? (verdict as { reason?: string } | undefined)?.reason,
+    ).toMatch(/regular|symbolic/);
+    expect(
+      Object.values(result.verdicts ?? {}).some(
+        (candidate) => candidate.status === 'current',
+      ),
+    ).toBe(false);
+    await expect(generatePinRecord(dir, spec)).rejects.toThrow(
+      /regular|symbolic/,
+    );
   });
 });
