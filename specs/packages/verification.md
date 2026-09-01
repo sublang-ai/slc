@@ -7,7 +7,7 @@
 
 This package specifies how `slc` verifies that a compiled `playbook` artifact faithfully represents its source, per [DR-009](../decisions/009-slc-playbook-pipeline-compilation.md) and the Playbook 1.0 actor and dynamic-call adoption of [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md).
 A compiled routing workflow also separates source-owned result metadata from acting prose per [DR-012](../decisions/012-playbook-routing-control-separation.md).
-Dormant schema-3 readiness checks use the Roles and runtime contracts of [DR-024](../decisions/024-playbook-10-schema-3-adoption.md) under the deferral in [DR-025](../decisions/025-defer-playbook-10-activation.md).
+Schema-3 checks use the Roles and runtime contracts of [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), current since the activation completed under [DR-027](../decisions/027-complete-playbook-10-activation.md).
 A compiled artifact is judgment-produced, so `slc` re-checks it deterministically against the `gears` and `fsm` it was built from and emits that check as a test beside the artifacts under `<basename>.playbook/`, so each build re-verifies faithfulness.
 The package covers GEARS↔FSM conformance, FSM introspection, prompt contracts, transition coverage, runtime equivalence, script actors, and emitted-module load integrity.
 Verification exercises those deterministic checks against the manual reference artifacts `@sublang/playbook` ships, detects injected drift, and runs generated tests beside reserved-pipeline artifacts.
@@ -25,13 +25,13 @@ When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc 
 | --- | --- |
 | Every node in a structured machine | Carry a non-empty explicit state id and matching `meta.playbook.stateId`. |
 | Direct-Captain leaf | Invoke `captain` and carry that same id plus the item's prompt body verbatim without `player` or `role` binding. |
-| Schema-3 readiness delegated-role leaf | Invoke `player`, carry `meta.playbook.role` and `invoke.input.role` equal to the source role's canonical lowercase local id, omit `invoke.input.player`, and preserve the role locally without encoding a concrete player or alias. |
-| Schema-3 readiness `Roles` declaration | Derive each local role id by lowercasing its source name, require it to match `[a-z][a-z0-9_-]*`, reject the reserved id `captain`, and reject removed aliases, repeated declarations, or distinct names that collide after derivation. |
+| Schema-3 delegated-role leaf | Invoke `player`, carry `meta.playbook.role` and `invoke.input.role` equal to the source role's canonical lowercase local id, omit `invoke.input.player`, and preserve the role locally without encoding a concrete player or alias. |
+| Schema-3 `Roles` declaration | Derive each local role id by lowercasing its source name, require it to match `[a-z][a-z0-9_-]*`, reject the reserved id `captain`, and reject removed aliases, repeated declarations, or distinct names that collide after derivation. |
 | Immutable schema-1 delegated-player leaf | Invoke `player` and carry its source-declared player through the historical `invoke.input.player` contract without being relabelled as schema 3. |
 | Literal nested-playbook leaf | Invoke `playbook` and carry the same id, literal target, and child-input body verbatim. |
 | Dynamic nested-playbook leaf | Invoke `playbook`, carry the same id, preserve the GEARS target-field name and sole child-text placeholder as literal `playbookIdContext` and `textContext` metadata, and evaluate `playbookId` and `text` to independent sentinel values supplied through those exact named context fields without source-text inspection. |
-| Schema-3 readiness parallel group | Represent each simultaneously active region by its canonical role id, require those region ids to be pairwise distinct, and appear exactly once in the FSM's `concurrentRoleSets` export in source group and region order. |
-| Schema-3 readiness artifact with no parallel group | Export `concurrentRoleSets` as the exact empty array. |
+| Schema-3 parallel group | Represent each simultaneously active region by its canonical role id, require those region ids to be pairwise distinct, and appear exactly once in the FSM's `concurrentRoleSets` export in source group and region order. |
+| Schema-3 artifact with no parallel group | Export `concurrentRoleSets` as the exact empty array. |
 | Schema-1 artifact whose FSM module independently exports `concurrentRoleSets` | Preserve schema-1 classification because the export is not artifact-schema evidence [[verification-21](#verification-21)]. |
 
 #### verification-3
@@ -44,7 +44,7 @@ When a compilation-correctness check determines whether a machine uses the schem
 
 #### verification-21
 
-When a compilation-correctness check selects the artifact schema used by generation-specific conformance, continuation, or runtime-profile probes, the check shall apply one fail-closed decision ([DR-024](../decisions/024-playbook-10-schema-3-adoption.md), [DR-025](../decisions/025-defer-playbook-10-activation.md)):
+When a compilation-correctness check selects the artifact schema used by generation-specific conformance, continuation, or runtime-profile probes, the check shall apply one fail-closed decision ([DR-024](../decisions/024-playbook-10-schema-3-adoption.md)):
 
 | Evidence case | Required schema decision |
 | --- | --- |
@@ -131,7 +131,7 @@ When a full reserved-pipeline run for the reserved `slc` or `playbook` identitie
 
 #### verification-10
 
-When comparing produced and reference compiled outputs, the slc equivalence harness shall derive and compare each exact runtime contract profile through all applicable cases ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md), [DR-010](../decisions/010-playbook-runtime-contract-evolution.md), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), [DR-025](../decisions/025-defer-playbook-10-activation.md)):
+When comparing produced and reference compiled outputs, the slc equivalence harness shall derive and compare each exact runtime contract profile through all applicable cases ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md), [DR-010](../decisions/010-playbook-runtime-contract-evolution.md), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md)):
 
 | Profile case | Required derivation and comparison |
 | --- | --- |
