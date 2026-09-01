@@ -132,6 +132,7 @@ export async function inspectClosureWithDeclaration(
   pinInputs?: LoadedPinInputs,
 ): Promise<InspectedClosure> {
   let inspectedPinInputs: InspectedPinInputs | undefined;
+  let sidecarIssue: PinError | undefined;
   let loaded = pinInputs;
   if (phase !== undefined) {
     if (loaded === undefined) {
@@ -140,7 +141,10 @@ export async function inspectClosureWithDeclaration(
         loaded = inspectedPinInputs;
       } catch (error) {
         if (!(error instanceof PinError)) throw error;
-        return { paths: new Set<string>(), complete: false, issue: error };
+        // The sidecar structure cannot be trusted, but the definition's inline
+        // tree remains independently discoverable for conservative protection.
+        sidecarIssue = error;
+        loaded = {};
       }
     }
     if (
@@ -206,7 +210,7 @@ export async function inspectClosureWithDeclaration(
   const closure = new Set<string>();
   const seen = new Set<string>();
   const queue: string[] = [definitionPath];
-  let issue = inspectedPinInputs?.issue;
+  let issue = sidecarIssue ?? inspectedPinInputs?.issue;
 
   while (queue.length > 0) {
     const rel = queue.shift() as string;
