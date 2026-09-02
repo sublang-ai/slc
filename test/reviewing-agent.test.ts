@@ -84,6 +84,9 @@ describe('createReviewingAgent (DR-022)', () => {
     expect(reviewer.calls[0].prompt).toContain(
       'Treat a finding rejected twice with evidence as settled',
     );
+    expect(reviewer.calls[0].prompt).toContain(
+      'Inspect only the workspace named by the request; do not consult artifacts outside it, including any prior or reference compilation.',
+    );
   });
 
   it('accepts NO_FINDINGS with surrounding whitespace and CRLF', async () => {
@@ -97,6 +100,49 @@ describe('createReviewingAgent (DR-022)', () => {
       status: 'success',
       text: 'coder result',
     });
+  });
+
+  it('reads a clean verdict from the end of a reply prefaced by rationale', async () => {
+    const coder = queuedClient([{ status: 'success', text: 'coder result' }]);
+    const reviewer = queuedClient([
+      {
+        status: 'success',
+        text: 'Verified the fix in detail.\n\nAll assertions reproduce.\n\nNO_FINDINGS',
+      },
+    ]);
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    await expect(agent.run(request())).resolves.toEqual({
+      status: 'success',
+      text: 'coder result',
+    });
+  });
+
+  it('reads a findings block from the end of a reply prefaced by narration', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'initial' },
+      {
+        status: 'success',
+        text: correctionEnvelope('replacement', [
+          { finding: 1, decision: 'accept', reason: 'fixed first' },
+          { finding: 2, decision: 'reject', reason: 'evidence disproves it' },
+        ]),
+      },
+    ]);
+    const reviewer = queuedClient([
+      {
+        status: 'success',
+        text: 'I reviewed the artifact.\n\nFINDINGS:\n1. First finding\n   evidence line\n2. Second finding',
+      },
+      { status: 'success', text: 'NO_FINDINGS' },
+    ]);
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    await expect(agent.run(request())).resolves.toEqual({
+      status: 'success',
+      text: 'replacement',
+    });
+    expect(coder.calls[1].prompt).toContain('2. Second finding');
   });
 
   it('relays findings to the Coder, preserves role resumes, and re-reviews the final Coder text', async () => {
@@ -447,6 +493,10 @@ describe('createReviewingAgent (DR-022)', () => {
     { status: 'error', text: 'review failed' } as AgentRunResult,
     { status: 'incomplete', text: 'review incomplete' } as AgentRunResult,
     { status: 'success', text: 'looks good' } as AgentRunResult,
+    {
+      status: 'success',
+      text: 'I inspected the artifact.\n\nIt matches the definition well.',
+    } as AgentRunResult,
     {
       status: 'success',
       text: 'FINDINGS:\n2. wrong numbering',
