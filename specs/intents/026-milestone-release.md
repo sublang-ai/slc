@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress — the contract-based adoption has landed.
+Done — v0.7.0 tagged and published on the adopted Playbook 12.2.0 set.
 
 ## Intent
 
