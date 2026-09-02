@@ -319,9 +319,10 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
     expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe(
       'compiled-v3:hello schema 3',
     );
-    // A fixture declaring no option is constructed exactly once, with the
-    // exact empty configured options (phase-execution-49).
-    expect(constructions).toEqual([[]]);
+    // A fixture declaring no option rejects the offered `definition` and is
+    // then constructed once more with the exact empty configured options
+    // (phase-execution-49).
+    expect(constructions).toEqual([['definition'], []]);
   });
 
   it('drives the same roleless composed-v3 fixture inside a Git worktree', async () => {
@@ -505,8 +506,8 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
   ] as const)(
     'does not retry a composed-v3 factory that rejects the exact construction as %s',
     async (kind) => {
-      // The host offers the exact empty configured options and then, once,
-      // the single `definition` option (phase-execution-49; DR-028); a factory
+      // The host offers the single `definition` option and then, once, the
+      // exact empty configured options (phase-execution-49; DR-028); a factory
       // rejecting both is neither constructed a third time nor initialized.
       const constructions: string[][] = [];
       const factory = (...args: unknown[]) => {
@@ -571,7 +572,7 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
             ? 'required configured option is absent'
             : 'required host authority is absent';
       expect(result.diagnostics.join('\n')).toContain(diagnostic);
-      expect(constructions).toEqual([[], ['definition']]);
+      expect(constructions).toEqual([['definition'], []]);
       expect(playerTransports).toBe(0);
     },
   );
@@ -736,10 +737,9 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
   });
 
   // A composed-v3 artifact whose options validator declares `definition`
-  // rejects the exact empty baseline and then receives, in one further
-  // construction, exactly `{ definition }` holding the exact bytes of the
-  // definition the request names; the seeded Request line carries paths only
-  // (phase-execution-49, phase-execution-29; DR-028).
+  // receives, in its single construction, exactly `{ definition }` holding
+  // the exact bytes of the definition the request names; the seeded Request
+  // line carries paths only (phase-execution-49, phase-execution-29; DR-028).
   const definitionExecutor = (constructions: string[][]) =>
     createCompiledExecutor({
       artifactPath: definitionFixture,
@@ -767,7 +767,7 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
       new AbortController().signal,
     );
     expect(result).toEqual({ status: 'ok', diagnostics: [] });
-    expect(constructions).toEqual([[], ['definition']]);
+    expect(constructions).toEqual([['definition']]);
     // Bytes cross unnormalized: the CRLF and non-ASCII text survive.
     expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe(phaseDefinition);
   });
@@ -788,7 +788,7 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
       new AbortController().signal,
     );
     expect(result).toEqual({ status: 'ok', diagnostics: [] });
-    expect(constructions).toEqual([[], ['definition']]);
+    expect(constructions).toEqual([['definition']]);
     expect(await readFile(join(root, 'linked.ts'), 'utf8')).toBe(
       linkDefinition,
     );

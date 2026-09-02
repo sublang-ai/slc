@@ -11,6 +11,8 @@
  * (DR-010, DR-011).
  */
 
+import type { HostCapabilities } from '@sublang/playbook/host-capabilities';
+
 /** The frozen 0.9 player result (DR-010 legacy profile). */
 export interface LegacyPlayerResult {
   status: 'ok' | 'aborted' | 'error';
@@ -268,30 +270,13 @@ export interface ComposedV3FactoryCompat {
   readonly runtimeAbi: 1;
 }
 
-export interface EmptyEffectLedgerSnapshot {
-  schemaVersion: 1;
-  revision: 0;
-  boundaries: readonly [];
-  logicalOperations: readonly [];
-}
-
-/** The deliberately narrow repository seam owned by SLC's roleless host. */
-export interface PhaseHostRepository {
-  runExclusive(...args: readonly unknown[]): Promise<never>;
-  runDeferred(...args: readonly unknown[]): Promise<never>;
-}
-
-/** The immutable-empty/read-only effect seam owned by SLC's roleless host. */
-export interface PhaseHostEffectLedger {
-  snapshot(): EmptyEffectLedgerSnapshot;
-  writeAhead(...args: readonly unknown[]): Promise<never>;
-}
-
-/** No authority capability enters SLC's root phase host (DR-024). */
-export interface ComposedV3PhaseHostCapabilities {
-  repository: PhaseHostRepository;
-  effectLedger: PhaseHostEffectLedger;
-}
+/**
+ * The live capabilities SLC's roleless phase host supplies: the installed
+ * engine's published `{ repository, effectLedger }` shape (DR-046), with no
+ * authority capability (DR-024). The host constructs them fail-closed because
+ * it runs no governed state.
+ */
+export type ComposedV3PhaseHostCapabilities = HostCapabilities;
 
 /**
  * The configured options SLC's roleless host may supply: the exact empty

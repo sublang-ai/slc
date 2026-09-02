@@ -1611,12 +1611,14 @@ describe('compiled execution through the bin (cli-28)', () => {
     // The delegated-role port fails closed before any player transport is
     // built, so only the eager shared Captain/judge transport exists.
     expect(adapterBuilds).toBe(1);
-    // The host supplies exactly two members — empty configured options plus
-    // live capabilities whose repository and ledger-write seams fail closed —
-    // over the same six-port composed root session (DR-024).
+    // The host supplies exactly two members — the single `definition` option
+    // this lenient factory accepts at its first construction (DR-028) plus the
+    // installed engine's fail-closed live capabilities, whose repository and
+    // ledger-write seams reject (DR-046) — over the same six-port composed
+    // root session (DR-024).
     expect(JSON.parse(await readFile(target, 'utf8'))).toEqual({
       inputKeys: ['configuredOptions', 'hostCapabilities'],
-      configuredOptionKeys: [],
+      configuredOptionKeys: ['definition'],
       capabilityKeys: ['effectLedger', 'repository'],
       sessionDepth: 0,
       rootIsSelf: true,
@@ -1635,11 +1637,10 @@ describe('compiled execution through the bin (cli-28)', () => {
         logicalOperations: [],
       },
       runExclusive:
-        'compiled composed-v3 phase host does not support repository operations',
+        'fail-closed host capabilities run no governed repository operation',
       runDeferred:
-        'compiled composed-v3 phase host does not support repository operations',
-      writeAhead:
-        'compiled composed-v3 phase host does not support effect-ledger writes',
+        'fail-closed host capabilities run no governed repository operation',
+      writeAhead: 'fail-closed host capabilities accept no effect-ledger write',
       callRole:
         'compiled composed-v3 phase host does not support delegated role calls',
     });
