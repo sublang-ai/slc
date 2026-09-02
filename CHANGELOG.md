@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-02
+
 ### Added
 
 - **Adapter-scoped fast mode for the Coder and the Reviewer.** `fastMode`
@@ -89,6 +91,11 @@ and this project adheres to
   `playbook run` uses; SLC's own `src/host-capabilities.ts` copy of the
   worktree classifier and its tests are deleted, so engine-contract changes
   to receipt classification now arrive with the dependency
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
+- **Playbook 12.2.0 is the adopted release.** Adopted Playbook 12.2.0 as a
+  routine contract-based adoption: definitions re-synchronized, pins
+  regenerated, no bundle rebuilt
   ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
 
 ## [0.6.0] - 2026-09-01
@@ -299,7 +306,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/sublang-ai/slc/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/sublang-ai/slc/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/sublang-ai/slc/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sublang-ai/slc/compare/v0.3.0...v0.4.0
