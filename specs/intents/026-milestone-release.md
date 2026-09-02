@@ -5,7 +5,7 @@
 
 ## Status
 
-Planned — starts when the adoption under IR-025 lands.
+In progress — the contract-based adoption has landed.
 
 ## Intent
 
@@ -13,14 +13,14 @@ Publish the compiler milestone the demo depends on: the contract-based adoption 
 
 ## Deliverables
 
-- [ ] Adapter-scoped fast mode is configurable for the coder and the reviewer (`fastMode`, `reviewerFastMode`, `SLC_FAST_MODE`, `SLC_REVIEWER_FAST_MODE`), delegated to the installed cligent capability contract like effort.
+- [x] Adapter-scoped fast mode is configurable for the coder and the reviewer (`fastMode`, `reviewerFastMode`, `SLC_FAST_MODE`, `SLC_REVIEWER_FAST_MODE`), delegated to the installed cligent capability contract like effort.
 - [ ] Version, changelog, and regenerated pins prepared on the adopted set.
 - [ ] `npm run release:check` and both demo reference checkers pass on the release commit.
 - [ ] The release is tagged and published.
 
 ## Tasks
 
-1. [ ] Add the fast-mode configuration keys with their spec items and tests.
+1. [x] Add the fast-mode configuration keys with their spec items and tests.
 2. [ ] Prepare the release commit and verify the full gate.
 3. [ ] Tag, push, and confirm publication.
 

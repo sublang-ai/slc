@@ -176,10 +176,13 @@ export function resolveRunConfig(
     SLC_AGENT: nonBlank(env.SLC_AGENT) ?? file.agent,
     SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.model,
     SLC_EFFORT: nonBlank(env.SLC_EFFORT) ?? file.effort,
+    SLC_FAST_MODE: nonBlank(env.SLC_FAST_MODE) ?? flag(file.fastMode),
     SLC_REVIEWER_AGENT: nonBlank(env.SLC_REVIEWER_AGENT) ?? file.reviewerAgent,
     SLC_REVIEWER_MODEL: nonBlank(env.SLC_REVIEWER_MODEL) ?? file.reviewerModel,
     SLC_REVIEWER_EFFORT:
       nonBlank(env.SLC_REVIEWER_EFFORT) ?? file.reviewerEffort,
+    SLC_REVIEWER_FAST_MODE:
+      nonBlank(env.SLC_REVIEWER_FAST_MODE) ?? flag(file.reviewerFastMode),
   });
   const pipelinePath = nonBlank(env.SLC_PIPELINE_PATH) ?? file.pipelinePath;
   const stallSeconds =
@@ -212,6 +215,15 @@ function nonBlank(value: string | undefined): string | undefined {
   return value !== undefined && value.trim() !== '' ? value : undefined;
 }
 
+/**
+ * Renders a file boolean in the exact `true`/`false` form its environment
+ * variable accepts, so one resolver validates both sources (cli-7); a
+ * literal `false` stays a request, and an absent key stays absent.
+ */
+function flag(value: boolean | undefined): string | undefined {
+  return value === undefined ? undefined : String(value);
+}
+
 /** Usage text naming the documented invocation forms and configuration (cli-2). */
 export function usageText(): string {
   return [
@@ -242,15 +254,18 @@ export function usageText(): string {
     '  environment variable below:',
     '    ./slc.config.yaml',
     '    ${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml',
-    '  Keys: agent, model, effort, reviewerAgent, reviewerModel,',
-    '        reviewerEffort, pipelinePath, stallTimeout.',
+    '  Keys: agent, model, effort, fastMode, reviewerAgent, reviewerModel,',
+    '        reviewerEffort, reviewerFastMode, pipelinePath, stallTimeout.',
     '',
     '  SLC_AGENT          agent CLI: claude-code | codex | gemini | opencode',
     '  SLC_MODEL          optional model for the agent CLI',
     '  SLC_EFFORT         optional adapter-scoped reasoning effort (e.g. xhigh)',
+    '  SLC_FAST_MODE      optional adapter-scoped fast mode: true | false',
+    '                     (omit for the agent CLI default)',
     '  SLC_REVIEWER_AGENT optional independent reviewer; enables reviewed compilation',
     '  SLC_REVIEWER_MODEL optional model for the reviewer agent CLI',
     '  SLC_REVIEWER_EFFORT optional adapter-scoped reviewer reasoning effort',
+    '  SLC_REVIEWER_FAST_MODE optional adapter-scoped reviewer fast mode: true | false',
     '  SLC_PIPELINE_PATH  search roots for <pipeline> references (default: cwd)',
     '  SLC_STALL_TIMEOUT  seconds of agent inactivity before a stalled call',
     '                     fails the run (default: 600; 0 disables)',

@@ -45,7 +45,7 @@ describe('loadConfigFile (cli-20, cli-21)', () => {
     const path = await write(
       cwd,
       CONFIG_FILE,
-      'agent: codex\nmodel: gpt-5.5\nreviewerAgent: claude-code\nreviewerModel: opus\nreviewerEffort: high\npipelinePath:\n  - ./pipes\n  - /abs/pipes\n',
+      'agent: codex\nmodel: gpt-5.5\nfastMode: true\nreviewerAgent: claude-code\nreviewerModel: opus\nreviewerEffort: high\nreviewerFastMode: false\npipelinePath:\n  - ./pipes\n  - /abs/pipes\n',
     );
 
     const loaded = await loadConfigFile({ cwd, configHome: home });
@@ -54,11 +54,30 @@ describe('loadConfigFile (cli-20, cli-21)', () => {
     expect(loaded.config).toEqual({
       agent: 'codex',
       model: 'gpt-5.5',
+      fastMode: true,
       reviewerAgent: 'claude-code',
       reviewerModel: 'opus',
       reviewerEffort: 'high',
+      // A literal false survives as a request, distinct from omission.
+      reviewerFastMode: false,
       pipelinePath: ['./pipes', '/abs/pipes'],
     });
+  });
+
+  it('rejects a fastMode or reviewerFastMode that is not a YAML boolean (cli-21, cli-43)', async () => {
+    for (const body of [
+      'agent: codex\nfastMode: "true"\n',
+      'agent: codex\nfastMode: yes\n',
+      'agent: codex\nreviewerAgent: claude-code\nreviewerFastMode: 1\n',
+    ]) {
+      await write(cwd, CONFIG_FILE, body);
+      await expect(
+        loadConfigFile({ cwd, configHome: home }),
+      ).rejects.toMatchObject({
+        code: 'config-invalid',
+        message: expect.stringMatching(/FastMode|fastMode/),
+      });
+    }
   });
 
   it('parses a numeric stallTimeout, including the disabling 0 (cli-34)', async () => {
@@ -151,9 +170,11 @@ describe('loadConfigFile (cli-20, cli-21)', () => {
     expect(loaded.config).toEqual({ agent: 'claude-code' });
     expect(seeded).toEqual([expected]);
     const template = await readFile(expected, 'utf8');
+    expect(template).toContain('# fastMode:');
     expect(template).toContain('# reviewerAgent: codex');
     expect(template).toContain('# reviewerModel:');
     expect(template).toContain('# reviewerEffort:');
+    expect(template).toContain('# reviewerFastMode:');
   });
 
   it('does not seed when the working-directory file exists (cli-30)', async () => {

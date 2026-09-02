@@ -15,12 +15,14 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FAST_MODE_SUPPORT } from '@sublang/cligent';
 import type { AgentAdapter } from '@sublang/cligent';
 
 import {
   createConfiguredCompiledFactory,
   createConfiguredExecutor,
   resolveAgentSelection,
+  SUPPORTED_AGENTS,
   type AgentSelection,
 } from '../src/config.js';
 import {
@@ -203,15 +205,19 @@ describe('conveniences (cli-13, cli-14)', () => {
         'agent',
         'model',
         'effort',
+        'fastMode',
         'reviewerAgent',
         'reviewerModel',
         'reviewerEffort',
+        'reviewerFastMode',
         'SLC_AGENT',
         'SLC_MODEL',
         'SLC_EFFORT',
+        'SLC_FAST_MODE',
         'SLC_REVIEWER_AGENT',
         'SLC_REVIEWER_MODEL',
         'SLC_REVIEWER_EFFORT',
+        'SLC_REVIEWER_FAST_MODE',
       ]) {
         expect(help).toContain(name);
       }
@@ -620,6 +626,86 @@ describe('stall timeout resolution (cli-34, cli-35)', () => {
   });
 });
 
+describe('fast-mode configuration resolution (cli-7, cli-43)', () => {
+  const env = { SLC_AGENT: 'claude-code' };
+
+  it('leaves fast mode unset when neither source supplies it', () => {
+    expect(resolveRunConfig(env, {}).selection.fastMode).toBeUndefined();
+  });
+
+  it('takes the file boolean when the environment is silent, false included', () => {
+    expect(resolveRunConfig(env, { fastMode: true }).selection.fastMode).toBe(
+      true,
+    );
+    // A file `false` is a literal request, not an omission.
+    expect(resolveRunConfig(env, { fastMode: false }).selection.fastMode).toBe(
+      false,
+    );
+    expect(
+      resolveRunConfig({ ...env, SLC_FAST_MODE: '  ' }, { fastMode: false })
+        .selection.fastMode,
+    ).toBe(false);
+  });
+
+  it('lets a non-blank SLC_FAST_MODE override the file value', () => {
+    expect(
+      resolveRunConfig({ ...env, SLC_FAST_MODE: 'false' }, { fastMode: true })
+        .selection.fastMode,
+    ).toBe(false);
+    expect(
+      resolveRunConfig({ ...env, SLC_FAST_MODE: 'true' }, { fastMode: false })
+        .selection.fastMode,
+    ).toBe(true);
+  });
+
+  it('refuses an SLC_FAST_MODE other than exactly true or false, naming the variable', () => {
+    expect(() =>
+      resolveRunConfig({ ...env, SLC_FAST_MODE: 'yes' }, { fastMode: true }),
+    ).toThrow(/SLC_FAST_MODE/);
+  });
+
+  it('refuses a literal from either source on an agent the installed Cligent contract reports unsupported', () => {
+    const unsupported = SUPPORTED_AGENTS.find(
+      (agent) => !FAST_MODE_SUPPORT[agent].requestSupported,
+    );
+    expect(unsupported).toBeDefined();
+    expect(() =>
+      resolveRunConfig({ SLC_AGENT: unsupported }, { fastMode: false }),
+    ).toThrow(new RegExp(`"${unsupported}"`));
+    expect(() =>
+      resolveRunConfig({ SLC_AGENT: unsupported, SLC_FAST_MODE: 'true' }, {}),
+    ).toThrow(new RegExp(`"${unsupported}"`));
+  });
+
+  it('refuses the run before any agent call through the bin, naming the agent and the variable (cli-18, cli-43)', async () => {
+    const unsupported = SUPPORTED_AGENTS.find(
+      (agent) => !FAST_MODE_SUPPORT[agent].requestSupported,
+    );
+    expect(unsupported).toBeDefined();
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await run(['flow', source], {
+      cwd: root,
+      env: {
+        SLC_AGENT: unsupported,
+        SLC_FAST_MODE: 'true',
+        SLC_PIPELINE_PATH: pipelinesRoot,
+        XDG_CONFIG_HOME: root,
+      },
+      stdout: (t) => out.push(t),
+      stderr: (t) => err.push(t),
+    });
+
+    expect(code).toBe(1);
+    expect(out.join('')).toBe('');
+    expect(err.join('')).toContain(`"${unsupported}"`);
+    expect(err.join('')).toContain('SLC_FAST_MODE');
+    expect(
+      await exists(join(root, 'onboarding.flow', 'onboarding.gears.md')),
+    ).toBe(false);
+  });
+});
+
 describe('reviewer configuration resolution (DR-022)', () => {
   it('merges environment over file independently for every Reviewer key', () => {
     expect(
@@ -633,13 +719,34 @@ describe('reviewer configuration resolution (DR-022)', () => {
           reviewerAgent: 'gemini',
           reviewerModel: 'file-review-model',
           reviewerEffort: 'high',
+          reviewerFastMode: true,
         },
       ).selection.reviewer,
     ).toEqual({
       agent: 'codex',
       model: 'file-review-model',
       effort: 'xhigh',
+      fastMode: true,
     });
+    expect(
+      resolveRunConfig(
+        {
+          SLC_AGENT: 'claude-code',
+          SLC_REVIEWER_AGENT: 'codex',
+          SLC_REVIEWER_FAST_MODE: 'false',
+        },
+        { reviewerFastMode: true },
+      ).selection.reviewer?.fastMode,
+    ).toBe(false);
+  });
+
+  it('refuses file-supplied Reviewer fast mode without a Reviewer agent', () => {
+    expect(() =>
+      resolveRunConfig(
+        { SLC_AGENT: 'claude-code' },
+        { reviewerFastMode: true },
+      ),
+    ).toThrow(/SLC_REVIEWER_AGENT/);
   });
 
   it('refuses file-supplied Reviewer model without a Reviewer agent', () => {
@@ -722,10 +829,14 @@ describe('configuration (cli-18, cli-19)', () => {
     expect(seededConfig).toContain('agent: claude-code');
     expect(seededConfig).toContain('# model:');
     expect(seededConfig).toContain('# effort:');
+    expect(seededConfig).toContain('# fastMode:');
     expect(seededConfig).toContain('# reviewerAgent:');
     expect(seededConfig).toContain('# reviewerModel:');
     expect(seededConfig).toContain('# reviewerEffort:');
-    expect(seededConfig).not.toMatch(/^reviewer(?:Agent|Model|Effort):/m);
+    expect(seededConfig).toContain('# reviewerFastMode:');
+    expect(seededConfig).not.toMatch(
+      /^(?:fastMode|reviewer(?:Agent|Model|Effort|FastMode)):/m,
+    );
     expect(seen.join('')).toContain(seeded);
   });
 

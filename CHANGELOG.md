@@ -13,6 +13,20 @@ and this project adheres to
 
 ### Added
 
+- **Adapter-scoped fast mode for the Coder and the Reviewer.** `fastMode`
+  and `reviewerFastMode` — plain YAML booleans — with `SLC_FAST_MODE` and
+  `SLC_REVIEWER_FAST_MODE` (exactly `true` or `false`; anything else refuses
+  the run naming the variable) request an agent CLI's fast mode the way
+  `effort` selects reasoning effort: a non-blank environment value wins over
+  the file, `false` is a literal request, and omission keeps the agent CLI's
+  default. Cligent's fast-mode capability contract decides support — a
+  literal on an adapter it reports unsupported refuses the run naming the
+  adapter before any agent call, and slc keeps no support list of its own.
+  The accepted literal rides every interpreted, compiled-player, and Reviewer
+  call's settings, and the seeded starter config, `--help`, and README show
+  the new keys beside effort
+  ([DR-006](specs/decisions/006-slc-configuration-sources.md)).
+
 - **Compiled execution relays the definition at run time.** A `composed-v3`
   bundle whose options contract requires the single configured option
   `definition` receives the exact bytes of the phase or link definition the

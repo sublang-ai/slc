@@ -51,11 +51,11 @@ Where a config file is present — `slc.config.yaml` in the working directory, `
 
 ### cli-39
 
-Where `reviewerAgent` or `SLC_REVIEWER_AGENT` selects a supported independent Reviewer, when the user runs a documented invocation form, the slc executable shall enable reviewed compilation using the independently resolved optional Reviewer model and effort; whereas Reviewer model or effort without a Reviewer agent shall refuse the run clearly, and absent Reviewer configuration shall leave execution unreviewed ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-006](../decisions/006-slc-configuration-sources.md)).
+Where `reviewerAgent` or `SLC_REVIEWER_AGENT` selects a supported independent Reviewer, when the user runs a documented invocation form, the slc executable shall enable reviewed compilation using the independently resolved optional Reviewer model, effort, and fast mode; whereas Reviewer model, effort, or fast mode without a Reviewer agent shall refuse the run clearly, and absent Reviewer configuration shall leave execution unreviewed ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-006](../decisions/006-slc-configuration-sources.md)).
 
 ### cli-29
 
-Where no config file exists in the working directory or the user config location and `--config` is not given, when the user runs a documented invocation form, the slc executable shall seed `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` with the bundled starter defaults — `agent: claude-code` active, Coder model/effort and Reviewer agent/model/effort as commented examples so agent defaults apply and reviewed compilation remains disabled — name the created file on stderr, and carry out the run with those defaults, so a first run needs no prior setup ([DR-015](../decisions/015-first-run-config-seeding.md)).
+Where no config file exists in the working directory or the user config location and `--config` is not given, when the user runs a documented invocation form, the slc executable shall seed `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` with the bundled starter defaults — `agent: claude-code` active, Coder model/effort/fast mode and Reviewer agent/model/effort/fast mode as commented examples so agent defaults apply and reviewed compilation remains disabled — name the created file on stderr, and carry out the run with those defaults, so a first run needs no prior setup ([DR-015](../decisions/015-first-run-config-seeding.md)).
 
 ## Internal Behavior
 
@@ -65,7 +65,7 @@ When the slc executable receives a `<pipeline>` reference other than the reserve
 
 ### cli-7
 
-Where the resolved agent — a non-blank `SLC_AGENT` environment variable, otherwise the config file's `agent` field — names one of the Cligent agent adapters the executable registers — `claude-code`, `codex`, `gemini`, or `opencode` — and the resolved model — a non-blank `SLC_MODEL`, otherwise the config file's `model` field — optionally names a model, and the resolved effort — a non-blank `SLC_EFFORT`, otherwise the config file's `effort` field — optionally names a reasoning effort the selected agent supports per Cligent's adapter-scoped effort metadata (an unsupported value refuses the run), the executable shall construct the coding-agent transport for that agent CLI through Cligent [[1]] with that model and effort — omitting either so the agent CLI uses its own default when neither source supplies one — leaving the agent CLI to read its credentials from the inherited process environment, and shall treat the selection as configuration that does not change phase semantics ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-006](../decisions/006-slc-configuration-sources.md), [[phase-execution-13](phase-execution.md#phase-execution-13)]).
+Where the resolved agent — a non-blank `SLC_AGENT` environment variable, otherwise the config file's `agent` field — names one of the Cligent agent adapters the executable registers — `claude-code`, `codex`, `gemini`, or `opencode` — and the resolved model — a non-blank `SLC_MODEL`, otherwise the config file's `model` field — optionally names a model, the resolved effort — a non-blank `SLC_EFFORT`, otherwise the config file's `effort` field — optionally names a reasoning effort the selected agent supports per Cligent's adapter-scoped effort metadata (an unsupported value refuses the run), and the resolved fast mode — a non-blank `SLC_FAST_MODE` holding exactly `true` or `false`, otherwise the config file's boolean `fastMode` field — optionally requests fast mode as a literal, `false` included, that Cligent's adapter-scoped fast-mode capability contract accepts for the selected agent (a literal for an agent that contract reports unsupported refuses the run naming the agent, and any other environment value refuses the run naming the variable, each before any agent call), the executable shall construct the coding-agent transport for that agent CLI through Cligent [[1]] with that model, effort, and fast mode in its call settings — omitting any of them so the agent CLI uses its own default when neither source supplies it — leaving the agent CLI to read its credentials from the inherited process environment, keeping no adapter capability list of its own, and shall treat the selection as configuration that does not change phase semantics ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-006](../decisions/006-slc-configuration-sources.md), [[phase-execution-13](phase-execution.md#phase-execution-13)]).
 
 ### cli-12
 
@@ -81,7 +81,7 @@ Where `--config <path>` names a file that does not exist, or a loaded config fil
 
 ### cli-30
 
-When discovery finds neither the working-directory `slc.config.yaml` nor the user config file, the executable shall create `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from the starter template bundled with the host — `agent: claude-code` set, Coder `model` and `effort` plus `reviewerAgent`, `reviewerModel`, and `reviewerEffort` as commented examples so reviewed compilation is disabled — report the created path on stderr, load the seeded file, and shall not seed when `--config` is given or when either discovered file exists ([DR-015](../decisions/015-first-run-config-seeding.md)).
+When discovery finds neither the working-directory `slc.config.yaml` nor the user config file, the executable shall create `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from the starter template bundled with the host — `agent: claude-code` set, Coder `model`, `effort`, and `fastMode` plus `reviewerAgent`, `reviewerModel`, `reviewerEffort`, and `reviewerFastMode` as commented examples so reviewed compilation is disabled — report the created path on stderr, load the seeded file, and shall not seed when `--config` is given or when either discovered file exists ([DR-015](../decisions/015-first-run-config-seeding.md)).
 
 ### cli-8
 
@@ -89,7 +89,7 @@ When the slc executable runs a pipeline, phase, or link, the executable shall in
 
 ### cli-40
 
-Where a non-blank `SLC_REVIEWER_AGENT` environment variable, otherwise the config file's `reviewerAgent`, supplies the optional Reviewer selection, when the slc executable constructs interpreted and compiled executors, the executable shall refuse an unsupported Reviewer adapter or Reviewer model/effort without a Reviewer agent, validate a supported optional Reviewer model and adapter-scoped effort through the same selection rules as the Coder, lazily wrap each transformation-capable client with a fresh read-only Reviewer per performing call, preserve separate compiled-player clients, and apply each non-blank environment value over its corresponding flat YAML key independently ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-006](../decisions/006-slc-configuration-sources.md), [[phase-execution-46](phase-execution.md#phase-execution-46)]).
+Where a non-blank `SLC_REVIEWER_AGENT` environment variable, otherwise the config file's `reviewerAgent`, supplies the optional Reviewer selection, when the slc executable constructs interpreted and compiled executors, the executable shall refuse an unsupported Reviewer adapter or Reviewer model/effort/fast mode without a Reviewer agent, validate a supported optional Reviewer model, adapter-scoped effort, and adapter-scoped fast mode through the same selection rules as the Coder [[cli-7](#cli-7)], lazily wrap each transformation-capable client with a fresh read-only Reviewer per performing call carrying that Reviewer selection in its call settings, preserve separate compiled-player clients, and apply each non-blank environment value over its corresponding flat YAML key independently ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-006](../decisions/006-slc-configuration-sources.md), [[phase-execution-46](phase-execution.md#phase-execution-46)]).
 
 ### cli-35
 
@@ -175,11 +175,23 @@ Where a loaded config file is malformed YAML, declares an unknown key, or holds 
 
 ### cli-31
 
-Where neither the working-directory `slc.config.yaml` nor the user config file exists and `--config` is absent, when the slc executable runs a full pipeline, the slc executable shall create the user config file with active `agent: claude-code`, commented `model`, `effort`, `reviewerAgent`, `reviewerModel`, and `reviewerEffort` examples, and no active Reviewer selection, name it on stderr, and complete the run with the seeded Coder selection; where the working-directory file exists, where the user file exists, or where `--config` is given, the slc executable shall create no file [[cli-29](#cli-29)], [[cli-30](#cli-30)].
+Where neither the working-directory `slc.config.yaml` nor the user config file exists and `--config` is absent, when the slc executable runs a full pipeline, the slc executable shall create the user config file with active `agent: claude-code`, commented `model`, `effort`, `fastMode`, `reviewerAgent`, `reviewerModel`, `reviewerEffort`, and `reviewerFastMode` examples, and no active Reviewer or fast-mode selection, name it on stderr, and complete the run with the seeded Coder selection; where the working-directory file exists, where the user file exists, or where `--config` is given, the slc executable shall create no file [[cli-29](#cli-29)], [[cli-30](#cli-30)].
 
 ### cli-41
 
-Where Reviewer configuration is supplied to the config-loader and run-config seams by a strict flat config file and matching environment values, when those seams and the configured executor factories are exercised, each non-blank environment Reviewer value shall override its file value, supported adapter-scoped selections shall lazily build reviewed interpreted and compiled-player execution, and an unsupported Reviewer or Reviewer model/effort without Reviewer agent shall refuse before phase execution [[cli-20](#cli-20)], [[cli-39](#cli-39)], [[cli-40](#cli-40)].
+Where Reviewer configuration is supplied to the config-loader and run-config seams by a strict flat config file and matching environment values, when those seams and the configured executor factories are exercised, each non-blank environment Reviewer value shall override its file value, supported adapter-scoped selections shall lazily build reviewed interpreted and compiled-player execution whose Reviewer calls carry the Reviewer's model, effort, and literal fast mode, and an unsupported Reviewer, a Reviewer fast mode the installed Cligent contract reports unsupported, or Reviewer model/effort/fast mode without Reviewer agent shall refuse before phase execution [[cli-20](#cli-20)], [[cli-39](#cli-39)], [[cli-40](#cli-40)].
+
+### cli-43
+
+Where the Coder fast mode is supplied by `fastMode`, `SLC_FAST_MODE`, or both, when the config-loader and run-config seams and the configured executor factories are exercised over faked adapters with the installed Cligent capability contract deciding support, the slc executable shall produce the outcome for the applicable case [[cli-7](#cli-7)], [[cli-20](#cli-20)], [[cli-21](#cli-21)]:
+
+| Case | Required outcome |
+| --- | --- |
+| Both sources supply a value. | The non-blank environment value wins, and a blank one falls through to the file. |
+| A literal `true` or `false` on an agent the installed contract reports supported. | Every interpreted and compiled-player Coder call carries that literal — `false` included — in its call settings, whereas omission leaves it unset. |
+| A literal from either source on an agent the installed contract reports unsupported. | The run is refused before any agent call, naming the agent. |
+| A file value that is not a YAML boolean. | The run is refused as wrong-typed. |
+| An environment value other than exactly `true` or `false`. | The run is refused naming the variable. |
 
 ### cli-28
 

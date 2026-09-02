@@ -23,7 +23,11 @@ import { ClaudeCodeAdapter } from '@sublang/cligent/adapters/claude-code';
 import { CodexAdapter } from '@sublang/cligent/adapters/codex';
 import { GeminiAdapter } from '@sublang/cligent/adapters/gemini';
 import { OpenCodeAdapter } from '@sublang/cligent/adapters/opencode';
-import { isEffortSupported, supportedEffortValues } from '@sublang/cligent';
+import {
+  assertFastModeSupported,
+  isEffortSupported,
+  supportedEffortValues,
+} from '@sublang/cligent';
 import type { AgentAdapter, PermissionPolicy } from '@sublang/cligent';
 
 import { createCligentAgent } from './cligent-agent.js';
@@ -84,6 +88,12 @@ export interface AgentSelection {
   model?: string;
   /** Optional adapter-scoped reasoning effort; omitted for the default. */
   effort?: string;
+  /**
+   * Literal adapter-scoped fast-mode request: `false` asks for it off, and
+   * omission leaves the agent CLI's own default. Validated against Cligent's
+   * fast-mode capability contract, which slc does not duplicate (cli-7).
+   */
+  fastMode?: boolean;
   /** Optional independent Reviewer selection; presence enables DR-022. */
   reviewer?: Omit<AgentSelection, 'reviewer'>;
 }
@@ -93,9 +103,13 @@ export type ConfigErrorCode =
   | 'agent-unset'
   | 'agent-unsupported'
   | 'effort-unsupported'
+  | 'fast-mode-invalid'
+  | 'fast-mode-unsupported'
   | 'reviewer-agent-unset'
   | 'reviewer-agent-unsupported'
-  | 'reviewer-effort-unsupported';
+  | 'reviewer-effort-unsupported'
+  | 'reviewer-fast-mode-invalid'
+  | 'reviewer-fast-mode-unsupported';
 
 /** Raised when a required Coder or Reviewer selection is invalid. */
 export class ConfigError extends Error {
@@ -116,14 +130,19 @@ export function isSupportedAgent(agent: string): agent is SupportedAgent {
 /**
  * Resolves the Coder and optional Reviewer selections from environment configuration
  * (cli-7, cli-12): `SLC_AGENT` names a registered agent CLI, `SLC_MODEL`
- * optionally names a model, and `SLC_EFFORT` optionally selects an
+ * optionally names a model, `SLC_EFFORT` optionally selects an
  * adapter-scoped reasoning effort validated against Cligent's support
- * metadata.
+ * metadata, and `SLC_FAST_MODE` — exactly `true` or `false` — optionally
+ * requests adapter-scoped fast mode, accepted or refused by Cligent's
+ * fast-mode capability contract before any agent call.
  *
  * @throws {ConfigError} when `SLC_AGENT` is unset/blank (`agent-unset`) or
- *   outside the registered set (`agent-unsupported`), or when `SLC_EFFORT`
+ *   outside the registered set (`agent-unsupported`), when `SLC_EFFORT`
  *   names a value the selected agent does not support
- *   (`effort-unsupported`); no implicit default agent is applied.
+ *   (`effort-unsupported`), when `SLC_FAST_MODE` is neither `true` nor
+ *   `false` (`fast-mode-invalid`), or when it is set for an agent Cligent
+ *   reports without fast-mode request support (`fast-mode-unsupported`); no
+ *   implicit default agent is applied.
  */
 export function resolveAgentSelection(
   env: Record<string, string | undefined>,
@@ -132,9 +151,12 @@ export function resolveAgentSelection(
     agent: 'SLC_AGENT',
     model: 'SLC_MODEL',
     effort: 'SLC_EFFORT',
+    fastMode: 'SLC_FAST_MODE',
     unsetCode: 'agent-unset',
     unsupportedCode: 'agent-unsupported',
     effortCode: 'effort-unsupported',
+    fastModeInvalidCode: 'fast-mode-invalid',
+    fastModeCode: 'fast-mode-unsupported',
     required: true,
   });
   if (selection === undefined) {
@@ -144,9 +166,12 @@ export function resolveAgentSelection(
     agent: 'SLC_REVIEWER_AGENT',
     model: 'SLC_REVIEWER_MODEL',
     effort: 'SLC_REVIEWER_EFFORT',
+    fastMode: 'SLC_REVIEWER_FAST_MODE',
     unsetCode: 'reviewer-agent-unset',
     unsupportedCode: 'reviewer-agent-unsupported',
     effortCode: 'reviewer-effort-unsupported',
+    fastModeInvalidCode: 'reviewer-fast-mode-invalid',
+    fastModeCode: 'reviewer-fast-mode-unsupported',
     required: false,
   });
   return reviewer === undefined ? selection : { ...selection, reviewer };
@@ -158,22 +183,28 @@ function resolveOneSelection(
     agent: string;
     model: string;
     effort: string;
+    fastMode: string;
     unsetCode: ConfigErrorCode;
     unsupportedCode: ConfigErrorCode;
     effortCode: ConfigErrorCode;
+    fastModeInvalidCode: ConfigErrorCode;
+    fastModeCode: ConfigErrorCode;
     required: boolean;
   },
 ): Omit<AgentSelection, 'reviewer'> | undefined {
   const agent = (env[names.agent] ?? '').trim();
   const model = (env[names.model] ?? '').trim();
   const effort = (env[names.effort] ?? '').trim();
+  const fastMode = (env[names.fastMode] ?? '').trim();
   if (agent === '') {
-    if (!names.required && model === '' && effort === '') return undefined;
+    if (!names.required && model === '' && effort === '' && fastMode === '') {
+      return undefined;
+    }
     throw new ConfigError(
       names.unsetCode,
       names.required
         ? `${names.agent} is not set; set it to one of: ${SUPPORTED_AGENTS.join(', ')}`
-        : `${names.agent} is not set; ${names.model} and ${names.effort} require a reviewer agent; set ${names.agent} to one of: ${SUPPORTED_AGENTS.join(', ')}`,
+        : `${names.agent} is not set; ${names.model}, ${names.effort}, and ${names.fastMode} require a reviewer agent; set ${names.agent} to one of: ${SUPPORTED_AGENTS.join(', ')}`,
     );
   }
   if (!isSupportedAgent(agent)) {
@@ -188,10 +219,26 @@ function resolveOneSelection(
       `${names.effort} "${effort}" is not supported by ${agent}; choose one of: ${(supportedEffortValues(agent) ?? []).join(', ')}`,
     );
   }
+  if (fastMode !== '' && fastMode !== 'true' && fastMode !== 'false') {
+    throw new ConfigError(
+      names.fastModeInvalidCode,
+      `${names.fastMode} "${fastMode}" must be exactly true or false`,
+    );
+  }
+  if (fastMode !== '') {
+    // Cligent owns adapter capability: a literal request — `false` included —
+    // is accepted or refused by its contract, naming the adapter (cli-7).
+    try {
+      assertFastModeSupported(agent, names.fastMode);
+    } catch (error) {
+      throw new ConfigError(names.fastModeCode, messageOf(error));
+    }
+  }
   return {
     agent,
     model: model === '' ? undefined : model,
     effort: effort === '' ? undefined : effort,
+    fastMode: fastMode === '' ? undefined : fastMode === 'true',
   };
 }
 
@@ -246,6 +293,7 @@ export function createConfiguredAgentClient(
     maxTurns: opts.maxTurns,
     permissions: opts.permissions,
     effort: selection.effort,
+    fastMode: selection.fastMode,
     stallTimeoutMs: opts.stallTimeoutMs,
   });
 }

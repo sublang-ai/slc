@@ -32,9 +32,11 @@ This DR settles the sources and their precedence, discovery, the schema (includi
 | `agent` | string | supported agent CLI id | `SLC_AGENT` |
 | `model` | string (optional) | model for the agent CLI | `SLC_MODEL` |
 | `effort` | string (optional) | adapter-scoped reasoning effort | `SLC_EFFORT` |
+| `fastMode` | boolean (optional) | literal adapter-scoped fast-mode request — `false` asks for it off, omission keeps the agent CLI's default — accepted or refused by Cligent's capability contract, which `slc` does not duplicate | `SLC_FAST_MODE` (exactly `true` or `false`) |
 | `reviewerAgent` | string (optional) | supported independent Reviewer CLI id; enables [DR-022](022-two-agent-reviewed-compilation.md) | `SLC_REVIEWER_AGENT` |
 | `reviewerModel` | string (optional) | model for the Reviewer CLI; requires `reviewerAgent` | `SLC_REVIEWER_MODEL` |
 | `reviewerEffort` | string (optional) | adapter-scoped Reviewer reasoning effort; requires `reviewerAgent` | `SLC_REVIEWER_EFFORT` |
+| `reviewerFastMode` | boolean (optional) | literal adapter-scoped Reviewer fast-mode request, as `fastMode`; requires `reviewerAgent` | `SLC_REVIEWER_FAST_MODE` (exactly `true` or `false`) |
 | `pipelinePath` | sequence of strings | pipeline search roots | `SLC_PIPELINE_PATH` |
 
 ### File format and discovery
@@ -54,7 +56,7 @@ This DR settles the sources and their precedence, discovery, the schema (includi
 
 ### Validation
 
-- Malformed YAML, an unknown top-level key, a wrong-typed value, a configured agent outside the supported set, Reviewer model or effort without Reviewer agent, or an absent explicit `--config` path each refuse the run with a diagnostic naming the offending source and execute no phase.
+- Malformed YAML, an unknown top-level key, a wrong-typed value, a configured agent outside the supported set, a fast-mode literal on an agent Cligent reports unsupported, a fast-mode environment value other than `true`/`false`, Reviewer model, effort, or fast mode without Reviewer agent, or an absent explicit `--config` path each refuse the run with a diagnostic naming the offending source and execute no phase.
 - Unknown-key rejection is strict so a typo surfaces at load time instead of falling through to a default.
 
 ## Consequences

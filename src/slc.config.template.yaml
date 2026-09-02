@@ -1,13 +1,18 @@
 # slc configuration, seeded on first run (DR-015). Environment variables
-# SLC_AGENT / SLC_MODEL / SLC_EFFORT and matching SLC_REVIEWER_* variables,
-# plus SLC_STALL_TIMEOUT, override these per key (DR-006, DR-022).
+# SLC_AGENT / SLC_MODEL / SLC_EFFORT / SLC_FAST_MODE and matching
+# SLC_REVIEWER_* variables, plus SLC_STALL_TIMEOUT, override these per key
+# (DR-006, DR-022).
 agent: claude-code
 # model: claude-opus-4-8
 # effort: high
+# Fast mode is a literal request (true or false) where the agent CLI supports
+# it; omit it to keep the agent CLI's default.
+# fastMode: true
 # Optional independent review/fix loop; disabled until reviewerAgent is set.
 # reviewerAgent: codex
 # reviewerModel: gpt-5.3-codex
 # reviewerEffort: xhigh
+# reviewerFastMode: true
 # Seconds of agent inactivity before a stalled call fails the run (DR-019);
 # 0 disables the watchdog.
 # stallTimeout: 600

@@ -11,6 +11,47 @@ import {
 } from '../src/cligent-agent.js';
 import { createReviewingAgent } from '../src/reviewing-agent.js';
 
+describe('createCligentAgent call settings (cli-7)', () => {
+  it('forwards the literal fast mode into every adapter call and omits it when unset', async () => {
+    const seen: Array<boolean | undefined> = [];
+    const adapter: AgentAdapter<string, boolean> = {
+      agent: 'fixture',
+      async isAvailable() {
+        return true;
+      },
+      async *run(_prompt: string, options?: AgentOptions<string, boolean>) {
+        seen.push(options?.fastMode);
+        yield {
+          type: 'done',
+          agent: 'fixture',
+          timestamp: 1,
+          sessionId: 'settings',
+          payload: {
+            status: 'success',
+            result: 'ok',
+            usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+            durationMs: 1,
+          },
+        };
+      },
+    };
+    const signal = new AbortController().signal;
+
+    // `false` is a literal request that must survive to the adapter.
+    await createCligentAgent({ adapter, fastMode: false }).run({
+      prompt: 'off',
+      signal,
+    });
+    await createCligentAgent({ adapter, fastMode: true }).run({
+      prompt: 'on',
+      signal,
+    });
+    await createCligentAgent({ adapter }).run({ prompt: 'default', signal });
+
+    expect(seen).toEqual([false, true, undefined]);
+  });
+});
+
 describe('createCligentAgent player continuation', () => {
   it('forwards explicit selection and exposes the returned resume token', async () => {
     const resumes: Array<string | undefined> = [];

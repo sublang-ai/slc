@@ -147,16 +147,21 @@ either, per key.
 agent: claude-code # claude-code | codex | gemini | opencode
 model: claude-opus-4-8 # optional; omit to use the agent CLI's default
 effort: high # optional adapter-scoped reasoning effort
+fastMode: true # optional adapter-scoped fast mode; false is a literal request
 reviewerAgent: codex # optional; enables reviewed compilation
 reviewerModel: gpt-5.3-codex # optional reviewer model
 reviewerEffort: xhigh # optional reviewer reasoning effort
+reviewerFastMode: true # optional reviewer fast mode
 stallTimeout: 600 # seconds of agent silence before a stalled call fails
 pipelinePath: # search roots for <pipeline> references; defaults to the cwd
   - ./pipelines
 ```
 
-Discovery order, `--config`, and validation rules live in the
-[CLI spec](specs/packages/cli.md); `slc --help` prints the summary.
+Effort and fast mode are adapter-scoped: Cligent's capability contract
+decides which agent CLIs accept them, and a literal on one that does not
+refuses the run before any agent call. Discovery order, `--config`, and
+validation rules live in the [CLI spec](specs/packages/cli.md);
+`slc --help` prints the summary.
 
 ### Reviewed compilation (two agents)
 
