@@ -134,46 +134,29 @@ try {
   // guards — the Coder's single completion guard, then the clean review.
   const judgeReplies = ['{"guard":"done"}', '{"guard":"clean"}'];
   // A schema-3 entry takes configured options plus live host capabilities. The
-  // demo smoke supplies a real repository capability so the optimize pass's
-  // agent-free `git init` script actually runs against the scratch worktree,
-  // and a minimal in-memory effect ledger. Both mirror the engine's contract
-  // rather than failing closed, because stage 4 asserts the script's effect.
-  // SLC's own host-capability implementation drives the governed script
-  // against the scratch worktree, so this smoke exercises real behavior rather
-  // than a harness-local reimplementation of the engine contract.
-  // SLC's own host-capability implementation drives the governed player
-  // boundary against the scratch worktree, so this smoke exercises real
-  // behavior rather than a harness-local reimplementation of the engine
-  // contract.
-  const { worktreeHostCapabilities, observeGitWorktree, classifyGitChange } =
-    await import(
-      pathToFileURL(join(repoRoot, 'dist/host-capabilities.js')).href
-    );
-  const gitObserve = (args) =>
-    execFileSync('git', args, {
-      cwd: workdir,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
+  // demo smoke constructs them through the installed engine's published
+  // `@sublang/playbook/host-capabilities` facade (DR-028; Playbook DR-046) —
+  // the same implementation `playbook run` uses — rather than a harness-local
+  // copy of the engine contract, so stage 4 exercises real governed behavior:
+  // the facade binds the governed worktree lazily, so the nested directory
+  // that is not yet a repository observes as the null HEAD, the workflow's own
+  // `git init` script classifies as `unchanged`, and the Coder's root commit
+  // classifies as `one-descendant-commit`.
+  const { createWorktreeHostCapabilities } =
+    await import('@sublang/playbook/host-capabilities');
+  // Governed boundaries carry the runtime's local role ids; the entry declares
+  // roles by their verbatim source names and maps the lowercased runtime ids
+  // back to them at the `callPlayer` boundary (self-hosting-15).
+  const runtimeRoleId = (id) => id.toLowerCase();
   const runtime = registryEntry.createRuntime(
     { captainOptions: { cwd: workdir } },
-    worktreeHostCapabilities({
-      playbookId: basename,
-      classify: (baseline, after, context) =>
-        classifyGitChange({
-          baseline,
-          after,
-          dispositions: context.dispositions,
-          run: gitObserve,
-        }),
-      // A real status-derived projection: an empty one would assert a clean
-      // worktree and let an uncommitted change pass as `unchanged`.
-      observe: () =>
-        observeGitWorktree({
-          worktree: workdir,
-          gitDir: join(workdir, '.git'),
-          run: gitObserve,
-        }),
+    await createWorktreeHostCapabilities({
+      cwd: workdir,
+      playbookId: registryEntry.id,
+      requiredRoleIds: registryEntry.requiredRoleIds.map(runtimeRoleId),
+      concurrentRoleSets: registryEntry.concurrentRoleSets.map((set) =>
+        set.map(runtimeRoleId),
+      ),
     }),
   );
   const sessionId = randomUUID();

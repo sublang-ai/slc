@@ -33,13 +33,18 @@
  * `definition` receives the exact text of the definition file the request
  * names through its configured options ({@link constructRuntime}; DR-028) —
  * the one channel that keeps the definition out of the seeded Boss turn a
- * classifier judge reads. See specs/packages/phase-execution.md.
+ * classifier judge reads. The live capabilities beside those options are the
+ * installed engine's own fail-closed host capabilities (DR-046), because the
+ * roleless phase host runs no governed state. See
+ * specs/packages/phase-execution.md.
  */
 
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+import { createFailClosedHostCapabilities } from '@sublang/playbook/host-capabilities';
 
 import { messageOf } from './errors.js';
 import type { LegacyPlaybookPorts } from './playbook-contract.js';
@@ -98,23 +103,21 @@ export async function loadPlaybookRuntime(
 
 const COMPOSED_V3_COMPAT_ERROR =
   'compiled composed-v3 factory requires immutable compatibility { artifactSchema: 3, runtimeAbi: 1 }';
-const COMPOSED_V3_REPOSITORY_ERROR =
-  'compiled composed-v3 phase host does not support repository operations';
-const COMPOSED_V3_EFFECT_ERROR =
-  'compiled composed-v3 phase host does not support effect-ledger writes';
 
 /**
  * Constructs exactly the profile the pin selected (DR-024, DR-028). Only the
- * roleless schema-3 profile takes configured options, and the host probes the
+ * roleless schema-3 profile takes configured options, and the host lets the
  * artifact's own options validation — the factory binds its options before it
- * builds any actor — with at most two constructions (phase-execution-49):
+ * builds any actor — decide between at most two constructions
+ * (phase-execution-49):
  *
- * 1. the exact empty configured options, the roleless baseline every bundle
- *    compiled before the compiled-execution contract accepts; then, only when
- *    the factory rejects that construction,
- * 2. exactly `{ definition }` holding the exact bytes of the definition file
+ * 1. exactly `{ definition }` holding the exact bytes of the definition file
  *    the request names — the one option a roleless meta-phase artifact may
- *    require, which a bundle carrying a `<definition>` placeholder declares.
+ *    require, which every bundle compiled from a definition's compiled-execution
+ *    section declares, so this is the single steady-state construction; then,
+ *    only when the factory rejects it,
+ * 2. the exact empty configured options, the roleless baseline a bundle
+ *    declaring no option accepts.
  *
  * A factory rejecting both fails the phase with the rejections named; no
  * other option, profile, or initialization is tried.
@@ -137,21 +140,21 @@ function constructRuntime(
     (factory as CompatiblePlaybookRuntimeFactory<ComposedV3FactoryInput>)(
       composedV3FactoryInput(configuredOptions),
     );
-  let emptyRejection: unknown;
-  try {
-    return construct({});
-  } catch (error) {
-    emptyRejection = error;
-  }
+  let definitionRejection: unknown;
   try {
     return construct({ definition });
   } catch (error) {
-    const empty = messageOf(emptyRejection);
-    const offered = messageOf(error);
+    definitionRejection = error;
+  }
+  try {
+    return construct({});
+  } catch (error) {
+    const offered = messageOf(definitionRejection);
+    const empty = messageOf(error);
     throw new Error(
       offered === empty
         ? empty
-        : `${empty}; with configured option definition: ${offered}`,
+        : `${offered}; with empty configured options: ${empty}`,
       { cause: error },
     );
   }
@@ -206,36 +209,19 @@ function requireComposedV3Compatibility(
 
 /**
  * The exact schema-3 factory input the compiled host supplies: the given
- * configured options — the exact empty record by default, or the single
- * `definition` option (DR-028) — plus fresh live host capabilities whose
- * repository and effect-ledger seams fail closed (DR-024). Exported so
- * verification drives the same construction the host performs rather than a
- * divergent copy.
+ * configured options — the single `definition` option (DR-028), or the exact
+ * empty record — plus the installed engine's fresh fail-closed live host
+ * capabilities, whose repository and effect-ledger write seams reject and
+ * whose ledger snapshot is the canonical empty ledger (DR-024, DR-046).
+ * Exported so verification drives the same construction the host performs
+ * rather than a divergent copy.
  */
 export function composedV3FactoryInput(
   configuredOptions: ComposedV3ConfiguredOptions = {},
 ): ComposedV3FactoryInput {
-  const rejectRepository = (): Promise<never> =>
-    Promise.reject(new Error(COMPOSED_V3_REPOSITORY_ERROR));
-  const rejectEffectWrite = (): Promise<never> =>
-    Promise.reject(new Error(COMPOSED_V3_EFFECT_ERROR));
   return {
     configuredOptions,
-    hostCapabilities: {
-      repository: {
-        runExclusive: rejectRepository,
-        runDeferred: rejectRepository,
-      },
-      effectLedger: {
-        snapshot: () => ({
-          schemaVersion: 1,
-          revision: 0,
-          boundaries: [],
-          logicalOperations: [],
-        }),
-        writeAhead: rejectEffectWrite,
-      },
-    },
+    hostCapabilities: createFailClosedHostCapabilities(),
   };
 }
 
