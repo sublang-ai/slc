@@ -55,6 +55,8 @@ import {
   pipelineSearchRoots,
 } from '../src/resolver.js';
 
+import { writePlaybookEngineFixture } from './playbook-engine-fixture.js';
+
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats
 
@@ -1246,11 +1248,10 @@ describe('compiled execution through the bin (cli-28)', () => {
   ] as const)(
     'keeps %s fail-closed through the phase-failure path (cli-16, cli-36)',
     async (_label, provenance) => {
-      // Both cases guard unmapped-provenance reporting: 1.3.0 was never
-      // installed or reviewed here, and 5.0.0 through 9.0.0 stay unmapped
-      // because reviewing exact 10.0.0 establishes no contract identity for an
-      // intermediate release (DR-024). Neither may invoke either execution
-      // mode.
+      // Both cases guard fail-closed selection: neither provenance is in the
+      // exact historical map, and the pin's link target is a plain file
+      // outside any installed engine, so no declaration can admit
+      // `composed-v3` (DR-028). Neither may invoke either execution mode.
       const bundleDir = join(pipelineDir, 'text2gears.slc');
       await mkdir(bundleDir);
       await writeFile(
@@ -1361,7 +1362,7 @@ describe('compiled execution through the bin (cli-28)', () => {
       // ...and the report names the failing phase, its target, and the reason.
       expect(lines[2]).toBe(`slc: phase "text2gears" failed at "${target}"`);
       expect(lines[3]).toContain(
-        `unsupported pinned Playbook runtime contract: ${provenance}`,
+        `unsupported pinned Playbook runtime contract: ${provenance} (link target linktarget.ts is not inside an installed @sublang/playbook package)`,
       );
       expect(interpretedRuns).toEqual([]);
       expect(adapterBuilds).toBe(0);
@@ -1371,9 +1372,10 @@ describe('compiled execution through the bin (cli-28)', () => {
 
   /**
    * Pins `text2gears` to a compiled bundle carrying `artifact` bytes, recording
-   * `provenance` on the pin's link target so the run selects exactly the
-   * profile that provenance maps to. The pin evaluates *current* — a stale one
-   * never reaches the factory.
+   * `provenance` on a link target inside an installed engine package that
+   * declares the schema-3 contract, so the run selects `composed-v3` through
+   * the declaration rather than the release number (DR-028). The pin
+   * evaluates *current* — a stale one never reaches the factory.
    */
   const pinCompiledArtifact = async (
     artifact: string,
@@ -1392,7 +1394,10 @@ describe('compiled execution through the bin (cli-28)', () => {
     ]) {
       await writeFile(join(bundleDir, name), `fixture: ${name}\n`);
     }
-    await writeFile(join(pipelineDir, 'linktarget.ts'), 'link target bytes\n');
+    const engine = await writePlaybookEngineFixture(pipelineDir, {
+      version: provenance.slice('@sublang/playbook@'.length),
+    });
+    const locator = 'node_modules/@sublang/playbook/src/runtime.ts';
     const record: PinRecord = {
       definition: {
         path: 'text2gears.md',
@@ -1411,8 +1416,8 @@ describe('compiled execution through the bin (cli-28)', () => {
       runtimeDependencies: [],
       linkTarget: {
         kind: 'file',
-        locator: 'linktarget.ts',
-        identity: await hashFile(join(pipelineDir, 'linktarget.ts')),
+        locator,
+        identity: await hashFile(engine.linkTarget),
         provenance,
       },
     };

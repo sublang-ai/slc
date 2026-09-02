@@ -2,15 +2,17 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 // continuous-integration-4 / self-hosting-11: prove that the definitions
-// vendored for compiled pin selection carry the immutable Playbook 10.0.0
-// normative content byte-identically. SLC-owned pin-input declarations live
-// in the slc.pin-inputs.json sidecar (DR-026), not inside the definitions.
+// vendored for compiled pin selection carry the locked Playbook release's
+// normative content byte-identically. The expected release is the one the
+// dependency lock resolves — adopting a release raises the manifest and lock,
+// re-synchronizes the definitions, and needs no edit here (DR-028). SLC-owned
+// pin-input declarations live in the slc.pin-inputs.json sidecar (DR-026),
+// not inside the definitions.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const expectedPlaybookVersion = '10.0.0';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const pipelineDir = join(repoRoot, 'pipelines', 'playbook');
 const definitions = ['text2gears', 'gears2fsm', 'link', 'optimize'];
@@ -22,13 +24,15 @@ const lockedPlaybook =
   lock.packages?.['node_modules/@sublang/playbook']?.version;
 
 if (
-  declaredPlaybook !== `^${expectedPlaybookVersion}` ||
-  lockedPlaybook !== expectedPlaybookVersion
+  typeof lockedPlaybook !== 'string' ||
+  !/^\d+\.\d+\.\d+$/.test(lockedPlaybook) ||
+  declaredPlaybook !== `^${lockedPlaybook}`
 ) {
   throw new Error(
-    `cannot verify definitions: @sublang/playbook must be declared as ^${expectedPlaybookVersion} and locked to ${expectedPlaybookVersion} (declared ${String(declaredPlaybook)}, locked ${String(lockedPlaybook)})`,
+    `cannot verify definitions: @sublang/playbook must be locked to one exact release and declared as its caret range (declared ${String(declaredPlaybook)}, locked ${String(lockedPlaybook)})`,
   );
 }
+const expectedPlaybookVersion = lockedPlaybook;
 
 const firstDefinitionPath = fileURLToPath(
   import.meta.resolve('@sublang/playbook/slc/text2gears.md'),
@@ -37,7 +41,7 @@ const playbookRoot = dirname(dirname(firstDefinitionPath));
 const installedPlaybook = readJson(join(playbookRoot, 'package.json'));
 if (installedPlaybook.version !== expectedPlaybookVersion) {
   throw new Error(
-    `cannot verify definitions: installed @sublang/playbook is ${String(installedPlaybook.version)}, expected ${expectedPlaybookVersion}`,
+    `cannot verify definitions: installed @sublang/playbook is ${String(installedPlaybook.version)}, expected the locked ${expectedPlaybookVersion}`,
   );
 }
 

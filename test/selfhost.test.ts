@@ -961,17 +961,37 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
   it.each([
     ['4.0.0', 1],
     ['10.0.0', 3],
+    ['12.0.0', 3],
   ] as const)(
     'bakes the concrete Playbook %s link target as schema %s',
     async (version, artifactSchema) => {
+      // 4.0.0 and 10.0.0 are recorded in the exact historical map, so their
+      // fixture packages carry no engine; a later release is schema evidence
+      // only through its installed engine's declaration (DR-028).
+      const declaring = version === '12.0.0';
       const packageRoot = join(root, `playbook-${version}`);
       const linkTarget = join(packageRoot, 'src', 'runtime.ts');
       await mkdir(join(packageRoot, 'src'), { recursive: true });
       await writeFile(
         join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@sublang/playbook', version }),
+        JSON.stringify({
+          name: '@sublang/playbook',
+          version,
+          ...(declaring
+            ? {
+                type: 'module',
+                exports: { './xstate-runtime': './src/xstate-runtime.js' },
+              }
+            : {}),
+        }),
       );
       await writeFile(linkTarget, 'export {}\n');
+      if (declaring) {
+        await writeFile(
+          join(packageRoot, 'src', 'xstate-runtime.js'),
+          'export const RUNTIME_ABI = 1;\nexport const SUPPORTED_ARTIFACT_SCHEMAS = Object.freeze([3]);\n',
+        );
+      }
       const directCaptainFsm = FSM_ARTIFACT.replaceAll(
         "          player: 'Writer',\n",
         '',

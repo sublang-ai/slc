@@ -9,12 +9,22 @@ import { describe, expect, it } from 'vitest';
 import { fromPromise, setup } from 'xstate';
 
 import {
+  RUNTIME_ABI,
+  SUPPORTED_ARTIFACT_SCHEMAS,
+} from '@sublang/playbook/xstate-runtime';
+
+import {
+  declaresComposedV3,
+  type PlaybookRuntimeDeclaration,
+} from '../src/runtime-contract.js';
+import {
   CONTROLLER_ACTION_GUARDS,
   artifactSchemaForPlaybookProvenance,
   loadFsmModule,
   loadLinkedModuleForVerification,
 } from '../src/verify.js';
 import {
+  COMPOSED_V3_EVIDENCE_FINDING,
   checkPlaybookIntegrity,
   checkReferenceEquivalence,
   hasBossReplySurface,
@@ -42,9 +52,17 @@ const installedPlaybookVersion = (
   ) as { version: string }
 ).version;
 const installedPlaybookProvenance = `@sublang/playbook@${installedPlaybookVersion}`;
-const installedArtifactSchema = artifactSchemaForPlaybookProvenance(
-  installedPlaybookProvenance,
-);
+// The installed engine's own declaration is the schema-3 evidence for any
+// release outside the exact historical map (DR-028).
+const installedRuntimeDeclaration: PlaybookRuntimeDeclaration = {
+  provenance: installedPlaybookProvenance,
+  packageRoot: join(repoRoot, 'node_modules/@sublang/playbook'),
+  runtimeAbi: RUNTIME_ABI,
+  supportedArtifactSchemas: SUPPORTED_ARTIFACT_SCHEMAS,
+};
+const installedArtifactSchema =
+  artifactSchemaForPlaybookProvenance(installedPlaybookProvenance) ??
+  (declaresComposedV3(installedRuntimeDeclaration) ? 3 : undefined);
 
 /** Loads the immutable Playbook-4 schema-1 reference fixture. */
 async function loadReference(): Promise<CompiledPlaybook> {
@@ -63,6 +81,7 @@ async function loadReference(): Promise<CompiledPlaybook> {
     playbook: schema3?.playbook ?? playbook,
     fsmSource: readFileSync(join(referenceDir, 'code.fsm.ts'), 'utf8'),
     linkTargetProvenance: installedPlaybookProvenance,
+    runtimeDeclaration: installedRuntimeDeclaration,
     ...(schema3 === undefined ? {} : { registry: schema3.registry }),
   };
 }
@@ -86,6 +105,7 @@ async function loadProduced(dir: string): Promise<CompiledPlaybook> {
     playbook: schema3?.playbook ?? playbook,
     fsmSource: readFileSync(join(dir, 'code.fsm.ts'), 'utf8'),
     linkTargetProvenance: installedPlaybookProvenance,
+    runtimeDeclaration: installedRuntimeDeclaration,
     ...(schema3 === undefined ? {} : { registry: schema3.registry }),
   };
 }
@@ -1029,10 +1049,13 @@ describe('reference equivalence harness (verification-9)', () => {
     const reference = await loadReference();
     // Playbook 10 ships the reference as a schema-3 Captain-hosted closure, so
     // the released runtime is reached only through its registry entry under
-    // exact 10.0.0 provenance; no probe may fall through to `composed-v2`.
+    // schema-3 link-target evidence — the installed provenance together with
+    // the installed engine's declaration; no probe may fall through to
+    // `composed-v2`.
     expect(
       await runtimeCapabilityProfile(reference.playbook, {
         provenance: installedPlaybookProvenance,
+        runtimeDeclaration: installedRuntimeDeclaration,
         registry: reference.registry,
       }),
     ).toBe('composed-v3');
@@ -1160,7 +1183,7 @@ describe('reference equivalence harness (verification-9)', () => {
     };
 
     expect(await checkPlaybookIntegrity('unaccompanied', compiled)).toContain(
-      'unaccompanied: composed-v3 requires exact @sublang/playbook@10.0.0 provenance',
+      `unaccompanied: ${COMPOSED_V3_EVIDENCE_FINDING}`,
     );
   });
 
@@ -1681,9 +1704,10 @@ describe('reference equivalence harness (verification-9)', () => {
     expect(fixture.observations).toEqual({ turns: 0, disposals: 0 });
   });
 
-  it('requires exact Playbook 10 provenance for a schema-3 registry', async () => {
+  it('requires schema-3 link-target evidence for a schema-3 registry', async () => {
     const fixture = schema3Fixture({ kind: 'shared-factory' });
 
+    // An unreviewed release without its engine declaration is no evidence.
     expect(
       await runtimeCapabilityProfile(fixture.playbook, {
         provenance: '@sublang/playbook@9.0.0',
@@ -1692,6 +1716,33 @@ describe('reference equivalence harness (verification-9)', () => {
     ).toBeNull();
     expect(
       await runtimeCapabilityProfile(fixture.playbook, {
+        registry: fixture.registry,
+      }),
+    ).toBeNull();
+    // The same release becomes evidence through its installed engine's
+    // declaration, whatever the release number (DR-028) ...
+    expect(
+      await runtimeCapabilityProfile(fixture.playbook, {
+        provenance: '@sublang/playbook@9.0.0',
+        runtimeDeclaration: {
+          provenance: '@sublang/playbook@9.0.0',
+          packageRoot: '/installed/@sublang/playbook',
+          runtimeAbi: 1,
+          supportedArtifactSchemas: [3],
+        },
+        registry: fixture.registry,
+      }),
+    ).toBe('composed-v3');
+    // ... but not through a declaration of another ABI or without schema 3.
+    expect(
+      await runtimeCapabilityProfile(fixture.playbook, {
+        provenance: '@sublang/playbook@12.0.0',
+        runtimeDeclaration: {
+          provenance: '@sublang/playbook@12.0.0',
+          packageRoot: '/installed/@sublang/playbook',
+          runtimeAbi: 2,
+          supportedArtifactSchemas: [3],
+        },
         registry: fixture.registry,
       }),
     ).toBeNull();

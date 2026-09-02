@@ -28,7 +28,12 @@
  * host-agnostic artifact's Captain learns the request's absolute paths; the
  * result is derived in {@link drivePhase} from the structured runtime boundary
  * or, for a void-result legacy runtime, the host-observable output delta.
- * See specs/packages/phase-execution.md.
+ *
+ * A schema-3 artifact whose options contract requires the single option
+ * `definition` receives the exact text of the definition file the request
+ * names through its configured options ({@link constructRuntime}; DR-028) —
+ * the one channel that keeps the definition out of the seeded Boss turn a
+ * classifier judge reads. See specs/packages/phase-execution.md.
  */
 
 import { createHash, randomUUID } from 'node:crypto';
@@ -57,6 +62,7 @@ import {
   type CompatiblePlaybookRunResult,
   isPlaybookRunResult,
   type ComposedPlaybookPorts,
+  type ComposedV3ConfiguredOptions,
   type ComposedV3FactoryInput,
   type CompatiblePlaybookPorts,
   type CompatiblePlaybookRuntime,
@@ -98,19 +104,57 @@ const COMPOSED_V3_EFFECT_ERROR =
   'compiled composed-v3 phase host does not support effect-ledger writes';
 
 /**
- * Constructs exactly the profile selected by reviewed provenance. The dormant
- * v3 branch is intentionally reachable only through an explicit profile until
- * the atomic Playbook 10 adoption maps that provenance (DR-024).
+ * Constructs exactly the profile the pin selected (DR-024, DR-028). Only the
+ * roleless schema-3 profile takes configured options, and the host probes the
+ * artifact's own options validation — the factory binds its options before it
+ * builds any actor — with at most two constructions (phase-execution-49):
+ *
+ * 1. the exact empty configured options, the roleless baseline every bundle
+ *    compiled before the compiled-execution contract accepts; then, only when
+ *    the factory rejects that construction,
+ * 2. exactly `{ definition }` holding the exact bytes of the definition file
+ *    the request names — the one option a roleless meta-phase artifact may
+ *    require, which a bundle carrying a `<definition>` placeholder declares.
+ *
+ * A factory rejecting both fails the phase with the rejections named; no
+ * other option, profile, or initialization is tried.
  */
 function constructRuntime(
   factory: CompatiblePlaybookRuntimeFactory,
   contract: RuntimeContractProfile,
+  definition: string | undefined,
 ): CompatiblePlaybookRuntime {
   if (contract !== 'composed-v3') return factory({});
   requireComposedV3Compatibility(factory);
-  return (factory as CompatiblePlaybookRuntimeFactory<ComposedV3FactoryInput>)(
-    composedV3FactoryInput(),
-  );
+  if (definition === undefined) {
+    throw new Error(
+      'compiled composed-v3 phase host requires the definition text before construction',
+    );
+  }
+  const construct = (
+    configuredOptions: ComposedV3ConfiguredOptions,
+  ): CompatiblePlaybookRuntime =>
+    (factory as CompatiblePlaybookRuntimeFactory<ComposedV3FactoryInput>)(
+      composedV3FactoryInput(configuredOptions),
+    );
+  let emptyRejection: unknown;
+  try {
+    return construct({});
+  } catch (error) {
+    emptyRejection = error;
+  }
+  try {
+    return construct({ definition });
+  } catch (error) {
+    const empty = messageOf(emptyRejection);
+    const offered = messageOf(error);
+    throw new Error(
+      offered === empty
+        ? empty
+        : `${empty}; with configured option definition: ${offered}`,
+      { cause: error },
+    );
+  }
 }
 
 /** Fails closed without reading a compatibility accessor or invoking a factory. */
@@ -160,20 +204,23 @@ function requireComposedV3Compatibility(
   if (!valid) throw new TypeError(COMPOSED_V3_COMPAT_ERROR);
 }
 
-/** Builds one fresh, plain, capability-bearing argument for a v3 factory. */
 /**
- * The exact schema-3 factory input the compiled host supplies: empty configured
- * options plus live host capabilities whose repository and effect-ledger seams
- * fail closed (DR-024). Exported so verification drives the same construction
- * the host performs rather than a divergent copy.
+ * The exact schema-3 factory input the compiled host supplies: the given
+ * configured options — the exact empty record by default, or the single
+ * `definition` option (DR-028) — plus fresh live host capabilities whose
+ * repository and effect-ledger seams fail closed (DR-024). Exported so
+ * verification drives the same construction the host performs rather than a
+ * divergent copy.
  */
-export function composedV3FactoryInput(): ComposedV3FactoryInput {
+export function composedV3FactoryInput(
+  configuredOptions: ComposedV3ConfiguredOptions = {},
+): ComposedV3FactoryInput {
   const rejectRepository = (): Promise<never> =>
     Promise.reject(new Error(COMPOSED_V3_REPOSITORY_ERROR));
   const rejectEffectWrite = (): Promise<never> =>
     Promise.reject(new Error(COMPOSED_V3_EFFECT_ERROR));
   return {
-    configuredOptions: {},
+    configuredOptions,
     hostCapabilities: {
       repository: {
         runExclusive: rejectRepository,
@@ -247,6 +294,27 @@ export function createCompiledExecutor(opts: {
     ): Promise<ExecutorResult> {
       let lastFsmState: string | undefined;
       const input = phaseInput(request, opts.runRoot);
+      const runtimeContract = opts.runtimeContract ?? 'legacy';
+      // The roleless schema-3 host may have to supply the definition the
+      // request names as the compiled phase's single configured option, so
+      // its exact bytes are read — unnormalized — before the artifact loads
+      // (phase-execution-49; DR-028).
+      let definition: string | undefined;
+      if (runtimeContract === 'composed-v3') {
+        try {
+          definition = await readFile(
+            resolve(opts.runRoot, request.definitionPath),
+            'utf8',
+          );
+        } catch (error) {
+          return {
+            status: 'error',
+            diagnostics: [
+              `compiled phase definition cannot be read: ${messageOf(error)}`,
+            ],
+          };
+        }
+      }
       const adapter = createPlaybookPorts({
         player: opts.player,
         judge: opts.judge,
@@ -285,7 +353,6 @@ export function createCompiledExecutor(opts: {
         },
       };
 
-      const runtimeContract = opts.runtimeContract ?? 'legacy';
       const identity = phaseSessionIdentity({
         sessionId: (opts.createSessionId ?? randomUUID)(),
         playbookId:
@@ -299,6 +366,7 @@ export function createCompiledExecutor(opts: {
         signal,
         identity,
         runtimeContract,
+        definition,
       );
       const result = mapVoidContractFailedState(
         driven,
@@ -359,11 +427,12 @@ async function drivePhase(
   signal: AbortSignal,
   identity: { sessionId: string; playbookId: string },
   runtimeContract: RuntimeContractProfile,
+  definition: string | undefined,
 ): Promise<PhaseResult> {
   let runtime: CompatiblePlaybookRuntime;
   try {
     const factory = await load(artifactPath);
-    runtime = constructRuntime(factory, runtimeContract);
+    runtime = constructRuntime(factory, runtimeContract, definition);
   } catch (error) {
     return {
       status: 'error',
@@ -767,7 +836,8 @@ function outputWasProduced(before: OutputState, after: OutputState): boolean {
 /**
  * Maps an {@link ExecuteRequest} to the {@link PhaseInput} the seed carries,
  * resolving its workspace paths against the run root to absolute host paths the
- * runtime's agents can act on (DR-005).
+ * runtime's agents can act on (DR-005). The definition the request names is
+ * not part of the seed (DR-028).
  */
 function phaseInput(request: ExecuteRequest, runRoot: string): PhaseInput {
   const abs = (path: string): string => resolve(runRoot, path);

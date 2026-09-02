@@ -116,7 +116,70 @@ export interface PlaybookInvocationState {
 export const NEEDS_BOSS_REPLY = 'needsBossReply';
 export const BOSS_QUESTION_MARKER = 'Output shall include `question:';
 
-/** Artifact schema selected only by a complete reviewed Playbook provenance. */
+/**
+ * A Playbook engine's raw compatibility self-report — `RUNTIME_ABI` and
+ * `SUPPORTED_ARTIFACT_SCHEMAS` on its `@sublang/playbook/xstate-runtime`
+ * surface — read from the installed package owning a link target
+ * (verification-21, phase-execution-30; DR-028). The reader lives in
+ * `runtime-contract.ts`; the predicates stay here so the artifact-local
+ * verifier copy (verification-12) carries the schema decision whole.
+ */
+export interface PlaybookRuntimeDeclaration {
+  /** `@sublang/playbook@<version>` of the owning installed package. */
+  provenance: string;
+  /** Lexical root of the owning package. */
+  packageRoot: string;
+  /** The exported `RUNTIME_ABI`, or `undefined` when the engine exports none. */
+  runtimeAbi: unknown;
+  /** The exported `SUPPORTED_ARTIFACT_SCHEMAS`, or `undefined` when absent. */
+  supportedArtifactSchemas: unknown;
+}
+
+/**
+ * True when the declaration admits the roleless schema-3 `composed-v3`
+ * generation: `RUNTIME_ABI` is exactly `1` and `SUPPORTED_ARTIFACT_SCHEMAS`
+ * contains `3` (DR-028).
+ */
+export function declaresComposedV3(
+  declaration: PlaybookRuntimeDeclaration,
+): boolean {
+  return (
+    declaration.runtimeAbi === 1 &&
+    Array.isArray(declaration.supportedArtifactSchemas) &&
+    declaration.supportedArtifactSchemas.includes(3)
+  );
+}
+
+/** Names a declaration for fail-closed diagnostics. */
+export function describeRuntimeDeclaration(
+  declaration: PlaybookRuntimeDeclaration,
+): string {
+  const abi =
+    declaration.runtimeAbi === undefined
+      ? 'no RUNTIME_ABI'
+      : `RUNTIME_ABI ${renderDeclared(declaration.runtimeAbi)}`;
+  const schemas =
+    declaration.supportedArtifactSchemas === undefined
+      ? 'no SUPPORTED_ARTIFACT_SCHEMAS'
+      : `SUPPORTED_ARTIFACT_SCHEMAS ${renderDeclared(declaration.supportedArtifactSchemas)}`;
+  return `${declaration.provenance} declares ${abi} and ${schemas}`;
+}
+
+function renderDeclared(value: unknown): string {
+  try {
+    const json = JSON.stringify(value);
+    return json === undefined ? String(value) : json;
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Artifact schema recorded for an exact reviewed Playbook provenance: the
+ * historical map kept as recorded (DR-028). A later release supplies its
+ * schema through the installed engine's declaration instead
+ * ({@link resolveArtifactSchemaForVerification}).
+ */
 export function artifactSchemaForPlaybookProvenance(
   provenance: unknown,
 ): 1 | 3 | undefined {
@@ -2990,10 +3053,19 @@ function linkedArtifactSchemaSignal(linked: {
     : { historicalFallback: false, invalidCompatibility: true };
 }
 
-/** Schema decision shared by generated and standalone artifact verification. */
+/**
+ * Schema decision shared by generated and standalone artifact verification
+ * (verification-21). Reviewed provenance is evidence through its exact
+ * historical map; any other provenance is evidence only through the engine
+ * declaration read from the link target's installed package — `RUNTIME_ABI`
+ * `1` with artifact schema `3` — and is otherwise reported unsupported
+ * (DR-028).
+ */
 export function resolveArtifactSchemaForVerification(opts: {
   artifactSchema?: 1 | 3;
   provenance?: unknown;
+  /** The link target's installed engine declaration, when the caller read it. */
+  runtimeDeclaration?: PlaybookRuntimeDeclaration;
   config?: MachineConfigLike;
   linked?: { default?: unknown };
 }): { artifactSchema?: 1 | 3; findings: string[] } {
@@ -3005,17 +3077,25 @@ export function resolveArtifactSchemaForVerification(opts: {
       schema: opts.artifactSchema,
     });
   }
-  const provenanceSchema = artifactSchemaForPlaybookProvenance(opts.provenance);
-  if (opts.provenance !== undefined && provenanceSchema === undefined) {
-    invalidSignalFindings.push(
-      `artifact schema has unsupported link-target provenance ${JSON.stringify(opts.provenance)}`,
-    );
-  }
+  const provenance = opts.provenance ?? opts.runtimeDeclaration?.provenance;
+  const provenanceSchema = artifactSchemaForPlaybookProvenance(provenance);
   if (provenanceSchema !== undefined) {
     candidates.push({
       source: 'reviewed link-target provenance',
       schema: provenanceSchema,
     });
+  } else if (provenance !== undefined) {
+    if (opts.runtimeDeclaration === undefined) {
+      invalidSignalFindings.push(
+        `artifact schema has unsupported link-target provenance ${JSON.stringify(provenance)}`,
+      );
+    } else if (declaresComposedV3(opts.runtimeDeclaration)) {
+      candidates.push({ source: 'declared link-target contract', schema: 3 });
+    } else {
+      invalidSignalFindings.push(
+        `artifact schema has an unsupported link-target contract: ${describeRuntimeDeclaration(opts.runtimeDeclaration)}`,
+      );
+    }
   }
   if (opts.config !== undefined) {
     const configSignals = promptArtifactSchemaSignalsFromConfig(opts.config);
@@ -3099,17 +3179,25 @@ export async function emitPromptContractTest(opts: {
   artifactSchema?: 1 | 3;
   /** Actual reviewed full-link target provenance, when the caller has it. */
   provenance?: unknown;
+  /** The full-link target's installed engine declaration, when read (DR-028). */
+  runtimeDeclaration?: PlaybookRuntimeDeclaration;
 }): Promise<{ path: string; diagnostics: string[] }> {
   const diagnostics: string[] = [];
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const config = findMachineConfig(await loadFsmModule(fsmPath));
   const rows = capturePromptContract(config);
-  let schemaResolution = resolveArtifactSchemaForVerification({
-    config,
+  const evidence = {
     ...(opts.provenance === undefined ? {} : { provenance: opts.provenance }),
+    ...(opts.runtimeDeclaration === undefined
+      ? {}
+      : { runtimeDeclaration: opts.runtimeDeclaration }),
     ...(opts.artifactSchema === undefined
       ? {}
       : { artifactSchema: opts.artifactSchema }),
+  };
+  let schemaResolution = resolveArtifactSchemaForVerification({
+    config,
+    ...evidence,
   });
   let artifactSchema = schemaResolution.artifactSchema;
 
@@ -3136,12 +3224,7 @@ export async function emitPromptContractTest(opts: {
       schemaResolution = resolveArtifactSchemaForVerification({
         config,
         linked,
-        ...(opts.provenance === undefined
-          ? {}
-          : { provenance: opts.provenance }),
-        ...(opts.artifactSchema === undefined
-          ? {}
-          : { artifactSchema: opts.artifactSchema }),
+        ...evidence,
       });
       artifactSchema = schemaResolution.artifactSchema;
       const actors = new Set(

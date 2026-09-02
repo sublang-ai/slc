@@ -237,6 +237,86 @@ describe('pin generation (pinning-16, pinning-19)', () => {
     );
   });
 
+  // A definition declaring its compiled-execution contract is pinned only to
+  // a bundle whose GEARS preserves that contract verbatim (pinning-23; DR-028).
+  const compiledExecutionSection = [
+    '',
+    '## Compiled execution',
+    '',
+    'When a transformation request names the Source and Target, Captain shall transform the Source into the Target:',
+    '',
+    '> Read <source> and write <target> following this definition:',
+    '>',
+    '> <definition>',
+    '',
+    'Results:',
+    '',
+    '- `compiled`: Captain wrote the Target.',
+    '- `rejected`: Captain reported the Source as unrepresentable.',
+    '',
+  ].join('\n');
+  const preservingGears = [
+    '# Phase',
+    '',
+    '## Behaviors',
+    '',
+    '### T2G-1',
+    '',
+    'When a transformation request names the Source and Target, Captain shall transform the Source into the Target:',
+    '',
+    '> Read <source> and write <target> following this definition:',
+    '>',
+    '> <definition>',
+    '',
+    'Results:',
+    '',
+    '- `compiled`: Captain wrote the Target.',
+    '- `rejected`: Captain reported the Source as unrepresentable.',
+    '',
+  ].join('\n');
+
+  it('pins a definition with a compiled-execution section only to a bundle preserving it (pinning-24)', async () => {
+    await writeFixture();
+    await write(
+      'text2gears.md',
+      `## Pin Inputs\n\n- \`reference/gears.md\`\n${compiledExecutionSection}`,
+    );
+    await write('text2gears.slc/text2gears.gears.md', preservingGears);
+    const record = await generatePinRecord(dir, spec);
+    await writePinFile(dir, { text2gears: record });
+    expect((await evaluatePins(dir)).verdicts?.text2gears).toEqual({
+      status: 'current',
+    });
+
+    // A transcribed extra prompt line is drift, as is a changed result.
+    await write(
+      'text2gears.slc/text2gears.gears.md',
+      preservingGears.replace(
+        '> <definition>\n',
+        '> <definition>\n> Also follow every rule above.\n',
+      ),
+    );
+    await expect(generatePinRecord(dir, spec)).rejects.toThrow(
+      /artifactBundle does not preserve the definition's compiled-execution contract: no direct-Captain GEARS item preserves the compiled-execution acting prompt verbatim; nearest item T2G-1 differs at prompt line 4/,
+    );
+    await write(
+      'text2gears.slc/text2gears.gears.md',
+      preservingGears.replace(
+        '- `rejected`: Captain reported the Source as unrepresentable.',
+        '- `rejected`: Captain gave up.',
+      ),
+    );
+    await expect(generatePinRecord(dir, spec)).rejects.toThrow(
+      /artifactBundle does not preserve the definition's compiled-execution contract: GEARS item T2G-1 preserves the compiled-execution acting prompt but its Results differ/,
+    );
+
+    // A definition without the section is pinned without the check.
+    await write('text2gears.md', '## Pin Inputs\n\n- `reference/gears.md`\n');
+    expect((await generatePinRecord(dir, spec)).definition.path).toBe(
+      'text2gears.md',
+    );
+  });
+
   it('rejects an artifact outside its reviewed bundle', async () => {
     await writeFixture();
     await write('standalone.playbook.ts', PHASE_ARTIFACT);

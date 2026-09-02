@@ -52,7 +52,12 @@ describe('seedPhaseTurn (phase-execution-29)', () => {
     };
     const seed = seedPhaseTurn(input);
     expect(seed.split('\n')[0]).toMatch(/compile phase non-interactively/);
-    expect(JSON.parse(requestLine(seed))).toEqual(input);
+    expect(seed.split('\n')).toHaveLength(2);
+    const request = JSON.parse(requestLine(seed)) as PhaseInput;
+    expect(request).toEqual(input);
+    // Paths only: the definition a schema-3 artifact may require crosses as a
+    // configured option, never through the classifier's turn (DR-028).
+    expect(Object.keys(request)).toEqual(['kind', 'source', 'target']);
   });
 
   it('seeds a link request as a directive plus one JSON line', () => {
@@ -65,7 +70,15 @@ describe('seedPhaseTurn (phase-execution-29)', () => {
     };
     const seed = seedPhaseTurn(input);
     expect(seed.split('\n')[0]).toMatch(/link phase non-interactively/);
-    expect(JSON.parse(requestLine(seed))).toEqual(input);
+    const request = JSON.parse(requestLine(seed)) as PhaseInput;
+    expect(request).toEqual(input);
+    expect(Object.keys(request)).toEqual([
+      'kind',
+      'objects',
+      'linkTarget',
+      'options',
+      'linked',
+    ]);
   });
 });
 

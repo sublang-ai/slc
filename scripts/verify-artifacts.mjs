@@ -4,9 +4,11 @@
 // Standalone review of a compiled `playbook` artifact directory: runs the four
 // DR-009 compilation-correctness checks (conformance incl. Boss-reply coverage,
 // introspection summary, prompt contract incl. composition when the linked
-// module exposes its composer, and transition coverage) and prints findings.
-// The review half of the build-and-review flow (DR-005, DR-007); run
-// `npm run build` first.
+// module exposes its composer, and transition coverage) plus the DR-028
+// compiled-execution fidelity check — the definition's `## Compiled execution`
+// section, when it declares one, must be preserved verbatim in the bundle's
+// GEARS — and prints findings. The review half of the build-and-review flow
+// (DR-005, DR-007); run `npm run build` first.
 //
 //   node scripts/verify-artifacts.mjs <artifactDir> <basename>
 
@@ -22,8 +24,14 @@ import { fileURLToPath } from 'node:url';
 export const reviewArtifact = async ({
   dir,
   basename,
+  /** Definition to check fidelity against; defaults to the pin's recorded definition, else `<pipelineDir>/<basename>.md`. */
+  definition,
   verification,
   pinning,
+  /** Reads the link target's installed engine declaration (DR-028). */
+  contract,
+  /** Checks compiled-execution fidelity between definition and GEARS (DR-028). */
+  fidelity,
   log = console.log,
 }) => {
   const {
@@ -40,6 +48,7 @@ export const reviewArtifact = async ({
     resolveArtifactSchemaForVerification,
   } = verification;
   const artifactDir = resolve(dir);
+  const pipelineDir = resolve(artifactDir, '..');
   const findings = [];
   const section = (title) => log(`\n== ${title}`);
 
@@ -48,11 +57,12 @@ export const reviewArtifact = async ({
   const fsm = await loadFsmModule(fsmPath);
   const config = findMachineConfig(fsm);
   let provenance;
+  let runtimeDeclaration;
+  let record;
   if (pinning !== undefined) {
     try {
-      const pipelineDir = resolve(artifactDir, '..');
       const loaded = await pinning.loadPinFile(pipelineDir);
-      const record = loaded.file?.pins?.[basename];
+      record = loaded.file?.pins?.[basename];
       if (record !== undefined) {
         const verdict = (
           await pinning.evaluatePinFile(pipelineDir, loaded.file)
@@ -62,6 +72,21 @@ export const reviewArtifact = async ({
         }
         if (verdict.status === 'current') {
           provenance = record.linkTarget.provenance;
+          if (contract !== undefined) {
+            // The installed engine's own declaration is the schema evidence
+            // for any provenance outside the exact historical map (DR-028).
+            const linkTarget = resolve(pipelineDir, record.linkTarget.locator);
+            try {
+              runtimeDeclaration =
+                await contract.readPlaybookRuntimeDeclaration(linkTarget);
+            } catch (error) {
+              log(
+                `ignoring unreadable link-target engine declaration for ${basename}: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            }
+          }
         } else {
           log(
             `ignoring ${verdict.status} pin provenance for ${basename}: ${verdict.reason}`,
@@ -90,6 +115,7 @@ export const reviewArtifact = async ({
   }
   const schemaResolution = resolveArtifactSchemaForVerification({
     ...(provenance === undefined ? {} : { provenance }),
+    ...(runtimeDeclaration === undefined ? {} : { runtimeDeclaration }),
     config,
     ...(linked === undefined ? {} : { linked }),
   });
@@ -105,6 +131,36 @@ export const reviewArtifact = async ({
   });
   findings.push(...conformance.map((f) => `conformance: ${f}`));
   log(conformance.length === 0 ? 'ok' : conformance.join('\n'));
+
+  section('compiled-execution fidelity');
+  if (fidelity === undefined) {
+    log('not reviewed: no fidelity checker supplied');
+  } else {
+    const definitionPath =
+      definition !== undefined
+        ? resolve(definition)
+        : record !== undefined
+          ? resolve(pipelineDir, record.definition.path)
+          : join(pipelineDir, `${basename}.md`);
+    if (!existsSync(definitionPath)) {
+      log(`not applicable: no definition at ${definitionPath}`);
+    } else {
+      const verdict = fidelity.checkCompiledExecutionFidelity(
+        readFileSync(definitionPath, 'utf8'),
+        gears,
+      );
+      if (!verdict.applicable) {
+        log(`not applicable: ${verdict.reason}`);
+      } else {
+        findings.push(...verdict.findings.map((f) => `fidelity: ${f}`));
+        log(
+          verdict.findings.length === 0
+            ? `ok: ${verdict.item} preserves the definition's compiled-execution contract`
+            : verdict.findings.join('\n'),
+        );
+      }
+    }
+  }
 
   section('introspection');
   const pins = pinIntrospection(config);
@@ -206,11 +262,14 @@ if (
     );
     process.exitCode = 2;
   } else {
-    const [verification, pinCurrency, pins] = await Promise.all([
-      import('../dist/verify.js'),
-      import('../dist/pin-currency.js'),
-      import('../dist/pins.js'),
-    ]);
+    const [verification, pinCurrency, pins, runtimeContract, fidelity] =
+      await Promise.all([
+        import('../dist/verify.js'),
+        import('../dist/pin-currency.js'),
+        import('../dist/pins.js'),
+        import('../dist/runtime-contract.js'),
+        import('../dist/compiled-execution.js'),
+      ]);
     const result = await reviewArtifact({
       dir,
       basename,
@@ -218,6 +277,13 @@ if (
       pinning: {
         evaluatePinFile: pinCurrency.evaluatePinFile,
         loadPinFile: pins.loadPinFile,
+      },
+      contract: {
+        readPlaybookRuntimeDeclaration:
+          runtimeContract.readPlaybookRuntimeDeclaration,
+      },
+      fidelity: {
+        checkCompiledExecutionFidelity: fidelity.checkCompiledExecutionFidelity,
       },
     });
     if (!result.passed) {
