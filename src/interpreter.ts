@@ -32,7 +32,11 @@ export interface AgentRunRequest {
   model?: string;
   /** Explicit backend continuation selection for Playbook player calls. */
   resume?: string | false;
-  /** Explicit tool allowlist for isolated Playbook Captain control calls. */
+  /**
+   * Explicit tool allowlist for isolated Playbook Captain control calls; the
+   * empty list requests tool-free isolation, and the transport decides
+   * whether the configured adapter can enforce it (phase-execution-31).
+   */
   allowedTools?: readonly string[];
   signal: AbortSignal;
 }

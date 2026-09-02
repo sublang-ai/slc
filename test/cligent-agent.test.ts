@@ -112,6 +112,55 @@ describe('createCligentAgent player continuation', () => {
   });
 });
 
+describe('createCligentAgent control-call tool isolation (phase-execution-31)', () => {
+  it('substitutes only the empty allowlist, and only for a prompt-only adapter', async () => {
+    const seen: Array<readonly string[] | undefined> = [];
+    const adapterFor = (agent: string): AgentAdapter => ({
+      agent,
+      async isAvailable() {
+        return true;
+      },
+      async *run(_prompt: string, options?: AgentOptions) {
+        seen.push(options?.allowedTools);
+        yield {
+          type: 'done',
+          agent,
+          timestamp: 1,
+          sessionId: `${agent}-session`,
+          payload: {
+            status: 'success',
+            result: 'ok',
+            usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+            durationMs: 1,
+          },
+        };
+      },
+    });
+    const signal = new AbortController().signal;
+    const call = async (
+      agent: string,
+      allowedTools?: readonly string[],
+    ): Promise<void> => {
+      await createCligentAgent({ adapter: adapterFor(agent) }).run({
+        prompt: 'control',
+        ...(allowedTools === undefined ? {} : { allowedTools }),
+        signal,
+      });
+    };
+
+    await call('claude-code', []);
+    await call('codex', []);
+    // A real restriction is never the host's way of saying tool-free, so it
+    // crosses unsubstituted and fails closed on the adapter that cannot
+    // enforce it; so does the empty list on an unrecognized adapter.
+    await call('codex', ['Read']);
+    await call('fixture', []);
+    await call('codex');
+
+    expect(seen).toEqual([[], undefined, ['Read'], [], undefined]);
+  });
+});
+
 const event = (
   type: string,
   payload: Record<string, unknown> = {},

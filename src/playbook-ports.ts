@@ -152,6 +152,9 @@ export function createPlaybookPorts(opts: {
           prompt,
           model: opts.defaultModel,
           cwd: opts.cwd,
+          // Host-owned adjudication isolation: a fresh conversation and the
+          // empty allowlist asking for no tools, which the transport forwards
+          // only to an adapter that can enforce one (phase-execution-31).
           resume: false,
           allowedTools: [],
           signal,
