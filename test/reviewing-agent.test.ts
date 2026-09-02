@@ -254,6 +254,20 @@ describe('createReviewingAgent (DR-022)', () => {
     ['bare', (json: string) => json],
     ['json fence', (json: string) => `\`\`\`json\n${json}\n\`\`\``],
     ['unlabeled fence', (json: string) => `\`\`\`\n${json}\n\`\`\``],
+    [
+      'narrated bare',
+      (json: string) =>
+        `Reading source.txt.\nApplying the accepted repair.\n${json}`,
+    ],
+    [
+      'narrated json fence',
+      (json: string) =>
+        `Reading source.txt.\nApplying the accepted repair.\n\`\`\`json\n${json}\n\`\`\``,
+    ],
+    [
+      'narration holding an unmatched brace',
+      (json: string) => `Restored the "if (ok) {" guard at line 12.\n${json}`,
+    ],
   ])('accepts a correction envelope in the %s form', async (_label, wrap) => {
     const coder = queuedClient([
       { status: 'success', text: 'initial' },
@@ -268,6 +282,28 @@ describe('createReviewingAgent (DR-022)', () => {
     await expect(agent.run(request())).resolves.toEqual({
       status: 'success',
       text: 'decoded result',
+    });
+  });
+
+  it('decodes a narrated envelope whose result carries braces inside strings', async () => {
+    const replacement =
+      'target {"nested": "}"} kept verbatim\nplus a \\ backslash and a } brace';
+    const coder = queuedClient([
+      { status: 'success', text: 'initial' },
+      {
+        status: 'success',
+        text: `Inspecting {the} workspace.\n${correctionEnvelope(replacement)}`,
+      },
+    ]);
+    const reviewer = queuedClient([
+      { status: 'success', text: 'FINDINGS:\n1. issue' },
+      { status: 'success', text: 'NO_FINDINGS' },
+    ]);
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    await expect(agent.run(request())).resolves.toEqual({
+      status: 'success',
+      text: replacement,
     });
   });
 
@@ -303,8 +339,18 @@ describe('createReviewingAgent (DR-022)', () => {
       ]),
     ],
     [
-      'surrounding prose',
-      `Envelope follows:\n${correctionEnvelope('replacement', [
+      'trailing prose after the object',
+      `${correctionEnvelope('replacement', [
+        { finding: 1, decision: 'accept', reason: 'one' },
+        { finding: 2, decision: 'reject', reason: 'two' },
+      ])}\nThe envelope is above.`,
+    ],
+    [
+      'two adjacent objects',
+      `Applied the repair.\n${correctionEnvelope('replacement', [
+        { finding: 1, decision: 'accept', reason: 'one' },
+        { finding: 2, decision: 'reject', reason: 'two' },
+      ])}\n${correctionEnvelope('other replacement', [
         { finding: 1, decision: 'accept', reason: 'one' },
         { finding: 2, decision: 'reject', reason: 'two' },
       ])}`,

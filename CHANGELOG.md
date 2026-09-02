@@ -11,6 +11,19 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- **A narrated correction survives review.** The private correction
+  envelope is now the last complete top-level JSON object in the Coder
+  reply — bare or inside one lone `json`/unlabeled fence — with any
+  narration before it ignored, because an adapter may join an agent's
+  progress commentary ahead of its final message and a commenting Coder
+  then lost a whole reviewed compile to a fail-closed "not one JSON
+  object". Every structural rule is unchanged, and a reply with no
+  complete object, a second object adjacent to the last, or any
+  non-whitespace text after the object still fails closed with a precise
+  reason ([DR-022](specs/decisions/022-two-agent-reviewed-compilation.md)).
+
 ## [0.7.0] - 2026-09-02
 
 ### Added

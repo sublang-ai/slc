@@ -211,16 +211,11 @@ function parseCorrectionEnvelope(
   text: string,
   findingCount: number,
 ): CorrectionEnvelope {
-  const source = unwrapCorrectionJson(text);
-  if (source === null) {
-    return {
-      kind: 'malformed',
-      reason: 'response must be bare JSON or one lone json/unlabeled fence',
-    };
-  }
+  const unwrapped = unwrapCorrectionJson(text);
+  if (unwrapped.kind === 'malformed') return unwrapped;
   let value: unknown;
   try {
-    value = JSON.parse(source) as unknown;
+    value = JSON.parse(unwrapped.source) as unknown;
   } catch {
     return { kind: 'malformed', reason: 'response is not one JSON object' };
   }
@@ -294,11 +289,125 @@ function parseCorrectionEnvelope(
   return { kind: 'valid', dispositions, result: record.result };
 }
 
-function unwrapCorrectionJson(text: string): string | null {
-  const source = text.trim();
-  if (!source.startsWith('```')) return source;
-  const fenced = source.match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/);
-  return fenced?.[1] ?? null;
+type CorrectionSource =
+  | { kind: 'source'; source: string }
+  | { kind: 'malformed'; reason: string };
+
+/**
+ * Isolates the envelope: the last complete top-level JSON object in the reply,
+ * bare or wholly enclosed by one lone `json`/unlabeled Markdown fence.
+ *
+ * An adapter may join an agent's progress commentary ahead of its final
+ * message, so leading narration is ignored. Nothing but whitespace may follow
+ * the object, and two objects separated by nothing but whitespace are
+ * ambiguous rather than an envelope preceded by narration.
+ */
+function unwrapCorrectionJson(text: string): CorrectionSource {
+  const trimmed = text.replaceAll('\r\n', '\n').trim();
+  const region = fencedRegion(trimmed);
+  if (typeof region !== 'string') return region;
+  return lastTopLevelObject(region);
+}
+
+/**
+ * Returns the content of the last fence when the reply ends with a closing
+ * fence line, the whole reply when it does not, or a malformed reason when the
+ * enclosing fence carries another label.
+ */
+function fencedRegion(trimmed: string): string | CorrectionSource {
+  const lines = trimmed.split('\n');
+  const close = lines.length - 1;
+  if (!/^[ \t]*```[ \t]*$/.test(lines[close] ?? '')) return trimmed;
+  for (let index = close - 1; index >= 0; index--) {
+    const opening = /^[ \t]*```[ \t]*([A-Za-z0-9_+-]*)[ \t]*$/.exec(
+      lines[index],
+    );
+    if (opening === null) continue;
+    if (opening[1] !== '' && opening[1] !== 'json') {
+      return {
+        kind: 'malformed',
+        reason: 'a fenced envelope must use one json or unlabeled fence',
+      };
+    }
+    return lines.slice(index + 1, close).join('\n');
+  }
+  return trimmed;
+}
+
+function lastTopLevelObject(region: string): CorrectionSource {
+  const objects = topLevelObjects(region);
+  const last = objects.at(-1);
+  if (last === undefined) {
+    return {
+      kind: 'malformed',
+      reason: 'response contains no complete JSON object',
+    };
+  }
+  if (region.slice(last.end).trim() !== '') {
+    return { kind: 'malformed', reason: 'text follows the JSON object' };
+  }
+  const previous = objects.at(-2);
+  if (
+    previous !== undefined &&
+    region.slice(previous.end, last.start).trim() === '' &&
+    isJsonObject(region.slice(previous.start, previous.end))
+  ) {
+    return {
+      kind: 'malformed',
+      reason: 'response ends with two adjacent JSON objects',
+    };
+  }
+  return { kind: 'source', source: region.slice(last.start, last.end) };
+}
+
+/**
+ * Balanced-brace scan for complete brace groups outside every JSON string,
+ * honoring backslash escapes. A quote at depth zero is narration, not a string
+ * delimiter, and an unmatched narration brace is skipped so the groups after it
+ * are still found.
+ */
+function topLevelObjects(
+  region: string,
+): Array<{ start: number; end: number }> {
+  const objects: Array<{ start: number; end: number }> = [];
+  let from = 0;
+  while (from < region.length) {
+    let depth = 0;
+    let start = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = from; index < region.length; index++) {
+      const character = region[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === '\\') escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') {
+        if (depth > 0) inString = true;
+      } else if (character === '{') {
+        if (depth === 0) start = index;
+        depth++;
+      } else if (character === '}' && depth > 0) {
+        depth--;
+        if (depth === 0) objects.push({ start, end: index + 1 });
+      }
+    }
+    if (depth === 0) break;
+    from = start + 1;
+  }
+  return objects;
+}
+
+function isJsonObject(text: string): boolean {
+  let value: unknown;
+  try {
+    value = JSON.parse(text) as unknown;
+  } catch {
+    return false;
+  }
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function buildReviewerPrompt(input: {
