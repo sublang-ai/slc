@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { FAST_MODE_SUPPORT } from '@sublang/cligent';
 import type { AgentAdapter, AgentOptions } from '@sublang/cligent';
 import { describe, expect, it } from 'vitest';
 
@@ -73,6 +74,67 @@ describe('resolveAgentSelection (cli-7, cli-12)', () => {
     ).toThrow(expect.objectContaining({ code: 'effort-unsupported' }));
   });
 
+  it('accepts or refuses a literal fast mode by the installed Cligent contract, naming the agent (cli-7, cli-43)', () => {
+    // The installed descriptor decides, so slc keeps no list of its own; the
+    // registered set must straddle it for this test to prove anything.
+    const supported = SUPPORTED_AGENTS.filter(
+      (agent) => FAST_MODE_SUPPORT[agent].requestSupported,
+    );
+    const unsupported = SUPPORTED_AGENTS.filter(
+      (agent) => !FAST_MODE_SUPPORT[agent].requestSupported,
+    );
+    expect(supported.length).toBeGreaterThan(0);
+    expect(unsupported.length).toBeGreaterThan(0);
+
+    for (const agent of supported) {
+      expect(
+        resolveAgentSelection({ SLC_AGENT: agent, SLC_FAST_MODE: 'true' })
+          .fastMode,
+      ).toBe(true);
+      // `false` is a literal request, not an omission.
+      expect(
+        resolveAgentSelection({ SLC_AGENT: agent, SLC_FAST_MODE: ' false ' })
+          .fastMode,
+      ).toBe(false);
+      expect(
+        resolveAgentSelection({ SLC_AGENT: agent, SLC_FAST_MODE: '  ' })
+          .fastMode,
+      ).toBeUndefined();
+    }
+    for (const agent of unsupported) {
+      for (const value of ['true', 'false']) {
+        let caught: unknown;
+        try {
+          resolveAgentSelection({ SLC_AGENT: agent, SLC_FAST_MODE: value });
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught).toBeInstanceOf(ConfigError);
+        expect((caught as ConfigError).code).toBe('fast-mode-unsupported');
+        expect((caught as ConfigError).message).toContain(`"${agent}"`);
+        expect((caught as ConfigError).message).toContain('SLC_FAST_MODE');
+      }
+    }
+  });
+
+  it('refuses an SLC_FAST_MODE other than exactly true or false, naming the variable (cli-43)', () => {
+    for (const value of ['yes', '1', 'TRUE', 'on', 'True']) {
+      let caught: unknown;
+      try {
+        resolveAgentSelection({
+          SLC_AGENT: 'claude-code',
+          SLC_FAST_MODE: value,
+        });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(ConfigError);
+      expect((caught as ConfigError).code).toBe('fast-mode-invalid');
+      expect((caught as ConfigError).message).toContain('SLC_FAST_MODE');
+      expect((caught as ConfigError).message).toContain(`"${value}"`);
+    }
+  });
+
   it('resolves and validates an optional independent Reviewer selection', () => {
     expect(
       resolveAgentSelection({
@@ -80,15 +142,18 @@ describe('resolveAgentSelection (cli-7, cli-12)', () => {
         SLC_REVIEWER_AGENT: 'codex',
         SLC_REVIEWER_MODEL: 'gpt-review',
         SLC_REVIEWER_EFFORT: 'xhigh',
+        SLC_REVIEWER_FAST_MODE: 'false',
       }),
     ).toEqual({
       agent: 'claude-code',
       model: undefined,
       effort: undefined,
+      fastMode: undefined,
       reviewer: {
         agent: 'codex',
         model: 'gpt-review',
         effort: 'xhigh',
+        fastMode: false,
       },
     });
     expect(() =>
@@ -104,12 +169,41 @@ describe('resolveAgentSelection (cli-7, cli-12)', () => {
         SLC_REVIEWER_EFFORT: 'ultra',
       }),
     ).toThrow(expect.objectContaining({ code: 'reviewer-effort-unsupported' }));
+    expect(() =>
+      resolveAgentSelection({
+        SLC_AGENT: 'codex',
+        SLC_REVIEWER_AGENT: 'claude-code',
+        SLC_REVIEWER_FAST_MODE: 'maybe',
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'reviewer-fast-mode-invalid',
+        message: expect.stringContaining('SLC_REVIEWER_FAST_MODE'),
+      }),
+    );
+    const unsupported = SUPPORTED_AGENTS.find(
+      (agent) => !FAST_MODE_SUPPORT[agent].requestSupported,
+    );
+    expect(unsupported).toBeDefined();
+    expect(() =>
+      resolveAgentSelection({
+        SLC_AGENT: 'codex',
+        SLC_REVIEWER_AGENT: unsupported,
+        SLC_REVIEWER_FAST_MODE: 'true',
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'reviewer-fast-mode-unsupported',
+        message: expect.stringContaining(`"${unsupported}"`),
+      }),
+    );
   });
 
-  it('refuses Reviewer model or effort without reviewerAgent', () => {
+  it('refuses Reviewer model, effort, or fast mode without reviewerAgent', () => {
     for (const reviewer of [
       { SLC_REVIEWER_MODEL: 'review-model' },
       { SLC_REVIEWER_EFFORT: 'high' },
+      { SLC_REVIEWER_FAST_MODE: 'true' },
     ]) {
       expect(() =>
         resolveAgentSelection({ SLC_AGENT: 'codex', ...reviewer }),
@@ -262,6 +356,165 @@ describe('createConfiguredExecutor (cli-7, cli-8)', () => {
           networkAccess: 'deny',
         },
       });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('carries the literal fast mode into every Coder and Reviewer call, and omission leaves it unset (cli-7, cli-40, cli-41, cli-43)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-fast-mode-config-'));
+    const definitionPath = join(dir, 'text2gears.md');
+    await writeFile(definitionPath, 'perform the transformation');
+    const capture = (): {
+      factory: AdapterFactory;
+      options: Map<string, AgentOptions>;
+    } => {
+      const options = new Map<string, AgentOptions>();
+      const factory: AdapterFactory = (agent) => ({
+        agent,
+        async isAvailable() {
+          return true;
+        },
+        async *run(_prompt: string, runOptions?: AgentOptions) {
+          if (runOptions !== undefined) options.set(agent, runOptions);
+          yield {
+            type: 'done',
+            agent,
+            timestamp: 1,
+            sessionId: `${agent}-session`,
+            payload: {
+              status: 'success',
+              result: agent === 'claude-code' ? 'NO_FINDINGS' : 'coder summary',
+              usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+              durationMs: 1,
+            },
+          } as never;
+        },
+      });
+      return { factory, options };
+    };
+    const request = {
+      kind: 'compile' as const,
+      definitionPath,
+      source: join(dir, 'source.txt'),
+      target: join(dir, 'target.md'),
+    };
+
+    try {
+      // A literal on each side — `false` for the Reviewer is a request, not
+      // an omission — rides the same call settings as effort.
+      const literal = capture();
+      await expect(
+        createConfiguredExecutor(
+          {
+            agent: 'codex',
+            effort: 'high',
+            fastMode: true,
+            reviewer: { agent: 'claude-code', fastMode: false },
+          },
+          { adapterFactory: literal.factory, cwd: dir },
+        ).run(request, new AbortController().signal),
+      ).resolves.toEqual({ status: 'ok', diagnostics: ['coder summary'] });
+      expect(literal.options.get('codex')).toMatchObject({
+        effort: 'high',
+        fastMode: true,
+      });
+      expect(literal.options.get('claude-code')).toMatchObject({
+        fastMode: false,
+      });
+
+      // Omission on both sides leaves the agent CLI's own default in force.
+      const omitted = capture();
+      await expect(
+        createConfiguredExecutor(
+          { agent: 'codex', reviewer: { agent: 'claude-code' } },
+          { adapterFactory: omitted.factory, cwd: dir },
+        ).run(request, new AbortController().signal),
+      ).resolves.toEqual({ status: 'ok', diagnostics: ['coder summary'] });
+      expect(omitted.options.get('codex')?.fastMode).toBeUndefined();
+      expect(omitted.options.get('claude-code')?.fastMode).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('carries the literal fast mode into a compiled player call (cli-7, cli-43)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-fast-mode-compiled-'));
+    const artifactPath = join(dir, 'phase.playbook.mjs');
+    const definitionPath = join(dir, 'phase.md');
+    const source = join(dir, 'source.md');
+    const target = join(dir, 'target.ts');
+    await writeFile(definitionPath, 'compiled phase definition');
+    await writeFile(source, 'source input');
+    await writeFile(
+      artifactPath,
+      [
+        'export default function createPlaybookRuntime() {',
+        '  let ports;',
+        '  return {',
+        '    async init(value) { ports = value; },',
+        '    async handleBossInput({ text, signal }) {',
+        "      const result = await ports.callPlayer('writer', text, signal);",
+        "      if (result.status !== 'ok') throw new Error('player failed');",
+        '    },',
+        '    async dispose() {},',
+        '  };',
+        '}',
+      ].join('\n'),
+    );
+    const playerOptions: AgentOptions[] = [];
+    const factory: AdapterFactory = (agent) => ({
+      agent,
+      async isAvailable() {
+        return true;
+      },
+      async *run(prompt: string, options?: AgentOptions) {
+        if (options !== undefined) playerOptions.push(options);
+        const marker = 'Request: ';
+        const line = prompt
+          .split('\n')
+          .find((candidate) => candidate.startsWith(marker));
+        if (line === undefined) throw new Error('missing compiled request');
+        const input = JSON.parse(line.slice(marker.length)) as {
+          target: string;
+        };
+        await writeFile(input.target, 'compiled output');
+        yield {
+          type: 'done',
+          agent,
+          timestamp: 1,
+          sessionId: `${agent}-session`,
+          payload: {
+            status: 'success',
+            result: 'player summary',
+            usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+            durationMs: 1,
+          },
+        } as never;
+      },
+    });
+
+    try {
+      const executor = await createConfiguredCompiledFactory(
+        { agent: 'codex', fastMode: false },
+        { adapterFactory: factory, cwd: dir },
+      )({
+        phase: 'phase',
+        pipelineDir: dir,
+        record: {
+          artifact: { path: 'phase.playbook.mjs' },
+          linkTarget: { provenance: '@sublang/playbook@0.9.0' },
+        },
+      } as unknown as CompiledSelection);
+
+      await expect(
+        executor.run(
+          { kind: 'compile', definitionPath, source, target },
+          new AbortController().signal,
+        ),
+      ).resolves.toMatchObject({ status: 'ok' });
+      expect(playerOptions).toHaveLength(1);
+      expect(playerOptions[0]).toMatchObject({ fastMode: false });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

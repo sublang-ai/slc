@@ -51,10 +51,13 @@ export interface FileConfig {
   agent?: string;
   model?: string;
   effort?: string;
+  /** Literal adapter-scoped fast-mode request; omission is the agent CLI's default. */
+  fastMode?: boolean;
   /** Optional independent Reviewer; presence enables reviewed calls (DR-022). */
   reviewerAgent?: string;
   reviewerModel?: string;
   reviewerEffort?: string;
+  reviewerFastMode?: boolean;
   pipelinePath?: string[];
   /** Agent-stall watchdog window in seconds; `0` disables (DR-019, cli-34). */
   stallTimeout?: number;
@@ -191,16 +194,18 @@ async function readConfigFile(path: string): Promise<FileConfig> {
   return normalizeFileConfig(raw, path);
 }
 
-const ALLOWED_KEYS = new Set([
+const ALLOWED_KEYS = [
   'agent',
   'model',
   'effort',
+  'fastMode',
   'reviewerAgent',
   'reviewerModel',
   'reviewerEffort',
+  'reviewerFastMode',
   'pipelinePath',
   'stallTimeout',
-]);
+] as const;
 
 function normalizeFileConfig(value: unknown, path: string): FileConfig {
   if (value === null || value === undefined) {
@@ -215,10 +220,10 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
 
   const input = value as Record<string, unknown>;
   for (const key of Object.keys(input)) {
-    if (!ALLOWED_KEYS.has(key)) {
+    if (!(ALLOWED_KEYS as readonly string[]).includes(key)) {
       throw new ConfigFileError(
         'config-invalid',
-        `Unknown config key "${key}" in ${path}; allowed keys: agent, model, effort, reviewerAgent, reviewerModel, reviewerEffort, pipelinePath, stallTimeout`,
+        `Unknown config key "${key}" in ${path}; allowed keys: ${ALLOWED_KEYS.join(', ')}`,
       );
     }
   }
@@ -232,6 +237,9 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
   }
   if (input.effort !== undefined) {
     config.effort = requireString(input.effort, 'effort', path);
+  }
+  if (input.fastMode !== undefined) {
+    config.fastMode = requireBoolean(input.fastMode, 'fastMode', path);
   }
   if (input.reviewerAgent !== undefined) {
     config.reviewerAgent = requireString(
@@ -251,6 +259,13 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
     config.reviewerEffort = requireString(
       input.reviewerEffort,
       'reviewerEffort',
+      path,
+    );
+  }
+  if (input.reviewerFastMode !== undefined) {
+    config.reviewerFastMode = requireBoolean(
+      input.reviewerFastMode,
+      'reviewerFastMode',
       path,
     );
   }
@@ -283,6 +298,20 @@ function requireSeconds(value: unknown, key: string, path: string): number {
       'config-invalid',
       `Config key "${key}" in ${path} must be at most ${MAX_STALL_TIMEOUT_SECONDS} seconds ` +
         '(use 0 to disable the stall watchdog)',
+    );
+  }
+  return value;
+}
+
+/**
+ * Fast mode is a plain YAML boolean: `false` is a literal request, so the
+ * string forms are refused rather than coerced (cli-7).
+ */
+function requireBoolean(value: unknown, key: string, path: string): boolean {
+  if (typeof value !== 'boolean') {
+    throw new ConfigFileError(
+      'config-invalid',
+      `Config key "${key}" in ${path} must be a boolean (true or false)`,
     );
   }
   return value;

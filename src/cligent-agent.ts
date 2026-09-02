@@ -63,6 +63,12 @@ export function createCligentAgent(opts: {
   /** Adapter-scoped reasoning effort, validated by the configuration layer. */
   effort?: string;
   /**
+   * Literal adapter-scoped fast-mode request (`false` asks for it off), its
+   * adapter support validated by the configuration layer; absent leaves the
+   * agent CLI's default.
+   */
+  fastMode?: boolean;
+  /**
    * Milliseconds of adapter-event inactivity after which the in-flight call is
    * aborted and reported as an error (DR-019, phase-execution-36). Zero or absent
    * disables the watchdog.
@@ -74,8 +80,9 @@ export function createCligentAgent(opts: {
   const cligent = new Cligent(opts.adapter, {
     maxTurns: opts.maxTurns,
     permissions: opts.permissions,
-    // Validated adapter-scoped by the configuration layer (cli-12).
+    // Both validated adapter-scoped by the configuration layer (cli-7, cli-12).
     ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
+    ...(opts.fastMode !== undefined ? { fastMode: opts.fastMode } : {}),
   });
   const stallMs = opts.stallTimeoutMs ?? 0;
   const timers = opts.watchdogTimers ?? defaultWatchdogTimers;
