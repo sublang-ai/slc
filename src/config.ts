@@ -28,11 +28,19 @@ import type { AgentAdapter, PermissionPolicy } from '@sublang/cligent';
 
 import { createCligentAgent } from './cligent-agent.js';
 import { createCompiledExecutor } from './compiled-executor.js';
+import { messageOf } from './errors.js';
 import type { PhaseExecutor } from './execution.js';
 import type { AgentClient } from './interpreter.js';
 import { createInterpretedExecutor } from './interpreter.js';
+import type { RuntimeContractProfile } from './playbook-contract.js';
 import { createReviewingAgent } from './reviewing-agent.js';
 import type { CompiledSelection } from './runner.js';
+import {
+  declaresComposedV3,
+  describeRuntimeDeclaration,
+  PLAYBOOK_PACKAGE,
+  readPlaybookRuntimeDeclaration,
+} from './runtime-contract.js';
 
 /** Agent CLI ids the executable registers (cli-7). */
 export const SUPPORTED_AGENTS = [
@@ -237,13 +245,16 @@ export function createConfiguredAgentClient(
 
 /**
  * Builds the compiled-execution factory the bin injects as `SlcDeps.compiled`
- * (cli-8, phase-execution-27): for a current pinned phase it drives the pinned `playbook`
- * artifact — resolved against its pipeline directory — through the compiled
- * executor, backing the runtime's player ports with one agent transport per
- * player id and its Captain/judge ports with one shared transport; the dormant
- * roleless composed-v3 path rejects its player port before that lazy player
- * transport is constructed (phase-execution-25). The factory applies the
- * selected model as the default per-player model (phase-execution-13).
+ * (cli-8, phase-execution-27): for a current pinned phase it selects the
+ * runtime contract profile ({@link runtimeContractForPin}) and drives the
+ * pinned `playbook` artifact — resolved against its pipeline directory —
+ * through the compiled executor, backing the runtime's player ports with one
+ * agent transport per player id and its Captain/judge ports with one shared
+ * transport; the roleless composed-v3 path rejects its player port before that
+ * lazy player transport is constructed (phase-execution-25). The factory
+ * applies the selected model as the default per-player model
+ * (phase-execution-13). A rejected selection rejects the returned promise
+ * before any artifact loads or transport is built (phase-execution-30).
  */
 export function createConfiguredCompiledFactory(
   selection: AgentSelection,
@@ -257,23 +268,25 @@ export function createConfiguredCompiledFactory(
     /** Live status sink streaming the runtime's non-trace status (DR-019, phase-execution-25). */
     onStatus?: (line: string) => void;
   } = {},
-): (choice: CompiledSelection) => PhaseExecutor {
+): (choice: CompiledSelection) => Promise<PhaseExecutor> {
   const client = (): AgentClient => {
     const coder = createConfiguredAgentClient(selection, opts);
     return configuredReviewingClient(selection, coder, opts);
   };
-  return (choice) =>
-    createCompiledExecutor({
+  return async (choice) => {
+    const runtimeContract = await runtimeContractForPin(choice);
+    return createCompiledExecutor({
       artifactPath: resolve(choice.pipelineDir, choice.record.artifact.path),
       runRoot: opts.cwd ?? process.cwd(),
       playbookId: choice.phase,
-      runtimeContract: runtimeContractForPin(choice),
+      runtimeContract,
       player: () => client(),
       judge: client(),
       defaultModel: selection.model,
       cwd: opts.cwd,
       onStatus: opts.onStatus,
     });
+  };
 }
 
 function configuredReviewingClient(
@@ -300,32 +313,28 @@ function configuredReviewingClient(
   });
 }
 
-function runtimeContractForPin(
-  choice: CompiledSelection,
-): 'legacy' | 'composed-v2' | 'composed-v3' {
-  const provenance = choice.record.linkTarget.provenance;
+/**
+ * The exact historical provenance maps, retained as recorded (DR-028):
+ * absent or Playbook 0.9.0 provenance is the `legacy` contract, and the
+ * reviewed six-port generation is `composed-v2`. Every other provenance is
+ * decided by the installed engine's declaration instead.
+ *
+ * Playbook 0.10 ships the composed six-port contract (DR-011); 1.0.0 is the
+ * published release of that same generation — 0.10.0 was cut locally and
+ * superseded before it reached the registry. 2.0.0 keeps the six-port
+ * boundary and structured results while moving Captain host failures onto
+ * the resolved `failed` path and emitting thin linked modules (DR-017).
+ * 3.1.0 ships runtime.ts byte-identical to 2.0.0 and only adds the additive
+ * DR-022 compat self-report (DR-018), and 4.0.0 keeps runtime.ts and the
+ * engine byte-identical to 3.1.0's — its major marks the SDK-topology break,
+ * not a contract change (DR-020) — so all five select `composed-v2`.
+ */
+export function historicalRuntimeContract(
+  provenance: string | undefined,
+): 'legacy' | 'composed-v2' | undefined {
   if (provenance === undefined || provenance === '@sublang/playbook@0.9.0') {
     return 'legacy';
   }
-  // Playbook 0.10 ships the composed six-port contract (DR-011); artifacts
-  // linked against it run through the composed session profile. 1.0.0 is the
-  // published release of that same contract generation — 0.10.0 was cut
-  // locally and superseded before it ever reached the registry. 2.0.0 keeps
-  // the six-port boundary and structured results while moving Captain host
-  // failures onto the resolved `failed` path and emitting thin linked
-  // modules (DR-017), so all three provenances select the composed profile.
-  // 3.1.0 ships runtime.ts byte-identical to 2.0.0 and only adds the
-  // additive DR-022 compat self-report on the shared engine, so it selects
-  // the same profile (DR-018). 4.0.0 keeps runtime.ts and the engine
-  // byte-identical to 3.1.0's — its major marks the SDK-topology break,
-  // with cligent owning runtime versions, not a contract change — so it
-  // selects the same profile (DR-020). 1.3.0 and 3.0.0 were never
-  // installed or reviewed here and stay fail-closed. Exact Playbook 10.0.0
-  // ships schema-3 linked artifacts whose Captain-hosted factory takes
-  // configured options plus live host capabilities, so it selects the
-  // composed-v3 profile (DR-024). 5.0.0 through 9.0.0 were never reviewed
-  // here and stay fail-closed: reviewing 10.0.0 establishes no contract
-  // identity for an intermediate release.
   if (
     provenance === '@sublang/playbook@0.10.0' ||
     provenance === '@sublang/playbook@1.0.0' ||
@@ -335,10 +344,51 @@ function runtimeContractForPin(
   ) {
     return 'composed-v2';
   }
-  if (provenance === '@sublang/playbook@10.0.0') {
-    return 'composed-v3';
+  return undefined;
+}
+
+/**
+ * Selects the runtime contract profile a current pin runs under
+ * (phase-execution-30; DR-010, DR-028). The historical exact maps decide
+ * `legacy` and `composed-v2`; every other provenance selects `composed-v3`
+ * exactly when the pin's link target resolves inside an installed
+ * `@sublang/playbook` whose engine declares `RUNTIME_ABI` `1` and
+ * `SUPPORTED_ARTIFACT_SCHEMAS` containing `3`, whatever its release version.
+ *
+ * @throws naming the declaration — or its absence — when the link target
+ *   lies outside such a package, its engine cannot be read, or it declares
+ *   another ABI or no schema 3; no profile is inferred from callable members
+ *   and no other profile is retried.
+ */
+export async function runtimeContractForPin(
+  choice: CompiledSelection,
+): Promise<RuntimeContractProfile> {
+  const provenance = choice.record.linkTarget.provenance;
+  const historical = historicalRuntimeContract(provenance);
+  if (historical !== undefined) return historical;
+  const locator = choice.record.linkTarget.locator;
+  const reject = (reason: string): never => {
+    throw new Error(
+      `unsupported pinned Playbook runtime contract: ${provenance} (${reason})`,
+    );
+  };
+  let declaration;
+  try {
+    declaration = await readPlaybookRuntimeDeclaration(
+      resolve(choice.pipelineDir, locator),
+    );
+  } catch (error) {
+    return reject(messageOf(error));
   }
-  throw new Error(
-    `unsupported pinned Playbook runtime contract: ${provenance}`,
-  );
+  if (declaration === undefined) {
+    return reject(
+      `link target ${locator} is not inside an installed ${PLAYBOOK_PACKAGE} package`,
+    );
+  }
+  if (!declaresComposedV3(declaration)) {
+    return reject(
+      `${describeRuntimeDeclaration(declaration)}; composed-v3 requires RUNTIME_ABI 1 and artifact schema 3`,
+    );
+  }
+  return 'composed-v3';
 }

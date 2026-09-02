@@ -293,8 +293,18 @@ export interface ComposedV3PhaseHostCapabilities {
   effectLedger: PhaseHostEffectLedger;
 }
 
+/**
+ * The configured options SLC's roleless host may supply: the exact empty
+ * record, or the single option `definition` — the exact text of the
+ * definition file the request names — for an artifact whose options contract
+ * requires it (DR-028).
+ */
+export type ComposedV3ConfiguredOptions =
+  | Record<string, never>
+  | { readonly definition: string };
+
 export interface ComposedV3FactoryInput {
-  configuredOptions: Record<string, never>;
+  configuredOptions: ComposedV3ConfiguredOptions;
   hostCapabilities: ComposedV3PhaseHostCapabilities;
 }
 

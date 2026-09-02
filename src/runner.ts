@@ -67,6 +67,11 @@ import {
 } from './pipeline.js';
 import { defaultPlaybookLinkTarget, isReservedPipeline } from './resolver.js';
 import {
+  type PlaybookRuntimeDeclaration,
+  readPlaybookRuntimeDeclaration,
+} from './runtime-contract.js';
+import {
+  artifactSchemaForPlaybookProvenance,
   emitFsmCoverageTest,
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
@@ -104,7 +109,9 @@ export interface SlcDeps {
    * a host runs interpreted only, so a current pin fails closed rather than
    * silently interpreting a phase the pipeline pinned to a compiled artifact.
    */
-  compiled?: (selection: CompiledSelection) => PhaseExecutor;
+  compiled?: (
+    selection: CompiledSelection,
+  ) => PhaseExecutor | Promise<PhaseExecutor>;
   /** Invocation working directory anchoring artifact placement (DR-014); defaults to the process cwd. */
   cwd?: string;
   signal?: AbortSignal;
@@ -500,7 +507,19 @@ async function emitVerification(
     ctx.linkTarget === undefined
       ? undefined
       : await playbookProvenanceForLinkTarget(ctx.linkTarget);
-  const schemaResolution = await resolveVerificationSchema(ctx, provenance);
+  // A provenance outside the exact historical map is schema evidence only
+  // through the installed engine's own declaration (DR-028); an unreadable
+  // engine simply supplies no signal, and the emission reports the gap.
+  const runtimeDeclaration =
+    ctx.linkTarget === undefined ||
+    artifactSchemaForPlaybookProvenance(provenance) !== undefined
+      ? undefined
+      : await linkTargetRuntimeDeclaration(ctx.linkTarget);
+  const evidence = {
+    ...(provenance === undefined ? {} : { provenance }),
+    ...(runtimeDeclaration === undefined ? {} : { runtimeDeclaration }),
+  };
+  const schemaResolution = await resolveVerificationSchema(ctx, evidence);
   const artifactSchema = schemaResolution.artifactSchema;
   const outputs = [...result.outputs];
   const diagnostics = [...result.diagnostics];
@@ -551,7 +570,7 @@ async function emitVerification(
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
       ...(artifactSchema === undefined ? {} : { artifactSchema }),
-      ...(provenance === undefined ? {} : { provenance }),
+      ...evidence,
     });
     outputs.push(promptContract.path);
     diagnostics.push(
@@ -589,10 +608,24 @@ async function emitVerification(
   return { ...result, outputs, diagnostics };
 }
 
+/** Reads the link target's engine declaration; unreadable is no evidence. */
+async function linkTargetRuntimeDeclaration(
+  linkTarget: string,
+): Promise<PlaybookRuntimeDeclaration | undefined> {
+  try {
+    return await readPlaybookRuntimeDeclaration(linkTarget);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Reconciles every schema witness available from one just-built artifact. */
 async function resolveVerificationSchema(
   ctx: VerificationContext,
-  provenance: string | undefined,
+  evidence: {
+    provenance?: string;
+    runtimeDeclaration?: PlaybookRuntimeDeclaration;
+  },
 ): Promise<{ artifactSchema?: 1 | 3; findings: string[] }> {
   const fsmPath = join(ctx.artDir, `${ctx.basename}.fsm.ts`);
   let config: ReturnType<typeof findMachineConfig> | undefined;
@@ -615,7 +648,7 @@ async function resolveVerificationSchema(
   }
 
   return resolveArtifactSchemaForVerification({
-    ...(provenance === undefined ? {} : { provenance }),
+    ...evidence,
     ...(config === undefined ? {} : { config }),
     ...(linked === undefined ? {} : { linked }),
   });
@@ -1038,8 +1071,9 @@ async function executeSteps(
       });
 
     // Selecting a compiled executor can throw rather than return a verdict —
-    // notably an unmapped pinned Playbook provenance, which the host factory
-    // rejects (phase-execution-30). That is the same fail-closed family as a stale pin,
+    // notably a pinned link target whose installed engine declares no
+    // supported contract, which the host factory rejects (phase-execution-30).
+    // That is the same fail-closed family as a stale pin,
     // so it is reported through the phase-failure path; letting it unwind
     // would strand the phase-start line with no terminal event and drop the
     // phase and target from the report (cli-4, cli-32, phase-execution-27).
@@ -1689,7 +1723,7 @@ async function selectExecutor(
     }
     return {
       kind: 'run',
-      executor: deps.compiled({
+      executor: await deps.compiled({
         phase: step.pinKey,
         pipelineDir,
         record,

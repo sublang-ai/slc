@@ -5,7 +5,9 @@
 // compiled meta-phase artifacts under pipelines/playbook/<phase>.slc/ are
 // built and reviewed, this records pipelines/playbook/slc.pins.json pinning
 // the playbook pipeline's phases (and the reserved link) to them, then
-// re-validates that every pin reads back current. Run `npm run build` first.
+// re-validates that every pin reads back current. A bundle whose GEARS no
+// longer preserves its definition's compiled-execution contract is refused by
+// the generator itself (pinning-23; DR-028). Run `npm run build` first.
 //
 //   node scripts/generate-pins.mjs
 
@@ -24,7 +26,6 @@ const pipelineDir = join(repoRoot, 'pipelines', 'playbook');
 // root so its identity can be pinned (pinning-15).
 const boundary = { boundary: '../..' };
 
-const expectedPlaybookVersion = '10.0.0';
 const expectedXstateVersion = '5.32.4';
 const rootPackage = JSON.parse(
   readFileSync(join(repoRoot, 'package.json'), 'utf8'),
@@ -39,12 +40,16 @@ const declaredXstate = rootPackage.dependencies?.xstate;
 const lockedXstate = lock.packages?.['node_modules/xstate']?.version;
 // The adoption runs from a clean registry install (DR-017, self-hosting-11); the
 // earlier packed-sibling fallback was retired by the later registry adoption.
+// The accepted Playbook release is whichever exact release the lock resolves,
+// declared as its caret range, so a routine adoption edits nothing here
+// (DR-028).
 if (
-  declaredPlaybook !== `^${expectedPlaybookVersion}` ||
-  lockedPlaybook !== expectedPlaybookVersion
+  typeof lockedPlaybook !== 'string' ||
+  !/^\d+\.\d+\.\d+$/.test(lockedPlaybook) ||
+  declaredPlaybook !== `^${lockedPlaybook}`
 ) {
   throw new Error(
-    `refusing to generate pins: @sublang/playbook must be declared as ^${expectedPlaybookVersion} and locked to ${expectedPlaybookVersion} (declared ${String(declaredPlaybook)}, locked ${String(lockedPlaybook)})`,
+    `refusing to generate pins: @sublang/playbook must be locked to one exact release and declared as its caret range (declared ${String(declaredPlaybook)}, locked ${String(lockedPlaybook)})`,
   );
 }
 if (

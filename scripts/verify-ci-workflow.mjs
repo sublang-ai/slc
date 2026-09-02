@@ -216,14 +216,26 @@ try {
       'synthetic linked module\n',
     ),
     writeFile(
+      join(artifactReviewRoot, 'synthetic.md'),
+      'synthetic definition\n',
+    ),
+    writeFile(
       join(artifactReviewRoot, 'slc.pins.json'),
       JSON.stringify({
         pins: {
           unrelated: {
-            linkTarget: { provenance: '@sublang/playbook@4.0.0' },
+            definition: { path: 'unrelated.md' },
+            linkTarget: {
+              locator: 'engine/runtime.ts',
+              provenance: '@sublang/playbook@4.0.0',
+            },
           },
           synthetic: {
-            linkTarget: { provenance: '@sublang/playbook@10.0.0' },
+            definition: { path: 'synthetic.md' },
+            linkTarget: {
+              locator: 'engine/runtime.ts',
+              provenance: '@sublang/playbook@10.0.0',
+            },
           },
         },
       }),
@@ -238,8 +250,15 @@ try {
   const linked = {
     _internal: { composeCaptainPrompt, composePlayerPrompt },
   };
+  const runtimeDeclaration = {
+    provenance: '@sublang/playbook@10.0.0',
+    packageRoot: join(artifactReviewRoot, 'engine'),
+    runtimeAbi: 1,
+    supportedArtifactSchemas: [3],
+  };
   const observed = {
     composition: [],
+    fidelity: [],
   };
   const logs = [];
   let actorKinds = ['captain', 'player'];
@@ -248,6 +267,27 @@ try {
     conformance: [],
     composition: [],
     coverage: [],
+    fidelity: [],
+  };
+  let fidelityVerdict = () => ({
+    applicable: true,
+    findings: injectedFindings.fidelity,
+    item: 'SYN-1',
+  });
+  // The DR-028 seams the review consults beside the verification module: the
+  // link target's installed engine declaration and the deterministic
+  // compiled-execution fidelity check.
+  const contract = {
+    readPlaybookRuntimeDeclaration: async (linkTarget) => {
+      observed.declarationInput = linkTarget;
+      return runtimeDeclaration;
+    },
+  };
+  const fidelity = {
+    checkCompiledExecutionFidelity: (definition, gears) => {
+      observed.fidelity.push({ definition, gears });
+      return fidelityVerdict();
+    },
   };
   const verification = {
     loadFsmModule: async (path) => {
@@ -310,13 +350,17 @@ try {
       return { synthetic: pinVerdict };
     },
   };
-  const result = await reviewArtifact({
-    dir: artifactDir,
-    basename: 'synthetic',
-    log: (line) => logs.push(line),
-    verification,
-    pinning,
-  });
+  const review = () =>
+    reviewArtifact({
+      dir: artifactDir,
+      basename: 'synthetic',
+      log: (line) => logs.push(line),
+      verification,
+      pinning,
+      contract,
+      fidelity,
+    });
+  const result = await review();
 
   const fsmPath = join(artifactDir, 'synthetic.fsm.ts');
   assert.equal(observed.fsmPath, fsmPath);
@@ -325,11 +369,27 @@ try {
     linkedPath: join(artifactDir, 'synthetic.playbook.ts'),
     fsmPath,
   });
+  // The current pin's link target is read for its engine declaration, and
+  // both the provenance and that declaration reach the schema decision.
+  assert.equal(
+    observed.declarationInput,
+    join(artifactReviewRoot, 'engine', 'runtime.ts'),
+  );
   assert.deepEqual(observed.schemaInput, {
     provenance: '@sublang/playbook@10.0.0',
+    runtimeDeclaration,
     config,
     linked,
   });
+  // Fidelity compares the pin's recorded definition with the bundle's GEARS.
+  assert.deepEqual(observed.fidelity, [
+    { definition: 'synthetic definition\n', gears: 'synthetic gears\n' },
+  ]);
+  assert.ok(
+    logs.includes(
+      "ok: SYN-1 preserves the definition's compiled-execution contract",
+    ),
+  );
   assert.equal(observed.pinPipelineDir, artifactReviewRoot);
   assert.equal(
     observed.pinEvaluation.file.pins.synthetic.linkTarget.provenance,
@@ -372,18 +432,13 @@ try {
   injectedFindings.schema = [];
   for (const [kind, message, expected] of [
     ['conformance', 'synthetic conformance drift', 'conformance'],
+    ['fidelity', 'synthetic compiled-execution drift', 'fidelity'],
     ['composition', 'synthetic prompt drift', 'composition'],
     ['coverage', 'synthetic unreachable arm', 'coverage'],
   ]) {
     if (kind === 'composition') actorKinds = ['captain'];
     injectedFindings[kind] = [message];
-    const findingResult = await reviewArtifact({
-      dir: artifactDir,
-      basename: 'synthetic',
-      log: (line) => logs.push(line),
-      verification,
-      pinning,
-    });
+    const findingResult = await review();
     assert.deepEqual(findingResult, {
       findings: [`${expected}: ${message}`],
       passed: false,
@@ -393,14 +448,27 @@ try {
     actorKinds = ['captain', 'player'];
   }
 
-  delete linked._internal.composePlayerPrompt;
-  const missingComposerResult = await reviewArtifact({
-    dir: artifactDir,
-    basename: 'synthetic',
-    log: (line) => logs.push(line),
-    verification,
-    pinning,
+  // A definition without a compiled-execution section is not applicable: no
+  // finding, and the review says so.
+  fidelityVerdict = () => ({
+    applicable: false,
+    reason: 'definition declares no "## Compiled execution" section',
   });
+  const inapplicableResult = await review();
+  assert.deepEqual(inapplicableResult, { findings: [], passed: true });
+  assert.ok(
+    logs.includes(
+      'not applicable: definition declares no "## Compiled execution" section',
+    ),
+  );
+  fidelityVerdict = () => ({
+    applicable: true,
+    findings: injectedFindings.fidelity,
+    item: 'SYN-1',
+  });
+
+  delete linked._internal.composePlayerPrompt;
+  const missingComposerResult = await review();
   assert.deepEqual(missingComposerResult, {
     findings: [
       'linked module exposes no _internal.composePlayerPrompt required by player states',
@@ -409,13 +477,7 @@ try {
   });
 
   actorKinds = ['captain'];
-  const irrelevantComposerResult = await reviewArtifact({
-    dir: artifactDir,
-    basename: 'synthetic',
-    log: (line) => logs.push(line),
-    verification,
-    pinning,
-  });
+  const irrelevantComposerResult = await review();
   assert.deepEqual(irrelevantComposerResult, { findings: [], passed: true });
   actorKinds = ['captain', 'player'];
   linked._internal.composePlayerPrompt = composePlayerPrompt;
@@ -425,13 +487,7 @@ try {
   actorKinds = [];
   await rename(linkedPath, hiddenLinkedPath);
   try {
-    const missingLinkedResult = await reviewArtifact({
-      dir: artifactDir,
-      basename: 'synthetic',
-      log: (line) => logs.push(line),
-      verification,
-      pinning,
-    });
+    const missingLinkedResult = await review();
     assert.deepEqual(missingLinkedResult, {
       findings: ['no linked module beside the artifacts'],
       passed: false,
@@ -441,19 +497,22 @@ try {
   }
   actorKinds = ['captain', 'player'];
 
+  // A non-current pin lends neither its provenance nor its link target's
+  // declaration to the schema decision, while fidelity still reviews the
+  // recorded definition against the GEARS.
+  observed.declarationInput = undefined;
+  observed.fidelity = [];
   pinVerdict = { status: 'stale', reason: 'artifact bundle changed' };
   verification.resolveArtifactSchemaForVerification = (input) => {
     observed.staleSchemaInput = input;
     return { artifactSchema: 3, findings: [] };
   };
-  const staleResult = await reviewArtifact({
-    dir: artifactDir,
-    basename: 'synthetic',
-    log: (line) => logs.push(line),
-    verification,
-    pinning,
-  });
+  const staleResult = await review();
   assert.deepEqual(observed.staleSchemaInput, { config, linked });
+  assert.equal(observed.declarationInput, undefined);
+  assert.deepEqual(observed.fidelity, [
+    { definition: 'synthetic definition\n', gears: 'synthetic gears\n' },
+  ]);
   assert.deepEqual(staleResult, { findings: [], passed: true });
   assert.ok(
     logs.includes(
@@ -469,13 +528,7 @@ try {
     observed.malformedSchemaInput = input;
     return { artifactSchema: 3, findings: [] };
   };
-  const malformedResult = await reviewArtifact({
-    dir: artifactDir,
-    basename: 'synthetic',
-    log: (line) => logs.push(line),
-    verification,
-    pinning,
-  });
+  const malformedResult = await review();
   assert.deepEqual(observed.malformedSchemaInput, { config, linked });
   assert.deepEqual(malformedResult, { findings: [], passed: true });
   assert.ok(
@@ -830,9 +883,21 @@ requireTestCase(
   'constructs and drives the exact roleless composed-v3 phase-host boundary',
 );
 
-assert.equal(manifest.dependencies?.['@sublang/playbook'], '^10.0.0');
+// One locked Playbook set (continuous-integration-4): the exact release the
+// lock resolves is the accepted release, the manifest declares its caret
+// range, and every recorded provenance names it — so a routine adoption
+// changes the manifest, lock, definitions, and pins, never this audit (DR-028).
 const lockedPlaybook = lock.packages?.['node_modules/@sublang/playbook'];
-assert.equal(lockedPlaybook?.version, '10.0.0');
+const lockedPlaybookVersion = lockedPlaybook?.version;
+assert.match(
+  String(lockedPlaybookVersion),
+  /^\d+\.\d+\.\d+$/,
+  'Playbook lock must resolve one exact release',
+);
+assert.equal(
+  manifest.dependencies?.['@sublang/playbook'],
+  `^${lockedPlaybookVersion}`,
+);
 assert.equal(
   lockedPlaybook.link,
   undefined,
@@ -841,23 +906,24 @@ assert.equal(
 const playbookArchive = new URL(lockedPlaybook.resolved);
 assert.equal(playbookArchive.protocol, 'https:');
 assert.ok(
-  playbookArchive.pathname.endsWith('/playbook-10.0.0.tgz'),
-  'Playbook lock does not resolve the 10.0.0 registry archive',
+  playbookArchive.pathname.endsWith(`/playbook-${lockedPlaybookVersion}.tgz`),
+  `Playbook lock does not resolve the ${lockedPlaybookVersion} registry archive`,
 );
 assert.match(
   lockedPlaybook.integrity,
   /^sha512-[A-Za-z0-9+/]+={0,2}$/,
   'Playbook registry archive has no SHA-512 integrity',
 );
+const lockedProvenance = `@sublang/playbook@${lockedPlaybookVersion}`;
 assert.deepEqual(Object.keys(pins.pins).sort(), bundles.slice().sort());
 for (const bundle of bundles) {
   const pin = pins.pins[bundle];
-  assert.equal(pin.linkTarget?.provenance, '@sublang/playbook@10.0.0');
+  assert.equal(pin.linkTarget?.provenance, lockedProvenance);
   assert.ok(
     pin.runtimeDependencies?.some(
-      (dependency) => dependency.provenance === '@sublang/playbook@10.0.0',
+      (dependency) => dependency.provenance === lockedProvenance,
     ),
-    `${bundle} pin is missing Playbook 10.0.0 runtime provenance`,
+    `${bundle} pin is missing ${lockedProvenance} runtime provenance`,
   );
 }
 

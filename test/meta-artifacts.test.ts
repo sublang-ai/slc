@@ -621,6 +621,12 @@ describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'slc-meta-workspace-'));
+    // The composed-v3 host reads each request's definition before the
+    // artifact loads (DR-028), so the named definitions exist in the
+    // workspace; these pre-contract bundles accept only the empty options.
+    for (const name of ['text2gears.md', 'gears2fsm.md', 'link.md']) {
+      await writeFile(join(root, name), `# ${name} fixture definition\n`);
+    }
   });
 
   afterEach(async () => {

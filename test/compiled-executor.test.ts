@@ -23,7 +23,11 @@ import type { PlaybookPorts } from '@sublang/playbook/runtime';
 import { createCompiledExecutor } from '../src/compiled-executor.js';
 import type { ExecuteRequest } from '../src/execution.js';
 import type { AgentClient } from '../src/interpreter.js';
-import { isPlaybookRunResult } from '../src/playbook-contract.js';
+import {
+  type CompatiblePlaybookRuntime,
+  type CompatiblePlaybookRuntimeFactory,
+  isPlaybookRunResult,
+} from '../src/playbook-contract.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -37,6 +41,35 @@ const composedV3Fixture = join(
   'fixtures',
   'phase-v3-fixture.mjs',
 );
+const definitionFixture = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'fixtures',
+  'phase-v3-definition-fixture.mjs',
+);
+
+/**
+ * Wraps a loaded schema-3 factory to record each construction's configured
+ * option keys, preserving the immutable `compat` declaration the host checks.
+ */
+const observeConstructions = (
+  factory: CompatiblePlaybookRuntimeFactory,
+  constructions: string[][],
+): CompatiblePlaybookRuntimeFactory => {
+  const wrapped = ((...args: unknown[]) => {
+    const input = args[0] as { configuredOptions?: object } | undefined;
+    constructions.push(Object.keys(input?.configuredOptions ?? {}));
+    return (factory as (...args: unknown[]) => CompatiblePlaybookRuntime)(
+      ...args,
+    );
+  }) as CompatiblePlaybookRuntimeFactory;
+  Object.defineProperty(wrapped, 'compat', {
+    value: factory.compat,
+    enumerable: true,
+    writable: false,
+    configurable: false,
+  });
+  return wrapped;
+};
 
 // An agent transport that is never invoked by the fixture (it only does file IO),
 // present to satisfy the ports adapter.
@@ -204,9 +237,17 @@ describe('structured PlaybookRunResult validation', () => {
 // the executor over a fixture run root (phase-execution-26).
 describe('createCompiledExecutor (phase-execution-26)', () => {
   let root: string;
+  // Exact definition bytes the composed-v3 host relays as the configured
+  // option `definition` (DR-028): non-ASCII, a CRLF, a blockquote, and a
+  // placeholder-looking token that must cross untouched.
+  const phaseDefinition =
+    '# Phase définition\r\n\n> Follow <definition> literally.\n';
+  const linkDefinition = '# Link\n\n> Link <source> into <target>.\n';
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'slc-compiled-'));
+    await writeFile(join(root, 'phase.md'), phaseDefinition);
+    await writeFile(join(root, 'link.md'), linkDefinition);
   });
 
   afterEach(async () => {
@@ -234,6 +275,7 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
 
   const runComposedV3Fixture = async (sourceContent: string) => {
     let playerTransports = 0;
+    const constructions: string[][] = [];
     await writeFile(join(root, 'src.md'), sourceContent);
     const executor = createCompiledExecutor({
       artifactPath: composedV3Fixture,
@@ -246,6 +288,11 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
       judge: idleAgent,
       createSessionId: () => 'schema-3-session',
       playbookId: 'schema-3-phase',
+      loadFactory: async (path) =>
+        observeConstructions(
+          (await import(path)).default as CompatiblePlaybookRuntimeFactory,
+          constructions,
+        ),
     });
     const result = await executor.run(
       {
@@ -256,7 +303,7 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
       },
       new AbortController().signal,
     );
-    return { result, playerTransports };
+    return { result, playerTransports, constructions };
   };
 
   it('constructs and drives the exact roleless composed-v3 phase-host boundary', async () => {
@@ -264,7 +311,7 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
     // checks the exact factory descriptor and argument, detached synchronous
     // ledger snapshots, the authority-free capability shape, causal-root six
     // ports, and non-observation of the optional schema-3 control surface.
-    const { result, playerTransports } =
+    const { result, playerTransports, constructions } =
       await runComposedV3Fixture('hello schema 3');
 
     expect(result).toEqual({ status: 'ok', diagnostics: [] });
@@ -272,6 +319,9 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
     expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe(
       'compiled-v3:hello schema 3',
     );
+    // A fixture declaring no option is constructed exactly once, with the
+    // exact empty configured options (phase-execution-49).
+    expect(constructions).toEqual([[]]);
   });
 
   it('drives the same roleless composed-v3 fixture inside a Git worktree', async () => {
@@ -455,9 +505,13 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
   ] as const)(
     'does not retry a composed-v3 factory that rejects the exact construction as %s',
     async (kind) => {
-      let constructions = 0;
+      // The host offers the exact empty configured options and then, once,
+      // the single `definition` option (phase-execution-49; DR-028); a factory
+      // rejecting both is neither constructed a third time nor initialized.
+      const constructions: string[][] = [];
       const factory = (...args: unknown[]) => {
-        constructions += 1;
+        const input = args[0] as { configuredOptions?: object } | undefined;
+        constructions.push(Object.keys(input?.configuredOptions ?? {}));
         if (kind === 'options-only wrapper') {
           if (args.length !== 0) throw new Error('options-only wrapper');
         } else {
@@ -517,7 +571,7 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
             ? 'required configured option is absent'
             : 'required host authority is absent';
       expect(result.diagnostics.join('\n')).toContain(diagnostic);
-      expect(constructions).toBe(1);
+      expect(constructions).toEqual([[], ['definition']]);
       expect(playerTransports).toBe(0);
     },
   );
@@ -679,6 +733,115 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
     expect(await readFile(join(root, 'linked.ts'), 'utf8')).toBe(
       'compiled:object',
     );
+  });
+
+  // A composed-v3 artifact whose options validator declares `definition`
+  // rejects the exact empty baseline and then receives, in one further
+  // construction, exactly `{ definition }` holding the exact bytes of the
+  // definition the request names; the seeded Request line carries paths only
+  // (phase-execution-49, phase-execution-29; DR-028).
+  const definitionExecutor = (constructions: string[][]) =>
+    createCompiledExecutor({
+      artifactPath: definitionFixture,
+      runRoot: root,
+      runtimeContract: 'composed-v3',
+      player: idleAgent,
+      judge: idleAgent,
+      loadFactory: async (path) =>
+        observeConstructions(
+          (await import(path)).default as CompatiblePlaybookRuntimeFactory,
+          constructions,
+        ),
+    });
+
+  it('seeds the compile definition as the single configured option an artifact declares (DR-028)', async () => {
+    const constructions: string[][] = [];
+    await writeFile(join(root, 'src.md'), 'hello');
+    const result = await definitionExecutor(constructions).run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: 'src.md',
+        target: 'out.ts',
+      },
+      new AbortController().signal,
+    );
+    expect(result).toEqual({ status: 'ok', diagnostics: [] });
+    expect(constructions).toEqual([[], ['definition']]);
+    // Bytes cross unnormalized: the CRLF and non-ASCII text survive.
+    expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe(phaseDefinition);
+  });
+
+  it('seeds the link definition as the single configured option an artifact declares (DR-028)', async () => {
+    const constructions: string[][] = [];
+    await writeFile(join(root, 'object.ts'), 'object');
+    await writeFile(join(root, 'runtime.ts'), 'runtime');
+    const result = await definitionExecutor(constructions).run(
+      {
+        kind: 'link',
+        definitionPath: join(root, 'link.md'),
+        objects: ['object.ts'],
+        linkTarget: 'runtime.ts',
+        options: [],
+        linked: 'linked.ts',
+      },
+      new AbortController().signal,
+    );
+    expect(result).toEqual({ status: 'ok', diagnostics: [] });
+    expect(constructions).toEqual([[], ['definition']]);
+    expect(await readFile(join(root, 'linked.ts'), 'utf8')).toBe(
+      linkDefinition,
+    );
+  });
+
+  it('fails closed before loading the artifact when the definition cannot be read (DR-028)', async () => {
+    await writeFile(join(root, 'src.md'), 'hello');
+    let loads = 0;
+    const executor = createCompiledExecutor({
+      artifactPath: definitionFixture,
+      runRoot: root,
+      runtimeContract: 'composed-v3',
+      player: idleAgent,
+      judge: idleAgent,
+      loadFactory: async (path) => {
+        loads += 1;
+        return (await import(path)).default;
+      },
+    });
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'missing.md'),
+        source: 'src.md',
+        target: 'out.ts',
+      },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe('error');
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0]).toMatch(
+      /^compiled phase definition cannot be read: .*missing\.md/,
+    );
+    expect(loads).toBe(0);
+  });
+
+  it('does not read the definition for a profile that takes no configured options', async () => {
+    // Only the roleless schema-3 host supplies the definition option, so a
+    // legacy fixture runs without the definition file existing at all.
+    await writeFile(join(root, 'src.md'), 'hello');
+    const result = await fixtureExecutor().run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'missing.md'),
+        source: 'src.md',
+        target: 'out.ts',
+      },
+      new AbortController().signal,
+    );
+    expect(result).toEqual({
+      status: 'ok',
+      diagnostics: ['fixture wrote target'],
+    });
   });
 
   it('streams status live to a configured sink without duplicating diagnostics (phase-execution-37)', async () => {

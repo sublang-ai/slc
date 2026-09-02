@@ -17,10 +17,19 @@
  * (DR-007 lifecycle). See specs/packages/pinning.md.
  */
 
-import { writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from 'node:path';
 import { basename as posixBasename } from 'node:path/posix';
 
+import { checkCompiledExecutionFidelity } from './compiled-execution.js';
 import { messageOf } from './errors.js';
 import { hashFile } from './hash.js';
 import { deriveClosure } from './pin-closure.js';
@@ -145,6 +154,22 @@ export async function generatePinRecord(
   );
   if (bundleLayout !== null) {
     throw new PinError('pin-invalid', bundleLayout);
+  }
+  // A definition declaring its compiled-execution contract is pinned only to
+  // a bundle whose GEARS preserves that contract verbatim (pinning-23; DR-028).
+  const gearsResolved = join(
+    artifactBundleResolved,
+    `${basename(artifactResolved).slice(0, -'.playbook.ts'.length)}.gears.md`,
+  );
+  const fidelity = checkCompiledExecutionFidelity(
+    await readFile(definitionResolved, 'utf8'),
+    await readFile(gearsResolved, 'utf8'),
+  );
+  if (fidelity.applicable && fidelity.findings.length > 0) {
+    throw new PinError(
+      'pin-invalid',
+      `artifactBundle does not preserve the definition's compiled-execution contract: ${fidelity.findings.join('; ')}`,
+    );
   }
   const linkResolved = resolvePinPath(
     pipelineDir,

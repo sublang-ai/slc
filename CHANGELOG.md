@@ -11,6 +11,44 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Compiled execution relays the definition at run time.** A `composed-v3`
+  bundle whose options contract requires the single configured option
+  `definition` receives the exact bytes of the phase or link definition the
+  request names through its configured options: the host constructs the
+  factory with the exact empty options first and offers `{ definition }`
+  once when the bundle refuses them, so a bundle declaring a `<definition>`
+  placeholder receives the definition instead of a build-time transcription
+  while the seeded `Request:` line keeps carrying paths only and never
+  routes the definition through a classifier judge; an unreadable
+  definition fails the phase before the artifact loads
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
+- **Compiled-execution fidelity check.** The independent artifact review
+  and the pin generator compare a definition's closing
+  `## Compiled execution` section — its acting blockquote, with Markdown
+  backslash escapes resolved so a Source-escaped `\<definition\>` matches
+  the compiled `<definition>`, and its `Results:` bullets — with the
+  bundle's GEARS and refuse a bundle whose control shell drifted; a
+  definition without the section is reported not applicable
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
+### Changed
+
+- **Playbook adoption keys on the engine's declared contract, not its
+  release number.** A current pin selects `composed-v3` when its link
+  target resolves inside an installed `@sublang/playbook` whose engine
+  declares `RUNTIME_ABI` 1 and `SUPPORTED_ARTIFACT_SCHEMAS` containing 3,
+  whatever the version, and fails closed naming the declaration
+  otherwise; the exact historical maps for `legacy` and `composed-v2`
+  stay as recorded. The verification-only schema decision accepts the
+  same declaration as schema-3 evidence, and the definitions guard, pin
+  generator, and CI audit take the accepted release from the dependency
+  lock, so a routine adoption changes only the manifest, lock,
+  definitions, and pins. `SlcDeps.compiled` may now return a promise
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
 ## [0.6.0] - 2026-09-01
 
 ### Changed

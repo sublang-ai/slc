@@ -133,6 +133,86 @@ describe('reviewed Playbook artifact schemas', () => {
     }
   });
 
+  it('admits a later release only through its installed engine declaration (DR-028)', () => {
+    const schema3Factory = (): object => ({});
+    Object.defineProperty(schema3Factory, 'compat', {
+      value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+    const declaration = (
+      runtimeAbi: unknown,
+      supportedArtifactSchemas: unknown,
+      version = '12.0.0',
+    ) => ({
+      provenance: `@sublang/playbook@${version}`,
+      packageRoot: '/installed/@sublang/playbook',
+      runtimeAbi,
+      supportedArtifactSchemas,
+    });
+
+    // The exact historical map still records 10.0.0 as schema 3; a release
+    // outside it is evidence only through RUNTIME_ABI 1 with schema 3.
+    expect(
+      artifactSchemaForPlaybookProvenance('@sublang/playbook@12.0.0'),
+    ).toBe(undefined);
+    expect(
+      resolveArtifactSchemaForVerification({
+        provenance: '@sublang/playbook@12.0.0',
+        runtimeDeclaration: declaration(1, [3]),
+        linked: { default: schema3Factory },
+      }),
+    ).toEqual({ artifactSchema: 3, findings: [] });
+    // The declaration carries its own provenance when the caller has none.
+    expect(
+      resolveArtifactSchemaForVerification({
+        runtimeDeclaration: declaration(1, [2, 3]),
+        linked: { default: schema3Factory },
+      }),
+    ).toEqual({ artifactSchema: 3, findings: [] });
+    // A historical provenance keeps its recorded schema whatever is declared.
+    expect(
+      resolveArtifactSchemaForVerification({
+        provenance: '@sublang/playbook@4.0.0',
+        runtimeDeclaration: declaration(1, [3], '4.0.0'),
+        linked: { default: () => ({}) },
+      }),
+    ).toEqual({ artifactSchema: 1, findings: [] });
+
+    for (const [abi, schemas, named] of [
+      [2, [3], 'RUNTIME_ABI 2 and SUPPORTED_ARTIFACT_SCHEMAS [3]'],
+      [1, [2], 'RUNTIME_ABI 1 and SUPPORTED_ARTIFACT_SCHEMAS [2]'],
+      [
+        undefined,
+        undefined,
+        'no RUNTIME_ABI and no SUPPORTED_ARTIFACT_SCHEMAS',
+      ],
+    ] as const) {
+      expect(
+        resolveArtifactSchemaForVerification({
+          provenance: '@sublang/playbook@12.0.0',
+          runtimeDeclaration: declaration(abi, schemas),
+          linked: { default: schema3Factory },
+        }),
+      ).toEqual({
+        findings: [
+          `artifact schema has an unsupported link-target contract: @sublang/playbook@12.0.0 declares ${named}`,
+        ],
+      });
+    }
+    expect(
+      resolveArtifactSchemaForVerification({
+        provenance: '@sublang/playbook@12.0.0',
+        linked: { default: schema3Factory },
+      }),
+    ).toEqual({
+      findings: [
+        'artifact schema has unsupported link-target provenance "@sublang/playbook@12.0.0"',
+      ],
+    });
+  });
+
   it('requires strong schema signals to agree and otherwise preserves compat-less schema 1', () => {
     const schema3Factory = (): object => ({});
     Object.defineProperty(schema3Factory, 'compat', {

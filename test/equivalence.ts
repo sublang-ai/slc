@@ -23,8 +23,13 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 import {
+  declaresComposedV3,
+  type PlaybookRuntimeDeclaration,
+} from '../src/runtime-contract.js';
+import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
+  artifactSchemaForPlaybookProvenance,
   checkGearsFsmConformance,
   canonicalRoleId,
   findConcurrentRoleSets,
@@ -55,6 +60,8 @@ export interface CompiledPlaybook {
   fsmSource?: string;
   /** Exact link-target provenance supplied by the comparison fixture. */
   linkTargetProvenance?: string;
+  /** The link target's installed engine declaration, when the fixture read it (DR-028). */
+  runtimeDeclaration?: PlaybookRuntimeDeclaration;
   /** Schema-3 Captain-hosted registry entry, when the closure has one. */
   registry?: unknown;
 }
@@ -74,6 +81,8 @@ interface RuntimeProfileInspection {
 /** Comparison-supplied configured-option slice for schema-3 registries. */
 export interface RuntimeProfileOptions {
   provenance?: string;
+  /** Engine declaration read from the link target's installed package (DR-028). */
+  runtimeDeclaration?: PlaybookRuntimeDeclaration;
   artifactSchema?: 1 | 3;
   config?: MachineConfigLike;
   registry?: unknown;
@@ -135,7 +144,9 @@ export interface InterposedSchema3LinkedModule {
   readonly factory: (...args: unknown[]) => unknown;
 }
 
-const PLAYBOOK_10_PROVENANCE = '@sublang/playbook@10.0.0';
+/** Reported when a schema-3 registry lacks schema-3 link-target evidence. */
+export const COMPOSED_V3_EVIDENCE_FINDING =
+  'composed-v3 requires schema-3 link-target evidence: an exact reviewed schema-3 provenance or an installed engine declaring RUNTIME_ABI 1 with artifact schema 3';
 const execFileAsync = promisify(execFile);
 const linkedFactoryCalls = new WeakMap<
   (...args: unknown[]) => unknown,
@@ -506,6 +517,9 @@ async function inspectRuntimeProfile(
     ...(options.provenance === undefined
       ? {}
       : { provenance: options.provenance }),
+    ...(options.runtimeDeclaration === undefined
+      ? {}
+      : { runtimeDeclaration: options.runtimeDeclaration }),
     ...(options.config === undefined ? {} : { config: options.config }),
     linked,
   });
@@ -587,10 +601,17 @@ async function inspectComposedV3Profile(
   options: RuntimeProfileOptions,
   findings: string[],
 ): Promise<RuntimeProfileInspection> {
-  if (options.provenance !== PLAYBOOK_10_PROVENANCE) {
-    findings.push(
-      `composed-v3 requires exact ${PLAYBOOK_10_PROVENANCE} provenance`,
-    );
+  // Schema-3 link-target evidence under the verification-only decision: the
+  // exact reviewed provenance as recorded, or an installed engine declaring
+  // RUNTIME_ABI 1 with artifact schema 3 whatever its release (DR-028).
+  const declared =
+    options.runtimeDeclaration !== undefined &&
+    declaresComposedV3(options.runtimeDeclaration);
+  if (
+    artifactSchemaForPlaybookProvenance(options.provenance) !== 3 &&
+    !declared
+  ) {
+    findings.push(COMPOSED_V3_EVIDENCE_FINDING);
     return { profile: null, findings };
   }
   if (marker !== undefined && marker !== 'composed-v3') {
@@ -1823,6 +1844,9 @@ function compiledRuntimeOptions(
     ...(compiled.linkTargetProvenance === undefined
       ? {}
       : { provenance: compiled.linkTargetProvenance }),
+    ...(compiled.runtimeDeclaration === undefined
+      ? {}
+      : { runtimeDeclaration: compiled.runtimeDeclaration }),
     ...(compiled.registry === undefined ? {} : { registry: compiled.registry }),
     ...(Object.prototype.hasOwnProperty.call(options, 'configuredOptions')
       ? { configuredOptions: options.configuredOptions }
@@ -1842,6 +1866,9 @@ function compiledSchemaResolution(
     ...(compiled.linkTargetProvenance === undefined
       ? {}
       : { provenance: compiled.linkTargetProvenance }),
+    ...(compiled.runtimeDeclaration === undefined
+      ? {}
+      : { runtimeDeclaration: compiled.runtimeDeclaration }),
     config,
     ...(linked === undefined ? {} : { linked }),
   });

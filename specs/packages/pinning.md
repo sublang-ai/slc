@@ -5,7 +5,7 @@
 
 ## Intent
 
-This package specifies SLC-owned semantic-input closure declarations and derivation, explicit build-and-review pin generation, and the host-side validator that decides whether a pipeline's committed compiled-phase pins are current under [DR-007](../decisions/007-slc-phase-artifact-pinning.md) and [DR-026](../decisions/026-slc-owned-pin-input-declarations.md).
+This package specifies SLC-owned semantic-input closure declarations and derivation, explicit build-and-review pin generation — including the compiled-execution fidelity gate of [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md) — and the host-side validator that decides whether a pipeline's committed compiled-phase pins are current under [DR-007](../decisions/007-slc-phase-artifact-pinning.md) and [DR-026](../decisions/026-slc-owned-pin-input-declarations.md).
 Given a pipeline directory, the validator reads `slc.pins.json`, the optional SLC-owned `slc.pin-inputs.json` semantic-input declaration, and the committed inputs they identify, and reports for each pinned phase a verdict of current, stale, or malformed.
 It runs no compiled artifact and selects no execution strategy — that is the compiled executor's role under [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) — but beyond existing and matching its recorded hash, the compiled artifact must resolve to the linked `playbook` format, recognized from its committed bytes, or the phase is stale.
 Verification exercises closure derivation during generation, validation, incremental-identity discovery, and protected-input discovery over fixture pipeline directories and ordinary committed files.
@@ -80,7 +80,11 @@ Where an applicable sidecar entry contains a member locator whose lexically norm
 
 #### pinning-15
 
-When the build-and-review flow generates a pin for a built and reviewed compiled artifact, it shall record over committed bytes the definition, the compiled `.playbook.ts` artifact entry module, its reviewed artifact-bundle tree directly containing the canonical local FSM, GEARS, and four verification files, the semantic-input closure derived from the applicable declaration [[pinning-17](#pinning-17)], every local executable runtime dependency outside the bundle, and the link-target identity — recording a widened path boundary when the definition, a semantic input, a dependency, or a link target lies outside the pipeline directory, such as an installed package module — so the written pin validates as current; where an installed package owns a versioned runtime or linked-format contract, the repository's generation flow shall reject a version that differs from both the dependency lock and the accepted contract version; an ordinary pipeline run shall neither generate nor rewrite a pin ([DR-007](../decisions/007-slc-phase-artifact-pinning.md), [DR-026](../decisions/026-slc-owned-pin-input-declarations.md)).
+When the build-and-review flow generates a pin for a built and reviewed compiled artifact, it shall record over committed bytes the definition, the compiled `.playbook.ts` artifact entry module, its reviewed artifact-bundle tree directly containing the canonical local FSM, GEARS, and four verification files, the semantic-input closure derived from the applicable declaration [[pinning-17](#pinning-17)], every local executable runtime dependency outside the bundle, and the link-target identity — recording a widened path boundary when the definition, a semantic input, a dependency, or a link target lies outside the pipeline directory, such as an installed package module — so the written pin validates as current; where an installed package owns a versioned runtime or linked-format contract, the repository's generation flow shall accept only the exact release the dependency lock resolves — declared by the manifest as its caret range — as that package's version, so a routine adoption edits the manifest and lock rather than the flow; an ordinary pipeline run shall neither generate nor rewrite a pin ([DR-007](../decisions/007-slc-phase-artifact-pinning.md), [DR-026](../decisions/026-slc-owned-pin-input-declarations.md), [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md)).
+
+#### pinning-23
+
+Where a definition declares a closing `## Compiled execution` section, when the build-and-review flow generates a pin binding that definition to a compiled artifact bundle, it shall refuse with a diagnostic naming the drift unless the bundle's GEARS preserves the section's acting prompt and result contract verbatim [[verification-23](verification.md#verification-23)], so no pin records a bundle whose control shell has drifted from its definition; a definition without the section is pinned without the check ([DR-028](../decisions/028-contract-based-adoption-without-recompilation.md)).
 
 ## Verification
 
@@ -127,6 +131,10 @@ Where fixture phases include an inline-declared definition and a matching-basena
 #### pinning-19
 
 Where fixture `slc.pin-inputs.json` files exercise a symbolic link, invalid JSON, an unsupported schema, an unknown or wrong-typed field, a non-portable closure key, a duplicate literal closure path, a member locator lexically normalizing to the definition locator, two distinct literal member locators lexically normalizing to one absolute host path, and an empty, absolute, backslash-containing, or boundary-escaping closure path under the applicable boundary [[pinning-21](#pinning-21)], with each normalized-path collision paired with an independently stale recorded definition, when pin-currency validation and pin generation process each fixture, the validator shall report the pin malformed with no phase current and the generator shall refuse, each with a diagnostic naming the offending field [[pinning-18](#pinning-18)], [[pinning-20](#pinning-20)].
+
+#### pinning-24
+
+Where a fixture definition declares a compiled-execution section and its reviewed bundle's GEARS preserves, extends, or re-describes that section, when the build-and-review flow generates the pin, it shall record a current pin for the preserving bundle, refuse the extended and re-described bundles naming the drift, and pin the same bundle without the check once the definition drops the section [[pinning-23](#pinning-23)].
 
 ### Closure-derivation acceptance
 

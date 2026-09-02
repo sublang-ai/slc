@@ -26,7 +26,12 @@ import ts from 'typescript';
 
 import type { ExecutorResult } from './execution.js';
 
-/** What a compiled phase is asked to produce: a compile target or a linked artifact (DR-005). */
+/**
+ * What a compiled phase is asked to produce: a compile target or a linked
+ * artifact (DR-005), as absolute host paths. The definition text a schema-3
+ * artifact may require never rides here: the host supplies it as the
+ * compiled phase's configured option `definition` (DR-028).
+ */
 export type PhaseInput =
   | { kind: 'compile'; source: string; target: string }
   | {
@@ -366,7 +371,9 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
  * can route it — and carries the full request as a single-line JSON object
  * introduced by `Request: `, with workspace paths already resolved to absolute
  * host paths, so a runtime (or a deterministic fixture) recovers the exact
- * `PhaseInput` without host-specific parsing.
+ * `PhaseInput` without host-specific parsing. The turn carries paths only:
+ * the definition text crosses as a configured option, never through the
+ * classifier's judge (DR-028).
  */
 export function seedPhaseTurn(input: PhaseInput): string {
   const directive =

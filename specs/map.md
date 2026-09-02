@@ -53,6 +53,7 @@ meta.md       The spec of specs
 | [DR-025](decisions/025-defer-playbook-10-activation.md) | 025-defer-playbook-10-activation.md | Superseded by [DR-027](decisions/027-complete-playbook-10-activation.md): the Playbook 10 activation deferral ended when the delivery completed |
 | [DR-026](decisions/026-slc-owned-pin-input-declarations.md) | 026-slc-owned-pin-input-declarations.md | SLC-owned sidecar semantic-input closures and boundary-contained installed-package definition pins, with inline compatibility and no asset cutover |
 | [DR-027](decisions/027-complete-playbook-10-activation.md) | 027-complete-playbook-10-activation.md | Playbook 10 activation completed: [DR-024](decisions/024-playbook-10-schema-3-adoption.md)'s set is current, definitions verify byte-identically with sidecar pin inputs, demo references regenerate until checker-clean, and Playbook 11 stays unadopted |
+| [DR-028](decisions/028-contract-based-adoption-without-recompilation.md) | 028-contract-based-adoption-without-recompilation.md | Profile selection by the engine's declared ABI and schema, bundle and demo retention by verified equivalence, run-time definition relay, the published host-capabilities facade, and routine decision-free adoption |
 
 ## Packages
 
@@ -60,13 +61,13 @@ meta.md       The spec of specs
 | --- | --- |
 | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
 | [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
-| [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, exact multi-profile runtime contracts, immutable Playbook adoption, demo acceptance, and package publication checks |
+| [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, exact multi-profile runtime contracts, routine locked Playbook adoption, demo acceptance, and package publication checks |
 | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
 | [incremental-compilation.md](packages/incremental-compilation.md) | Complete build history, sidecar-aware input identity, reuse/update/ordinary selection, update context, success-only publication, rebuilds, exclusions, and fixture acceptance |
 | [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
-| [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, compiled runtime profiles, pin selection, status streaming, and the agent-stall watchdog |
-| [pinning.md](packages/pinning.md) | Closure derivation, pin-currency validation, and generation: SLC-owned declarations, context-selected path boundaries, boundary-contained definitions, currency verdicts, and fixture acceptance |
+| [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, compiled runtime profiles selected by the declared engine contract, run-time definition relay, pin selection, status streaming, and the agent-stall watchdog |
+| [pinning.md](packages/pinning.md) | Closure derivation, pin-currency validation, and generation: SLC-owned declarations, context-selected path boundaries, boundary-contained definitions, currency verdicts, the compiled-execution fidelity gate, and fixture acceptance |
 | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, link-object import settlement, pass and normalization scheduling, and system acceptance |
 | [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |
-| [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, atomic reviewed-asset adoption, and system acceptance |
-| [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, and runtime checks; portable generated tests; and emitted-module load integrity |
+| [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, routine adoption retaining bundles by verified equivalence, and system acceptance |
+| [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, runtime, and compiled-execution fidelity checks; portable generated tests; and emitted-module load integrity |
