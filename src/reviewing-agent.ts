@@ -31,8 +31,9 @@ export interface ReviewingAgentOptions {
 /**
  * Decorates a Coder client with the DR-022 review/fix/re-review protocol.
  *
- * Reviewer failures and malformed verdicts fail closed with a stable error
- * diagnostic that retains the latest Coder text and resume token.
+ * The verdict is read from the end of the Reviewer reply and narration before
+ * it is ignored. Reviewer failures and malformed verdicts fail closed with a
+ * stable error diagnostic that retains the latest Coder text and resume token.
  */
 export function createReviewingAgent(
   options: ReviewingAgentOptions,
@@ -169,12 +170,31 @@ type ReviewerVerdict =
   | { kind: 'findings'; findingCount: number }
   | { kind: 'malformed' };
 
+/**
+ * Reads the verdict from the end of the Reviewer reply.
+ *
+ * A reply whose last non-blank line is exactly `NO_FINDINGS` is clean;
+ * otherwise the findings block runs from the last line that is exactly
+ * `FINDINGS:` to the end of the reply. Narration before the verdict is ignored,
+ * because a Reviewer may preface its verdict with rationale and an adapter may
+ * join progress commentary ahead of it. A reply with neither form, or a
+ * malformed findings block, is malformed.
+ */
 function parseReviewerVerdict(text: string): ReviewerVerdict {
-  const verdict = text.trim().replaceAll('\r\n', '\n');
-  if (verdict === 'NO_FINDINGS') return { kind: 'clean' };
-  if (!verdict.startsWith('FINDINGS:\n')) return { kind: 'malformed' };
-  const body = verdict.slice('FINDINGS:\n'.length);
-  const lines = body.split(/\r?\n/).filter((line) => line.trim() !== '');
+  const all = text.replaceAll('\r\n', '\n').split('\n');
+  let lastNonBlank = -1;
+  let opening = -1;
+  for (let index = all.length - 1; index >= 0; index--) {
+    const line = all[index].trim();
+    if (line === '') continue;
+    if (lastNonBlank === -1) lastNonBlank = index;
+    if (opening === -1 && line === 'FINDINGS:') opening = index;
+  }
+  if (lastNonBlank !== -1 && all[lastNonBlank].trim() === 'NO_FINDINGS') {
+    return { kind: 'clean' };
+  }
+  if (opening === -1) return { kind: 'malformed' };
+  const lines = all.slice(opening + 1).filter((line) => line.trim() !== '');
   if (lines.length === 0) return { kind: 'malformed' };
   let findingCount = 0;
   for (const line of lines) {
@@ -440,6 +460,7 @@ function buildReviewerPrompt(input: {
     'Understand the full picture and reason systematically about the underlying design.',
     'Flag only material correctness, behavior, or specification-quality defects; include stale, missing, over-specified, or under-specified requirements when relevant.',
     'Do not flag style, equally valid alternatives, or theoretical threats. Avoid unnecessary complexity, but flag fundamental flaws whose later repair would cost more.',
+    'Inspect only the workspace named by the request; do not consult artifacts outside it, including any prior or reference compilation.',
     'For each defect class, report every instance worth fixing rather than revealing the class piecemeal. Do not duplicate findings.',
     'Accept or challenge each Coder rebuttal. Treat a finding rejected twice with evidence as settled and do not raise it again.',
     'Reply with exactly NO_FINDINGS when no unsettled material finding remains.',
