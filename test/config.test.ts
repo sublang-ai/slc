@@ -20,6 +20,7 @@ import {
   isSupportedAgent,
   resolveAgentSelection,
   runtimeContractForPin,
+  type SupportedAgent,
 } from '../src/config.js';
 import type { CompiledSelection } from '../src/runner.js';
 
@@ -515,6 +516,137 @@ describe('createConfiguredExecutor (cli-7, cli-8)', () => {
       ).resolves.toMatchObject({ status: 'ok' });
       expect(playerOptions).toHaveLength(1);
       expect(playerOptions[0]).toMatchObject({ fastMode: false });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('requests the control-call tool allowlist only from an adapter that enforces one (phase-execution-31, phase-execution-32)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-control-isolation-'));
+    const definitionPath = join(dir, 'phase.md');
+    const source = join(dir, 'source.md');
+    const target = join(dir, 'target.ts');
+    await writeFile(definitionPath, 'compiled phase definition');
+    await writeFile(source, 'source input');
+    // A composed-v2 fixture whose single turn makes exactly the two control
+    // calls: a routing-only Captain call carrying the source-owned empty
+    // allowlist, then the hidden judge call the host isolates itself.
+    await writeFile(
+      join(dir, 'phase.playbook.mjs'),
+      [
+        "import { writeFile } from 'node:fs/promises';",
+        '',
+        'export default function createPlaybookRuntime() {',
+        '  let ports;',
+        '  return {',
+        '    async init(session) { ports = session.ports; },',
+        '    async handleBossInput({ text, signal }) {',
+        "      await ports.callCaptain('Route this.', signal, {",
+        "        visibility: 'visible',",
+        '        resume: false,',
+        '        allowedTools: [],',
+        '      });',
+        "      await ports.callJudge('Adjudicate this.', signal);",
+        "      const marker = 'Request: ';",
+        "      const line = text.split('\\n').find((c) => c.startsWith(marker));",
+        '      const input = JSON.parse(line.slice(marker.length));',
+        "      await writeFile(input.target, 'compiled output');",
+        '      return {',
+        "        outcome: 'terminal',",
+        '        state: {',
+        "          value: 'done',",
+        "          activeStateIds: ['done'],",
+        '          tags: [],',
+        "          status: 'done',",
+        '          quiescent: true,',
+        "          stateId: 'done',",
+        '        },',
+        '      };',
+        '    },',
+        '    async dispose() {},',
+        '  };',
+        '}',
+      ].join('\n'),
+    );
+
+    // The options each control call actually reaches the configured agent's
+    // Cligent adapter with — the seam below the ports, where adapter tool
+    // capability is host knowledge (phase-execution-31).
+    const controlCallOptions = async (
+      agent: SupportedAgent,
+    ): Promise<AgentOptions[]> => {
+      const seen: AgentOptions[] = [];
+      const factory: AdapterFactory = (id) => ({
+        agent: id,
+        async isAvailable() {
+          return true;
+        },
+        async *run(_prompt: string, options?: AgentOptions) {
+          if (options !== undefined) seen.push(options);
+          yield {
+            type: 'done',
+            agent: id,
+            timestamp: 1,
+            sessionId: `${id}-session`,
+            payload: {
+              status: 'success',
+              result: 'control reply',
+              usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+              durationMs: 1,
+            },
+          } as never;
+        },
+      });
+      const executor = await createConfiguredCompiledFactory(
+        { agent },
+        { adapterFactory: factory, cwd: dir },
+      )({
+        phase: 'phase',
+        pipelineDir: dir,
+        record: {
+          artifact: { path: 'phase.playbook.mjs' },
+          linkTarget: { provenance: '@sublang/playbook@2.0.0' },
+        },
+      } as unknown as CompiledSelection);
+
+      await expect(
+        executor.run(
+          { kind: 'compile', definitionPath, source, target },
+          new AbortController().signal,
+        ),
+      ).resolves.toMatchObject({ status: 'ok' });
+      await rm(target, { force: true });
+      return seen;
+    };
+    const withoutTools = (options: AgentOptions): Record<string, unknown> => {
+      const { allowedTools, abortSignal, ...rest } = options;
+      void allowedTools;
+      void abortSignal;
+      return rest;
+    };
+
+    try {
+      const enforcing = await controlCallOptions('claude-code');
+      const promptOnly = await controlCallOptions('codex');
+
+      // The same two control calls under either selection.
+      expect(enforcing).toHaveLength(2);
+      expect(promptOnly).toHaveLength(2);
+      // Only an adapter with a provider-enforced tool-restriction surface is
+      // asked for the empty allowlist: Codex refuses any tool-list value, so
+      // requesting one there would fail every control call before the model
+      // ran, leaving the artifact's authored control envelope as the
+      // isolation (DR-012).
+      expect(enforcing.map((options) => options.allowedTools)).toEqual([
+        [],
+        [],
+      ]);
+      expect(promptOnly.map((options) => options.allowedTools)).toEqual([
+        undefined,
+        undefined,
+      ]);
+      // The substitution changes nothing else about either call.
+      expect(promptOnly.map(withoutTools)).toEqual(enforcing.map(withoutTools));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

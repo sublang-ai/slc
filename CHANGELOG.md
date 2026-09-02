@@ -13,6 +13,20 @@ and this project adheres to
 
 ### Fixed
 
+- **Control calls stay isolated on an agent CLI without tool lists.** A
+  compiled phase's hidden judge call and routing-only Captain call ask for
+  an empty tool allowlist to run tool-free, which Cligent's `codex`,
+  `kimi`, and `opencode` adapters refuse outright — so every `SLC_AGENT=codex`
+  compiled run died at its first judge call with "cannot enforce explicit
+  allowedTools". The host now decides where that request can be honored:
+  the empty allowlist still reaches an adapter with a provider-enforced
+  tool-restriction surface and an unrecognized adapter alike, and is omitted
+  for those three, whose isolation then rests on the artifact's authored
+  hidden-control prompt envelope — a documented reduction in enforcement,
+  not an equivalence. A non-empty restriction is never substituted and
+  still fails closed
+  ([DR-012](specs/decisions/012-playbook-routing-control-separation.md)).
+
 - **A narrated correction survives review.** The private correction
   envelope is now the last complete top-level JSON object in the Coder
   reply — bare or inside one lone `json`/unlabeled fence — with any

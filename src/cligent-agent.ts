@@ -10,6 +10,12 @@
  * permissions, keeping agent selection a configuration concern (phase-execution-13); the
  * DR-003 write-scope sandbox would be configured here via `permissions`.
  *
+ * The transport also owns the host half of control-call tool isolation
+ * (phase-execution-31): a call requesting the empty allowlist that expresses
+ * "no tools" gets it forwarded only to an adapter that can enforce one, and
+ * omitted for an adapter Cligent gives no provider-enforced tool-restriction
+ * surface, whose isolation then rests on the call's authored prompt envelope.
+ *
  * The transport also owns the agent-stall watchdog (DR-019, phase-execution-36): with a
  * positive `stallTimeoutMs`, an in-flight call that observes no adapter event
  * for that window is aborted through a call-local controller — the caller's
@@ -31,6 +37,45 @@ import type {
 
 import type { AgentClient, AgentRunResult } from './interpreter.js';
 import { formatElapsed } from './progress.js';
+
+/**
+ * Cligent adapters with no provider-enforced tool-restriction surface
+ * (phase-execution-31). Each rejects any `allowedTools` or `disallowedTools`
+ * value — including the empty list a control call uses to *express* tool-free
+ * — because its supported provider surface cannot constrain the tool
+ * registry, so requesting isolation from one fails the call before the model
+ * is reached. Cligent publishes effort and fast-mode capability metadata but
+ * none for tool restriction, so this stays host knowledge, kept to the
+ * adapters it names: an adapter outside this set keeps receiving the empty
+ * list and fails closed if it cannot honor it.
+ */
+const PROMPT_ONLY_TOOL_ISOLATION: ReadonlySet<string> = new Set([
+  'codex',
+  'kimi',
+  'opencode',
+]);
+
+/**
+ * The tool half of one call's Cligent options (phase-execution-31).
+ *
+ * An empty allowlist means "no tools available" and is distinct from
+ * omission, which grants the adapter's full native tool surface — so the
+ * empty list is dropped only where it would be refused outright, degrading
+ * that call's isolation to its authored prompt-level restriction rather than
+ * failing it. A non-empty list is a real restriction, never the host's way of
+ * saying tool-free, so it always crosses unchanged and fails closed on an
+ * adapter that cannot enforce it.
+ */
+function toolOptionsFor(
+  agent: string,
+  allowedTools: readonly string[] | undefined,
+): { allowedTools?: string[] } {
+  if (allowedTools === undefined) return {};
+  if (allowedTools.length === 0 && PROMPT_ONLY_TOOL_ISOLATION.has(agent)) {
+    return {};
+  }
+  return { allowedTools: [...allowedTools] };
+}
 
 /** Timer seams for the stall watchdog; injected in tests. */
 export interface WatchdogTimers {
@@ -108,9 +153,7 @@ export function createCligentAgent(opts: {
           cwd,
           model,
           ...(resume !== undefined ? { resume } : {}),
-          ...(allowedTools !== undefined
-            ? { allowedTools: [...allowedTools] }
-            : {}),
+          ...toolOptionsFor(opts.adapter.agent, allowedTools),
         })) {
           // Any adapter event is activity, regardless of type: the reliable
           // event subset differs per adapter, so the watchdog resets on every
