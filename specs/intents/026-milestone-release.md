@@ -16,13 +16,13 @@ Publish the compiler milestone the demo depends on: the contract-based adoption 
 - [x] Adapter-scoped fast mode is configurable for the coder and the reviewer (`fastMode`, `reviewerFastMode`, `SLC_FAST_MODE`, `SLC_REVIEWER_FAST_MODE`), delegated to the installed cligent capability contract like effort.
 - [x] Version, changelog, and regenerated pins prepared on the adopted set.
 - [x] `npm run release:check` and both demo reference checkers pass on the release commit.
-- [ ] The release is tagged and published.
+- [x] The release is tagged and published.
 
 ## Tasks
 
 1. [x] Add the fast-mode configuration keys with their spec items and tests.
 2. [x] Prepare the release commit and verify the full gate.
-3. [ ] Tag, push, and confirm publication.
+3. [x] Tag, push, and confirm publication (v0.7.0; the trusted-publish run and GitHub release succeeded).
 
 ## Verification
 
