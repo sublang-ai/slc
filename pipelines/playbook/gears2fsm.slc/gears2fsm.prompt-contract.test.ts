@@ -17,23 +17,16 @@ import * as playbook from './gears2fsm.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'transformSource',
-    sourceItem: 'G2F-1',
+    state: 'transform',
+    sourceItem: 'GEARS2FSM-1',
     player: '',
-    reads: ['pendingBossQuestion'],
-    wires: {},
-    placeholders: [
-      '<model>',
-      '<boss-intent>',
-      '<enabled-playbooks>',
-      '<remaining-plan>',
-      '<completed-call-results>',
-      '<#>',
-      '<id>',
-      '<target-field>',
-      '<stable-state-id>',
-      '<ITEM-A>',
-    ],
+    reads: ['bossReply', 'definition', 'pendingBossQuestion'],
+    wires: {
+      definition: ['definition'],
+      pendingBossQuestion: ['pendingBossQuestion'],
+      bossReply: ['bossReply'],
+    },
+    placeholders: ['<definition>'],
   },
 ];
 const SCHEMA_FINDINGS = [];
@@ -48,7 +41,7 @@ describe('gears2fsm: prompt contract', () => {
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    transformSource: [],
+    transform: ['<definition>'],
   };
 
   const composeCaptain = (

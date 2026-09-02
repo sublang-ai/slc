@@ -17,23 +17,17 @@ import * as playbook from './text2gears.playbook.js';
 
 const CONTRACT = [
   {
-    state: 'transformSource',
-    sourceItem: 'T2G-1',
+    state: 'transform',
+    sourceItem: 'TEXT2GEARS-1',
     player: '',
-    reads: ['pendingBossQuestion'],
-    wires: {},
-    placeholders: [
-      '<ITEM-ID>',
-      '<behavior>',
-      '<Role>',
-      '<coder-output>',
-      '<placeholder>',
-      '<field>',
-      '<stable-kebab-case-id>',
-      '<playbook-id>',
-      '<playbook-id-context>',
-      '<placeholder\\>',
-    ],
+    reads: ['bossIntent', 'bossReply', 'definition', 'pendingBossQuestion'],
+    wires: {
+      definition: ['definition'],
+      bossIntent: ['bossIntent'],
+      pendingBossQuestion: ['pendingBossQuestion'],
+      bossReply: ['bossReply'],
+    },
+    placeholders: ['<definition>'],
   },
 ];
 const SCHEMA_FINDINGS = [];
@@ -48,7 +42,7 @@ describe('text2gears: prompt contract', () => {
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    transformSource: [],
+    transform: ['<definition>'],
   };
 
   const composeCaptain = (

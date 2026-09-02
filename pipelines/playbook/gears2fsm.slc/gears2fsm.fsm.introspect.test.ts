@@ -13,25 +13,25 @@ const PINNED = {
   initial: 'ready',
   captain: [
     {
-      state: 'transformSource',
+      state: 'transform',
       actor: 'captain',
-      sourceItem: 'G2F-1',
+      sourceItem: 'GEARS2FSM-1',
       player: '',
       resultKeys: ['compiled', 'needsBossReply', 'rejected'],
       onDone: [
         {
           index: 0,
-          target: 'awaitBossReply',
-          guarded: true,
-        },
-        {
-          index: 1,
           target: 'compiled',
           guarded: true,
         },
         {
-          index: 2,
+          index: 1,
           target: 'rejected',
+          guarded: true,
+        },
+        {
+          index: 2,
+          target: 'awaitBossReply',
           guarded: true,
         },
         {
@@ -58,7 +58,7 @@ const PINNED = {
         TRANSFORMATION_REQUEST: [
           {
             index: 0,
-            target: 'transformSource',
+            target: 'transform',
             guarded: true,
           },
         ],
@@ -71,7 +71,7 @@ const PINNED = {
         BOSS_REPLY: [
           {
             index: 0,
-            target: 'transformSource',
+            target: 'transform',
             guarded: true,
           },
           {
@@ -89,7 +89,7 @@ const PINNED = {
         TRANSFORMATION_REQUEST: [
           {
             index: 0,
-            target: 'transformSource',
+            target: 'transform',
             guarded: true,
           },
         ],
@@ -110,12 +110,12 @@ const PINNED = {
     BOSS_INTERRUPT: [
       {
         index: 0,
-        target: 'transformSource',
+        target: 'transform',
         guarded: true,
       },
     ],
   },
-  interruptTargets: ['transformSource'],
+  interruptTargets: ['transform'],
 };
 
 describe('gears2fsm: FSM introspection', () => {

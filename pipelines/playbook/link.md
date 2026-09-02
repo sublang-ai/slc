@@ -423,7 +423,7 @@ After a governed operation settles, the host shall retain any exact proposed com
 Each state shall name exactly the outcomes in that state's `invoke.input.result`, and each outcome shall contain exactly `fields` and `repositoryDisposition`.
 The outcome key owns the semantic discriminator, so `guard` shall not appear in `fields`; the `fields` keys shall equal every additional payload field named by that outcome's result description.
 Each field shall have exactly one authority from `presentation`, `semantic`, `effect`, or `runtime`; every linker-declared verbatim payload field and `question` shall be `presentation`, `latestCommit` shall be `effect`, and the payload fields `irNumber` and `irTask` shall be `semantic`, while outcome keys such as `moreTasks` and `finalTask` remain semantic discriminators.
-Each repository disposition shall be exactly `unchanged`, `one-descendant-commit`, or `deferred`; an effect-owned field is valid only on `one-descendant-commit`, and `deferred` is valid only on `needsBossReply` with presentation-owned `question` and another outcome in that state declaring `one-descendant-commit`.
+Each repository disposition shall be exactly `unchanged`, `one-descendant-commit`, or `deferred`; an effect-owned field is valid on `one-descendant-commit` and `unchanged` and never on `deferred`, and `deferred` is valid only on `needsBossReply` with presentation-owned `question` and another outcome in that state declaring `one-descendant-commit`.
 The shared factory shall reject every legacy artifact schema and reject schema-3 missing, extra, unknown, wrongly owned, or inconsistent metadata before the affected player call.
 
 `init` receives the host-owned playbook session identity and ports, constructs the XState actor with FSM `input` derived from `options`, and starts the actor.
@@ -1081,8 +1081,11 @@ field shall satisfy the result map's required-field type before any actor
 output is delivered.
 The reconciler shall construct the complete actor output rather than accept a
 cross-authority object from the judge: every presentation-owned payload field
-shall receive the canonical `finalText.trim()` value, effect-owned
-`latestCommit` shall receive only the qualifying receipt's exact commit OID,
+shall receive the canonical `finalText.trim()` value; every effect-owned
+field shall receive only the qualifying receipt's repository fact selected by
+the accepted outcome's declared disposition — the exact new-descendant commit
+OID on `one-descendant-commit`, or the matching `unchanged` receipt's
+observed HEAD OID on `unchanged` — never a value keyed on the field's name;
 and no authority may supply, overwrite, or contradict another authority's
 field.
 It shall reject an absent required field, an undeclared or extra field, a
@@ -1092,8 +1095,12 @@ inconsistent candidate before FSM delivery.
 For a non-deferred candidate, reconciliation shall require a complete durable
 physical receipt, or the complete cumulative logical receipt of a deferred
 operation, whose classification is exactly the outcome's declared
-`unchanged` or `one-descendant-commit` disposition; the latter shall carry
-exactly the after-HEAD OID used for `latestCommit`.
+`unchanged` or `one-descendant-commit` disposition; a `one-descendant-commit`
+receipt shall carry exactly the after-HEAD OID used for the arm's effect-owned
+fields, while an `unchanged` receipt's complete validated observation supplies
+its observed HEAD OID for them, and a receipt that cannot prove that observed
+HEAD shall leave the envelope unresolved rather than inject a fabricated
+value.
 A `deferred` candidate shall be admissible only for its already-validated
 effect-authorized `needsBossReply` outcome and only from a complete after
 observation whose HEAD equals the logical operation's original baseline HEAD
@@ -2443,6 +2450,22 @@ This spec is silent on the choice; the contract is the same in any location.
   (DR-014); everything beyond it remains out of scope.
 
 New behavior in any of these areas requires a separate slc spec.
+
+## Compiled execution
+
+This section governs compiled execution of this phase; the rules above remain the transformation's normative content for both execution paths.
+
+Where the phase host supplies `<definition>` as the exact bytes of the definition file the request names, when a transformation request names an `fsm` Source (`.ts`) and a `playbook` Target (`.ts`), Captain shall carry out the FSM-to-runtime linking as specified:
+
+> Follow the definition relayed between the `--- DEFINITION ---` and `--- END DEFINITION ---` lines exactly, adding no rules of your own: read the named Source and write the named Target as the definition specifies.
+> If the Source cannot be transformed under the definition, do not guess: leave the Target unwritten and report the concrete reason.
+> --- DEFINITION ---
+> \<definition\>
+> --- END DEFINITION ---
+
+Results:
+- `compiled`: Captain wrote the named Target as the relayed definition specifies.
+- `rejected`: Captain reported that the Source cannot be transformed under the relayed definition and left the Target unwritten.
 
 ## References
 

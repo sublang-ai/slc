@@ -2,17 +2,20 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 // Behavior pins for the reviewed compiled meta-phase artifacts under
-// pipelines/playbook/{text2gears,gears2fsm,link}.slc, rebuilt as Playbook
-// 10.0.0 schema-3 thin modules over the shared `createXStatePlaybookRuntime`
-// engine (DR-024): the linked factory takes exactly `configuredOptions` and
-// `hostCapabilities`, `init` takes a root `PlaybookSession`, `handleBossInput`
-// returns a structured `PlaybookRunResult`, and every working state performs
-// direct Captain work (`callCaptain`, visible) adjudicated through
-// `callJudge` — these machines declare no delegated role, so no turn ever
-// crosses `callPlayer`. Their entry event is a classified transformation
-// request that must name both a source and a target for the idle hub's guard
-// to admit it; a turn arriving at `failed` re-enters through the same
-// classifier, either as a fresh request or as a root `BOSS_INTERRUPT`.
+// pipelines/playbook/{text2gears,gears2fsm,link}.slc, rebuilt once as
+// compiled-execution control shells over the shared
+// `createXStatePlaybookRuntime` engine (DR-028; Playbook DR-047): each bundle's
+// GEARS is the one direct-Captain item its definition's `## Compiled execution`
+// section states, whose prompt relays the definition through the single
+// configured option `definition`. The linked factory takes exactly
+// `configuredOptions` and `hostCapabilities`, `init` takes a root
+// `PlaybookSession`, `handleBossInput` returns a structured `PlaybookRunResult`,
+// and the one working state performs direct Captain work (`callCaptain`,
+// visible) adjudicated through `callJudge` into `compiled` or `rejected` —
+// these machines declare no delegated role, so no turn ever crosses
+// `callPlayer`. text2gears and gears2fsm declare a deterministic textual entry
+// event, so a fresh Boss turn enters with zero classifier calls; link declares
+// a payload-free `TRANSFORMATION_REQUEST` that the classifier judge selects.
 
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,6 +35,7 @@ import createGears2Fsm from '../pipelines/playbook/gears2fsm.slc/gears2fsm.playb
 import createLink from '../pipelines/playbook/link.slc/link.playbook.js';
 import createText2Gears from '../pipelines/playbook/text2gears.slc/text2gears.playbook.js';
 
+import { checkCompiledExecutionFidelity } from '../src/compiled-execution.js';
 import {
   composedV3FactoryInput,
   createCompiledExecutor,
@@ -44,30 +48,26 @@ const pipelineDir = fileURLToPath(
   new URL('../pipelines/playbook/', import.meta.url),
 );
 
-// Judge-selected request paths. The three machines gate their idle hub on a
-// request that names both a source and a target (`namesSourceAndTarget` /
-// `canStartLinking`), so a payload-free classification is admitted by no meta
-// phase and settles the turn as `no-action`. These fields seed the machine's
-// own request context; the write-scope rules the acting Captain must obey
-// still reach it only through the host transport's appended workspace
-// contract (phase-execution-34).
-const REQUEST_SOURCE = '/tmp/meta-artifacts/source.md';
-const REQUEST_TARGET = '/tmp/meta-artifacts/target.md';
+// Fixture definitions relayed as each bundle's single configured option
+// (DR-028). The composed Captain prompt must carry these exact lines between
+// the `--- DEFINITION ---` markers instead of a build-time transcription.
+const DEFINITIONS = {
+  text2gears:
+    '# text2gears fixture definition\n\nCompose one GEARS item per behavior.\n',
+  gears2fsm:
+    '# gears2fsm fixture definition\n\nEmit one XState v5 machine per package.\n',
+  link: '# link fixture definition\n\nLink the machine into a PlaybookRuntime.\n',
+} as const;
 
-/** text2gears and gears2fsm classify their entry as `TRANSFORMATION_REQUEST`. */
-const transformationRequest = (
-  sourcePath = REQUEST_SOURCE,
-  targetPath = REQUEST_TARGET,
-): string =>
-  JSON.stringify({ type: 'TRANSFORMATION_REQUEST', sourcePath, targetPath });
-
-/** link classifies its entry as `BOSS_INTENT` over `source`/`target`. */
-const linkIntent = (source = REQUEST_SOURCE, target = REQUEST_TARGET): string =>
-  JSON.stringify({ type: 'BOSS_INTENT', source, target });
-
-// The shared 10.0.0 engine's classifier prompt preamble.
+// The shared engine's classifier and adjudicator prompt preambles.
 const CLASSIFICATION_ANCHOR =
   'Classify the following Boss message into exactly one event.';
+const ADJUDICATION_ANCHOR = 'Adjudicate the direct Captain output';
+
+/** link classifies its payload-free entry as `TRANSFORMATION_REQUEST`. */
+const TRANSFORMATION_REQUEST = '{"type":"TRANSFORMATION_REQUEST"}';
+/** Every meta phase adjudicates its Captain output into `compiled`. */
+const COMPILED = '{"guard":"compiled"}';
 
 const quietPorts = (overrides: Partial<PlaybookPorts> = {}): PlaybookPorts => ({
   callPlayer: async () => ({ status: 'ok', finalText: 'done' }),
@@ -75,7 +75,7 @@ const quietPorts = (overrides: Partial<PlaybookPorts> = {}): PlaybookPorts => ({
     status: 'ok',
     finalText: 'The work is complete.',
   }),
-  callJudge: async () => '{"guard":"done"}',
+  callJudge: async () => COMPILED,
   callPlaybook: async () => {
     throw new Error('the meta playbooks make no nested playbook calls');
   },
@@ -136,104 +136,96 @@ function onceAborted(signal: AbortSignal): Promise<void> {
   });
 }
 
+const createArtifact = {
+  text2gears: (): PlaybookRuntime =>
+    createText2Gears(
+      composedV3FactoryInput({ definition: DEFINITIONS.text2gears }),
+    ),
+  gears2fsm: (): PlaybookRuntime =>
+    createGears2Fsm(
+      composedV3FactoryInput({ definition: DEFINITIONS.gears2fsm }),
+    ),
+  link: (): PlaybookRuntime =>
+    createLink(composedV3FactoryInput({ definition: DEFINITIONS.link })),
+} as const;
+
 interface ArtifactCase {
-  readonly name: string;
+  readonly name: keyof typeof DEFINITIONS;
   readonly create: () => PlaybookRuntime;
   readonly bossText: string;
   /**
-   * Judge replies in call order. All three artifacts classify their entry
-   * request first, then adjudicate the direct Captain output against their
+   * Judge replies in call order: link classifies its entry request first;
+   * every artifact then adjudicates the direct Captain output against its
    * own authored outcome guards.
    */
   readonly judgeReplies: readonly string[];
   /** Substring the first judge prompt must carry. */
   readonly firstJudgeAnchor: string;
-  /** Substring the composed direct-Captain prompt must carry. */
+  /** Definition line the composed direct-Captain prompt must relay. */
   readonly promptAnchor: string;
-  /** The authored final state the adjudicated guard must route into. */
-  readonly terminalStateId: string;
 }
-
-const ADJUDICATION_ANCHOR = 'Adjudicate the direct Captain output';
 
 const artifacts: readonly ArtifactCase[] = [
   {
     name: 'text2gears',
-    create: () => createText2Gears(composedV3FactoryInput()),
+    create: createArtifact.text2gears,
     bossText: 'Compile the requested source into GEARS.',
-    // Adjudication picks the authored `transformed` outcome of item T2G-1.
-    judgeReplies: [transformationRequest(), '{"guard":"transformed"}'],
-    firstJudgeAnchor: CLASSIFICATION_ANCHOR,
-    promptAnchor:
-      'read the Source procedure description and compose a package of normative GEARS spec items',
-    terminalStateId: 'transformed',
+    // Deterministic textual entry: the only judge call adjudicates TEXT2GEARS-1.
+    judgeReplies: [COMPILED],
+    firstJudgeAnchor: ADJUDICATION_ANCHOR,
+    promptAnchor: 'Compose one GEARS item per behavior.',
   },
   {
     name: 'gears2fsm',
-    create: () => createGears2Fsm(composedV3FactoryInput()),
+    create: createArtifact.gears2fsm,
     bossText: 'Compile the GEARS package into an FSM.',
-    // Adjudication picks the authored `compiled` outcome of item G2F-1.
-    judgeReplies: [transformationRequest(), '{"guard":"compiled"}'],
-    firstJudgeAnchor: CLASSIFICATION_ANCHOR,
-    promptAnchor: 'XState v5 finite state machine',
-    terminalStateId: 'compiled',
+    // Deterministic textual entry: the only judge call adjudicates GEARS2FSM-1.
+    judgeReplies: [COMPILED],
+    firstJudgeAnchor: ADJUDICATION_ANCHOR,
+    promptAnchor: 'Emit one XState v5 machine per package.',
   },
   {
     name: 'link',
-    create: () => createLink(composedV3FactoryInput()),
+    create: createArtifact.link,
     bossText: 'Link /tmp/machine.fsm.ts into /tmp/machine.playbook.ts.',
-    // Adjudication picks the authored `done` outcome of item LINK-1.
-    judgeReplies: [linkIntent(), '{"guard":"done"}'],
+    // Classified entry, then adjudication of LINK-1.
+    judgeReplies: [TRANSFORMATION_REQUEST, COMPILED],
     firstJudgeAnchor: CLASSIFICATION_ANCHOR,
-    promptAnchor: 'into a `PlaybookRuntime`',
-    terminalStateId: 'done',
+    promptAnchor: 'Link the machine into a PlaybookRuntime.',
   },
 ];
 
 describe('reviewed compiled meta-phase artifacts', () => {
-  it('carries post-build definition amendments into the compiled prompts', async () => {
-    // gears2fsm: the round-2 default single-outcome contract and the universal
-    // busy-tag rule, alongside the erasable-syntax rule the artifacts rely on.
-    const gears2fsm = await readFile(
-      `${pipelineDir}/gears2fsm.slc/gears2fsm.gears.md`,
-      'utf8',
-    );
-    expect(gears2fsm).toContain('default single-outcome contract');
-    expect(gears2fsm).toContain('The acting agent completed the behavior.');
-    expect(gears2fsm).toContain('Every invoking working leaf');
-    expect(gears2fsm).toContain('playbook.busy');
-    expect(gears2fsm).toContain('erasable TypeScript syntax');
-
-    // link: DR-016 script execution and the composed six-port contract.
-    const link = await readFile(
-      `${pipelineDir}/link.slc/link.gears.md`,
-      'utf8',
-    );
-    expect(link).toContain('Executed script for');
-    expect(link).toContain('sh -c');
-    expect(link).toContain(
-      'implement the six ports once and inherit every playbook',
-    );
-    expect(link).toContain('erasable TypeScript syntax');
-
-    // text2gears: the produced-value rule backing placeholders with typed
-    // Results properties.
-    const text2gears = await readFile(
-      `${pipelineDir}/text2gears.slc/text2gears.gears.md`,
-      'utf8',
-    );
-    expect(text2gears).toContain("using the placeholder's exact identifier");
-  });
+  it.each(['text2gears', 'gears2fsm', 'link'] as const)(
+    "%s preserves its definition's compiled-execution contract verbatim (DR-028)",
+    async (name) => {
+      // The control shell is exactly the definition's closing section: the
+      // acting prompt lines after Markdown unescaping and the `compiled` /
+      // `rejected` result contract, on one direct-Captain item.
+      const definition = await readFile(`${pipelineDir}/${name}.md`, 'utf8');
+      const gears = await readFile(
+        `${pipelineDir}/${name}.slc/${name}.gears.md`,
+        'utf8',
+      );
+      expect(checkCompiledExecutionFidelity(definition, gears)).toEqual({
+        applicable: true,
+        findings: [],
+        item: `${name.toUpperCase()}-1`,
+      });
+      expect(gears).toContain('> <definition>');
+      expect(gears).not.toContain('<boss-intent>');
+    },
+  );
 
   it.each(artifacts)(
     '$name drives one Boss turn through visible direct Captain work to terminal',
     async ({
+      name,
       create,
       bossText,
       judgeReplies,
       firstJudgeAnchor,
       promptAnchor,
-      terminalStateId,
     }) => {
       const runtime = create();
       const replies = [...judgeReplies];
@@ -267,15 +259,20 @@ describe('reviewed compiled meta-phase artifacts', () => {
       });
 
       expect(result.outcome).toBe('terminal');
-      // The adjudicated guard routes into that artifact's own authored
-      // completed final state, not merely into some terminal state.
-      expect(result.state.stateId).toBe(terminalStateId);
-      // Direct Captain work: exactly one visible, non-resuming call carrying
-      // the GEARS-derived prompt body. These transformation-performing
+      // The adjudicated guard routes into the artifact's authored `compiled`
+      // final state, not merely into some terminal state.
+      expect(result.state.stateId).toBe('compiled');
+      // Direct Captain work: exactly one visible, non-resuming call whose
+      // prompt relays the configured definition between the markers with the
+      // placeholder substituted (DR-028). These transformation-performing
       // Captains carry no source-owned tool restriction (link.md
       // §PlaybookPorts contract), so the host Captain works with its tools.
       expect(captainPrompts).toHaveLength(1);
+      expect(captainPrompts[0]).toContain('--- DEFINITION ---');
       expect(captainPrompts[0]).toContain(promptAnchor);
+      expect(captainPrompts[0]).toContain(DEFINITIONS[name].trimEnd());
+      expect(captainPrompts[0]).toContain('--- END DEFINITION ---');
+      expect(captainPrompts[0]).not.toContain('<definition>');
       expect(captainOptions).toEqual([
         { visibility: 'visible', resume: false },
       ]);
@@ -289,7 +286,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
   );
 
   it('passes the active turn abort signal into text2gears direct Captain work', async () => {
-    const runtime = createText2Gears(composedV3FactoryInput());
+    const runtime = createArtifact.text2gears();
     const controller = new AbortController();
     let started!: () => void;
     const captainStarted = new Promise<void>((resolve) => {
@@ -307,7 +304,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
         },
         callJudge: async () => {
           judgeCalls += 1;
-          return transformationRequest();
+          return COMPILED;
         },
       }),
     );
@@ -321,14 +318,14 @@ describe('reviewed compiled meta-phase artifacts', () => {
     const result = await turn;
     expect(result.outcome).toBe('aborted');
     expect(observedSignal?.aborted).toBe(true);
-    // The entry request is classified once, and an aborted Captain call
-    // is never adjudicated, so no second judge call occurs.
-    expect(judgeCalls).toBe(1);
+    // The entry is deterministic, and an aborted Captain call is never
+    // adjudicated, so no judge call occurs at all.
+    expect(judgeCalls).toBe(0);
     await runtime.dispose();
   });
 
   it('pairs a gears2fsm Captain result that resolves ok after abort as aborted', async () => {
-    const runtime = createGears2Fsm(composedV3FactoryInput());
+    const runtime = createArtifact.gears2fsm();
     const controller = new AbortController();
     let started!: () => void;
     const captainStarted = new Promise<void>((resolve) => {
@@ -339,7 +336,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
       rootSession({
         callJudge: async () => {
           judgeCalls += 1;
-          return transformationRequest();
+          return COMPILED;
         },
         callCaptain: async () => {
           started();
@@ -357,18 +354,18 @@ describe('reviewed compiled meta-phase artifacts', () => {
     controller.abort();
     const result = await turn;
     // A host promise that ignores cancellation and resolves late is paired as
-    // aborted; only the classification judge call ran — the late ok result is
-    // never adjudicated and does not masquerade as success.
+    // aborted; the entry was deterministic and the late ok result is never
+    // adjudicated, so it does not masquerade as success.
     expect(result.outcome).toBe('aborted');
-    expect(judgeCalls).toBe(1);
+    expect(judgeCalls).toBe(0);
     await runtime.dispose();
   });
 
   // The link artifact routes an abort through its `failed` state and settles
   // as `{ outcome: 'aborted' }`, the same normalized pairing its siblings
-  // apply (LINK-1 §Status and telemetry).
+  // apply.
   it('pairs a link Captain result that resolves ok after abort as aborted', async () => {
-    const runtime = createLink(composedV3FactoryInput());
+    const runtime = createArtifact.link();
     const controller = new AbortController();
     let started!: () => void;
     const captainStarted = new Promise<void>((resolve) => {
@@ -379,7 +376,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
       rootSession({
         callJudge: async () => {
           judgeCalls += 1;
-          return linkIntent();
+          return TRANSFORMATION_REQUEST;
         },
         callCaptain: async () => {
           started();
@@ -435,14 +432,14 @@ describe('reviewed compiled meta-phase artifacts', () => {
   );
 
   it('ignores a link classifier result that resolves after abort', async () => {
-    const runtime = createLink(composedV3FactoryInput());
+    const runtime = createArtifact.link();
     const controller = new AbortController();
     let captainCalls = 0;
     await runtime.init(
       rootSession({
         callJudge: async () => {
           controller.abort();
-          return linkIntent();
+          return TRANSFORMATION_REQUEST;
         },
         callCaptain: async () => {
           captainCalls += 1;
@@ -461,10 +458,9 @@ describe('reviewed compiled meta-phase artifacts', () => {
   });
 
   it('does not complete gears2fsm from an adjudication returned after abort', async () => {
-    const runtime = createGears2Fsm(composedV3FactoryInput());
+    const runtime = createArtifact.gears2fsm();
     const controller = new AbortController();
     const states: string[] = [];
-    let judgeCalls = 0;
     await runtime.init(
       rootSession({
         callCaptain: async () => ({
@@ -472,12 +468,10 @@ describe('reviewed compiled meta-phase artifacts', () => {
           finalText: 'Compiled the machine.',
         }),
         callJudge: async () => {
-          judgeCalls += 1;
-          // The first call classifies the fresh transformation request; the
-          // abort lands during the second (adjudication) call.
-          if (judgeCalls === 1) return transformationRequest();
+          // The entry is deterministic, so the first judge call is the
+          // adjudication; the abort lands during it.
           controller.abort();
-          return '{"guard":"compiled"}';
+          return COMPILED;
         },
         emitTelemetry: async (event) => {
           const target = transitionTarget(event);
@@ -492,7 +486,7 @@ describe('reviewed compiled meta-phase artifacts', () => {
     });
     expect(result.outcome).toBe('aborted');
     expect(states).toContain('failed');
-    // `compiled` is gears2fsm's completed terminal state under Playbook 10.
+    // `compiled` is gears2fsm's completed terminal state.
     expect(states).not.toContain('compiled');
     await runtime.dispose();
   });
@@ -500,14 +494,15 @@ describe('reviewed compiled meta-phase artifacts', () => {
   it.each([
     {
       name: 'gears2fsm',
-      create: (): PlaybookRuntime => createGears2Fsm(composedV3FactoryInput()),
-      priorReplies: [transformationRequest()] as readonly string[],
+      create: createArtifact.gears2fsm,
+      // Deterministic entry: the adjudication is the first judge call.
+      priorReplies: [] as readonly string[],
       bossText: 'Compile the GEARS package.',
     },
     {
       name: 'link',
-      create: (): PlaybookRuntime => createLink(composedV3FactoryInput()),
-      priorReplies: [linkIntent()] as readonly string[],
+      create: createArtifact.link,
+      priorReplies: [TRANSFORMATION_REQUEST] as readonly string[],
       bossText: 'Link the artifact.',
     },
   ])(
@@ -539,8 +534,8 @@ describe('reviewed compiled meta-phase artifacts', () => {
   );
 
   it('does not leak a masked text2gears adjudicator fault into a later turn', async () => {
-    const runtime = createText2Gears(composedV3FactoryInput());
-    let judgeCalls = 0;
+    const runtime = createArtifact.text2gears();
+    let adjudications = 0;
     let failEmission = true;
     await runtime.init(
       rootSession({
@@ -548,24 +543,20 @@ describe('reviewed compiled meta-phase artifacts', () => {
           status: 'ok',
           finalText: 'A GEARS package.',
         }),
-        callJudge: async () => {
-          judgeCalls += 1;
-          if (judgeCalls === 1) return transformationRequest();
-          if (judgeCalls === 2) throw new Error('judge-fail');
-          // Entry from `failed` is classified rather than deterministic
-          // under the shared engine, so the recovery turn first routes
-          // through the interrupt classifier. The root `BOSS_INTERRUPT`
-          // guard admits only the machine's own working-leaf id and still
-          // requires a request naming both paths.
-          if (judgeCalls === 3) {
+        callJudge: async (prompt) => {
+          // Recovery from `failed` may route through the interrupt classifier;
+          // the root `BOSS_INTERRUPT` guard admits only the machine's own
+          // working-leaf id and carries the fresh Boss intent.
+          if (prompt.startsWith(CLASSIFICATION_ANCHOR)) {
             return JSON.stringify({
               type: 'BOSS_INTERRUPT',
-              targetId: 'transformSource',
-              sourcePath: REQUEST_SOURCE,
-              targetPath: REQUEST_TARGET,
+              targetId: 'transform',
+              bossIntent: 'Recovery attempt.',
             });
           }
-          return '{"guard":"transformed"}';
+          adjudications += 1;
+          if (adjudications === 1) throw new Error('judge-fail');
+          return COMPILED;
         },
         emitTelemetry: async (event) => {
           if (failEmission && transitionTarget(event) === 'failed') {
@@ -613,17 +604,18 @@ describe('reviewed compiled meta-phase artifacts', () => {
 });
 
 // Regressions at the compiled meta-phase SLC boundary: nullish host-port
-// rejections must remain control-plane failures (phase-execution-26), and the artifacts
-// compose host-agnostic Captain prompts, so the host appends its workspace
-// contract (phase-execution-35) before the Captain transport runs.
+// rejections must remain control-plane failures (phase-execution-26), the host
+// relays the request's definition as the single configured option (DR-028),
+// and the artifacts compose host-agnostic Captain prompts, so the host appends
+// its workspace contract (phase-execution-35) before the Captain transport runs.
 describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-35)', () => {
   let root: string;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'slc-meta-workspace-'));
     // The composed-v3 host reads each request's definition before the
-    // artifact loads (DR-028), so the named definitions exist in the
-    // workspace; these pre-contract bundles accept only the empty options.
+    // artifact loads and binds its exact bytes as the `definition` option
+    // every compiled-execution bundle declares (DR-028).
     for (const name of ['text2gears.md', 'gears2fsm.md', 'link.md']) {
       await writeFile(join(root, name), `# ${name} fixture definition\n`);
     }
@@ -647,12 +639,12 @@ describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-
     readonly request: (dir: string) => ExecuteRequest;
     /** Workspace-relative target the fake Captain writes. */
     readonly target: string;
-    /** GEARS-derived body substring the composed prompt must retain. */
+    /** Relayed definition line the composed prompt must carry. */
     readonly promptAnchor: string;
     /** Host-contract substrings the transported prompt must carry. */
     readonly workspaceAnchors: (dir: string) => string[];
-    /** Judge replies: all three classify first and adjudicate last. */
-    readonly judgeReply: (prompt: string, dir: string) => string;
+    /** Judge replies: link classifies first; every artifact adjudicates last. */
+    readonly judgeReply: (prompt: string) => string;
   }
 
   const cases: readonly WorkspaceCase[] = [
@@ -666,20 +658,13 @@ describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-
         target: 'workflow.gears.raw.md',
       }),
       target: 'workflow.gears.raw.md',
-      promptAnchor:
-        'read the Source procedure description and compose a package of normative GEARS spec items',
+      promptAnchor: '# text2gears.md fixture definition',
       workspaceAnchors: (dir) => [
         `source to read: ${join(dir, 'workflow.text.md')}`,
         `artifact to write: ${join(dir, 'workflow.gears.raw.md')}`,
         `write only ${join(dir, 'workflow.gears.raw.md')}`,
       ],
-      judgeReply: (prompt, dir) =>
-        prompt.startsWith(CLASSIFICATION_ANCHOR)
-          ? transformationRequest(
-              join(dir, 'workflow.text.md'),
-              join(dir, 'workflow.gears.raw.md'),
-            )
-          : '{"guard":"transformed"}',
+      judgeReply: () => COMPILED,
     },
     {
       name: 'gears2fsm',
@@ -691,19 +676,13 @@ describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-
         target: 'workflow.fsm.ts',
       }),
       target: 'workflow.fsm.ts',
-      promptAnchor: 'XState v5 finite state machine',
+      promptAnchor: '# gears2fsm.md fixture definition',
       workspaceAnchors: (dir) => [
         `source to read: ${join(dir, 'workflow.gears.md')}`,
         `artifact to write: ${join(dir, 'workflow.fsm.ts')}`,
         `write only ${join(dir, 'workflow.fsm.ts')}`,
       ],
-      judgeReply: (prompt, dir) =>
-        prompt.startsWith(CLASSIFICATION_ANCHOR)
-          ? transformationRequest(
-              join(dir, 'workflow.gears.md'),
-              join(dir, 'workflow.fsm.ts'),
-            )
-          : '{"guard":"compiled"}',
+      judgeReply: () => COMPILED,
     },
     {
       name: 'link',
@@ -717,25 +696,20 @@ describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-
         linked: 'workflow.playbook.ts',
       }),
       target: 'workflow.playbook.ts',
-      promptAnchor: 'into a `PlaybookRuntime`',
+      promptAnchor: '# link.md fixture definition',
       workspaceAnchors: (dir) => [
         // The write scope and the ordered read list reach the Captain only
         // through the host transport's appended workspace contract
-        // (phase-execution-34); link's own `<source>`/`<target>` placeholders
-        // carry whatever the classified `BOSS_INTENT` named.
-        join(dir, 'workflow.fsm.ts'),
+        // (phase-execution-34); the relayed definition names no path.
         `object artifacts to read, in order: ${join(dir, 'workflow.fsm.ts')}`,
         `link target module: ${join(dir, 'runtime.ts')}`,
         `artifact to write: ${join(dir, 'workflow.playbook.ts')}`,
         `write only ${join(dir, 'workflow.playbook.ts')}`,
       ],
-      judgeReply: (prompt, dir) =>
+      judgeReply: (prompt) =>
         prompt.startsWith(CLASSIFICATION_ANCHOR)
-          ? linkIntent(
-              join(dir, 'workflow.fsm.ts'),
-              join(dir, 'workflow.playbook.ts'),
-            )
-          : '{"guard":"done"}',
+          ? TRANSFORMATION_REQUEST
+          : COMPILED,
     },
   ];
 
@@ -743,29 +717,31 @@ describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-
     ['undefined', undefined],
     ['null', null],
   ] as const)(
-    'normalizes a %s classifier-port rejection before the Playbook 10 boundary',
+    'normalizes a %s classifier-port rejection before the shared-engine boundary',
     async (_label, rejection) => {
+      // link is the meta phase whose entry crosses the classifier judge.
       const rejectingJudge: AgentClient = {
         async run() {
           throw rejection;
         },
       };
       const executor = createCompiledExecutor({
-        artifactPath: 'pinned-text2gears-artifact',
+        artifactPath: 'pinned-link-artifact',
         runRoot: root,
         player: idlePlayer,
         judge: rejectingJudge,
         runtimeContract: 'composed-v3',
-        loadFactory: async () =>
-          createText2Gears as CompatiblePlaybookRuntimeFactory,
+        loadFactory: async () => createLink as CompatiblePlaybookRuntimeFactory,
       });
 
       const result = await executor.run(
         {
-          kind: 'compile',
-          definitionPath: join(root, 'text2gears.md'),
-          source: 'workflow.text.md',
-          target: 'workflow.gears.raw.md',
+          kind: 'link',
+          definitionPath: join(root, 'link.md'),
+          objects: ['workflow.fsm.ts'],
+          linkTarget: 'runtime.ts',
+          options: [],
+          linked: 'workflow.playbook.ts',
         },
         new AbortController().signal,
       );
@@ -778,7 +754,7 @@ describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-
   );
 
   it.each(cases)(
-    '$name Captain transport names the absolute paths and a writing Captain maps to ok',
+    '$name Captain transport relays the definition, names the absolute paths, and a writing Captain maps to ok',
     async ({
       factory,
       request,
@@ -803,7 +779,7 @@ describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-
             };
           }
           judgePrompts.push(call.prompt);
-          return { status: 'success', text: judgeReply(call.prompt, root) };
+          return { status: 'success', text: judgeReply(call.prompt) };
         },
       };
       const executor = createCompiledExecutor({
@@ -822,9 +798,11 @@ describe('compiled meta-phase SLC boundary (phase-execution-26, phase-execution-
 
       expect(result.status).toBe('ok');
       expect(captainPrompts).toHaveLength(1);
-      // The GEARS-derived composed body survives unchanged ahead of the
-      // appended host workspace contract.
+      // The definition the request names is relayed verbatim between the
+      // markers (DR-028), ahead of the appended host workspace contract.
+      expect(captainPrompts[0]).toContain('--- DEFINITION ---');
       expect(captainPrompts[0]).toContain(promptAnchor);
+      expect(captainPrompts[0]).not.toContain('<definition>');
       for (const anchor of workspaceAnchors(root)) {
         expect(captainPrompts[0]).toContain(anchor);
       }

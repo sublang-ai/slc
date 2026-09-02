@@ -17,20 +17,25 @@ const PINNED = {
       actor: 'captain',
       sourceItem: 'LINK-1',
       player: '',
-      resultKeys: ['done', 'needsBossReply'],
+      resultKeys: ['compiled', 'needsBossReply', 'rejected'],
       onDone: [
         {
           index: 0,
-          target: 'done',
+          target: 'compiled',
           guarded: true,
         },
         {
           index: 1,
-          target: 'awaitBossReply',
+          target: 'rejected',
           guarded: true,
         },
         {
           index: 2,
+          target: 'awaitBossReply',
+          guarded: true,
+        },
+        {
+          index: 3,
           target: 'failed',
           guarded: false,
         },
@@ -50,16 +55,11 @@ const PINNED = {
       state: 'ready',
       final: false,
       on: {
-        BOSS_INTENT: [
+        TRANSFORMATION_REQUEST: [
           {
             index: 0,
             target: 'linking',
             guarded: true,
-          },
-          {
-            index: 1,
-            target: null,
-            guarded: false,
           },
         ],
       },
@@ -80,40 +80,28 @@ const PINNED = {
             guarded: false,
           },
         ],
-        BOSS_INTENT: [
-          {
-            index: 0,
-            target: 'linking',
-            guarded: true,
-          },
-          {
-            index: 1,
-            target: null,
-            guarded: false,
-          },
-        ],
       },
     },
     {
       state: 'failed',
       final: false,
       on: {
-        BOSS_INTENT: [
+        TRANSFORMATION_REQUEST: [
           {
             index: 0,
             target: 'linking',
             guarded: true,
           },
-          {
-            index: 1,
-            target: null,
-            guarded: false,
-          },
         ],
       },
     },
     {
-      state: 'done',
+      state: 'compiled',
+      final: true,
+      on: {},
+    },
+    {
+      state: 'rejected',
       final: true,
       on: {},
     },

@@ -81,7 +81,42 @@ export interface PlaybookInvocationState {
  */
 export declare const NEEDS_BOSS_REPLY = 'needsBossReply';
 export declare const BOSS_QUESTION_MARKER = 'Output shall include `question:';
-/** Artifact schema selected only by a complete reviewed Playbook provenance. */
+/**
+ * A Playbook engine's raw compatibility self-report — `RUNTIME_ABI` and
+ * `SUPPORTED_ARTIFACT_SCHEMAS` on its `@sublang/playbook/xstate-runtime`
+ * surface — read from the installed package owning a link target
+ * (verification-21, phase-execution-30; DR-028). The reader lives in
+ * `runtime-contract.ts`; the predicates stay here so the artifact-local
+ * verifier copy (verification-12) carries the schema decision whole.
+ */
+export interface PlaybookRuntimeDeclaration {
+  /** `@sublang/playbook@<version>` of the owning installed package. */
+  provenance: string;
+  /** Lexical root of the owning package. */
+  packageRoot: string;
+  /** The exported `RUNTIME_ABI`, or `undefined` when the engine exports none. */
+  runtimeAbi: unknown;
+  /** The exported `SUPPORTED_ARTIFACT_SCHEMAS`, or `undefined` when absent. */
+  supportedArtifactSchemas: unknown;
+}
+/**
+ * True when the declaration admits the roleless schema-3 `composed-v3`
+ * generation: `RUNTIME_ABI` is exactly `1` and `SUPPORTED_ARTIFACT_SCHEMAS`
+ * contains `3` (DR-028).
+ */
+export declare function declaresComposedV3(
+  declaration: PlaybookRuntimeDeclaration,
+): boolean;
+/** Names a declaration for fail-closed diagnostics. */
+export declare function describeRuntimeDeclaration(
+  declaration: PlaybookRuntimeDeclaration,
+): string;
+/**
+ * Artifact schema recorded for an exact reviewed Playbook provenance: the
+ * historical map kept as recorded (DR-028). A later release supplies its
+ * schema through the installed engine's declaration instead
+ * ({@link resolveArtifactSchemaForVerification}).
+ */
 export declare function artifactSchemaForPlaybookProvenance(
   provenance: unknown,
 ): 1 | 3 | undefined;
@@ -472,10 +507,19 @@ export declare function generatePromptContractTest(opts: {
     player?: Record<string, string[]>;
   };
 }): string;
-/** Schema decision shared by generated and standalone artifact verification. */
+/**
+ * Schema decision shared by generated and standalone artifact verification
+ * (verification-21). Reviewed provenance is evidence through its exact
+ * historical map; any other provenance is evidence only through the engine
+ * declaration read from the link target's installed package — `RUNTIME_ABI`
+ * `1` with artifact schema `3` — and is otherwise reported unsupported
+ * (DR-028).
+ */
 export declare function resolveArtifactSchemaForVerification(opts: {
   artifactSchema?: 1 | 3;
   provenance?: unknown;
+  /** The link target's installed engine declaration, when the caller read it. */
+  runtimeDeclaration?: PlaybookRuntimeDeclaration;
   config?: MachineConfigLike;
   linked?: {
     default?: unknown;
@@ -506,6 +550,8 @@ export declare function emitPromptContractTest(opts: {
   artifactSchema?: 1 | 3;
   /** Actual reviewed full-link target provenance, when the caller has it. */
   provenance?: unknown;
+  /** The full-link target's installed engine declaration, when read (DR-028). */
+  runtimeDeclaration?: PlaybookRuntimeDeclaration;
 }): Promise<{
   path: string;
   diagnostics: string[];
