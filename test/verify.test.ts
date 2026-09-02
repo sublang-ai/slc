@@ -3226,17 +3226,18 @@ describe('checkPromptComposition (verification-5)', () => {
       config,
       playbook._internal.composePlayerPrompt,
     );
-    // The reference substitutes the relayed intent and run results on every
-    // phase, <#> on the IR-task phase, and the Coder model on both commits.
+    // The installed reference (Playbook 12) substitutes the relayed caller
+    // input and run results on every phase, the IR number on the IR-task
+    // phase, and the Coder model on both commits.
     expect(substituted.runFirstPhase).toEqual([
       '<caller-input>',
       '<run-results>',
       '<coder-llm>',
     ]);
     expect(substituted.runIrTask).toEqual([
-      '<ir-task>',
+      '<caller-input>',
+      '<ir-number>',
       '<run-results>',
-      '<#>',
       '<coder-llm>',
     ]);
   });

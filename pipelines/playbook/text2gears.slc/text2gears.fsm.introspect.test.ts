@@ -13,25 +13,25 @@ const PINNED = {
   initial: 'ready',
   captain: [
     {
-      state: 'transformSource',
+      state: 'transform',
       actor: 'captain',
-      sourceItem: 'T2G-1',
+      sourceItem: 'TEXT2GEARS-1',
       player: '',
-      resultKeys: ['needsBossReply', 'transformed', 'unrepresentable'],
+      resultKeys: ['compiled', 'needsBossReply', 'rejected'],
       onDone: [
         {
           index: 0,
-          target: 'awaitBossReply',
+          target: 'compiled',
           guarded: true,
         },
         {
           index: 1,
-          target: 'transformed',
+          target: 'rejected',
           guarded: true,
         },
         {
           index: 2,
-          target: 'unrepresentable',
+          target: 'awaitBossReply',
           guarded: true,
         },
         {
@@ -55,10 +55,10 @@ const PINNED = {
       state: 'ready',
       final: false,
       on: {
-        TRANSFORMATION_REQUEST: [
+        BOSS_INTENT: [
           {
             index: 0,
-            target: 'transformSource',
+            target: 'transform',
             guarded: true,
           },
         ],
@@ -71,7 +71,7 @@ const PINNED = {
         BOSS_REPLY: [
           {
             index: 0,
-            target: 'transformSource',
+            target: 'transform',
             guarded: true,
           },
           {
@@ -86,22 +86,22 @@ const PINNED = {
       state: 'failed',
       final: false,
       on: {
-        TRANSFORMATION_REQUEST: [
+        BOSS_INTENT: [
           {
             index: 0,
-            target: 'transformSource',
+            target: 'transform',
             guarded: true,
           },
         ],
       },
     },
     {
-      state: 'transformed',
+      state: 'compiled',
       final: true,
       on: {},
     },
     {
-      state: 'unrepresentable',
+      state: 'rejected',
       final: true,
       on: {},
     },
@@ -110,12 +110,12 @@ const PINNED = {
     BOSS_INTERRUPT: [
       {
         index: 0,
-        target: 'transformSource',
+        target: 'transform',
         guarded: true,
       },
     ],
   },
-  interruptTargets: ['transformSource'],
+  interruptTargets: ['transform'],
 };
 
 describe('text2gears: FSM introspection', () => {

@@ -32,7 +32,44 @@ import { hashFile } from './hash.js';
  */
 export const NEEDS_BOSS_REPLY = 'needsBossReply';
 export const BOSS_QUESTION_MARKER = 'Output shall include `question:';
-/** Artifact schema selected only by a complete reviewed Playbook provenance. */
+/**
+ * True when the declaration admits the roleless schema-3 `composed-v3`
+ * generation: `RUNTIME_ABI` is exactly `1` and `SUPPORTED_ARTIFACT_SCHEMAS`
+ * contains `3` (DR-028).
+ */
+export function declaresComposedV3(declaration) {
+  return (
+    declaration.runtimeAbi === 1 &&
+    Array.isArray(declaration.supportedArtifactSchemas) &&
+    declaration.supportedArtifactSchemas.includes(3)
+  );
+}
+/** Names a declaration for fail-closed diagnostics. */
+export function describeRuntimeDeclaration(declaration) {
+  const abi =
+    declaration.runtimeAbi === undefined
+      ? 'no RUNTIME_ABI'
+      : `RUNTIME_ABI ${renderDeclared(declaration.runtimeAbi)}`;
+  const schemas =
+    declaration.supportedArtifactSchemas === undefined
+      ? 'no SUPPORTED_ARTIFACT_SCHEMAS'
+      : `SUPPORTED_ARTIFACT_SCHEMAS ${renderDeclared(declaration.supportedArtifactSchemas)}`;
+  return `${declaration.provenance} declares ${abi} and ${schemas}`;
+}
+function renderDeclared(value) {
+  try {
+    const json = JSON.stringify(value);
+    return json === undefined ? String(value) : json;
+  } catch {
+    return String(value);
+  }
+}
+/**
+ * Artifact schema recorded for an exact reviewed Playbook provenance: the
+ * historical map kept as recorded (DR-028). A later release supplies its
+ * schema through the installed engine's declaration instead
+ * ({@link resolveArtifactSchemaForVerification}).
+ */
 export function artifactSchemaForPlaybookProvenance(provenance) {
   switch (provenance) {
     case '@sublang/playbook@0.10.0':
@@ -370,7 +407,18 @@ export function inspectGearsRoleContract(gears) {
       } else {
         byCanonical.set(roleId, name);
       }
-      if (!/^[a-z][a-z0-9_-]*$/.test(roleId)) {
+      // A canonical local role id is the declared name lowercased. Playbook 10
+      // explicitly admits non-English role names ("quote non-English names
+      // (e.g., `作者`)"), and a script without case - Chinese among them -
+      // lowercases to itself, so an ASCII-only class would reject exactly the
+      // names the definition sanctions. Require instead that the id be genuinely
+      // canonical: already lowercase, carrying no whitespace or separator that
+      // would make it ambiguous as an identifier.
+      if (
+        roleId.length === 0 ||
+        roleId !== roleId.toLowerCase() ||
+        /[\s.,;:/\\'"`()[\]{}<>|]/u.test(roleId)
+      ) {
         findings.push(
           `Roles declaration ${JSON.stringify(name)} derives noncanonical local role ${JSON.stringify(roleId)}`,
         );
@@ -2451,7 +2499,14 @@ function linkedArtifactSchemaSignal(linked) {
     ? { schema: 3, historicalFallback: false, invalidCompatibility: false }
     : { historicalFallback: false, invalidCompatibility: true };
 }
-/** Schema decision shared by generated and standalone artifact verification. */
+/**
+ * Schema decision shared by generated and standalone artifact verification
+ * (verification-21). Reviewed provenance is evidence through its exact
+ * historical map; any other provenance is evidence only through the engine
+ * declaration read from the link target's installed package — `RUNTIME_ABI`
+ * `1` with artifact schema `3` — and is otherwise reported unsupported
+ * (DR-028).
+ */
 export function resolveArtifactSchemaForVerification(opts) {
   const candidates = [];
   const invalidSignalFindings = [];
@@ -2461,17 +2516,25 @@ export function resolveArtifactSchemaForVerification(opts) {
       schema: opts.artifactSchema,
     });
   }
-  const provenanceSchema = artifactSchemaForPlaybookProvenance(opts.provenance);
-  if (opts.provenance !== undefined && provenanceSchema === undefined) {
-    invalidSignalFindings.push(
-      `artifact schema has unsupported link-target provenance ${JSON.stringify(opts.provenance)}`,
-    );
-  }
+  const provenance = opts.provenance ?? opts.runtimeDeclaration?.provenance;
+  const provenanceSchema = artifactSchemaForPlaybookProvenance(provenance);
   if (provenanceSchema !== undefined) {
     candidates.push({
       source: 'reviewed link-target provenance',
       schema: provenanceSchema,
     });
+  } else if (provenance !== undefined) {
+    if (opts.runtimeDeclaration === undefined) {
+      invalidSignalFindings.push(
+        `artifact schema has unsupported link-target provenance ${JSON.stringify(provenance)}`,
+      );
+    } else if (declaresComposedV3(opts.runtimeDeclaration)) {
+      candidates.push({ source: 'declared link-target contract', schema: 3 });
+    } else {
+      invalidSignalFindings.push(
+        `artifact schema has an unsupported link-target contract: ${describeRuntimeDeclaration(opts.runtimeDeclaration)}`,
+      );
+    }
   }
   if (opts.config !== undefined) {
     const configSignals = promptArtifactSchemaSignalsFromConfig(opts.config);
@@ -2549,12 +2612,18 @@ export async function emitPromptContractTest(opts) {
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const config = findMachineConfig(await loadFsmModule(fsmPath));
   const rows = capturePromptContract(config);
-  let schemaResolution = resolveArtifactSchemaForVerification({
-    config,
+  const evidence = {
     ...(opts.provenance === undefined ? {} : { provenance: opts.provenance }),
+    ...(opts.runtimeDeclaration === undefined
+      ? {}
+      : { runtimeDeclaration: opts.runtimeDeclaration }),
     ...(opts.artifactSchema === undefined
       ? {}
       : { artifactSchema: opts.artifactSchema }),
+  };
+  let schemaResolution = resolveArtifactSchemaForVerification({
+    config,
+    ...evidence,
   });
   let artifactSchema = schemaResolution.artifactSchema;
   let composer;
@@ -2568,12 +2637,7 @@ export async function emitPromptContractTest(opts) {
       schemaResolution = resolveArtifactSchemaForVerification({
         config,
         linked,
-        ...(opts.provenance === undefined
-          ? {}
-          : { provenance: opts.provenance }),
-        ...(opts.artifactSchema === undefined
-          ? {}
-          : { artifactSchema: opts.artifactSchema }),
+        ...evidence,
       });
       artifactSchema = schemaResolution.artifactSchema;
       const actors = new Set(

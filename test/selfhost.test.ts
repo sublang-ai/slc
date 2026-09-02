@@ -184,8 +184,8 @@ export const machine = setup({
 // canonical `Roles:`, the machine invokes the `player` actor with the canonical
 // lowercase local role id, and the delegated state repeats that id in
 // `state.meta.playbook.role` (DR-024). A bare `playbook` run links against the
-// installed `@sublang/playbook@10.0.0`, whose provenance is schema 3, so only
-// this pair lets the emitted verification settle on one artifact schema.
+// installed `@sublang/playbook`, whose engine declares schema 3 (DR-028), so
+// only this pair lets the emitted verification settle on one artifact schema.
 const SCHEMA_3_GEARS_ARTIFACT = `# Flow
 
 Roles:
@@ -827,9 +827,9 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
   it('runs generated verification in a project with no SLC installation', async () => {
     // A Playbook 10 compile: canonical `Roles:`, an `invoke.input.role`
     // binding, and a shared-factory linked module, all agreeing with the
-    // schema-3 provenance of the default `@sublang/playbook@10.0.0` link
+    // schema-3 declaration of the default installed `@sublang/playbook` link
     // target, so the emitted schema reconciliation reports no finding
-    // (DR-024).
+    // (DR-024, DR-028).
     const result = await runSlc(['playbook', source], {
       resolver: withReservedPipelines(() => []),
       executor: createInterpretedExecutor({
@@ -1024,10 +1024,15 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
 
   it('does not use the compiled FSM phase pin as full-link artifact provenance', async () => {
     // The compiling phases run from the repository's own pinned bundles, whose
-    // link-target provenance is exact Playbook 10.0.0 (schema 3). This run's
-    // artifact links against a reviewed Playbook 4.0.0 package (schema 1), and
-    // verification must pin the artifact's own link target, not the compiler's
-    // phase pin (DR-024).
+    // link-target provenance is the exact schema-3 Playbook release the
+    // dependency lock resolves (DR-028). This run's artifact links against a
+    // reviewed Playbook 4.0.0 package (schema 1), and verification must pin
+    // the artifact's own link target, not the compiler's phase pin (DR-024).
+    const lock = JSON.parse(
+      await readFile(join(repoRoot, 'package-lock.json'), 'utf8'),
+    ) as { packages: Record<string, { version: string }> };
+    const lockedPlaybook =
+      lock.packages['node_modules/@sublang/playbook'].version;
     const packageRoot = join(root, 'playbook-custom-4');
     const linkTarget = join(packageRoot, 'src', 'runtime.ts');
     await mkdir(join(packageRoot, 'src'), { recursive: true });
@@ -1062,7 +1067,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     expect(result.ok).toBe(true);
     // Every compiled phase this run selected carries the schema-3 pin ...
     expect(new Set(selectedProvenances)).toEqual(
-      new Set(['@sublang/playbook@10.0.0']),
+      new Set([`@sublang/playbook@${lockedPlaybook}`]),
     );
     const verificationDir = join(work, 'code.slc');
     // ... while the emitted verification pins the artifact's own schema-1

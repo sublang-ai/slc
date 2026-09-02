@@ -20,41 +20,13 @@ const CONTRACT = [
     state: 'linking',
     sourceItem: 'LINK-1',
     player: '',
-    reads: ['bossReply', 'pendingBossQuestion', 'source', 'target'],
+    reads: ['bossReply', 'definition', 'pendingBossQuestion'],
     wires: {
-      source: ['source'],
-      target: ['target'],
+      definition: ['definition'],
       pendingBossQuestion: ['pendingBossQuestion'],
       bossReply: ['bossReply'],
     },
-    placeholders: [
-      '<source>',
-      '<target>',
-      '<void>',
-      '<PlaybookRunResult>',
-      '<PlaybookEffectLedger>',
-      '<PlaybookRuntimeOptions>',
-      '<Options>',
-      '<PlayerResult>',
-      '<CaptainResult>',
-      '<string>',
-      '<PlaybookCallStart>',
-      '<n>',
-      '<pendingBossQuestion.question>',
-      '<bossReply>',
-      '<remaining-plan>',
-      '<completed-call-results>',
-      '<field>',
-      '<stateId>',
-      '<status>',
-      '<acceptedOutcome>',
-      '<Role>',
-      '<label>',
-      '<PlaybookControlReceipt>',
-      '<EVENT_TYPE>',
-      '<state>',
-      '<#>',
-    ],
+    placeholders: ['<definition>'],
   },
 ];
 const SCHEMA_FINDINGS = [];
@@ -69,7 +41,7 @@ describe('link: prompt contract', () => {
   });
 
   const CAPTAIN_SUBSTITUTED = {
-    linking: ['<source>', '<target>'],
+    linking: ['<definition>'],
   };
 
   const composeCaptain = (

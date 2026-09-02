@@ -53,8 +53,15 @@ export const SUPPORTED_AGENTS = [
 /** One of the registered agent CLI ids (cli-7). */
 export type SupportedAgent = (typeof SUPPORTED_AGENTS)[number];
 
-/** Constructs the Cligent adapter for a supported agent id (cli-7). */
-export type AdapterFactory = (agent: SupportedAgent) => AgentAdapter;
+/**
+ * Constructs the Cligent adapter for a supported agent id (cli-7). Cligent
+ * types each adapter by its own effort vocabulary and fast-mode support, so
+ * the factory is typed at the widest adapter shape; the configuration layer
+ * validates effort against Cligent's per-agent support metadata (cli-12).
+ */
+export type AdapterFactory = (
+  agent: SupportedAgent,
+) => AgentAdapter<string, boolean>;
 
 /** Default factory: Cligent's built-in adapters, constructed on demand (cli-7). */
 export const defaultAdapterFactory: AdapterFactory = (agent) => {

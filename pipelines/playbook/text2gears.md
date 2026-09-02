@@ -79,6 +79,9 @@ If Source supplies a blockquoted template for that relay, text2gears shall keep 
 If Source names the relayed value but supplies no template, text2gears shall emit its canonical typed placeholder on a line beginning with literal `> ` and shall not summarize, paraphrase, or invent a value in its place.
 An ordinary Source blockquote that specifies a complete acting prompt without requiring quoted relay retains the existing rule above: its one leading marker is Source syntax and is not prompt content.
 
+An acting prompt whose instructions refer to a runtime value the acting role cannot otherwise observe — for example the Boss input task that triggered the workflow — shall relay that value as a quoted `<placeholder>` line appended to the prompt even when Source states no explicit relay.
+A prompt that references an undelivered value asks its player to act on data it never received; omitting the relay is a compilation defect, not a faithful rendering of Source.
+
 Source statements that assign active-leaf routing, call identity, suspension,
 or return matching to the host describe execution preconditions rather than
 behaviors for Captain to perform. text2gears shall use such a statement only as
@@ -318,7 +321,8 @@ exact English form regardless of Source language.
 ## Transformation-spec sources
 
 A Source may itself be the normative specification of a transformation — e.g., a compiler phase definition, as when a meta pipeline compiles this file.
-Such a Source declares no roles and prompts none; its implied procedure is that Captain performs the specified transformation on request.
+Such a Source declares no roles and prompts none; Captain performs the specified transformation on request.
+Where such a Source carries a `## Compiled execution` section, text2gears shall compile it from that section alone: the section is the Source's complete behavior — its acting item, prompt, and `Results:` contract — and the remaining definition text is relayed content, not behaviors to transcribe, so the composition below applies only to a Source without that section.
 Compose Captain-acting spec items for it: when a transformation request names the specification's source and target, Captain shall carry out the transformation as specified.
 Prompts shall carry the specification's normative requirements as instructions to Captain — deduplicated, one point per line — without inventing roles, triggers, or requirements the specification does not state.
 
@@ -348,6 +352,22 @@ Partition items by every variable that determines prompt content — including a
 
 Drop disjunctive branches incompatible with the rest of an item's condition or prompt.
 Dead branches mislead readers and downstream phases.
+
+## Compiled execution
+
+This section governs compiled execution of this phase; the rules above remain the transformation's normative content for both execution paths.
+
+Where the phase host supplies `<definition>` as the exact bytes of the definition file the request names, when a transformation request names a `text` Source (`.md`) and a `gears` Target (`.md`), Captain shall carry out the text-to-GEARS transformation as specified:
+
+> Follow the definition relayed between the `--- DEFINITION ---` and `--- END DEFINITION ---` lines exactly, adding no rules of your own: read the named Source and write the named Target as the definition specifies.
+> If the Source cannot be transformed under the definition, do not guess: leave the Target unwritten and report the concrete reason.
+> --- DEFINITION ---
+> \<definition\>
+> --- END DEFINITION ---
+
+Results:
+- `compiled`: Captain wrote the named Target as the relayed definition specifies.
+- `rejected`: Captain reported that the Source cannot be transformed under the relayed definition and left the Target unwritten.
 
 ## References
 

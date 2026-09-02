@@ -26,7 +26,6 @@ import { Cligent } from '@sublang/cligent';
 import type {
   AgentAdapter,
   AgentEvent,
-  Effort,
   PermissionPolicy,
 } from '@sublang/cligent';
 
@@ -57,7 +56,8 @@ export const defaultWatchdogTimers: WatchdogTimers = {
 
 /** Wraps a Cligent adapter as an {@link AgentClient} for the interpreter. */
 export function createCligentAgent(opts: {
-  adapter: AgentAdapter;
+  /** Any Cligent adapter; effort is validated adapter-scoped upstream (cli-12). */
+  adapter: AgentAdapter<string, boolean>;
   maxTurns?: number;
   permissions?: PermissionPolicy;
   /** Adapter-scoped reasoning effort, validated by the configuration layer. */
@@ -75,7 +75,7 @@ export function createCligentAgent(opts: {
     maxTurns: opts.maxTurns,
     permissions: opts.permissions,
     // Validated adapter-scoped by the configuration layer (cli-12).
-    ...(opts.effort !== undefined ? { effort: opts.effort as Effort } : {}),
+    ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
   });
   const stallMs = opts.stallTimeoutMs ?? 0;
   const timers = opts.watchdogTimers ?? defaultWatchdogTimers;
