@@ -17,12 +17,13 @@ and this project adheres to
   bundle whose options contract requires the single configured option
   `definition` receives the exact bytes of the phase or link definition the
   request names through its configured options: the host constructs the
-  factory with the exact empty options first and offers `{ definition }`
-  once when the bundle refuses them, so a bundle declaring a `<definition>`
-  placeholder receives the definition instead of a build-time transcription
-  while the seeded `Request:` line keeps carrying paths only and never
-  routes the definition through a classifier judge; an unreadable
-  definition fails the phase before the artifact loads
+  factory with `{ definition }` first — the single construction for every
+  current bundle — and offers the exact empty options once only when a
+  bundle declaring no option refuses it, so a bundle declaring a
+  `<definition>` placeholder receives the definition instead of a
+  build-time transcription while the seeded `Request:` line keeps carrying
+  paths only and never routes the definition through a classifier judge;
+  an unreadable definition fails the phase before the artifact loads
   ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
 
 - **Compiled-execution fidelity check.** The independent artifact review
@@ -47,6 +48,33 @@ and this project adheres to
   generator, and CI audit take the accepted release from the dependency
   lock, so a routine adoption changes only the manifest, lock,
   definitions, and pins. `SlcDeps.compiled` may now return a promise
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
+- **Breaking: Playbook 12.1.0 and Cligent 0.24.0 are the adopted set.**
+  `@sublang/playbook` moves to `^12.1.0` and `@sublang/cligent` to
+  `^0.24.0`, the four vendored definitions are byte-identical to that
+  release, and the three meta-phase bundles were rebuilt once — the last
+  rebuild — through interpreted real-agent runs from definitions that
+  now close with a `## Compiled execution` section: each bundle's GEARS is
+  one direct-Captain item whose prompt relays the definition through the
+  configured option `definition` with the results `compiled` and
+  `rejected`, so the bundles are stable control shells and later
+  definition edits reach compiled runs at the next adoption without a
+  rebuild. Pins were regenerated with `@sublang/playbook@12.1.0`
+  provenance, and both demo reference sets were retained unchanged and
+  re-verified by their checkers against the installed engine. Cligent
+  0.24.0 types each adapter by its own effort and fast-mode vocabulary, so
+  the adapter factory is typed at the widest adapter shape
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
+- **Host capabilities come from the published facade.** The compiled
+  executor constructs its roleless fail-closed capabilities with
+  `createFailClosedHostCapabilities()` and the demo reference checker
+  drives its governed smoke with `createWorktreeHostCapabilities()`, both
+  from `@sublang/playbook/host-capabilities`, the same implementation
+  `playbook run` uses; SLC's own `src/host-capabilities.ts` copy of the
+  worktree classifier and its tests are deleted, so engine-contract changes
+  to receipt classification now arrive with the dependency
   ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
 
 ## [0.6.0] - 2026-09-01
