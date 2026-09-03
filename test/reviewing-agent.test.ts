@@ -559,6 +559,33 @@ describe('createReviewingAgent (DR-022)', () => {
     expect(coder.calls).toHaveLength(1);
   });
 
+  it('never retries a stall-aborted Reviewer call', async () => {
+    const stall =
+      'agent call stalled: no agent activity for 40m; aborted by the stall watchdog';
+    const coder = queuedClient([
+      {
+        status: 'success',
+        text: 'latest coder report',
+        resumeToken: 'coder-1',
+      },
+    ]);
+    const reviewer = queuedClient([
+      { status: 'error', stalled: true, text: stall },
+    ]);
+    const agent = createReviewingAgent({
+      coder,
+      reviewer: () => reviewer,
+      reviewRetryDelayMs: 0,
+    });
+
+    const result = await agent.run(request());
+
+    expect(reviewer.calls).toHaveLength(1);
+    expect(result).toMatchObject({ status: 'error', resumeToken: 'coder-1' });
+    expect(result.text).toContain(`Reviewer returned error: ${stall}`);
+    expect(result.text).toContain('latest Coder output: latest coder report');
+  });
+
   it('fails closed with the second error when the retried Reviewer errors again', async () => {
     const coder = queuedClient([
       {

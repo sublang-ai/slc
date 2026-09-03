@@ -89,10 +89,13 @@ export function createReviewingAgent(
         try {
           reviewerCalls++;
           review = await reviewer.run(reviewerRequest);
-          if (review.status === 'error') {
+          if (review.status === 'error' && review.stalled !== true) {
             // One bounded retry of the identical call: an adapter reports
             // transient overload as an error result, and the retry belongs to
-            // the same review call, so it consumes no further review slot.
+            // the same review call, so it consumes no further review slot. A
+            // stall abort is marked structurally and never retried: that call
+            // is hung, and a second one would only wait another full stall
+            // window (phase-execution-36).
             await pause(
               options.reviewRetryDelayMs ?? DEFAULT_REVIEW_RETRY_DELAY_MS,
             );

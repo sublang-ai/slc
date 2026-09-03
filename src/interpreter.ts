@@ -49,6 +49,12 @@ export interface AgentRunResult {
   text: string;
   /** Opaque backend continuation token, when the transport exposes one. */
   resumeToken?: string;
+  /**
+   * Set only by the stall watchdog's abort (phase-execution-36), so a caller
+   * can tell a hung call from a transient transport error without reading the
+   * diagnostic text.
+   */
+  readonly stalled?: true;
 }
 
 /** The transport to a coding agent, backed by Cligent in production. */
