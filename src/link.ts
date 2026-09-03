@@ -58,9 +58,11 @@ export class LinkError extends Error {
 
 /**
  * The Playbook-owned linked format token; Playbook validates its targets, so a
- * `link.md` emitting it needs no per-pipeline `## Link Targets` (DR-002, DR-009).
+ * `link.md` emitting it needs no per-pipeline `## Link Targets` (DR-002,
+ * DR-009), and only such a link emits the module the link-fidelity gate checks
+ * (DR-030, phase-execution-53).
  */
-const PLAYBOOK_LINKED_FORMAT = 'playbook';
+export const PLAYBOOK_LINKED_FORMAT = 'playbook';
 
 /**
  * Parses a `link.md` definition (pipeline-11, pipeline-19).

@@ -34,6 +34,8 @@ import { messageOf } from './errors.js';
 import {
   assertSafeTarget,
   type ExecuteRequest,
+  type LinkOptionPair,
+  type MechanicalReview,
   type PhaseExecutor,
   formatFailureReport,
   pathsAlias,
@@ -42,7 +44,12 @@ import {
 import { compareUtf8, hashBytes, isHash, type Hash } from './hash.js';
 import { type Invocation, parseInvocation } from './invocation.js';
 import { unifiedLineDiff } from './line-diff.js';
-import { type LinkPhase, linkedArtifactPath, loadLinkFile } from './link.js';
+import {
+  PLAYBOOK_LINKED_FORMAT,
+  type LinkPhase,
+  linkedArtifactPath,
+  loadLinkFile,
+} from './link.js';
 import {
   inspectClosureWithDeclaration,
   type InspectedClosure,
@@ -76,6 +83,7 @@ import {
 } from './runtime-contract.js';
 import {
   artifactSchemaForPlaybookProvenance,
+  checkLinkedModuleContract,
   emitFsmCoverageTest,
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
@@ -337,20 +345,20 @@ async function runDirectLink(
   });
   await mkdir(dirname(linked), { recursive: true });
 
-  const step: PhaseStep = {
-    request: {
-      kind: 'link',
-      definitionPath: pipeline.linkFile as string,
-      objects: invocation.objects.map((path) => resolve(cwd, path)),
-      linkTarget: resolve(cwd, invocation.linkTarget),
-      options: invocation.options,
-      linked,
-    },
-    phase: 'link',
-    pinKey: 'link',
-    targetExt: link.target.ext,
-  };
-  return executeSteps([step], pipeline, deps);
+  return executeSteps(
+    [
+      linkStep({
+        link,
+        definitionPath: pipeline.linkFile as string,
+        objects: invocation.objects.map((path) => resolve(cwd, path)),
+        linkTarget: resolve(cwd, invocation.linkTarget),
+        options: invocation.options,
+        linked,
+      }),
+    ],
+    pipeline,
+    deps,
+  );
 }
 
 async function runFullLink(
@@ -394,20 +402,17 @@ async function runFullLink(
     linked: link.target,
     output: invocation.output === null ? null : resolve(cwd, invocation.output),
   });
-  const linkStep: PhaseStep = {
-    request: {
-      kind: 'link',
+  const steps = [
+    ...compileSteps,
+    linkStep({
+      link,
       definitionPath: pipeline.linkFile as string,
       objects: [plan[plan.length - 1].path],
       linkTarget: resolve(cwd, invocation.linkTarget),
       options: invocation.options,
       linked,
-    },
-    phase: 'link',
-    pinKey: 'link',
-    targetExt: link.target.ext,
-  };
-  const steps = [...compileSteps, linkStep];
+    }),
+  ];
   const gearsPlan = plan.find(
     (artifact) => artifact.phase.target.format === 'gears',
   );
@@ -727,6 +732,8 @@ interface PhaseStep {
   targetExt: string;
   /** Present for a gated text-to-GEARS step (DR-029, phase-execution-51). */
   sourceFidelity?: true;
+  /** Present for a gated `playbook` link step (DR-030, phase-execution-53). */
+  linkFidelity?: MechanicalReview;
 }
 
 /** A canonical full/full-link invocation eligible for history. */
@@ -953,6 +960,63 @@ async function sourceFidelityFindings(
     return checkSourceGearsContract(sourceText, gearsText);
   } catch (error) {
     return [`Source fidelity could not be checked: ${messageOf(error)}`];
+  }
+}
+
+/**
+ * Builds one link step, gated by DR-030 when the link emits Playbook's
+ * `playbook` module over exactly the one FSM object the checks read
+ * (phase-execution-53). Any other link — another linked format, or an object
+ * set the checks cannot address — carries no gate.
+ */
+function linkStep(opts: {
+  link: LinkPhase;
+  definitionPath: string;
+  objects: string[];
+  linkTarget: string;
+  options: readonly LinkOptionPair[];
+  linked: string;
+}): PhaseStep {
+  const { link } = opts;
+  const fsmObjects = opts.objects.filter((object) =>
+    object.endsWith(`.${link.source.format}${link.source.ext}`),
+  );
+  const gated =
+    link.target.format === PLAYBOOK_LINKED_FORMAT && fsmObjects.length === 1
+      ? () => linkFidelityFindings(opts.linked, fsmObjects[0])
+      : undefined;
+  return {
+    request: {
+      kind: 'link',
+      definitionPath: opts.definitionPath,
+      objects: opts.objects,
+      linkTarget: opts.linkTarget,
+      options: [...opts.options],
+      linked: opts.linked,
+      ...(gated === undefined ? {} : { mechanicalReview: gated }),
+    },
+    phase: 'link',
+    pinKey: 'link',
+    targetExt: link.target.ext,
+    ...(gated === undefined ? {} : { linkFidelity: gated }),
+  };
+}
+
+/**
+ * The DR-030 gate over one link phase's live linked module: the deterministic
+ * prompt-contract findings against the FSM object it links (phase-execution-53,
+ * verification-27). The checks never throw on an absent or unloadable module,
+ * and an unexpected failure becomes a finding, so the gate never throws into
+ * the executor it guards.
+ */
+async function linkFidelityFindings(
+  linked: string,
+  fsmPath: string,
+): Promise<readonly string[]> {
+  try {
+    return await checkLinkedModuleContract({ linkedPath: linked, fsmPath });
+  } catch (error) {
+    return [`link fidelity could not be checked: ${messageOf(error)}`];
   }
 }
 
@@ -1295,6 +1359,26 @@ async function executeSteps(
           `linked module ${target} has unresolvable relative imports: ` +
             `${missing.join(', ')} — an emitted module that cannot load ` +
             'fails the link (verification-18)',
+        );
+        return stopped(index);
+      }
+    }
+
+    // The DR-030 gate on the accepted result, after post-link settlement has
+    // put the module in its final loadable form: a reviewed loop already
+    // relayed its findings to the Coder for repair, so a finding surviving to
+    // here is an unreviewed — or unrepaired — link-fidelity break and fails the
+    // phase closed (phase-execution-53).
+    if (step.linkFidelity !== undefined) {
+      const findings = await step.linkFidelity();
+      if (findings.length > 0) {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons: [...findings],
+          }),
         );
         return stopped(index);
       }

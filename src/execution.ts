@@ -120,8 +120,8 @@ export type ExecuteRequest =
       target: string;
       /**
        * Deterministic gate on the produced target, supplied by the host for the
-       * phases that have one — currently text-to-GEARS (DR-029,
-       * phase-execution-51). Absent for every other phase.
+       * compile phases that have one — currently text-to-GEARS (DR-029,
+       * phase-execution-51). Absent for every other compile phase.
        */
       mechanicalReview?: MechanicalReview;
       /**
@@ -141,6 +141,12 @@ export type ExecuteRequest =
       linkTarget: string;
       options: LinkOptionPair[];
       linked: string;
+      /**
+       * Deterministic gate on the produced linked module, supplied by the host
+       * for a `playbook` link over an FSM object (DR-030,
+       * phase-execution-53). Absent for every other link.
+       */
+      mechanicalReview?: MechanicalReview;
     };
 
 /** Terminal status an executor reports for a phase run. */

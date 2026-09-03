@@ -9,7 +9,7 @@ This package specifies how `slc` verifies that a compiled `playbook` artifact fa
 A compiled routing workflow also separates source-owned result metadata from acting prose per [DR-012](../decisions/012-playbook-routing-control-separation.md).
 Schema-3 checks use the Roles and runtime contracts of [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), current since the activation completed under [DR-027](../decisions/027-complete-playbook-10-activation.md); under [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md), a later release is schema-3 evidence through its installed engine's declaration, and a bundle is retained across adoptions by the compiled-execution fidelity check.
 A compiled artifact is judgment-produced, so `slc` re-checks it deterministically against the `gears` and `fsm` it was built from and emits that check as a test beside the artifacts under `<basename>.playbook/`, so each build re-verifies faithfulness.
-The package covers GEARS↔FSM conformance, FSM introspection, prompt contracts, transition coverage, runtime equivalence, Source fidelity under [DR-029](../decisions/029-source-fidelity-gate.md), script actors, and emitted-module load integrity.
+The package covers GEARS↔FSM conformance, FSM introspection, prompt contracts, transition coverage, runtime equivalence, Source fidelity under [DR-029](../decisions/029-source-fidelity-gate.md), link fidelity under [DR-030](../decisions/030-link-fidelity-gate.md), script actors, and emitted-module load integrity.
 Verification exercises those deterministic checks against the manual reference artifacts `@sublang/playbook` ships, detects injected drift, and runs generated tests beside reserved-pipeline artifacts.
 Essential project-specific references: `slc`, this project's compiler CLI; and `@sublang/playbook`, whose installed package provides the manual reference artifacts, compiler definitions, and linked runtime contract.
 
@@ -181,6 +181,20 @@ When the slc command checks a GEARS package's fidelity to the Source it was comp
 
 - A Source that authors no fragment leaves the third rule inapplicable, so a plain-prose Source whose prompt wording the compiler judges reports no finding at all.
 
+### Link fidelity
+
+#### verification-27
+
+When the slc command checks a linked `playbook` module's fidelity to the FSM beside it, the slc command shall decide the findings from that module and that FSM alone — consulting no Source, definition, pin, or prior artifact — as exactly the checks the emitted prompt-contract suite [[verification-5](#verification-5)] asserts and no further check, reporting one finding per violation ([DR-030](../decisions/030-link-fidelity-gate.md)):
+
+| Check | Reported violation |
+| --- | --- |
+| The linked module imports, through the same ephemeral TypeScript FSM edge emission resolves [[verification-5](#verification-5)]. | The import diagnostic. |
+| The artifact schema the FSM's structure and the linked factory's compatibility witness reconciles [[verification-21](#verification-21)]. | That schema decision's finding. |
+| Every `_internal` composer the module exposes for an actor the machine invokes honors the link contract on an ordinary turn and on a Boss-reply continuation turn [[verification-5](#verification-5)]. | Each composition finding, unchanged. |
+
+- The check degrades to no finding wherever emission degrades [[verification-5](#verification-5)]: an absent linked module, an absent or unimportable FSM the checks derive from, and an actor whose matching composer the module does not expose.
+
 ### Script actors
 
 #### verification-15
@@ -267,6 +281,12 @@ Where synthetic definitions and GEARS exercise a preserved section beside unrela
 #### verification-26
 
 Where the maintained reference Sources `@sublang/playbook` installs are paired with their compiled GEARS packages, and one such pair is mutated, when the Source-fidelity check runs over each pair, it shall report no finding for every unmutated pair and for a plain-prose Source that authors no fragment, and shall name the matching drift for an invented item whose prompt lines the Source never authored, a dropped fragment, two fragments swapped inside one item, a relay placeholder read without its `>` marker, and a field declared verbatim in one item and judge-authored in another [[verification-25](#verification-25)].
+
+### Link-fidelity acceptance
+
+#### verification-28
+
+Where a linked module sits beside its FSM, when the link-fidelity check runs over each case, it shall report no finding for an installed maintained bundle whose composers honor the link contract, name the mismatch for a composer that resolves its player-facing identity from a canonical local role other than its state's, name the import diagnostic for a module that cannot be imported, and report no finding for an absent module, an unimportable FSM, or a module exposing no composer for an actor the machine invokes [[verification-27](#verification-27)].
 
 ### Script acceptance
 

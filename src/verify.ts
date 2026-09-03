@@ -3157,6 +3157,176 @@ export function resolveArtifactSchemaForVerification(opts: {
     : { findings: [] };
 }
 
+/** The `_internal` composer export serving one state actor (verification-5). */
+const COMPOSER_EXPORTS = {
+  captain: 'composeCaptainPrompt',
+  player: 'composePlayerPrompt',
+} as const;
+
+/** One state actor's composer, as the prompt-contract checks observe it. */
+interface ComposerInspection {
+  actor: 'captain' | 'player';
+  exportName: (typeof COMPOSER_EXPORTS)[keyof typeof COMPOSER_EXPORTS];
+  /** Present only when the linked module exposes that composer. */
+  substitutions?: Record<string, string[]>;
+  /** Link-contract findings; empty when the composer conforms. */
+  findings: string[];
+}
+
+/** What the prompt-contract checks observe on one linked module. */
+interface LinkedPromptContract {
+  artifactSchema?: 1 | 3;
+  schemaFindings: string[];
+  /** False when no linked module sits beside the FSM. */
+  present: boolean;
+  /** Present when a linked module exists but could not be imported. */
+  loadError?: string;
+  composers: ComposerInspection[];
+}
+
+/**
+ * Runs the deterministic prompt-contract checks over one live linked module
+ * beside its FSM (verification-5, verification-27): the module imports through
+ * the ephemeral TypeScript FSM edge, its schema evidence reconciles, and every
+ * actor the machine invokes has a composer that honors the link contract.
+ *
+ * Shared by the emitted suite's generator, which pins the derived substitutions
+ * and degrades each observation to a diagnostic, and by the link-fidelity gate,
+ * which relays the same observations as findings — so the gate adds no check of
+ * its own (DR-030).
+ */
+async function inspectLinkedPromptContract(opts: {
+  config: MachineConfigLike;
+  linkedPath: string;
+  fsmPath: string;
+  evidence: {
+    provenance?: unknown;
+    runtimeDeclaration?: PlaybookRuntimeDeclaration;
+    artifactSchema?: 1 | 3;
+  };
+}): Promise<LinkedPromptContract> {
+  const { config, evidence } = opts;
+  const withoutModule = (
+    extra: Partial<LinkedPromptContract>,
+  ): LinkedPromptContract => {
+    const resolution = resolveArtifactSchemaForVerification({
+      config,
+      ...evidence,
+    });
+    return {
+      ...(resolution.artifactSchema === undefined
+        ? {}
+        : { artifactSchema: resolution.artifactSchema }),
+      schemaFindings: resolution.findings,
+      present: true,
+      composers: [],
+      ...extra,
+    };
+  };
+
+  if (!existsSync(opts.linkedPath)) return withoutModule({ present: false });
+  let linked: {
+    default?: unknown;
+    _internal?: {
+      composeCaptainPrompt?: unknown;
+      composePlayerPrompt?: unknown;
+    };
+  };
+  try {
+    linked = (await loadLinkedModuleForVerification({
+      linkedPath: opts.linkedPath,
+      fsmPath: opts.fsmPath,
+    })) as typeof linked;
+  } catch (error) {
+    return withoutModule({ loadError: messageOf(error) });
+  }
+
+  const resolution = resolveArtifactSchemaForVerification({
+    config,
+    linked,
+    ...evidence,
+  });
+  const artifactSchema = resolution.artifactSchema;
+  const actors = new Set(
+    enumerateCaptainStates(config).map(({ actor }) => actor),
+  );
+  const composers: ComposerInspection[] = [];
+  for (const actor of ['captain', 'player'] as const) {
+    if (!actors.has(actor)) continue;
+    const exportName = COMPOSER_EXPORTS[actor];
+    const compose = linked._internal?.[exportName];
+    if (typeof compose !== 'function') {
+      composers.push({ actor, exportName, findings: [] });
+      continue;
+    }
+    const typedCompose = compose as (input: unknown) => string;
+    composers.push({
+      actor,
+      exportName,
+      substitutions: deriveSubstitutions(config, typedCompose, actor),
+      findings: checkPromptComposition({
+        config,
+        compose: typedCompose,
+        actor,
+        ...(artifactSchema === undefined ? {} : { artifactSchema }),
+      }),
+    });
+  }
+  return {
+    ...(artifactSchema === undefined ? {} : { artifactSchema }),
+    schemaFindings: resolution.findings,
+    present: true,
+    composers,
+  };
+}
+
+/**
+ * The deterministic link-fidelity checks over one live linked `playbook` module
+ * beside its FSM (verification-27): exactly the checks the emitted
+ * prompt-contract suite asserts, decided from those two paths alone and
+ * returning one finding per violation.
+ *
+ * The gate that runs this before any Reviewer call must never throw into the
+ * executor it guards (DR-030, phase-execution-53), so a module that cannot be
+ * imported yields its import diagnostic as a finding. An absent module or FSM
+ * yields none: an artifact the performing call has not written is the generic
+ * target check's business (phase-execution-4). An FSM that cannot be imported
+ * yields none either — the suite's checks derive from that machine, so they
+ * degrade exactly as emission degrades its prompt-contract test to a
+ * diagnostic (verification-5).
+ */
+export async function checkLinkedModuleContract(opts: {
+  linkedPath: string;
+  fsmPath: string;
+}): Promise<string[]> {
+  if (!existsSync(opts.linkedPath) || !existsSync(opts.fsmPath)) return [];
+  let config: MachineConfigLike;
+  try {
+    config = findMachineConfig(await loadFsmModule(opts.fsmPath));
+  } catch {
+    return [];
+  }
+
+  const contract = await inspectLinkedPromptContract({
+    config,
+    linkedPath: opts.linkedPath,
+    fsmPath: opts.fsmPath,
+    evidence: {},
+  });
+  const findings = [...contract.schemaFindings];
+  if (contract.loadError !== undefined) {
+    findings.push(`linked module could not be imported: ${contract.loadError}`);
+    return findings;
+  }
+  // A module exposing no matching composer degrades exactly as emission does
+  // (verification-5): the suite asserts nothing about it, so neither does the
+  // gate that reuses the suite's checks.
+  for (const composer of contract.composers) {
+    findings.push(...composer.findings);
+  }
+  return findings;
+}
+
 /**
  * Emits the prompt-contract test beside a compiled `playbook` artifact
  * (verification-5): derives and pins the per-state contract from the physical
@@ -3195,88 +3365,45 @@ export async function emitPromptContractTest(opts: {
       ? {}
       : { artifactSchema: opts.artifactSchema }),
   };
-  let schemaResolution = resolveArtifactSchemaForVerification({
+  const contract = await inspectLinkedPromptContract({
     config,
-    ...evidence,
+    linkedPath: join(opts.artifactDir, `${opts.basename}.playbook.ts`),
+    fsmPath,
+    evidence,
   });
-  let artifactSchema = schemaResolution.artifactSchema;
+  const artifactSchema = contract.artifactSchema;
 
-  let composer:
-    | {
-        playbookModule: string;
-        captain?: Record<string, string[]>;
-        player?: Record<string, string[]>;
-      }
-    | undefined;
-  const linkedPath = join(opts.artifactDir, `${opts.basename}.playbook.ts`);
-  if (existsSync(linkedPath)) {
-    try {
-      const linked = (await loadLinkedModuleForVerification({
-        linkedPath,
-        fsmPath,
-      })) as {
-        default?: unknown;
-        _internal?: {
-          composeCaptainPrompt?: unknown;
-          composePlayerPrompt?: unknown;
-        };
-      };
-      schemaResolution = resolveArtifactSchemaForVerification({
-        config,
-        linked,
-        ...evidence,
-      });
-      artifactSchema = schemaResolution.artifactSchema;
-      const actors = new Set(
-        enumerateCaptainStates(config).map(({ actor }) => actor),
+  if (contract.loadError !== undefined) {
+    diagnostics.push(
+      `prompt contract: linked module could not be imported (${contract.loadError}); composition checks not emitted`,
+    );
+  }
+  const substitutions: {
+    captain?: Record<string, string[]>;
+    player?: Record<string, string[]>;
+  } = {};
+  for (const inspected of contract.composers) {
+    if (inspected.substitutions === undefined) {
+      diagnostics.push(
+        `prompt contract: linked module exposes no _internal.${inspected.exportName}; ${inspected.actor} composition checks not emitted`,
       );
-      const substitutions: {
-        captain?: Record<string, string[]>;
-        player?: Record<string, string[]>;
-      } = {};
-      for (const actor of ['captain', 'player'] as const) {
-        if (!actors.has(actor)) continue;
-        const exportName =
-          actor === 'captain' ? 'composeCaptainPrompt' : 'composePlayerPrompt';
-        const compose = linked._internal?.[exportName];
-        if (typeof compose !== 'function') {
-          diagnostics.push(
-            `prompt contract: linked module exposes no _internal.${exportName}; ${actor} composition checks not emitted`,
-          );
-          continue;
-        }
-        const typedCompose = compose as (input: unknown) => string;
-        substitutions[actor] = deriveSubstitutions(config, typedCompose, actor);
-        const findings = checkPromptComposition({
-          config,
-          compose: typedCompose,
-          actor,
-          ...(artifactSchema === undefined ? {} : { artifactSchema }),
-        });
-        diagnostics.push(
-          ...findings.map((finding) => `prompt contract: ${finding}`),
-        );
-      }
-      if (
-        substitutions.captain !== undefined ||
-        substitutions.player !== undefined
-      ) {
-        composer = {
+      continue;
+    }
+    substitutions[inspected.actor] = inspected.substitutions;
+    diagnostics.push(
+      ...inspected.findings.map((finding) => `prompt contract: ${finding}`),
+    );
+  }
+  const composer =
+    substitutions.captain !== undefined || substitutions.player !== undefined
+      ? {
           playbookModule: `./${opts.basename}.playbook.js`,
           ...substitutions,
-        };
-      }
-    } catch (error) {
-      diagnostics.push(
-        `prompt contract: linked module could not be imported (${messageOf(error)}); composition checks not emitted`,
-      );
-    }
-  }
+        }
+      : undefined;
 
   diagnostics.unshift(
-    ...schemaResolution.findings.map(
-      (finding) => `prompt contract: ${finding}`,
-    ),
+    ...contract.schemaFindings.map((finding) => `prompt contract: ${finding}`),
   );
 
   const content = generatePromptContractTest({
@@ -3285,7 +3412,7 @@ export async function emitPromptContractTest(opts: {
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
     rows,
     ...(artifactSchema === undefined ? {} : { artifactSchema }),
-    schemaFindings: schemaResolution.findings,
+    schemaFindings: contract.schemaFindings,
     composer,
   });
   await mkdir(opts.artifactDir, { recursive: true });
