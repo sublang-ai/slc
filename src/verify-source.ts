@@ -23,7 +23,12 @@ const BLOCKQUOTE = /^>\s?(.*)$/;
 const PLACEHOLDER = /<([A-Za-z_$#][A-Za-z0-9_$#-]*)>/g;
 const RELAY_PLACEHOLDER_LINE = /^>\s+<[A-Za-z_$#][A-Za-z0-9_$#-]*>$/;
 const RESULT_BULLET = /^-\s+`([A-Za-z_$][A-Za-z0-9_$]*)`:\s+(.+)$/;
-const REQUIRED_FIELD = /^([A-Za-z_$][A-Za-z0-9_$]*)(?::\s*<([^>]+)>)?$/;
+// A result-field entry names one output property, optionally annotating its
+// ownership; the name is captured as authored so a non-identifier is reported
+// rather than skipped (text2gears.md "Result contracts").
+const ANNOTATED_FIELD = /^([^\s:]+)\s*:\s*<([^>]*)>$/;
+const BARE_FIELD = /^\S+$/;
+const FIELD_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ENGLISH_PLAYER = '[A-Z][A-Za-z0-9_-]*';
 
 /** What a Source fragment contributes to the items compiled from it. */
@@ -147,12 +152,17 @@ function resultFields(description: string): GearsResultField[] {
   if (marker === -1) return [];
   const fields: GearsResultField[] = [];
   for (const match of description.slice(marker).matchAll(/`([^`]+)`/g)) {
-    const field = REQUIRED_FIELD.exec(match[1].trim());
-    if (field === null) continue;
-    fields.push({
-      name: field[1],
-      verbatim: field[2]?.trim().toLowerCase() === 'verbatim final text',
-    });
+    const span = match[1].trim();
+    const annotated = ANNOTATED_FIELD.exec(span);
+    if (annotated !== null) {
+      fields.push({
+        name: annotated[1],
+        verbatim: annotated[2].trim().toLowerCase() === 'verbatim final text',
+      });
+      continue;
+    }
+    // A span carrying whitespace is prose, not a bare property name.
+    if (BARE_FIELD.test(span)) fields.push({ name: span, verbatim: false });
   }
   return fields;
 }
@@ -310,6 +320,20 @@ export function checkSourceGearsContract(
       findings.push(
         `${item.id}: prompt line is not an authored fragment: ${JSON.stringify(line)}`,
       );
+    }
+  }
+
+  // Downstream artifacts and calling playbooks consume an output property by
+  // name, so a quoted kebab-case key names nothing the verifier can synthesize
+  // (DR-029; text2gears.md "Result contracts").
+  for (const item of items) {
+    for (const result of item.results) {
+      for (const field of result.fields) {
+        if (FIELD_IDENTIFIER.test(field.name)) continue;
+        findings.push(
+          `${item.id}: result \`${result.guard}\` names the non-identifier output property ${JSON.stringify(field.name)}`,
+        );
+      }
     }
   }
 

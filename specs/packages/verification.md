@@ -169,13 +169,14 @@ When the slc command checks a GEARS package's fidelity to the Source it was comp
 | Quoted relay fragment | An authored blockquote fragment whose introducing prose — the nearest preceding non-blank lines before any heading or fence — says its content is relayed in quotes (`` `>` ``); its lines keep their literal `>` markers, and each `<token>` in them names a relayed field. |
 | Relayed field name | A relay placeholder's canonical name: its kebab segments joined camel-case, with the lone `#` token naming the IR number. |
 | Item prompt | A GEARS item's contiguous blockquote lines, escapes resolved, beginning at its first blockquote. |
-| Result field | A backticked `` `<name>` `` or `` `<name>: <ownership>` `` entry listed after `Output shall include` in one of the item's ``- `<guardName>`: <description>`` result bullets, owned verbatim exactly when its ownership reads `verbatim final text`. |
+| Result field | A backticked whitespace-free `` `<name>` `` or `` `<name>: <ownership>` `` entry listed after `Output shall include` in one of the item's ``- `<guardName>`: <description>`` result bullets, its name read as authored, and owned verbatim exactly when its ownership reads `verbatim final text`. |
 
 | Rule | Reported violation |
 | --- | --- |
 | Every authored fragment's lines appear contiguously and in order inside at least one item's prompt. | That fragment, named by its Source line, was dropped or changed. |
 | The authored fragments one item carries appear in that item's prompt in Source order. | That item's authored prompt fragments are out of Source order. |
 | Where the Source authors at least one fragment, every non-empty prompt line of every item is an authored fragment line or a bare quoted relay placeholder `> <token>`. | That item's prompt line is not an authored fragment. |
+| Every result field's name matches the ASCII identifier pattern `[A-Za-z_$][A-Za-z0-9_$]*` a guard name matches [[verification-13](#verification-13)]. | That item's named result declares that non-identifier output property. |
 | No result field is owned verbatim in one item and left judge-authored in another. | That field mixes verbatim and judge-authored ownership. |
 | Wherever an item's prompt line reads a relayed field's placeholder, that line carries a literal `>` quote marker. | That item's relayed field lacks a literal quote marker. |
 
@@ -280,7 +281,7 @@ Where synthetic definitions and GEARS exercise a preserved section beside unrela
 
 #### verification-26
 
-Where the maintained reference Sources `@sublang/playbook` installs are paired with their compiled GEARS packages, and one such pair is mutated, when the Source-fidelity check runs over each pair, it shall report no finding for every unmutated pair and for a plain-prose Source that authors no fragment, and shall name the matching drift for an invented item whose prompt lines the Source never authored, a dropped fragment, two fragments swapped inside one item, a relay placeholder read without its `>` marker, and a field declared verbatim in one item and judge-authored in another [[verification-25](#verification-25)].
+Where the maintained reference Sources `@sublang/playbook` installs are paired with their compiled GEARS packages, and one such pair is mutated, when the Source-fidelity check runs over each pair, it shall report no finding for every unmutated pair and for a plain-prose Source that authors no fragment, and shall name the matching drift for an invented item whose prompt lines the Source never authored, a dropped fragment, two fragments swapped inside one item, a relay placeholder read without its `>` marker, a result declaring a quoted kebab-case output property, and a field declared verbatim in one item and judge-authored in another [[verification-25](#verification-25)].
 
 ### Link-fidelity acceptance
 

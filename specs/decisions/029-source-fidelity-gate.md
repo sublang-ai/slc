@@ -21,6 +21,7 @@ Not every Source authors fragments: the demo Sources are plain prose, leaving pr
   - every authored fragment — a fenced `markdown` block or a blockquote, with Markdown escapes of `<` and `>` resolved and a blockquote that prose introduces "in quotes (`>`)" kept with its literal `>` markers — appears contiguously in at least one item's prompt;
   - within one item, authored fragments appear in Source order;
   - where the Source authors at least one fragment, every non-empty prompt line of every item is an authored line or a bare quoted relay placeholder `> <name>`;
+  - every output property a result description names matches the ASCII identifier pattern a guard name matches, since downstream artifacts and calling playbooks consume those properties by name;
   - a result field is not declared verbatim-owned in one item and judge-authored in another;
   - a placeholder that the Source relays in quotes carries a literal quote marker wherever an item's prompt reads it.
 - Findings are mechanical Reviewer findings: under a reviewed loop they are relayed to the Coder as a numbered findings list in place of the Reviewer call for that round and count as one of the permitted Reviewer calls, so the loop's bound is unchanged; a result with no mechanical finding proceeds to the Reviewer as before.

@@ -160,6 +160,19 @@ When a fabricated condition holds, Captain shall prompt Coder:
     );
   });
 
+  it('names a result that declares a non-identifier output property', () => {
+    const { source, gears } = maintained('decide');
+    const quotedKebab = gears.replace(
+      '`latestCommit: <commit identity>`',
+      '`decide-commit: <commit identity>`',
+    );
+    expect(quotedKebab).not.toBe(gears);
+
+    expect(checkSourceGearsContract(source, quotedKebab)).toEqual([
+      'DECIDE-3: result `committed` names the non-identifier output property "decide-commit"',
+    ]);
+  });
+
   it('names a field declared verbatim in one item and judge-authored in another', () => {
     const { source, gears } = maintained('code');
     const bullet = gears
