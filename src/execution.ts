@@ -102,6 +102,14 @@ export function updateContextLines(
   ];
 }
 
+/**
+ * A host-owned deterministic review of the work a performing agent just did,
+ * returning one finding per violation and the empty array when it conserves its
+ * input (phase-execution-51). The host reads the live artifact itself, so the
+ * hook is re-run before each Reviewer call rather than snapshotted.
+ */
+export type MechanicalReview = () => Promise<readonly string[]>;
+
 /** What a phase execution is asked to produce: a compile target or a linked artifact. */
 export type ExecuteRequest =
   | {
@@ -110,6 +118,12 @@ export type ExecuteRequest =
       definitionPath: string;
       source: string;
       target: string;
+      /**
+       * Deterministic gate on the produced target, supplied by the host for the
+       * phases that have one — currently text-to-GEARS (DR-029,
+       * phase-execution-51). Absent for every other phase.
+       */
+      mechanicalReview?: MechanicalReview;
       /**
        * Read-only reference documents the definition tells the executor to
        * consult — e.g. the entry-phase definition a generic normalize step

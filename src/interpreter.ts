@@ -22,6 +22,7 @@ import {
   type ExecuteRequest,
   type ExecutorResult,
   type LinkOptionPair,
+  type MechanicalReview,
   type PhaseExecutor,
 } from './execution.js';
 
@@ -38,6 +39,12 @@ export interface AgentRunRequest {
    * whether the configured adapter can enforce it (phase-execution-31).
    */
   allowedTools?: readonly string[];
+  /**
+   * Host-owned deterministic review of the artifact this call produces, run
+   * before each Reviewer call of a reviewed loop (phase-execution-51). A plain
+   * transport ignores it; only the reviewing decorator reads it.
+   */
+  mechanicalReview?: MechanicalReview;
   signal: AbortSignal;
 }
 
@@ -150,6 +157,11 @@ export function createInterpretedExecutor(opts: {
         prompt,
         cwd: config.cwd,
         model: config.model,
+        // The host's deterministic gate rides the call, so a reviewed loop can
+        // relay its findings in place of a Reviewer call (phase-execution-51).
+        ...(request.kind === 'compile' && request.mechanicalReview !== undefined
+          ? { mechanicalReview: request.mechanicalReview }
+          : {}),
         signal,
       });
 

@@ -9,7 +9,7 @@ This package specifies how `slc` verifies that a compiled `playbook` artifact fa
 A compiled routing workflow also separates source-owned result metadata from acting prose per [DR-012](../decisions/012-playbook-routing-control-separation.md).
 Schema-3 checks use the Roles and runtime contracts of [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), current since the activation completed under [DR-027](../decisions/027-complete-playbook-10-activation.md); under [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md), a later release is schema-3 evidence through its installed engine's declaration, and a bundle is retained across adoptions by the compiled-execution fidelity check.
 A compiled artifact is judgment-produced, so `slc` re-checks it deterministically against the `gears` and `fsm` it was built from and emits that check as a test beside the artifacts under `<basename>.playbook/`, so each build re-verifies faithfulness.
-The package covers GEARS↔FSM conformance, FSM introspection, prompt contracts, transition coverage, runtime equivalence, script actors, and emitted-module load integrity.
+The package covers GEARS↔FSM conformance, FSM introspection, prompt contracts, transition coverage, runtime equivalence, Source fidelity under [DR-029](../decisions/029-source-fidelity-gate.md), script actors, and emitted-module load integrity.
 Verification exercises those deterministic checks against the manual reference artifacts `@sublang/playbook` ships, detects injected drift, and runs generated tests beside reserved-pipeline artifacts.
 Essential project-specific references: `slc`, this project's compiler CLI; and `@sublang/playbook`, whose installed package provides the manual reference artifacts, compiler definitions, and linked runtime contract.
 
@@ -157,6 +157,30 @@ When reviewing a compiled `playbook` artifact whose definition declares a closin
 - A section with no blockquote, no `Results:` label, no valid entry, a repeated guard, or a second such section is itself a finding.
 - A finding names the drift: the nearest direct-Captain item's first differing prompt line, or the preserving item's differing results.
 
+### Source fidelity
+
+#### verification-25
+
+When the slc command checks a GEARS package's fidelity to the Source it was compiled from, the slc command shall decide the findings as a pure function of the Source text and the GEARS text — reading no file and consulting no definition, installed engine, or prior artifact — over these terms and rules, reporting one finding per violation ([DR-029](../decisions/029-source-fidelity-gate.md)):
+
+| Term | Meaning in the Source or the GEARS |
+| --- | --- |
+| Authored fragment | A Source fenced `markdown` block's lines, or a Source blockquote's lines, each with a Markdown backslash escape of `<` or `>` resolved to that character [[1]]. |
+| Quoted relay fragment | An authored blockquote fragment whose introducing prose — the nearest preceding non-blank lines before any heading or fence — says its content is relayed in quotes (`` `>` ``); its lines keep their literal `>` markers, and each `<token>` in them names a relayed field. |
+| Relayed field name | A relay placeholder's canonical name: its kebab segments joined camel-case, with the lone `#` token naming the IR number. |
+| Item prompt | A GEARS item's contiguous blockquote lines, escapes resolved, beginning at its first blockquote. |
+| Result field | A backticked `` `<name>` `` or `` `<name>: <ownership>` `` entry listed after `Output shall include` in one of the item's ``- `<guardName>`: <description>`` result bullets, owned verbatim exactly when its ownership reads `verbatim final text`. |
+
+| Rule | Reported violation |
+| --- | --- |
+| Every authored fragment's lines appear contiguously and in order inside at least one item's prompt. | That fragment, named by its Source line, was dropped or changed. |
+| The authored fragments one item carries appear in that item's prompt in Source order. | That item's authored prompt fragments are out of Source order. |
+| Where the Source authors at least one fragment, every non-empty prompt line of every item is an authored fragment line or a bare quoted relay placeholder `> <token>`. | That item's prompt line is not an authored fragment. |
+| No result field is owned verbatim in one item and left judge-authored in another. | That field mixes verbatim and judge-authored ownership. |
+| Wherever an item's prompt line reads a relayed field's placeholder, that line carries a literal `>` quote marker. | That item's relayed field lacks a literal quote marker. |
+
+- A Source that authors no fragment leaves the third rule inapplicable, so a plain-prose Source whose prompt wording the compiler judges reports no finding at all.
+
 ### Script actors
 
 #### verification-15
@@ -237,6 +261,12 @@ Where synthetic GEARS may contain a canonical `Results:` block after an acting b
 #### verification-24
 
 Where synthetic definitions and GEARS exercise a preserved section beside unrelated items, a rewritten prompt line, a transcribed extra prompt line, reordered and missing results, a delegated-role item carrying the prompt, a malformed section, and a definition without the section, when the fidelity check runs, it shall accept only the preserving direct-Captain item, name each drift, report the malformed section, and report the sectionless definition not applicable [[verification-23](#verification-23)].
+
+### Source-fidelity acceptance
+
+#### verification-26
+
+Where the maintained reference Sources `@sublang/playbook` installs are paired with their compiled GEARS packages, and one such pair is mutated, when the Source-fidelity check runs over each pair, it shall report no finding for every unmutated pair and for a plain-prose Source that authors no fragment, and shall name the matching drift for an invented item whose prompt lines the Source never authored, a dropped fragment, two fragments swapped inside one item, a relay placeholder read without its `>` marker, and a field declared verbatim in one item and judge-authored in another [[verification-25](#verification-25)].
 
 ### Script acceptance
 

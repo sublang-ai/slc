@@ -65,7 +65,11 @@ import {
   loadPipeline,
   resolvePipeline,
 } from './pipeline.js';
-import { defaultPlaybookLinkTarget, isReservedPipeline } from './resolver.js';
+import {
+  RESERVED_SLC_PIPELINE,
+  defaultPlaybookLinkTarget,
+  isReservedPipeline,
+} from './resolver.js';
 import {
   type PlaybookRuntimeDeclaration,
   readPlaybookRuntimeDeclaration,
@@ -87,6 +91,7 @@ import {
   emitVerifierSupport,
   verifierSupportFiles,
 } from './verify-support.js';
+import { checkSourceGearsContract } from './verify-source.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
 export interface CompiledSelection {
@@ -213,6 +218,7 @@ async function runFull(
     basename,
     optimize: !invocation.noOptimize,
     normalize: invocation.normalize || raw,
+    sourceFidelity: invocation.pipeline !== RESERVED_SLC_PIPELINE,
   });
   const verification = {
     pipeline: invocation.pipeline,
@@ -278,6 +284,7 @@ async function runSinglePhase(
   }
   const artDir = artifactDir(cwd, basename, invocation.pipeline);
   await mkdir(artDir, { recursive: true });
+  const sourceFidelity = invocation.pipeline !== RESERVED_SLC_PIPELINE;
 
   if (phase.pass) {
     // A standalone pass run cannot overwrite its own source: it writes the
@@ -285,7 +292,7 @@ async function runSinglePhase(
     const target =
       (invocation.output === null ? null : resolve(cwd, invocation.output)) ??
       join(artDir, `${basename}.${phase.target.format}.opt${phase.target.ext}`);
-    const step = compileStep(pipeline, phase, source, target);
+    const step = compileStep(pipeline, phase, source, target, sourceFidelity);
     return executeSteps([step], pipeline, deps);
   }
 
@@ -300,7 +307,13 @@ async function runSinglePhase(
       invocation.output === null ? undefined : resolve(cwd, invocation.output),
   });
   const artifact = plan[pipeline.phases.indexOf(phase)];
-  const step = compileStep(pipeline, phase, source, artifact.path);
+  const step = compileStep(
+    pipeline,
+    phase,
+    source,
+    artifact.path,
+    sourceFidelity,
+  );
   return executeSteps([step], pipeline, deps);
 }
 
@@ -371,6 +384,7 @@ async function runFullLink(
     basename,
     optimize: !invocation.noOptimize,
     normalize,
+    sourceFidelity: invocation.pipeline !== RESERVED_SLC_PIPELINE,
   });
 
   const linked = linkedArtifactPath({
@@ -711,6 +725,8 @@ interface PhaseStep {
   /** Pipeline pin key; absent for the host-owned normalization step. */
   pinKey?: string;
   targetExt: string;
+  /** Present for a gated text-to-GEARS step (DR-029, phase-execution-51). */
+  sourceFidelity?: true;
 }
 
 /** A canonical full/full-link invocation eligible for history. */
@@ -807,6 +823,8 @@ function buildCompileSteps(opts: {
   basename: string;
   optimize: boolean;
   normalize: boolean;
+  /** False inside the reserved `slc` meta-pipeline, which has its own gate (DR-029). */
+  sourceFidelity: boolean;
 }): PhaseStep[] {
   const { pipeline, plan, artDir, basename } = opts;
   const steps: PhaseStep[] = [];
@@ -840,7 +858,15 @@ function buildCompileSteps(opts: {
         )
       : [];
     if (passes.length === 0) {
-      steps.push(compileStep(pipeline, phase, previous, artifact.path));
+      steps.push(
+        compileStep(
+          pipeline,
+          phase,
+          previous,
+          artifact.path,
+          opts.sourceFidelity,
+        ),
+      );
       previous = artifact.path;
       continue;
     }
@@ -848,7 +874,9 @@ function buildCompileSteps(opts: {
       artDir,
       `${basename}.${phase.target.format}.raw${phase.target.ext}`,
     );
-    steps.push(compileStep(pipeline, phase, previous, raw));
+    steps.push(
+      compileStep(pipeline, phase, previous, raw, opts.sourceFidelity),
+    );
     previous = raw;
     passes.forEach((pass, index) => {
       const target =
@@ -858,7 +886,9 @@ function buildCompileSteps(opts: {
               artDir,
               `${basename}.${phase.target.format}.opt${index + 1}${phase.target.ext}`,
             );
-      steps.push(compileStep(pipeline, pass, previous, target));
+      steps.push(
+        compileStep(pipeline, pass, previous, target, opts.sourceFidelity),
+      );
       previous = target;
     });
   }
@@ -870,18 +900,51 @@ function compileStep(
   phase: Phase,
   source: string,
   target: string,
+  sourceFidelity: boolean,
 ): PhaseStep {
+  // Only a text-to-GEARS phase conserves authored Source fragments, and the
+  // reserved meta-pipeline compiles definitions under its own fidelity gate
+  // (DR-029, phase-execution-51, verification-23).
+  const gated =
+    sourceFidelity &&
+    phase.source.format === 'text' &&
+    phase.target.format === 'gears';
   return {
     request: {
       kind: 'compile',
       definitionPath: phaseDefinition(pipeline, phase.name),
       source,
       target,
+      ...(gated
+        ? { mechanicalReview: () => sourceFidelityFindings(source, target) }
+        : {}),
     },
     phase: phase.name,
     pinKey: phase.name,
     targetExt: phase.target.ext,
+    ...(gated ? { sourceFidelity: true as const } : {}),
   };
+}
+
+/**
+ * The DR-029 gate over one text-to-GEARS phase's live target: the deterministic
+ * conservation findings against the Source that phase reads (phase-execution-51,
+ * verification-25). An unreadable or malformed pair is itself a finding, so the
+ * gate never throws into the executor it guards.
+ */
+async function sourceFidelityFindings(
+  source: string,
+  target: string,
+): Promise<readonly string[]> {
+  try {
+    const [sourceText, gearsText] = await Promise.all([
+      readFile(source, 'utf8'),
+      readFile(target, 'utf8'),
+    ]);
+    return checkSourceGearsContract(sourceText, gearsText);
+  } catch (error) {
+    return [`Source fidelity could not be checked: ${messageOf(error)}`];
+  }
 }
 
 /**
@@ -1134,6 +1197,27 @@ async function executeSteps(
       return { ok: false, outputs, diagnostics };
     }
     diagnostics.push(...result.diagnostics);
+    // The DR-029 gate on the accepted result: a reviewed loop already relayed
+    // its findings to the Coder for repair, so a finding surviving to here is
+    // an unreviewed — or unrepaired — Source-fidelity break and fails the phase
+    // closed (phase-execution-51).
+    if (step.sourceFidelity === true && step.request.kind === 'compile') {
+      const findings = await sourceFidelityFindings(
+        step.request.source,
+        target,
+      );
+      if (findings.length > 0) {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons: [...findings],
+          }),
+        );
+        return { ok: false, outputs, diagnostics };
+      }
+    }
     // Settle an agent-chosen `.js`/`.ts` link-object edge from the sibling that
     // currently exists (pipeline-40), then keep rejecting every genuinely
     // unresolved import (verification-18).

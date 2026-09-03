@@ -11,6 +11,12 @@
  * and repair until the Reviewer reports no unsettled findings or the bounded
  * review limit is reached. Only the latest Coder result crosses the decorated
  * transport boundary.
+ *
+ * A request may carry a host-owned deterministic `mechanicalReview`. Its
+ * findings are mechanical Reviewer findings (DR-029, phase-execution-51): the
+ * round relays them to the Coder in place of its Reviewer call and spends one of
+ * the permitted Reviewer calls, so the loop's bound is unchanged and no agent
+ * judges an artifact a machine can already reject.
  */
 
 import { messageOf } from './errors.js';
@@ -74,56 +80,82 @@ export function createReviewingAgent(
       let reviewerCalls = 0;
 
       for (;;) {
-        const reviewerRequest: AgentRunRequest = {
-          prompt: buildReviewerPrompt({
-            originalPrompt: request.prompt,
-            coderOutput: coderResult.text,
-            transcript,
-          }),
-          cwd: request.cwd,
-          model: options.reviewerModel,
-          ...(reviewerResume === undefined ? {} : { resume: reviewerResume }),
-          signal: request.signal,
-        };
-        let review: AgentRunResult;
+        // The deterministic gate decides this round before any Reviewer sees
+        // the artifact: its findings replace that Reviewer call and spend its
+        // slot (phase-execution-51).
+        let mechanical: readonly string[];
         try {
-          reviewerCalls++;
-          review = await reviewer.run(reviewerRequest);
-          if (review.status === 'error' && review.stalled !== true) {
-            // One bounded retry of the identical call: an adapter reports
-            // transient overload as an error result, and the retry belongs to
-            // the same review call, so it consumes no further review slot. A
-            // stall abort is marked structurally and never retried: that call
-            // is hung, and a second one would only wait another full stall
-            // window (phase-execution-36).
-            await pause(
-              options.reviewRetryDelayMs ?? DEFAULT_REVIEW_RETRY_DELAY_MS,
-            );
-            review = await reviewer.run(reviewerRequest);
-          }
+          mechanical =
+            request.mechanicalReview === undefined
+              ? []
+              : await request.mechanicalReview();
         } catch (error) {
           return failClosed(
             coderResult,
-            `Reviewer call threw: ${messageOf(error)}`,
+            `mechanical review could not run: ${messageOf(error)}`,
           );
         }
-        if (review.status !== 'success') {
-          return failClosed(
-            coderResult,
-            `Reviewer returned ${review.status}${review.text ? `: ${review.text}` : ''}`,
-          );
-        }
-        reviewerResume = review.resumeToken;
 
-        const verdict = parseReviewerVerdict(review.text);
-        if (verdict.kind === 'clean') return coderResult;
-        if (verdict.kind === 'malformed') {
-          return failClosed(
-            coderResult,
-            `Reviewer returned a malformed verdict: ${review.text}`,
-          );
+        let findings: string;
+        let findingCount: number;
+        if (mechanical.length > 0) {
+          reviewerCalls++;
+          findings = formatMechanicalFindings(mechanical);
+          findingCount = mechanical.length;
+        } else {
+          const reviewerRequest: AgentRunRequest = {
+            prompt: buildReviewerPrompt({
+              originalPrompt: request.prompt,
+              coderOutput: coderResult.text,
+              transcript,
+            }),
+            cwd: request.cwd,
+            model: options.reviewerModel,
+            ...(reviewerResume === undefined ? {} : { resume: reviewerResume }),
+            signal: request.signal,
+          };
+          let review: AgentRunResult;
+          try {
+            reviewerCalls++;
+            review = await reviewer.run(reviewerRequest);
+            if (review.status === 'error' && review.stalled !== true) {
+              // One bounded retry of the identical call: an adapter reports
+              // transient overload as an error result, and the retry belongs to
+              // the same review call, so it consumes no further review slot. A
+              // stall abort is marked structurally and never retried: that call
+              // is hung, and a second one would only wait another full stall
+              // window (phase-execution-36).
+              await pause(
+                options.reviewRetryDelayMs ?? DEFAULT_REVIEW_RETRY_DELAY_MS,
+              );
+              review = await reviewer.run(reviewerRequest);
+            }
+          } catch (error) {
+            return failClosed(
+              coderResult,
+              `Reviewer call threw: ${messageOf(error)}`,
+            );
+          }
+          if (review.status !== 'success') {
+            return failClosed(
+              coderResult,
+              `Reviewer returned ${review.status}${review.text ? `: ${review.text}` : ''}`,
+            );
+          }
+          reviewerResume = review.resumeToken;
+
+          const verdict = parseReviewerVerdict(review.text);
+          if (verdict.kind === 'clean') return coderResult;
+          if (verdict.kind === 'malformed') {
+            return failClosed(
+              coderResult,
+              `Reviewer returned a malformed verdict: ${review.text}`,
+            );
+          }
+          findings = review.text.trim();
+          findingCount = verdict.findingCount;
         }
-        const findings = review.text.trim();
+
         if (reviewerCalls === MAX_REVIEWER_CALLS) {
           return failClosed(
             coderResult,
@@ -149,10 +181,7 @@ export function createReviewingAgent(
         });
         if (correction.status !== 'success') return correction;
 
-        const envelope = parseCorrectionEnvelope(
-          correction.text,
-          verdict.findingCount,
-        );
+        const envelope = parseCorrectionEnvelope(correction.text, findingCount);
         if (envelope.kind === 'malformed') {
           return failClosed(
             priorCoderResult,
@@ -175,6 +204,22 @@ export function createReviewingAgent(
       }
     },
   };
+}
+
+/**
+ * Renders host-owned mechanical findings as the exact verdict block a Reviewer
+ * would have produced, so the Coder's correction contract is one protocol
+ * (phase-execution-51). Continuation lines stay indented, as the Reviewer's own
+ * evidence lines do.
+ */
+function formatMechanicalFindings(findings: readonly string[]): string {
+  return [
+    'FINDINGS:',
+    ...findings.flatMap((finding, index) => {
+      const [first, ...rest] = finding.split('\n');
+      return [`${index + 1}. ${first}`, ...rest.map((line) => `  ${line}`)];
+    }),
+  ].join('\n');
 }
 
 async function pause(ms: number): Promise<void> {
