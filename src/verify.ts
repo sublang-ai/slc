@@ -234,6 +234,8 @@ export interface MachineConfigLike {
   initial?: string;
   states?: Record<string, StateLike>;
   on?: Record<string, unknown>;
+  /** The machine's initial context: a literal record or an input-taking factory. */
+  context?: unknown;
 }
 
 interface InvokeLike {
@@ -827,12 +829,13 @@ function structuredStateIdentityFindings(
 
 function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
   const out: CaptainBinding[] = [];
+  const initial = initialMachineContext(config) ?? {};
   for (const node of walkStateNodes(config)) {
     for (const invoke of normalizeInvokes(node.state.invoke)) {
       const source = invokeSource(invoke.src);
       const explicitlyWorkActor = source === 'captain' || source === 'player';
       if (!explicitlyWorkActor && invoke.src !== undefined) continue;
-      const inspected = invocationInput(invoke);
+      const inspected = invocationInput(invoke, initial);
       if ('error' in inspected) {
         if (explicitlyWorkActor) {
           const actor = source === 'player' ? 'player' : 'captain';
@@ -999,10 +1002,11 @@ function enumeratePlaybookBindings(
   config: MachineConfigLike,
 ): PlaybookBinding[] {
   const out: PlaybookBinding[] = [];
+  const initial = initialMachineContext(config) ?? {};
   for (const node of walkStateNodes(config)) {
     for (const invoke of normalizeInvokes(node.state.invoke)) {
       if (invokeSource(invoke.src) !== 'playbook') continue;
-      const inspected = invocationInput(invoke);
+      const inspected = invocationInput(invoke, initial);
       if ('error' in inspected) {
         out.push({
           state: malformedPlaybookState(
@@ -1055,6 +1059,7 @@ function enumeratePlaybookBindings(
           const playbookIdSentinel = sentinelFor(fields.playbookIdContext);
           const textSentinel = sentinelFor(fields.textContext);
           const wired = invocationInput(invoke, {
+            ...initial,
             [fields.playbookIdContext]: playbookIdSentinel,
             [fields.textContext]: textSentinel,
           });
@@ -1140,6 +1145,7 @@ export function enumerateScriptStates(
   config: MachineConfigLike,
 ): ScriptInvocationState[] {
   const out: ScriptInvocationState[] = [];
+  const initial = initialMachineContext(config) ?? {};
   for (const node of walkStateNodes(config)) {
     for (const invoke of normalizeInvokes(node.state.invoke)) {
       if (invokeSource(invoke.src) !== 'script') continue;
@@ -1151,7 +1157,7 @@ export function enumerateScriptStates(
         ...nestedStatePath(node),
         bindingFindings: [finding],
       });
-      const inspected = invocationInput(invoke);
+      const inspected = invocationInput(invoke, initial);
       if ('error' in inspected) {
         out.push(
           malformed(
@@ -2069,12 +2075,14 @@ const sentinelFor = (field: string): string => `«${field}»`;
  */
 export function probeContextReads(
   inputFn: (arg: { context: Record<string, unknown> }) => unknown,
+  /** The machine's initial context, so a typed field does not truncate the trace. */
+  initial: Record<string, unknown> = {},
 ): string[] {
   const reads = new Set<string>();
-  const context = new Proxy({} as Record<string, unknown>, {
-    get(_target, prop) {
+  const context = new Proxy({ ...initial } as Record<string, unknown>, {
+    get(target, prop) {
       if (typeof prop === 'string') reads.add(prop);
-      return undefined;
+      return Reflect.get(target, prop) as unknown;
     },
     has() {
       return true;
@@ -2107,6 +2115,130 @@ function ordinaryContext(reads: readonly string[]): Record<string, unknown> {
   );
 }
 
+/**
+ * The machine's resolved initial context (verification-5): a literal record, or
+ * the config's factory resolved with the declared initial input, so a typed
+ * context field an ordinary turn reads keeps its initial shape instead of a
+ * string sentinel. Returns undefined when no initial snapshot can be produced
+ * without running the machine — the caller then degrades to sentinels alone.
+ */
+function initialMachineContext(
+  config: MachineConfigLike,
+): Record<string, unknown> | undefined {
+  const declared = config.context;
+  if (declared === undefined) return {};
+  if (typeof declared === 'object' && declared !== null) {
+    return { ...(declared as Record<string, unknown>) };
+  }
+  if (typeof declared !== 'function') return undefined;
+  try {
+    const resolved = (
+      declared as (arg: {
+        input: Record<string, unknown>;
+        spawn: () => undefined;
+        self: undefined;
+        event: { type: string };
+      }) => unknown
+    )({
+      input: {},
+      spawn: () => undefined,
+      self: undefined,
+      event: { type: 'xstate.init' },
+    });
+    return typeof resolved === 'object' && resolved !== null
+      ? { ...(resolved as Record<string, unknown>) }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The context an ordinary-turn probe drives an `invoke.input` thunk with: the
+ * machine's initial context, overlaid with one string sentinel per traced read
+ * whose initial value is absent or itself a string, and never a Boss-reply
+ * field (verification-5).
+ */
+function ordinaryTurnContext(
+  reads: readonly string[],
+  initial: Record<string, unknown> | undefined,
+  /** Traces the Boss-reply fields too, for wiring capture rather than a turn. */
+  includeBossFields = false,
+): Record<string, unknown> {
+  if (initial === undefined) {
+    return includeBossFields ? sentinelContext(reads) : ordinaryContext(reads);
+  }
+  const context: Record<string, unknown> = { ...initial };
+  if (!includeBossFields) {
+    for (const field of BOSS_CONTEXT_FIELDS) delete context[field];
+  }
+  for (const field of reads) {
+    if (!includeBossFields && BOSS_CONTEXT_FIELDS.includes(field)) continue;
+    const current = context[field];
+    if (current === undefined || typeof current === 'string') {
+      context[field] = sentinelFor(field);
+    }
+  }
+  return context;
+}
+
+// Input fields the composition contract itself owns: a placeholder naming one
+// of them relays no runtime value, so the probe never overwrites it.
+const CONTRACT_INPUT_FIELDS = [
+  'prompt',
+  'result',
+  'stateId',
+  'sourceItem',
+  'role',
+  'player',
+  ...BOSS_CONTEXT_FIELDS,
+];
+
+/** The canonical field a `<kebab-token>` placeholder relays: its segments joined camel-case. */
+function placeholderField(token: string): string {
+  const segments = token.replace(/^<|>$/g, '').split('-');
+  return segments
+    .map((segment, index) =>
+      index === 0
+        ? segment
+        : segment.charAt(0).toUpperCase() + segment.slice(1),
+    )
+    .join('');
+}
+
+/**
+ * Overlays one string sentinel on every placeholder-derived input field the
+ * prompt relays, so a field the machine's initial context leaves empty or
+ * derives through a typed value still evidences substitution (verification-5).
+ * Returns the probed input and the sentinel field names it carries.
+ */
+function withPlaceholderValues(
+  state: CaptainState,
+  input: unknown,
+): { input: unknown; fields: string[] } {
+  if (typeof input !== 'object' || input === null) return { input, fields: [] };
+  const record = input as Record<string, unknown>;
+  const probed: Record<string, unknown> = { ...record };
+  const fields: string[] = [];
+  for (const token of placeholdersIn(state.prompt)) {
+    const field = placeholderField(token);
+    if (field === '' || CONTRACT_INPUT_FIELDS.includes(field)) continue;
+    if (typeof record[field] !== 'string') continue;
+    probed[field] = sentinelFor(field);
+    if (!fields.includes(field)) fields.push(field);
+  }
+  return { input: probed, fields };
+}
+
+/** Every canonical local role the artifact's player states declare (verification-1). */
+function declaredLocalRoles(config: MachineConfigLike): string[] {
+  const roles = new Set<string>();
+  for (const state of enumerateCaptainStates(config)) {
+    if (state.role !== undefined) roles.add(state.role);
+  }
+  return [...roles].sort();
+}
+
 function carriesSentinel(value: unknown, sentinel: string): boolean {
   try {
     return (JSON.stringify(value) ?? '').includes(sentinel);
@@ -2124,13 +2256,16 @@ export function capturePromptContract(
   config: MachineConfigLike,
 ): PromptContractRow[] {
   const rows: PromptContractRow[] = [];
+  const initial = initialMachineContext(config);
   for (const binding of enumerateCaptainBindings(config)) {
     const { state, inputFn } = binding;
     if (typeof inputFn !== 'function') continue;
-    const reads = probeContextReads(inputFn);
+    const reads = probeContextReads(inputFn, initial);
     const wires: Record<string, string[]> = {};
     try {
-      const input = inputFn({ context: sentinelContext(reads) });
+      const input = inputFn({
+        context: ordinaryTurnContext(reads, initial, true),
+      });
       if (typeof input === 'object' && input !== null) {
         for (const [key, value] of Object.entries(input)) {
           const carried = reads.filter((field) =>
@@ -2167,17 +2302,19 @@ export function deriveSubstitutions(
   actor?: CaptainState['actor'],
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
+  const roles = declaredLocalRoles(config);
+  const initial = initialMachineContext(config);
   for (const binding of enumerateCaptainBindings(config)) {
     const { state, inputFn } = binding;
     if (actor !== undefined && state.actor !== actor) continue;
     if (typeof inputFn !== 'function') continue;
     try {
-      const reads = probeContextReads(inputFn);
-      const composed = composeForState(
-        compose,
+      const reads = probeContextReads(inputFn, initial);
+      const probed = withPlaceholderValues(
         state,
-        inputFn({ context: ordinaryContext(reads) }),
+        inputFn({ context: ordinaryTurnContext(reads, initial) }),
       );
+      const composed = composeForState(compose, state, probed.input, roles);
       if (typeof composed !== 'string') {
         out[state.stateId] = [];
         continue;
@@ -2188,7 +2325,12 @@ export function deriveSubstitutions(
       // hide valid evidence, while merely deleting a token still cannot
       // masquerade as substitution.
       const evidenced = new Set<string>();
-      const promptReads = promptSentinelFields(state, reads);
+      const promptReads = promptSentinelFields(
+        state,
+        reads,
+        probed.fields,
+        roles,
+      );
       for (const line of state.prompt.split('\n')) {
         for (const token of matchPromptBody(line, composed, promptReads)
           ?.substitutions ?? []) {
@@ -2220,9 +2362,18 @@ export function checkPromptComposition(opts: {
   actor?: CaptainState['actor'];
   /** Grounded linked-artifact schema for otherwise ambiguous direct Captain states. */
   artifactSchema?: 1 | 3;
+  /** Collects observations that degrade the probe without failing the contract. */
+  diagnostics?: string[];
 }): string[] {
   const findings: string[] = [];
   const controller = isControllerMachine(opts.config);
+  const roles = declaredLocalRoles(opts.config);
+  const initial = initialMachineContext(opts.config);
+  if (initial === undefined) {
+    opts.diagnostics?.push(
+      'the machine has no resolvable initial context; ordinary-turn input is synthesized from context sentinels alone',
+    );
+  }
   const schemaResolution = resolveArtifactSchemaForVerification({
     config: opts.config,
     ...(opts.artifactSchema === undefined
@@ -2243,17 +2394,18 @@ export function checkPromptComposition(opts: {
     const { state, inputFn } = binding;
     if (opts.actor !== undefined && state.actor !== opts.actor) continue;
     if (typeof inputFn !== 'function') continue;
-    const reads = probeContextReads(inputFn);
-    const promptReads = promptSentinelFields(state, reads);
+    const reads = probeContextReads(inputFn, initial);
     const substituted = substitutions[state.stateId] ?? [];
 
     let ordinary: string;
+    let promptReads: string[];
     try {
-      ordinary = composeForState(
-        opts.compose,
+      const probed = withPlaceholderValues(
         state,
-        inputFn({ context: ordinaryContext(reads) }),
+        inputFn({ context: ordinaryTurnContext(reads, initial) }),
       );
+      promptReads = promptSentinelFields(state, reads, probed.fields, roles);
+      ordinary = composeForState(opts.compose, state, probed.input, roles);
       if (typeof ordinary !== 'string') {
         throw new Error(`${composerName} returned a non-string value`);
       }
@@ -2326,18 +2478,23 @@ export function checkPromptComposition(opts: {
     let continuation: string;
     let input: unknown;
     try {
-      input = inputFn({
-        context: {
-          ...ordinaryContext(reads),
-          pendingBossQuestion,
-          bossReply: reply,
-          pendingBossQuestions: {
-            [state.stateId]: pendingBossQuestion,
+      const probed = withPlaceholderValues(
+        state,
+        inputFn({
+          context: {
+            ...ordinaryTurnContext(reads, initial),
+            pendingBossQuestion,
+            bossReply: reply,
+            pendingBossQuestions: {
+              [state.stateId]: pendingBossQuestion,
+            },
+            bossReplies: { [state.stateId]: reply },
           },
-          bossReplies: { [state.stateId]: reply },
-        },
-      });
-      continuation = composeForState(opts.compose, state, input);
+        }),
+      );
+      input = probed.input;
+      promptReads = promptSentinelFields(state, reads, probed.fields, roles);
+      continuation = composeForState(opts.compose, state, input, roles);
       if (typeof continuation !== 'string') {
         throw new Error(`${composerName} returned a non-string value`);
       }
@@ -2410,16 +2567,20 @@ type PromptComposer = (
 function promptSentinelFields(
   state: CaptainState,
   reads: readonly string[],
+  placeholderFields: readonly string[],
+  declaredRoles: readonly string[],
 ): string[] {
+  const fields = [...reads, ...placeholderFields];
   return state.role === undefined
-    ? [...reads]
-    : [...reads, `promptIdentity:${state.role}`];
+    ? fields
+    : [...fields, ...declaredRoles.map((role) => `promptIdentity:${role}`)];
 }
 
 function composeForState(
   compose: PromptComposer,
   state: CaptainState,
   input: unknown,
+  declaredRoles: readonly string[],
 ): string {
   // Schema-1 composers and the shared default composer use their second
   // positional argument as a placeholder-field map. A callable proxy with a
@@ -2432,9 +2593,12 @@ function composeForState(
         `prompt identity lookup used role ${JSON.stringify(roleId)} for a direct-Captain or historical state`,
       );
     }
-    if (roleId !== state.role) {
+    // A prompt may name any declared role's identity — a Coder prompt reaches
+    // the Reviewer's `<reviewer-llm>` — so only an undeclared role is drift
+    // (link.md, "Player prompt composition").
+    if (!declaredRoles.includes(roleId)) {
       throw new Error(
-        `prompt identity lookup used role ${JSON.stringify(roleId)} instead of canonical local role ${JSON.stringify(state.role)}`,
+        `prompt identity lookup used undeclared role ${JSON.stringify(roleId)}; the artifact declares ${JSON.stringify(declaredRoles)}`,
       );
     }
     return sentinelFor(`promptIdentity:${roleId}`);
@@ -3171,6 +3335,8 @@ interface ComposerInspection {
   substitutions?: Record<string, string[]>;
   /** Link-contract findings; empty when the composer conforms. */
   findings: string[];
+  /** Observations that degraded the probe without failing the contract. */
+  diagnostics: string[];
 }
 
 /** What the prompt-contract checks observe on one linked module. */
@@ -3256,10 +3422,11 @@ async function inspectLinkedPromptContract(opts: {
     const exportName = COMPOSER_EXPORTS[actor];
     const compose = linked._internal?.[exportName];
     if (typeof compose !== 'function') {
-      composers.push({ actor, exportName, findings: [] });
+      composers.push({ actor, exportName, findings: [], diagnostics: [] });
       continue;
     }
     const typedCompose = compose as (input: unknown) => string;
+    const diagnostics: string[] = [];
     composers.push({
       actor,
       exportName,
@@ -3269,7 +3436,9 @@ async function inspectLinkedPromptContract(opts: {
         compose: typedCompose,
         actor,
         ...(artifactSchema === undefined ? {} : { artifactSchema }),
+        diagnostics,
       }),
+      diagnostics,
     });
   }
   return {
@@ -3391,6 +3560,9 @@ export async function emitPromptContractTest(opts: {
     }
     substitutions[inspected.actor] = inspected.substitutions;
     diagnostics.push(
+      ...inspected.diagnostics.map(
+        (diagnostic) => `prompt contract: ${diagnostic}`,
+      ),
       ...inspected.findings.map((finding) => `prompt contract: ${finding}`),
     );
   }
