@@ -929,18 +929,27 @@ function compileStep(
 /**
  * The DR-029 gate over one text-to-GEARS phase's live target: the deterministic
  * conservation findings against the Source that phase reads (phase-execution-51,
- * verification-25). An unreadable or malformed pair is itself a finding, so the
- * gate never throws into the executor it guards.
+ * verification-25). An artifact that is not there yet leaves the verdict to the
+ * generic target check, and a malformed Source is itself a finding, so the gate
+ * never throws into the executor it guards.
  */
 async function sourceFidelityFindings(
   source: string,
   target: string,
 ): Promise<readonly string[]> {
+  let sourceText: string;
+  let gearsText: string;
   try {
-    const [sourceText, gearsText] = await Promise.all([
+    [sourceText, gearsText] = await Promise.all([
       readFile(source, 'utf8'),
       readFile(target, 'utf8'),
     ]);
+  } catch {
+    // An artifact the performing call has not written is the generic target
+    // check's business (phase-execution-4), not a conservation finding.
+    return [];
+  }
+  try {
     return checkSourceGearsContract(sourceText, gearsText);
   } catch (error) {
     return [`Source fidelity could not be checked: ${messageOf(error)}`];

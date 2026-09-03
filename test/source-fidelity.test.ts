@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { createCompiledExecutor } from '../src/compiled-executor.js';
 import type { PhaseExecutor } from '../src/execution.js';
 import {
   createInterpretedExecutor,
@@ -15,6 +16,7 @@ import {
 } from '../src/interpreter.js';
 import { createReviewingAgent } from '../src/reviewing-agent.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
+import { checkSourceGearsContract } from '../src/verify-source.js';
 
 const textToGears = `## Formats
 
@@ -115,41 +117,51 @@ describe('text-to-GEARS Source-fidelity gate (phase-execution-51, phase-executio
     expect(result).toMatchObject({ ok: true, outputs: [metaTarget] });
   });
 
+  /** A Coder that writes the queued artifacts, correcting on the second call. */
+  const queuedCoder = (
+    writes: string[],
+    calls: AgentRunRequest[],
+    artifact: string,
+  ): AgentClient => ({
+    async run(request) {
+      calls.push(request);
+      const content = writes.shift();
+      if (content === undefined) throw new Error('unexpected Coder call');
+      await writeFile(artifact, content);
+      return calls.length === 1
+        ? { status: 'success', text: 'wrote the gears' }
+        : {
+            status: 'success',
+            text: JSON.stringify({
+              dispositions: [
+                {
+                  finding: 1,
+                  decision: 'accept',
+                  reason: 'dropped the invented line',
+                },
+              ],
+              result: 'conserved the gears',
+            }),
+          };
+    },
+  });
+
+  const cleanReviewer = (calls: AgentRunRequest[]): AgentClient => ({
+    async run(request) {
+      calls.push(request);
+      return { status: 'success', text: 'NO_FINDINGS' };
+    },
+  });
+
   it('relays a finding to the Coder in place of the Reviewer call, then reviews the repair', async () => {
-    const writes = [INVENTED, CONSERVANT];
     const coderCalls: AgentRunRequest[] = [];
-    const coder: AgentClient = {
-      async run(request) {
-        coderCalls.push(request);
-        const content = writes.shift();
-        if (content === undefined) throw new Error('unexpected Coder call');
-        await writeFile(target, content);
-        return coderCalls.length === 1
-          ? { status: 'success', text: 'wrote the gears' }
-          : {
-              status: 'success',
-              text: JSON.stringify({
-                dispositions: [
-                  {
-                    finding: 1,
-                    decision: 'accept',
-                    reason: 'dropped the invented line',
-                  },
-                ],
-                result: 'conserved the gears',
-              }),
-            };
-      },
-    };
     const reviewerCalls: AgentRunRequest[] = [];
-    const reviewer: AgentClient = {
-      async run(request) {
-        reviewerCalls.push(request);
-        return { status: 'success', text: 'NO_FINDINGS' };
-      },
-    };
+    const reviewer = cleanReviewer(reviewerCalls);
     const executor = createInterpretedExecutor({
-      agent: createReviewingAgent({ coder, reviewer: () => reviewer }),
+      agent: createReviewingAgent({
+        coder: queuedCoder([INVENTED, CONSERVANT], coderCalls, target),
+        reviewer: () => reviewer,
+      }),
     });
 
     const result = await runSlc(['flow', source], deps(executor));
@@ -160,5 +172,86 @@ describe('text-to-GEARS Source-fidelity gate (phase-execution-51, phase-executio
     // The Reviewer judged only the repaired artifact.
     expect(reviewerCalls).toHaveLength(1);
     expect(await readFile(target, 'utf8')).toBe(CONSERVANT);
+  });
+
+  it('relays a finding through a compiled performing Captain call (phase-execution-25)', async () => {
+    const compiledTarget = join(workDir, 'compiled.gears.md');
+    const definitionPath = join(pipelineDir, 'text2gears.md');
+    const state = {
+      value: 'done',
+      activeStateIds: ['done'],
+      tags: [],
+      status: 'done',
+      quiescent: true,
+      stateId: 'done',
+    };
+    // A roleless schema-3 artifact performs through one direct Captain call:
+    // the same call the reviewed transport wraps in production.
+    let ports: {
+      callCaptain: (
+        prompt: string,
+        signal: AbortSignal,
+        options: { visibility: 'visible'; resume: false },
+      ) => Promise<{ status: string; finalText?: string; error?: string }>;
+    };
+    const factory = () => ({
+      async init(session: { ports: typeof ports }) {
+        ports = session.ports;
+      },
+      async handleBossInput({ signal }: { text: string; signal: AbortSignal }) {
+        const captain = await ports.callCaptain(
+          'Compile the Source into GEARS.',
+          signal,
+          { visibility: 'visible', resume: false },
+        );
+        return captain.status === 'ok'
+          ? { outcome: 'terminal', state, stateDescription: 'compiled' }
+          : { outcome: 'failed', state, error: captain.error };
+      },
+      async dispose() {},
+    });
+    Object.defineProperty(factory, 'compat', {
+      value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+
+    const coderCalls: AgentRunRequest[] = [];
+    const reviewerCalls: AgentRunRequest[] = [];
+    const reviewer = cleanReviewer(reviewerCalls);
+    const captainTransport = createReviewingAgent({
+      coder: queuedCoder([INVENTED, CONSERVANT], coderCalls, compiledTarget),
+      reviewer: () => reviewer,
+    });
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: workDir,
+      runtimeContract: 'composed-v3',
+      player: captainTransport,
+      judge: captainTransport,
+      loadFactory: async () => factory as never,
+    });
+
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath,
+        source,
+        target: compiledTarget,
+        mechanicalReview: async () =>
+          checkSourceGearsContract(
+            await readFile(source, 'utf8'),
+            await readFile(compiledTarget, 'utf8'),
+          ),
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(coderCalls).toHaveLength(2);
+    expect(coderCalls[1].prompt).toContain(`FINDINGS:\n1. ${INVENTED_FINDING}`);
+    expect(reviewerCalls).toHaveLength(1);
+    expect(await readFile(compiledTarget, 'utf8')).toBe(CONSERVANT);
   });
 });

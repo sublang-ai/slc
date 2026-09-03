@@ -322,6 +322,12 @@ export function createCompiledExecutor(opts: {
               ).join('\n'),
             }
           : {}),
+        // The host's deterministic gate rides the performing Captain call, so
+        // a reviewed transport relays its findings to the Coder in place of a
+        // Reviewer call (DR-029, phase-execution-25, phase-execution-51).
+        ...(request.kind === 'compile' && request.mechanicalReview !== undefined
+          ? { mechanicalReview: request.mechanicalReview }
+          : {}),
         onStatus: opts.onStatus,
       });
       // Hand the runtime only Playbook's ports — never the host-only
