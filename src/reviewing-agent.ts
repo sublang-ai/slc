@@ -14,9 +14,14 @@
  */
 
 import { messageOf } from './errors.js';
-import type { AgentClient, AgentRunResult } from './interpreter.js';
+import type {
+  AgentClient,
+  AgentRunRequest,
+  AgentRunResult,
+} from './interpreter.js';
 
 const MAX_REVIEWER_CALLS = 3;
+const DEFAULT_REVIEW_RETRY_DELAY_MS = 15_000;
 
 /** Options for {@link createReviewingAgent}. */
 export interface ReviewingAgentOptions {
@@ -26,14 +31,20 @@ export interface ReviewingAgentOptions {
   reviewer: () => AgentClient;
   /** Optional Reviewer model; omitted to use that adapter's default. */
   reviewerModel?: string;
+  /** Pause before the single retry of an errored Reviewer call; tests pass 0. */
+  reviewRetryDelayMs?: number;
 }
 
 /**
  * Decorates a Coder client with the DR-022 review/fix/re-review protocol.
  *
  * The verdict is read from the end of the Reviewer reply and narration before
- * it is ignored. Reviewer failures and malformed verdicts fail closed with a
- * stable error diagnostic that retains the latest Coder text and resume token.
+ * it is ignored. A Reviewer call that returns an error rather than a verdict is
+ * retried once after a short pause, because an adapter surfaces transient
+ * overload as an error result and a finished Coder phase is too expensive to
+ * discard for one. A repeated Reviewer error, an incompletion, and a malformed
+ * verdict fail closed with a stable error diagnostic that retains the latest
+ * Coder text and resume token.
  */
 export function createReviewingAgent(
   options: ReviewingAgentOptions,
@@ -63,20 +74,30 @@ export function createReviewingAgent(
       let reviewerCalls = 0;
 
       for (;;) {
+        const reviewerRequest: AgentRunRequest = {
+          prompt: buildReviewerPrompt({
+            originalPrompt: request.prompt,
+            coderOutput: coderResult.text,
+            transcript,
+          }),
+          cwd: request.cwd,
+          model: options.reviewerModel,
+          ...(reviewerResume === undefined ? {} : { resume: reviewerResume }),
+          signal: request.signal,
+        };
         let review: AgentRunResult;
         try {
           reviewerCalls++;
-          review = await reviewer.run({
-            prompt: buildReviewerPrompt({
-              originalPrompt: request.prompt,
-              coderOutput: coderResult.text,
-              transcript,
-            }),
-            cwd: request.cwd,
-            model: options.reviewerModel,
-            ...(reviewerResume === undefined ? {} : { resume: reviewerResume }),
-            signal: request.signal,
-          });
+          review = await reviewer.run(reviewerRequest);
+          if (review.status === 'error') {
+            // One bounded retry of the identical call: an adapter reports
+            // transient overload as an error result, and the retry belongs to
+            // the same review call, so it consumes no further review slot.
+            await pause(
+              options.reviewRetryDelayMs ?? DEFAULT_REVIEW_RETRY_DELAY_MS,
+            );
+            review = await reviewer.run(reviewerRequest);
+          }
         } catch (error) {
           return failClosed(
             coderResult,
@@ -151,6 +172,10 @@ export function createReviewingAgent(
       }
     },
   };
+}
+
+async function pause(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 function isReviewable(result: AgentRunResult): boolean {

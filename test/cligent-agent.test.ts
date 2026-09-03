@@ -205,7 +205,7 @@ describe('createCligentAgent stall watchdog (phase-execution-36, phase-execution
     expect(runs).toBe(1); // no retry of the aborted call (phase-execution-12)
   });
 
-  it('preserves a stalled Reviewer diagnostic and does not retry it', async () => {
+  it('preserves a stalled Reviewer diagnostic after its one bounded retry', async () => {
     let reviewerRuns = 0;
     const adapter: AgentAdapter = {
       agent: 'fixture',
@@ -230,6 +230,7 @@ describe('createCligentAgent stall watchdog (phase-execution-36, phase-execution
         },
       },
       reviewer: () => reviewer,
+      reviewRetryDelayMs: 0,
     });
 
     const result = await reviewed.run({
@@ -240,7 +241,9 @@ describe('createCligentAgent stall watchdog (phase-execution-36, phase-execution
     expect(result.status).toBe('error');
     expect(result.text).toContain('Reviewer returned error');
     expect(result.text).toContain('no agent activity for 0s');
-    expect(reviewerRuns).toBe(1);
+    // The transport itself never retries: the second run is the review
+    // wrapper's single bounded retry of the errored Reviewer call.
+    expect(reviewerRuns).toBe(2);
   });
 
   it('arms a referenced timer so a dead transport still trips the watchdog', () => {

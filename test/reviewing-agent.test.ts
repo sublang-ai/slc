@@ -506,7 +506,7 @@ describe('createReviewingAgent (DR-022)', () => {
       text: 'FINDINGS:\n1. real finding\nunrequested epilogue',
     } as AgentRunResult,
   ])(
-    'fails closed with a stable diagnostic on Reviewer failure or malformed verdict',
+    'fails closed with a stable diagnostic on repeated Reviewer failure or malformed verdict',
     async (reviewResult) => {
       const coder = queuedClient([
         {
@@ -515,8 +515,13 @@ describe('createReviewingAgent (DR-022)', () => {
           resumeToken: 'coder-1',
         },
       ]);
-      const reviewer = queuedClient([reviewResult]);
-      const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+      // An error result is retried once; every other case fails on the first.
+      const reviewer = queuedClient([reviewResult, reviewResult]);
+      const agent = createReviewingAgent({
+        coder,
+        reviewer: () => reviewer,
+        reviewRetryDelayMs: 0,
+      });
 
       const result = await agent.run(request());
       expect(result).toMatchObject({
@@ -528,6 +533,84 @@ describe('createReviewingAgent (DR-022)', () => {
       expect(result.text).toContain(reviewResult.text);
     },
   );
+
+  it('retries an errored Reviewer call once and continues on its verdict', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'wrote target', resumeToken: 'coder-1' },
+    ]);
+    const reviewer = queuedClient([
+      { status: 'error', text: 'API Error: 529 Overloaded' },
+      { status: 'success', text: 'NO_FINDINGS', resumeToken: 'reviewer-1' },
+    ]);
+    const agent = createReviewingAgent({
+      coder,
+      reviewer: () => reviewer,
+      reviewRetryDelayMs: 0,
+    });
+
+    await expect(agent.run(request())).resolves.toEqual({
+      status: 'success',
+      text: 'wrote target',
+      resumeToken: 'coder-1',
+    });
+    expect(reviewer.calls).toHaveLength(2);
+    expect(reviewer.calls[1].prompt).toBe(reviewer.calls[0].prompt);
+    expect(reviewer.calls.map((call) => call.resume)).toEqual([false, false]);
+    expect(coder.calls).toHaveLength(1);
+  });
+
+  it('fails closed with the second error when the retried Reviewer errors again', async () => {
+    const coder = queuedClient([
+      {
+        status: 'success',
+        text: 'latest coder report',
+        resumeToken: 'coder-1',
+      },
+    ]);
+    const reviewer = queuedClient([
+      { status: 'error', text: 'first overload' },
+      { status: 'error', text: 'second overload' },
+    ]);
+    const agent = createReviewingAgent({
+      coder,
+      reviewer: () => reviewer,
+      reviewRetryDelayMs: 0,
+    });
+
+    const result = await agent.run(request());
+
+    expect(reviewer.calls).toHaveLength(2);
+    expect(result).toMatchObject({ status: 'error', resumeToken: 'coder-1' });
+    expect(result.text).toContain('Reviewer returned error: second overload');
+    expect(result.text).not.toContain('first overload');
+    expect(result.text).toContain('latest Coder output: latest coder report');
+  });
+
+  it('spends no review slot on the retry of an errored Reviewer call', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'initial' },
+      { status: 'success', text: correctionEnvelope('correction one') },
+      { status: 'success', text: correctionEnvelope('correction two') },
+    ]);
+    const reviewer = queuedClient([
+      { status: 'error', text: 'transient overload' },
+      { status: 'success', text: 'FINDINGS:\n1. first issue' },
+      { status: 'success', text: 'FINDINGS:\n1. second issue' },
+      { status: 'success', text: 'NO_FINDINGS' },
+    ]);
+    const agent = createReviewingAgent({
+      coder,
+      reviewer: () => reviewer,
+      reviewRetryDelayMs: 0,
+    });
+
+    await expect(agent.run(request())).resolves.toEqual({
+      status: 'success',
+      text: 'correction two',
+    });
+    expect(reviewer.calls).toHaveLength(4);
+    expect(coder.calls).toHaveLength(3);
+  });
 
   it('returns a failing or BLOCKED correction as the latest Coder result without another review', async () => {
     for (const correction of [
