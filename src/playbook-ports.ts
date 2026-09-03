@@ -16,11 +16,14 @@
  * one whose source-owned options carry no tool restriction — additionally
  * carries the host workspace contract appended to its composed prompt, because
  * the linked artifact is host-agnostic and only the host owns the request's
- * workspace paths (phase-execution-34). Exact `playbook.trace` payloads stay out of ordinary
+ * workspace paths (phase-execution-34), and carries the host's deterministic
+ * mechanical review, which its reviewed transport relays in place of a Reviewer
+ * call (DR-029). Exact `playbook.trace` payloads stay out of ordinary
  * diagnostics (DR-010, DR-011). The adapter holds no host specifics beyond the
  * injected transports. See specs/packages/phase-execution.md.
  */
 
+import type { MechanicalReview } from './execution.js';
 import type { AgentClient, AgentRunResult } from './interpreter.js';
 import type {
   CaptainCallOptions,
@@ -73,6 +76,13 @@ export function createPlaybookPorts(opts: {
    * carry it.
    */
   updateContext?: string;
+  /**
+   * Host-owned deterministic review of what a transformation-performing direct
+   * Captain call produces (DR-029, phase-execution-25). It rides that call, so a
+   * reviewed transport relays its findings to the Coder in place of a Reviewer
+   * call; routing-only Captain and judge calls carry none.
+   */
+  mechanicalReview?: MechanicalReview;
   /**
    * Live status sink (DR-019, phase-execution-25): when set, human status and non-trace
    * operational telemetry stream here as they occur instead of being collected
@@ -138,7 +148,11 @@ export function createPlaybookPorts(opts: {
           cwd: opts.cwd,
           resume: isolation.resume,
           ...(isolation.allowedTools === undefined
-            ? {}
+            ? // Only the performing call produces the artifact the host's
+              // deterministic gate reviews (DR-029, phase-execution-25).
+              opts.mechanicalReview === undefined
+              ? {}
+              : { mechanicalReview: opts.mechanicalReview }
             : { allowedTools: isolation.allowedTools }),
           signal,
         });
