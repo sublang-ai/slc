@@ -10,7 +10,7 @@ The evolving runtime boundary is settled by [DR-010](../decisions/010-playbook-r
 Playbook 10's roleless schema-3 host boundary is current: its contract follows [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), activated by [DR-027](../decisions/027-complete-playbook-10-activation.md).
 Under [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md), that schema-3 generation is selected by the installed engine's declared contract rather than by an exact release, and compiled execution relays the definition text at run time.
 Direct Captain control-call isolation is extended by [DR-012](../decisions/012-playbook-routing-control-separation.md).
-A text-to-GEARS phase additionally passes the deterministic Source-fidelity gate of [DR-029](../decisions/029-source-fidelity-gate.md) before any Reviewer judges its output.
+A text-to-GEARS phase additionally passes the deterministic Source-fidelity gate of [DR-029](../decisions/029-source-fidelity-gate.md) before any Reviewer judges its output, and a `playbook` link phase the link-fidelity gate of [DR-030](../decisions/030-link-fidelity-gate.md).
 Generic pipeline mechanics are specified in the `pipeline` package.
 Verification uses integration and system acceptance over the execution boundary, interpreted and compiled execution, and pin-driven selection, exercising the `slc` command with faked agent transports and fixture compiled artifacts.
 Essential project-specific references are `slc`, this project's compiler CLI, and Cligent (`@sublang/cligent` [[1]]), the SDK through which `slc` reaches coding agents.
@@ -122,6 +122,19 @@ Where a compile phase transforms a `text` source into a `gears` target outside t
 | Findings inside a reviewed loop, before that round's Reviewer call | Relay them to the Coder as the numbered `FINDINGS:` list that Reviewer call would have produced, in place of it, and count it as one of the permitted Reviewer calls so the loop's bound is unchanged [[phase-execution-46](#phase-execution-46)]. |
 | No finding | Leave the round unchanged, so a reviewed loop proceeds to its Reviewer call. |
 | Findings on a phase result the run would otherwise accept | Fail the phase closed with the findings as its diagnostic [[phase-execution-9](#phase-execution-9)]. |
+
+### Link-fidelity gate
+
+#### phase-execution-53
+
+Where a link phase links exactly one `fsm` object into Playbook's `playbook` linked module [[pipeline-11](pipeline.md#pipeline-11)], when its interpreted [[phase-execution-11](#phase-execution-11)] or compiled [[phase-execution-25](#phase-execution-25)] performing agent returns a result, the slc command shall check that live linked module against that FSM for link fidelity [[verification-27](verification.md#verification-27)] and dispose of the findings, the reserved `slc` meta-pipeline [[self-hosting-2](self-hosting.md#self-hosting-2)] included ([DR-030](../decisions/030-link-fidelity-gate.md)):
+
+| Case | Required disposition |
+| --- | --- |
+| Findings inside a reviewed loop, before that round's Reviewer call | Relay them to the Coder as the numbered `FINDINGS:` list that Reviewer call would have produced, in place of it, and count it as one of the permitted Reviewer calls so the loop's bound is unchanged, exactly as a mechanical Source-fidelity finding is relayed [[phase-execution-51](#phase-execution-51)], [[phase-execution-46](#phase-execution-46)]. |
+| No finding | Leave the round unchanged, so a reviewed loop proceeds to its Reviewer call. |
+| Findings on a link result the run would otherwise accept | Fail the phase closed with the findings as its diagnostic [[phase-execution-9](#phase-execution-9)]. |
+| A linked module the checks cannot import | Dispose of the import diagnostic as a finding, so the Coder receives it rather than the phase failing with an error. |
 
 ### Compiled execution
 
@@ -244,6 +257,10 @@ Where a normalization fixture supplies the entry-phase definition as a read-only
 #### phase-execution-52
 
 Where a fixture `text2gears` phase compiles a Source authoring one fragment and its executor writes a live target, when the phase runs, a target that drops the fragment shall reach the Coder of a reviewed interpreted loop and of a reviewed compiled performing Captain call alike as a numbered `FINDINGS:` correction without any Reviewer call, a conservant correction shall then reach the Reviewer and succeed on `NO_FINDINGS`, findings still present when the third permitted call comes due shall fail closed carrying them, an unreviewed run whose target has findings shall fail that phase with the findings as its diagnostic, and neither a conservant target nor the same phase run under the reserved `slc` meta-pipeline shall report a finding [[phase-execution-51](#phase-execution-51)].
+
+#### phase-execution-54
+
+Where a fixture `playbook` link phase links one FSM object and its executor writes a live linked module, when the link runs, a module whose composer resolves its player-facing identity from a canonical local role other than its state's shall reach the Coder of a reviewed loop as a numbered `FINDINGS:` correction without any Reviewer call, a conformant correction shall then reach the Reviewer and succeed on `NO_FINDINGS`, an unreviewed run whose module has findings shall fail that link with the findings as its diagnostic, and a conformant module shall report no finding [[phase-execution-53](#phase-execution-53)].
 
 ### Compiled-run acceptance
 

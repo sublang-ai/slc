@@ -158,10 +158,11 @@ export function createInterpretedExecutor(opts: {
         cwd: config.cwd,
         model: config.model,
         // The host's deterministic gate rides the call, so a reviewed loop can
-        // relay its findings in place of a Reviewer call (phase-execution-51).
-        ...(request.kind === 'compile' && request.mechanicalReview !== undefined
-          ? { mechanicalReview: request.mechanicalReview }
-          : {}),
+        // relay its findings in place of a Reviewer call for a compile
+        // (phase-execution-51) or a link (phase-execution-53).
+        ...(request.mechanicalReview === undefined
+          ? {}
+          : { mechanicalReview: request.mechanicalReview }),
         signal,
       });
 
