@@ -10,6 +10,7 @@ The evolving runtime boundary is settled by [DR-010](../decisions/010-playbook-r
 Playbook 10's roleless schema-3 host boundary is current: its contract follows [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), activated by [DR-027](../decisions/027-complete-playbook-10-activation.md).
 Under [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md), that schema-3 generation is selected by the installed engine's declared contract rather than by an exact release, and compiled execution relays the definition text at run time.
 Direct Captain control-call isolation is extended by [DR-012](../decisions/012-playbook-routing-control-separation.md).
+A text-to-GEARS phase additionally passes the deterministic Source-fidelity gate of [DR-029](../decisions/029-source-fidelity-gate.md) before any Reviewer judges its output.
 Generic pipeline mechanics are specified in the `pipeline` package.
 Verification uses integration and system acceptance over the execution boundary, interpreted and compiled execution, and pin-driven selection, exercising the `slc` command with faked agent transports and fixture compiled artifacts.
 Essential project-specific references are `slc`, this project's compiler CLI, and Cligent (`@sublang/cligent` [[1]]), the SDK through which `slc` reaches coding agents.
@@ -109,6 +110,18 @@ When interpreting a phase, the slc command shall permit the agent to invoke the 
 #### phase-execution-46
 
 Where an independent Reviewer is configured, when an agent call has no explicit `allowedTools` property and its Coder returns successful non-`BLOCKED` work, the slc command shall create a fresh Reviewer conversation for that performing call whose prompt permits only host-exposed read-only file/search capabilities, warns that shell/network may be unavailable, confines any exposed read-only shell to non-mutating inspection, forbids edits, writes, mutations, and commits, confines inspection to the request's workspace rather than prior or reference artifacts outside it, and guides the Reviewer to treat a twice-evidenced rejection as settled; it shall read the verdict from the end of the Reviewer reply — clean when the last non-blank line is exactly `NO_FINDINGS`, otherwise a findings block running from the last line that is exactly `FINDINGS:` to the end of the reply with consecutive top-level numbered findings and only indented continuation/evidence lines — ignoring narration before the verdict because a Reviewer may preface its verdict with rationale or an adapter may join progress commentary ahead of it, and treating a reply with neither form or a malformed findings block as malformed, relay findings to the Coder for evidenced disposition and minimal root-cause repair, and permit at most three Reviewer calls, succeeding on `NO_FINDINGS` but failing closed before another correction when the third well-formed verdict still reports findings and including those final well-formed Reviewer findings in the failure diagnostic alongside the latest usable Coder result; it shall take every successful correction's private envelope from the last complete top-level JSON object in the reply — bare or wholly enclosed by one lone unlabeled or `json` Markdown fence, with narration before that object ignored because an adapter may join an agent's progress commentary ahead of its final message, and with a reply carrying no complete object, another fence label, non-whitespace text after that object, or a second complete object separated from it by whitespace alone rejected — whose `dispositions` consecutively cover every current finding with its number, `accept` or `reject` decision, and nonblank reason and whose string `result` is the complete replacement in the original response format, validate and add those decoded fields to the explicit review transcript, replace only the Coder result text with decoded `result` before re-review or phase adjudication, and fail closed on a malformed envelope while retaining the preceding usable Coder result; it shall use a role's continuation token only when that role's immediately preceding result supplies one, include prior transcript in later Coder and Reviewer prompts as fallback, preserve the original cwd, models, and cancellation signal, retry a Reviewer call once after a short pause when it returns an error rather than a verdict and that error is not a stall abort [[phase-execution-36](#phase-execution-36)], fail closed with the Reviewer failure text on a repeated Reviewer error, incompletion, or malformed verdict, return Coder error or incompletion without envelope parsing, treat `BLOCKED` only after decoding a successful correction's `result`, and bypass every call carrying explicit `allowedTools` unchanged ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [[phase-execution-31](#phase-execution-31)]).
+
+### Source-fidelity gate
+
+#### phase-execution-51
+
+Where a compile phase transforms a `text` source into a `gears` target outside the reserved `slc` meta-pipeline [[self-hosting-2](self-hosting.md#self-hosting-2)], when its performing agent returns a result, the slc command shall check the phase's current live target against the source that phase reads for Source fidelity [[verification-25](verification.md#verification-25)] and dispose of the findings ([DR-029](../decisions/029-source-fidelity-gate.md)):
+
+| Case | Required disposition |
+| --- | --- |
+| Findings inside a reviewed loop, before that round's Reviewer call | Relay them to the Coder as the numbered `FINDINGS:` list that Reviewer call would have produced, in place of it, and count it as one of the permitted Reviewer calls so the loop's bound is unchanged [[phase-execution-46](#phase-execution-46)]. |
+| No finding | Leave the round unchanged, so a reviewed loop proceeds to its Reviewer call. |
+| Findings on a phase result the run would otherwise accept | Fail the phase closed with the findings as its diagnostic [[phase-execution-9](#phase-execution-9)]. |
 
 ### Compiled execution
 
@@ -227,6 +240,10 @@ Where reviewed execution uses faked Coder and Reviewer transports, when interpre
 #### phase-execution-48
 
 Where a normalization fixture supplies the entry-phase definition as a read-only reference, when the slc command interprets the generic normalization step, the slc command shall present that reference beside the source in the agent prompt and protect it like a definition, so a fixture mutation of the reference fails the run with a diagnostic naming the changed path [[phase-execution-33](#phase-execution-33)].
+
+#### phase-execution-52
+
+Where a fixture `text2gears` phase compiles a Source authoring one fragment and its executor writes a live target, when the phase runs, a target that drops the fragment shall reach a reviewed loop's Coder as a numbered `FINDINGS:` correction without any Reviewer call, a conservant correction shall then reach the Reviewer and succeed on `NO_FINDINGS`, findings still present when the third permitted call comes due shall fail closed carrying them, an unreviewed run whose target has findings shall fail that phase with the findings as its diagnostic, and neither a conservant target nor the same phase run under the reserved `slc` meta-pipeline shall report a finding [[phase-execution-51](#phase-execution-51)].
 
 ### Compiled-run acceptance
 

@@ -7,10 +7,12 @@
 // module exposes its composer, and transition coverage) plus the DR-028
 // compiled-execution fidelity check — the definition's `## Compiled execution`
 // section, when it declares one, must be preserved verbatim in the bundle's
-// GEARS — and prints findings. The review half of the build-and-review flow
-// (DR-005, DR-007); run `npm run build` first.
+// GEARS — and the DR-029 Source-fidelity check over the Source beside the
+// artifacts (`<basename>.text.md`) or the one `--source` names, and prints
+// findings. The review half of the build-and-review flow (DR-005, DR-007); run
+// `npm run build` first.
 //
-//   node scripts/verify-artifacts.mjs <artifactDir> <basename>
+//   node scripts/verify-artifacts.mjs <artifactDir> <basename> [--source <path>]
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -26,12 +28,16 @@ export const reviewArtifact = async ({
   basename,
   /** Definition to check fidelity against; defaults to the pin's recorded definition, else `<pipelineDir>/<basename>.md`. */
   definition,
+  /** Source to check the GEARS against; defaults to `<artifactDir>/<basename>.text.md` (DR-029). */
+  source,
   verification,
   pinning,
   /** Reads the link target's installed engine declaration (DR-028). */
   contract,
   /** Checks compiled-execution fidelity between definition and GEARS (DR-028). */
   fidelity,
+  /** Checks Source fidelity between the Source and the GEARS (DR-029). */
+  sourceFidelity,
   log = console.log,
 }) => {
   const {
@@ -162,6 +168,30 @@ export const reviewArtifact = async ({
     }
   }
 
+  section('source fidelity');
+  if (sourceFidelity === undefined) {
+    log('not reviewed: no Source-fidelity checker supplied');
+  } else {
+    const sourcePath =
+      source !== undefined
+        ? resolve(source)
+        : join(artifactDir, `${basename}.text.md`);
+    if (!existsSync(sourcePath)) {
+      log(`not applicable: no Source at ${sourcePath}`);
+    } else {
+      const conserved = sourceFidelity.checkSourceGearsContract(
+        readFileSync(sourcePath, 'utf8'),
+        gears,
+      );
+      findings.push(...conserved.map((f) => `source: ${f}`));
+      log(
+        conserved.length === 0
+          ? `ok: the GEARS conserves every fragment ${sourcePath} authors`
+          : conserved.join('\n'),
+      );
+    }
+  }
+
   section('introspection');
   const pins = pinIntrospection(config);
   log(
@@ -255,24 +285,42 @@ if (
   process.argv[1] !== undefined &&
   realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 ) {
-  const [dir, basename] = process.argv.slice(2);
-  if (!dir || !basename) {
+  const argv = process.argv.slice(2);
+  const positional = [];
+  let source;
+  for (let index = 0; index < argv.length; index++) {
+    if (argv[index] === '--source') {
+      source = argv[++index];
+      continue;
+    }
+    positional.push(argv[index]);
+  }
+  const [dir, basename] = positional;
+  if (!dir || !basename || (argv.includes('--source') && !source)) {
     console.error(
-      'usage: node scripts/verify-artifacts.mjs <artifactDir> <basename>',
+      'usage: node scripts/verify-artifacts.mjs <artifactDir> <basename> [--source <path>]',
     );
     process.exitCode = 2;
   } else {
-    const [verification, pinCurrency, pins, runtimeContract, fidelity] =
-      await Promise.all([
-        import('../dist/verify.js'),
-        import('../dist/pin-currency.js'),
-        import('../dist/pins.js'),
-        import('../dist/runtime-contract.js'),
-        import('../dist/compiled-execution.js'),
-      ]);
+    const [
+      verification,
+      pinCurrency,
+      pins,
+      runtimeContract,
+      fidelity,
+      sourceFidelity,
+    ] = await Promise.all([
+      import('../dist/verify.js'),
+      import('../dist/pin-currency.js'),
+      import('../dist/pins.js'),
+      import('../dist/runtime-contract.js'),
+      import('../dist/compiled-execution.js'),
+      import('../dist/verify-source.js'),
+    ]);
     const result = await reviewArtifact({
       dir,
       basename,
+      ...(source === undefined ? {} : { source }),
       verification,
       pinning: {
         evaluatePinFile: pinCurrency.evaluatePinFile,
@@ -284,6 +332,9 @@ if (
       },
       fidelity: {
         checkCompiledExecutionFidelity: fidelity.checkCompiledExecutionFidelity,
+      },
+      sourceFidelity: {
+        checkSourceGearsContract: sourceFidelity.checkSourceGearsContract,
       },
     });
     if (!result.passed) {

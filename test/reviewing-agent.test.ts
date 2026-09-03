@@ -799,6 +799,100 @@ describe('createReviewingAgent (DR-022)', () => {
     expect(result.text).toContain('latest Coder output: correction two');
   });
 
+  it('relays a mechanical finding in place of that round’s Reviewer call (phase-execution-51)', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'wrote the gears', resumeToken: 'coder-0' },
+      {
+        status: 'success',
+        text: correctionEnvelope('conserved the gears'),
+        resumeToken: 'coder-1',
+      },
+    ]);
+    const reviewer = queuedClient([
+      { status: 'success', text: 'NO_FINDINGS', resumeToken: 'reviewer-1' },
+    ]);
+    const rounds = [['CASE-1: prompt line is not an authored fragment'], []];
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    const result = await agent.run(
+      request({ mechanicalReview: async () => rounds.shift() ?? [] }),
+    );
+
+    expect(coder.calls).toHaveLength(2);
+    expect(coder.calls[1].prompt).toContain(
+      'FINDINGS:\n1. CASE-1: prompt line is not an authored fragment',
+    );
+    expect(coder.calls[1].resume).toBe('coder-0');
+    // The Reviewer never judged the rejected artifact; it judged the repair.
+    expect(reviewer.calls).toHaveLength(1);
+    expect(reviewer.calls[0].prompt).toContain(
+      'CASE-1: prompt line is not an authored fragment',
+    );
+    expect(result).toEqual({
+      status: 'success',
+      text: 'conserved the gears',
+      resumeToken: 'coder-1',
+    });
+  });
+
+  it('spends one permitted Reviewer call per mechanical round and fails closed on the third (phase-execution-51)', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'initial', resumeToken: 'coder-0' },
+      {
+        status: 'success',
+        text: correctionEnvelope('correction one'),
+        resumeToken: 'coder-1',
+      },
+      {
+        status: 'success',
+        text: correctionEnvelope('correction two'),
+        resumeToken: 'coder-2',
+      },
+    ]);
+    const reviewer = queuedClient([]);
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    const result = await agent.run(
+      request({
+        mechanicalReview: async () => [
+          'CASE-2: source instruction fragment at line 7 was dropped or changed',
+        ],
+      }),
+    );
+
+    expect(reviewer.calls).toHaveLength(0);
+    expect(coder.calls).toHaveLength(3);
+    expect(result.status).toBe('error');
+    expect(result.text).toContain('third and final review call');
+    expect(result.text).toContain(
+      'unresolved Reviewer findings:\nFINDINGS:\n1. CASE-2: source instruction fragment at line 7 was dropped or changed',
+    );
+    expect(result.text).toContain('latest Coder output: correction two');
+  });
+
+  it('fails closed when the mechanical review cannot run (phase-execution-51)', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'wrote the gears' },
+    ]);
+    const reviewer = queuedClient([]);
+    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+
+    const result = await agent.run(
+      request({
+        mechanicalReview: () => {
+          throw new Error('unclosed markdown instruction fence at line 4');
+        },
+      }),
+    );
+
+    expect(reviewer.calls).toHaveLength(0);
+    expect(result.status).toBe('error');
+    expect(result.text).toContain(
+      'mechanical review could not run: unclosed markdown instruction fence at line 4',
+    );
+    expect(result.text).toContain('latest Coder output: wrote the gears');
+  });
+
   it('creates a separate Reviewer conversation for each performing call', async () => {
     const coder = queuedClient([
       { status: 'success', text: 'one' },
