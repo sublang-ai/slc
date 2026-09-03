@@ -71,21 +71,43 @@ const linkedModule = (role: string): string =>
   ].join('\n');
 
 const CONFORMANT = linkedModule('coder');
+/** `reviewer` is declared by no state of {@link FSM_FIXTURE}. */
 const WRONG_ROLE = linkedModule('reviewer');
 
 const WRONG_ROLE_FINDING =
   'draft: composePlayerPrompt threw on an ordinary turn: ' +
-  'prompt identity lookup used role "reviewer" instead of canonical local role "coder"';
+  'prompt identity lookup used undeclared role "reviewer"; ' +
+  'the artifact declares ["coder"]';
+
+/** The same machine with a second `reviewer` leaf, so both roles are declared. */
+const TWO_ROLE_FSM_FIXTURE = FSM_FIXTURE.replace(
+  '    },\n  },\n};',
+  [
+    '      review: {',
+    "        meta: { playbook: { stateId: 'review', role: 'reviewer' } },",
+    '        invoke: {',
+    "          src: 'player',",
+    '          input: ({ context }: { context: Record<string, unknown> }) => ({',
+    "            stateId: 'review',",
+    "            sourceItem: 'X-2',",
+    "            role: 'reviewer',",
+    "            prompt: 'Review for <audience>.',",
+    "            result: { done: 'the review is written' },",
+    '            audience: context.audience,',
+    '          }),',
+    '        },',
+    '      },',
+    '    },',
+    '  },',
+    '};',
+  ].join('\n'),
+);
 
 describe('linked-module contract checks (verification-27, verification-28)', () => {
   // The maintained bundles ship both their TypeScript sources and the built
   // JavaScript beside them; Node refuses to strip types under node_modules, so
-  // the checks address the built pair. Only `code` currently passes the emitted
-  // prompt-contract checks: `review` and `decide` each compose a Coder-role
-  // prompt through `promptIdentity('reviewer')`, and `dev` composes one from a
-  // context field it assumes is an array — exactly the class of defect DR-030
-  // gates, but present upstream today, so they are excluded here.
-  it.each(['code'])(
+  // the checks address the built pair.
+  it.each(['code', 'review', 'decide', 'dev'])(
     'reports no finding for the maintained %s bundle',
     async (name) => {
       const dir = join(sdlc, `${name}.playbook`);
@@ -110,7 +132,7 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
     }
   });
 
-  it('names the wrong canonical local role a composer resolved its identity from', async () => {
+  it('names an undeclared role a composer resolved its identity from', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-link-contract-'));
     try {
       await writeFile(join(dir, 'case.fsm.ts'), FSM_FIXTURE);
@@ -130,6 +152,22 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
           fsmPath: join(dir, 'case.fsm.ts'),
         }),
       ).toEqual([WRONG_ROLE_FINDING]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts one declared role’s prompt naming another declared role’s identity', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-link-contract-peer-'));
+    try {
+      const fsmPath = join(dir, 'case.fsm.ts');
+      const linkedPath = join(dir, 'case.playbook.ts');
+      await writeFile(fsmPath, TWO_ROLE_FSM_FIXTURE);
+      // The `coder` state's prompt names the declared `reviewer` identity.
+      await writeFile(linkedPath, WRONG_ROLE);
+      expect(await checkLinkedModuleContract({ linkedPath, fsmPath })).toEqual(
+        [],
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

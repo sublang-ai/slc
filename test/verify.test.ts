@@ -2755,7 +2755,7 @@ describe('checkPromptComposition (verification-5)', () => {
     ).toMatch(/exposes a concrete player binding/);
   });
 
-  it('rejects a schema-3 prompt lookup through another role', () => {
+  it('rejects a schema-3 prompt lookup through an undeclared role', () => {
     const compose = (
       raw: unknown,
       promptIdentity: (roleId: string) => string,
@@ -2763,7 +2763,7 @@ describe('checkPromptComposition (verification-5)', () => {
       const input = raw as { prompt: string; topic?: string };
       return input.prompt
         .replaceAll('<topic>', input.topic ?? '<topic>')
-        .replaceAll('<coder-llm>', promptIdentity('reviewer'));
+        .replaceAll('<coder-llm>', promptIdentity('auditor'));
     };
     expect(
       checkPromptComposition({
@@ -2771,7 +2771,173 @@ describe('checkPromptComposition (verification-5)', () => {
         compose,
         actor: 'player',
       }).join('\n'),
-    ).toMatch(/instead of canonical local role "coder"/);
+    ).toMatch(/prompt identity lookup used undeclared role "auditor"/);
+  });
+
+  it('accepts one role’s prompt naming another declared role’s identity', () => {
+    // The Coder prompt reaches the Reviewer's identity, as the maintained
+    // REVIEW and DECIDE bundles do through `<reviewer-llm>`.
+    const compose = (
+      raw: unknown,
+      promptIdentity: (roleId: string) => string,
+    ): string => {
+      const input = raw as {
+        prompt: string;
+        topic?: string;
+        pendingBossQuestion?: { question: string };
+        bossReply?: string;
+      };
+      const body = input.prompt
+        .replaceAll('<topic>', input.topic ?? '<topic>')
+        .replaceAll('<coder-llm>', promptIdentity('reviewer'));
+      return input.pendingBossQuestion && input.bossReply
+        ? [
+            CONTINUATION_PREAMBLE,
+            `Boss question:\n${input.pendingBossQuestion.question}`,
+            `Boss reply:\n${input.bossReply}`,
+            body,
+          ].join('\n\n')
+        : body;
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }),
+    ).toEqual([]);
+  });
+
+  it('drives an ordinary turn with the machine’s typed initial context', () => {
+    const config: MachineConfigLike = {
+      context: ({ input }: { input: { runResults?: string } }) => ({
+        runResults:
+          typeof input.runResults === 'string' ? input.runResults : '',
+        exchanges: [] as { question: string }[],
+      }),
+      states: {
+        work: {
+          meta: { playbook: { stateId: 'work', role: 'analyst' } },
+          invoke: {
+            src: 'player',
+            input: ({ context }) => ({
+              stateId: 'work',
+              role: 'analyst',
+              sourceItem: 'TYPED-1',
+              prompt: '> <discussion-context>\nPlan <topic>.',
+              result: {
+                done: 'The player finished.',
+                needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+              },
+              // Throws when the array-typed field arrives as a string.
+              discussionContext: (context.exchanges as { question: string }[])
+                .map((exchange) => exchange.question)
+                .join('\n'),
+              topic: context.topic,
+              ...(context.pendingBossQuestion && context.bossReply
+                ? {
+                    pendingBossQuestion: context.pendingBossQuestion,
+                    bossReply: context.bossReply,
+                  }
+                : {}),
+            }),
+          },
+        },
+      },
+    };
+    const compose = (raw: unknown): string => {
+      const input = raw as {
+        prompt: string;
+        discussionContext: string;
+        topic?: string;
+        pendingBossQuestion?: { question: string };
+        bossReply?: string;
+      };
+      // An empty relay drops its authored line, as the maintained DEV bundle does.
+      const body = input.prompt
+        .split('\n')
+        .filter(
+          (line) =>
+            !(
+              line === '> <discussion-context>' &&
+              input.discussionContext.length === 0
+            ),
+        )
+        .join('\n')
+        .replaceAll('<discussion-context>', input.discussionContext)
+        .replaceAll('<topic>', input.topic ?? '<topic>');
+      return input.pendingBossQuestion && input.bossReply
+        ? [
+            CONTINUATION_PREAMBLE,
+            `Boss question:\n${input.pendingBossQuestion.question}`,
+            `Boss reply:\n${input.bossReply}`,
+            body,
+          ].join('\n\n')
+        : body;
+    };
+
+    expect(
+      checkPromptComposition({ config, compose, actor: 'player' }),
+    ).toEqual([]);
+    expect(deriveSubstitutions(config, compose, 'player')).toEqual({
+      work: ['<discussion-context>', '<topic>'],
+    });
+  });
+
+  it('degrades to sentinel-only synthesis when no initial context resolves', () => {
+    const config: MachineConfigLike = {
+      context: () => {
+        throw new Error('needs a live actor');
+      },
+      states: {
+        work: {
+          meta: { playbook: { stateId: 'work', role: 'analyst' } },
+          invoke: {
+            src: 'player',
+            input: ({ context }) => ({
+              stateId: 'work',
+              role: 'analyst',
+              sourceItem: 'TYPED-2',
+              prompt: 'Plan <topic>.',
+              result: {
+                done: 'The player finished.',
+                needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+              },
+              topic: context.topic,
+              ...(context.pendingBossQuestion && context.bossReply
+                ? {
+                    pendingBossQuestion: context.pendingBossQuestion,
+                    bossReply: context.bossReply,
+                  }
+                : {}),
+            }),
+          },
+        },
+      },
+    };
+    const compose = (raw: unknown): string => {
+      const input = raw as {
+        prompt: string;
+        topic?: string;
+        pendingBossQuestion?: { question: string };
+        bossReply?: string;
+      };
+      const body = input.prompt.replaceAll('<topic>', input.topic ?? '<topic>');
+      return input.pendingBossQuestion && input.bossReply
+        ? [
+            CONTINUATION_PREAMBLE,
+            `Boss question:\n${input.pendingBossQuestion.question}`,
+            `Boss reply:\n${input.bossReply}`,
+            body,
+          ].join('\n\n')
+        : body;
+    };
+
+    const diagnostics: string[] = [];
+    expect(
+      checkPromptComposition({ config, compose, actor: 'player', diagnostics }),
+    ).toEqual([]);
+    expect(diagnostics.join('\n')).toMatch(/no resolvable initial context/);
   });
 
   it('checks controller prompt text without inventing a Boss continuation', () => {
