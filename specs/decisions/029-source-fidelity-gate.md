@@ -32,3 +32,4 @@ Not every Source authors fragments: the demo Sources are plain prose, leaving pr
 - An invented, dropped, reordered, or unquoted authored fragment is caught deterministically before any agent judges the artifact, and the Coder receives an exact finding to repair.
 - Plain-prose Sources, which author no fragment, pass the check vacuously and keep the compiler's judgment over prompt wording.
 - Semantic item partitioning, condition wording, and result descriptions remain the Reviewer's concern; the gate decides only what is mechanically decidable.
+- A bare relay placeholder names a value the compiler chose to thread, so one the Source never relays passes the gate; whether a relayed value is authored remains the Reviewer's concern.
