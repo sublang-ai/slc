@@ -279,6 +279,20 @@ export function createCompiledExecutor(opts: {
       signal: AbortSignal,
     ): Promise<ExecutorResult> {
       let lastFsmState: string | undefined;
+      // The final text of the latest successful performing call, so an
+      // authored terminal that produced no output still carries the reason
+      // that call gave — exactly as a failed review does (phase-execution-24).
+      let latestPerformingText: string | undefined;
+      const recordPerforming = (result: {
+        status: string;
+        finalText?: string;
+      }): void => {
+        if (result.status !== 'ok') return;
+        const text = result.finalText;
+        if (text !== undefined && text.trim().length > 0) {
+          latestPerformingText = text;
+        }
+      };
       const input = phaseInput(request, opts.runRoot);
       const runtimeContract = opts.runtimeContract ?? 'legacy';
       // The roleless schema-3 host may have to supply the definition the
@@ -333,8 +347,29 @@ export function createCompiledExecutor(opts: {
       // Hand the runtime only Playbook's ports — never the host-only
       // drainDiagnostics, nor a file capability (DR-005, phase-execution-23).
       const ports: CompatiblePlaybookPorts = {
-        callPlayer: adapter.callPlayer,
-        callCaptain: adapter.callCaptain,
+        callPlayer: async (playerId, prompt, signal, options) => {
+          const result = await adapter.callPlayer(
+            playerId,
+            prompt,
+            signal,
+            options,
+          );
+          recordPerforming(result);
+          return result;
+        },
+        callCaptain: async (prompt, signal, options) => {
+          const result = await adapter.callCaptain(prompt, signal, options);
+          // Only a transformation-performing call does the phase's work; a
+          // routing-only Captain carries an explicitly empty allowlist and
+          // decides rather than performs (phase-execution-31).
+          if (
+            Object.getOwnPropertyDescriptor(options, 'allowedTools') ===
+            undefined
+          ) {
+            recordPerforming(result);
+          }
+          return result;
+        },
         callJudge: adapter.callJudge,
         callPlaybook: adapter.callPlaybook,
         emitStatus: adapter.emitStatus,
@@ -359,6 +394,7 @@ export function createCompiledExecutor(opts: {
         identity,
         runtimeContract,
         definition,
+        () => latestPerformingText,
       );
       const result = mapVoidContractFailedState(
         driven,
@@ -420,6 +456,7 @@ async function drivePhase(
   identity: { sessionId: string; playbookId: string },
   runtimeContract: RuntimeContractProfile,
   definition: string | undefined,
+  latestPerformingText: () => string | undefined,
 ): Promise<PhaseResult> {
   let runtime: CompatiblePlaybookRuntime;
   try {
@@ -472,7 +509,12 @@ async function drivePhase(
   }
   const after = await outputState(outputPath);
   const produced = outputWasProduced(before, after);
-  return mapRuntimeOutcome(runResult, produced, runtimeContract);
+  return mapRuntimeOutcome(
+    runResult,
+    produced,
+    runtimeContract,
+    latestPerformingText(),
+  );
 }
 
 async function disposeRuntime(
@@ -664,6 +706,7 @@ function mapRuntimeOutcome(
   result: unknown,
   produced: boolean,
   contract: RuntimeContractProfile,
+  performingText: string | undefined,
 ): PhaseResult {
   if (contract === 'legacy' || contract === 'session-v1') {
     return result === undefined
@@ -687,7 +730,7 @@ function mapRuntimeOutcome(
       diagnostics: ['compiled runtime returned an invalid run result'],
     };
   }
-  return structuredOutputResult(result, produced);
+  return structuredOutputResult(result, produced, performingText);
 }
 
 function phaseSessionIdentity(identity: {
@@ -717,6 +760,7 @@ function legacyOutputResult(produced: boolean): PhaseResult {
 function structuredOutputResult(
   result: CompatiblePlaybookRunResult,
   produced: boolean,
+  performingText: string | undefined,
 ): PhaseResult {
   switch (result.outcome) {
     case 'quiescent':
@@ -726,7 +770,11 @@ function structuredOutputResult(
         : {
             status: 'blocked',
             diagnostics: [
-              `compiled runtime ${result.outcome} without producing output`,
+              `compiled runtime ${result.outcome} without producing output` +
+                ` at state ${reachedState(result)}` +
+                (performingText === undefined
+                  ? ''
+                  : `; latest Coder output: ${performingText}`),
             ],
           };
     case 'no-action':
@@ -755,6 +803,25 @@ function structuredOutputResult(
         diagnostics: ['compiled runtime stopped with an unresolved effect'],
       };
   }
+}
+
+/**
+ * Names the state an outputless turn reached — its id, plus the authored
+ * terminal meaning when the schema-3 result carries one — so a compiled phase
+ * that stopped in an authored final state says which one (phase-execution-24).
+ */
+function reachedState(result: CompatiblePlaybookRunResult): string {
+  const state = result.state;
+  const id =
+    state.stateId ??
+    (typeof state.value === 'string'
+      ? state.value
+      : JSON.stringify(state.value));
+  const description = (result as { stateDescription?: unknown })
+    .stateDescription;
+  return typeof description === 'string' && description.trim().length > 0
+    ? `${id} (${description})`
+    : id;
 }
 
 function playbookIdFromArtifact(artifactPath: string): string {

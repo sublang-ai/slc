@@ -707,6 +707,101 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
     },
   );
 
+  it('names the outputless terminal state and carries the latest performing text (phase-execution-24)', async () => {
+    const target = join(root, 'out.ts');
+    const performed = 'the arms disagree, so the link is not accepted';
+    const captain: AgentClient = {
+      async run(request) {
+        return {
+          status: 'success',
+          text: request.prompt.includes('Link it.') ? performed : 'ROUTE: done',
+        };
+      },
+    };
+    let ports:
+      | {
+          callCaptain(
+            prompt: string,
+            signal: AbortSignal,
+            options: {
+              visibility: 'visible';
+              resume: false;
+              allowedTools?: readonly [];
+            },
+          ): Promise<unknown>;
+        }
+      | undefined;
+    const factory = () => ({
+      async init(value: unknown) {
+        ports = (value as { ports: typeof ports }).ports;
+      },
+      async handleBossInput({ signal }: { signal: AbortSignal }) {
+        // The performing Captain call carries no tool restriction; the
+        // routing-only call that follows decides rather than performs, so its
+        // text must not stand in for the reason (phase-execution-31).
+        await ports?.callCaptain('Link it.', signal, {
+          visibility: 'visible',
+          resume: false,
+        });
+        await ports?.callCaptain('Route it.', signal, {
+          visibility: 'visible',
+          resume: false,
+          allowedTools: [],
+        });
+        // An authored terminal reached without writing the declared output.
+        return {
+          outcome: 'terminal',
+          state: {
+            value: 'rejected',
+            activeStateIds: ['rejected'],
+            tags: [],
+            status: 'done' as const,
+            quiescent: true,
+            stateId: 'rejected',
+          },
+          stateDescription: 'the link was rejected',
+        };
+      },
+      async resumePlaybookCall() {
+        return { outcome: 'no-action', state: structuredState };
+      },
+      async dispose() {},
+    });
+    Object.defineProperty(factory, 'compat', {
+      value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+    const executor = createCompiledExecutor({
+      artifactPath: 'ignored',
+      runRoot: root,
+      runtimeContract: 'composed-v3',
+      player: idleAgent,
+      judge: captain,
+      loadFactory: async () => factory as never,
+    });
+
+    const result = await executor.run(
+      {
+        kind: 'compile',
+        definitionPath: join(root, 'phase.md'),
+        source: 'src.md',
+        target,
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.status).toBe('blocked');
+    const diagnostics = result.diagnostics.join('\n');
+    expect(diagnostics).toContain(
+      'compiled runtime terminal without producing output',
+    );
+    expect(diagnostics).toContain('at state rejected (the link was rejected)');
+    expect(diagnostics).toContain(`latest Coder output: ${performed}`);
+    expect(diagnostics).not.toContain('ROUTE: done');
+  });
+
   it('seeds and drives a compile request through the fixture runtime (phase-execution-29)', async () => {
     const result = await runFixture('hello');
     expect(result.status).toBe('ok');
