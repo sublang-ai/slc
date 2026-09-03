@@ -71,6 +71,7 @@ The host walks the current schedule in order and compares it with the active bui
   It remains while phases only Reuse and is removed immediately before the first Update or Ordinary executor may write.
 - If that run fails, is cancelled, or is interrupted, it publishes no build and leaves no active marker.
   The next eligible invocation therefore runs ordinarily; crash resume and completed-prefix salvage are deliberately not implemented.
+  A failed run that accepted at least one phase reports those phases' live targets and the single-phase invocation that resumes from the last accepted target, so manual salvage needs no recovery state.
 - After every phase and required deterministic post-processing succeeds, the host copies the source and every current phase output into one new build and commits `latest` last.
   A recording failure does not turn a successful compile into a failed compile, but leaves history inactive and reports a diagnostic.
 - `--rebuild` is valid only for canonical full and full-link invocations.

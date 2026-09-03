@@ -1063,6 +1063,32 @@ async function executeSteps(
     );
   };
 
+  /**
+   * The failure result of an eligible run, carrying the salvage hint: a failed
+   * run publishes no build but keeps every accepted live target, so the
+   * diagnostics name them and the single-phase invocation that continues from
+   * the last one (DR-021, incremental-compilation-6).
+   */
+  const stopped = (failedIndex: number): SlcResult => ({
+    ok: false,
+    outputs,
+    diagnostics:
+      state === undefined || state.accepted.length === 0
+        ? diagnostics
+        : [
+            ...diagnostics,
+            ...state.accepted.map(
+              (accepted) =>
+                `accepted phase "${accepted.step.phase}" left its live target at ${accepted.target}`,
+            ),
+            `resume from the last accepted target with: ${resumeCommand(
+              state.pipelineName,
+              steps[failedIndex],
+              state.accepted[state.accepted.length - 1].target,
+            )}`,
+          ],
+  });
+
   for (let index = 0; index < steps.length; index++) {
     const step = steps[index];
     const target = targets[index];
@@ -1106,7 +1132,7 @@ async function executeSteps(
         diagnostics.push(
           formatFailureReport({ phase: step.phase, target, reasons }),
         );
-        return { ok: false, outputs, diagnostics };
+        return stopped(index);
       }
       deps.progress?.({
         kind: 'status',
@@ -1155,7 +1181,7 @@ async function executeSteps(
           reasons: selection.reasons,
         }),
       );
-      return { ok: false, outputs, diagnostics };
+      return stopped(index);
     }
 
     if (mode.mode === 'update') {
@@ -1194,7 +1220,7 @@ async function executeSteps(
     if (!result.ok) {
       fail();
       diagnostics.push(formatFailureReport(result.report));
-      return { ok: false, outputs, diagnostics };
+      return stopped(index);
     }
     diagnostics.push(...result.diagnostics);
     // The DR-029 gate on the accepted result: a reviewed loop already relayed
@@ -1215,7 +1241,7 @@ async function executeSteps(
             reasons: [...findings],
           }),
         );
-        return { ok: false, outputs, diagnostics };
+        return stopped(index);
       }
     }
     // Settle an agent-chosen `.js`/`.ts` link-object edge from the sibling that
@@ -1252,7 +1278,7 @@ async function executeSteps(
             'post-link completion and load integrity are mandatory ' +
             '(pipeline-40, verification-18)',
         );
-        return { ok: false, outputs, diagnostics };
+        return stopped(index);
       }
       if (missing.length > 0) {
         fail();
@@ -1261,7 +1287,7 @@ async function executeSteps(
             `${missing.join(', ')} — an emitted module that cannot load ` +
             'fails the link (verification-18)',
         );
-        return { ok: false, outputs, diagnostics };
+        return stopped(index);
       }
     }
 
@@ -1305,6 +1331,22 @@ async function executeSteps(
   return state === undefined
     ? completed
     : publishIncremental(completed, state, steps);
+}
+
+/**
+ * The single-phase invocation that continues a failed eligible run from its last
+ * accepted live target (DR-021, incremental-compilation-6). `next` is the step
+ * the run stopped at, so a stopped link step resumes through the direct-link
+ * form with that target as its object.
+ */
+function resumeCommand(
+  pipelineName: string,
+  next: PhaseStep,
+  lastTarget: string,
+): string {
+  return next.request.kind === 'link'
+    ? `slc ${pipelineName}.link ${lastTarget} ${next.request.linkTarget}`
+    : `slc ${pipelineName}.${next.phase} ${lastTarget}`;
 }
 
 function stepTarget(step: PhaseStep): string {

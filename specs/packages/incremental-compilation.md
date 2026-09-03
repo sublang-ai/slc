@@ -34,7 +34,12 @@ While a compile phase has a matching record whose current inputs differ and whos
 
 #### incremental-compilation-6
 
-While an eligible run has removed its active marker before executor work [[incremental-compilation-12](#incremental-compilation-12)], when the run fails, is cancelled, or is interrupted, the slc command shall publish no build and shall leave history inactive [[incremental-compilation-17](#incremental-compilation-17)] so the next eligible invocation executes ordinarily.
+While an eligible run has removed its active marker before executor work [[incremental-compilation-12](#incremental-compilation-12)], when the run fails, is cancelled, or is interrupted, the slc command shall publish no build, shall leave history inactive [[incremental-compilation-17](#incremental-compilation-17)] so the next eligible invocation executes ordinarily, and, where at least one scheduled phase was accepted, shall additionally report the salvage the accepted live targets already are — as diagnostics that publish no state and no marker, so manual salvage needs no recovery state:
+
+| Reported line | Content |
+| --- | --- |
+| One per accepted phase, in schedule order | That phase and its live target. |
+| One resume line | The single-phase invocation [[pipeline-9](pipeline.md#pipeline-9)] continuing from the last accepted target, or the direct-link invocation [[pipeline-12](pipeline.md#pipeline-12)] taking that target as its object where the run stopped at the link phase. |
 
 ### Rebuilds and exclusions
 
@@ -164,3 +169,7 @@ While a fixture pipeline has an active build whose phase definition uses a `slc.
 | --- | --- |
 | Presentation | Change only the valid JSON presentation. |
 | Unrelated entry | Add one well-formed entry that is not applicable to a scheduled phase. |
+
+#### incremental-compilation-34
+
+Where a fixture full run accepts its first phase and then fails, when the run reports, its diagnostics shall name that accepted phase with its live target and the exact single-phase invocation resuming from that target — the direct-link invocation naming the link target where the failing step is the link phase — whereas a run failing in its first phase shall add no such diagnostic [[incremental-compilation-6](#incremental-compilation-6)].

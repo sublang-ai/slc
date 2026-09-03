@@ -705,6 +705,79 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
     expect((await loadBuildHistory(artDir))?.build).toBe(2);
   });
 
+  it('reports the accepted phases and the resume command when a later phase fails (incremental-compilation-34)', async () => {
+    const failing = fake([], async (request) => {
+      if (request.kind !== 'compile')
+        throw new Error('unexpected link request');
+      if (request.target.endsWith('.middle.md')) {
+        await writeFile(request.target, 'middle\n');
+        return { status: 'ok', diagnostics: [] };
+      }
+      return { status: 'error', diagnostics: ['fixture failure'] };
+    });
+
+    const result = await runSlc(['flow', source], deps(failing));
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toContain(
+      `accepted phase "text2middle" left its live target at ${join(artDir, 'case.middle.md')}`,
+    );
+    expect(result.diagnostics).toContain(
+      `resume from the last accepted target with: slc flow.middle2final ${join(artDir, 'case.middle.md')}`,
+    );
+    expect(await exists(join(artDir, '.slc', 'latest'))).toBe(false);
+  });
+
+  it('adds no salvage diagnostic when the first phase fails (incremental-compilation-34)', async () => {
+    const failing = fake([], async () => ({
+      status: 'error' as const,
+      diagnostics: ['fixture failure'],
+    }));
+
+    const result = await runSlc(['flow', source], deps(failing));
+
+    expect(result.ok).toBe(false);
+    expect(
+      result.diagnostics.some((diagnostic) =>
+        diagnostic.startsWith('accepted phase'),
+      ),
+    ).toBe(false);
+    expect(
+      result.diagnostics.some((diagnostic) =>
+        diagnostic.startsWith('resume from'),
+      ),
+    ).toBe(false);
+  });
+
+  it('resumes a failed link step through the direct-link form (incremental-compilation-34)', async () => {
+    const linkTarget = join(workDir, 'runtime.ts');
+    await writeFile(join(pipelineDir, 'link.md'), linkPhase);
+    await writeFile(linkTarget, 'runtime one\n');
+    const failing = fake([], async (request) => {
+      if (request.kind === 'link') {
+        return { status: 'error', diagnostics: ['fixture link failure'] };
+      }
+      await writeFile(
+        request.target,
+        request.target.endsWith('.middle.md') ? 'middle\n' : 'final\n',
+      );
+      return { status: 'ok', diagnostics: [] };
+    });
+
+    const result = await runSlc(
+      ['flow', source, '--link', linkTarget],
+      deps(failing),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toContain(
+      `accepted phase "middle2final" left its live target at ${join(artDir, 'case.final.md')}`,
+    );
+    expect(result.diagnostics).toContain(
+      `resume from the last accepted target with: slc flow.link ${join(artDir, 'case.final.md')} ${linkTarget}`,
+    );
+  });
+
   it('makes --rebuild ordinary and publishes a new complete build', async () => {
     await runSlc(['flow', source], deps(fake([])));
     const calls: ExecuteRequest[] = [];
