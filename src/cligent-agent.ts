@@ -188,6 +188,7 @@ export function createCligentAgent(opts: {
       if (watchdog.tripped && status !== 'success') {
         return {
           status: 'error',
+          stalled: true,
           text:
             `agent call stalled: no agent activity for ${formatElapsed(stallMs)}; ` +
             'aborted by the stall watchdog (SLC_STALL_TIMEOUT / stallTimeout)',
