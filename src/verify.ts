@@ -772,6 +772,14 @@ function metadataRole(state: StateLike): unknown {
   return (playbook as { role?: unknown }).role;
 }
 
+/** The published terminal kind a root final state declares, if any. */
+function metadataTerminal(state: StateLike): unknown {
+  if (typeof state.meta !== 'object' || state.meta === null) return undefined;
+  const playbook = (state.meta as { playbook?: unknown }).playbook;
+  if (typeof playbook !== 'object' || playbook === null) return undefined;
+  return (playbook as { terminal?: unknown }).terminal;
+}
+
 function stateIdConsistencyFindings(
   node: StateNodeRef,
   inputStateId: unknown,
@@ -821,6 +829,44 @@ function structuredStateIdentityFindings(
     } else if (isNonEmptyString(configId) && metaId !== configId) {
       findings.push(
         `FSM structured state ${node.statePath}: state.meta.playbook.stateId "${metaId}" does not match state.id "${configId}"`,
+      );
+    }
+  }
+  return findings;
+}
+
+/**
+ * A schema-3 machine publishes each of its own terminal outcomes as
+ * `success` or `failure`, so a caller reads the child's meaning from the
+ * state it reached rather than from its output fields. Only the machine's own
+ * root final states carry that kind: a final inside a parallel region merely
+ * stages the join and publishes no workflow outcome.
+ *
+ * Artifacts compiled before the definition declared the kind carry none at
+ * all, and they are retained rather than rebuilt, so the requirement engages
+ * once the artifact declares one — a partly declared artifact is drift.
+ */
+function terminalKindFindings(
+  nodes: readonly StateNodeRef[],
+  schema3: boolean,
+): string[] {
+  if (!schema3) return [];
+  const finals = nodes.filter(
+    ({ path, state }) => path.length === 1 && state.type === 'final',
+  );
+  if (!finals.some(({ state }) => metadataTerminal(state) !== undefined)) {
+    return [];
+  }
+  const findings: string[] = [];
+  for (const { statePath, state } of finals) {
+    const terminal = metadataTerminal(state);
+    if (terminal === undefined) {
+      findings.push(
+        `FSM final state ${statePath}: state.meta.playbook.terminal is missing while other final states declare it`,
+      );
+    } else if (terminal !== 'success' && terminal !== 'failure') {
+      findings.push(
+        `FSM final state ${statePath}: state.meta.playbook.terminal ${JSON.stringify(terminal)} is neither "success" nor "failure"`,
       );
     }
   }
@@ -1442,13 +1488,15 @@ export function checkGearsFsmConformance(
     );
   }
 
-  findings.push(...structuredStateIdentityFindings(walkStateNodes(config)));
+  const nodes = walkStateNodes(config);
+  findings.push(...structuredStateIdentityFindings(nodes));
   findings.push(...roleContract.findings);
-  const requiresConcurrentRoleSets =
+  const schema3 =
     roleContract.generation === 'schema-3' ||
     controller ||
     options.artifactSchema === 3;
-  if (requiresConcurrentRoleSets) {
+  findings.push(...terminalKindFindings(nodes, schema3));
+  if (schema3) {
     const actual = concurrentRoleSets(options.concurrentRoleSets);
     if (actual === undefined) {
       findings.push('schema-3 FSM exports no valid concurrentRoleSets array');

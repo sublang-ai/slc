@@ -260,13 +260,10 @@ try {
 // committed artifacts, which resolve the engine from this repository's own
 // install. Every home the host resolves points inside the scratch tree, so
 // the check reads, writes, and relocates nothing under the invoking user's
-// home. The host binds only canonical lowercase ASCII local role ids, so a
-// reference whose roles are not canonical — the Chinese set — is expected to
-// be refused by name rather than listed; asserting that refusal pins the gap
-// instead of skipping the stage.
-const CANONICAL_ROLE_ID = /^[a-z][a-z0-9_-]*$/;
+// home. The host binds a canonical local role id in any script, so both
+// references are listed under their own id and neither language is asserted
+// through a refusal.
 const PLACEHOLDER_PLAYER = 'reference.player';
-const uncanonicalRole = roles.find((role) => !CANONICAL_ROLE_ID.test(role));
 const hostRoot = join(repoRoot, 'node_modules', '@sublang', 'playbook');
 const hostScratch = await mkdtemp(join(tmpdir(), 'slc-demo-host-'));
 try {
@@ -320,21 +317,11 @@ try {
       stderr: error.stderr ?? String(error),
     };
   }
-  if (uncanonicalRole === undefined) {
-    report(
-      'installed host validates and lists the entry',
-      listed.ok && listed.stdout.includes(`/${basename}  ${basename}  —  `),
-      (listed.ok ? listed.stdout : listed.stderr).trim().split('\n')[0],
-    );
-  } else {
-    report(
-      'installed host refuses the non-canonical role key by name',
-      !listed.ok &&
-        listed.stderr.includes(uncanonicalRole) &&
-        listed.stderr.includes('canonical lowercase local role id'),
-      listed.stderr.trim().split('\n')[0],
-    );
-  }
+  report(
+    'installed host validates and lists the entry',
+    listed.ok && listed.stdout.includes(`/${basename}  ${basename}  —  `),
+    (listed.ok ? listed.stdout : listed.stderr).trim().split('\n')[0],
+  );
 } catch (error) {
   report('installed host registry validation', false, String(error));
 } finally {
