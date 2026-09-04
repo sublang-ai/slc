@@ -237,6 +237,32 @@ assert.equal(
 );
 assert.doesNotMatch(manifest.scripts['release:check'], /test:acceptance/);
 assert.match(acceptanceSource, /npm run test:acceptance/);
+
+// release-17: the gate isolates every home the installed Playbook host
+// resolves inside its own scratch tree — the shared configuration root, the
+// session state home, and the superseded configuration path the host still
+// relocates a configuration from — writes its configuration under that
+// configuration root, and hands those homes to the host invocation. A gate
+// that isolated only one of them relocated its scratch config into the
+// maintainer's home.
+for (const variable of ['SPEX_HOME', 'XDG_STATE_HOME', 'XDG_CONFIG_HOME']) {
+  assert.match(
+    acceptanceSource,
+    new RegExp(`${variable}: join\\(scratch, '[^']+'\\)`),
+    `the acceptance gate does not root ${variable} in its scratch tree`,
+  );
+}
+assert.match(
+  acceptanceSource,
+  /join\(\s*hostHomes\.SPEX_HOME,\s*'playbook',\s*'playbook\.config\.yaml',?\s*\)/,
+  'the acceptance gate does not write its config under the scratch Spex root',
+);
+assert.match(
+  acceptanceSource,
+  /env: \{ \.\.\.process\.env, \.\.\.hostHomes \}/,
+  'the acceptance gate does not pass the isolated homes to the host',
+);
+
 assert.deepEqual(manifest.scripts.build.split(' && ').slice(0, 2), [
   'rm -rf dist',
   'tsc',

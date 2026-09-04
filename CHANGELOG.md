@@ -136,6 +136,17 @@ and this project adheres to
   regenerated
   ([DR-024](specs/decisions/024-playbook-10-schema-3-adoption.md)).
 
+- **The opt-in acceptance gate stops touching the maintainer's home.** It
+  isolated only `XDG_CONFIG_HOME`, but the installed Playbook host reads
+  its shared configuration under the Spex root and its session store
+  under `XDG_STATE_HOME` — and relocates a configuration found at the
+  former path into that Spex root, which is how a gate run moved its own
+  scratch config into the maintainer's home. The gate now writes its
+  configuration where the host reads it and points `SPEX_HOME`,
+  `XDG_STATE_HOME`, and `XDG_CONFIG_HOME` into the scratch tree, so a run
+  reads, writes, and relocates nothing personal but adapter
+  authentication. The deterministic release audit checks it.
+
 ## [0.7.0] - 2026-09-02
 
 ### Added
