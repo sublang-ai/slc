@@ -12,13 +12,13 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { declaredPlayers, emitEntryModule } from '../src/entry-module.js';
+import { emitEntryModule } from '../src/entry-module.js';
 import {
   createInterpretedExecutor,
   type AgentClient,
@@ -1161,8 +1161,9 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     expect(module).toContain('export default entry');
     expect(module).toContain("id: 'code'");
     expect(module).toContain("command: 'code'");
-    // The declared ids stay verbatim while the DR-017 role-binding boundary
-    // maps runtime-resolved (lowercased) ids back to them at callPlayer.
+    // This historical `Players:` generation keeps its verbatim declared ids
+    // while the DR-017 role-binding boundary maps runtime-resolved
+    // (lowercased) ids back to them at callPlayer.
     expect(module).toContain(
       "const REQUIRED_ROLE_IDS: readonly string[] = ['Writer']",
     );
@@ -1187,21 +1188,140 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     expect(result.outputs).not.toContain(join(work, 'code.ts'));
   });
 
-  it('derives requiredRoleIds from the gears Players block, excluding alias declarations (self-hosting-16)', () => {
-    expect(
-      declaredPlayers(
-        'Players:\n\n- Writer\n- `Reviewer`\n- `Editor` = `Writer` | `Reviewer`\n\n## Behaviors\n',
-      ),
-    ).toEqual(['Writer', 'Reviewer']);
+  /** Emits an entry module for one gears declaration in a scratch directory. */
+  const withEmittedEntry = async (
+    files: { gears: string; linked?: string },
+    assertion: (entryPath: string, module: string) => Promise<void> | void,
+  ): Promise<void> => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-entry-'));
+    try {
+      if (files.linked !== undefined) {
+        await mkdir(join(dir, 'flow.playbook'), { recursive: true });
+        await writeFile(
+          join(dir, 'flow.playbook', 'flow.playbook.ts'),
+          files.linked,
+        );
+      }
+      await writeFile(join(dir, 'flow.gears.md'), files.gears);
+      await writeFile(join(dir, 'flow.text.md'), '# Flow\n\nLead line.\n');
+      const entryPath = await emitEntryModule({
+        cwd: dir,
+        basename: 'flow',
+        pipeline: 'playbook',
+        gearsPath: join(dir, 'flow.gears.md'),
+        textPath: join(dir, 'flow.text.md'),
+      });
+      await assertion(entryPath, await readFile(entryPath, 'utf8'));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('derives requiredRoleIds from the gears Players block, excluding alias declarations (self-hosting-16)', async () => {
+    await withEmittedEntry(
+      {
+        gears:
+          'Players:\n\n- Writer\n- `Reviewer`\n- `Editor` = `Writer` | `Reviewer`\n\n## Behaviors\n',
+      },
+      (_entryPath, module) => {
+        expect(module).toContain(
+          "const REQUIRED_ROLE_IDS: readonly string[] = ['Writer', 'Reviewer']",
+        );
+      },
+    );
   });
 
-  it('reads the markdown-heading form of the Players declaration (self-hosting-15)', () => {
+  it('reads the markdown-heading form of the Players declaration (self-hosting-15)', async () => {
     // A real interpreted compile rendered the declaration as `## Players`
     // with a bare bullet; the emitter must not declare an empty role list
     // for a workflow that plainly names its player.
-    expect(declaredPlayers('## Players\n\n- Worker\n\n## Items\n')).toEqual([
-      'Worker',
-    ]);
+    await withEmittedEntry(
+      { gears: '## Players\n\n- Worker\n\n## Items\n' },
+      (_entryPath, module) => {
+        expect(module).toContain(
+          "const REQUIRED_ROLE_IDS: readonly string[] = ['Worker']",
+        );
+      },
+    );
+  });
+
+  it('declares a Roles source by canonical role id and hands it to callPlayer unchanged (self-hosting-16, DR-024)', async () => {
+    // A schema-3 machine delegates by the canonical lowercase local role id,
+    // and the Playbook host binds its configured roles by the very ids
+    // `requiredRoleIds` names — so a display-named `Roles:` source must
+    // declare `coder`, not `Coder`, and the entry must not translate the port.
+    const linked = [
+      'interface Ports {',
+      '  callPlayer(roleId: string, prompt: string): Promise<unknown>;',
+      '}',
+      '',
+      'export const inputs: unknown[] = [];',
+      'export const runtimes: unknown[] = [];',
+      '',
+      'export default function createPlaybookRuntime(input: unknown) {',
+      '  inputs.push(input);',
+      '  let ports: Ports | undefined;',
+      '  const runtime = {',
+      '    async init(session: { ports: Ports }) {',
+      '      ports = session.ports;',
+      '    },',
+      '    async handleBossInput() {',
+      "      await ports?.callPlayer('coder', 'p');",
+      "      await ports?.callPlayer('reviewer', 'p');",
+      "      return { outcome: 'quiescent' };",
+      '    },',
+      '    async dispose() {},',
+      '  };',
+      '  runtimes.push(runtime);',
+      '  return runtime;',
+      '}',
+      '',
+    ].join('\n');
+    await withEmittedEntry(
+      { gears: 'Roles:\n\n- Coder\n- `Reviewer`\n\n## Behaviors\n', linked },
+      async (entryPath, module) => {
+        expect(module).toContain(
+          "const REQUIRED_ROLE_IDS: readonly string[] = ['coder', 'reviewer']",
+        );
+        expect(module).toContain('artifactSchema: 3');
+        expect(module).toContain("runtimeProfile: 'composed-v3'");
+        // The schema-3 entry keeps no role-binding boundary at all.
+        expect(module).not.toContain('withRoleBinding');
+        const entry = (await import(entryPath)).default as {
+          requiredRoleIds: string[];
+          createRuntime(
+            options: { captainOptions?: unknown },
+            hostCapabilities: unknown,
+          ): {
+            init(session: unknown): Promise<void>;
+            handleBossInput(): Promise<unknown>;
+          };
+        };
+        expect(entry.requiredRoleIds).toEqual(['coder', 'reviewer']);
+        const capabilities = { authority: {} };
+        const runtime = entry.createRuntime({}, capabilities);
+        const linkedModule = (await import(
+          join(dirname(entryPath), 'flow.playbook', 'flow.playbook.ts')
+        )) as { inputs: { hostCapabilities?: unknown }[]; runtimes: unknown[] };
+        // The factory is called once with the composed argument and its
+        // runtime is returned unchanged — no wrapper stands between them.
+        expect(linkedModule.inputs).toHaveLength(1);
+        expect(linkedModule.inputs[0].hostCapabilities).toBe(capabilities);
+        expect(runtime).toBe(linkedModule.runtimes[0]);
+        const seen: string[] = [];
+        await runtime.init({
+          sessionId: 's',
+          playbookId: 'flow',
+          ports: {
+            callPlayer: async (roleId: string) => {
+              seen.push(roleId);
+            },
+          },
+        });
+        await runtime.handleBossInput();
+        expect(seen).toEqual(entry.requiredRoleIds);
+      },
+    );
   });
 
   it('binds runtime-resolved player ids back to declared role ids at callPlayer (self-hosting-16, DR-017)', async () => {

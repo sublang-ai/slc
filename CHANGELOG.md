@@ -123,6 +123,19 @@ and this project adheres to
   machine's initial context, preserving each field's authored type
   ([DR-030](specs/decisions/030-link-fidelity-gate.md)).
 
+- **The emitted entry names its roles the way the host binds them.** A
+  current `Roles:` source compiles to a machine that delegates by the
+  canonical lowercase local role id, but the generated registry entry
+  declared `requiredRoleIds` by the source display name — so `playbook
+  run` refused the entry outright ("must use a canonical lowercase local
+  role id") and no compiled workflow could be bound. The entry now
+  declares exactly the ids its machine delegates to and returns the
+  linked factory's runtime unchanged, with no translation left at the
+  `callPlayer` port; a historical `Players:` source keeps its verbatim
+  names and role-binding boundary. Both demo reference entries are
+  regenerated
+  ([DR-024](specs/decisions/024-playbook-10-schema-3-adoption.md)).
+
 ## [0.7.0] - 2026-09-02
 
 ### Added
