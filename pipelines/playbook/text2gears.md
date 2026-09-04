@@ -145,6 +145,11 @@ The guard name shall match the ASCII identifier pattern
 The bullet order is authoritative, guard names are unique within the item, and
 the description shall name every required output property with its exact
 case-sensitive identifier.
+An output property name shall match the same ASCII identifier pattern as a
+guard name: a kebab-case Source placeholder such as `<coder-output>` names the
+property `coderOutput` through the canonical kebab-token-to-camel-field mapping
+of [link](link.md), never a quoted kebab-case key, because downstream artifacts
+and calling playbooks consume these properties by name.
 
 A produced value consumed later shall have a declared producer: where any
 later item's blockquote reads a value through a `<placeholder>`, the item
@@ -242,6 +247,12 @@ text2gears shall emit an item whose behavior uses
 complete JSON-safe input-text template for that call.
 The literal target id shall be a stable configured playbook id, not a slash
 command or module specifier.
+A nested-call item shall carry no `Results:` label: the child's terminal result
+is its outcome, so Source's continuation after child success, abort, or failure
+stays as prose after the blockquote for
+[gears2fsm](gears2fsm.md#nested-playbook-calls) to route through
+`invoke.onDone` and `invoke.onError`; a `Results:` block on a nested-call item
+is malformed.
 
 Example:
 
