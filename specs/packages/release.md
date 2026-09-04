@@ -120,7 +120,7 @@ Where a maintainer prepares a release tag, when the opt-in local acceptance gate
 
 | Gate case | Required outcome |
 | --- | --- |
-| Stage and lineup selection | Refuse an invocation that selects no stage; bind every entry-declared player and the Captain explicitly so the maintainer's host defaults cannot change the test; and require exactly the agent CLIs that the bound lineup invokes. |
+| Stage and lineup selection | Refuse an invocation that selects no stage; bind every entry-declared player and the Captain explicitly, each in cligent's protected auto permission mode as the Playbook host's seeded template does so the run stage's edit-and-commit work needs no interactive grant, so the maintainer's host defaults cannot change the test; and require exactly the agent CLIs that the bound lineup invokes. |
 | Missing prerequisite | State the missing prerequisite in an actionable message rather than failing inside a downstream tool. |
 | Candidate preparation | Build the candidate from the working tree before packing it, because generated output is untracked and an unbuilt checkout would pack no executable while a stale build would test superseded output; install the package into a scratch consumer project. |
 | Any selected stage fails | Report a non-zero exit and retain the scratch tree so the compiled artifacts and agent commits remain inspectable. |
