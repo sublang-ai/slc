@@ -28,7 +28,10 @@
  * entry and binds every role and the Captain explicitly — `claude` unless
  * `ACCEPTANCE_PLAYER` / `ACCEPTANCE_CAPTAIN` name
  * `<adapter>[:<model>][@<effort>]` specs — so the maintainer's own playbook
- * config never changes what the gate tests.
+ * config never changes what the gate tests. That scratch configuration and
+ * the host's session state live under scratch `SPEX_HOME`, `XDG_STATE_HOME`,
+ * and `XDG_CONFIG_HOME` roots, so nothing under the maintainer's home is
+ * read, written, or relocated except adapter authentication.
  */
 
 import { execFileSync, spawn } from 'node:child_process';
@@ -559,8 +562,8 @@ function referenceSource() {
  * `playbook run` (DR-024): the gate enables the entry in a scratch
  * configuration under `playbooks.<id>.from`, binds every declared role to its
  * own explicitly configured player plus the Captain, points the installed
- * host at that configuration alone through `XDG_CONFIG_HOME`, and invokes
- * the entry's effective slash command (release-17).
+ * host's configuration root and session state home at the scratch tree, and
+ * invokes the entry's effective slash command (release-17).
  */
 function runStage(consumer, scratch, source) {
   step(`run the ${source.label} playbook with real agents`);
@@ -596,16 +599,25 @@ function runStage(consumer, scratch, source) {
   if (roles.length === 0) fail('the entry under test declares no roles');
   ok('entry declares its required roles', roles.join(', '));
 
-  // Enable and bind the entry in a scratch Playbook configuration rather than
-  // letting any role stay unset: the host reads one config at
-  // `${XDG_CONFIG_HOME:-~/.config}/playbook/playbook.config.yaml`, so an
-  // isolated XDG_CONFIG_HOME makes the run independent of the maintainer's
-  // personal file and the gate the same on every machine. Each role binds its
-  // own stable player, keeping role conversations isolated like the old
-  // per-role bindings. (The override reaches spawned agent CLIs too; the
-  // supported adapters keep their auth under HOME-based paths, so sign-in
+  // Every home the installed host resolves points inside the scratch tree, so
+  // the gate reads, writes, and relocates nothing of the maintainer's and is
+  // the same on every machine: the shared configuration lives under the Spex
+  // root at `${SPEX_HOME:-~/.spex}/playbook/playbook.config.yaml` (Playbook
+  // DR-043), the session store under `${XDG_STATE_HOME:-~/.local/state}`, and
+  // the pre-DR-043 `${XDG_CONFIG_HOME:-~/.config}` path is isolated too
+  // because the host relocates a config found there into the Spex root — that
+  // relocation is exactly how an earlier run moved the gate's scratch config
+  // into the maintainer's home. (The overrides reach spawned agent CLIs too;
+  // the supported adapters keep their auth under HOME-based paths, so sign-in
   // state is unaffected.)
-  const configHome = join(scratch, 'config-home');
+  const hostHomes = {
+    SPEX_HOME: join(scratch, 'spex-home'),
+    XDG_STATE_HOME: join(scratch, 'state-home'),
+    XDG_CONFIG_HOME: join(scratch, 'config-home'),
+  };
+  // Enable and bind the entry in that scratch configuration rather than
+  // letting any role stay unset. Each role binds its own stable player,
+  // keeping role conversations isolated like the old per-role bindings.
   const players = {};
   const bindings = {};
   roles.forEach((role, index) => {
@@ -613,7 +625,11 @@ function runStage(consumer, scratch, source) {
     players[playerId] = agentBlock(playerSpec());
     bindings[role] = playerId;
   });
-  const configPath = join(configHome, 'playbook', 'playbook.config.yaml');
+  const configPath = join(
+    hostHomes.SPEX_HOME,
+    'playbook',
+    'playbook.config.yaml',
+  );
   mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(
     configPath,
@@ -641,7 +657,7 @@ function runStage(consumer, scratch, source) {
       cwd: work,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'inherit'],
-      env: { ...process.env, XDG_CONFIG_HOME: configHome },
+      env: { ...process.env, ...hostHomes },
     },
   );
   ok(
