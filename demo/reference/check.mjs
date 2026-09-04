@@ -249,7 +249,99 @@ try {
   await rm(smokeRoot, { recursive: true, force: true });
 }
 
-// Stage 5 — the emitted verification suites pass at the destination.
+// Stage 5 — the installed Playbook host accepts the emitted entry through its
+// own registry validation. Stage 4 constructs the runtime directly, so it can
+// never see a manifest field only the host reads: an entry advertising a
+// `runtimeProfile` the host refuses passed every other stage. `--list` is the
+// host's deterministic catalog path — it validates the configuration, loads
+// the registry module, and prints the catalog before any readiness, adapter,
+// or session work — so this stage spends no model call and needs no adapter
+// SDK. `--no-provision` keeps it from writing engine links beside the
+// committed artifacts, which resolve the engine from this repository's own
+// install. Every home the host resolves points inside the scratch tree, so
+// the check reads, writes, and relocates nothing under the invoking user's
+// home. The host binds only canonical lowercase ASCII local role ids, so a
+// reference whose roles are not canonical — the Chinese set — is expected to
+// be refused by name rather than listed; asserting that refusal pins the gap
+// instead of skipping the stage.
+const CANONICAL_ROLE_ID = /^[a-z][a-z0-9_-]*$/;
+const PLACEHOLDER_PLAYER = 'reference.player';
+const uncanonicalRole = roles.find((role) => !CANONICAL_ROLE_ID.test(role));
+const hostRoot = join(repoRoot, 'node_modules', '@sublang', 'playbook');
+const hostScratch = await mkdtemp(join(tmpdir(), 'slc-demo-host-'));
+try {
+  const hostManifest = JSON.parse(
+    await readFile(join(hostRoot, 'package.json'), 'utf8'),
+  );
+  const hostBin = join(
+    hostRoot,
+    typeof hostManifest.bin === 'string'
+      ? hostManifest.bin
+      : hostManifest.bin.playbook,
+  );
+  const homes = {
+    SPEX_HOME: join(hostScratch, 'spex-home'),
+    XDG_STATE_HOME: join(hostScratch, 'state-home'),
+    XDG_CONFIG_HOME: join(hostScratch, 'config-home'),
+  };
+  const configPath = join(homes.SPEX_HOME, 'playbook', 'playbook.config.yaml');
+  await mkdir(dirname(configPath), { recursive: true });
+  await writeFile(
+    configPath,
+    [
+      'captain:',
+      '  adapter: claude',
+      'players:',
+      `  ${PLACEHOLDER_PLAYER}:`,
+      '    adapter: claude',
+      'playbooks:',
+      `  ${basename}:`,
+      `    from: ${JSON.stringify(entry)}`,
+      '    roles:',
+      ...roles.map(
+        (role) => `      ${JSON.stringify(role)}: ${PLACEHOLDER_PLAYER}`,
+      ),
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  let listed;
+  try {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [hostBin, '--list', '--no-provision'],
+      { cwd: hostScratch, env: { ...process.env, ...homes } },
+    );
+    listed = { ok: true, stdout, stderr: '' };
+  } catch (error) {
+    listed = {
+      ok: false,
+      stdout: error.stdout ?? '',
+      stderr: error.stderr ?? String(error),
+    };
+  }
+  if (uncanonicalRole === undefined) {
+    report(
+      'installed host validates and lists the entry',
+      listed.ok && listed.stdout.includes(`/${basename}  ${basename}  —  `),
+      (listed.ok ? listed.stdout : listed.stderr).trim().split('\n')[0],
+    );
+  } else {
+    report(
+      'installed host refuses the non-canonical role key by name',
+      !listed.ok &&
+        listed.stderr.includes(uncanonicalRole) &&
+        listed.stderr.includes('canonical lowercase local role id'),
+      listed.stderr.trim().split('\n')[0],
+    );
+  }
+} catch (error) {
+  report('installed host registry validation', false, String(error));
+} finally {
+  await rm(hostScratch, { recursive: true, force: true });
+}
+
+// Stage 6 — the emitted verification suites pass at the destination.
 try {
   await execFileAsync('npx', ['vitest', 'run', bundle], { cwd: repoRoot });
   report('emitted verification suites pass', true);
@@ -261,7 +353,7 @@ try {
   );
 }
 
-// Stage 6 — the independent compilation-correctness review has no findings.
+// Stage 7 — the independent compilation-correctness review has no findings.
 try {
   const { stdout } = await execFileAsync(
     'node',

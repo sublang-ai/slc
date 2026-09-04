@@ -147,6 +147,21 @@ and this project adheres to
   reads, writes, and relocates nothing personal but adapter
   authentication. The deterministic release audit checks it.
 
+- **The emitted entry declares the runtime profile the host reads.** The
+  generated registry entry advertised `composed-v3` — slc's own internal
+  contract marker — where the Playbook host requires an implementation
+  declaration, so it refused every generated entry ("runtimeProfile must
+  be a plain object"). The entry now emits
+  `{ kind: 'shared-factory', compat }` carrying the linked factory's own
+  captured `{ artifactSchema, runtimeAbi }` record, and both demo
+  reference entries are regenerated. The demo reference check gained a
+  stage that offers each committed entry to the installed host's own
+  registry validation under scratch Spex, state, and configuration homes
+  — it lists the English entry and pins the Chinese one's known refusal
+  by its non-ASCII role key — so a manifest field only the host reads can
+  no longer pass `release:check`
+  ([DR-024](specs/decisions/024-playbook-10-schema-3-adoption.md)).
+
 ## [0.7.0] - 2026-09-02
 
 ### Added

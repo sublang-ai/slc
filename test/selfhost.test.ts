@@ -1258,7 +1258,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       'export const inputs: unknown[] = [];',
       'export const runtimes: unknown[] = [];',
       '',
-      'export default function createPlaybookRuntime(input: unknown) {',
+      'export function createPlaybookRuntime(input: unknown) {',
       '  inputs.push(input);',
       '  let ports: Ports | undefined;',
       '  const runtime = {',
@@ -1276,6 +1276,17 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       '  return runtime;',
       '}',
       '',
+      // The shared engine publishes its validated artifact compatibility as
+      // the factory's own immutable data property; the entry's manifest
+      // profile must carry that very record, so the stub exposes it the same
+      // way rather than letting the emitted reference resolve to undefined.
+      "Object.defineProperty(createPlaybookRuntime, 'compat', {",
+      '  value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),',
+      '  enumerable: true,',
+      '});',
+      '',
+      'export default createPlaybookRuntime;',
+      '',
     ].join('\n');
     await withEmittedEntry(
       { gears: 'Roles:\n\n- Coder\n- `Reviewer`\n\n## Behaviors\n', linked },
@@ -1284,11 +1295,23 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
           "const REQUIRED_ROLE_IDS: readonly string[] = ['coder', 'reviewer']",
         );
         expect(module).toContain('artifactSchema: 3');
-        expect(module).toContain("runtimeProfile: 'composed-v3'");
+        // The host reads `runtimeProfile` as the implementation declaration
+        // it must validate, not as a marker string: a shared-factory entry
+        // declares exactly `kind` and the linked factory's own `compat`.
+        expect(module).toContain(
+          [
+            '  runtimeProfile: Object.freeze({',
+            "    kind: 'shared-factory',",
+            '    compat: createPlaybookRuntime.compat,',
+            '  }),',
+          ].join('\n'),
+        );
+        expect(module).not.toContain("runtimeProfile: 'composed-v3'");
         // The schema-3 entry keeps no role-binding boundary at all.
         expect(module).not.toContain('withRoleBinding');
         const entry = (await import(entryPath)).default as {
           requiredRoleIds: string[];
+          runtimeProfile: { kind: string; compat: unknown };
           createRuntime(
             options: { captainOptions?: unknown },
             hostCapabilities: unknown,
@@ -1302,7 +1325,18 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         const runtime = entry.createRuntime({}, capabilities);
         const linkedModule = (await import(
           join(dirname(entryPath), 'flow.playbook', 'flow.playbook.ts')
-        )) as { inputs: { hostCapabilities?: unknown }[]; runtimes: unknown[] };
+        )) as {
+          inputs: { hostCapabilities?: unknown }[];
+          runtimes: unknown[];
+          createPlaybookRuntime: { compat: unknown };
+        };
+        expect(entry.runtimeProfile).toEqual({
+          kind: 'shared-factory',
+          compat: { artifactSchema: 3, runtimeAbi: 1 },
+        });
+        expect(entry.runtimeProfile.compat).toBe(
+          linkedModule.createPlaybookRuntime.compat,
+        );
         // The factory is called once with the composed argument and its
         // runtime is returned unchanged — no wrapper stands between them.
         expect(linkedModule.inputs).toHaveLength(1);
