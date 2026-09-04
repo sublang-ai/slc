@@ -144,6 +144,10 @@ function agentBlock(spec) {
     adapter,
     ...(model === '' ? {} : { model }),
     ...(effort === '' ? {} : { effort }),
+    // cligent's protected auto mode, the posture the Playbook host's seeded
+    // template gives every agent: the run stage's edit-and-commit work then
+    // needs no interactive grant, which a headless scratch run cannot give.
+    permissions: { mode: 'auto' },
   };
 }
 

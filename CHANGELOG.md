@@ -77,6 +77,13 @@ and this project adheres to
 
 ### Fixed
 
+- **The acceptance gate's lineup can edit and commit.** The gate bound its
+  scratch players with adapter, model, and effort only, so a Claude player
+  fell to Claude Code's ask-everything default, could not apply its fix in
+  the scratch repository, and parked the run on a Boss question; every bound
+  agent now carries cligent's protected auto permission mode, the posture
+  the Playbook host's seeded template gives every agent.
+
 - **Control calls stay isolated on an agent CLI without tool lists.** A
   compiled phase's hidden judge call and routing-only Captain call ask for
   an empty tool allowlist to run tool-free, which Cligent's `codex`,
