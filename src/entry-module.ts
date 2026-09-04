@@ -146,8 +146,15 @@ function renderEntryModule(spec: {
   const factoryArgument = spec.schema3
     ? `{\n      configuredOptions: ${cwdWiring},\n      hostCapabilities,\n    }`
     : cwdWiring;
+  // The manifest's `runtimeProfile` is the host's implementation declaration,
+  // not slc's internal contract marker: a shared-factory artifact declares
+  // `{ kind: 'shared-factory', compat }` whose `compat` is the very immutable
+  // record the linked factory captured from its validated `spec.compat` — the
+  // artifact's own `{ artifactSchema, runtimeAbi }` declaration — so the host
+  // reads the emitted module's compatibility rather than a marker string it
+  // cannot interpret (DR-024, DR-028).
   const schemaMembers = spec.schema3
-    ? `\n  artifactSchema: 3,\n  runtimeProfile: 'composed-v3',\n  concurrentRoleSets: ${JSON.stringify(
+    ? `\n  artifactSchema: 3,\n  runtimeProfile: Object.freeze({\n    kind: 'shared-factory',\n    compat: createPlaybookRuntime.compat,\n  }),\n  concurrentRoleSets: ${JSON.stringify(
         spec.concurrentRoleSets,
       )} as readonly (readonly string[])[],`
     : '';

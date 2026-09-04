@@ -42,7 +42,10 @@ const entry = {
   command: 'workflow',
   intent: 'Two-Agent Change-and-Review Workflow — Roles:',
   artifactSchema: 3,
-  runtimeProfile: 'composed-v3',
+  runtimeProfile: Object.freeze({
+    kind: 'shared-factory',
+    compat: createPlaybookRuntime.compat,
+  }),
   concurrentRoleSets: [] as readonly (readonly string[])[],
   requiredRoleIds: [...REQUIRED_ROLE_IDS],
   validateOptions,

@@ -84,7 +84,7 @@ When publication validation is configured, the project shall apply the correspon
 | --- | --- |
 | Manual publication | Run `release:check` through the package's `prepublishOnly` lifecycle. |
 | Tag-workflow publication | Run the same `release:check` explicitly, then invoke npm with lifecycle scripts disabled so registry credentials cannot reach validation. |
-| `release:check` execution | Run formatting, lint, build, tests, immutable Playbook-definition verification, release-workflow verification, reviewed-artifact verification, reproducible pin verification, the English and Chinese demo reference checks, and the installed-tarball smoke. |
+| `release:check` execution | Run formatting, lint, build, tests, immutable Playbook-definition verification, release-workflow verification, reviewed-artifact verification, reproducible pin verification, the English and Chinese demo reference checks [[continuous-integration-5](continuous-integration.md#continuous-integration-5)], and the installed-tarball smoke. |
 
 #### release-21
 
