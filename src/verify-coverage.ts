@@ -1711,6 +1711,11 @@ function playbookCoverageInput(
   }
 }
 
+/**
+ * The value the bridge resolves a completed child with: a child that reached
+ * a success terminal, or an older child that published no terminal kind,
+ * resolves with its own output and reaches `onDone`.
+ */
 function nestedSuccessOutput(): Record<string, unknown> {
   return {
     outcome: 'terminal',
@@ -1733,6 +1738,36 @@ function nestedFailure(playbookId: string): Error {
         name: 'Error',
         message: 'coverage: forced nested playbook failure',
       },
+    },
+  });
+  return error;
+}
+
+/**
+ * A child that completed at its own authored failure terminal. The bridge
+ * rejects the call with that exact `ok` result, so a recovering first
+ * `onError` arm written for it is satisfiable under probing.
+ */
+function nestedFailureTerminal(playbookId: string): Error {
+  const terminal = {
+    stateId: 'coverageFailureTerminal',
+    kind: 'failure',
+    description: 'coverage: the child reported its own failure terminal',
+  };
+  const error = new Error(
+    `Child playbook ${playbookId} reached failure terminal ${terminal.stateId}`,
+  );
+  error.name = 'NestedPlaybookCallError';
+  Object.defineProperty(error, 'result', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: {
+      status: 'ok',
+      playbookId,
+      childSessionId: 'coverage-child-session',
+      output: { response: 'coverage: nested playbook failure terminal' },
+      terminal,
     },
   });
   return error;
@@ -2365,6 +2400,9 @@ async function probePlaybookOutcome(
     } else {
       const errors = [
         nestedFailure(expectedPlaybookId),
+        // A completed child that reached its own failure terminal arrives on
+        // this same path, so an arm written only for that shape is driven too.
+        nestedFailureTerminal(expectedPlaybookId),
         new Error('coverage: generic nested playbook failure'),
       ];
       for (const base of errors) {

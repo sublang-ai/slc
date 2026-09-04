@@ -674,8 +674,34 @@ const dynamicCaptainMachine = () => {
 };
 
 /** A literal child call with independently selectable success/error arms. */
+/**
+ * The recovering first `onError` arm a workflow writes for a child that
+ * completed at its own authored failure terminal: the bridge rejects that
+ * `ok` result through the error path, so nothing else on this path matches.
+ */
+const authoredFailureTerminalGuard = ({ event }: any): boolean => {
+  const result = event.error?.result;
+  const terminal = result?.terminal;
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    result.status === 'ok' &&
+    typeof result.childSessionId === 'string' &&
+    result.childSessionId !== '' &&
+    typeof terminal === 'object' &&
+    terminal !== null &&
+    terminal.kind === 'failure' &&
+    typeof terminal.stateId === 'string' &&
+    terminal.stateId !== ''
+  );
+};
+
 const nestedMultiArmMachine = (
-  opts: { deadDoneArm?: boolean; deadErrorArm?: boolean } = {},
+  opts: {
+    deadDoneArm?: boolean;
+    deadErrorArm?: boolean;
+    authoredFailureTerminalArm?: boolean;
+  } = {},
 ) =>
   setup({
     actors: {
@@ -721,8 +747,11 @@ const nestedMultiArmMachine = (
           onError: [
             {
               target: '#errorFirst',
-              guard: ({ event }: any) =>
-                event.error.name === 'RetryableChildError',
+              guard:
+                opts.authoredFailureTerminalArm === true
+                  ? authoredFailureTerminalGuard
+                  : ({ event }: any) =>
+                      event.error.name === 'RetryableChildError',
             },
             {
               target: '#errorSecond',
@@ -1453,6 +1482,14 @@ describe('checkFsmCoverage (verification-6)', () => {
   it('drives every satisfiable nested success and error arm', async () => {
     expect(
       await checkFsmCoverage({ machine: nestedMultiArmMachine() }),
+    ).toEqual([]);
+  });
+
+  it('satisfies a first onError arm written for an authored failure terminal (verification-6, verification-11)', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: nestedMultiArmMachine({ authoredFailureTerminalArm: true }),
+      }),
     ).toEqual([]);
   });
 

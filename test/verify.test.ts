@@ -1618,6 +1618,80 @@ describe('checkGearsFsmConformance', () => {
     ).toEqual([]);
   });
 
+  const terminalKindOptions = { concurrentRoleSets: [['coder', 'reviewer']] };
+  const schema3TerminalConfig = (
+    kinds: Record<string, unknown>,
+  ): MachineConfigLike => {
+    const config = schema3Config();
+    // A second root final, so a partly declared artifact is observable.
+    config.states!.abandoned = {
+      ...schema3Identity('abandoned'),
+      type: 'final',
+    };
+    for (const [stateId, terminal] of Object.entries(kinds)) {
+      const meta = (
+        config.states![stateId] as {
+          meta: { playbook: Record<string, unknown> };
+        }
+      ).meta.playbook;
+      meta.terminal = terminal;
+    }
+    return config;
+  };
+
+  it('accepts declared terminal kinds on schema-3 root finals (verification-1, verification-11)', () => {
+    // A bundle retained from before the kind was compiled declares none.
+    expect(
+      checkGearsFsmConformance(
+        schema3Gears,
+        schema3TerminalConfig({}),
+        terminalKindOptions,
+      ),
+    ).toEqual([]);
+    // Every root final declares a valid kind; the parallel regions' own finals
+    // stage the join and publish none.
+    expect(
+      checkGearsFsmConformance(
+        schema3Gears,
+        schema3TerminalConfig({ done: 'success', abandoned: 'failure' }),
+        terminalKindOptions,
+      ),
+    ).toEqual([]);
+  });
+
+  it('rejects a missing or invalid schema-3 terminal kind (verification-1, verification-11)', () => {
+    expect(
+      checkGearsFsmConformance(
+        schema3Gears,
+        schema3TerminalConfig({ done: 'success' }),
+        terminalKindOptions,
+      ).join('\n'),
+    ).toMatch(
+      /FSM final state abandoned: state\.meta\.playbook\.terminal is missing while other final states declare it/,
+    );
+
+    expect(
+      checkGearsFsmConformance(
+        schema3Gears,
+        schema3TerminalConfig({ done: 'parked', abandoned: 'failure' }),
+        terminalKindOptions,
+      ).join('\n'),
+    ).toMatch(
+      /FSM final state done: state\.meta\.playbook\.terminal "parked" is neither "success" nor "failure"/,
+    );
+  });
+
+  it('exempts a historical schema-1 artifact from the terminal kind (verification-1, verification-11)', () => {
+    const historical = `# Historical fixture\n\nPlayers:\n\n- Writer\n\n${gears}`;
+    const config = conformantConfig();
+    config.states!.done = {
+      type: 'final',
+      meta: { playbook: { stateId: 'done', terminal: 'success' } },
+    };
+    config.states!.abandoned = { type: 'final' };
+    expect(checkGearsFsmConformance(historical, config)).toEqual([]);
+  });
+
   it('accepts a script item realized by a matching script state (verification-15, verification-17)', () => {
     expect(checkGearsFsmConformance(scriptGears, scriptConfig())).toEqual([]);
   });

@@ -11,6 +11,40 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **The verifier checks a schema-3 workflow's published terminal
+  kinds.** A compiled final state now declares whether reaching it means
+  the workflow succeeded or failed, so a caller learns the outcome from
+  the machine it reached rather than from the callee's output fields.
+  Once an artifact declares any root final's kind, every root final must
+  declare exactly `success` or `failure`; a final inside a parallel
+  region stages the join and declares none, and a bundle retained from
+  before the kind was compiled declares none at all and stays exempt.
+
+- **Transition coverage drives a failure terminal through `onError`.** A
+  child that completes at its own authored failure terminal is delivered
+  to the caller as a rejection carrying that exact `ok` result, so a
+  recovering first `onError` arm written for that shape alone is now
+  satisfiable under probing instead of being reported unreachable.
+
+### Changed
+
+- **Adopts `@sublang/playbook` 12.3.0.** The release brings typed
+  terminal outcomes and accepts a canonical local role id in any script.
+  Its `gears2fsm` and `link` definitions changed, but both preserve
+  their compiled-execution contract verbatim, so all three meta-phase
+  bundles and both demo reference sets are retained and re-verified
+  rather than recompiled.
+
+### Fixed
+
+- **The Chinese demo check now proves the workflow binds.** Its host
+  registry-validation stage asserted a refusal, pinning the host's
+  former ASCII-only role-id gap. The host now accepts the Chinese role
+  ids, so both languages assert the same outcome: the host validates the
+  configuration and lists the entry under its own id.
+
 ## [0.8.0] - 2026-09-04
 
 ### Added
