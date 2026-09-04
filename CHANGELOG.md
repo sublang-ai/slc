@@ -62,8 +62,10 @@ and this project adheres to
 
 ### Changed
 
-- **Playbook 12.2.1 is the adopted release.** `@sublang/playbook` moves
-  to `^12.2.1` as a routine contract-based adoption: the four vendored
+- **Playbook 12.2.2 is the adopted release.** `@sublang/playbook` moves
+  to `^12.2.2` as a routine contract-based adoption — 12.2.2 also binds the
+  governed worktree lazily, which the acceptance gate's scripted `git init`
+  run stage requires: the four vendored
   definitions are byte-identical to that release — a nested-call item
   carries no `Results:` label, output property names are identifiers, and
   an empty relay composes no quoted line — and the pins were regenerated
