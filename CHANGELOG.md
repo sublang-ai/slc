@@ -11,6 +11,68 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-03
+
+### Added
+
+- **A deterministic Source-fidelity gate runs before the Reviewer.** The
+  text2gears phase must conserve every prompt fragment the Source
+  authors, yet a reviewed compile of a maintained playbook produced an
+  item whose prompt lines the Source never authored and the Reviewer
+  accepted it. Outside the reserved meta-pipeline, the host now checks
+  each text2gears output mechanically against the invocation Source —
+  fenced instruction blocks and blockquotes reach the GEARS verbatim and
+  in Source order, and an unauthored prompt line is an invention — and
+  relays the numbered findings to the Coder in place of that round's
+  Reviewer call, counting them as one permitted call and failing an
+  unreviewed phase closed. The same hook runs under compiled execution,
+  so the compiled text→gears performing call gets the identical
+  correction round. The check also requires a result description to name
+  its output properties by the ASCII identifier pattern, since downstream
+  artifacts and calling playbooks consume them by name; a quoted
+  kebab-case property is a finding
+  ([DR-029](specs/decisions/029-source-fidelity-gate.md)).
+
+- **A deterministic link-fidelity gate runs before the Reviewer.** The
+  emitted prompt-contract suite ran only after the link phase was
+  accepted, so its checks arrived too late to correct the Coder — one
+  reviewed compile accepted a linked module after three hours whose
+  synthesis state composed its prompt under the wrong role identity. The
+  host now runs those same checks on the live linked module beside its
+  FSM before any Reviewer call: the module imports and its factory
+  constructs, and every player-invoking state's prompt composer yields
+  the authored prompt on an ordinary turn with each placeholder
+  substituted per the link contract. Findings are relayed to the Coder
+  under the same mechanical protocol
+  ([DR-030](specs/decisions/030-link-fidelity-gate.md)).
+
+- **A failed run names what it kept and how to continue.** A run that
+  fails partway keeps its accepted live phase targets, but the
+  diagnostics said nothing about them, so salvaging one meant guessing.
+  The failure report now names the accepted phases and the single-phase
+  invocation that resumes from the last one, so manual recovery needs no
+  recovery state
+  ([DR-021](specs/decisions/021-incremental-compilation.md)).
+
+- **An output-less compiled terminal reports a recoverable reason.** A
+  compiled phase that reaches an authored terminal producing no output —
+  a rejected link, for instance — reported nothing to act on. It now
+  names the reached state and carries the performing call's last text,
+  the way a failure does.
+
+### Changed
+
+- **Playbook 12.2.1 is the adopted release.** `@sublang/playbook` moves
+  to `^12.2.1` as a routine contract-based adoption: the four vendored
+  definitions are byte-identical to that release — a nested-call item
+  carries no `Results:` label, output property names are identifiers, and
+  an empty relay composes no quoted line — and the pins were regenerated
+  with the new provenance. Every definition's `## Compiled execution`
+  section is preserved verbatim, so the three meta-phase bundles were
+  retained and re-verified against the installed engine rather than
+  rebuilt
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
 ### Fixed
 
 - **Control calls stay isolated on an agent CLI without tool lists.** A
@@ -37,6 +99,29 @@ and this project adheres to
   complete object, a second object adjacent to the last, or any
   non-whitespace text after the object still fails closed with a precise
   reason ([DR-022](specs/decisions/022-two-agent-reviewed-compilation.md)).
+
+- **A reasoned Reviewer approval is still an approval.** A Reviewer that
+  prefaced `NO_FINDINGS` with its rationale failed the approved call
+  closed; the verdict is now read from the end of the reply, matching the
+  correction-envelope rule. The Reviewer prompt also confines inspection
+  to the request's workspace, so review cannot wander outside the
+  material under review
+  ([DR-022](specs/decisions/022-two-agent-reviewed-compilation.md)).
+
+- **A transient Reviewer transport error no longer discards a finished
+  phase.** One errored Reviewer call threw away a completed Coder phase.
+  An errored call is now retried once after a short pause, and only a
+  repeated error fails the performing call closed. A stall-watchdog abort
+  is excluded: it is marked structurally on the result and still fails
+  the performing call closed after a single run.
+
+- **The prompt-contract check stops rejecting valid artifacts.** It
+  refused any prompt identity lookup other than the acting role and
+  synthesized array-typed context fields as strings, so three maintained
+  playbooks that pass real runs failed it. The lookup now rejects only
+  undeclared roles, and an ordinary turn's input starts from the
+  machine's initial context, preserving each field's authored type
+  ([DR-030](specs/decisions/030-link-fidelity-gate.md)).
 
 ## [0.7.0] - 2026-09-02
 
@@ -333,7 +418,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/sublang-ai/slc/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/sublang-ai/slc/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/sublang-ai/slc/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/sublang-ai/slc/compare/v0.4.0...v0.5.0
