@@ -144,8 +144,9 @@ Every role defaults to `claude` — the coder and reviewer players, and
 the Captain, the hidden orchestrator that routes turns and adjudicates
 results. To choose an agent, model, or effort per role, add flags in the
 form `<adapter>[:<model>][@<effort>]`, for example: `--player
-Coder=claude:claude-sonnet-5 --player Reviewer=codex:gpt-5.6-terra
---captain claude:claude-sonnet-5@high`.
+coder=claude:claude-sonnet-5 --player reviewer=codex:gpt-5.6-terra
+--captain claude:claude-sonnet-5@high`. The entry names each role by its
+canonical lowercase id, the same id the compiled machine delegates to.
 
 The workflow operates on the **current directory**, and its scripted
 first step checks whether that directory is the **root** of a Git

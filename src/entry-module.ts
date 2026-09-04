@@ -2,19 +2,24 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Deterministic entry-module emission (DR-014, DR-017, self-hosting-15).
+ * Deterministic entry-module emission (DR-014, DR-017, DR-024,
+ * self-hosting-15).
  *
  * After a successful full-link of the `playbook` pipeline, {@link
  * emitEntryModule} writes `<cwd>/<basename>.ts`: an erasable-TypeScript module
  * default-exporting a Playbook registry entry derived entirely from the
  * compiled bundle — `id`/`command` from the basename, `requiredRoleIds` from
- * the gears `Players:` declaration, `intent` from the normalized source's
- * title and lead line, an option allowlist carrying `cwd` exactly when the
- * source compiled a script item, and `createRuntime` wiring the linked default
- * factory behind the DR-017 role-binding boundary, which maps the linked
- * runtime's lowercased player ids back to the declared role ids at the
- * session's `callPlayer` port. `playbook run ./<basename>.ts "<task>"`
- * consumes it unchanged (self-hosting-14). See specs/packages/self-hosting.md.
+ * the gears `Roles:`/`Players:` declaration, `intent` from the normalized
+ * source's title and lead line, an option allowlist carrying `cwd` exactly
+ * when the source compiled a script item, and `createRuntime` wiring the
+ * linked default factory. A current `Roles:` source declares the canonical
+ * lowercase local role ids its compiled machine's delegated states name, so
+ * the host binds exactly those ids and the session's `callPlayer` port needs
+ * no translation (DR-024); a historical `Players:` source keeps its verbatim
+ * declared names behind the DR-017 role-binding boundary, which maps the
+ * linked runtime's lowercased player ids back to them. Its generation's host
+ * consumes the module unchanged (self-hosting-14). See
+ * specs/packages/self-hosting.md.
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -42,35 +47,39 @@ export async function emitEntryModule(
 ): Promise<string> {
   const gears = await readFile(opts.gearsPath, 'utf8');
   const text = await readFile(opts.textPath, 'utf8');
-  const players = declaredPlayers(gears);
-  // The role-binding boundary keys declared ids by their lowercased form; a
-  // case-insensitive collision would make the binding ambiguous (DR-017).
-  const byLowered = new Map<string, string>();
-  for (const player of players) {
-    const existing = byLowered.get(player.toLowerCase());
-    if (existing !== undefined && existing !== player) {
+  // One derivation serves both generations: the declared names, verbatim in
+  // source order, and the canonical lowercase local role ids the compiled
+  // machine's delegated states carry. A `Roles:` source compiles to a schema-3
+  // artifact whose linked factory takes configured options plus live host
+  // capabilities; a `Players:` source keeps the schema-1 entry contract
+  // (DR-024).
+  const roleContract = inspectGearsRoleContract(gears);
+  const schema3 = roleContract.generation === 'schema-3';
+  // Two declared names differing only by case derive one canonical role id, so
+  // neither the schema-3 host binding nor the schema-1 role-binding boundary
+  // could tell them apart (DR-017, DR-024).
+  const byRoleId = new Map<string, string>();
+  roleContract.names.forEach((name, index) => {
+    const roleId = roleContract.roleIds[index];
+    const existing = byRoleId.get(roleId);
+    if (existing !== undefined && existing !== name) {
       throw new Error(
-        `entry emission failed: declared players "${existing}" and "${player}" collide case-insensitively`,
+        `entry emission failed: declared players "${existing}" and "${name}" collide case-insensitively`,
       );
     }
-    byLowered.set(player.toLowerCase(), player);
-  }
+    byRoleId.set(roleId, name);
+  });
   const hasScript = parseGearsItems(gears).some(
     (item) => item.actor === 'script',
   );
   const intent = deriveIntent(text) ?? opts.basename;
-  // A `Roles:` source compiles to a schema-3 artifact whose linked factory
-  // takes configured options plus live host capabilities; a `Players:` source
-  // keeps the schema-1 entry contract (DR-024).
-  const roleContract = inspectGearsRoleContract(gears);
-  const schema3 = roleContract.generation === 'schema-3';
   const path = join(opts.cwd, `${opts.basename}.ts`);
   await writeFile(
     path,
     renderEntryModule({
       basename: opts.basename,
       bundleLeaf: `${opts.basename}.${opts.pipeline}`,
-      players,
+      roleIds: schema3 ? roleContract.roleIds : roleContract.names,
       hasScript,
       intent,
       schema3,
@@ -79,39 +88,6 @@ export async function emitEntryModule(
     'utf8',
   );
   return path;
-}
-
-/**
- * The gears role declaration, verbatim in source order (self-hosting-15).
- * Playbook 10 renames the section `Players:` to `Roles:` and removes aliasing;
- * both headings are read so schema-1 and schema-3 sources emit the same way.
- * A schema-1 alias declaration (`` `A` = `B` | `C` ``) is a launcher option,
- * not a required role, and is excluded.
- */
-export function declaredPlayers(gears: string): string[] {
-  const players: string[] = [];
-  let inBlock = false;
-  for (const line of gears.split('\n')) {
-    // Gears render the declaration either as a `Players:`/`Roles:` line or as
-    // the matching markdown heading; all carry the same source declaration.
-    if (
-      /^(?:#{1,6}\s+(?:Players|Roles)|(?:Players|Roles):)\s*$/.test(line.trim())
-    ) {
-      inBlock = true;
-      continue;
-    }
-    if (!inBlock) continue;
-    const bullet = /^-\s+(.*)$/.exec(line.trim());
-    if (bullet === null) {
-      if (line.trim() === '') continue;
-      break;
-    }
-    const declaration = bullet[1];
-    if (declaration.includes('=')) continue;
-    const name = /^[`"“]?([^`"”]+?)[`"”]?\s*$/.exec(declaration.trim());
-    if (name !== null && name[1].length > 0) players.push(name[1]);
-  }
-  return players;
 }
 
 /** Title and lead line of the normalized source, joined as the intent. */
@@ -145,7 +121,7 @@ function deriveIntent(text: string): string | undefined {
 function renderEntryModule(spec: {
   basename: string;
   bundleLeaf: string;
-  players: readonly string[];
+  roleIds: readonly string[];
   hasScript: boolean;
   intent: string;
   schema3: boolean;
@@ -175,23 +151,14 @@ function renderEntryModule(spec: {
         spec.concurrentRoleSets,
       )} as readonly (readonly string[])[],`
     : '';
-  return `// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
-//
-// Generated by slc (DR-014): the registry entry exposing the compiled
-// playbook to \`playbook run\`. Derived deterministically from the compiled
-// bundle; recompiling regenerates it. The role-binding boundary (DR-017)
-// hands the host's \`callPlayer\` port only declared role ids.
-
-import createPlaybookRuntime from './${spec.bundleLeaf}/${spec.basename}.playbook.ts';
-
-type FactoryInput = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
-${runtimeOptionsAlias}
-
-const ALLOWED_OPTION_KEYS: readonly string[] = ${allowed};
-
-const REQUIRED_ROLE_IDS: readonly string[] = [${spec.players.map(sourceString).join(', ')}];
-
+  // A schema-3 entry declares the very ids the machine's delegated states
+  // name, so the host's `callPlayer` port needs no translation and the entry
+  // returns the linked factory's runtime directly (DR-024). Only a historical
+  // schema-1 entry keeps the DR-017 role-binding boundary, which maps the
+  // runtime's lowercased player ids back to the verbatim declared names.
+  const roleBinding = spec.schema3
+    ? ''
+    : `
 const ROLE_ID_BY_RESOLVED: ReadonlyMap<string, string> = new Map(
   REQUIRED_ROLE_IDS.map((id): [string, string] => [id.toLowerCase(), id]),
 );
@@ -237,7 +204,32 @@ function withRoleBinding<T extends object>(runtime: T): T {
     },
   });
 }
+`;
+  const runtimeExpression = spec.schema3
+    ? `createPlaybookRuntime(${factoryArgument})`
+    : `withRoleBinding(createPlaybookRuntime(${factoryArgument}))`;
+  const roleNote = spec.schema3
+    ? `// bundle; recompiling regenerates it. \`requiredRoleIds\` are the canonical
+// lowercase local role ids the compiled machine's delegated states name
+// (DR-024).`
+    : `// bundle; recompiling regenerates it. The role-binding boundary (DR-017)
+// hands the host's \`callPlayer\` port only declared role ids.`;
+  return `// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
+//
+// Generated by slc (DR-014): the registry entry exposing the compiled
+// playbook to \`playbook run\`. Derived deterministically from the compiled
+${roleNote}
 
+import createPlaybookRuntime from './${spec.bundleLeaf}/${spec.basename}.playbook.ts';
+
+type FactoryInput = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
+${runtimeOptionsAlias}
+
+const ALLOWED_OPTION_KEYS: readonly string[] = ${allowed};
+
+const REQUIRED_ROLE_IDS: readonly string[] = [${spec.roleIds.map(sourceString).join(', ')}];
+${roleBinding}
 function validateOptions(value: unknown): RuntimeOptions {
   if (value === undefined) return {};
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -266,7 +258,7 @@ const entry = {
   validateOptions,
   createRuntime(options: { captainOptions?: unknown }${schema3Param}) {
     const validated = validateOptions(options.captainOptions);
-    return withRoleBinding(createPlaybookRuntime(${factoryArgument}));
+    return ${runtimeExpression};
   },
 };
 

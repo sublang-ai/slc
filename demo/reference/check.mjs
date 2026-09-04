@@ -26,9 +26,21 @@ const execFileAsync = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
 
+// `players` are the display names the READMEs and the normalized text carry;
+// `roles` are the canonical lowercase local role ids the compiled machine's
+// delegated states name and the emitted entry declares (DR-024). A Chinese
+// name has no ASCII lowercase form, so the two coincide there.
 const LANGS = {
-  en: { basename: 'workflow', players: ['Coder', 'Reviewer'] },
-  zh: { basename: 'workflow.zh', players: ['编码者', '审查者'] },
+  en: {
+    basename: 'workflow',
+    players: ['Coder', 'Reviewer'],
+    roles: ['coder', 'reviewer'],
+  },
+  zh: {
+    basename: 'workflow.zh',
+    players: ['编码者', '审查者'],
+    roles: ['编码者', '审查者'],
+  },
 };
 
 const lang = process.argv[2] ?? 'en';
@@ -37,7 +49,7 @@ if (profile === undefined) {
   console.error(`usage: node check.mjs [${Object.keys(LANGS).join('|')}]`);
   process.exit(1);
 }
-const { basename, players } = profile;
+const { basename, players, roles } = profile;
 const bundle = join(here, `${basename}.playbook`);
 const entry = join(here, `${basename}.ts`);
 
@@ -83,13 +95,13 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-// Stage 2 — the entry declares the documented players verbatim, and the
-// normalized text declares the same names.
+// Stage 2 — the entry declares the canonical role ids of the documented
+// players, and the normalized text declares those players by name.
 const entrySource = await readFile(entry, 'utf8');
 report(
-  'entry declares the documented players',
-  players.every((player) => entrySource.includes(`'${player}'`)),
-  players.join(', '),
+  'entry declares the canonical role ids',
+  roles.every((role) => entrySource.includes(`'${role}'`)),
+  roles.join(', '),
 );
 const text = await readFile(join(bundle, `${basename}.text.md`), 'utf8');
 report(
@@ -144,19 +156,16 @@ try {
   // classifies as `one-descendant-commit`.
   const { createWorktreeHostCapabilities } =
     await import('@sublang/playbook/host-capabilities');
-  // Governed boundaries carry the runtime's local role ids; the entry declares
-  // roles by their verbatim source names and maps the lowercased runtime ids
-  // back to them at the `callPlayer` boundary (self-hosting-15).
-  const runtimeRoleId = (id) => id.toLowerCase();
+  // Governed boundaries carry the runtime's local role ids, and the entry
+  // declares exactly those ids, so the capabilities take them as emitted
+  // (self-hosting-15).
   const runtime = registryEntry.createRuntime(
     { captainOptions: { cwd: workdir } },
     await createWorktreeHostCapabilities({
       cwd: workdir,
       playbookId: registryEntry.id,
-      requiredRoleIds: registryEntry.requiredRoleIds.map(runtimeRoleId),
-      concurrentRoleSets: registryEntry.concurrentRoleSets.map((set) =>
-        set.map(runtimeRoleId),
-      ),
+      requiredRoleIds: registryEntry.requiredRoleIds,
+      concurrentRoleSets: registryEntry.concurrentRoleSets,
     }),
   );
   const sessionId = randomUUID();
@@ -214,8 +223,8 @@ try {
     console.error('  DEBUG outcome:', JSON.stringify(result).slice(0, 400));
   report('entry/runtime smoke reaches terminal', result.outcome === 'terminal');
   report(
-    'entry maps runtime role ids to documented players',
-    JSON.stringify(seenPlayers) === JSON.stringify(players),
+    'entry hands the host its declared role ids',
+    JSON.stringify(seenPlayers) === JSON.stringify(roles),
     seenPlayers.join(', '),
   );
   // A workflow whose machine never delivers the Boss task to its first

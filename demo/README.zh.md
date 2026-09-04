@@ -87,7 +87,7 @@ npx playbook run ./workflow.zh.ts \
 
 ### 角色设置
 
-每个角色都默认使用 `claude`——包括编码者、审查者两个 player，以及 Captain（隐藏的编排者，负责轮次路由与结果裁决）。想按角色指定 agent、模型或推理力度，可加形如 `<adapter>[:<model>][@<effort>]` 的参数，例如：`--player 编码者=claude:claude-sonnet-5 --player 审查者=codex:gpt-5.6-terra --captain claude:claude-sonnet-5@high`。（英文参考入口的 player 名为 `Coder` 与 `Reviewer`。）
+每个角色都默认使用 `claude`——包括编码者、审查者两个 player，以及 Captain（隐藏的编排者，负责轮次路由与结果裁决）。想按角色指定 agent、模型或推理力度，可加形如 `<adapter>[:<model>][@<effort>]` 的参数，例如：`--player 编码者=claude:claude-sonnet-5 --player 审查者=codex:gpt-5.6-terra --captain claude:claude-sonnet-5@high`。（入口以规范小写角色 id 命名每个角色，与编译后状态机委派的 id 一致；英文参考入口的 player 名为 `coder` 与 `reviewer`。）
 
 工作流作用于**当前目录**，其脚本化的第一步会检查该目录是否为 Git 仓库的**根目录**。本目录不是，于是这一步首先执行 `git init`，随后：
 
