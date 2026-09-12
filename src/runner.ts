@@ -87,11 +87,13 @@ import {
 } from './runtime-contract.js';
 import {
   artifactSchemaForPlaybookProvenance,
+  checkGearsFsmConformance,
   checkLinkedModuleContract,
   emitFsmCoverageTest,
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
+  findConcurrentRoleSets,
   findMachineConfig,
   loadFsmModule,
   loadLinkedModuleForVerification,
@@ -419,6 +421,7 @@ async function runFullLink(
     optimize: !invocation.noOptimize,
     normalize,
     sourceFidelity: invocation.pipeline !== RESERVED_SLC_PIPELINE,
+    linkTarget: resolve(cwd, invocation.linkTarget),
   });
 
   const linked = linkedArtifactPath({
@@ -760,6 +763,8 @@ interface PhaseStep {
   sourceFidelity?: true;
   /** Present for a gated `playbook` link step (DR-030, phase-execution-53). */
   linkFidelity?: MechanicalReview;
+  /** Existing GEARS-to-FSM conformance checked before downstream work (DR-033). */
+  fsmConformance?: MechanicalReview;
 }
 
 /** A canonical full/full-link invocation eligible for history. */
@@ -858,6 +863,8 @@ function buildCompileSteps(opts: {
   normalize: boolean;
   /** False inside the reserved `slc` meta-pipeline, which has its own gate (DR-029). */
   sourceFidelity: boolean;
+  /** Concrete generated-artifact target, never a compiler phase pin. */
+  linkTarget?: string;
 }): PhaseStep[] {
   const { pipeline, plan, artDir, basename } = opts;
   const steps: PhaseStep[] = [];
@@ -898,6 +905,7 @@ function buildCompileSteps(opts: {
           previous,
           artifact.path,
           opts.sourceFidelity,
+          opts.linkTarget,
         ),
       );
       previous = artifact.path;
@@ -908,7 +916,14 @@ function buildCompileSteps(opts: {
       `${basename}.${phase.target.format}.raw${phase.target.ext}`,
     );
     steps.push(
-      compileStep(pipeline, phase, previous, raw, opts.sourceFidelity),
+      compileStep(
+        pipeline,
+        phase,
+        previous,
+        raw,
+        opts.sourceFidelity,
+        opts.linkTarget,
+      ),
     );
     previous = raw;
     passes.forEach((pass, index) => {
@@ -920,7 +935,14 @@ function buildCompileSteps(opts: {
               `${basename}.${phase.target.format}.opt${index + 1}${phase.target.ext}`,
             );
       steps.push(
-        compileStep(pipeline, pass, previous, target, opts.sourceFidelity),
+        compileStep(
+          pipeline,
+          pass,
+          previous,
+          target,
+          opts.sourceFidelity,
+          opts.linkTarget,
+        ),
       );
       previous = target;
     });
@@ -934,6 +956,7 @@ function compileStep(
   source: string,
   target: string,
   sourceFidelity: boolean,
+  linkTarget?: string,
 ): PhaseStep {
   // Only a text-to-GEARS phase conserves authored Source fragments, and the
   // reserved meta-pipeline compiles definitions under its own fidelity gate
@@ -942,20 +965,26 @@ function compileStep(
     sourceFidelity &&
     phase.source.format === 'text' &&
     phase.target.format === 'gears';
+  const fsmConformance =
+    phase.source.format === 'gears' && phase.target.format === 'fsm'
+      ? () => fsmConformanceFindings(source, target, linkTarget)
+      : undefined;
+  const mechanicalReview = gated
+    ? () => sourceFidelityFindings(source, target)
+    : fsmConformance;
   return {
     request: {
       kind: 'compile',
       definitionPath: phaseDefinition(pipeline, phase.name),
       source,
       target,
-      ...(gated
-        ? { mechanicalReview: () => sourceFidelityFindings(source, target) }
-        : {}),
+      ...(mechanicalReview === undefined ? {} : { mechanicalReview }),
     },
     phase: phase.name,
     pinKey: phase.name,
     targetExt: phase.target.ext,
     ...(gated ? { sourceFidelity: true as const } : {}),
+    ...(fsmConformance === undefined ? {} : { fsmConformance }),
   };
 }
 
@@ -986,6 +1015,55 @@ async function sourceFidelityFindings(
     return checkSourceGearsContract(sourceText, gearsText);
   } catch (error) {
     return [`Source fidelity could not be checked: ${messageOf(error)}`];
+  }
+}
+
+/** Reuses the emitted GEARS-to-FSM suite before accepting its input (DR-033). */
+async function fsmConformanceFindings(
+  source: string,
+  target: string,
+  linkTarget?: string,
+): Promise<readonly string[]> {
+  try {
+    await stat(target);
+  } catch (error) {
+    // Absence belongs to the generic target check; all other failures are
+    // actionable findings rather than permission to skip the gate.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    return [`FSM conformance could not be checked: ${messageOf(error)}`];
+  }
+  try {
+    const [gears, fsm] = await Promise.all([
+      readFile(source, 'utf8'),
+      loadFsmModule(target),
+    ]);
+    const config = findMachineConfig(fsm);
+    const provenance =
+      linkTarget === undefined
+        ? undefined
+        : await playbookProvenanceForLinkTarget(linkTarget);
+    const runtimeDeclaration =
+      linkTarget === undefined ||
+      artifactSchemaForPlaybookProvenance(provenance) !== undefined
+        ? undefined
+        : await linkTargetRuntimeDeclaration(linkTarget);
+    const schema = resolveArtifactSchemaForVerification({
+      requireContinuationSchema: false,
+      config,
+      ...(provenance === undefined ? {} : { provenance }),
+      ...(runtimeDeclaration === undefined ? {} : { runtimeDeclaration }),
+    });
+    return [
+      ...schema.findings,
+      ...checkGearsFsmConformance(gears, config, {
+        concurrentRoleSets: findConcurrentRoleSets(fsm),
+        ...(schema.artifactSchema === undefined
+          ? {}
+          : { artifactSchema: schema.artifactSchema }),
+      }),
+    ];
+  } catch (error) {
+    return [`FSM conformance could not be checked: ${messageOf(error)}`];
   }
 }
 
@@ -1348,6 +1426,22 @@ async function executeSteps(
         step.request.source,
         target,
       );
+      if (findings.length > 0) {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons: [...findings],
+          }),
+        );
+        return stopped(index);
+      }
+    }
+    // Recheck even custom executors that do not consume mechanicalReview.
+    // runPhase has already enforced the unchanged generic protection checks.
+    if (step.fsmConformance !== undefined) {
+      const findings = await step.fsmConformance();
       if (findings.length > 0) {
         fail();
         diagnostics.push(

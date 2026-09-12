@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted
+Accepted; unreviewed-finding disposition amended by [DR-033](033-early-conformance-and-mechanical-repair.md).
 
 ## Context
 

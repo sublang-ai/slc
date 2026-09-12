@@ -59,6 +59,8 @@ import {
 
 import { writePlaybookEngineFixture } from './playbook-engine-fixture.js';
 
+import { pipelineOutput } from './pipeline-output-fixture.js';
+
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats
 
@@ -108,7 +110,8 @@ const makeAgent = (
         return { status: 'success', text: 'BLOCKED: the source is malformed' };
       if (opts.error) return { status: 'error', text: 'agent failed' };
       const match = /artifact to write: (.+)/.exec(prompt);
-      if (match && !opts.skip) await writeFile(match[1].trim(), 'output\n');
+      if (match && !opts.skip)
+        await writeFile(match[1].trim(), pipelineOutput(match[1].trim()));
       return { status: 'success', text: 'wrote the artifact' };
     },
   };
@@ -420,7 +423,8 @@ describe('progress (cli-36, cli-37)', () => {
       run: async ({ prompt }) => {
         seenDuringPhase.push([...err]);
         const target = /artifact to write: (.+)/.exec(prompt)?.[1].trim();
-        if (target !== undefined) await writeFile(target, 'output\n');
+        if (target !== undefined)
+          await writeFile(target, pipelineOutput(target));
         return { status: 'success', text: 'wrote the artifact' };
       },
     };
@@ -465,7 +469,8 @@ describe('progress (cli-36, cli-37)', () => {
         signalEntered();
         await released;
         const target = /artifact to write: (.+)/.exec(prompt)?.[1].trim();
-        if (target !== undefined) await writeFile(target, 'output\n');
+        if (target !== undefined)
+          await writeFile(target, pipelineOutput(target));
         return { status: 'success', text: 'wrote the artifact' };
       },
     };

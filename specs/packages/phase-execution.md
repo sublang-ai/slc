@@ -21,7 +21,7 @@ Essential project-specific references are `slc`, this project's compiler CLI, an
 
 #### phase-execution-1
 
-The slc command shall perform only generic pipeline mechanics, and shall not contain phase-specific transformation rules, phase-specific prompt notes, or phase-specific semantic validators ([DR-003](../decisions/003-slc-phase-execution.md)).
+The slc command shall perform only generic pipeline mechanics, and shall not contain phase-specific transformation rules, phase-specific prompt notes, or phase-specific semantic validators beyond the existing artifact-verification gates [[phase-execution-51](#phase-execution-51)], [[phase-execution-53](#phase-execution-53)], [[phase-execution-55](#phase-execution-55)] ([DR-003](../decisions/003-slc-phase-execution.md)).
 
 #### phase-execution-2
 
@@ -83,7 +83,7 @@ When interpreting a phase, the slc command shall prompt a coding agent, reached 
 
 #### phase-execution-12
 
-Where no independent Reviewer is configured, when interpreting a phase, the slc command shall use exactly one agent invocation per phase; reviewed execution is governed instead by [[phase-execution-46](#phase-execution-46)] ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-022](../decisions/022-two-agent-reviewed-compilation.md)).
+Where no independent Reviewer is configured, when interpreting a phase, the slc command shall use exactly one initial agent invocation per phase, with at most two corrections only for mechanical findings [[phase-execution-56](#phase-execution-56)]; reviewed execution is governed instead by [[phase-execution-46](#phase-execution-46)] ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-022](../decisions/022-two-agent-reviewed-compilation.md)).
 
 #### phase-execution-13
 
@@ -110,7 +110,7 @@ When interpreting a phase, the slc command shall permit the agent to invoke the 
 
 #### phase-execution-46
 
-Where an independent Reviewer is configured, when an agent call has no explicit `allowedTools` property and its Coder returns successful non-`BLOCKED` work without a clarification marker [[clarification-6](clarification.md#clarification-6)], the slc command shall create a fresh Reviewer conversation for that performing call whose prompt permits only host-exposed read-only file/search capabilities, warns that shell/network may be unavailable, confines any exposed read-only shell to non-mutating inspection, forbids edits, writes, mutations, and commits, confines inspection to the request's workspace rather than prior or reference artifacts outside it, and guides the Reviewer to treat a twice-evidenced rejection as settled; it shall read the verdict from the end of the Reviewer reply — clean when the last non-blank line is exactly `NO_FINDINGS`, otherwise a findings block running from the last line that is exactly `FINDINGS:` to the end of the reply with consecutive top-level numbered findings and only indented continuation/evidence lines — ignoring narration before the verdict because a Reviewer may preface its verdict with rationale or an adapter may join progress commentary ahead of it, and treating a reply with neither form or a malformed findings block as malformed, relay findings to the Coder for evidenced disposition and minimal root-cause repair, and permit at most three Reviewer calls, succeeding on `NO_FINDINGS` but failing closed before another correction when the third well-formed verdict still reports findings and including those final well-formed Reviewer findings in the failure diagnostic alongside the latest usable Coder result; it shall take every successful correction's private envelope from the last complete top-level JSON object in the reply — bare or wholly enclosed by one lone unlabeled or `json` Markdown fence, with narration before that object ignored because an adapter may join an agent's progress commentary ahead of its final message, and with a reply carrying no complete object, another fence label, non-whitespace text after that object, or a second complete object separated from it by whitespace alone rejected — whose `dispositions` consecutively cover every current finding with its number, `accept` or `reject` decision, and nonblank reason and whose string `result` is the complete replacement in the original response format, validate and add those decoded fields to the explicit review transcript, replace only the Coder result text with decoded `result` before re-review or phase adjudication, and fail closed on a malformed envelope while retaining the preceding usable Coder result; it shall use a role's continuation token only when that role's immediately preceding result supplies one, include prior transcript in later Coder and Reviewer prompts as fallback, preserve the original cwd, models, and cancellation signal, retry a Reviewer call once after a short pause when it returns an error rather than a verdict and that error is not a stall abort [[phase-execution-36](#phase-execution-36)], fail closed with the Reviewer failure text on a repeated Reviewer error, incompletion, or malformed verdict, return Coder error or incompletion without envelope parsing, treat `BLOCKED` only after decoding a successful correction's `result`, and bypass every call carrying explicit `allowedTools` unchanged ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [[phase-execution-31](#phase-execution-31)]).
+Where an independent Reviewer is configured, when an agent call has no explicit `allowedTools` property and its Coder returns successful non-`BLOCKED` work without a clarification marker [[clarification-6](clarification.md#clarification-6)], the slc command shall create a fresh Reviewer conversation for that performing call only after its mechanical checks are clean [[phase-execution-56](#phase-execution-56)] whose prompt permits only host-exposed read-only file/search capabilities, warns that shell/network may be unavailable, confines any exposed read-only shell to non-mutating inspection, forbids edits, writes, mutations, and commits, confines inspection to the request's workspace rather than prior or reference artifacts outside it, and guides the Reviewer to treat a twice-evidenced rejection as settled; it shall read the verdict from the end of the Reviewer reply — clean when the last non-blank line is exactly `NO_FINDINGS`, otherwise a findings block running from the last line that is exactly `FINDINGS:` to the end of the reply with consecutive top-level numbered findings and only indented continuation/evidence lines — ignoring narration before the verdict because a Reviewer may preface its verdict with rationale or an adapter may join progress commentary ahead of it, and treating a reply with neither form or a malformed findings block as malformed, relay findings to the Coder for evidenced disposition and minimal root-cause repair, and permit at most three Reviewer calls, succeeding on `NO_FINDINGS` but failing closed before another correction when the third well-formed verdict still reports findings and including those final well-formed Reviewer findings in the failure diagnostic alongside the latest usable Coder result; it shall take every successful correction's private envelope from the last complete top-level JSON object in the reply — bare or wholly enclosed by one lone unlabeled or `json` Markdown fence, with narration before that object ignored because an adapter may join an agent's progress commentary ahead of its final message, and with a reply carrying no complete object, another fence label, non-whitespace text after that object, or a second complete object separated from it by whitespace alone rejected — whose `dispositions` consecutively cover every current finding with its number, `accept` or `reject` decision, and nonblank reason and whose string `result` is the complete replacement in the original response format, validate and add those decoded fields to the explicit review transcript, replace only the Coder result text with decoded `result` before re-review or phase adjudication, and fail closed on a malformed envelope while retaining the preceding usable Coder result; it shall use a role's continuation token only when that role's immediately preceding result supplies one, include prior transcript in later Coder and Reviewer prompts as fallback, preserve the original cwd, models, and cancellation signal, retry a Reviewer call once after a short pause when it returns an error rather than a verdict and that error is not a stall abort [[phase-execution-36](#phase-execution-36)], fail closed with the Reviewer failure text on a repeated Reviewer error, incompletion, or malformed verdict, return Coder error or incompletion without envelope parsing, treat `BLOCKED` only after decoding a successful correction's `result`, and bypass every call carrying explicit `allowedTools` unchanged ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [[phase-execution-31](#phase-execution-31)]).
 
 ### Source-fidelity gate
 
@@ -120,8 +120,8 @@ Where a compile phase transforms a `text` source into a `gears` target outside t
 
 | Case | Required disposition |
 | --- | --- |
-| Findings inside a reviewed loop, before that round's Reviewer call | Relay them to the Coder as the numbered `FINDINGS:` list that Reviewer call would have produced, in place of it, and count it as one of the permitted Reviewer calls so the loop's bound is unchanged [[phase-execution-46](#phase-execution-46)]. |
-| No finding | Leave the round unchanged, so a reviewed loop proceeds to its Reviewer call. |
+| Findings inside a configured performing-agent loop, before any Reviewer call | Relay them through bounded mechanical repair [[phase-execution-56](#phase-execution-56)]. |
+| No finding | Accept without another agent call when no independent Reviewer is configured, otherwise proceed to its Reviewer call [[phase-execution-56](#phase-execution-56)]. |
 | Findings on a phase result the run would otherwise accept | Fail the phase closed with the findings as its diagnostic [[phase-execution-9](#phase-execution-9)]. |
 
 ### Link-fidelity gate
@@ -132,10 +132,20 @@ Where a link phase links exactly one `fsm` object into Playbook's `playbook` lin
 
 | Case | Required disposition |
 | --- | --- |
-| Findings inside a reviewed loop, before that round's Reviewer call | Relay them to the Coder as the numbered `FINDINGS:` list that Reviewer call would have produced, in place of it, and count it as one of the permitted Reviewer calls so the loop's bound is unchanged, exactly as a mechanical Source-fidelity finding is relayed [[phase-execution-51](#phase-execution-51)], [[phase-execution-46](#phase-execution-46)]. |
-| No finding | Leave the round unchanged, so a reviewed loop proceeds to its Reviewer call. |
+| Findings inside a configured performing-agent loop, before any Reviewer call | Relay them through bounded mechanical repair [[phase-execution-56](#phase-execution-56)]. |
+| No finding | Accept without another agent call when no independent Reviewer is configured, otherwise proceed to its Reviewer call [[phase-execution-56](#phase-execution-56)]. |
 | Findings on a link result the run would otherwise accept | Fail the phase closed with the findings as its diagnostic [[phase-execution-9](#phase-execution-9)]. |
 | A linked module the checks cannot import | Dispose of the import diagnostic as a finding, so the Coder receives it rather than the phase failing with an error. |
+
+### Early conformance and mechanical repair
+
+#### phase-execution-55
+
+Where a compile phase transforms a `gears` source into an `fsm` target, when its interpreted or compiled performing agent returns successful work, the slc command shall check the live FSM's conformance to that GEARS source [[verification-1](verification.md#verification-1)] using reconciled artifact-schema evidence [[verification-21](verification.md#verification-21)] from the FSM and the actual full-link target when available, without prior linked artifacts or compiler phase pins, relay schema, conformance, and module-import findings through mechanical repair [[phase-execution-56](#phase-execution-56)], and recheck after generic phase acceptance [[phase-execution-4](#phase-execution-4)], [[phase-execution-5](#phase-execution-5)] before any downstream phase; an absent target remains the generic target check's responsibility ([DR-033](../decisions/033-early-conformance-and-mechanical-repair.md)).
+
+#### phase-execution-56
+
+Where a configured performing call has no explicit `allowedTools` property and returns successful non-`BLOCKED` work without a clarification marker [[clarification-6](clarification.md#clarification-6)], when its deterministic mechanical check reports findings, the slc command shall relay them to the same Coder as a numbered `FINDINGS:` list through the existing private correction-envelope protocol [[phase-execution-46](#phase-execution-46)], with or without an independent Reviewer, sharing a maximum of three mechanical-or-Reviewer rounds and two Coder corrections, returning the decoded result immediately when mechanically clean and no Reviewer is configured, creating any independent Reviewer only after mechanical checks are clean, failing closed with the surviving findings after the last round, and stopping before another check or agent call on cancellation or a decoded clarification; calls with neither a mechanical check nor a Reviewer and explicit `allowedTools` control calls retain their single unchanged Coder call ([DR-033](../decisions/033-early-conformance-and-mechanical-repair.md)).
 
 ### Compiled execution
 
@@ -201,7 +211,7 @@ Where a positive stall timeout is configured, while any Coder, Reviewer, compile
 
 #### phase-execution-16
 
-Where every phase is interpreted [[phase-execution-10](#phase-execution-10)] and no independent Reviewer is configured, when the slc command runs a full pipeline whose agent writes each declared target [[phase-execution-11](#phase-execution-11)], the slc command shall complete with exactly one agent invocation per phase [[phase-execution-12](#phase-execution-12)], the canonical artifacts present, and any ambiguity the agent reported surfaced in its diagnostics [[phase-execution-8](#phase-execution-8)].
+Where every phase is interpreted [[phase-execution-10](#phase-execution-10)] and no independent Reviewer is configured, when the slc command runs a full pipeline whose agent writes each declared target [[phase-execution-11](#phase-execution-11)], the slc command shall complete with exactly one agent invocation per mechanically clean phase [[phase-execution-12](#phase-execution-12)], the canonical artifacts present, and any ambiguity the agent reported surfaced in its diagnostics [[phase-execution-8](#phase-execution-8)].
 
 #### phase-execution-17
 
@@ -257,7 +267,7 @@ Where a normalization fixture supplies the entry-phase definition as a read-only
 
 #### phase-execution-52
 
-Where a fixture `text2gears` phase compiles a Source authoring one fragment and its executor writes a live target, when the phase runs, a target that drops the fragment shall reach the Coder of a reviewed interpreted loop and of a reviewed compiled performing Captain call alike as a numbered `FINDINGS:` correction without any Reviewer call, a conservant correction shall then reach the Reviewer and succeed on `NO_FINDINGS`, findings still present when the third permitted call comes due shall fail closed carrying them, an unreviewed run whose target has findings shall fail that phase with the findings as its diagnostic, and neither a conservant target nor the same phase run under the reserved `slc` meta-pipeline shall report a finding [[phase-execution-51](#phase-execution-51)].
+Where a fixture `text2gears` phase compiles a Source authoring one fragment and its executor writes a live target, when the phase runs, a target that drops the fragment shall reach the Coder of a reviewed interpreted loop and of a reviewed compiled performing Captain call alike as a numbered `FINDINGS:` correction without any Reviewer call, a conservant correction shall then reach the Reviewer and succeed on `NO_FINDINGS`, findings still present when the third permitted call comes due shall fail closed carrying them, a run without a configured correction transport whose target has findings shall fail that phase with the findings as its diagnostic, and neither a conservant target nor the same phase run under the reserved `slc` meta-pipeline shall report a finding [[phase-execution-51](#phase-execution-51)].
 
 #### phase-execution-54
 
@@ -288,6 +298,14 @@ Where a faked Coder or Reviewer transport yields an initial event and then stall
 #### phase-execution-35
 
 Where a pinned `composed-v2` meta-phase artifact is driven through the compiled executor over a fake agent transport that captures transported prompts, when the seeded compile or link turn reaches the artifact's transformation-performing direct Captain call, the transported prompt shall carry the artifact's composed GEARS-derived body plus the host workspace contract naming the request's absolute workspace inputs and the absolute artifact-to-write path, and a captain that writes exactly that artifact shall map the run to `ok`; whereas a routing-only Captain call carrying an explicitly empty `allowedTools` and every hidden judge call shall receive its composed prompt unchanged [[phase-execution-34](#phase-execution-34)].
+
+#### phase-execution-57
+
+Where fixture compilation produces a GEARS prompt containing a runtime placeholder, when its FSM interpolates that placeholder prematurely or fails to import, the integration suite shall verify that the real conformance gate rejects it before downstream linking, rechecks a repaired FSM through a fresh module load, and reconciles schema evidence from the actual target rather than compiler pins or stale linked artifacts [[phase-execution-55](#phase-execution-55)].
+
+#### phase-execution-58
+
+Where configured interpreted and compiled performing calls use fixture transports without an independent Reviewer, when deterministic findings require correction, the integration suite shall verify successful same-Coder recovery, one call for a clean artifact, at most two repairs for recurring findings, private-envelope validation, and stopping on cancellation or decoded clarification [[phase-execution-56](#phase-execution-56)], together with protected-input rejection after a correction [[phase-execution-5](#phase-execution-5)]; an independently configured Reviewer shall be constructed only after the mechanical findings clear [[phase-execution-56](#phase-execution-56)].
 
 ## References
 

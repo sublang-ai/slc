@@ -57,7 +57,7 @@ When a compilation-correctness check selects the artifact schema used by generat
 | A linked callable factory has an own `compat` property. | Supply a schema-3 signal only for an enumerable, non-writable, non-configurable data property whose value is a frozen exact own-data `{ artifactSchema: 3, runtimeAbi: 1 }` record; otherwise report malformed compatibility. |
 | One or more provenance, actor-generation, or exact factory-compatibility signals exist and every present signal is valid. | Select a schema only when all supplied signals agree, and report disagreement otherwise. |
 | No provenance, actor-generation, or compatibility signal exists and the linked callable factory has no own `compat`. | Select the immutable historical schema-1 continuation shape. |
-| A direct-Captain continuation has neither reviewed provenance, a generation-specific actor binding or controller, nor a linked callable factory. | Leave it unclassified and report the missing schema rather than guessing. |
+| A direct-Captain continuation has neither reviewed provenance, a generation-specific actor binding or controller, nor a linked callable factory. | Leave it unclassified; report the missing schema when checking continuation composition, while pre-link conformance requires no continuation-generation decision and retains all other schema findings. |
 | No schema signal exists and no direct-Captain continuation requires a generation-specific probe. | Leave the artifact unclassified without reporting a schema finding. |
 
 #### verification-22

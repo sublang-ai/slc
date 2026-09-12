@@ -174,17 +174,26 @@ refuses the run before any agent call. Discovery order, `--config`, and
 validation rules live in the [CLI spec](specs/packages/cli.md);
 `slc --help` prints the summary.
 
+Mechanical checks run by default at the source-to-GEARS, GEARS-to-FSM,
+and Playbook link boundaries. A failing check returns its findings to the
+same Coder for at most two repairs; a clean unreviewed transformation uses
+one agent call. An invalid FSM stops before linking. Unresolved findings
+fail the phase, and source questions still stop for clarification
+([DR-033](specs/decisions/033-early-conformance-and-mechanical-repair.md)).
+
 ### Reviewed compilation (two agents)
 
 Set `reviewerAgent` to compile with two independent agents. Your `agent`
-selection is the Coder that writes each artifact; the Reviewer then
-inspects that work read-only and reports only material correctness or
+selection is the Coder that writes each artifact; once mechanical checks
+pass, the Reviewer inspects that work read-only and reports only material correctness or
 spec defects, and the Coder answers every finding with evidence and a
-minimal fix. Up to three review rounds — if the third still reports
+minimal fix. Mechanical and independent review share three rounds — if the
+third still reports
 findings, the phase fails closed and names them rather than shipping a
 questionable artifact.
 
-It costs at least one extra agent call per transformation that runs.
+An independent review adds an agent call for each mechanically valid
+transformation it inspects.
 Reuse performs no transformation and so makes no calls; Update,
 Ordinary, and `--rebuild` use the loop automatically
 ([DR-022](specs/decisions/022-two-agent-reviewed-compilation.md)).

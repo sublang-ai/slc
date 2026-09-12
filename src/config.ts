@@ -350,7 +350,7 @@ function configuredReviewingClient(
   opts: Parameters<typeof createConfiguredAgentClient>[1],
 ): AgentClient {
   const reviewer = selection.reviewer;
-  if (reviewer === undefined) return coder;
+  if (reviewer === undefined) return createReviewingAgent({ coder });
   return createReviewingAgent({
     coder,
     reviewer: () =>

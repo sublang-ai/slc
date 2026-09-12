@@ -21,6 +21,20 @@ and this project adheres to
   remains unaccepted until compilation succeeds
   ([DR-032](specs/decisions/032-noninteractive-source-clarification.md)).
 
+- **FSM conformance is checked before linking.** Existing GEARS-to-FSM
+  checks reject prompt drift, malformed modules, and conflicting schema
+  evidence before downstream compilation spends time on invalid input
+  ([DR-033](specs/decisions/033-early-conformance-and-mechanical-repair.md)).
+
+### Changed
+
+- **Mechanical findings can be repaired by the same Coder by default.**
+  Source, FSM, and link checks allow at most two correction calls without
+  requiring an independent Reviewer. Clean unreviewed work still uses one
+  call. Optional independent review starts only after mechanical checks
+  pass and shares the existing three-round bound; clarification and
+  protected-input checks remain in effect.
+
 ## [0.9.0] - 2026-09-04
 
 ### Added

@@ -3274,6 +3274,8 @@ function linkedArtifactSchemaSignal(linked: {
  * (DR-028).
  */
 export function resolveArtifactSchemaForVerification(opts: {
+  /** Conformance before linking has no continuation composer to classify. */
+  requireContinuationSchema?: boolean;
   artifactSchema?: 1 | 3;
   provenance?: unknown;
   /** The link target's installed engine declaration, when the caller read it. */
@@ -3354,6 +3356,7 @@ export function resolveArtifactSchemaForVerification(opts: {
     return { artifactSchema: 1, findings: [] };
   }
   const hasAmbiguousCaptainContinuation =
+    opts.requireContinuationSchema !== false &&
     opts.config !== undefined &&
     enumerateCaptainStates(opts.config).some(
       (state) =>

@@ -20,6 +20,8 @@ import {
 } from '../src/interpreter.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
 
+import { pipelineOutput } from './pipeline-output-fixture.js';
+
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats
 
@@ -56,7 +58,8 @@ const makeAgent = (
       if (opts.block)
         return { status: 'success', text: 'BLOCKED: the source is malformed' };
       const match = /artifact to write: (.+)/.exec(prompt);
-      if (match && !opts.skip) await writeFile(match[1].trim(), 'output\n');
+      if (match && !opts.skip)
+        await writeFile(match[1].trim(), pipelineOutput(match[1].trim()));
       if (opts.mutate) await writeFile(opts.mutate, 'tampered');
       if (opts.add)
         await writeFile(opts.add, formats('text', '.md', 'foo', '.md'));

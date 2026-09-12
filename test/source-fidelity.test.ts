@@ -174,84 +174,94 @@ describe('text-to-GEARS Source-fidelity gate (phase-execution-51, phase-executio
     expect(await readFile(target, 'utf8')).toBe(CONSERVANT);
   });
 
-  it('relays a finding through a compiled performing Captain call (phase-execution-25)', async () => {
-    const compiledTarget = join(workDir, 'compiled.gears.md');
-    const definitionPath = join(pipelineDir, 'text2gears.md');
-    const state = {
-      value: 'done',
-      activeStateIds: ['done'],
-      tags: [],
-      status: 'done',
-      quiescent: true,
-      stateId: 'done',
-    };
-    // A roleless schema-3 artifact performs through one direct Captain call:
-    // the same call the reviewed transport wraps in production.
-    let ports: {
-      callCaptain: (
-        prompt: string,
-        signal: AbortSignal,
-        options: { visibility: 'visible'; resume: false },
-      ) => Promise<{ status: string; finalText?: string; error?: string }>;
-    };
-    const factory = () => ({
-      async init(session: { ports: typeof ports }) {
-        ports = session.ports;
-      },
-      async handleBossInput({ signal }: { text: string; signal: AbortSignal }) {
-        const captain = await ports.callCaptain(
-          'Compile the Source into GEARS.',
+  it.each([false, true])(
+    'relays a finding through a compiled performing Captain call (independent Reviewer=%s)',
+    async (reviewed) => {
+      const compiledTarget = join(workDir, 'compiled.gears.md');
+      const definitionPath = join(pipelineDir, 'text2gears.md');
+      const state = {
+        value: 'done',
+        activeStateIds: ['done'],
+        tags: [],
+        status: 'done',
+        quiescent: true,
+        stateId: 'done',
+      };
+      // A roleless schema-3 artifact performs through one direct Captain call:
+      // the same call the reviewed transport wraps in production.
+      let ports: {
+        callCaptain: (
+          prompt: string,
+          signal: AbortSignal,
+          options: { visibility: 'visible'; resume: false },
+        ) => Promise<{ status: string; finalText?: string; error?: string }>;
+      };
+      const factory = () => ({
+        async init(session: { ports: typeof ports }) {
+          ports = session.ports;
+        },
+        async handleBossInput({
           signal,
-          { visibility: 'visible', resume: false },
-        );
-        return captain.status === 'ok'
-          ? { outcome: 'terminal', state, stateDescription: 'compiled' }
-          : { outcome: 'failed', state, error: captain.error };
-      },
-      async dispose() {},
-    });
-    Object.defineProperty(factory, 'compat', {
-      value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
-      enumerable: true,
-      writable: false,
-      configurable: false,
-    });
+        }: {
+          text: string;
+          signal: AbortSignal;
+        }) {
+          const captain = await ports.callCaptain(
+            'Compile the Source into GEARS.',
+            signal,
+            { visibility: 'visible', resume: false },
+          );
+          return captain.status === 'ok'
+            ? { outcome: 'terminal', state, stateDescription: 'compiled' }
+            : { outcome: 'failed', state, error: captain.error };
+        },
+        async dispose() {},
+      });
+      Object.defineProperty(factory, 'compat', {
+        value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      });
 
-    const coderCalls: AgentRunRequest[] = [];
-    const reviewerCalls: AgentRunRequest[] = [];
-    const reviewer = cleanReviewer(reviewerCalls);
-    const captainTransport = createReviewingAgent({
-      coder: queuedCoder([INVENTED, CONSERVANT], coderCalls, compiledTarget),
-      reviewer: () => reviewer,
-    });
-    const executor = createCompiledExecutor({
-      artifactPath: 'ignored',
-      runRoot: workDir,
-      runtimeContract: 'composed-v3',
-      player: captainTransport,
-      judge: captainTransport,
-      loadFactory: async () => factory as never,
-    });
+      const coderCalls: AgentRunRequest[] = [];
+      const reviewerCalls: AgentRunRequest[] = [];
+      const reviewer = cleanReviewer(reviewerCalls);
+      const captainTransport = createReviewingAgent({
+        coder: queuedCoder([INVENTED, CONSERVANT], coderCalls, compiledTarget),
+        ...(reviewed ? { reviewer: () => reviewer } : {}),
+      });
+      const executor = createCompiledExecutor({
+        artifactPath: 'ignored',
+        runRoot: workDir,
+        runtimeContract: 'composed-v3',
+        player: captainTransport,
+        judge: captainTransport,
+        loadFactory: async () => factory as never,
+      });
 
-    const result = await executor.run(
-      {
-        kind: 'compile',
-        definitionPath,
-        source,
-        target: compiledTarget,
-        mechanicalReview: async () =>
-          checkSourceGearsContract(
-            await readFile(source, 'utf8'),
-            await readFile(compiledTarget, 'utf8'),
-          ),
-      },
-      new AbortController().signal,
-    );
+      const result = await executor.run(
+        {
+          kind: 'compile',
+          definitionPath,
+          source,
+          target: compiledTarget,
+          mechanicalReview: async () =>
+            checkSourceGearsContract(
+              await readFile(source, 'utf8'),
+              await readFile(compiledTarget, 'utf8'),
+            ),
+        },
+        new AbortController().signal,
+      );
 
-    expect(result.status).toBe('ok');
-    expect(coderCalls).toHaveLength(2);
-    expect(coderCalls[1].prompt).toContain(`FINDINGS:\n1. ${INVENTED_FINDING}`);
-    expect(reviewerCalls).toHaveLength(1);
-    expect(await readFile(compiledTarget, 'utf8')).toBe(CONSERVANT);
-  });
+      expect(result.status).toBe('ok');
+      expect(coderCalls).toHaveLength(2);
+      expect(coderCalls[1].prompt).toContain(
+        `FINDINGS:\n1. ${INVENTED_FINDING}`,
+      );
+      expect(reviewerCalls).toHaveLength(reviewed ? 1 : 0);
+      expect(await readFile(compiledTarget, 'utf8')).toBe(CONSERVANT);
+    },
+  );
 });

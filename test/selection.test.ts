@@ -30,6 +30,8 @@ import {
 } from '../src/pins.js';
 import { runSlc, type CompiledSelection, type SlcDeps } from '../src/runner.js';
 
+import { pipelineOutput } from './pipeline-output-fixture.js';
+
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${sf} | ${se} |\n| target | ${tf} | ${te} |\n`;
 
@@ -46,7 +48,7 @@ function spyExecutor(
       calls.push(request);
       const target =
         request.kind === 'compile' ? request.target : request.linked;
-      await writeFile(target, `${label} output\n`);
+      await writeFile(target, pipelineOutput(target, `${label} output`));
       return { status: 'ok', diagnostics: [`${label} ran`] };
     },
   };

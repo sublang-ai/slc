@@ -918,3 +918,111 @@ describe('createReviewingAgent (DR-022)', () => {
     ]);
   });
 });
+
+describe('mechanical repair without an independent Reviewer (DR-033)', () => {
+  it('stops after the initial Coder call and two repairs for unchanged findings', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'initial', resumeToken: 'c1' },
+      {
+        status: 'success',
+        text: correctionEnvelope('first repair'),
+        resumeToken: 'c2',
+      },
+      {
+        status: 'success',
+        text: correctionEnvelope('second repair'),
+        resumeToken: 'c3',
+      },
+    ]);
+    let checks = 0;
+    const result = await createReviewingAgent({ coder }).run(
+      request({
+        mechanicalReview: () => {
+          checks++;
+          return ['same defect'];
+        },
+      }),
+    );
+    expect(result.status).toBe('error');
+    expect(result.text).toContain('same defect');
+    expect(result.text).toContain('latest Coder output: second repair');
+    expect(checks).toBe(3);
+    expect(coder.calls).toHaveLength(3);
+    expect(coder.calls.slice(1).map((call) => call.resume)).toEqual([
+      'c1',
+      'c2',
+    ]);
+  });
+
+  it.each(['malformed', 'clarification', 'blocked'])(
+    'stops on a %s correction before another mechanical check',
+    async (kind) => {
+      const replacement =
+        kind === 'clarification'
+          ? 'CLARIFICATION: {"questions":[{"id":"scope","question":"Which scope?","reason":"Choose behavior","evidence":"Scope is absent"}]}'
+          : 'BLOCKED: cannot proceed';
+      const coder = queuedClient([
+        { status: 'success', text: 'initial' },
+        {
+          status: 'success',
+          text:
+            kind === 'malformed'
+              ? replacement
+              : correctionEnvelope(replacement),
+        },
+      ]);
+      let checks = 0;
+      const result = await createReviewingAgent({ coder }).run(
+        request({
+          mechanicalReview: () => {
+            checks++;
+            return ['defect'];
+          },
+        }),
+      );
+      expect(checks).toBe(1);
+      expect(coder.calls).toHaveLength(2);
+      if (kind === 'malformed') {
+        expect(result.status).toBe('error');
+        expect(result.text).toContain('malformed private review envelope');
+      } else {
+        expect(result).toMatchObject({ status: 'success', text: replacement });
+      }
+    },
+  );
+
+  it('does not begin a correction after cancellation during a mechanical check', async () => {
+    const controller = new AbortController();
+    const coder = queuedClient([{ status: 'success', text: 'initial' }]);
+    const result = await createReviewingAgent({ coder }).run(
+      request({
+        signal: controller.signal,
+        mechanicalReview: () => {
+          controller.abort();
+          return ['defect'];
+        },
+      }),
+    );
+    expect(result.status).toBe('error');
+    expect(coder.calls).toHaveLength(1);
+  });
+
+  it('does not create a Reviewer while every mechanical round has findings', async () => {
+    const coder = queuedClient([
+      { status: 'success', text: 'initial' },
+      { status: 'success', text: correctionEnvelope('first repair') },
+      { status: 'success', text: correctionEnvelope('second repair') },
+    ]);
+    let creations = 0;
+    const result = await createReviewingAgent({
+      coder,
+      reviewer: () => {
+        creations++;
+        throw new Error('must not construct');
+      },
+    }).run(request({ mechanicalReview: () => ['defect'] }));
+    expect(result.status).toBe('error');
+    expect(creations).toBe(0);
+    expect(coder.calls).toHaveLength(3);
+  });
+});
