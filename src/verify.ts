@@ -232,6 +232,7 @@ export async function playbookProvenanceForLinkTarget(
 /** The minimal XState machine-config shape the introspector walks (`machine.config`). */
 export interface MachineConfigLike {
   initial?: string;
+  meta?: unknown;
   states?: Record<string, StateLike>;
   on?: Record<string, unknown>;
   /** The machine's initial context: a literal record or an input-taking factory. */
@@ -1490,6 +1491,20 @@ export function checkGearsFsmConformance(
   const playbookStates = enumeratePlaybookStates(config);
   const scriptStates = enumerateScriptStates(config);
   const findings: string[] = [];
+
+  const rootPlaybook =
+    typeof config.meta === 'object' && config.meta !== null
+      ? (config.meta as { playbook?: unknown }).playbook
+      : undefined;
+  if (
+    typeof rootPlaybook === 'object' &&
+    rootPlaybook !== null &&
+    Object.hasOwn(rootPlaybook, 'stateId')
+  ) {
+    findings.push(
+      'FSM machine root declares meta.playbook.stateId; public playbook identities belong only to state nodes under states',
+    );
+  }
 
   for (const { state, nearMiss } of controllerNearMisses) {
     const detail =

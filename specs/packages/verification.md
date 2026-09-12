@@ -23,7 +23,8 @@ When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc 
 
 | Case | Required conformance |
 | --- | --- |
-| Every node in a structured machine | Carry a non-empty explicit state id and matching `meta.playbook.stateId`. |
+| The machine root | Omit `meta.playbook.stateId`: public playbook identities belong only to state nodes declared under `states`; the root's XState `id`, description, and other metadata remain outside this restriction ([DR-036](../decisions/036-machine-root-public-identity.md)). |
+| Every state node declared under `states` in a structured machine | Carry a non-empty explicit state id and matching `meta.playbook.stateId`. |
 | Direct-Captain leaf | Invoke `captain` and carry that same id plus the item's prompt body verbatim without `player` or `role` binding. |
 | Schema-3 delegated-role leaf | Invoke `player`, carry `meta.playbook.role` and `invoke.input.role` equal to the source role's canonical lowercase local id, omit `invoke.input.player`, and preserve the role locally without encoding a concrete player or alias. |
 | Schema-3 `Roles` declaration | Derive each local role id by lowercasing its source name, require it to match `[a-z][a-z0-9_-]*`, reject the reserved id `captain`, and reject removed aliases, repeated declarations, or distinct names that collide after derivation. |
@@ -330,6 +331,18 @@ Where a link phase writes a linked module, when the run completes after post-lin
 #### verification-31
 
 Where fixture artifacts yield empty or populated prompt contracts, introspection pins, substitution maps, and schema findings, when their real generated suites are checked with the installed TypeScript compiler in an isolated NodeNext destination using artifact-local checker support, the integration suite shall verify strict type-check success without unused symbols [[verification-2](#verification-2)], [[verification-5](#verification-5)], runtime acceptance of consistent empty evidence, and retained assertion failure for populated schema findings [[verification-21](#verification-21)].
+
+### Machine-root identity acceptance
+
+#### verification-32
+
+Where real XState fixtures exercise machine-root and ordinary state identities, when conformance and the GEARS-to-FSM boundary run, the integration suite shall verify these identity cases [[verification-1](#verification-1)]:
+
+| Fixture | Required evidence |
+| --- | --- |
+| A public identity on the machine root beside an ordinary active state's identity | The normalized snapshot exposes both identities, conformance names the prohibited root declaration, and the boundary rejects before any link call without rewriting its source or generated FSM. |
+| The same fixture with only the root's public-identity metadata removed | The snapshot exposes the ordinary state's identity, conformance accepts it, and the root's XState id, description, and unrelated metadata remain intact. |
+| Existing flat, structured, and historical state-node identities | Conformance preserves their acceptance without relabelling them or extending the root restriction to ordinary nodes. |
 
 ## References
 
