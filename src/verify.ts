@@ -1492,17 +1492,13 @@ export function checkGearsFsmConformance(
   const scriptStates = enumerateScriptStates(config);
   const findings: string[] = [];
 
-  const rootPlaybook =
-    typeof config.meta === 'object' && config.meta !== null
-      ? (config.meta as { playbook?: unknown }).playbook
-      : undefined;
   if (
-    typeof rootPlaybook === 'object' &&
-    rootPlaybook !== null &&
-    Object.hasOwn(rootPlaybook, 'stateId')
+    typeof config.meta === 'object' &&
+    config.meta !== null &&
+    Object.hasOwn(config.meta, 'playbook')
   ) {
     findings.push(
-      'FSM machine root declares meta.playbook.stateId; public playbook identities belong only to state nodes under states',
+      'FSM machine root declares meta.playbook; public playbook metadata belongs only to state nodes under states',
     );
   }
 

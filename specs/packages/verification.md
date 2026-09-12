@@ -23,7 +23,7 @@ When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc 
 
 | Case | Required conformance |
 | --- | --- |
-| The machine root | Omit `meta.playbook.stateId`: public playbook identities belong only to state nodes declared under `states`; the root's XState `id`, description, and other metadata remain outside this restriction ([DR-036](../decisions/036-machine-root-public-identity.md)). |
+| The machine root | Omit an own `meta.playbook` namespace, regardless of its value: public playbook metadata belongs only to state nodes declared under `states`; the root's XState `id`, description, and other metadata namespaces remain outside this restriction ([DR-036](../decisions/036-machine-root-public-identity.md)). |
 | Every state node declared under `states` in a structured machine | Carry a non-empty explicit state id and matching `meta.playbook.stateId`. |
 | Direct-Captain leaf | Invoke `captain` and carry that same id plus the item's prompt body verbatim without `player` or `role` binding. |
 | Schema-3 delegated-role leaf | Invoke `player`, carry `meta.playbook.role` and `invoke.input.role` equal to the source role's canonical lowercase local id, omit `invoke.input.player`, and preserve the role locally without encoding a concrete player or alias. |
@@ -341,6 +341,7 @@ Where real XState fixtures exercise machine-root and ordinary state identities, 
 | Fixture | Required evidence |
 | --- | --- |
 | A public identity on the machine root beside an ordinary active state's identity | The normalized snapshot exposes both identities, conformance names the prohibited root declaration, and the boundary rejects before any link call without rewriting its source or generated FSM. |
+| An empty or null own `meta.playbook` namespace on the machine root | The installed runtime rejects snapshot metadata, and conformance rejects the namespace before linking with unchanged source and FSM bytes. |
 | The same fixture with only the root's public-identity metadata removed | The snapshot exposes the ordinary state's identity, conformance accepts it, and the root's XState id, description, and unrelated metadata remain intact. |
 | Existing flat, structured, and historical state-node identities | Conformance preserves their acceptance without relabelling them or extending the root restriction to ordinary nodes. |
 

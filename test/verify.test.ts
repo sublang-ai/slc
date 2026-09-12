@@ -1400,99 +1400,111 @@ describe('findMachineConfig', () => {
 });
 
 describe('checkGearsFsmConformance', () => {
-  it('rejects only the machine-root public identity before linking (verification-32)', async () => {
-    const config = {
-      id: 'minimal',
-      description: 'Wait for work.',
-      meta: {
-        documentation: { title: 'Minimal workflow' },
-        playbook: { stateId: 'minimal' },
-      },
-      initial: 'ready',
-      states: {
-        ready: {
-          id: 'ready',
-          meta: { playbook: { stateId: 'ready' } },
-          tags: ['playbook.parked'],
+  it.each([{}, null, { stateId: 'minimal' }])(
+    'rejects the machine-root playbook namespace %j before linking (verification-32)',
+    async (rootPlaybook) => {
+      const config = {
+        id: 'minimal',
+        description: 'Wait for work.',
+        meta: {
+          documentation: { title: 'Minimal workflow' },
+          playbook: rootPlaybook,
         },
-      },
-    };
-    const snapshot = createActor(createMachine(config)).getSnapshot();
-    expect(normalizePlaybookSnapshot(snapshot).activeStateIds).toEqual([
-      'minimal',
-      'ready',
-    ]);
-    expect(normalizePlaybookSnapshot(snapshot).stateId).toBeUndefined();
-    const finding =
-      'FSM machine root declares meta.playbook.stateId; public playbook identities belong only to state nodes under states';
-    expect(checkGearsFsmConformance('# Wait\n', config)).toEqual([finding]);
-    const corrected = {
-      ...config,
-      meta: { documentation: config.meta.documentation },
-    };
-    const correctedMachine = createMachine(corrected);
-    expect(
-      normalizePlaybookSnapshot(createActor(correctedMachine).getSnapshot()),
-    ).toMatchObject({ activeStateIds: ['ready'], stateId: 'ready' });
-    expect(correctedMachine.config).toMatchObject({
-      id: config.id,
-      description: config.description,
-      meta: { documentation: config.meta.documentation },
-      states: config.states,
-    });
-    expect(checkGearsFsmConformance('# Wait\n', corrected)).toEqual([]);
-
-    const root = await mkdtemp(join(tmpdir(), 'slc-root-identity-'));
-    try {
-      const pipeline = join(root, 'pipeline');
-      await mkdir(pipeline);
-      await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
-      const formats = (source: string, target: string, extension: string) =>
-        `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${source} | ${extension} |\n| target | ${target} | .ts |\n`;
-      await writeFile(
-        join(pipeline, 'gears2fsm.md'),
-        formats('gears', 'fsm', '.md'),
-      );
-      await writeFile(
-        join(pipeline, 'link.md'),
-        formats('fsm', 'playbook', '.ts'),
-      );
-      const source = join(root, 'case.gears.md');
-      const linkTarget = join(root, 'engine.ts');
-      await writeFile(source, '# Wait\n');
-      await writeFile(linkTarget, 'export const engine = true;\n');
-      const generated = `import { createMachine } from 'xstate';\nexport const machine = createMachine(${JSON.stringify(config)});\n`;
-      let compileCalls = 0;
-      let linkCalls = 0;
-      let artifact = '';
-      const result = await runSlc(['flow', source, '--link', linkTarget], {
-        cwd: root,
-        resolver: () => [pipeline],
-        executor: {
-          async run(request) {
-            if (request.kind === 'link') {
-              linkCalls++;
-              throw new Error('root identity must fail before linking');
-            }
-            compileCalls++;
-            artifact = request.target;
-            await writeFile(artifact, generated);
-            return { status: 'ok' };
+        initial: 'ready',
+        states: {
+          ready: {
+            id: 'ready',
+            meta: { playbook: { stateId: 'ready' } },
+            tags: ['playbook.parked'],
           },
         },
+      };
+      const snapshot = createActor(createMachine(config)).getSnapshot();
+      if (rootPlaybook !== null && 'stateId' in rootPlaybook) {
+        expect(normalizePlaybookSnapshot(snapshot).activeStateIds).toEqual([
+          'minimal',
+          'ready',
+        ]);
+        expect(normalizePlaybookSnapshot(snapshot).stateId).toBeUndefined();
+      } else {
+        expect(() => normalizePlaybookSnapshot(snapshot)).toThrow(
+          /minimal\.meta\.playbook/,
+        );
+      }
+      const finding =
+        'FSM machine root declares meta.playbook; public playbook metadata belongs only to state nodes under states';
+      expect(checkGearsFsmConformance('# Wait\n', config)).toEqual([finding]);
+      const corrected = {
+        ...config,
+        meta: { documentation: config.meta.documentation },
+      };
+      const correctedMachine = createMachine(corrected);
+      expect(
+        normalizePlaybookSnapshot(createActor(correctedMachine).getSnapshot()),
+      ).toMatchObject({ activeStateIds: ['ready'], stateId: 'ready' });
+      expect(correctedMachine.config).toMatchObject({
+        id: config.id,
+        description: config.description,
+        meta: { documentation: config.meta.documentation },
+        states: config.states,
       });
-      expect(result.ok).toBe(false);
-      expect(result.diagnostics.join('\n')).toContain(finding);
-      expect({ compileCalls, linkCalls }).toEqual({
-        compileCalls: 1,
-        linkCalls: 0,
-      });
-      expect(await readFile(source, 'utf8')).toBe('# Wait\n');
-      expect(await readFile(artifact, 'utf8')).toBe(generated);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+      expect(checkGearsFsmConformance('# Wait\n', corrected)).toEqual([]);
+
+      const root = await mkdtemp(join(tmpdir(), 'slc-root-identity-'));
+      try {
+        const pipeline = join(root, 'pipeline');
+        await mkdir(pipeline);
+        await symlink(
+          join(repoRoot, 'node_modules'),
+          join(root, 'node_modules'),
+        );
+        const formats = (source: string, target: string, extension: string) =>
+          `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${source} | ${extension} |\n| target | ${target} | .ts |\n`;
+        await writeFile(
+          join(pipeline, 'gears2fsm.md'),
+          formats('gears', 'fsm', '.md'),
+        );
+        await writeFile(
+          join(pipeline, 'link.md'),
+          formats('fsm', 'playbook', '.ts'),
+        );
+        const source = join(root, 'case.gears.md');
+        const linkTarget = join(root, 'engine.ts');
+        await writeFile(source, '# Wait\n');
+        await writeFile(linkTarget, 'export const engine = true;\n');
+        const generated = `import { createMachine } from 'xstate';\nexport const machine = createMachine(${JSON.stringify(config)});\n`;
+        let compileCalls = 0;
+        let linkCalls = 0;
+        let artifact = '';
+        const result = await runSlc(['flow', source, '--link', linkTarget], {
+          cwd: root,
+          resolver: () => [pipeline],
+          executor: {
+            async run(request) {
+              if (request.kind === 'link') {
+                linkCalls++;
+                throw new Error('root identity must fail before linking');
+              }
+              compileCalls++;
+              artifact = request.target;
+              await writeFile(artifact, generated);
+              return { status: 'ok' };
+            },
+          },
+        });
+        expect(result.ok).toBe(false);
+        expect(result.diagnostics.join('\n')).toContain(finding);
+        expect({ compileCalls, linkCalls }).toEqual({
+          compileCalls: 1,
+          linkCalls: 0,
+        });
+        expect(await readFile(source, 'utf8')).toBe('# Wait\n');
+        expect(await readFile(artifact, 'utf8')).toBe(generated);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('reports no findings when the FSM matches the GEARS source', () => {
     expect(checkGearsFsmConformance(gears, conformantConfig())).toEqual([]);
