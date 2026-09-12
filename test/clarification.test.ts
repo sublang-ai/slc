@@ -114,6 +114,12 @@ describe('stateless source clarification integration (clarification-9, clarifica
           expect(prompt).toContain(
             'Source clarification (noninteractive compiler protocol)',
           );
+          expect(prompt).toContain(
+            'Only when unresolved source behavior requires clarification',
+          );
+          expect(prompt).toContain(
+            'When the source is sufficient, complete the artifact normally and omit the CLARIFICATION marker entirely.',
+          );
           const input =
             prompt.match(/^- source to read: (.+)$/m)?.[1] ??
             prompt.match(/^- object artifacts to read, in order: (.+)$/m)![1];

@@ -28,7 +28,7 @@ When an interpreted or compiled performing-agent report is decoded, the clarific
 
 ### clarification-3
 
-When the host prompts a transformation-performing agent, the host shall provide the same clarification contract [[clarification-1](#clarification-1)], [[clarification-2](#clarification-2)] for interpreted phases, normalization, compiled player work, and compiled direct Captain work, while leaving routing and judge prompts unchanged.
+When the host prompts a transformation-performing agent, the host shall provide the same conditional clarification contract [[clarification-1](#clarification-1)], [[clarification-2](#clarification-2)] for interpreted phases, normalization, compiled player work, and compiled direct Captain work, explicitly requiring ordinary completion without a clarification marker when the source is sufficient and forbidding an empty questions array, while leaving routing and judge prompts unchanged.
 
 ### clarification-4
 

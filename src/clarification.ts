@@ -98,9 +98,10 @@ export function clarificationContract(): string {
     'Source clarification (noninteractive compiler protocol):',
     '- If a complete artifact would require choosing missing, contradictory, or materially ambiguous domain behavior, stop producing the artifact; do not invent the choice or ask through an interactive tool. Any work already written remains unaccepted.',
     '- Report concrete questions the user can resolve by editing the original source and rerunning the same command. Do not request clarification for benign ambiguity that does not change domain semantics.',
-    '- End your reply with CLARIFICATION: followed by one JSON object and no trailing prose or Markdown fence:',
+    '- Only when unresolved source behavior requires clarification, end your reply with CLARIFICATION: followed by one JSON object and no trailing prose or Markdown fence:',
     'CLARIFICATION: {"questions":[{"id":"q1","question":"What behavior should the source specify?","reason":"Why this choice is necessary to compile.","evidence":"Exact source excerpt or location of missing information."}]}',
     '- Use exactly the shown fields, with nonblank strings and unique question ids; each question may additionally include "choices", an array of at least two distinct nonblank alternatives. Never select an answer.',
+    '- When the source is sufficient, complete the artifact normally and omit the CLARIFICATION marker entirely. Never emit an empty questions array or a no-clarification report.',
     '- This host report protocol also applies when the definition describes unresolved behavior as BLOCKED; use BLOCKED for other malformed or incompatible inputs.',
   ].join('\n');
 }
