@@ -322,3 +322,163 @@ describe('opt-in compilation benchmark', () => {
     ).rejects.toThrow('--timeout-seconds');
   });
 });
+
+const FIXED_FSM = `export const machine = { config: { context: { audience: '' }, states: { write: {
+  meta: { playbook: { stateId: 'write', role: 'writer' } },
+  invoke: { src: 'player', input: ({ context }) => ({
+    stateId: 'write', sourceItem: 'FIXED-1', role: 'writer',
+    prompt: 'Write for <audience>.', audience: context.audience, result: { done: 'Written.' }
+  }) }
+} } } };
+`;
+const FAITHFUL_LINK = `export const _internal = { composePlayerPrompt: input => input.prompt.replaceAll('<audience>', input.audience) };
+export default function createRuntime() { return { init: async()=>{}, handleBossInput: async()=>{}, dispose: async()=>{} }; }
+`;
+
+async function linkFixture() {
+  const options = await fixture();
+  const root = dirname(options.source);
+  const pipeline = join(options.pipelinePaths[0], 'fixture');
+  await rm(pipeline, { recursive: true });
+  await mkdir(pipeline);
+  await writeFile(
+    join(pipeline, 'gears2fsm.md'),
+    '## Formats\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | gears | .md |\n| target | fsm | .ts |\n',
+  );
+  await writeFile(
+    join(pipeline, 'link.md'),
+    '## Formats\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | fsm | .ts |\n| target | playbook | .ts |\n',
+  );
+  const source = join(root, 'fixed.fsm.ts');
+  const linkTarget = join(root, 'runtime.ts');
+  await writeFile(source, FIXED_FSM);
+  await writeFile(linkTarget, 'export const runtime = true;\n');
+  return { ...options, source, linkTarget };
+}
+
+function linkingAdapter(prompts) {
+  const base = adapter([]);
+  return {
+    ...base,
+    async *run(prompt) {
+      prompts.push(prompt);
+      const target = /^- artifact to write: (.+)$/m.exec(prompt)?.[1];
+      await writeFile(target, FAITHFUL_LINK);
+      yield {
+        type: 'done',
+        agent: 'claude-code',
+        sessionId: 'fixed-link',
+        timestamp: 1,
+        payload: {
+          status: 'success',
+          result: 'Linked fixed FSM.',
+          durationMs: 1,
+          usage: { inputTokens: 10, outputTokens: 5, toolUses: 1 },
+        },
+      };
+    },
+  };
+}
+
+describe('fixed-FSM link-only benchmark', () => {
+  it('runs one ordinary link in fresh workspaces and independently validates unchanged input', async () => {
+    const options = await linkFixture();
+    const prompts = [];
+    const injected = {
+      runtime,
+      env: {},
+      adapterFactory: () => linkingAdapter(prompts),
+    };
+    const first = await benchmarkCompile(options, injected);
+    const second = await benchmarkCompile(options, injected);
+    expect(
+      first.summary,
+      await readFile(first.summary.logs.diagnostics, 'utf8'),
+    ).toMatchObject({
+      scope: 'link',
+      status: 'success',
+      optimize: null,
+      runtimeCheck: null,
+      validation: {
+        ok: true,
+        sourceUnchanged: true,
+        linkedContract: { ok: true },
+      },
+      linkTarget: {
+        path: options.linkTarget,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
+    });
+    expect(first.summary.invocation).toEqual([
+      'fixture.link',
+      first.summary.source.path,
+      options.linkTarget,
+    ]);
+    expect(first.summary.phases.map((phase) => phase.name)).toEqual(['link']);
+    expect(first.summary.calls).toHaveLength(1);
+    expect(first.summary.calls[0]).toMatchObject({
+      promptBytes: expect.any(Number),
+      usage: { inputTokens: 10 },
+    });
+    expect(first.evidence).not.toBe(second.evidence);
+    expect(await readFile(options.source, 'utf8')).toBe(FIXED_FSM);
+    expect(await readFile(first.summary.source.path, 'utf8')).toBe(FIXED_FSM);
+    expect(prompts).toHaveLength(2);
+    expect(first.summary.validation).not.toHaveProperty('entryImport');
+    expect(first.summary.validation).not.toHaveProperty('suite');
+  });
+
+  it('rejects linked prompt drift found by independent validation after phase acceptance', async () => {
+    const options = await linkFixture();
+    const result = await benchmarkCompile(options, {
+      runtime: {
+        ...runtime,
+        async runSlc(...args) {
+          const compiled = await runtime.runSlc(...args);
+          expect(compiled.ok).toBe(true);
+          await writeFile(
+            compiled.outputs[0],
+            FAITHFUL_LINK.replace(
+              "input.prompt.replaceAll('<audience>', input.audience)",
+              "'Dropped the original prompt.'",
+            ),
+          );
+          return compiled;
+        },
+      },
+      env: {},
+      adapterFactory: () => linkingAdapter([]),
+    });
+    expect(result.summary).toMatchObject({
+      scope: 'link',
+      status: 'failure',
+      compile: { ok: true },
+      validation: {
+        ok: false,
+        sourceUnchanged: true,
+        linkedContract: { ok: false },
+      },
+    });
+    expect(await readFile(result.summary.logs.diagnostics, 'utf8')).toContain(
+      'does not preserve the body line',
+    );
+  });
+
+  it.each([
+    { linkTarget: '/runtime.ts' },
+    { source: '/source.md', linkTarget: '/runtime.ts' },
+    { source: '/source.fsm.ts', linkTarget: '/runtime.ts', optimize: false },
+    {
+      source: '/source.fsm.ts',
+      linkTarget: '/runtime.ts',
+      runtimeCheck: 'minimal',
+    },
+  ])(
+    'refuses invalid link-only selections before calls: %j',
+    async (options) => {
+      await expect(
+        benchmarkCompile({ model: 'fixture', ...options }),
+      ).rejects.toThrow(/requires explicit --source|not valid for link-only/);
+    },
+  );
+});

@@ -34,6 +34,7 @@ export function parseArguments(args) {
   const options = { pipelinePaths: [] };
   const values = {
     '--source': 'source',
+    '--link-target': 'linkTarget',
     '--config': 'config',
     '--agent': 'agent',
     '--model': 'model',
@@ -307,6 +308,68 @@ if (typeof entry?.createRuntime !== 'function') throw new Error('Entry has no cr
   };
 }
 
+/** Fixed-FSM experiments validate only linking, never claim full compilation. */
+export async function validateLinkedArtifact({
+  result,
+  source,
+  originalSource,
+  sourceSha256,
+  root,
+  work,
+  signal,
+  log,
+}) {
+  const unchanged = [source, originalSource]
+    .filter(Boolean)
+    .every(
+      (path) => existsSync(path) && identity(path).sha256 === sourceSha256,
+    );
+  if (
+    !unchanged ||
+    result.outputs.length !== 1 ||
+    !existsSync(result.outputs[0])
+  ) {
+    log(
+      'Link validation requires one linked output and unchanged FSM inputs.\n',
+    );
+    return {
+      ok: false,
+      sourceUnchanged: unchanged,
+      linkedCount: result.outputs.length,
+    };
+  }
+  const checked = await command(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `const verify = await import(process.argv[1]);
+     verify.findMachineConfig(await verify.loadFsmModule(process.argv[2]));
+     const findings = await verify.checkLinkedModuleContract({ fsmPath: process.argv[2], linkedPath: process.argv[3] });
+     for (const finding of findings) console.error(finding);
+     if (findings.length) process.exitCode = 1;`,
+      pathToFileURL(join(root, 'dist/verify.js')).href,
+      source,
+      result.outputs[0],
+    ],
+    work,
+    signal,
+    log,
+  );
+  const sourceUnchanged = [source, originalSource]
+    .filter(Boolean)
+    .every(
+      (path) => existsSync(path) && identity(path).sha256 === sourceSha256,
+    );
+  if (!sourceUnchanged)
+    log('FSM inputs changed during linked-module validation.\n');
+  return {
+    ok: checked.ok && sourceUnchanged,
+    sourceUnchanged,
+    linkedContract: checked,
+  };
+}
+
 /** Injection is for fixture integration only; production uses the built compiler. */
 export async function benchmarkCompile(options, injected = {}) {
   const timeoutSeconds = Number(options.timeoutSeconds ?? 1200);
@@ -321,7 +384,22 @@ export async function benchmarkCompile(options, injected = {}) {
     throw new Error('--model is required for attributable measurements');
   if (options.runtimeCheck !== undefined && options.runtimeCheck !== 'minimal')
     throw new Error('--runtime-check must be minimal');
-  const runtimeCheck = options.source ? options.runtimeCheck : 'minimal';
+  const scope = options.linkTarget === undefined ? 'full' : 'link';
+  if (scope === 'link') {
+    if (!options.source?.endsWith('.fsm.ts'))
+      throw new Error('--link-target requires explicit --source <name>.fsm.ts');
+    if (options.optimize === false || options.runtimeCheck !== undefined)
+      throw new Error(
+        '--no-optimize and --runtime-check are not valid for link-only measurements',
+      );
+  }
+  const runtimeCheck =
+    scope === 'link'
+      ? undefined
+      : options.source
+        ? options.runtimeCheck
+        : 'minimal';
+  const linkTarget = scope === 'link' ? resolve(options.linkTarget) : undefined;
   const root = injected.root ?? ROOT;
   const runtime =
     injected.runtime ??
@@ -348,6 +426,8 @@ export async function benchmarkCompile(options, injected = {}) {
     appendFileSync(metricPath, `${JSON.stringify(event)}\n`);
   const summary = {
     schema: 'sublang.slc.benchmark.v1',
+    scope,
+    ...(linkTarget === undefined ? {} : { linkTarget: identity(linkTarget) }),
     label: options.label ?? null,
     startedAt: new Date().toISOString(),
     status: 'incomplete',
@@ -355,7 +435,7 @@ export async function benchmarkCompile(options, injected = {}) {
     cold: true,
     runtimeCheck: runtimeCheck ?? null,
     pipeline: options.pipeline ?? 'playbook',
-    optimize: options.optimize !== false,
+    optimize: scope === 'full' ? options.optimize !== false : null,
     reviewerDisabled: options.review !== true,
     freshPhaseSessions: options.freshPhaseSessions === true,
     timeoutSeconds,
@@ -513,11 +593,14 @@ export async function benchmarkCompile(options, injected = {}) {
       checkpoint();
       return candidates;
     };
-    const args = [
-      summary.pipeline,
-      source,
-      ...(summary.optimize ? [] : ['--no-optimize']),
-    ];
+    const args =
+      scope === 'link'
+        ? [`${summary.pipeline}.link`, source, linkTarget]
+        : [
+            summary.pipeline,
+            source,
+            ...(summary.optimize ? [] : ['--no-optimize']),
+          ];
     summary.invocation = args;
     const compileStart = performance.now();
     const result = await runtime.runSlc(args, deps);
@@ -531,13 +614,20 @@ export async function benchmarkCompile(options, injected = {}) {
       if (existsSync(path)) summary.artifacts.push(identity(path));
     if (result.ok && !controller.signal.aborted && summary.calls.length > 0) {
       const validationStart = performance.now();
-      summary.validation = await (injected.validate ?? validateArtifacts)({
+      const validate =
+        scope === 'link'
+          ? (injected.validateLink ?? validateLinkedArtifact)
+          : (injected.validate ?? validateArtifacts);
+      summary.validation = await validate({
         result,
         work,
         root,
         signal: controller.signal,
         log,
         runtimeCheck,
+        source,
+        originalSource: original,
+        sourceSha256: summary.source.sha256,
       });
       summary.validation.elapsedMs = elapsed(validationStart);
       summary.status = summary.validation.ok ? 'success' : 'failure';
@@ -568,6 +658,7 @@ if (
       console.log(`Usage: node scripts/benchmark-compile.mjs --model <model> [options]
   --agent <id> --effort <value> --config <path>
   --source <path>          default: minimal three-line acceptance workflow
+  --link-target <path>    link-only comparison; requires --source <name>.fsm.ts
   --runtime-check minimal enable the default runtime acceptance check for a supplied source
   --pipeline-path <path>   repeatable absolute pipeline search roots (pins allowed)
   --pipeline <name>        default: playbook
@@ -577,6 +668,7 @@ if (
   --output <directory>    evidence parent; every run creates a fresh child
   --timeout-seconds <n>    whole experiment deadline; default: 1200
   --label <text>          experiment label
+Link-only success is separate from the cold full-compilation target.
 Run npm run build first. Every invocation spends real model calls and retains evidence.
 Summary omits prompt/result text; diagnostics.log may contain private source information.`);
     } else {

@@ -21,6 +21,67 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const MINIMAL_TASK =
   'Create change.txt containing exactly:\nbenchmark "Boss" task — unchanged\nCommit that change once.';
 
+/** The minimal profile supports one normal outcome without semantic payloads. */
+function minimalJudgeReply(prompt) {
+  if (prompt.startsWith('Classify the following Boss message')) {
+    const section = prompt
+      .split('Allowed JSON objects:\n')[1]
+      ?.split('\nBoss message:')[0];
+    assert(section, 'unsupported minimal-profile Boss-classifier prompt');
+    const events = section
+      .split('\n')
+      .flatMap((line) => {
+        const match = /^- (\{.*\})(?: \(.*\))?$/.exec(line.trim());
+        if (!match) return [];
+        return [JSON.parse(match[1])];
+      })
+      .filter(
+        (event) =>
+          ![
+            'NO_ACTION',
+            'BOSS_PAUSE',
+            'BOSS_RESUME',
+            'BOSS_INTERRUPT',
+            'BOSS_REPLY',
+          ].includes(event.type),
+      );
+    assert.equal(
+      events.length,
+      1,
+      'minimal profile requires one unambiguous initial event',
+    );
+    return JSON.stringify(events[0]);
+  }
+  const outcomes = [
+    ...prompt.matchAll(/^- `([A-Za-z_$][A-Za-z0-9_$]*)`(?: — ([^\n]*))?\n?/gm),
+  ].filter((match) => match[1] !== 'needsBossReply');
+  assert.equal(
+    outcomes.length,
+    1,
+    'minimal profile requires one normal outcome',
+  );
+  const outcome = outcomes[0];
+  const tail = prompt
+    .slice(outcome.index + outcome[0].length)
+    .split(/\n- `/)[0];
+  const exact = /^ {2}Reply exactly: (.*)$/m.exec(tail);
+  if (exact) {
+    const reply = JSON.parse(exact[1]);
+    assert.deepEqual(
+      Object.keys(reply),
+      ['guard'],
+      'minimal profile supports no judge-authored payload fields',
+    );
+    assert.equal(reply.guard, outcome[1]);
+    return JSON.stringify(reply);
+  }
+  assert(
+    !/Output shall include|输出应包含/.test(outcome[2] ?? ''),
+    'minimal profile supports no judge-authored payload fields',
+  );
+  return JSON.stringify({ guard: outcome[1] });
+}
+
 export async function checkMinimalRuntime({
   entry,
   signal = AbortSignal.timeout(30_000),
@@ -56,6 +117,7 @@ export async function checkMinimalRuntime({
     );
   let runtime;
   let performingCalls = 0;
+  let setupCaptainCalls = 0;
   let judgeCalls = 0;
   let performingFailure;
   const started = performance.now();
@@ -124,19 +186,63 @@ export async function checkMinimalRuntime({
       depth: 0,
       ports: {
         callPlayer: async (_role, prompt) => perform(prompt),
-        callCaptain: async (prompt) => perform(prompt),
-        callJudge: async () => {
-          assert.equal(
-            performingCalls,
-            1,
-            'minimal entry must route the Boss task deterministically',
-          );
-          assert.equal(
-            ++judgeCalls,
-            1,
-            'minimal workflow must classify only one performing result',
-          );
-          return '{"guard":"done"}';
+        callCaptain: async (prompt) => {
+          try {
+            signal.throwIfAborted();
+            assert.equal(
+              performingCalls,
+              0,
+              'setup Captain must run before the delegated task',
+            );
+            assert.equal(
+              ++setupCaptainCalls,
+              1,
+              'minimal profile supports one setup Captain call',
+            );
+            assert.match(
+              prompt,
+              /git/i,
+              'setup Captain must receive the repository instruction',
+            );
+            assert.match(
+              prompt,
+              /init/i,
+              'setup Captain must receive the initialization instruction',
+            );
+            assert.match(
+              prompt,
+              /(?:current|working) directory|cwd/i,
+              'setup Captain must receive the working-directory scope',
+            );
+            assert.match(
+              prompt,
+              /\.git|root[^\n]*(?:git repository|repository)/i,
+              'setup Captain must receive the own-repository condition',
+            );
+            git(workdir, 'init', '-q');
+            return {
+              status: 'ok',
+              finalText:
+                'Initialized the current directory as its own Git repository.',
+            };
+          } catch (error) {
+            performingFailure ??= error;
+            throw error;
+          }
+        },
+        callJudge: async (prompt) => {
+          try {
+            signal.throwIfAborted();
+            judgeCalls++;
+            assert(
+              judgeCalls <= 6,
+              'minimal runtime exceeded its bounded synthetic judge budget',
+            );
+            return minimalJudgeReply(prompt);
+          } catch (error) {
+            performingFailure ??= error;
+            throw error;
+          }
         },
         callPlaybook: async () => {
           throw new Error('minimal workflow must not invoke a child playbook');
@@ -194,6 +300,7 @@ export async function checkMinimalRuntime({
       ok: true,
       profile: 'minimal',
       performingCalls,
+      setupCaptainCalls,
       judgeCalls,
       ownRepository: true,
       exactBossTask: true,

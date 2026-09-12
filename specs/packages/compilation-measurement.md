@@ -24,7 +24,7 @@ While an experiment is running, when its configurable deadline expires, the comp
 
 ### compilation-measurement-4
 
-When a compilation completes successfully, the compilation benchmark shall separately time loading the emitted entry and executing its emitted verification suite [[verification-2](verification.md#verification-2)], recording experiment success only after those checks succeed before cancellation.
+Where full compilation is selected, when a compilation completes successfully, the compilation benchmark shall separately time loading the emitted entry and executing its emitted verification suite [[verification-2](verification.md#verification-2)], recording experiment success only after those checks succeed before cancellation.
 
 ### compilation-measurement-5
 
@@ -36,7 +36,11 @@ Where the benchmark's fresh-phase-session experiment is explicitly enabled, when
 
 ### compilation-measurement-11
 
-Where the benchmark uses its default minimal workflow or an explicitly selected minimal runtime-check profile, when emitted artifact checks pass, the compilation benchmark shall additionally drive the emitted entry with real installed Playbook host capabilities in a fresh nested directory inside an ancestor repository, requiring that directory to become its own repository before exactly one synthetic performing agent receives the exact Boss task and commits one change, followed by a successful terminal outcome and an unchanged ancestor repository, with the runtime check covered by the experiment deadline and recorded separately; an explicitly supplied source receives no minimal-specific check unless selected.
+Where the benchmark uses its default minimal workflow or an explicitly selected minimal runtime-check profile, when emitted artifact checks pass, the compilation benchmark shall additionally drive the emitted entry with real installed Playbook host capabilities in a fresh nested directory inside an ancestor repository, requiring that directory to become its own repository before exactly one synthetic delegated agent receives the exact Boss task and commits one change, followed by a successful terminal outcome and an unchanged ancestor repository, with setup executed either by the emitted script or one preceding synthetic Captain whose prompt carries the Git initialization and own-working-directory scope, optional initial classification selected from one offered non-control event, and adjudication selected from the offered sole normal guard without judge-authored payloads, failing with an unsupported-profile diagnostic for other prompt contracts, with the runtime check covered by the experiment deadline and recorded separately; an explicitly supplied source receives no minimal-specific check unless selected.
+
+### compilation-measurement-13
+
+Where an explicit link target and explicit `.fsm.ts` source are supplied, when a link-only benchmark runs, the compilation benchmark shall invoke the ordinary single link phase [[pipeline-18](pipeline.md#pipeline-18)] against an unchanged fresh copy of that FSM, record scope `link` instead of the default `full` together with the link-target byte identity and ordinary phase and adapter accounting [[compilation-measurement-2](#compilation-measurement-2)], reject optimization and minimal-runtime selections in this scope, and accept only one linked output whose existing linked-module contract check [[verification-27](verification.md#verification-27)] passes through the measured compiler with an importable unchanged FSM before the experiment deadline; this success shall remain a link-only measurement and shall not replace full-compilation validation [[compilation-measurement-4](#compilation-measurement-4)], [[compilation-measurement-11](#compilation-measurement-11)] or count toward the cold full-compilation target.
 
 ## Verification
 
@@ -58,4 +62,8 @@ Where a fixture bundle supplies an entry and all four emitted verification-suite
 
 ### compilation-measurement-12
 
-Where a minimal entry uses the installed shared runtime and real host capabilities, when the integration suite runs the benchmark runtime check across faithful behavior, ancestor-repository reuse, omitted Boss text, repeated performing calls, and a failure terminal, the suite shall verify that only the faithful behavior passes and that arbitrary supplied sources omit the minimal check unless selected [[compilation-measurement-11](#compilation-measurement-11)].
+Where a minimal entry uses the installed shared runtime and real host capabilities, when the integration suite runs the benchmark runtime check across faithful script setup, faithful Captain setup with initial classification and an authored normal guard, ancestor-repository reuse, omitted Boss text, repeated delegated calls, and a failure terminal, the suite shall verify that only the faithful behavior passes and that arbitrary supplied sources omit the minimal check unless selected [[compilation-measurement-11](#compilation-measurement-11)].
+
+### compilation-measurement-14
+
+Where a fixture link phase receives a fixed FSM and a supplied link target, when the integration suite runs the link-only benchmark, the suite shall verify a fresh single link invocation, unchanged input bytes, explicit scope and target identity, preserved adapter metrics, accepted faithful linking, rejected linked prompt drift, and refusal of a missing FSM source or irrelevant options before adapter work [[compilation-measurement-13](#compilation-measurement-13)].

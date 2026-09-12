@@ -66,7 +66,7 @@ meta.md       The spec of specs
 | --- | --- |
 | [clarification.md](packages/clarification.md) | Generic noninteractive source questions, executor stopping, structured diagnostics, and original-source reruns |
 | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
-| [compilation-measurement.md](packages/compilation-measurement.md) | Opt-in cold-compilation benchmark, explicit settings, phase and agent-call measurements, cancellation, private local evidence, and artifact validation |
+| [compilation-measurement.md](packages/compilation-measurement.md) | Opt-in cold-compilation and fixed-FSM link benchmarks, explicit settings, phase and agent-call measurements, cancellation, private local evidence, and artifact validation |
 | [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
 | [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, exact multi-profile runtime contracts, routine locked Playbook adoption, demo acceptance, and package publication checks |
 | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |

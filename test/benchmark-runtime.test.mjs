@@ -25,6 +25,9 @@ async function entryFixture({
   omitTask = false,
   repeat = false,
   terminal = 'success',
+  setupCaptain = false,
+  normalGuard = 'done',
+  classifyWithJudge = false,
 } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'slc-runtime-entry-'));
   directories.push(directory);
@@ -40,20 +43,20 @@ async function entryFixture({
 import { setup, assign, fromPromise } from 'xstate';
 import { RUNTIME_ABI, createXStatePlaybookRuntime } from '@sublang/playbook/xstate-runtime';
 const machine = setup({
-  actors: { script: fromPromise(async () => { throw new Error('unbound script'); }), player: fromPromise(async () => { throw new Error('unbound player'); }) },
+  actors: { script: fromPromise(async () => { throw new Error('unbound script'); }), player: fromPromise(async () => { throw new Error('unbound player'); }), captain: fromPromise(async () => { throw new Error('unbound captain'); }) },
   actions: { start: assign({ task: ({ event }) => event.task }) },
-  guards: { ok: ({ event }) => event.output.guard === 'ok', done: ({ event }) => event.output.guard === 'done' },
+  guards: { ok: ({ event }) => event.output.guard === 'ok', done: ({ event }) => event.output.guard === ${JSON.stringify(normalGuard)} },
 }).createMachine({
   id: 'minimal', initial: 'ready', context: { task: '' },
   states: {
     ready: { meta: { playbook: { stateId: 'ready', description: 'Waiting for task.' } }, tags: ['playbook.parked'], on: { START: { target: 'setup', actions: 'start' } } },
     setup: {
       meta: { playbook: { stateId: 'setup', description: 'Initialize repository.' } }, tags: ['playbook.busy'],
-      invoke: { src: 'script', input: { stateId: 'setup', sourceItem: 'MINIMAL-1', command: ${JSON.stringify(command)}, result: { ok: 'Command succeeded.', failed: 'Command failed.' } }, onDone: [{ guard: 'ok', target: 'implement' }, { target: 'failed' }], onError: 'failed' },
+      ${setupCaptain ? `invoke: { src: 'captain', input: { stateId: 'setup', sourceItem: 'MINIMAL-1', prompt: 'Ensure the current directory is its own Git repository; if .git is absent, initialize it here.', result: { ready: 'Repository is initialized.' } }, onDone: 'implement', onError: 'failed' },` : `invoke: { src: 'script', input: { stateId: 'setup', sourceItem: 'MINIMAL-1', command: ${JSON.stringify(command)}, result: { ok: 'Command succeeded.', failed: 'Command failed.' } }, onDone: [{ guard: 'ok', target: 'implement' }, { target: 'failed' }], onError: 'failed' },`}
     },
     implement: {
       tags: ['playbook.busy'], meta: { playbook: { stateId: 'implement', role: 'agent', description: 'Carry out and commit the task.' } },
-      invoke: { src: 'player', input: ({ context }) => ({ stateId: 'implement', role: 'agent', sourceItem: 'MINIMAL-2', prompt: 'Carry out and commit the task.\\n' + ${omitTask ? "'omitted'" : 'context.task'}, result: { done: 'The acting agent completed the behavior.' } }), onDone: [{ guard: 'done', target: ${JSON.stringify(repeat ? 'implement' : 'finished')}, reenter: true }, { target: 'failed' }], onError: 'failed' },
+      invoke: { src: 'player', input: ({ context }) => ({ stateId: 'implement', role: 'agent', sourceItem: 'MINIMAL-2', prompt: 'Carry out and commit the task.\\n' + ${omitTask ? "'omitted'" : 'context.task'}, result: { ${JSON.stringify(normalGuard)}: 'The acting agent completed the behavior.' } }), onDone: [{ guard: 'done', target: ${JSON.stringify(repeat ? 'implement' : 'finished')}, reenter: true }, { target: 'failed' }], onError: 'failed' },
     },
     finished: { type: 'final', meta: { playbook: { stateId: 'finished', terminal: ${JSON.stringify(terminal)}, description: 'Finished.' } } },
     failed: { type: 'final', meta: { playbook: { stateId: 'failed', terminal: 'failure', description: 'Failed.' } } },
@@ -62,9 +65,10 @@ const machine = setup({
 const factory = createXStatePlaybookRuntime(machine, {
   label: 'minimal', compat: { artifactSchema: 3, runtimeAbi: RUNTIME_ABI },
   snapshotOptions: (options = {}) => ({ ...options }), machineInput: () => ({}),
-  entryEvent: { type: 'START', textField: 'task', contextField: 'task' }, transitionEventFields: ['task'],
+  ${classifyWithJudge ? '' : "entryEvent: { type: 'START', textField: 'task', contextField: 'task' },"} transitionEventFields: ['task'],
+  ${classifyWithJudge ? `classifyBossText: async (text, ports, signal) => { const event = JSON.parse(await ports.callJudge('Classify the following Boss message into exactly one event.\\nAllowed JSON objects:\\n- { "type": "NO_ACTION" }\\n- { "type": "START" }\\nBoss message:\\n' + text, signal)); return { ...event, task: text }; },` : ''}
   roleStates: { implement: { role: 'agent', label: 'Carry out and commit the task.' } },
-  outcomeAuthority: { governedPlayerStates: { implement: { done: { fields: {}, repositoryDisposition: 'one-descendant-commit' } } } },
+  outcomeAuthority: { governedPlayerStates: { implement: { ${JSON.stringify(normalGuard)}: { fields: {}, repositoryDisposition: 'one-descendant-commit' } } } },
 });
 export default {
   id: 'minimal', requiredRoleIds: ['agent'], concurrentRoleSets: [],
@@ -85,6 +89,23 @@ describe('minimal benchmark source acceptance', () => {
       performingCalls: 1,
       commits: 1,
       terminalKind: 'success',
+    });
+  });
+
+  it('supports faithful setup Captain work and an authored normal guard', async () => {
+    const result = await checkMinimalRuntime({
+      entry: await entryFixture({
+        setupCaptain: true,
+        normalGuard: 'completed',
+        classifyWithJudge: true,
+      }),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      performingCalls: 1,
+      setupCaptainCalls: 1,
+      judgeCalls: 3,
+      commits: 1,
     });
   });
 

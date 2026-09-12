@@ -17,6 +17,8 @@ A five-minute target for a simple workflow needs reproducible successful measure
 
 - An opt-in local benchmark executes the ordinary compiler through its dependency-injection seams, recording phase timing and adapter-call timing, prompt byte counts and hashes, event counts, and provider-reported usage without changing production execution.
 - The default workload is the minimal three-line acceptance workflow, compiled in a fresh directory with independent review disabled; explicit sources, pipeline roots, reviewer selection, and optimization settings permit attributable comparisons.
+- An explicit link-only experiment copies a supplied `.fsm.ts` into a fresh workspace and invokes the ordinary pipeline link phase against the specified link target; its summary declares `scope: link`, records both input identities, and rejects optimization and minimal-runtime selections that do not apply to that scope.
+- Link-only validation requires an unchanged, importable copied FSM, one linked output, and the measured compiler's existing linked-module contract check; it neither emits a full-build success claim nor counts toward the cold full-compilation target, whose entry, generated suites, and applicable runtime acceptance remain mandatory.
 - Every run records its explicit requested model, effective agent settings, dependency versions, source and definition identities, completion, and separately timed generated-artifact validation.
 - The default experiment deadline is twenty minutes, configurable only on the benchmark; expiry cooperatively aborts the ordinary compiler and records failure, preserving evidence.
 - Machine-readable summaries omit prompts, responses, and diagnostics text; raw diagnostics remain in the local evidence directory.
