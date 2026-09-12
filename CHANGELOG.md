@@ -26,6 +26,11 @@ and this project adheres to
   evidence before downstream compilation spends time on invalid input
   ([DR-033](specs/decisions/033-early-conformance-and-mechanical-repair.md)).
 
+- **Malformed GEARS is checked at its producer.** Existing Results syntax
+  findings reach the phase that can repair the output, including optimization
+  and normalization. Invalid supplied GEARS fails before its consumer runs
+  ([DR-035](specs/decisions/035-gears-contract-at-producer.md)).
+
 ### Changed
 
 - **Mechanical findings can be repaired by the same Coder by default.**
@@ -34,6 +39,13 @@ and this project adheres to
   call. Optional independent review starts only after mechanical checks
   pass and shares the existing three-round bound; clarification and
   protected-input checks remain in effect.
+
+### Fixed
+
+- **Coverage accepts reachable script fallbacks.** Ordered transitions are
+  checked with the script runtime's actual guard and exit-status outputs;
+  impossible outputs cannot make an unreachable transition pass
+  ([DR-034](specs/decisions/034-faithful-transition-coverage.md)).
 
 ## [0.9.0] - 2026-09-04
 

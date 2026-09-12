@@ -99,15 +99,14 @@ tests — and `my-workflow.ts` is the runnable entry. Run it:
 playbook run ./my-workflow.ts "<your task>"
 ```
 
-Compilation drives your configured coding agent, so **expect it to take
-a while**: measured compiles of a five-line workflow have run from tens
-of minutes to more than two hours, with the first intermediate typically
-landing within about five minutes. Meanwhile `slc` reports each phase,
+Compilation runs your configured coding agent at each phase. Elapsed time
+depends on the workflow, model, effort and required corrections; the
+[performance report](docs/compilation-performance.md) records measured
+settings, failures and validation separately. `slc` reports each phase,
 each artifact with its elapsed time, and a heartbeat at least every 30
-seconds on stderr; an agent call that goes silent for `stallTimeout`
-seconds fails that phase instead of hanging. Success prints the artifact
-paths and exits 0; a failure prints diagnostics naming the failing phase
-and exits non-zero.
+seconds on stderr. An agent call that goes silent for `stallTimeout`
+seconds fails that phase. Success prints the artifact paths and exits 0;
+a failure prints diagnostics naming the failing phase and exits non-zero.
 
 If a phase discovers missing, contradictory, or materially ambiguous behavior,
 `slc` stops with actionable questions and exits **2**. The report names the
@@ -174,12 +173,14 @@ refuses the run before any agent call. Discovery order, `--config`, and
 validation rules live in the [CLI spec](specs/packages/cli.md);
 `slc --help` prints the summary.
 
-Mechanical checks run by default at the source-to-GEARS, GEARS-to-FSM,
-and Playbook link boundaries. A failing check returns its findings to the
+Mechanical checks run by default at GEARS-producing phases, the GEARS-to-FSM
+boundary, and Playbook linking. A failing check returns its findings to the
 same Coder for at most two repairs; a clean unreviewed transformation uses
-one agent call. An invalid FSM stops before linking. Unresolved findings
+one agent call. Malformed supplied GEARS stops before its consumer runs,
+and an invalid FSM stops before linking. Unresolved findings
 fail the phase, and source questions still stop for clarification
-([DR-033](specs/decisions/033-early-conformance-and-mechanical-repair.md)).
+([DR-033](specs/decisions/033-early-conformance-and-mechanical-repair.md),
+[DR-035](specs/decisions/035-gears-contract-at-producer.md)).
 
 ### Reviewed compilation (two agents)
 

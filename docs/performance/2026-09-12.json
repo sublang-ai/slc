@@ -1,7 +1,7 @@
 {
   "schema": "sublang.slc.performance-progress.v1",
-  "asOf": "2026-09-12T18:03:00Z",
-  "scope": "Settled local measurements only. No accepted successful five-minute compile; ongoing work omitted.",
+  "asOf": "2026-09-12T18:30:45Z",
+  "scope": "Settled full-minimal, full-broader-demo, fixed-FSM link, and settings-failure measurements; scopes are not interchangeable. No accepted successful five-minute full compile; ongoing work omitted.",
   "targetMs": 300000,
   "targetAchieved": false,
   "complete": false,
@@ -263,6 +263,42 @@
           "sha256": "51a9ad21ea9be64ac253870c220a7afa6274c4a14f21dc985a5f5b7fa3c9f2fe"
         }
       ]
+    },
+    "compile-fIne1M": {
+      "capture": "at benchmark start",
+      "path": "/Users/basicthinker/Projects/SubLang/slc/dist",
+      "files": 42,
+      "sha256": "a958bc7005eed58084ede251bf468aa772dd52ab12ce9b960981be052219d1e2"
+    },
+    "compile-bayvzK": {
+      "capture": "at benchmark start",
+      "path": "/Users/basicthinker/Projects/SubLang/slc/dist",
+      "files": 42,
+      "sha256": "a958bc7005eed58084ede251bf468aa772dd52ab12ce9b960981be052219d1e2"
+    },
+    "compile-j8qjkm": {
+      "capture": "at benchmark start",
+      "path": "/Users/basicthinker/Projects/SubLang/slc/dist",
+      "files": 42,
+      "sha256": "a958bc7005eed58084ede251bf468aa772dd52ab12ce9b960981be052219d1e2"
+    },
+    "compile-yoHZsO": {
+      "capture": "at benchmark start",
+      "path": "/Users/basicthinker/Projects/SubLang/slc/dist",
+      "files": 42,
+      "sha256": "94742917f1b5809a4e3074ec3b45bc8087d28cfc2500f3996c8bd16dc28b1949"
+    },
+    "compile-VMjtQM": {
+      "capture": "at benchmark start",
+      "path": "/private/tmp/slc-gpt6-current-v2/dist",
+      "files": 42,
+      "sha256": "94742917f1b5809a4e3074ec3b45bc8087d28cfc2500f3996c8bd16dc28b1949"
+    },
+    "compile-1EMnzp": {
+      "capture": "at benchmark start",
+      "path": "/private/tmp/slc-gpt6-current-v2/dist",
+      "files": 42,
+      "sha256": "94742917f1b5809a4e3074ec3b45bc8087d28cfc2500f3996c8bd16dc28b1949"
     }
   },
   "runtimeIdentityLimitations": [
@@ -533,7 +569,10 @@
         "artifactValidationMs": null,
         "minimalRuntimePassed": null,
         "withinFiveMinutes": false
-      }
+      },
+      "scope": "full",
+      "workload": "minimal",
+      "acceptedFullCompilation": false
     },
     {
       "id": "compile-umeUCL",
@@ -806,7 +845,10 @@
         "artifactValidationMs": null,
         "minimalRuntimePassed": null,
         "withinFiveMinutes": false
-      }
+      },
+      "scope": "full",
+      "workload": "minimal",
+      "acceptedFullCompilation": false
     },
     {
       "id": "compile-IXAbh6",
@@ -930,7 +972,10 @@
         "artifactValidationMs": null,
         "minimalRuntimePassed": null,
         "withinFiveMinutes": true
-      }
+      },
+      "scope": "full",
+      "workload": "minimal",
+      "acceptedFullCompilation": false
     },
     {
       "id": "compile-EXAwtt",
@@ -1158,7 +1203,10 @@
         "artifactValidationMs": null,
         "minimalRuntimePassed": null,
         "withinFiveMinutes": false
-      }
+      },
+      "scope": "full",
+      "workload": "minimal",
+      "acceptedFullCompilation": false
     },
     {
       "id": "compile-k6mg7y",
@@ -1510,6 +1558,17 @@
         "path": "/private/tmp/slc-performance-evidence/compile-k6mg7y/runtime-retrocheck.json",
         "bytes": 33,
         "sha256": "b19a64823b70b4b1f122bb96180a5035c430326e5ccc99422539e23e36bd40c8"
+      },
+      "scope": "full",
+      "workload": "minimal",
+      "acceptedFullCompilation": false,
+      "independentTypecheck": {
+        "status": "success",
+        "exitCode": 0,
+        "elapsedMs": 872,
+        "diagnosticCodes": [],
+        "unchanged": true,
+        "log": "/private/tmp/slc-generated-typecheck-audit/k6mg7y/tsc.log"
       }
     },
     {
@@ -1776,7 +1835,10 @@
       "confounders": [
         "Changed optimizer definition introduced a fenced command body instead of the required GEARS blockquote.",
         "FSM correction subsequently rejected malformed source rather than producing an accepted artifact."
-      ]
+      ],
+      "scope": "full",
+      "workload": "minimal",
+      "acceptedFullCompilation": false
     },
     {
       "id": "compile-hmOuZA",
@@ -2051,6 +2113,1435 @@
         "path": "/private/tmp/slc-performance-evidence/compile-hmOuZA/runtime-retrocheck.json",
         "bytes": 33,
         "sha256": "b19a64823b70b4b1f122bb96180a5035c430326e5ccc99422539e23e36bd40c8"
+      },
+      "scope": "full",
+      "workload": "minimal",
+      "acceptedFullCompilation": false,
+      "independentTypecheck": {
+        "status": "success",
+        "exitCode": 0,
+        "elapsedMs": 976,
+        "diagnosticCodes": [],
+        "unchanged": true,
+        "log": "/private/tmp/slc-generated-typecheck-audit/hmOuZA/tsc.log"
+      }
+    },
+    {
+      "id": "compile-fIne1M",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-fIne1M/summary.json",
+        "bytes": 23218,
+        "sha256": "68984c5fc6b9b05b3d22a62d3c1d8fa6ddc83f59af3fcdfd41f74b5ba1ca813f"
+      },
+      "scope": "full",
+      "workload": "broader_demo",
+      "startedAt": "2026-09-12T17:54:50.877Z",
+      "finishedAt": "2026-09-12T18:01:47.069Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "acceptedFullCompilation": false,
+      "failureCode": "malformed_gears_results_repaired_at_wrong_phase",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "@openai/codex-sdk": "0.146.1",
+          "@anthropic-ai/claude-agent-sdk": "0.3.223",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-fIne1M/work/workflow.txt",
+        "bytes": 797,
+        "sha256": "7356a778510fca0de5a937e1395b1560decd96bd402869d82f3a0fc4442196fa",
+        "original": "/Users/basicthinker/Projects/SubLang/slc/demo/workflow.txt"
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "compile-fIne1M",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/link.md",
+          "bytes": 153918,
+          "sha256": "9d125da89dfafecfe5c4fe495364dd210b5a018989b76463cbe1d54d2dce5067"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/optimize.md",
+          "bytes": 5676,
+          "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "pipelineInputClosures": {
+        "status": "unavailable",
+        "reasonCode": "historical-harness-recorded-root-files-only"
+      },
+      "verificationHarness": {
+        "status": "unavailable",
+        "reasonCode": "not-captured-at-execution"
+      },
+      "reproductionCommand": [
+        "node",
+        "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-compile.mjs",
+        "--agent",
+        "claude-code",
+        "--model",
+        "claude-opus-5",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "1200",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope",
+        "--label",
+        "broader-demo-opus5-low",
+        "--source",
+        "/Users/basicthinker/Projects/SubLang/slc/demo/workflow.txt"
+      ],
+      "commandQualification": "Reconstructed command; reproduce exact recorded file identities. Current harness also requires independent strict TypeScript checking.",
+      "compileMs": 416174,
+      "experimentMs": 416185,
+      "agentCalls": 6,
+      "toolCalls": 8,
+      "firstEventSumMs": 30764,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 42558
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 55697
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 34948
+        },
+        {
+          "name": "gears2fsm",
+          "status": "error",
+          "elapsedMs": 282911
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "success",
+          "elapsedMs": 43070,
+          "firstEventMs": 5892,
+          "providerDurationMs": 37068,
+          "promptBytes": 5688,
+          "promptSha256": "f67cd8ee82315a75b14ffb129ae189973c7314bbeaf916a08aaa3e1b14245304",
+          "toolCalls": 2,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 81783,
+                "uncached": 6,
+                "cacheRead": 66524,
+                "cacheWrite": 15253
+              },
+              "output": {
+                "total": 947
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 56198,
+          "firstEventMs": 5490,
+          "providerDurationMs": 50533,
+          "promptBytes": 23541,
+          "promptSha256": "f2863fed73a526e2dbc7ce45b914532c4e38852615e9751cba2e41e17121b7cb",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 80916,
+                "uncached": 4,
+                "cacheRead": 69199,
+                "cacheWrite": 11713
+              },
+              "output": {
+                "total": 3951
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 35454,
+          "firstEventMs": 5316,
+          "providerDurationMs": 29984,
+          "promptBytes": 8408,
+          "promptSha256": "88be551acc1086ed2789d15e8767202ee2d224c95ea27c84f384d0ff89103309",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 93770,
+                "uncached": 4,
+                "cacheRead": 88445,
+                "cacheWrite": 5321
+              },
+              "output": {
+                "total": 943
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 202932,
+          "firstEventMs": 6173,
+          "providerDurationMs": 196597,
+          "promptBytes": 53103,
+          "promptSha256": "70b84c047c03c59a1b5ec519ec94209f29748dd0cd8a7bf9ffb44b2dbaf87c5e",
+          "toolCalls": 2,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 238004,
+                "uncached": 6,
+                "cacheRead": 198572,
+                "cacheWrite": 39426
+              },
+              "output": {
+                "total": 19028
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 53785,
+          "firstEventMs": 3592,
+          "providerDurationMs": 50034,
+          "promptBytes": 57456,
+          "promptSha256": "913e09798d78b05a08eba29410026417ed1143b8f1bb9f811b00c24dad53b243",
+          "toolCalls": 2,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 325069,
+                "uncached": 5,
+                "cacheRead": 302931,
+                "cacheWrite": 22133
+              },
+              "output": {
+                "total": 2330
+              }
+            }
+          }
+        },
+        {
+          "id": 6,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 27714,
+          "firstEventMs": 4301,
+          "providerDurationMs": 23247,
+          "promptBytes": 62224,
+          "promptSha256": "9dd9dce523a6ba575d4e23ba96540d2408ba71fa1b6a2541b152682cad4f3df7",
+          "toolCalls": 0,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 132420,
+                "uncached": 2,
+                "cacheRead": 108897,
+                "cacheWrite": 23521
+              },
+              "output": {
+                "total": 1763
+              }
+            }
+          }
+        }
+      ],
+      "validation": {
+        "status": "not-run"
+      }
+    },
+    {
+      "id": "compile-bayvzK",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-bayvzK/summary.json",
+        "bytes": 12877,
+        "sha256": "3457aad626f54e388d79681d297770638dc17b4c72d8d3b04b9dc7285399ad73"
+      },
+      "scope": "link",
+      "workload": "fixed_fsm",
+      "startedAt": "2026-09-12T17:59:48.868Z",
+      "finishedAt": "2026-09-12T18:04:11.672Z",
+      "recordedStatus": "success",
+      "acceptedSuccess": false,
+      "acceptedFullCompilation": false,
+      "failureCode": "link_contract_only_full_acceptance_unmeasured",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": null,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "@openai/codex-sdk": "0.146.1",
+          "@anthropic-ai/claude-agent-sdk": "0.3.223",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-bayvzK/work/minimal.fsm.ts",
+        "bytes": 12554,
+        "sha256": "4de885cae296bfa1802aaeb9526142d174c1ef98c9d56259008f2416bb0b4d22",
+        "original": "/private/tmp/slc-performance-evidence/compile-hmOuZA/work/minimal.playbook/minimal.fsm.ts"
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "compile-bayvzK",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/correctness/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/correctness/playbook/link.md",
+          "bytes": 154485,
+          "sha256": "2c842a847b8896f3f24c454d1bbe515512b0acd9e1ba76d5a2550081fe1d8501"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/correctness/playbook/optimize.md",
+          "bytes": 5676,
+          "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/correctness/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "pipelineInputClosures": {
+        "status": "unavailable",
+        "reasonCode": "historical-harness-recorded-root-files-only"
+      },
+      "verificationHarness": {
+        "status": "unavailable",
+        "reasonCode": "not-captured-at-execution"
+      },
+      "reproductionCommand": [
+        "node",
+        "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-compile.mjs",
+        "--agent",
+        "claude-code",
+        "--model",
+        "claude-opus-5",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "1200",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/correctness",
+        "--label",
+        "fixed-fsm-default-link-opus5-low",
+        "--source",
+        "/private/tmp/slc-performance-evidence/compile-hmOuZA/work/minimal.playbook/minimal.fsm.ts",
+        "--link-target",
+        "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/src/runtime.ts"
+      ],
+      "commandQualification": "Reconstructed command; reproduce exact recorded file identities. Current harness also requires independent strict TypeScript checking.",
+      "compileMs": 262655,
+      "experimentMs": 262843,
+      "agentCalls": 1,
+      "toolCalls": 18,
+      "firstEventSumMs": 2722,
+      "phases": [
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 262602
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 262966,
+          "firstEventMs": 2722,
+          "providerDurationMs": 260344,
+          "promptBytes": 157341,
+          "promptSha256": "934fb3610b47086159a64510745ff19fc064c5b7339b44bf068d15785e0098b4",
+          "toolCalls": 18,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 2031287,
+                "uncached": 37,
+                "cacheRead": 1922997,
+                "cacheWrite": 108253
+              },
+              "output": {
+                "total": 12303
+              }
+            }
+          }
+        }
+      ],
+      "validation": {
+        "ok": true,
+        "sourceUnchanged": true,
+        "linkedContract": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null
+        },
+        "elapsedMs": 182
+      },
+      "acceptedLinkedContract": true,
+      "linkTarget": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17530,
+        "sha256": "844f3bdfe7af19715ae4f48306f36f7c0223a18c4cdcba61a9116cbc6e4c0b5e"
+      },
+      "fullRuntimeAcceptance": {
+        "status": "not-run"
+      }
+    },
+    {
+      "id": "compile-j8qjkm",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-j8qjkm/summary.json",
+        "bytes": 17240,
+        "sha256": "20b0a4654890feaa1e1715ae50971e36d61dcef8233bca7b71e04383d0c04635"
+      },
+      "scope": "link",
+      "workload": "fixed_fsm",
+      "startedAt": "2026-09-12T18:05:04.221Z",
+      "finishedAt": "2026-09-12T18:08:29.311Z",
+      "recordedStatus": "success",
+      "acceptedSuccess": false,
+      "acceptedFullCompilation": false,
+      "failureCode": "link_contract_only_full_acceptance_unmeasured",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": null,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "@openai/codex-sdk": "0.146.1",
+          "@anthropic-ai/claude-agent-sdk": "0.3.223",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-j8qjkm/work/minimal.fsm.ts",
+        "bytes": 12554,
+        "sha256": "4de885cae296bfa1802aaeb9526142d174c1ef98c9d56259008f2416bb0b4d22",
+        "original": "/private/tmp/slc-performance-evidence/compile-hmOuZA/work/minimal.playbook/minimal.fsm.ts"
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "compile-j8qjkm",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/link.md",
+          "bytes": 158258,
+          "sha256": "2e35acb0c6c6e4c51148ecf7b7753e20371c10765175e605f6273689a9baf2a6"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/materialize-link.mjs",
+          "bytes": 20616,
+          "sha256": "071973de05753ede6381985efbeea60276b02b8a35b7e0af7952d9f2ef3de1ac"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/slc.pin-inputs.json",
+          "bytes": 180,
+          "sha256": "c6b258591dc956b8e503caeed7a3ac4ca0909702101f36ce9d2f630154b65d0b"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "pipelineInputClosures": {
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook": {
+          "status": "complete",
+          "boundary": ".",
+          "phases": [
+            {
+              "name": "gears2fsm",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/gears2fsm.md"
+              ]
+            },
+            {
+              "name": "optimize",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/optimize.md"
+              ]
+            },
+            {
+              "name": "text2gears",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/text2gears.md"
+              ]
+            },
+            {
+              "name": "link",
+              "declaration": "sidecar",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/gears2fsm.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/link.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/materialize-link.mjs",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/optimize.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/text2gears.md"
+              ]
+            }
+          ],
+          "files": [
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/gears2fsm.md",
+              "bytes": 50379,
+              "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/link.md",
+              "bytes": 158258,
+              "sha256": "2e35acb0c6c6e4c51148ecf7b7753e20371c10765175e605f6273689a9baf2a6"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/materialize-link.mjs",
+              "bytes": 20616,
+              "sha256": "071973de05753ede6381985efbeea60276b02b8a35b7e0af7952d9f2ef3de1ac"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/optimize.md",
+              "bytes": 4468,
+              "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/slc.pin-inputs.json",
+              "bytes": 180,
+              "sha256": "c6b258591dc956b8e503caeed7a3ac4ca0909702101f36ce9d2f630154b65d0b"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1/playbook/text2gears.md",
+              "bytes": 20806,
+              "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+            }
+          ],
+          "sha256": "450d73821a660d3879161417a5c51bfaea0b6abc050034b89506f3b0b8fb298c"
+        }
+      },
+      "verificationHarness": {
+        "files": [
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-compile.mjs",
+            "bytes": 25210,
+            "sha256": "3dd0f05cbd615ba8829c43f85f03ee8f234170a97154df66d6ddcae2e9e96a66"
+          },
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-runtime.mjs",
+            "bytes": 10235,
+            "sha256": "a16f61beb6799fe8031566b38e6183979f737bb2c237838ae138e764a27b15c2"
+          }
+        ],
+        "sha256": "04da4f17dd4e12429f726c5ee9f70abfcd139f0e2ac1224cfca9c2fdec25b7f8"
+      },
+      "reproductionCommand": [
+        "node",
+        "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-compile.mjs",
+        "--agent",
+        "claude-code",
+        "--model",
+        "claude-opus-5",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "1200",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v1",
+        "--label",
+        "fixed-fsm-materializer-opus5-low",
+        "--source",
+        "/private/tmp/slc-performance-evidence/compile-hmOuZA/work/minimal.playbook/minimal.fsm.ts",
+        "--link-target",
+        "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/src/runtime.ts"
+      ],
+      "commandQualification": "Reconstructed command; reproduce exact recorded file identities. Current harness also requires independent strict TypeScript checking.",
+      "compileMs": 204907,
+      "experimentMs": 205085,
+      "agentCalls": 1,
+      "toolCalls": 10,
+      "firstEventSumMs": 7115,
+      "phases": [
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 204899
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 205365,
+          "firstEventMs": 7115,
+          "providerDurationMs": 198108,
+          "promptBytes": 161114,
+          "promptSha256": "dfc3d1a976aee91dac31a67ff7fc4ab8799ce77db4cc4af5f7d60832e0812c81",
+          "toolCalls": 10,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 1017809,
+                "uncached": 21,
+                "cacheRead": 930623,
+                "cacheWrite": 87165
+              },
+              "output": {
+                "total": 7401
+              }
+            }
+          }
+        }
+      ],
+      "validation": {
+        "ok": true,
+        "sourceUnchanged": true,
+        "linkedContract": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null
+        },
+        "elapsedMs": 169
+      },
+      "acceptedLinkedContract": true,
+      "linkTarget": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17530,
+        "sha256": "844f3bdfe7af19715ae4f48306f36f7c0223a18c4cdcba61a9116cbc6e4c0b5e"
+      },
+      "fullRuntimeAcceptance": {
+        "status": "not-run"
+      },
+      "manualCorrection": "Final artifact corrects helper-v1 composer call arity for installed Playbook 12.3; v2 removes that manual correction.",
+      "independentTypecheck": {
+        "status": "success",
+        "exitCode": 0,
+        "elapsedMs": 883,
+        "diagnosticCodes": [],
+        "unchanged": true,
+        "log": "/private/tmp/slc-generated-typecheck-audit/j8qjkm/tsc.log"
+      }
+    },
+    {
+      "id": "compile-yoHZsO",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-yoHZsO/summary.json",
+        "bytes": 15668,
+        "sha256": "2cec5c148284572b821937236c931bb4af2a3d60227c42d30b15c6f9e211f368"
+      },
+      "scope": "link",
+      "workload": "fixed_fsm",
+      "startedAt": "2026-09-12T18:16:45.492Z",
+      "finishedAt": "2026-09-12T18:16:53.004Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "acceptedFullCompilation": false,
+      "failureCode": "provider_rate_limit_no_throughput_result",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": null,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 600,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "@openai/codex-sdk": "0.146.1",
+          "@anthropic-ai/claude-agent-sdk": "0.3.223",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-yoHZsO/work/minimal.fsm.ts",
+        "bytes": 12554,
+        "sha256": "4de885cae296bfa1802aaeb9526142d174c1ef98c9d56259008f2416bb0b4d22",
+        "original": "/private/tmp/slc-performance-evidence/compile-hmOuZA/work/minimal.playbook/minimal.fsm.ts"
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "compile-yoHZsO",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/link.md",
+          "bytes": 158445,
+          "sha256": "20f223c1ff58f2f59f69f250d47aa385fafabfcef63bfb6e2e0080cf5d7cc9dd"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/materialize-link.mjs",
+          "bytes": 20923,
+          "sha256": "fe7336bc4c1511c4170ac3cdaeda4ffc30f3848b40ae7301f6660c20067e58e0"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md",
+          "bytes": 5676,
+          "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/slc.pin-inputs.json",
+          "bytes": 180,
+          "sha256": "c6b258591dc956b8e503caeed7a3ac4ca0909702101f36ce9d2f630154b65d0b"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "pipelineInputClosures": {
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook": {
+          "status": "complete",
+          "boundary": ".",
+          "phases": [
+            {
+              "name": "gears2fsm",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md"
+              ]
+            },
+            {
+              "name": "optimize",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md"
+              ]
+            },
+            {
+              "name": "text2gears",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md"
+              ]
+            },
+            {
+              "name": "link",
+              "declaration": "sidecar",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/link.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/materialize-link.mjs",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md"
+              ]
+            }
+          ],
+          "files": [
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md",
+              "bytes": 50379,
+              "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/link.md",
+              "bytes": 158445,
+              "sha256": "20f223c1ff58f2f59f69f250d47aa385fafabfcef63bfb6e2e0080cf5d7cc9dd"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/materialize-link.mjs",
+              "bytes": 20923,
+              "sha256": "fe7336bc4c1511c4170ac3cdaeda4ffc30f3848b40ae7301f6660c20067e58e0"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md",
+              "bytes": 5676,
+              "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/slc.pin-inputs.json",
+              "bytes": 180,
+              "sha256": "c6b258591dc956b8e503caeed7a3ac4ca0909702101f36ce9d2f630154b65d0b"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md",
+              "bytes": 20806,
+              "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+            }
+          ],
+          "sha256": "477b5a3a13150474359883eebdb0c87fa0dfb221e59ae91102b658491ebe0401"
+        }
+      },
+      "verificationHarness": {
+        "files": [
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-compile.mjs",
+            "bytes": 28021,
+            "sha256": "713db56cf3230bcd791a558a786ffaa472f92408f2563d01cc9d0c4e24d09f07"
+          },
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-runtime.mjs",
+            "bytes": 10235,
+            "sha256": "a16f61beb6799fe8031566b38e6183979f737bb2c237838ae138e764a27b15c2"
+          }
+        ],
+        "sha256": "13f9f296818c44a33a4980b7166d3eab518cfa95cfb77699f7c35034bf0b6cf1"
+      },
+      "reproductionCommand": [
+        "node",
+        "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-compile.mjs",
+        "--agent",
+        "claude-code",
+        "--model",
+        "claude-opus-5",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "600",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2",
+        "--label",
+        "fixed-fsm-materializer-v2-opus5-low",
+        "--source",
+        "/private/tmp/slc-performance-evidence/compile-hmOuZA/work/minimal.playbook/minimal.fsm.ts",
+        "--link-target",
+        "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/src/runtime.ts"
+      ],
+      "commandQualification": "Reconstructed command; reproduce exact recorded file identities. Current harness also requires independent strict TypeScript checking.",
+      "compileMs": 7499,
+      "experimentMs": 7507,
+      "agentCalls": 1,
+      "toolCalls": 0,
+      "firstEventSumMs": 4636,
+      "phases": [
+        {
+          "name": "link",
+          "status": "error",
+          "elapsedMs": 7490
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "link",
+          "status": "error",
+          "elapsedMs": 8005,
+          "firstEventMs": 4636,
+          "providerDurationMs": 3236,
+          "promptBytes": 161301,
+          "promptSha256": "3132bd10dfdbcc2a704792324be36ee97461ea72145cf841edda2f625fca3714",
+          "toolCalls": 0,
+          "resumed": false,
+          "requestedResume": false
+        }
+      ],
+      "validation": {
+        "status": "not-run"
+      },
+      "acceptedLinkedContract": false,
+      "linkTarget": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17530,
+        "sha256": "844f3bdfe7af19715ae4f48306f36f7c0223a18c4cdcba61a9116cbc6e4c0b5e"
+      },
+      "fullRuntimeAcceptance": {
+        "status": "not-run"
+      }
+    },
+    {
+      "id": "compile-VMjtQM",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-VMjtQM/summary.json",
+        "bytes": 15083,
+        "sha256": "76591f8b0cd1f0e36dbfa40a5fedc11363d8f067cd0df1d488b1997a5a7211cf"
+      },
+      "scope": "full",
+      "workload": "minimal",
+      "startedAt": "2026-09-12T18:19:16.405Z",
+      "finishedAt": "2026-09-12T18:19:41.517Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "acceptedFullCompilation": false,
+      "failureCode": "unsupported_effort_no_throughput_result",
+      "settings": {
+        "selection": {
+          "agent": "codex",
+          "model": "gpt-6-astra",
+          "effort": "minimal"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 900,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "@openai/codex-sdk": "0.153.4",
+          "@anthropic-ai/claude-agent-sdk": "0.3.223",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-VMjtQM/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/private/tmp/slc-gpt6-current-v2/package-lock.json",
+        "bytes": 188232,
+        "sha256": "e70b863cf88782b05e4de2753a9973c8cd4723ec2d4179105d574ea81f217bdb"
+      },
+      "runtimeIdentity": "compile-VMjtQM",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/link.md",
+          "bytes": 158445,
+          "sha256": "20f223c1ff58f2f59f69f250d47aa385fafabfcef63bfb6e2e0080cf5d7cc9dd"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/materialize-link.mjs",
+          "bytes": 20923,
+          "sha256": "fe7336bc4c1511c4170ac3cdaeda4ffc30f3848b40ae7301f6660c20067e58e0"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md",
+          "bytes": 5676,
+          "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/slc.pin-inputs.json",
+          "bytes": 180,
+          "sha256": "c6b258591dc956b8e503caeed7a3ac4ca0909702101f36ce9d2f630154b65d0b"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "pipelineInputClosures": {
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook": {
+          "status": "complete",
+          "boundary": ".",
+          "phases": [
+            {
+              "name": "gears2fsm",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md"
+              ]
+            },
+            {
+              "name": "optimize",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md"
+              ]
+            },
+            {
+              "name": "text2gears",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md"
+              ]
+            },
+            {
+              "name": "link",
+              "declaration": "sidecar",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/link.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/materialize-link.mjs",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md"
+              ]
+            }
+          ],
+          "files": [
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md",
+              "bytes": 50379,
+              "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/link.md",
+              "bytes": 158445,
+              "sha256": "20f223c1ff58f2f59f69f250d47aa385fafabfcef63bfb6e2e0080cf5d7cc9dd"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/materialize-link.mjs",
+              "bytes": 20923,
+              "sha256": "fe7336bc4c1511c4170ac3cdaeda4ffc30f3848b40ae7301f6660c20067e58e0"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md",
+              "bytes": 5676,
+              "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/slc.pin-inputs.json",
+              "bytes": 180,
+              "sha256": "c6b258591dc956b8e503caeed7a3ac4ca0909702101f36ce9d2f630154b65d0b"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md",
+              "bytes": 20806,
+              "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+            }
+          ],
+          "sha256": "477b5a3a13150474359883eebdb0c87fa0dfb221e59ae91102b658491ebe0401"
+        }
+      },
+      "verificationHarness": {
+        "files": [
+          {
+            "path": "/private/tmp/slc-gpt6-current-v2/scripts/benchmark-compile.mjs",
+            "bytes": 28021,
+            "sha256": "713db56cf3230bcd791a558a786ffaa472f92408f2563d01cc9d0c4e24d09f07"
+          },
+          {
+            "path": "/private/tmp/slc-gpt6-current-v2/scripts/benchmark-runtime.mjs",
+            "bytes": 10235,
+            "sha256": "a16f61beb6799fe8031566b38e6183979f737bb2c237838ae138e764a27b15c2"
+          }
+        ],
+        "sha256": "67393d4e2006ae484febf31e27b90861954ad908861090bda95bc4e2bd792819"
+      },
+      "reproductionCommand": [
+        "node",
+        "/private/tmp/slc-gpt6-current-v2/scripts/benchmark-compile.mjs",
+        "--agent",
+        "codex",
+        "--model",
+        "gpt-6-astra",
+        "--effort",
+        "minimal",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "900",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2",
+        "--label",
+        "full-materializer-v2-gpt6-minimal"
+      ],
+      "commandQualification": "Reconstructed command; reproduce exact recorded file identities. Current harness also requires independent strict TypeScript checking.",
+      "compileMs": 25101,
+      "experimentMs": 25107,
+      "agentCalls": 1,
+      "toolCalls": 0,
+      "firstEventSumMs": 7576,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "error",
+          "elapsedMs": 25047
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "error",
+          "elapsedMs": 25042,
+          "firstEventMs": 7576,
+          "providerDurationMs": 25035,
+          "promptBytes": 5683,
+          "promptSha256": "e15d7ff075b205b94d0c1576e18967c82d8c0bd588fc15e65abeea6bab05f1ca",
+          "toolCalls": 0,
+          "resumed": false,
+          "requestedResume": false
+        }
+      ],
+      "validation": {
+        "status": "not-run"
+      }
+    },
+    {
+      "id": "compile-1EMnzp",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-1EMnzp/summary.json",
+        "bytes": 15510,
+        "sha256": "54437bd9d4ded67e392a2216a6b990db170874fdfbb491dd8f163662d243e742"
+      },
+      "scope": "full",
+      "workload": "minimal",
+      "startedAt": "2026-09-12T18:20:23.513Z",
+      "finishedAt": "2026-09-12T18:21:02.427Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "acceptedFullCompilation": false,
+      "failureCode": "empty_clarification_after_successful_normalization",
+      "settings": {
+        "selection": {
+          "agent": "codex",
+          "model": "gpt-6-astra",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 900,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "@openai/codex-sdk": "0.153.4",
+          "@anthropic-ai/claude-agent-sdk": "0.3.223",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-1EMnzp/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/private/tmp/slc-gpt6-current-v2/package-lock.json",
+        "bytes": 188232,
+        "sha256": "e70b863cf88782b05e4de2753a9973c8cd4723ec2d4179105d574ea81f217bdb"
+      },
+      "runtimeIdentity": "compile-1EMnzp",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/link.md",
+          "bytes": 158445,
+          "sha256": "20f223c1ff58f2f59f69f250d47aa385fafabfcef63bfb6e2e0080cf5d7cc9dd"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/materialize-link.mjs",
+          "bytes": 20923,
+          "sha256": "fe7336bc4c1511c4170ac3cdaeda4ffc30f3848b40ae7301f6660c20067e58e0"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md",
+          "bytes": 5676,
+          "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/slc.pin-inputs.json",
+          "bytes": 180,
+          "sha256": "c6b258591dc956b8e503caeed7a3ac4ca0909702101f36ce9d2f630154b65d0b"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "pipelineInputClosures": {
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook": {
+          "status": "complete",
+          "boundary": ".",
+          "phases": [
+            {
+              "name": "gears2fsm",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md"
+              ]
+            },
+            {
+              "name": "optimize",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md"
+              ]
+            },
+            {
+              "name": "text2gears",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md"
+              ]
+            },
+            {
+              "name": "link",
+              "declaration": "sidecar",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/link.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/materialize-link.mjs",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md"
+              ]
+            }
+          ],
+          "files": [
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/gears2fsm.md",
+              "bytes": 50379,
+              "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/link.md",
+              "bytes": 158445,
+              "sha256": "20f223c1ff58f2f59f69f250d47aa385fafabfcef63bfb6e2e0080cf5d7cc9dd"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/materialize-link.mjs",
+              "bytes": 20923,
+              "sha256": "fe7336bc4c1511c4170ac3cdaeda4ffc30f3848b40ae7301f6660c20067e58e0"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/optimize.md",
+              "bytes": 5676,
+              "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/slc.pin-inputs.json",
+              "bytes": 180,
+              "sha256": "c6b258591dc956b8e503caeed7a3ac4ca0909702101f36ce9d2f630154b65d0b"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2/playbook/text2gears.md",
+              "bytes": 20806,
+              "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+            }
+          ],
+          "sha256": "477b5a3a13150474359883eebdb0c87fa0dfb221e59ae91102b658491ebe0401"
+        }
+      },
+      "verificationHarness": {
+        "files": [
+          {
+            "path": "/private/tmp/slc-gpt6-current-v2/scripts/benchmark-compile.mjs",
+            "bytes": 28021,
+            "sha256": "713db56cf3230bcd791a558a786ffaa472f92408f2563d01cc9d0c4e24d09f07"
+          },
+          {
+            "path": "/private/tmp/slc-gpt6-current-v2/scripts/benchmark-runtime.mjs",
+            "bytes": 10235,
+            "sha256": "a16f61beb6799fe8031566b38e6183979f737bb2c237838ae138e764a27b15c2"
+          }
+        ],
+        "sha256": "67393d4e2006ae484febf31e27b90861954ad908861090bda95bc4e2bd792819"
+      },
+      "reproductionCommand": [
+        "node",
+        "/private/tmp/slc-gpt6-current-v2/scripts/benchmark-compile.mjs",
+        "--agent",
+        "codex",
+        "--model",
+        "gpt-6-astra",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "900",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/materializer-v2",
+        "--label",
+        "full-materializer-v2-gpt6-low"
+      ],
+      "commandQualification": "Reconstructed command; reproduce exact recorded file identities. Current harness also requires independent strict TypeScript checking.",
+      "compileMs": 38905,
+      "experimentMs": 38910,
+      "agentCalls": 1,
+      "toolCalls": 2,
+      "firstEventSumMs": 6738,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "error",
+          "elapsedMs": 38853
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "success",
+          "elapsedMs": 38847,
+          "firstEventMs": 6738,
+          "providerDurationMs": 38835,
+          "promptBytes": 5683,
+          "promptSha256": "d33ca4b3cbfffea86ef7876e4746bdd0a06a4277c181aade971e93acdcb813a5",
+          "toolCalls": 2,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "partial",
+            "totals": {
+              "input": {
+                "total": 64240,
+                "uncached": 11504,
+                "cacheRead": 52736,
+                "cacheWrite": 0
+              },
+              "output": {
+                "total": 389,
+                "visible": 328,
+                "reasoning": 61
+              }
+            }
+          }
+        }
+      ],
+      "validation": {
+        "status": "not-run"
+      },
+      "clarificationReplay": {
+        "evidence": {
+          "path": "/private/tmp/slc-performance-evidence/compile-1EMnzp/clarification-replay.json",
+          "bytes": 1148,
+          "sha256": "21b65f729a163789bdd39b52ba4360f09364ac19e7beb0cdbdcb8f3ea56d475c"
+        },
+        "transcriptSha256": "b46ac3a6de8242fdef101eca774282f46ccbcc3ba9920cec5d67cc70dc63e409",
+        "retainedMessageCount": 1,
+        "conclusion": "Agent produced normalized artifact and reported success, then appended an invalid empty clarification object; strict decoder correctly refused.",
+        "fixCommit": "684119a",
+        "rawMessagesIncluded": false
       }
     }
   ],
@@ -2146,7 +3637,9 @@
     {
       "technique": "noninteractive source clarification",
       "status": "retained_feature_live_verified",
-      "speedClaim": false
+      "speedClaim": false,
+      "promptFollowupCommit": "684119a",
+      "promptFollowup": "Make clarification instructions conditional on unresolved source behavior; successful unambiguous work omits the marker, and malformed-marker decoding stays strict."
     },
     {
       "technique": "typed FSM construction helpers",
@@ -2155,6 +3648,40 @@
       "speedClaim": false,
       "scope": "Optional shared actor stubs, structural types and transition builders; source-owned states and guards remain explicit.",
       "dependency": "Evaluate link materialization first."
+    },
+    {
+      "technique": "declared-closure and executing-harness identities",
+      "status": "retained_validation",
+      "commit": "abfef9b",
+      "speedClaim": false
+    },
+    {
+      "technique": "independent strict TypeScript artifact acceptance",
+      "status": "retained_validation",
+      "commit": "d4e5933",
+      "speedClaim": false
+    },
+    {
+      "technique": "script-result coverage fallback correction",
+      "status": "retained_correctness_fix",
+      "commit": "d640d0f",
+      "speedClaim": false
+    },
+    {
+      "technique": "Playbook-owned link materializer",
+      "status": "provisional_link_only_improvement_full_acceptance_pending",
+      "evidenceRuns": ["compile-bayvzK", "compile-j8qjkm"],
+      "speedClaim": false,
+      "v2LiveOpusStatus": "provider_rate_limit",
+      "observedLinkReductionPercent": 21.99
+    },
+    {
+      "technique": "GEARS contract at producer and consumer preflight",
+      "status": "retained_correctness_fix_failed_work_avoided",
+      "speedClaim": false,
+      "commit": "a599b2f",
+      "consumerPreflightMs": 175.68870900000002,
+      "consumerAgentCalls": 0
     }
   ],
   "deterministicProbes": {
@@ -2183,6 +3710,188 @@
       "originalElapsedMs": 45.9,
       "replayElapsedMs": 46.35970900000001,
       "subsequentRejectedLinkMs": 158223
+    },
+    "strictTypeScript": {
+      "evidence": {
+        "path": "/private/tmp/slc-generated-typecheck-audit/evidence.json",
+        "bytes": 2947,
+        "sha256": "8fb6687cbcb02dbdb80518eff27b919ad1afbd3fdd92d5cfbaf99e66bc5a41e2"
+      },
+      "reproductionCommand": [
+        "node",
+        "/private/tmp/slc-generated-typecheck-audit/probe.mjs"
+      ],
+      "compilerVersion": "6.0.3",
+      "compiler": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/typescript/lib/tsc.js",
+        "sha256": "2cffde0b8c6760dfb0b5b0382bbb7e00ba6a8b2d981b9205b256a700a481d983"
+      },
+      "flags": [
+        "--ignoreConfig",
+        "--noEmit",
+        "--strict",
+        "--noUnusedLocals",
+        "--noUnusedParameters",
+        "--noImplicitOverride",
+        "--verbatimModuleSyntax",
+        "--esModuleInterop",
+        "--forceConsistentCasingInFileNames",
+        "--skipLibCheck",
+        "--module",
+        "NodeNext",
+        "--moduleResolution",
+        "NodeNext",
+        "--target",
+        "ES2022",
+        "--lib",
+        "ES2022",
+        "--allowImportingTsExtensions",
+        "--erasableSyntaxOnly",
+        "--isolatedModules",
+        "--moduleDetection",
+        "force",
+        "--noFallthroughCasesInSwitch",
+        "--types",
+        "node",
+        "--typeRoots",
+        "/Users/basicthinker/Projects/SubLang/slc/node_modules/@types"
+      ],
+      "consumer": "Byte-preserving temporary ESM consumer with original installed dependency resolution; no emission or edits to original bundles.",
+      "runs": [
+        {
+          "name": "hmOuZA",
+          "work": "/private/tmp/slc-performance-evidence/compile-hmOuZA/work",
+          "entry": "minimal.ts",
+          "sha256": "e9e9e841fda9306624fb734470103841f4f389a82e2dae2197bf3b76d6710e31",
+          "unchanged": true,
+          "status": "success",
+          "exitCode": 0,
+          "elapsedMs": 976,
+          "diagnosticCodes": [],
+          "log": "/private/tmp/slc-generated-typecheck-audit/hmOuZA/tsc.log",
+          "nodeModules": "/Users/basicthinker/Projects/SubLang/slc/node_modules"
+        },
+        {
+          "name": "k6mg7y",
+          "work": "/private/tmp/slc-performance-evidence/compile-k6mg7y/work",
+          "entry": "minimal.ts",
+          "sha256": "e9e9e841fda9306624fb734470103841f4f389a82e2dae2197bf3b76d6710e31",
+          "unchanged": true,
+          "status": "success",
+          "exitCode": 0,
+          "elapsedMs": 872,
+          "diagnosticCodes": [],
+          "log": "/private/tmp/slc-generated-typecheck-audit/k6mg7y/tsc.log",
+          "nodeModules": "/Users/basicthinker/Projects/SubLang/slc/node_modules"
+        },
+        {
+          "name": "j8qjkm",
+          "work": "/private/tmp/slc-performance-evidence/compile-j8qjkm/work",
+          "entry": "minimal.playbook/minimal.playbook.ts",
+          "sha256": "6ca01084da849effbf37f3564bb1dd9cb69735c34ef98cb7801861c1b41dcc4b",
+          "unchanged": true,
+          "status": "success",
+          "exitCode": 0,
+          "elapsedMs": 883,
+          "diagnosticCodes": [],
+          "log": "/private/tmp/slc-generated-typecheck-audit/j8qjkm/tsc.log",
+          "nodeModules": "/Users/basicthinker/Projects/SubLang/slc/node_modules"
+        },
+        {
+          "name": "helper-v2",
+          "work": "/private/tmp/playbook-materializer-12.3-probe-v2",
+          "entry": "minimal.playbook.ts",
+          "sha256": "6cf6efc0247b7055885b281d22d3c7a6a5ff4bbc2246045c70bff9537235b272",
+          "unchanged": true,
+          "status": "success",
+          "exitCode": 0,
+          "elapsedMs": 873,
+          "diagnosticCodes": [],
+          "log": "/private/tmp/slc-generated-typecheck-audit/helper-v2/tsc.log",
+          "nodeModules": "/Users/basicthinker/Projects/SubLang/slc/node_modules"
+        }
+      ],
+      "benchmarkCommit": "d4e5933"
+    },
+    "scriptCoverageCorrection": {
+      "commit": "d640d0f",
+      "beforeEvidence": {
+        "path": "/private/tmp/slc-coverage-fallback-before.json",
+        "bytes": 1692,
+        "sha256": "c68866c72f95dc41754c945250b6cb960a0252d8ed58cd352c0dbdb7084ee400"
+      },
+      "afterEvidence": {
+        "path": "/private/tmp/slc-coverage-fallback-after.json",
+        "bytes": 2341,
+        "sha256": "723e64a35d8f07323b21e9da529d5664dae744e8885467d76019d512bd891f74"
+      },
+      "reproductionCommand": [
+        "node",
+        "/private/tmp/slc-coverage-fallback-probe.mjs"
+      ],
+      "beforeFindingsCount": 1,
+      "afterFindingsCount": 0,
+      "beforeElapsedMs": 25.758499999999984,
+      "afterElapsedMs": 26.010749999999987,
+      "artifactHashes": {
+        "/private/tmp/slc-performance-evidence/compile-hmOuZA/work/minimal.playbook/minimal.fsm.ts": "4de885cae296bfa1802aaeb9526142d174c1ef98c9d56259008f2416bb0b4d22",
+        "/private/tmp/slc-performance-evidence/compile-hmOuZA/work/minimal.playbook/minimal.playbook.ts": "43ad87eeebf33c0ed0e22dc661615d916feff16bb3f4ca20a07ec53276e2a436"
+      },
+      "unchanged": true,
+      "realRuntimeSuccessRoute": "runTask",
+      "realRuntimeFailureRoute": "failed",
+      "fullGeneratedSuiteReplay": false,
+      "scope": "Current checker replays the unchanged original FSM; portable historical checker and original failed benchmark remain unchanged."
+    },
+    "gearsProducerContract": {
+      "evidence": {
+        "path": "/private/tmp/slc-gears-producer-evidence.json",
+        "bytes": 1307,
+        "sha256": "d455a4e66fde5045de3c7b3795d0cb0f08a383faf2cd534af442beee75869893"
+      },
+      "reproductionCommand": [
+        "node",
+        "/private/tmp/slc-gears-producer-probe.mjs"
+      ],
+      "inputs": [
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-fIne1M/work/workflow.playbook/workflow.gears.raw.md",
+          "sha256": "dceffe8f82705dbf62b53384b40fe277597dcc70aa72f4eb3b46e91ad2d532a3",
+          "elapsedMs": 0.8147919999999971,
+          "findingsCount": 1
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-fIne1M/work/workflow.playbook/workflow.gears.md",
+          "sha256": "4de29841afbde045941b9de01b0091d9fce2be4b55120cc4c4db3ab669e926f0",
+          "elapsedMs": 0.47637500000000443,
+          "findingsCount": 1
+        }
+      ],
+      "subsequentFailedFsmPhaseMs": 282911,
+      "fsmAgentCalls": 3,
+      "status": "committed",
+      "conclusion": "Malformed Results originated before FSM generation; repeated protected-input consumer repairs cannot change the producer artifact.",
+      "commit": "a599b2f",
+      "consumerPreflight": {
+        "evidence": {
+          "path": "/private/tmp/slc-gears-consumer-preflight-evidence.json",
+          "bytes": 1179,
+          "sha256": "e5129ca97cfb291857587e6b7cd76a1df9b40bedbc0a235ea7e1df93894d0e97"
+        },
+        "reproductionCommand": [
+          "node",
+          "/private/tmp/slc-gears-consumer-preflight-probe.mjs"
+        ],
+        "elapsedMs": 175.68870900000002,
+        "parserElapsedMs": 0.08158300000002328,
+        "selectedExecutors": 0,
+        "compiledExecutors": 0,
+        "agentCalls": 0,
+        "ok": false,
+        "outputCount": 0,
+        "sourceUnchanged": true,
+        "sourceSha256": "4de29841afbde045941b9de01b0091d9fce2be4b55120cc4c4db3ab669e926f0"
+      }
     }
   },
   "environmentAudit": {
@@ -2358,5 +4067,32 @@
     ],
     "benchmarkDifference": "Recorded benchmarks use repository SLC 0.9.0 and Playbook 12.3.0 with explicit low-effort models; this global environment was inspected only, not benchmarked.",
     "configurationMerge": "A cwd slc.config.yaml replaces home discovery; omitted model/effort therefore use provider defaults rather than home-config values."
-  }
+  },
+  "comparisons": {
+    "fixedFsmLink": {
+      "baseline": "compile-bayvzK",
+      "candidate": "compile-j8qjkm",
+      "sourceSha256": "4de885cae296bfa1802aaeb9526142d174c1ef98c9d56259008f2416bb0b4d22",
+      "observedElapsedReductionMs": 57748,
+      "observedElapsedReductionPercent": 21.99,
+      "baselineToolCalls": 18,
+      "candidateToolCalls": 10,
+      "bothLinkedContractPassed": true,
+      "causalSpeedupEstablished": false,
+      "fiveMinuteFullTargetEvidence": false,
+      "limitations": [
+        "One observation per technique; no randomized or repeated equivalent-load comparison.",
+        "Default-link run overlaps broader-demo provider work for about 118 seconds; helper run has different concurrent load.",
+        "Helper-v1 required manual installed-engine arity correction; final artifact passes retrospective strict TypeScript.",
+        "No full source-level Git runtime acceptance for either link-only run.",
+        "Baseline harness captured root definition files only; helper run captured the declared closure and executing harness identities."
+      ]
+    }
+  },
+  "inputIdentityNotes": [
+    "Closure commit abfef9b records measured-compiler sidecar/inline declared closure, including helper scripts and declaration files; it does not infer undeclared inputs.",
+    "Earlier runs retain original root-level metadata only; missing complete closure and harness identities are unavailable rather than reconstructed as execution-time evidence.",
+    "Closure and harness aggregate digests include absolute paths; compare member byte hashes as well as aggregate digests when workspace roots differ.",
+    "Helper-v1 declared closure SHA256450d73821a660d3879161417a5c51bfaea0b6abc050034b89506f3b0b8fb298c; helper-v2 declared closure SHA256477b5a3a13150474359883eebdb0c87fa0dfb221e59ae91102b658491ebe0401."
+  ]
 }
