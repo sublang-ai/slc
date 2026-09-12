@@ -19,6 +19,7 @@ import { readFile } from 'node:fs/promises';
 import { clarificationContract, decodeClarification } from './clarification.js';
 
 import {
+  definitionReferenceContext,
   updateContextLines,
   type ExecuteRequest,
   type ExecutorResult,
@@ -112,6 +113,8 @@ export function buildPhasePrompt(opts: {
     '--- DEFINITION ---',
     definition,
     '--- END DEFINITION ---',
+    '',
+    definitionReferenceContext(request.definitionPath),
     '',
     'Inputs:',
     ...inputs.map((line) => `- ${line}`),

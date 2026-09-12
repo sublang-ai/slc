@@ -78,6 +78,8 @@ export function createPlaybookPorts(opts: {
   updateContext?: string;
   /** Generic noninteractive source-question protocol for compiled player work. */
   playerClarification?: string;
+  /** Definition location for performing calls; absent from control calls (DR-037). */
+  definitionContext?: string;
   /** Invoked immediately before transport dispatch, including queued control calls. */
   beforeAgentCall?: () => void;
   /** Observes performing work before releasing the shared Captain queue. */
@@ -120,7 +122,12 @@ export function createPlaybookPorts(opts: {
     ): Promise<PlayerResult> {
       opts.beforeAgentCall?.();
       const result = await playerFor(playerId).run({
-        prompt: [prompt, opts.updateContext, opts.playerClarification]
+        prompt: [
+          prompt,
+          opts.definitionContext,
+          opts.updateContext,
+          opts.playerClarification,
+        ]
           .filter((part): part is string => part !== undefined)
           .join('\n\n'),
         model: opts.models?.[playerId] ?? opts.defaultModel,
@@ -145,7 +152,12 @@ export function createPlaybookPorts(opts: {
       // absolute source/target paths (phase-execution-34).
       const transported =
         isolation.allowedTools === undefined
-          ? [prompt, opts.captainWorkspace, opts.updateContext]
+          ? [
+              prompt,
+              opts.captainWorkspace,
+              opts.definitionContext,
+              opts.updateContext,
+            ]
               .filter((part): part is string => part !== undefined)
               .join('\n\n')
           : prompt;

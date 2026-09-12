@@ -52,6 +52,17 @@ export interface LinkOptionPair {
   value: string;
 }
 
+/** Host-owned origin for relative inputs cited by a phase definition (DR-037). */
+export function definitionReferenceContext(definitionPath: string): string {
+  const file = resolve(definitionPath);
+  return [
+    'Definition reference context (read-only):',
+    `- definition file: ${JSON.stringify(file)}`,
+    `- definition directory: ${JSON.stringify(dirname(file))}`,
+    '- resolve relative references in the definition from its directory unless the definition explicitly specifies another base.',
+  ].join('\n');
+}
+
 /**
  * Host-supplied update-mode context for a compile step (DR-021, incremental-compilation-15).
  *

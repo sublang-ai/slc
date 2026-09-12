@@ -62,6 +62,7 @@ meta.md       The spec of specs
 | [DR-034](decisions/034-faithful-transition-coverage.md) | 034-faithful-transition-coverage.md | Ordered fallback reachability and script probes matching the runtime's guard and exit-status contract |
 | [DR-035](decisions/035-gears-contract-at-producer.md) | 035-gears-contract-at-producer.md | Existing GEARS result-contract findings at every producer and before consumer execution |
 | [DR-036](decisions/036-machine-root-public-identity.md) | 036-machine-root-public-identity.md | Public state identities belong under `states`, with extra machine-root identity rejected before linking |
+| [DR-037](decisions/037-definition-reference-origin.md) | 037-definition-reference-origin.md | Definition locations supplied to performing calls for direct resolution of cited relative inputs |
 
 ## Packages
 

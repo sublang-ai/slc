@@ -50,6 +50,7 @@ import { messageOf } from './errors.js';
 import type { LegacyPlaybookPorts } from './playbook-contract.js';
 
 import {
+  definitionReferenceContext,
   updateContextLines,
   type ExecuteRequest,
   type ExecutorResult,
@@ -343,6 +344,9 @@ export function createCompiledExecutor(opts: {
         // transported prompt carries the request's absolute paths and
         // write-scope rules (phase-execution-34).
         captainWorkspace: composeWorkspaceContract(input),
+        definitionContext: definitionReferenceContext(
+          resolve(opts.runRoot, request.definitionPath),
+        ),
         playerClarification: clarificationContract(),
         beforeAgentCall: refuseAfterQuestion,
         onPerformingResult: recordPerforming,
