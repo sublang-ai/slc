@@ -1,0 +1,2362 @@
+{
+  "schema": "sublang.slc.performance-progress.v1",
+  "asOf": "2026-09-12T18:03:00Z",
+  "scope": "Settled local measurements only. No accepted successful five-minute compile; ongoing work omitted.",
+  "targetMs": 300000,
+  "targetAchieved": false,
+  "complete": false,
+  "accountingNotes": [
+    "Prompt sizes are UTF-8 bytes, not tokens.",
+    "Provider input token totals include repeated cached input across tool turns; cacheRead, cacheWrite and uncached are distinct provider units.",
+    "Use top-level usage.tokens.totals once; records repeat accounting and must not be added to totals.",
+    "Missing provider accounting remains absent, not zero. Codex coverage is partial where reported.",
+    "First-event latency includes startup and provider/network waiting; it is not isolated model compute or additive to call duration.",
+    "Summed call lifetimes can exceed compilation wall time because adapter cleanup overlaps phase boundaries.",
+    "Legacy benchmark success did not include runtime source acceptance; accepted flags below also apply retrochecks."
+  ],
+  "runtimeIdentities": {
+    "frozenBaseline": {
+      "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/baseline/dist",
+      "observation": "Retrospective hash of preserved frozen runtime; not captured by the original benchmark.",
+      "algorithm": "SHA-256 of compact JSON of sorted {name,bytes,sha256} JavaScript entries.",
+      "files": 41,
+      "sha256": "0b6d85a4a01fdab7a78d32699a398f7874e7ab5b6b0069252b41db1940e125aa",
+      "cli": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/baseline/dist/cli.js",
+        "bytes": 980,
+        "sha256": "32a7db8e73e8195d05484819dec97c8bdec6f259342a9c168101065a78d9000b"
+      }
+    },
+    "isolatedCodex1534": {
+      "path": "/private/tmp/slc-gpt6-runtime-mlgyv8pk/dist",
+      "observation": "Retrospective hash of preserved frozen runtime; not captured by the original benchmark.",
+      "algorithm": "SHA-256 of compact JSON of sorted {name,bytes,sha256} JavaScript entries.",
+      "files": 41,
+      "sha256": "0b6d85a4a01fdab7a78d32699a398f7874e7ab5b6b0069252b41db1940e125aa",
+      "cli": {
+        "path": "/private/tmp/slc-gpt6-runtime-mlgyv8pk/dist/cli.js",
+        "bytes": 980,
+        "sha256": "32a7db8e73e8195d05484819dec97c8bdec6f259342a9c168101065a78d9000b"
+      }
+    },
+    "earlyGateCandidate": null,
+    "clarificationSmoke": null,
+    "freshSessionCandidate": {
+      "path": "/Users/basicthinker/Projects/SubLang/slc/dist",
+      "observation": "Captured by the benchmark before execution.",
+      "files": 42,
+      "sha256": "a958bc7005eed58084ede251bf468aa772dd52ab12ce9b960981be052219d1e2"
+    },
+    "correctedOptimizerCandidate": {
+      "capture": "at benchmark start",
+      "sha256": "a958bc7005eed58084ede251bf468aa772dd52ab12ce9b960981be052219d1e2",
+      "path": "/Users/basicthinker/Projects/SubLang/slc/dist",
+      "files": [
+        {
+          "name": "app.js",
+          "bytes": 14607,
+          "sha256": "84cf6b8bf87d89d84387c3394a378591daeea5bed633e7c59a2a4e0ca5109a47"
+        },
+        {
+          "name": "artifacts.js",
+          "bytes": 4002,
+          "sha256": "9516c87a5df95d435143f7ac8d3c815a4785b01547667421b6f696e416c476b5"
+        },
+        {
+          "name": "build-history.js",
+          "bytes": 11029,
+          "sha256": "8e8bdd011d29d948e4c7f626499560f4fed0f9797737ef80fff3ef49fd8aa6bd"
+        },
+        {
+          "name": "clarification.js",
+          "bytes": 4459,
+          "sha256": "92c4488c4b11ee611347ac5aecf3a1f8083133c223e64f6ea6b4bc13634c350f"
+        },
+        {
+          "name": "cli.js",
+          "bytes": 980,
+          "sha256": "32a7db8e73e8195d05484819dec97c8bdec6f259342a9c168101065a78d9000b"
+        },
+        {
+          "name": "cligent-agent.js",
+          "bytes": 9072,
+          "sha256": "a141d238260ff1867eb23d6c61c02b40eaf547fed0fd226d23b27ef5ea7ce1e4"
+        },
+        {
+          "name": "compiled-execution.js",
+          "bytes": 8316,
+          "sha256": "5e373511e3c33584730e926e8d38210f58e88d02c6d54fe6126675e707755ca3"
+        },
+        {
+          "name": "compiled-executor.js",
+          "bytes": 28776,
+          "sha256": "f137ef85ebdb7e3cf16ab5c706b1f93c2a439841142bed7961f8e714343fc297"
+        },
+        {
+          "name": "config-file.js",
+          "bytes": 8807,
+          "sha256": "75db644af2823357c7e1f8e36d8bdb156f1b731a46c620a79d498dcbc3a20ee4"
+        },
+        {
+          "name": "config.js",
+          "bytes": 13783,
+          "sha256": "5dce36c1fdbe5a4681e0db4cfad0d230f81bbc0fbbc30213f4660d4f6ceb6dc8"
+        },
+        {
+          "name": "emitted-imports.js",
+          "bytes": 4187,
+          "sha256": "c9492bbf3249d22c1f2363193dee6672793b457e4e019be15f882baa8afcd849"
+        },
+        {
+          "name": "entry-module.js",
+          "bytes": 10875,
+          "sha256": "37e0e73d28b5bd835410f80610a10e91e9ddbb0081461e1d76b3b1fb023bb85f"
+        },
+        {
+          "name": "errors.js",
+          "bytes": 1068,
+          "sha256": "2a4d3856b2078b850cc846f637b626b68caee4265e16181293eea1829fb950dc"
+        },
+        {
+          "name": "execution.js",
+          "bytes": 16508,
+          "sha256": "c88362f7d2ef1e0279843c0c2e55cb621bc9d345c1329ae7aa37d6f8c4d4294a"
+        },
+        {
+          "name": "hash.js",
+          "bytes": 3301,
+          "sha256": "18c88afd930e8838e0b782d46c2f752c67675b8172f5892c8fdb3c29a9ae5d9f"
+        },
+        {
+          "name": "index.js",
+          "bytes": 898,
+          "sha256": "f1d365a336abe9c5614a95704f585868c654f87413f49daab89a0404fef63b14"
+        },
+        {
+          "name": "interpreter.js",
+          "bytes": 6881,
+          "sha256": "ae911f79d88ceff16f14f8957a6199255ed6cfa13c6a1ddaf74571221b9a90d4"
+        },
+        {
+          "name": "invocation.js",
+          "bytes": 5475,
+          "sha256": "48ca6a46772d2cddc1ccacf942f93d4e20250e8c573ae9582446d0ec081eeab9"
+        },
+        {
+          "name": "line-diff.js",
+          "bytes": 2423,
+          "sha256": "fa06693eb21ebad7bec1d16cbec30f4727270773a90b3d5230d3146ea82aace0"
+        },
+        {
+          "name": "link.js",
+          "bytes": 7149,
+          "sha256": "9530874fed7944eb3bc0497392416a317a924db4070f7822c2aac53961477f6f"
+        },
+        {
+          "name": "markdown.js",
+          "bytes": 2004,
+          "sha256": "26ede086e96f26776073e3edaa22cafbb26be88c5bc3d6e55a6800c6c5e91c21"
+        },
+        {
+          "name": "phase-runner.js",
+          "bytes": 14767,
+          "sha256": "56d42e6b0b532804b4aa1fd1401b0b812370a92213b4a7671101a03046c0ec27"
+        },
+        {
+          "name": "phase.js",
+          "bytes": 5119,
+          "sha256": "b5ee01de4f53c73e67b8d2bf087f40fe959cc034f2bf62aad79768c64974b22e"
+        },
+        {
+          "name": "pin-closure.js",
+          "bytes": 9115,
+          "sha256": "91773edc0e6b7fc2f1cc0f403d11ebee8d80b1d681d645b9604a39acd50d6e44"
+        },
+        {
+          "name": "pin-currency.js",
+          "bytes": 19600,
+          "sha256": "e6e74af63422d0f9c443259c7568e3e7b6bd08183386ebf481f72139af599758"
+        },
+        {
+          "name": "pin-generate.js",
+          "bytes": 7218,
+          "sha256": "e665a09a9f895ecc414399a714aa417e55cb219f669be2ee77ee965ad0c8011d"
+        },
+        {
+          "name": "pin-inputs.js",
+          "bytes": 6747,
+          "sha256": "eda0682bc5664965716a0fe5b88faab02473676f37270376ced0d8e4ac567245"
+        },
+        {
+          "name": "pin-paths.js",
+          "bytes": 4371,
+          "sha256": "6624f814fc7af3dfc0d66879bf3788bc9cf72f87db73f8729437fd3c32aa7731"
+        },
+        {
+          "name": "pins.js",
+          "bytes": 10476,
+          "sha256": "d566a401c3944cfd4252ef9f4f84dd29cd6d9744a7ed5439ff76c8c6078c7789"
+        },
+        {
+          "name": "pipeline.js",
+          "bytes": 5625,
+          "sha256": "87cb5ac8ecb4103a1191b183a6231a2e58b694b3664df0735510c55f8dd6372a"
+        },
+        {
+          "name": "playbook-contract.js",
+          "bytes": 8335,
+          "sha256": "9a929408be7b2383aebde137d66894b7b66e954e8d8974369cb74094b4fe0cad"
+        },
+        {
+          "name": "playbook-ports.js",
+          "bytes": 9910,
+          "sha256": "b53e8f010f1756f3f1d590c9909322f955c962fc4a42115d1eac8d722e71f377"
+        },
+        {
+          "name": "progress.js",
+          "bytes": 3635,
+          "sha256": "2e45a4c88e601cbfa26f3f5780c188e4368f188d66d1509f2de2ea6c94bcdb71"
+        },
+        {
+          "name": "resolver.js",
+          "bytes": 6097,
+          "sha256": "620e848167941c059ef83fec777fcaa4e10dcd29282d6feeaa9c579feb175eb8"
+        },
+        {
+          "name": "reviewing-agent.js",
+          "bytes": 22910,
+          "sha256": "8a86fb097d8327b30c84ed97faa5f47460ea435523208c4027ed3e4e762b481a"
+        },
+        {
+          "name": "runner.js",
+          "bytes": 62074,
+          "sha256": "98fbb9c55d29debf265e5855a21bd027fe706885f9b8a394b641aa6c7dd914c6"
+        },
+        {
+          "name": "runtime-contract.js",
+          "bytes": 4715,
+          "sha256": "5e459ad3dd41b18f1518d47b3f5c641c307117eb3720fe0f6a8f74d14795a17a"
+        },
+        {
+          "name": "runtime-package.js",
+          "bytes": 4708,
+          "sha256": "f9da04935dc2f537307874cd8d4b1e5b45e73494c182ddd98ab10327f678c4ac"
+        },
+        {
+          "name": "verify-coverage.js",
+          "bytes": 107099,
+          "sha256": "9d41baa1fff4a3823d224daf03750d9b71c20422768f18c45bb4ecbb6a008b48"
+        },
+        {
+          "name": "verify-source.js",
+          "bytes": 11917,
+          "sha256": "9bcdab22a3a66d54e9eb679e24be977b0dbe0e4eb4b6e8222bd0983cc1181568"
+        },
+        {
+          "name": "verify-support.js",
+          "bytes": 2467,
+          "sha256": "19d56a17021680b8191f56d50eceaff1241526603248aa15019d720d1d03b32e"
+        },
+        {
+          "name": "verify.js",
+          "bytes": 119845,
+          "sha256": "51a9ad21ea9be64ac253870c220a7afa6274c4a14f21dc985a5f5b7fa3c9f2fe"
+        }
+      ]
+    }
+  },
+  "runtimeIdentityLimitations": [
+    "The early-gate candidate and live clarification smoke predate compiled-runtime hash instrumentation; exact executing-build identities were not retained."
+  ],
+  "runs": [
+    {
+      "id": "compile-iS1Lmh",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-iS1Lmh/summary.json",
+        "bytes": 14558,
+        "sha256": "49c04d939892c9aa980472c4850c889f74df6bf2744e2b73639c687a9fb021c5"
+      },
+      "startedAt": "2026-09-12T17:01:08.705Z",
+      "finishedAt": "2026-09-12T17:06:38.745Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "failureCode": "prompt_fidelity_violation",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "sdkVersionsFromRetainedLock": {
+        "@openai/codex-sdk": "0.146.1",
+        "@anthropic-ai/claude-agent-sdk": "0.3.223"
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-iS1Lmh/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/baseline/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "frozenBaseline",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/link.md",
+          "bytes": 153918,
+          "sha256": "9d125da89dfafecfe5c4fe495364dd210b5a018989b76463cbe1d54d2dce5067"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "reproductionCommand": [
+        "node",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/baseline/scripts/benchmark-compile.mjs",
+        "--model",
+        "claude-opus-5",
+        "--agent",
+        "claude-code",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "1200",
+        "--label",
+        "baseline-opus5-low"
+      ],
+      "commandQualification": "Reconstructed from recorded effective settings; reproduces the experiment, not model nondeterminism or original machine state.",
+      "compileMs": 330026,
+      "experimentMs": 330037,
+      "agentCalls": 5,
+      "toolCalls": 15,
+      "firstEventSumMs": 31479,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 37897
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 23632
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 21012
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 89203
+        },
+        {
+          "name": "link",
+          "status": "error",
+          "elapsedMs": 158223
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "success",
+          "elapsedMs": 38412,
+          "firstEventMs": 10199,
+          "providerDurationMs": 28095,
+          "promptBytes": 4471,
+          "promptSha256": "e6a04884ff8cd2ba5e7a47efca41651e9855ccaa35b25dca06aefd886dccde17",
+          "toolCalls": 2,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 80539,
+                "uncached": 6,
+                "cacheRead": 50613,
+                "cacheWrite": 29920
+              },
+              "output": {
+                "total": 721
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 24148,
+          "firstEventMs": 6221,
+          "providerDurationMs": 17760,
+          "promptBytes": 22334,
+          "promptSha256": "392fbc2e683d559969c902d78bc8cf69648e23cb8efb28672829608599371904",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 77253,
+                "uncached": 4,
+                "cacheRead": 68193,
+                "cacheWrite": 9056
+              },
+              "output": {
+                "total": 859
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 21525,
+          "firstEventMs": 6187,
+          "providerDurationMs": 15192,
+          "promptBytes": 5993,
+          "promptSha256": "6c27e9a9ac524eee7ff9c74b8d6f6c89080e0166774d19760724fbdad6fabb88",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 83714,
+                "uncached": 4,
+                "cacheRead": 80495,
+                "cacheWrite": 3215
+              },
+              "output": {
+                "total": 659
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 89725,
+          "firstEventMs": 5606,
+          "providerDurationMs": 83950,
+          "promptBytes": 51896,
+          "promptSha256": "ac29821f2e497ccdfc5e90aee4b0210d232847add650f9628f9af5a35194c10a",
+          "toolCalls": 2,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 191947,
+                "uncached": 6,
+                "cacheRead": 168062,
+                "cacheWrite": 23879
+              },
+              "output": {
+                "total": 6387
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 158694,
+          "firstEventMs": 3266,
+          "providerDurationMs": 155258,
+          "promptBytes": 155590,
+          "promptSha256": "4c6cf044d8250efaf554e792e93d9910dde868bb65fb2628c51d48ddd5e3db1b",
+          "toolCalls": 9,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 1344010,
+                "uncached": 20,
+                "cacheRead": 1266157,
+                "cacheWrite": 77833
+              },
+              "output": {
+                "total": 6245
+              }
+            }
+          }
+        }
+      ],
+      "validation": {
+        "compilePassed": false,
+        "entryImportPassed": null,
+        "generatedSuitesPassed": null,
+        "generatedSuiteFiles": null,
+        "artifactValidationMs": null,
+        "minimalRuntimePassed": null,
+        "withinFiveMinutes": false
+      }
+    },
+    {
+      "id": "compile-umeUCL",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-umeUCL/summary.json",
+        "bytes": 14937,
+        "sha256": "c9bd3996ffefec705aa448d89f7fd8d4a1b5ee33421d247bc7277044f371cca8"
+      },
+      "startedAt": "2026-09-12T17:13:36.591Z",
+      "finishedAt": "2026-09-12T17:19:32.846Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "failureCode": "runtime_role_label_mismatch",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "sdkVersionsFromRetainedLock": {
+        "@openai/codex-sdk": "0.146.1",
+        "@anthropic-ai/claude-agent-sdk": "0.3.223"
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-umeUCL/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/baseline/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "frozenBaseline",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/link-split-v2/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/link-split-v2/playbook/link.md",
+          "bytes": 30161,
+          "sha256": "c15c73a183d6063fe7e484eb9b36bc6720e9dadbbac5776d08d57948835141fa"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/link-split-v2/playbook/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/link-split-v2/playbook/slc.pin-inputs.json",
+          "bytes": 552,
+          "sha256": "a86e92990b348020c446a5706b1a35d2d51844ea6864b69f16050a48c6fbb010"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/link-split-v2/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "reproductionCommand": [
+        "node",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/baseline/scripts/benchmark-compile.mjs",
+        "--model",
+        "claude-opus-5",
+        "--agent",
+        "claude-code",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "1200",
+        "--label",
+        "split-link-opus5-low",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/link-split-v2"
+      ],
+      "commandQualification": "Reconstructed from recorded effective settings; reproduces the experiment, not model nondeterminism or original machine state.",
+      "compileMs": 356240,
+      "experimentMs": 356252,
+      "agentCalls": 5,
+      "toolCalls": 22,
+      "firstEventSumMs": 26435,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 29082
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 23820
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 27146
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 81268
+        },
+        {
+          "name": "link",
+          "status": "error",
+          "elapsedMs": 194863
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "success",
+          "elapsedMs": 29595,
+          "firstEventMs": 5989,
+          "providerDurationMs": 23451,
+          "promptBytes": 4480,
+          "promptSha256": "c6c8a3e4507ffd72386447536390068f12ba343f353c3b5d24850e2f523bcfa4",
+          "toolCalls": 2,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 81359,
+                "uncached": 6,
+                "cacheRead": 66218,
+                "cacheWrite": 15135
+              },
+              "output": {
+                "total": 760
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 24333,
+          "firstEventMs": 5489,
+          "providerDurationMs": 18688,
+          "promptBytes": 22334,
+          "promptSha256": "27fca3bf6904d5412306d3f587d596ec4f7dfc1123e8a84e6810dca580ee0e4a",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 76551,
+                "uncached": 4,
+                "cacheRead": 68079,
+                "cacheWrite": 8468
+              },
+              "output": {
+                "total": 853
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 27661,
+          "firstEventMs": 6229,
+          "providerDurationMs": 21276,
+          "promptBytes": 5993,
+          "promptSha256": "079278c8f95d4525704d681e1c0c9445482d9e30471781a9916111fe49d9efb6",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 84082,
+                "uncached": 4,
+                "cacheRead": 80369,
+                "cacheWrite": 3709
+              },
+              "output": {
+                "total": 724
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 81782,
+          "firstEventMs": 4185,
+          "providerDurationMs": 77446,
+          "promptBytes": 51896,
+          "promptSha256": "b178d931c0fafaf68c2a840df9d9dcbcf2c3c7f55d0bc3d8a7c3e30d8630dffe",
+          "toolCalls": 2,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 191713,
+                "uncached": 6,
+                "cacheRead": 167928,
+                "cacheWrite": 23779
+              },
+              "output": {
+                "total": 5969
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 195319,
+          "firstEventMs": 4543,
+          "providerDurationMs": 190604,
+          "promptBytes": 31833,
+          "promptSha256": "a2dcd73345037fab26c44feade4bc8cb4c21c6ce568b38fd69a95866c6cdf75e",
+          "toolCalls": 16,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 1635463,
+                "uncached": 32,
+                "cacheRead": 1593869,
+                "cacheWrite": 41562
+              },
+              "output": {
+                "total": 8620
+              }
+            }
+          }
+        }
+      ],
+      "validation": {
+        "compilePassed": false,
+        "entryImportPassed": null,
+        "generatedSuitesPassed": null,
+        "generatedSuiteFiles": null,
+        "artifactValidationMs": null,
+        "minimalRuntimePassed": null,
+        "withinFiveMinutes": false
+      }
+    },
+    {
+      "id": "compile-IXAbh6",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-IXAbh6/summary.json",
+        "bytes": 3676,
+        "sha256": "38d1ce0b3f6d5dcc24aa3a408424301085e58c073177d09df55ecb8e550c7807"
+      },
+      "startedAt": "2026-09-12T17:08:47.701Z",
+      "finishedAt": "2026-09-12T17:09:42.552Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "failureCode": "model_runtime_incompatible",
+      "settings": {
+        "selection": {
+          "agent": "codex",
+          "model": "gpt-6-astra",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "sdkVersionsFromRetainedLock": {
+        "@openai/codex-sdk": "0.146.1",
+        "@anthropic-ai/claude-agent-sdk": "0.3.223"
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-IXAbh6/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/baseline/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "frozenBaseline",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/link.md",
+          "bytes": 153918,
+          "sha256": "9d125da89dfafecfe5c4fe495364dd210b5a018989b76463cbe1d54d2dce5067"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "reproductionCommand": [
+        "node",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/baseline/scripts/benchmark-compile.mjs",
+        "--model",
+        "gpt-6-astra",
+        "--agent",
+        "codex",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "1200",
+        "--label",
+        "baseline-gpt6-low"
+      ],
+      "commandQualification": "Reconstructed from recorded effective settings; reproduces the experiment, not model nondeterminism or original machine state.",
+      "compileMs": 54842,
+      "experimentMs": 54849,
+      "agentCalls": 1,
+      "toolCalls": 0,
+      "firstEventSumMs": 15525,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "error",
+          "elapsedMs": 54793
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "error",
+          "elapsedMs": 54787,
+          "firstEventMs": 15525,
+          "providerDurationMs": 54780,
+          "promptBytes": 4471,
+          "promptSha256": "ae8632123a33900eb4f959c2be4ec106608f840599532b57405a7408c8bbe045",
+          "toolCalls": 0,
+          "resumed": false,
+          "requestedResume": false
+        }
+      ],
+      "validation": {
+        "compilePassed": false,
+        "entryImportPassed": null,
+        "generatedSuitesPassed": null,
+        "generatedSuiteFiles": null,
+        "artifactValidationMs": null,
+        "minimalRuntimePassed": null,
+        "withinFiveMinutes": true
+      }
+    },
+    {
+      "id": "compile-EXAwtt",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-EXAwtt/summary.json",
+        "bytes": 9211,
+        "sha256": "4f0fd3660b2cd373195a28429cbe4e09e69cbd294aa3bc592457a44c5e1f5675"
+      },
+      "startedAt": "2026-09-12T17:19:35.981Z",
+      "finishedAt": "2026-09-12T17:28:52.174Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "failureCode": "incorrect_engine_validation_layer_audit",
+      "settings": {
+        "selection": {
+          "agent": "codex",
+          "model": "gpt-6-astra",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "sdkVersionsFromRetainedLock": {
+        "@openai/codex-sdk": "0.153.4",
+        "@anthropic-ai/claude-agent-sdk": "0.3.223"
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-EXAwtt/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/private/tmp/slc-gpt6-runtime-mlgyv8pk/package-lock.json",
+        "bytes": 188232,
+        "sha256": "e70b863cf88782b05e4de2753a9973c8cd4723ec2d4179105d574ea81f217bdb"
+      },
+      "runtimeIdentity": "isolatedCodex1534",
+      "pipelineDefinitions": [
+        {
+          "path": "/private/tmp/slc-gpt6-runtime-mlgyv8pk/node_modules/@sublang/playbook/slc/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/private/tmp/slc-gpt6-runtime-mlgyv8pk/node_modules/@sublang/playbook/slc/link.md",
+          "bytes": 153918,
+          "sha256": "9d125da89dfafecfe5c4fe495364dd210b5a018989b76463cbe1d54d2dce5067"
+        },
+        {
+          "path": "/private/tmp/slc-gpt6-runtime-mlgyv8pk/node_modules/@sublang/playbook/slc/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        {
+          "path": "/private/tmp/slc-gpt6-runtime-mlgyv8pk/node_modules/@sublang/playbook/slc/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "reproductionCommand": [
+        "node",
+        "/private/tmp/slc-gpt6-runtime-mlgyv8pk/scripts/benchmark-compile.mjs",
+        "--model",
+        "gpt-6-astra",
+        "--agent",
+        "codex",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "1200",
+        "--label",
+        "baseline-gpt6-new-runtime-low"
+      ],
+      "commandQualification": "Reconstructed from recorded effective settings; reproduces the experiment, not model nondeterminism or original machine state.",
+      "compileMs": 556180,
+      "experimentMs": 556189,
+      "agentCalls": 5,
+      "toolCalls": 22,
+      "firstEventSumMs": 31984,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 48198
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 62804
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 62814
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 255211
+        },
+        {
+          "name": "link",
+          "status": "error",
+          "elapsedMs": 127102
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "success",
+          "elapsedMs": 48190,
+          "firstEventMs": 5873,
+          "providerDurationMs": 48183,
+          "promptBytes": 4469,
+          "promptSha256": "e0e688a872ec60aa31b8561e20a2ff5f9ca7bd8435e839b202ed1b517bdb3c8d",
+          "toolCalls": 2,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "partial",
+            "totals": {
+              "input": {
+                "total": 63586,
+                "uncached": 11234,
+                "cacheRead": 52352,
+                "cacheWrite": 0
+              },
+              "output": {
+                "total": 466,
+                "visible": 372,
+                "reasoning": 94
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 62795,
+          "firstEventMs": 5787,
+          "providerDurationMs": 62792,
+          "promptBytes": 22334,
+          "promptSha256": "96844e20739ee0c787f7ef32e104567fb52bfeeb684b22cad78a009587d518ea",
+          "toolCalls": 2,
+          "resumed": true,
+          "requestedResume": true
+        },
+        {
+          "id": 3,
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 62805,
+          "firstEventMs": 9943,
+          "providerDurationMs": 62802,
+          "promptBytes": 5993,
+          "promptSha256": "3b8c8e25d360f7b01d32026aa046f8f4e188f121639a814fdfd1034b55beb53c",
+          "toolCalls": 2,
+          "resumed": true,
+          "requestedResume": true
+        },
+        {
+          "id": 4,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 255201,
+          "firstEventMs": 7077,
+          "providerDurationMs": 255199,
+          "promptBytes": 51896,
+          "promptSha256": "d8e7a58b78fc7f7b910df5f879ea6dbcab7a6e9c1ffeb5dc3a9c1e46eeb86f31",
+          "toolCalls": 6,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "partial",
+            "totals": {
+              "input": {
+                "total": 288289,
+                "uncached": 19745,
+                "cacheRead": 268544,
+                "cacheWrite": 0
+              },
+              "output": {
+                "total": 5607,
+                "visible": 4852,
+                "reasoning": 755
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 127096,
+          "firstEventMs": 3304,
+          "providerDurationMs": 127092,
+          "promptBytes": 155588,
+          "promptSha256": "e5c697ff8264c41d5661995ec0933a24cb92c23777c71ac12aca748005b5cb11",
+          "toolCalls": 10,
+          "resumed": true,
+          "requestedResume": true
+        }
+      ],
+      "validation": {
+        "compilePassed": false,
+        "entryImportPassed": null,
+        "generatedSuitesPassed": null,
+        "generatedSuiteFiles": null,
+        "artifactValidationMs": null,
+        "minimalRuntimePassed": null,
+        "withinFiveMinutes": false
+      }
+    },
+    {
+      "id": "compile-k6mg7y",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-k6mg7y/summary.json",
+        "bytes": 23466,
+        "sha256": "2455a529b99e1a2454d9f72159e85ee5964a3a63e61504c45add1325b72538a5"
+      },
+      "startedAt": "2026-09-12T17:25:40.355Z",
+      "finishedAt": "2026-09-12T17:33:46.632Z",
+      "recordedStatus": "success",
+      "acceptedSuccess": false,
+      "failureCode": "source_repository_root_drift",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "sdkVersionsFromRetainedLock": {
+        "@openai/codex-sdk": "0.146.1",
+        "@anthropic-ai/claude-agent-sdk": "0.3.223"
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-k6mg7y/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "earlyGateCandidate",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/link.md",
+          "bytes": 153918,
+          "sha256": "9d125da89dfafecfe5c4fe495364dd210b5a018989b76463cbe1d54d2dce5067"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "reproductionCommand": [
+        "node",
+        "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-compile.mjs",
+        "--model",
+        "claude-opus-5",
+        "--agent",
+        "claude-code",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "1200",
+        "--label",
+        "early-gate-repair-opus5-low"
+      ],
+      "commandQualification": "Reconstructed from recorded effective settings; reproduces the experiment, not model nondeterminism or original machine state.",
+      "compileMs": 485497,
+      "experimentMs": 486273,
+      "agentCalls": 8,
+      "toolCalls": 26,
+      "firstEventSumMs": 35596,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 34420
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 23601
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 20417
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 115332
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 291626
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "success",
+          "elapsedMs": 34934,
+          "firstEventMs": 3407,
+          "providerDurationMs": 31432,
+          "promptBytes": 5672,
+          "promptSha256": "0ecbef36058a7892dbea8a1f9b721646896d3d39f7fcbccd9b82f31f0da6053e",
+          "toolCalls": 2,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 81683,
+                "uncached": 6,
+                "cacheRead": 66377,
+                "cacheWrite": 15300
+              },
+              "output": {
+                "total": 851
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 24113,
+          "firstEventMs": 2589,
+          "providerDurationMs": 21362,
+          "promptBytes": 23535,
+          "promptSha256": "6a7c4ab604f308a2ddb1cc5c377e162be0d686ce16fc796e9117610e32fb6904",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 78186,
+                "uncached": 4,
+                "cacheRead": 69115,
+                "cacheWrite": 9067
+              },
+              "output": {
+                "total": 742
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 20933,
+          "firstEventMs": 6129,
+          "providerDurationMs": 14659,
+          "promptBytes": 7194,
+          "promptSha256": "ae888eaea9a8c3aa1cef44164b9ffa1a8eadfb952a332754140c03d4cbd1bae1",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 85740,
+                "uncached": 4,
+                "cacheRead": 81958,
+                "cacheWrite": 3778
+              },
+              "output": {
+                "total": 716
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 76001,
+          "firstEventMs": 4539,
+          "providerDurationMs": 71312,
+          "promptBytes": 53097,
+          "promptSha256": "372325b48602bf925d59062a210a12b10e8594c7e9bf90ddebe4f060719e5bd9",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 128635,
+                "uncached": 4,
+                "cacheRead": 104812,
+                "cacheWrite": 23819
+              },
+              "output": {
+                "total": 6121
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 40302,
+          "firstEventMs": 4964,
+          "providerDurationMs": 35202,
+          "promptBytes": 56040,
+          "promptSha256": "e4e6a53d1873dc8c1e7b16c99e0cfdcaedfde9c1743d41a28ce6eeee60f5d167",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 174438,
+                "uncached": 3,
+                "cacheRead": 153843,
+                "cacheWrite": 20592
+              },
+              "output": {
+                "total": 1660
+              }
+            }
+          }
+        },
+        {
+          "id": 6,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 160521,
+          "firstEventMs": 5701,
+          "providerDurationMs": 154671,
+          "promptBytes": 156791,
+          "promptSha256": "ea9324a46a963445b7b796abf5852dc43a9a0ee42b86bdd5d0d50b9ca02d033f",
+          "toolCalls": 11,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 1848585,
+                "uncached": 23,
+                "cacheRead": 1772712,
+                "cacheWrite": 75850
+              },
+              "output": {
+                "total": 6681
+              }
+            }
+          }
+        },
+        {
+          "id": 7,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 71434,
+          "firstEventMs": 4136,
+          "providerDurationMs": 67202,
+          "promptBytes": 160282,
+          "promptSha256": "053c85cf90d47843420e79b419a9eb6d4f3ea7813c30283706a8a8d7f4f130c8",
+          "toolCalls": 5,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 1332062,
+                "uncached": 12,
+                "cacheRead": 1271800,
+                "cacheWrite": 60250
+              },
+              "output": {
+                "total": 2876
+              }
+            }
+          }
+        },
+        {
+          "id": 8,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 61128,
+          "firstEventMs": 4131,
+          "providerDurationMs": 56832,
+          "promptBytes": 164014,
+          "promptSha256": "ff6d65154d33a974820bf08715af3b87f93269be950a3df8f32574a1c20b87f8",
+          "toolCalls": 4,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 1419879,
+                "uncached": 9,
+                "cacheRead": 1357840,
+                "cacheWrite": 62030
+              },
+              "output": {
+                "total": 2280
+              }
+            }
+          }
+        }
+      ],
+      "validation": {
+        "compilePassed": true,
+        "entryImportPassed": true,
+        "generatedSuitesPassed": true,
+        "generatedSuiteFiles": 4,
+        "artifactValidationMs": 768,
+        "minimalRuntimePassed": false,
+        "withinFiveMinutes": false
+      },
+      "runtimeRetrocheck": {
+        "path": "/private/tmp/slc-performance-evidence/compile-k6mg7y/runtime-retrocheck.json",
+        "bytes": 33,
+        "sha256": "b19a64823b70b4b1f122bb96180a5035c430326e5ccc99422539e23e36bd40c8"
+      }
+    },
+    {
+      "id": "compile-AoStYE",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-AoStYE/summary.json",
+        "bytes": 21156,
+        "sha256": "993bae0c1f0c847db2c2eb829f24afda8917a711cde404ef7f3968d635a1ad27"
+      },
+      "startedAt": "2026-09-12T17:34:54.615Z",
+      "finishedAt": "2026-09-12T17:40:25.270Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "failureCode": "optimizer_emitted_fence_instead_of_gears_blockquote",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": true,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "@openai/codex-sdk": "0.146.1",
+          "@anthropic-ai/claude-agent-sdk": "0.3.223",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-AoStYE/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "freshSessionCandidate",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/link.md",
+          "bytes": 153918,
+          "sha256": "9d125da89dfafecfe5c4fe495364dd210b5a018989b76463cbe1d54d2dce5067"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/optimize.md",
+          "bytes": 5387,
+          "sha256": "d41ac06d73cc6b49bbad3d4c882afaf6d17639c53dccdb6fe2521c4a0c16dcec"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "reproductionCommand": [
+        "node",
+        "/Users/basicthinker/Projects/SubLang/slc/scripts/benchmark-compile.mjs",
+        "--model",
+        "claude-opus-5",
+        "--agent",
+        "claude-code",
+        "--effort",
+        "low",
+        "--fresh-phase-sessions",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "1200",
+        "--label",
+        "fresh-sessions-correct-scope-opus5-low"
+      ],
+      "commandQualification": "Reconstructed settings; the optimizer definition also changed, so this is not an isolated session-policy comparison.",
+      "compileMs": 330640,
+      "experimentMs": 330648,
+      "agentCalls": 5,
+      "toolCalls": 14,
+      "firstEventSumMs": 27367,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 35967
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 54654
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 45777
+        },
+        {
+          "name": "gears2fsm",
+          "status": "error",
+          "elapsedMs": 194185
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "success",
+          "elapsedMs": 36477,
+          "firstEventMs": 6678,
+          "providerDurationMs": 29640,
+          "promptBytes": 5683,
+          "promptSha256": "8d4f2e3454299ebbdd9443a0d2d5361edfb4d471edf3eb46dd26115389140ab8",
+          "toolCalls": 2,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 82557,
+                "uncached": 6,
+                "cacheRead": 66990,
+                "cacheWrite": 15561
+              },
+              "output": {
+                "total": 807
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 55164,
+          "firstEventMs": 4991,
+          "providerDurationMs": 50030,
+          "promptBytes": 23535,
+          "promptSha256": "91e46b98163444f9dcca3db77defc823c4b977112ce7c4b78f6b84896a0f70f7",
+          "toolCalls": 2,
+          "resumed": false,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 86391,
+                "uncached": 6,
+                "cacheRead": 72204,
+                "cacheWrite": 14181
+              },
+              "output": {
+                "total": 895
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 46289,
+          "firstEventMs": 5811,
+          "providerDurationMs": 40348,
+          "promptBytes": 8113,
+          "promptSha256": "b9eea51d7d6287059061a0cb44a61a02b7440412ba96e05c5a3e5197e6637ebb",
+          "toolCalls": 3,
+          "resumed": false,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 96526,
+                "uncached": 8,
+                "cacheRead": 86440,
+                "cacheWrite": 10078
+              },
+              "output": {
+                "total": 956
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 140684,
+          "firstEventMs": 5707,
+          "providerDurationMs": 134833,
+          "promptBytes": 53097,
+          "promptSha256": "2c60c283be1e7512555bf34065d8c0423ca2687f5be323e8019b7571bbf98628",
+          "toolCalls": 6,
+          "resumed": false,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 308514,
+                "uncached": 14,
+                "cacheRead": 276678,
+                "cacheWrite": 31822
+              },
+              "output": {
+                "total": 8113
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 54481,
+          "firstEventMs": 4180,
+          "providerDurationMs": 50168,
+          "promptBytes": 56926,
+          "promptSha256": "c203c30517e564a9d7492dd2660cfc06eef36f217f1ed4c7fe6428a4e3cb549c",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 135766,
+                "uncached": 4,
+                "cacheRead": 113996,
+                "cacheWrite": 21766
+              },
+              "output": {
+                "total": 2820
+              }
+            }
+          }
+        }
+      ],
+      "validation": {
+        "compilePassed": false,
+        "entryImportPassed": null,
+        "generatedSuitesPassed": null,
+        "generatedSuiteFiles": null,
+        "artifactValidationMs": null,
+        "minimalRuntimePassed": null,
+        "withinFiveMinutes": false
+      },
+      "confounders": [
+        "Changed optimizer definition introduced a fenced command body instead of the required GEARS blockquote.",
+        "FSM correction subsequently rejected malformed source rather than producing an accepted artifact."
+      ]
+    },
+    {
+      "id": "compile-hmOuZA",
+      "summary": {
+        "path": "/private/tmp/slc-performance-evidence/compile-hmOuZA/summary.json",
+        "bytes": 24664,
+        "sha256": "c6d815523f599c342142352091abc0b6675fb941dcb0ee48b2f821a946ae18e7"
+      },
+      "startedAt": "2026-09-12T17:45:54.310Z",
+      "finishedAt": "2026-09-12T17:50:55.362Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "failureCode": "coverage_script_false_positive_and_repository_disposition_drift",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 1200,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "@openai/codex-sdk": "0.146.1",
+          "@anthropic-ai/claude-agent-sdk": "0.3.223",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-hmOuZA/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/package-lock.json",
+        "bytes": 188226,
+        "sha256": "503d9ffcf81fddd17399eddb73189eb68aea68ec6d7e98118fb99bbd204a8c18"
+      },
+      "runtimeIdentity": "correctedOptimizerCandidate",
+      "pipelineDefinitions": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/link.md",
+          "bytes": 153918,
+          "sha256": "9d125da89dfafecfe5c4fe495364dd210b5a018989b76463cbe1d54d2dce5067"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/optimize.md",
+          "bytes": 5676,
+          "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ],
+      "reproductionCommand": [
+        "node",
+        "scripts/benchmark-compile.mjs",
+        "--agent",
+        "claude-code",
+        "--model",
+        "claude-opus-5",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/optimizer-scope",
+        "--label",
+        "corrected-optimizer-opus5-low"
+      ],
+      "commandQualification": "Reconstructed invocation; use recorded definition hashes because experiment overlays may subsequently evolve.",
+      "compileMs": 300156,
+      "experimentMs": 301045,
+      "agentCalls": 5,
+      "toolCalls": 13,
+      "firstEventSumMs": 27709,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 42102
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 25267
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 19916
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 73631
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 139131
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "success",
+          "elapsedMs": 42614,
+          "firstEventMs": 3869,
+          "providerDurationMs": 38606,
+          "promptBytes": 5683,
+          "promptSha256": "ba29470b9cfdd52d49c33a87f45314ca8a7ab3239470b1d4f029c1951284cfb7",
+          "toolCalls": 3,
+          "resumed": false,
+          "requestedResume": false,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 112282,
+                "uncached": 8,
+                "cacheRead": 96666,
+                "cacheWrite": 15608
+              },
+              "output": {
+                "total": 969
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 25781,
+          "firstEventMs": 7287,
+          "providerDurationMs": 18370,
+          "promptBytes": 23535,
+          "promptSha256": "3a3ed8415b86add0605f6444117b5b4831cf5435522996698ad044a717477fb1",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 79401,
+                "uncached": 4,
+                "cacheRead": 69995,
+                "cacheWrite": 9402
+              },
+              "output": {
+                "total": 875
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 20432,
+          "firstEventMs": 6445,
+          "providerDurationMs": 13824,
+          "promptBytes": 8402,
+          "promptSha256": "6fce129f29e0da9e9cdf8f555291aa796b87589342573471b642545efcb04b70",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 87110,
+                "uncached": 4,
+                "cacheRead": 83408,
+                "cacheWrite": 3698
+              },
+              "output": {
+                "total": 625
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 74087,
+          "firstEventMs": 4947,
+          "providerDurationMs": 68978,
+          "promptBytes": 53097,
+          "promptSha256": "5e4693d4746148ba16f63fc54073171bf2efdc1923b0ad9f2898b7d9cee055fd",
+          "toolCalls": 1,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 129872,
+                "uncached": 4,
+                "cacheRead": 105857,
+                "cacheWrite": 24011
+              },
+              "output": {
+                "total": 6307
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 139630,
+          "firstEventMs": 5161,
+          "providerDurationMs": 134318,
+          "promptBytes": 156791,
+          "promptSha256": "bf1b790c6a466bc3d649bbd0c7e32fda45c4e213f2c2616105de0b858c5578f7",
+          "toolCalls": 7,
+          "resumed": true,
+          "requestedResume": true,
+          "reportedTokens": {
+            "coverage": "complete",
+            "totals": {
+              "input": {
+                "total": 1055816,
+                "uncached": 15,
+                "cacheRead": 980463,
+                "cacheWrite": 75338
+              },
+              "output": {
+                "total": 6239
+              }
+            }
+          }
+        }
+      ],
+      "validation": {
+        "ok": false,
+        "entryImport": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null
+        },
+        "suite": {
+          "ok": false,
+          "code": 1,
+          "terminationSignal": null
+        },
+        "testFiles": 4,
+        "elapsedMs": 882
+      },
+      "runtimeRetrocheck": {
+        "path": "/private/tmp/slc-performance-evidence/compile-hmOuZA/runtime-retrocheck.json",
+        "bytes": 33,
+        "sha256": "b19a64823b70b4b1f122bb96180a5035c430326e5ccc99422539e23e36bd40c8"
+      }
+    }
+  ],
+  "clarification": {
+    "evidence": {
+      "path": "/private/tmp/slc-live-clarification-27abde0w/evidence.json",
+      "bytes": 2297,
+      "sha256": "6f30f0b0bc227a6fdf92091ebd5b0e107e4b118b0ae02f3501c5c1df992b5151"
+    },
+    "command": [
+      "/opt/homebrew/Cellar/node/25.5.0/bin/node",
+      "/Users/basicthinker/Projects/SubLang/slc/dist/cli.js",
+      "playbook",
+      "/private/tmp/slc-live-clarification-27abde0w/contradiction.text.md",
+      "--config",
+      "/private/tmp/slc-live-clarification-27abde0w/slc.config.yaml"
+    ],
+    "model": "claude-opus-5",
+    "agent": "claude-code",
+    "effort": "low",
+    "elapsedMs": 19158,
+    "deadlineMs": 240000,
+    "exitCode": 2,
+    "timedOut": false,
+    "sourceSha256Before": "aeb6f85759abe057464faa856ffa4c45971e327e74eaa2b4839147e6bb0f246c",
+    "sourceSha256After": "aeb6f85759abe057464faa856ffa4c45971e327e74eaa2b4839147e6bb0f246c",
+    "sourceUnchanged": true,
+    "stdoutEmpty": true,
+    "reportSchema": "sublang.slc.clarification.v1",
+    "phase": "text2gears",
+    "questionCount": 1,
+    "finalArtifactPresent": false,
+    "entryArtifactPresent": false,
+    "artifactFileCount": 0,
+    "activeBuildMarkerPresent": false,
+    "acceptedClarificationResult": true,
+    "successfulCompilation": false
+  },
+  "baselineRepositoryProbe": {
+    "evidence": {
+      "path": "/private/tmp/slc-baseline-git-probe-72xgd94k/evidence.json",
+      "bytes": 715,
+      "sha256": "ff086cff3ff109368a4d127f60f217ec50658ad4175660f673ed0ffaa3b43093"
+    },
+    "source": "/private/tmp/slc-performance-evidence/compile-iS1Lmh/work/minimal.playbook/minimal.gears.md",
+    "sourceSha256": "587f767451287477a9f38d5caaadd50de9f82378e4a9feb04900f5e96f5a8ff4",
+    "observedCommand": "git rev-parse --is-inside-work-tree 2>/dev/null || git init",
+    "cwd": "/private/tmp/slc-baseline-git-probe-72xgd94k/ancestor/nested",
+    "exitCode": 0,
+    "ownGitExists": false,
+    "observedRepositoryRoot": "/private/tmp/slc-baseline-git-probe-72xgd94k/ancestor",
+    "sourceSemanticsPreserved": false,
+    "scope": "Exact optimized script executed, not emitted-entry validation."
+  },
+  "techniques": [
+    {
+      "technique": "bounded measurements and runtime source acceptance",
+      "status": "retained_validation",
+      "speedClaim": false
+    },
+    {
+      "technique": "split link definition into referenced runtime contract",
+      "status": "rejected",
+      "speedClaim": false,
+      "upstreamRepository": "/Users/basicthinker/Projects/SubLang/playbook",
+      "revertCommit": "de60d8e"
+    },
+    {
+      "technique": "isolated supported Codex SDK 0.153.4",
+      "status": "retained_benchmark_environment",
+      "speedClaim": false
+    },
+    {
+      "technique": "early FSM conformance and bounded same-Coder repair",
+      "status": "recovery_demonstrated_performance_pending",
+      "speedClaim": false
+    },
+    {
+      "technique": "exact repository-root optimization",
+      "status": "upstream_correctness_fix_live_acceptance_pending",
+      "speedClaim": false,
+      "upstreamRepository": "/Users/basicthinker/Projects/SubLang/playbook",
+      "commit": "f0f032b",
+      "followupCommit": "40d8538baa062ed2a55d41790348b29f7061cd00"
+    },
+    {
+      "technique": "fresh first session per phase",
+      "status": "no_demonstrated_benefit_not_adopted",
+      "speedClaim": false,
+      "evidenceRun": "compile-AoStYE",
+      "isolatedComparison": false
+    },
+    {
+      "technique": "noninteractive source clarification",
+      "status": "retained_feature_live_verified",
+      "speedClaim": false
+    },
+    {
+      "technique": "typed FSM construction helpers",
+      "status": "unimplemented_unmeasured_deferred",
+      "estimatedEmittedByteReductionPercent": [15, 25],
+      "speedClaim": false,
+      "scope": "Optional shared actor stubs, structural types and transition builders; source-owned states and guards remain explicit.",
+      "dependency": "Evaluate link materialization first."
+    }
+  ],
+  "deterministicProbes": {
+    "hostCapabilityAudit": {
+      "evidence": "/private/tmp/slc-gpt6-engine-audit/evidence.json",
+      "sha256": "8abab1677bcf5bb2ea962ea275fae54b8884bbf613307cd4a25969dde8075cc0",
+      "reproductionCommand": [
+        "node",
+        "/private/tmp/slc-gpt6-engine-audit/probe.mjs"
+      ],
+      "caseCount": 3,
+      "allRejected": true,
+      "runtimeFactoryCalls": 0,
+      "validatorsIdentical": true,
+      "validatorIdentity": "f6dd07f38e511beda1666aa8752081d025b5474d416a5b9122d2a0c8023105c1",
+      "conclusion": "wrong_validation_layer_false_positive"
+    },
+    "earlyFsmGate": {
+      "evidence": "/private/tmp/slc-gpt6-engine-audit/early-gate-evidence.json",
+      "sha256": "c36bb0d868538c99dad4538934a83a0ab3e0148ac6a9e9d20e6ce93a986a9121",
+      "reproductionCommand": [
+        "node",
+        "/private/tmp/slc-gpt6-engine-audit/early-gate-probe.mjs"
+      ],
+      "findingsCount": 1,
+      "originalElapsedMs": 45.9,
+      "replayElapsedMs": 46.35970900000001,
+      "subsequentRejectedLinkMs": 158223
+    }
+  },
+  "environmentAudit": {
+    "evidence": {
+      "path": "/private/tmp/slc-global-runtime-audit/evidence.json",
+      "bytes": 6677,
+      "sha256": "baa4596b1d164ad18a52b58fd3d3a2d7276e58387c44dfddb4cdadd6fae924f7"
+    },
+    "recordedAt": "2026-09-12T17:53:41.773Z",
+    "scope": "Read-only resolution and selected configuration fields; no live model calls or configuration/install changes.",
+    "pathExecutable": "/opt/homebrew/bin/slc",
+    "resolvedEntry": "/opt/homebrew/lib/node_modules/@sublang/slc/dist/cli.js",
+    "compiler": {
+      "root": "/opt/homebrew/lib/node_modules/@sublang/slc",
+      "name": "@sublang/slc",
+      "version": "0.7.0"
+    },
+    "compilerRuntime": {
+      "path": "/opt/homebrew/lib/node_modules/@sublang/slc/dist",
+      "files": 40,
+      "sha256": "b1a1bc909fce93d9c82027ddf820580f463669c9acc4c8157dd1e0c7346dfba3"
+    },
+    "dependencies": [
+      {
+        "specifier": "@sublang/playbook/runtime",
+        "resolved": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/playbook/src/runtime.js",
+        "root": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/playbook",
+        "name": "@sublang/playbook",
+        "version": "12.2.0"
+      },
+      {
+        "specifier": "@sublang/cligent",
+        "resolved": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/cligent/dist/index.js",
+        "root": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/cligent",
+        "name": "@sublang/cligent",
+        "version": "0.24.0"
+      },
+      {
+        "specifier": "@sublang/cligent/adapters/claude-code",
+        "resolved": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/cligent/dist/adapters/claude-code.js",
+        "root": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/cligent",
+        "name": "@sublang/cligent",
+        "version": "0.24.0"
+      },
+      {
+        "specifier": "@sublang/cligent/adapters/codex",
+        "resolved": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/cligent/dist/adapters/codex.js",
+        "root": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/cligent",
+        "name": "@sublang/cligent",
+        "version": "0.24.0"
+      },
+      {
+        "specifier": "@openai/codex-sdk",
+        "resolved": "/opt/homebrew/lib/node_modules/@openai/codex-sdk/dist/index.js",
+        "root": "/opt/homebrew/lib/node_modules/@openai/codex-sdk",
+        "name": "@openai/codex-sdk",
+        "version": "0.146.0"
+      },
+      {
+        "specifier": "@anthropic-ai/claude-agent-sdk",
+        "resolved": "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+        "root": "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-agent-sdk",
+        "name": "@anthropic-ai/claude-agent-sdk",
+        "version": "0.3.220"
+      },
+      {
+        "specifier": "xstate",
+        "resolved": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/xstate/dist/xstate.cjs.mjs",
+        "root": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/xstate",
+        "name": "xstate",
+        "version": "5.32.6"
+      },
+      {
+        "specifier": "typescript",
+        "resolved": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/typescript/lib/typescript.js",
+        "root": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/typescript",
+        "name": "typescript",
+        "version": "6.0.3"
+      }
+    ],
+    "separateGlobalPlaybook": {
+      "path": "/opt/homebrew/lib/node_modules/@sublang/playbook",
+      "version": "12.0.0",
+      "usedBySlcInstalledFallback": false
+    },
+    "contexts": [
+      {
+        "cwd": "/Users/basicthinker/Projects/SubLang/playbook",
+        "config": "/Users/basicthinker/.config/slc/config.yaml",
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-4-8",
+          "effort": "high"
+        },
+        "reviewerEnabled": false,
+        "stallTimeoutMs": 600000,
+        "pipelineSearchRoots": [
+          "/Users/basicthinker/Projects/SubLang/playbook"
+        ],
+        "resolvedPipelines": [
+          "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/playbook/slc"
+        ],
+        "defaultLinkTarget": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/playbook/src/runtime.ts"
+      },
+      {
+        "cwd": "/Users/basicthinker/Projects/SubLang/slc",
+        "config": "/Users/basicthinker/Projects/SubLang/slc/slc.config.yaml",
+        "selection": {
+          "agent": "claude-code"
+        },
+        "reviewerEnabled": false,
+        "stallTimeoutMs": 600000,
+        "pipelineSearchRoots": [
+          "/Users/basicthinker/Projects/SubLang/slc/pipelines"
+        ],
+        "resolvedPipelines": [
+          "/Users/basicthinker/Projects/SubLang/slc/pipelines/playbook"
+        ],
+        "defaultLinkTarget": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/playbook/src/runtime.ts"
+      }
+    ],
+    "definitions": {
+      "global": [
+        {
+          "path": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/playbook/slc/gears2fsm.md",
+          "bytes": 48990,
+          "sha256": "4d28d0def1d8a9f76658888d83bbc1df2cc572372b6b0ba4bee2c5d82c15df43"
+        },
+        {
+          "path": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/playbook/slc/link.md",
+          "bytes": 152671,
+          "sha256": "6bfb2e00b9e0cb1f360b6e9e36200d39f84117534fa96219ac9e2ebdd114aa05"
+        },
+        {
+          "path": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/playbook/slc/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        {
+          "path": "/opt/homebrew/lib/node_modules/@sublang/slc/node_modules/@sublang/playbook/slc/text2gears.md",
+          "bytes": 20078,
+          "sha256": "579aa073de33d94bf93c37380cd8518d685bc6a1052c3c14c6d4f0144fa071d7"
+        }
+      ],
+      "repo": [
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/link.md",
+          "bytes": 153918,
+          "sha256": "9d125da89dfafecfe5c4fe495364dd210b5a018989b76463cbe1d54d2dce5067"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        {
+          "path": "/Users/basicthinker/Projects/SubLang/slc/node_modules/@sublang/playbook/slc/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        }
+      ]
+    },
+    "selectionEnvironmentPresent": [],
+    "globalRuntimeHasClarificationModule": false,
+    "reproductionCommand": [
+      "node",
+      "/private/tmp/slc-global-runtime-audit/probe.mjs"
+    ],
+    "benchmarkDifference": "Recorded benchmarks use repository SLC 0.9.0 and Playbook 12.3.0 with explicit low-effort models; this global environment was inspected only, not benchmarked.",
+    "configurationMerge": "A cwd slc.config.yaml replaces home discovery; omitted model/effort therefore use provider defaults rather than home-config values."
+  }
+}
