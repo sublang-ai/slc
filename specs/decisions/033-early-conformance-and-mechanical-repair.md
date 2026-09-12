@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted; repair-default performance validation pending.
+Accepted.
 Amends the unreviewed-finding disposition in [DR-029](029-source-fidelity-gate.md) and [DR-030](030-link-fidelity-gate.md), and the single-invocation rule in [DR-004](004-slc-interpreted-phase-execution.md).
 
 ## Context
