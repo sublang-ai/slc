@@ -388,6 +388,12 @@ function synthOutput(
   state: CaptainState,
   key: string,
 ): Record<string, unknown> {
+  if (state.actor === 'script') {
+    return {
+      guard: key,
+      exitStatus: Object.keys(state.result)[0] === key ? 0 : 1,
+    };
+  }
   const output: Record<string, unknown> = { guard: key };
   for (const field of requiredFields(state.result[key] ?? '')) {
     output[field] = synthesizedFieldValue(field);
@@ -1224,6 +1230,7 @@ const GENERIC_VALUES: unknown[] = [
   COVERAGE_ENABLED_PLAYBOOKS,
 ];
 const MAX_PROBES = 30_000;
+const MAX_SCRIPT_EXIT_STATUSES = 8;
 const PROBES_PER_TIMEOUT_MILLISECOND = 50;
 const COVERAGE_TIMEOUT_MARGIN_MS = 5_000;
 const MIN_COVERAGE_TEST_TIMEOUT_MS = 10_000;
@@ -1524,11 +1531,12 @@ function doneGuardSatisfiable(
   event: Readonly<Record<string, unknown>>,
   output: Record<string, unknown>,
   extraValues: readonly unknown[],
+  fixedOutput = false,
 ): boolean {
   return probeGuardSatisfiable(
     guard.run,
-    event,
-    [{ eventField: 'output', tag: 'o:', base: output }],
+    fixedOutput ? { ...event, output } : event,
+    fixedOutput ? [] : [{ eventField: 'output', tag: 'o:', base: output }],
     [...guard.probeValues, ...extraValues],
   );
 }
@@ -2749,9 +2757,16 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
       (arm) => armGuard(arm) !== undefined,
     ).length;
     const errorArms = transitionArms(captain.invocation.onError).length;
-    // Result acceptance probes each guarded arm once, then the arm audit probes
-    // every result's structured and bare output forms.
-    guardProbeCalls += resultKeys.length * guardedDoneArms * 3 + errorArms;
+    // Acceptance includes ordered fallbacks. Script arm probes have one zero
+    // status and a capped set of nonzero statuses; ordinary actors also probe
+    // malformed bare outputs for defensive arms.
+    guardProbeCalls +=
+      resultKeys.length * transitionArms(captain.invocation.onDone).length +
+      guardedDoneArms *
+        (captain.binding.actor === 'script'
+          ? 1 + MAX_SCRIPT_EXIT_STATUSES
+          : resultKeys.length * 2) +
+      errorArms;
     // Every result, the blank Boss-reply check, and onError enter through an
     // independently context-probed interrupt plan.
     guardProbeCalls +=
@@ -3071,23 +3086,20 @@ export async function checkFsmCoverage(
     const onDoneArms = normalizeArms(captain.invocation.onDone);
     const controllerResultByArm = new Map<number, string>();
 
-    // Every declared result needs an arm that explicitly accepts its complete
-    // valid output. A sole unguarded arm accepts the whole local result
-    // contract; an array's unguarded arm is a fallback and cannot make an
-    // otherwise orphaned key look covered.
+    // Every declared result needs an ordered arm accepting its valid output.
+    // A fallback is reachable exactly when all preceding guards reject it.
+    // Result names alone cannot distinguish authored failure from an orphan.
     for (const key of Object.keys(state.result)) {
       const output = synthOutput(state, key);
       const accepting = new Map<number, ProbeAssignment | undefined>();
       for (const [index, arm] of rawDoneArms.entries()) {
         const target = onDoneArms[index]?.target ?? null;
         const rawGuard = armGuard(arm);
-        if (rawGuard === undefined) {
-          if (rawDoneArms.length === 1 && target !== null) {
-            accepting.set(index, undefined);
-          }
-          continue;
-        }
-        if (target === null || resolveGuard(machine, rawGuard) === undefined) {
+        if (
+          target === null ||
+          (rawGuard !== undefined &&
+            resolveGuard(machine, rawGuard) === undefined)
+        ) {
           continue;
         }
         const guard = orderedArmPredicate(machine, rawDoneArms, index);
@@ -3101,7 +3113,15 @@ export async function checkFsmCoverage(
             initialCoverageContext,
           );
           if (assignment !== undefined) accepting.set(index, assignment);
-        } else if (doneGuardSatisfiable(guard, doneEvent, output, candidates)) {
+        } else if (
+          doneGuardSatisfiable(
+            guard,
+            doneEvent,
+            output,
+            candidates,
+            state.actor === 'script',
+          )
+        ) {
           accepting.set(index, undefined);
         }
       }
@@ -3355,8 +3375,9 @@ export async function checkFsmCoverage(
     }
 
     // Every onDone arm is satisfiable under the actual done-event identity.
-    // Try each key's full output and bare malformed form; neither probe may
-    // invent a different event type or actor id.
+    // Ordinary actors also probe bare malformed forms for authored defensive
+    // arms. Scripts resolve only their exact runtime guard/exit-status pair;
+    // invented payload fields or impossible statuses cannot cover an arm.
     for (const [index, arm] of rawDoneArms.entries()) {
       const rawGuard = armGuard(arm);
       if (rawGuard === undefined) continue;
@@ -3371,16 +3392,34 @@ export async function checkFsmCoverage(
       // A prior unresolvable arm already owns the actionable finding, and makes
       // ordered reachability of later arms unsafe to evaluate.
       if (guard === undefined) continue;
-      const anyOutput = Object.keys(state.result).some(
-        (key) =>
-          doneGuardSatisfiable(
-            guard,
-            doneEvent,
-            synthOutput(state, key),
-            candidates,
+      const anyOutput = Object.keys(state.result).some((key) => {
+        const output = synthOutput(state, key);
+        const outputs =
+          state.actor === 'script' && output.exitStatus !== 0
+            ? [...new Set([1, ...declaredGuard.probeValues, ...candidates])]
+                .filter(
+                  (value): value is number =>
+                    typeof value === 'number' &&
+                    Number.isInteger(value) &&
+                    value > 0,
+                )
+                .slice(0, MAX_SCRIPT_EXIT_STATUSES)
+                .map((exitStatus) => ({ guard: key, exitStatus }))
+            : [output];
+        return (
+          outputs.some((candidate) =>
+            doneGuardSatisfiable(
+              guard,
+              doneEvent,
+              candidate,
+              candidates,
+              state.actor === 'script',
+            ),
           ) ||
-          doneGuardSatisfiable(guard, doneEvent, { guard: key }, candidates),
-      );
+          (state.actor !== 'script' &&
+            doneGuardSatisfiable(guard, doneEvent, { guard: key }, candidates))
+        );
+      });
       if (!anyOutput) {
         findings.push(
           `state ${stateKey}: onDone arm ${index} (target ${

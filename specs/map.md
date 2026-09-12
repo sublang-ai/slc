@@ -59,6 +59,7 @@ meta.md       The spec of specs
 | [DR-031](decisions/031-measured-compilation-performance.md) | 031-measured-compilation-performance.md | Opt-in bounded cold-compilation measurements, per-call accounting, separate artifact validation, and evidence requirements for performance experiments |
 | [DR-032](decisions/032-noninteractive-source-clarification.md) | 032-noninteractive-source-clarification.md | Stateless structured questions for unresolved source behavior at any phase; edit the source and repeat the command |
 | [DR-033](decisions/033-early-conformance-and-mechanical-repair.md) | 033-early-conformance-and-mechanical-repair.md | Existing FSM conformance before linking and bounded same-Coder mechanical repairs with optional lazy independent review |
+| [DR-034](decisions/034-faithful-transition-coverage.md) | 034-faithful-transition-coverage.md | Ordered fallback reachability and script probes matching the runtime's guard and exit-status contract |
 
 ## Packages
 

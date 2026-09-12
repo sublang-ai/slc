@@ -117,6 +117,7 @@ When a compiled `playbook` artifact's `gears` and `fsm` are produced at their ca
 | Nested invocation or intentionally non-root-jumpable parallel branch leaves | Evaluate a nested invocation only after entering it with the machine's initialized or transition-produced context, rather than preflighting the input with an artificial empty context; for the parallel leaves, enter their public parallel parent and drive the distinct delegated-player actors in place. |
 | A typed `BOSS_INTERRUPT` arm requires additional Boss-supplied payload fields. | Synthesize only missing top-level fields under bounded guard probing while preserving the real event type and public target id. |
 | Bounded generated-test execution | Set a timeout derived from the checker's bounded settle, parallel-combination, and guard-probe budgets rather than relying on the test runner's default timeout; include the fields named by their result descriptions in structured Captain outputs; match dynamic call ids to a seeded enabled-playbook catalog exactly; and enter a dynamic call through the Captain transition that populates its context before driving child success or failure. |
+| Ordered result acceptance | Count an unguarded fallback for a declared result only when every preceding guard rejects that valid output under bounded probing; preserve controller action-arm distinctness and report missing, shadowed, unresolved, or unsatisfiable transitions rather than inferring intended routing from result names or prose ([DR-034](../decisions/034-faithful-transition-coverage.md)). |
 | A `BOSS_INTERRUPT` arm has valid context preconditions that the machine's initial input alone cannot represent. | Bounded-probe missing and existing context fields plus missing Boss-supplied event fields, restore an XState persisted initial snapshot with satisfying context and no stale children, and drive the authored ordered transition using matching artifact identifiers and catalog, call, final-response, or accumulated-state sentinels; report an unsatisfiable guard or a transition that does not enter its target rather than accepting direct guard evaluation as coverage. |
 
 #### verification-12
@@ -205,7 +206,7 @@ When checking GEARS↔FSM conformance, the slc command shall recognize as the op
 
 #### verification-16
 
-When checking FSM transition coverage, the slc command shall drive `script` actor states like other work states — resolving each declared exit-status guard — so an optimized artifact's transitions are covered as strictly as an unoptimized one's ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+When checking FSM transition coverage, the slc command shall drive `script` actor states like other work states [[verification-6](#verification-6)] with exactly `guard` and `exitStatus` — the first declared guard with zero and the second with representative nonzero statuses from the bounded candidate set — and satisfy guarded script arms only with those runtime-valid outputs, without inventing payload fields or using malformed bare outputs, so optimized transitions receive faithful coverage ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-034](../decisions/034-faithful-transition-coverage.md)).
 
 ### Emitted-module load integrity
 
@@ -299,6 +300,8 @@ When a GEARS package and FSM contain script behavior, the conformance and covera
 | Case | Required outcome |
 | --- | --- |
 | A script item is realized by a matching `script` actor state. | Pass conformance [[verification-15](#verification-15)] and coverage [[verification-16](#verification-16)]. |
+| Script success and failure outputs route through an explicit success arm and a selected failure fallback, including guards that inspect the required exit status. | Accept the runtime-valid transitions [[verification-16](#verification-16)] and the ordered fallback [[verification-6](#verification-6)]. |
+| A script arm accepts only an impossible guard/status pair or invented payload, a declared outcome has no accepting arm, or a preceding arm shadows another guarded arm. | Report the unreachable transition without satisfying it through malformed script outputs [[verification-16](#verification-16)], [[verification-6](#verification-6)]. |
 | The command drifts, a guard is renamed or reordered, `needsBossReply` is added, or the item is realized by a Captain or player state. | Report the conformance drift [[verification-15](#verification-15)]. |
 
 ### Load-integrity acceptance

@@ -180,6 +180,91 @@ const goodMachine = (
   } as any);
 };
 
+/** A script preflight followed by ordinary acting work, as in the cold demo. */
+const scriptWorkflow = (
+  options: {
+    guard?: (args: any) => boolean;
+    failureArm?: boolean;
+    shadowSuccess?: boolean;
+    specialFailureStatus?: number;
+    observed?: Array<{ guard: string; exitStatus: number }>;
+  } = {},
+) => {
+  const ordinary = goodMachine({ workId: 'runTask' });
+  const states = ordinary.config.states as any;
+  const scriptOutput = (event: any) =>
+    typeof event.output?.exitStatus === 'number' &&
+    ['zero', 'nonzero'].includes(event.output?.guard)
+      ? event.output
+      : undefined;
+  return setup({
+    actors: {
+      captain: fromPromise(async () => {
+        throw new Error('coverage must supply the acting actor');
+      }),
+      script: fromPromise(async () => {
+        throw new Error('coverage must supply the script actor');
+      }),
+    },
+    guards: {
+      scriptOk:
+        options.guard ??
+        (({ event }: any) => scriptOutput(event)?.guard === 'zero'),
+    },
+    actions: {
+      rememberScriptResult: assign(({ event }: any) => {
+        const output = scriptOutput(event);
+        if (output !== undefined) options.observed?.push(output);
+        return output === undefined ? {} : { lastResult: output };
+      }),
+    },
+  }).createMachine({
+    ...ordinary.config,
+    states: {
+      ...states,
+      ready: { id: 'ready', on: { GO: { target: 'ensureRepository' } } },
+      ensureRepository: {
+        id: 'ensureRepository',
+        meta: { playbook: { stateId: 'ensureRepository' } },
+        invoke: {
+          src: 'script',
+          input: () => ({
+            stateId: 'ensureRepository',
+            sourceItem: 'X-0',
+            command: 'test -e .git',
+            result: {
+              zero: 'The command exited with status zero.',
+              nonzero: 'The command exited with a nonzero status.',
+            },
+          }),
+          onDone: [
+            ...(options.shadowSuccess === true ? [{ target: '#failed' }] : []),
+            {
+              guard: 'scriptOk',
+              target: '#runTask',
+              actions: 'rememberScriptResult',
+            },
+            ...(options.specialFailureStatus === undefined
+              ? []
+              : [
+                  {
+                    guard: ({ event }: any) =>
+                      event.output.guard === 'nonzero' &&
+                      event.output.exitStatus === options.specialFailureStatus,
+                    target: '#failed',
+                  },
+                ]),
+            ...(options.failureArm === false
+              ? []
+              : [{ target: '#failed', actions: 'rememberScriptResult' }]),
+          ],
+          onError: { target: '#failed' },
+        },
+      },
+    },
+  } as any);
+};
+
 /** A two-region structured machine with branch-local Boss-reply waits. */
 const parallelMachine = (
   opts: {
@@ -1145,6 +1230,12 @@ type ErrorGuardArgs = {
   event: { error: Error };
 };
 
+type ScriptGuardArgs = {
+  event: {
+    output: { guard: string; exitStatus?: number; invented?: string };
+  };
+};
+
 describe('guardSatisfiable (verification-6)', () => {
   it('satisfies a conjunctive guard by iterative deepening over its literals', () => {
     const guard = ({
@@ -1615,9 +1706,9 @@ describe('checkFsmCoverage (verification-6)', () => {
     ).toEqual([]);
   });
 
-  it('detects a declared result key handled only by the failure fallback', async () => {
+  it('accepts a declared result selected by an ordered failure fallback', async () => {
     const machine = goodMachine({
-      result: { orphan: 'No onDone guard accepts this declared result.' },
+      result: { failed: 'Work failed and reaches the failure state.' },
       onDone: [
         {
           target: '#done',
@@ -1627,9 +1718,78 @@ describe('checkFsmCoverage (verification-6)', () => {
         { target: '#failed' },
       ],
     });
+    expect(await checkFsmCoverage({ machine })).toEqual([]);
+  });
+
+  it('detects a declared result with no accepting transition', async () => {
+    const machine = goodMachine({
+      result: { orphan: 'No onDone arm accepts this declared result.' },
+    });
     expect((await checkFsmCoverage({ machine })).join('\n')).toMatch(
       /result "orphan" has no reachable accepting transition/,
     );
+  });
+
+  it('drives script success and fallback failure with runtime exit statuses', async () => {
+    const observed: Array<{ guard: string; exitStatus: number }> = [];
+    expect(
+      await checkFsmCoverage({ machine: scriptWorkflow({ observed }) }),
+    ).toEqual([]);
+    expect(observed).toEqual(
+      expect.arrayContaining([
+        { guard: 'zero', exitStatus: 0 },
+        { guard: 'nonzero', exitStatus: 1 },
+      ]),
+    );
+  });
+
+  it.each([
+    [
+      'impossible success status',
+      ({ event }: ScriptGuardArgs) =>
+        event.output.guard === 'zero' && event.output.exitStatus === 1,
+    ],
+    [
+      'invented script payload',
+      ({ event }: ScriptGuardArgs) =>
+        event.output.guard === 'zero' && event.output.invented === 'yes',
+    ],
+    [
+      'undeclared result',
+      ({ event }: ScriptGuardArgs) => event.output.guard === 'notDeclared',
+    ],
+  ])('rejects script guards requiring %s', async (_name, guard) => {
+    expect(
+      (await checkFsmCoverage({ machine: scriptWorkflow({ guard }) })).join(
+        '\n',
+      ),
+    ).toMatch(/state ensureRepository: onDone arm 0 .* unsatisfiable/);
+  });
+
+  it('rejects missing script failure routes and shadowed success arms', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: scriptWorkflow({ failureArm: false }),
+      }),
+    ).toContain(
+      'state ensureRepository: result "nonzero" has no reachable accepting transition',
+    );
+    expect(
+      (
+        await checkFsmCoverage({
+          machine: scriptWorkflow({ shadowSuccess: true }),
+        })
+      ).join('\n'),
+    ).toMatch(/state ensureRepository: onDone arm 1 .* unsatisfiable/);
+  });
+
+  it('probes declared nonzero exit statuses from artifact candidates', async () => {
+    expect(
+      await checkFsmCoverage(
+        { machine: scriptWorkflow({ specialFailureStatus: 42 }) },
+        { sourceText: 'const specialFailureStatus = 42;' },
+      ),
+    ).toEqual([]);
   });
 
   it('keeps the actual done-event type fixed during arm probing', async () => {
