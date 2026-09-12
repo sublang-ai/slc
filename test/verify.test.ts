@@ -20,6 +20,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 import { defaultComposePlayerPrompt } from '../node_modules/@sublang/playbook/src/xstate-playbook-runtime.js';
+import { emitVerifierSupport } from '../src/verify-support.js';
 
 import {
   CONTROLLER_ACTION_GUARDS,
@@ -3802,6 +3803,142 @@ describe('emitPromptContractTest (verification-5)', () => {
 });
 
 describe('generateGearsFsmConformanceTest', () => {
+  it('strictly type-checks real generated suites with empty and populated pinned evidence', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-strict-generated-tests-'));
+    try {
+      await writeFile(join(root, 'package.json'), '{"type":"module"}\n');
+      await symlink(
+        join(repoRoot, 'node_modules'),
+        join(root, 'node_modules'),
+        'dir',
+      );
+      await emitVerifierSupport(root);
+      const fixtureConfigs: Record<string, MachineConfigLike> = {
+        empty: {
+          states: { ready: { id: 'ready', tags: ['playbook.parked'] } },
+        },
+        populated: {
+          states: {
+            work: {
+              invoke: {
+                src: 'captain',
+                input: {
+                  stateId: 'work',
+                  sourceItem: 'X-1',
+                  prompt: 'Do the task.',
+                  result: { done: 'Completed.' },
+                },
+              },
+            },
+          },
+        },
+      };
+      const files: string[] = [];
+      const finding = 'fixture schema evidence conflicts';
+      for (const [basename, config] of Object.entries(fixtureConfigs)) {
+        await writeFile(
+          join(root, `${basename}.fsm.ts`),
+          `export const machine = { config: ${JSON.stringify(config)} };\n`,
+        );
+        await writeFile(join(root, `${basename}.gears.md`), '');
+        await writeFile(
+          join(root, `${basename}.playbook.ts`),
+          'export const _internal = { composeCaptainPrompt: (input: unknown) => JSON.stringify(input) };\n',
+        );
+        const opts = {
+          basename,
+          fsmModule: `./${basename}.fsm.js`,
+          verifyModule: './.slc-verify/verify.js',
+          schemaFindings: basename === 'empty' ? [] : [finding],
+        };
+        const suites = {
+          'gears-fsm': generateGearsFsmConformanceTest({
+            ...opts,
+            gearsFile: `./${basename}.gears.md`,
+          }),
+          'fsm.introspect': generateFsmIntrospectionTest({
+            ...opts,
+            pins: pinIntrospection(config),
+          }),
+          'prompt-contract': generatePromptContractTest({
+            ...opts,
+            rows: capturePromptContract(config),
+            composer: {
+              playbookModule: `./${basename}.playbook.js`,
+              captain: basename === 'empty' ? {} : { work: [] },
+            },
+          }),
+        };
+        for (const [suffix, contents] of Object.entries(suites)) {
+          const path = join(root, `${basename}.${suffix}.test.ts`);
+          await writeFile(path, contents);
+          files.push(path);
+        }
+      }
+      await expect(
+        execFileAsync(
+          process.execPath,
+          [
+            join(repoRoot, 'node_modules/typescript/lib/tsc.js'),
+            '--ignoreConfig',
+            '--noEmit',
+            '--strict',
+            '--noUnusedLocals',
+            '--noUnusedParameters',
+            '--verbatimModuleSyntax',
+            '--erasableSyntaxOnly',
+            '--target',
+            'ES2022',
+            '--module',
+            'NodeNext',
+            '--moduleResolution',
+            'NodeNext',
+            '--types',
+            'node',
+            '--skipLibCheck',
+            ...files,
+          ],
+          { cwd: root },
+        ),
+      ).resolves.toMatchObject({ stdout: '', stderr: '' });
+      const vitest = join(repoRoot, 'node_modules/vitest/vitest.mjs');
+      const config = join(root, 'vitest.config.mjs');
+      await writeFile(
+        config,
+        "export default { test: { include: ['*.test.ts'] } };\n",
+      );
+      await expect(
+        execFileAsync(
+          process.execPath,
+          [vitest, 'run', '--root', root, '--config', config, 'empty.'],
+          { cwd: root },
+        ),
+      ).resolves.toBeDefined();
+      await expect(
+        execFileAsync(
+          process.execPath,
+          [
+            vitest,
+            'run',
+            '--root',
+            root,
+            '--config',
+            config,
+            'populated.',
+            '--testNamePattern',
+            'uses consistent artifact-schema evidence',
+          ],
+          { cwd: root },
+        ),
+      ).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining(finding),
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 20_000);
+
   it('emits a test wiring the artifact fsm, gears file, and checker', () => {
     const emitted = generateGearsFsmConformanceTest({
       basename: 'code',

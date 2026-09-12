@@ -2937,7 +2937,7 @@ import { describe, expect, it } from 'vitest';
 import { checkGearsFsmConformance, findConcurrentRoleSets, findMachineConfig } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 
-const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
+const SCHEMA_FINDINGS: readonly string[] = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
 
 describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
   it('uses consistent artifact-schema evidence', () => {
@@ -3082,7 +3082,7 @@ import { describe, expect, it } from 'vitest';
 import { findMachineConfig, pinIntrospection } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 
-const PINNED = ${JSON.stringify(opts.pins, null, 2)};
+const PINNED = ${JSON.stringify(opts.pins, null, 2)} as const;
 
 describe(${sourceString(`${opts.basename}: FSM introspection`)}, () => {
   it('matches the machine topology pinned at build time', () => {
@@ -3131,7 +3131,7 @@ export function generatePromptContractTest(opts: {
       const compose = `compose${label === 'Captain' ? 'Captain' : 'Player'}`;
       return [
         `
-const ${constant} = ${JSON.stringify(substituted, null, 2)};
+const ${constant} = ${JSON.stringify(substituted, null, 2)} as const;
 
 const ${compose} = (
   playbook as unknown as {
@@ -3183,8 +3183,8 @@ import {
 } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 ${composerImports}
-const CONTRACT = ${JSON.stringify(opts.rows, null, 2)};
-const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
+const CONTRACT = ${JSON.stringify(opts.rows, null, 2)} as const;
+const SCHEMA_FINDINGS: readonly string[] = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
 
 describe(${sourceString(`${opts.basename}: prompt contract`)}, () => {
   it('uses consistent artifact-schema evidence', () => {
