@@ -11,7 +11,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as runtime from '../src/index.js';
 import {
@@ -147,6 +147,12 @@ describe('opt-in compilation benchmark', () => {
       true,
     ]);
     expect(first.summary.calls[0].usage.tokens.totals.input.total).toBe(4);
+    expect(first.summary.dependencies['@openai/codex-sdk']).toEqual(
+      expect.any(String),
+    );
+    expect(
+      first.summary.dependencies['@anthropic-ai/claude-agent-sdk'],
+    ).toEqual(expect.any(String));
     expect(first.summary.validation).toMatchObject({
       ok: true,
       elapsedMs: expect.any(Number),
@@ -163,6 +169,65 @@ describe('opt-in compilation benchmark', () => {
       'PRIVATE AGENT RESPONSE',
     );
   });
+
+  it('identifies changed compiled JavaScript without exposing its contents', async () => {
+    const options = await fixture();
+    const root = dirname(options.source);
+    await mkdir(join(root, 'dist'));
+    await symlink(
+      fileURLToPath(new URL('../node_modules', import.meta.url)),
+      join(root, 'node_modules'),
+      'dir',
+    );
+    const compiled = join(root, 'dist/cli.js');
+    await writeFile(compiled, 'PRIVATE COMPILER BYTES one');
+    const injected = {
+      root,
+      runtime,
+      env: {},
+      adapterFactory: () => adapter([]),
+      validate,
+    };
+    const first = await benchmarkCompile(options, injected);
+    await writeFile(compiled, 'PRIVATE COMPILER BYTES two');
+    const second = await benchmarkCompile(options, injected);
+    expect(first.summary.status).toBe('success');
+    expect(second.summary.status).toBe('success');
+    expect(first.summary.compilerRuntime.files).toEqual([
+      {
+        name: 'cli.js',
+        bytes: 26,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
+    ]);
+    expect(second.summary.compilerRuntime.sha256).not.toBe(
+      first.summary.compilerRuntime.sha256,
+    );
+    expect(JSON.stringify(second.summary)).not.toContain('PRIVATE COMPILER');
+  });
+
+  it.each([undefined, 'minimal'])(
+    'applies only the explicitly selected runtime check to supplied sources: %s',
+    async (runtimeCheck) => {
+      const options = await fixture();
+      const seenProfiles = [];
+      const result = await benchmarkCompile(
+        { ...options, runtimeCheck },
+        {
+          runtime,
+          env: {},
+          adapterFactory: () => adapter([]),
+          validate: async (inputs) => {
+            seenProfiles.push(inputs.runtimeCheck);
+            return validate(inputs);
+          },
+        },
+      );
+      expect(result.summary.status).toBe('success');
+      expect(seenProfiles).toEqual([runtimeCheck]);
+      expect(result.summary.runtimeCheck).toBe(runtimeCheck ?? null);
+    },
+  );
 
   it('omits only the inherited phase continuation in the explicit experiment', async () => {
     const options = await fixture();

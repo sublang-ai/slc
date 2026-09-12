@@ -42,6 +42,7 @@ export function parseArguments(args) {
     '--timeout-seconds': 'timeoutSeconds',
     '--pipeline': 'pipeline',
     '--label': 'label',
+    '--runtime-check': 'runtimeCheck',
   };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -202,7 +203,14 @@ function command(commandPath, args, cwd, signal, log) {
   });
 }
 
-export async function validateArtifacts({ result, work, root, signal, log }) {
+export async function validateArtifacts({
+  result,
+  work,
+  root,
+  signal,
+  log,
+  runtimeCheck,
+}) {
   const entries = readdirSync(work).filter((name) => name.endsWith('.ts'));
   const tests = [];
   for (const name of readdirSync(work)) {
@@ -269,8 +277,30 @@ if (typeof entry?.createRuntime !== 'function') throw new Error('Entry has no cr
     signal,
     log,
   );
+  let runtime;
+  if (suite.ok && runtimeCheck === 'minimal') {
+    const evidencePath = join(work, 'benchmark.runtime.json');
+    const started = performance.now();
+    const execution = await command(
+      process.execPath,
+      [join(ROOT, 'scripts/benchmark-runtime.mjs'), entry, evidencePath],
+      work,
+      signal,
+      log,
+    );
+    const evidence = existsSync(evidencePath)
+      ? JSON.parse(readFileSync(evidencePath, 'utf8'))
+      : {};
+    runtime = {
+      ...evidence,
+      ...execution,
+      ok: execution.ok && evidence.ok === true,
+      elapsedMs: elapsed(started),
+    };
+  }
   return {
-    ok: suite.ok,
+    ok: suite.ok && (runtimeCheck !== 'minimal' || runtime?.ok === true),
+    ...(runtime ? { runtime } : {}),
     entryImport: imported,
     suite,
     testFiles: tests.length,
@@ -289,6 +319,9 @@ export async function benchmarkCompile(options, injected = {}) {
   }
   if (!options.model?.trim())
     throw new Error('--model is required for attributable measurements');
+  if (options.runtimeCheck !== undefined && options.runtimeCheck !== 'minimal')
+    throw new Error('--runtime-check must be minimal');
+  const runtimeCheck = options.source ? options.runtimeCheck : 'minimal';
   const root = injected.root ?? ROOT;
   const runtime =
     injected.runtime ??
@@ -320,6 +353,7 @@ export async function benchmarkCompile(options, injected = {}) {
     status: 'incomplete',
     source: { ...identity(source), original: original ?? null },
     cold: true,
+    runtimeCheck: runtimeCheck ?? null,
     pipeline: options.pipeline ?? 'playbook',
     optimize: options.optimize !== false,
     reviewerDisabled: options.review !== true,
@@ -336,6 +370,8 @@ export async function benchmarkCompile(options, injected = {}) {
     '@sublang/slc',
     '@sublang/playbook',
     '@sublang/cligent',
+    '@openai/codex-sdk',
+    '@anthropic-ai/claude-agent-sdk',
     'xstate',
     'typescript',
   ]) {
@@ -347,6 +383,21 @@ export async function benchmarkCompile(options, injected = {}) {
       summary.dependencies[name] = JSON.parse(
         readFileSync(path, 'utf8'),
       ).version;
+  }
+  const runtimeDirectory = join(root, 'dist');
+  if (existsSync(runtimeDirectory)) {
+    const files = readdirSync(runtimeDirectory)
+      .filter((name) => name.endsWith('.js'))
+      .sort()
+      .map((name) => {
+        const { bytes, sha256 } = identity(join(runtimeDirectory, name));
+        return { name, bytes, sha256 };
+      });
+    summary.compilerRuntime = {
+      path: runtimeDirectory,
+      files,
+      sha256: hash(JSON.stringify(files)),
+    };
   }
   if (existsSync(join(root, 'package-lock.json')))
     summary.lock = identity(join(root, 'package-lock.json'));
@@ -486,6 +537,7 @@ export async function benchmarkCompile(options, injected = {}) {
         root,
         signal: controller.signal,
         log,
+        runtimeCheck,
       });
       summary.validation.elapsedMs = elapsed(validationStart);
       summary.status = summary.validation.ok ? 'success' : 'failure';
@@ -516,6 +568,7 @@ if (
       console.log(`Usage: node scripts/benchmark-compile.mjs --model <model> [options]
   --agent <id> --effort <value> --config <path>
   --source <path>          default: minimal three-line acceptance workflow
+  --runtime-check minimal enable the default runtime acceptance check for a supplied source
   --pipeline-path <path>   repeatable absolute pipeline search roots (pins allowed)
   --pipeline <name>        default: playbook
   --no-optimize            omit optimization passes

@@ -14,14 +14,14 @@ Evaluate the existing two-agent demo as a broader workload.
 
 ## Deliverables
 
-- [ ] Reproducible baseline with phase and agent-call measurements using Opus 5 or GPT-6.
+- [x] Reproducible baseline with phase and agent-call measurements using Opus 5 and GPT-6, retaining failed outcomes explicitly.
 - [ ] Individually measured optimizations, retaining only techniques supported by comparative evidence and correctness checks.
 - [ ] Updated decisions, behavior specs, user guidance, and a concise experiment report.
 - [ ] Validated commits and full integration closeout.
 
 ## Tasks
 
-1. [ ] Add an opt-in measurement harness and record the current baseline.
+1. [x] Add an opt-in measurement harness and record the current baseline.
 2. [ ] Specify, implement, and measure each candidate technique in a separate commit-sized experiment.
 3. [ ] Verify the retained combination on the minimal and existing demo workflows and publish reproducible results.
 

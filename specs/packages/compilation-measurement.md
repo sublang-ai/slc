@@ -16,7 +16,7 @@ When explicitly invoked with a model, the compilation benchmark shall compile th
 
 ### compilation-measurement-2
 
-When the benchmark records an experiment, the compilation benchmark shall retain a machine-readable summary containing source and pipeline-definition byte identities, requested model and effective agent settings, dependency versions, invocation settings, phase durations, individual adapter-call durations and completion statuses, prompt byte counts and hashes, event and tool-call counts, and usage where the adapter reports it, with unreported accounting absent rather than fabricated.
+When the benchmark records an experiment, the compilation benchmark shall retain a machine-readable summary containing source and pipeline-definition byte identities, requested model and effective agent settings, dependency and provider SDK versions, compiled JavaScript runtime byte identities, invocation settings, phase durations, individual adapter-call durations and completion statuses, prompt byte counts and hashes, event and tool-call counts, and usage where the adapter reports it, with unreported accounting absent rather than fabricated.
 
 ### compilation-measurement-3
 
@@ -34,11 +34,15 @@ When writing experiment evidence, the compilation benchmark shall preserve raw d
 
 Where the benchmark's fresh-phase-session experiment is explicitly enabled, when an adapter receives a phase's first call, the compilation benchmark shall omit that call's inherited continuation token while preserving later continuations within that phase and recording both requested and actual continuation presence, without changing the ordinary compiler's defaults.
 
+### compilation-measurement-11
+
+Where the benchmark uses its default minimal workflow or an explicitly selected minimal runtime-check profile, when emitted artifact checks pass, the compilation benchmark shall additionally drive the emitted entry with real installed Playbook host capabilities in a fresh nested directory inside an ancestor repository, requiring that directory to become its own repository before exactly one synthetic performing agent receives the exact Boss task and commits one change, followed by a successful terminal outcome and an unchanged ancestor repository, with the runtime check covered by the experiment deadline and recorded separately; an explicitly supplied source receives no minimal-specific check unless selected.
+
 ## Verification
 
 ### compilation-measurement-7
 
-Where a fixture pipeline runs through the ordinary compiler with a measured fixture adapter, when the integration suite invokes the benchmark twice over identical source bytes, the suite shall verify distinct fresh output directories and effective one-agent settings [[compilation-measurement-1](#compilation-measurement-1)], recorded source identities and actual phase and call measurements with authentic reported usage [[compilation-measurement-2](#compilation-measurement-2)], separately recorded validation success [[compilation-measurement-4](#compilation-measurement-4)], and retained evidence that excludes fixture prompt and response text from summaries and metrics [[compilation-measurement-5](#compilation-measurement-5)].
+Where a fixture pipeline runs through the ordinary compiler with a measured fixture adapter, when the integration suite invokes the benchmark twice over identical source bytes, the suite shall verify distinct fresh output directories and effective one-agent settings [[compilation-measurement-1](#compilation-measurement-1)], recorded source and compiled-runtime identities, SDK versions, and actual phase and call measurements with authentic reported usage [[compilation-measurement-2](#compilation-measurement-2)], separately recorded validation success [[compilation-measurement-4](#compilation-measurement-4)], and retained evidence that excludes fixture prompt and response text from summaries and metrics [[compilation-measurement-5](#compilation-measurement-5)].
 
 ### compilation-measurement-8
 
@@ -51,3 +55,7 @@ Where a fixture pipeline has two phases and its adapter supplies a continuation 
 ### compilation-measurement-10
 
 Where a fixture bundle supplies an entry and all four emitted verification-suite kinds, when the integration suite executes benchmark artifact validation before and after injecting an assertion failure into one suite, the suite shall verify successful entry loading and validation of the intact bundle followed by failed validation of the changed bundle [[compilation-measurement-4](#compilation-measurement-4)].
+
+### compilation-measurement-12
+
+Where a minimal entry uses the installed shared runtime and real host capabilities, when the integration suite runs the benchmark runtime check across faithful behavior, ancestor-repository reuse, omitted Boss text, repeated performing calls, and a failure terminal, the suite shall verify that only the faithful behavior passes and that arbitrary supplied sources omit the minimal check unless selected [[compilation-measurement-11](#compilation-measurement-11)].

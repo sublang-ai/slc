@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
+
+import { afterEach, describe, expect, it } from 'vitest';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { validateArtifacts } from '../scripts/benchmark-compile.mjs';
+import { checkMinimalRuntime } from '../scripts/benchmark-runtime.mjs';
+
+const directories = [];
+afterEach(async () => {
+  await Promise.all(
+    directories
+      .splice(0)
+      .map((path) => rm(path, { recursive: true, force: true })),
+  );
+});
+
+// A real schema-3 entry, shared XState runtime, script actor and governed commit
+// boundary. Only the performing model is synthetic, as in the live benchmark.
+async function entryFixture({
+  command = '[ -e .git ] || git init',
+  omitTask = false,
+  repeat = false,
+  terminal = 'success',
+} = {}) {
+  const directory = await mkdtemp(join(tmpdir(), 'slc-runtime-entry-'));
+  directories.push(directory);
+  await symlink(
+    fileURLToPath(new URL('../node_modules', import.meta.url)),
+    join(directory, 'node_modules'),
+    'dir',
+  );
+  const entry = join(directory, 'minimal.ts');
+  await writeFile(
+    entry,
+    `
+import { setup, assign, fromPromise } from 'xstate';
+import { RUNTIME_ABI, createXStatePlaybookRuntime } from '@sublang/playbook/xstate-runtime';
+const machine = setup({
+  actors: { script: fromPromise(async () => { throw new Error('unbound script'); }), player: fromPromise(async () => { throw new Error('unbound player'); }) },
+  actions: { start: assign({ task: ({ event }) => event.task }) },
+  guards: { ok: ({ event }) => event.output.guard === 'ok', done: ({ event }) => event.output.guard === 'done' },
+}).createMachine({
+  id: 'minimal', initial: 'ready', context: { task: '' },
+  states: {
+    ready: { meta: { playbook: { stateId: 'ready', description: 'Waiting for task.' } }, tags: ['playbook.parked'], on: { START: { target: 'setup', actions: 'start' } } },
+    setup: {
+      meta: { playbook: { stateId: 'setup', description: 'Initialize repository.' } }, tags: ['playbook.busy'],
+      invoke: { src: 'script', input: { stateId: 'setup', sourceItem: 'MINIMAL-1', command: ${JSON.stringify(command)}, result: { ok: 'Command succeeded.', failed: 'Command failed.' } }, onDone: [{ guard: 'ok', target: 'implement' }, { target: 'failed' }], onError: 'failed' },
+    },
+    implement: {
+      tags: ['playbook.busy'], meta: { playbook: { stateId: 'implement', role: 'agent', description: 'Carry out and commit the task.' } },
+      invoke: { src: 'player', input: ({ context }) => ({ stateId: 'implement', role: 'agent', sourceItem: 'MINIMAL-2', prompt: 'Carry out and commit the task.\\n' + ${omitTask ? "'omitted'" : 'context.task'}, result: { done: 'The acting agent completed the behavior.' } }), onDone: [{ guard: 'done', target: ${JSON.stringify(repeat ? 'implement' : 'finished')}, reenter: true }, { target: 'failed' }], onError: 'failed' },
+    },
+    finished: { type: 'final', meta: { playbook: { stateId: 'finished', terminal: ${JSON.stringify(terminal)}, description: 'Finished.' } } },
+    failed: { type: 'final', meta: { playbook: { stateId: 'failed', terminal: 'failure', description: 'Failed.' } } },
+  },
+});
+const factory = createXStatePlaybookRuntime(machine, {
+  label: 'minimal', compat: { artifactSchema: 3, runtimeAbi: RUNTIME_ABI },
+  snapshotOptions: (options = {}) => ({ ...options }), machineInput: () => ({}),
+  entryEvent: { type: 'START', textField: 'task', contextField: 'task' }, transitionEventFields: ['task'],
+  roleStates: { implement: { role: 'agent', label: 'Carry out and commit the task.' } },
+  outcomeAuthority: { governedPlayerStates: { implement: { done: { fields: {}, repositoryDisposition: 'one-descendant-commit' } } } },
+});
+export default {
+  id: 'minimal', requiredRoleIds: ['agent'], concurrentRoleSets: [],
+  createRuntime(options, hostCapabilities) { return factory({ configuredOptions: options.captainOptions, hostCapabilities }); },
+};
+`,
+  );
+  return entry;
+}
+
+describe('minimal benchmark source acceptance', () => {
+  it('drives an emitted entry with real host capabilities and a committed exact Boss task', async () => {
+    const result = await checkMinimalRuntime({ entry: await entryFixture() });
+    expect(result).toMatchObject({
+      ok: true,
+      ownRepository: true,
+      exactBossTask: true,
+      performingCalls: 1,
+      commits: 1,
+      terminalKind: 'success',
+    });
+  });
+
+  it('requires the runtime check after emitted suites pass and retains separate evidence', async () => {
+    const entry = await entryFixture();
+    const work = directories.at(-1);
+    const bundle = join(work, 'minimal.playbook');
+    await mkdir(bundle);
+    for (const suffix of [
+      'gears-fsm',
+      'fsm.introspect',
+      'prompt-contract',
+      'fsm.coverage',
+    ]) {
+      await writeFile(
+        join(bundle, `minimal.${suffix}.test.ts`),
+        "import { it, expect } from 'vitest'; it('valid artifact', () => expect(true).toBe(true));\n",
+      );
+    }
+    const result = await validateArtifacts({
+      result: { outputs: [entry] },
+      work,
+      root: fileURLToPath(new URL('..', import.meta.url)),
+      signal: AbortSignal.timeout(15_000),
+      log: () => {},
+      runtimeCheck: 'minimal',
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      suite: { ok: true },
+      runtime: {
+        ok: true,
+        performingCalls: 1,
+        commits: 1,
+        terminalKind: 'success',
+        elapsedMs: expect.any(Number),
+      },
+    });
+  });
+
+  it.each([
+    [
+      {
+        command: 'git rev-parse --is-inside-work-tree 2>/dev/null || git init',
+      },
+      /own .git/,
+    ],
+    [{ omitTask: true }, /exact Boss task/],
+    [{ repeat: true }, /perform exactly once/],
+    [{ terminal: 'failure' }, /successful terminal/],
+  ])(
+    'rejects semantic drift in an otherwise runnable entry: %j',
+    async (options, expected) => {
+      await expect(
+        checkMinimalRuntime({ entry: await entryFixture(options) }),
+      ).rejects.toThrow(expected);
+    },
+  );
+});
