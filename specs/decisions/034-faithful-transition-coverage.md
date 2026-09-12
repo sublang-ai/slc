@@ -21,6 +21,7 @@ An invalid synthetic success could therefore leave the working state through fai
 - Use the same bounded valid-output candidates for declared-result acceptance and arm auditing, and drive a directly accepting candidate; outcome reachability requires one satisfying representative rather than proving every possible exit status safe.
 - Apply the candidate cap per arm, prioritizing that arm's constants over general artifact candidates, so unrelated arms cannot exhaust its search; combine only accepted candidates for runtime driving.
 - Never invent additional script output fields or use a malformed bare script output to satisfy a guarded arm.
+- Preserve the supplied top-level event payload in both candidate evaluation and read tracing, including its own-property descriptors; an authored guard may read known fields through descriptors without requiring new reflective-field inference.
 - Keep coverage outside the early compilation gates; this correction changes verification accuracy, not compilation policy.
 
 ## Consequences

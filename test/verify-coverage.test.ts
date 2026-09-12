@@ -71,6 +71,7 @@ const goodMachine = (
     publicStateId?: string;
     blankStaysParked?: boolean;
     interruptRequiresIntent?: boolean;
+    descriptorInterruptType?: string;
     unsatisfiableInterrupt?: boolean;
     dropFailedParkTag?: boolean;
   } = {},
@@ -164,7 +165,12 @@ const goodMachine = (
           target: `#${workId}`,
           reenter: true,
           guard: ({ event }: any) =>
-            event.targetId === publicStateId &&
+            (overrides.descriptorInterruptType === undefined
+              ? event.targetId === publicStateId
+              : Object.getOwnPropertyDescriptor(event, 'type')?.value ===
+                  overrides.descriptorInterruptType &&
+                Object.getOwnPropertyDescriptor(event, 'targetId')?.value ===
+                  publicStateId) &&
             overrides.unsatisfiableInterrupt !== true &&
             (overrides.interruptRequiresIntent !== true ||
               (typeof event.intent === 'string' && event.intent.trim() !== '')),
@@ -1294,6 +1300,30 @@ describe('identifierLiterals', () => {
 });
 
 describe('checkFsmCoverage (verification-6)', () => {
+  it.each(['BOSS_INTERRUPT', 'WRONG_EVENT'])(
+    'preserves descriptor-read fixed event fields against a %s guard',
+    async (eventType) => {
+      const machine = goodMachine({ descriptorInterruptType: eventType });
+      const actor = createActor(
+        machine.provide({
+          actors: { captain: fromPromise(() => new Promise(() => {})) },
+        }),
+      );
+      actor.start();
+      actor.send({ type: 'BOSS_INTERRUPT', targetId: 'work' });
+      expect(actor.getSnapshot().value).toBe(
+        eventType === 'BOSS_INTERRUPT' ? 'work' : 'ready',
+      );
+      actor.stop();
+      const findings = await checkFsmCoverage({ machine });
+      if (eventType === 'BOSS_INTERRUPT') expect(findings).toEqual([]);
+      else
+        expect(findings).toContain(
+          'BOSS_INTERRUPT target work is unsatisfiable under context/event probing',
+        );
+    },
+  );
+
   it('finds nothing on a machine covering all its transitions', async () => {
     expect(await checkFsmCoverage({ machine: goodMachine() })).toEqual([]);
   });

@@ -1349,7 +1349,10 @@ function probeGuardAssignment(
     let event = { ...fixedEvent };
     for (const payload of payloads) {
       if (payload.eventField === undefined) {
-        event = overlaidObject(event, assignment.payloads[payload.tag] ?? {});
+        event = overlaidObject(
+          overlaidObject(payload.base, event),
+          assignment.payloads[payload.tag] ?? {},
+        );
       } else {
         event[payload.eventField] = overlaidObject(
           payload.base,
@@ -1408,7 +1411,7 @@ function probeGuardAssignment(
       for (const payload of payloads) {
         if (payload.eventField === undefined) {
           event = recording(
-            event,
+            overlaidObject(payload.base, event),
             assignment.payloads[payload.tag] ?? {},
             payload.tag,
           ) as Record<string, unknown>;

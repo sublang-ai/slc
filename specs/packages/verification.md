@@ -130,7 +130,7 @@ When a compiled `playbook` artifact's `gears` and `fsm` are produced at their ca
 | Immutable artifact predating the atomic Playbook 1.0 reference refresh | Exempt a legacy flat `failed` state that carries no `meta.playbook` identity from the parked-tag check; require any metadata-bearing recoverable failure to use the current tagged contract. |
 | An invocation input or transition-scoped actor start throws synchronously during bounded driving. | Return a state-specific coverage finding and attach an error observer to every settle probe so XState does not report the same failure outside the checker boundary. |
 | Nested invocation or intentionally non-root-jumpable parallel branch leaves | Evaluate a nested invocation only after entering it with the machine's initialized or transition-produced context, rather than preflighting the input with an artificial empty context; for the parallel leaves, enter their public parallel parent and drive the distinct delegated-player actors in place. |
-| A typed `BOSS_INTERRUPT` arm requires additional Boss-supplied payload fields. | Synthesize only missing top-level fields under bounded guard probing while preserving the real event type and public target id. |
+| A typed `BOSS_INTERRUPT` arm requires additional Boss-supplied payload fields. | Synthesize only missing top-level fields under bounded guard probing while preserving the real event type and public target id, with each supplied top-level payload's values and own-property descriptors present in both candidate evaluation and read tracing ([DR-034](../decisions/034-faithful-transition-coverage.md)). |
 | Bounded generated-test execution | Set a timeout derived from the checker's bounded settle, parallel-combination, and guard-probe budgets rather than relying on the test runner's default timeout; include the fields named by their result descriptions in structured Captain outputs; match dynamic call ids to a seeded enabled-playbook catalog exactly; and enter a dynamic call through the Captain transition that populates its context before driving child success or failure. |
 | Ordered result acceptance | Count an unguarded fallback for a declared result only when every preceding guard rejects that valid output under bounded probing; preserve controller action-arm distinctness and report missing, shadowed, unresolved, or unsatisfiable transitions rather than inferring intended routing from result names or prose ([DR-034](../decisions/034-faithful-transition-coverage.md)). |
 | A `BOSS_INTERRUPT` arm has valid context preconditions that the machine's initial input alone cannot represent. | Bounded-probe missing and existing context fields plus missing Boss-supplied event fields, restore an XState persisted initial snapshot with satisfying context and no stale children, and drive the authored ordered transition using matching artifact identifiers and catalog, call, final-response, or accumulated-state sentinels; report an unsatisfiable guard or a transition that does not enter its target rather than accepting direct guard evaluation as coverage. |
@@ -366,6 +366,12 @@ Where real TypeScript fixtures use standalone ESM roots, relative imports, proje
 #### verification-36
 
 Where real FSM input mappers use scalar, keyed, typed nested, historical-player, or direct-Captain continuation contexts, when the integration suite runs continuation verification, the suite shall verify acceptance of canonical question and reply wiring, rejection of omitted or privately nested-only wiring, preservation of unrelated typed context, and controller exemption [[verification-35](#verification-35)], with the linked composition probe reporting the same input defect [[verification-5](#verification-5)].
+
+### Fixed coverage-event acceptance
+
+#### verification-37
+
+Where a real XState fixture reads supplied event type and target id through own-property descriptors, when transition coverage runs, the integration suite shall verify that the fixed event reaches its declared interrupt branch and is accepted by bounded probing, while a guard demanding another event type remains unreachable without changing the supplied type [[verification-6](#verification-6)].
 
 ## References
 
