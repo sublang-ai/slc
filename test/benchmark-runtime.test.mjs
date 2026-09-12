@@ -42,10 +42,18 @@ async function entryFixture({
     `
 import { setup, assign, fromPromise } from 'xstate';
 import { RUNTIME_ABI, createXStatePlaybookRuntime } from '@sublang/playbook/xstate-runtime';
+type WorkInput = { stateId: string; sourceItem: string; prompt?: string; command?: string; role?: string; result: Record<string, string> };
+type Outcome = { guard: string };
+function resultGuard(event: unknown): string | undefined {
+  if (typeof event !== 'object' || event === null || !('output' in event)) return undefined;
+  const output = event.output;
+  return typeof output === 'object' && output !== null && 'guard' in output && typeof output.guard === 'string' ? output.guard : undefined;
+}
 const machine = setup({
-  actors: { script: fromPromise(async () => { throw new Error('unbound script'); }), player: fromPromise(async () => { throw new Error('unbound player'); }), captain: fromPromise(async () => { throw new Error('unbound captain'); }) },
+  types: { context: {} as { task: string }, events: {} as { type: 'START'; task: string } },
+  actors: { script: fromPromise<Outcome, WorkInput>(async () => { throw new Error('unbound script'); }), player: fromPromise<Outcome, WorkInput>(async () => { throw new Error('unbound player'); }), captain: fromPromise<Outcome, WorkInput>(async () => { throw new Error('unbound captain'); }) },
   actions: { start: assign({ task: ({ event }) => event.task }) },
-  guards: { ok: ({ event }) => event.output.guard === 'ok', done: ({ event }) => event.output.guard === ${JSON.stringify(normalGuard)} },
+  guards: { ok: ({ event }) => resultGuard(event) === 'ok', done: ({ event }) => resultGuard(event) === ${JSON.stringify(normalGuard)} },
 }).createMachine({
   id: 'minimal', initial: 'ready', context: { task: '' },
   states: {
@@ -64,7 +72,16 @@ const machine = setup({
 });
 const factory = createXStatePlaybookRuntime(machine, {
   label: 'minimal', compat: { artifactSchema: 3, runtimeAbi: RUNTIME_ABI },
-  snapshotOptions: (options = {}) => ({ ...options }), machineInput: () => ({}),
+  snapshotOptions: (value: unknown) => {
+    if (value === undefined) return {};
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Invalid options');
+    const options: Record<string, string> = {};
+    for (const [key, field] of Object.entries(value)) {
+      if (typeof field !== 'string') throw new Error('Invalid option value');
+      options[key] = field;
+    }
+    return options;
+  }, machineInput: () => ({}),
   ${classifyWithJudge ? '' : "entryEvent: { type: 'START', textField: 'task', contextField: 'task' },"} transitionEventFields: ['task'],
   ${classifyWithJudge ? `classifyBossText: async (text, ports, signal) => { const event = JSON.parse(await ports.callJudge('Classify the following Boss message into exactly one event.\\nAllowed JSON objects:\\n- { "type": "NO_ACTION" }\\n- { "type": "START" }\\nBoss message:\\n' + text, signal)); return { ...event, task: text }; },` : ''}
   roleStates: { implement: { role: 'agent', label: 'Carry out and commit the task.' } },
@@ -72,7 +89,7 @@ const factory = createXStatePlaybookRuntime(machine, {
 });
 export default {
   id: 'minimal', requiredRoleIds: ['agent'], concurrentRoleSets: [],
-  createRuntime(options, hostCapabilities) { return factory({ configuredOptions: options.captainOptions, hostCapabilities }); },
+  createRuntime(options: { captainOptions?: Readonly<Record<string, string>> }, hostCapabilities: NonNullable<Parameters<typeof factory>[0]>['hostCapabilities']) { return factory({ configuredOptions: options.captainOptions ?? {}, hostCapabilities }); },
 };
 `,
   );
@@ -125,15 +142,16 @@ describe('minimal benchmark source acceptance', () => {
         "import { it, expect } from 'vitest'; it('valid artifact', () => expect(true).toBe(true));\n",
       );
     }
+    const diagnostics = [];
     const result = await validateArtifacts({
       result: { outputs: [entry] },
       work,
       root: fileURLToPath(new URL('..', import.meta.url)),
       signal: AbortSignal.timeout(15_000),
-      log: () => {},
+      log: (text) => diagnostics.push(text),
       runtimeCheck: 'minimal',
     });
-    expect(result).toMatchObject({
+    expect(result, diagnostics.join('')).toMatchObject({
       ok: true,
       suite: { ok: true },
       runtime: {
