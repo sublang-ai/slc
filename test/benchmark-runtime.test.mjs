@@ -28,6 +28,8 @@ async function entryFixture({
   setupCaptain = false,
   normalGuard = 'done',
   classifyWithJudge = false,
+  taskPresentation = 'literal',
+  taskDrift = 'none',
 } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'slc-runtime-entry-'));
   directories.push(directory);
@@ -49,6 +51,17 @@ function resultGuard(event: unknown): string | undefined {
   const output = event.output;
   return typeof output === 'object' && output !== null && 'guard' in output && typeof output.guard === 'string' ? output.guard : undefined;
 }
+function presentTask(task: string, presentation: string = ${JSON.stringify(taskPresentation)}): string {
+  let lines = task.split('\\n');
+  const drift: string = ${JSON.stringify(taskDrift)};
+  if (drift === 'changed') lines[1] = lines[1].replace('unchanged', 'changed');
+  if (drift === 'missing') lines = lines.slice(0, -1);
+  if (drift === 'reordered') lines.reverse();
+  if (presentation === 'quoted') {
+    lines = lines.map((line, index) => drift === 'mixed' && index === 1 ? line : '> ' + line);
+  }
+  return lines.join('\\n');
+}
 const machine = setup({
   types: { context: {} as { task: string }, events: {} as { type: 'START'; task: string } },
   actors: { script: fromPromise<Outcome, WorkInput>(async () => { throw new Error('unbound script'); }), player: fromPromise<Outcome, WorkInput>(async () => { throw new Error('unbound player'); }), captain: fromPromise<Outcome, WorkInput>(async () => { throw new Error('unbound captain'); }) },
@@ -64,7 +77,7 @@ const machine = setup({
     },
     implement: {
       tags: ['playbook.busy'], meta: { playbook: { stateId: 'implement', role: 'agent', description: 'Carry out and commit the task.' } },
-      invoke: { src: 'player', input: ({ context }) => ({ stateId: 'implement', role: 'agent', sourceItem: 'MINIMAL-2', prompt: 'Carry out and commit the task.\\n' + ${omitTask ? "'omitted'" : 'context.task'}, result: { ${JSON.stringify(normalGuard)}: 'The acting agent completed the behavior.' } }), onDone: [{ guard: 'done', target: ${JSON.stringify(repeat ? 'implement' : 'finished')}, reenter: true }, { target: 'failed' }], onError: 'failed' },
+      invoke: { src: 'player', input: ({ context }) => ({ stateId: 'implement', role: 'agent', sourceItem: 'MINIMAL-2', prompt: 'Carry out and commit the task.\\n' + ${omitTask ? "'omitted'" : 'presentTask(context.task)'}, result: { ${JSON.stringify(normalGuard)}: 'The acting agent completed the behavior.' } }), onDone: [{ guard: 'done', target: ${JSON.stringify(repeat ? 'implement' : 'finished')}, reenter: true }, { target: 'failed' }], onError: 'failed' },
     },
     finished: { type: 'final', meta: { playbook: { stateId: 'finished', terminal: ${JSON.stringify(terminal)}, description: 'Finished.' } } },
     failed: { type: 'final', meta: { playbook: { stateId: 'failed', terminal: 'failure', description: 'Failed.' } } },
@@ -103,11 +116,38 @@ describe('minimal benchmark source acceptance', () => {
       ok: true,
       ownRepository: true,
       exactBossTask: true,
+      taskPresentation: 'literal',
       performingCalls: 1,
       commits: 1,
       terminalKind: 'success',
     });
   });
+
+  it('accepts the exact quoted task through real Git execution', async () => {
+    const result = await checkMinimalRuntime({
+      entry: await entryFixture({ taskPresentation: 'quoted' }),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      exactBossTask: true,
+      taskPresentation: 'quoted',
+      ownRepository: true,
+      performingCalls: 1,
+      commits: 1,
+      terminalKind: 'success',
+    });
+  });
+
+  it.each(['changed', 'missing', 'reordered', 'mixed'])(
+    'rejects %s quoted task lines through real runtime execution',
+    async (taskDrift) => {
+      await expect(
+        checkMinimalRuntime({
+          entry: await entryFixture({ taskPresentation: 'quoted', taskDrift }),
+        }),
+      ).rejects.toThrow(/exact Boss task/);
+    },
+  );
 
   it('supports faithful setup Captain work and an authored normal guard', async () => {
     const result = await checkMinimalRuntime({

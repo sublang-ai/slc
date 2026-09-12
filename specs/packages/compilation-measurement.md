@@ -36,7 +36,7 @@ Where the benchmark's fresh-phase-session experiment is explicitly enabled, when
 
 ### compilation-measurement-11
 
-Where the benchmark uses its default minimal workflow or an explicitly selected minimal runtime-check profile, when emitted artifact checks pass, the compilation benchmark shall additionally drive the emitted entry with real installed Playbook host capabilities in a fresh nested directory inside an ancestor repository, requiring that directory to become its own repository before exactly one synthetic delegated agent receives the exact Boss task and commits one change, followed by a successful terminal outcome and an unchanged ancestor repository, with setup executed either by the emitted script or one preceding synthetic Captain whose prompt carries the Git initialization and own-working-directory scope, optional initial classification selected from one offered non-control event, and adjudication selected from the offered sole normal guard without judge-authored payloads, failing with an unsupported-profile diagnostic for other prompt contracts, with the runtime check covered by the experiment deadline and recorded separately; an explicitly supplied source receives no minimal-specific check unless selected.
+Where the benchmark uses its default minimal workflow or an explicitly selected minimal runtime-check profile, when emitted artifact checks pass, the compilation benchmark shall additionally drive the emitted entry with real installed Playbook host capabilities in a fresh nested directory inside an ancestor repository, requiring that directory to become its own repository before exactly one synthetic delegated agent receives the exact Boss task [[compilation-measurement-18](#compilation-measurement-18)] and commits one change, followed by a successful terminal outcome and an unchanged ancestor repository, with setup executed either by the emitted script or one preceding synthetic Captain whose prompt carries the Git initialization and own-working-directory scope, optional initial classification selected from one offered non-control event, and adjudication selected from the offered sole normal guard without judge-authored payloads, failing with an unsupported-profile diagnostic for other prompt contracts, with the runtime check covered by the experiment deadline and recorded separately; an explicitly supplied source receives no minimal-specific check unless selected.
 
 ### compilation-measurement-13
 
@@ -45,6 +45,10 @@ Where an explicit link target and explicit `.fsm.ts` source are supplied, when a
 ### compilation-measurement-16
 
 When full or link-only artifact validation runs, the compilation benchmark shall additionally require the emitted TypeScript and, for linking, its supplied FSM to pass the measured installation's TypeScript compiler in an isolated ESM consumer preserving artifact bytes and dependency resolution, under ES2022 NodeNext strict checking with unused-local, unused-parameter, implicit-override, switch-fallthrough, isolated-module, case-consistency, verbatim-module and erasable-syntax checks, allowing native `.ts` imports under `noEmit`, skipping installed declaration checks, and selecting only Node ambient types, with compiler arguments, input identities, outcome and elapsed time recorded separately, diagnostics confined to the local log, and cancellation bounded by the experiment deadline [[compilation-measurement-3](#compilation-measurement-3)].
+
+### compilation-measurement-18
+
+When checking the minimal runtime's performing prompt, the compilation benchmark shall accept and record either an unchanged literal task substring or a contiguous block of whole lines formed by prefixing every original task line with exactly `> `, preserving every other character and rejecting every other representation without normalization or fuzzy matching ([DR-038](../decisions/038-quoted-task-runtime-acceptance.md)).
 
 ## Verification
 
@@ -79,3 +83,7 @@ Where fixture pipelines declare a helper through a sidecar or a transitive inlin
 ### compilation-measurement-17
 
 Where emitted fixture artifacts have valid native TypeScript imports beside variants with a strict type error, an unused local, or an unsupported installed-engine call arity, when the integration suite runs full and link-only benchmark validation, the suite shall accept only the type-correct artifacts, preserve their original bytes, record independent type-check outcomes, and stop before type checking when already cancelled [[compilation-measurement-16](#compilation-measurement-16)].
+
+### compilation-measurement-19
+
+Where minimal entries use the actual shared runtime and host capabilities, when their performing prompts carry literal, correctly quoted, changed, missing, reordered, or inconsistently quoted task lines, the integration suite shall verify acceptance only for unchanged literal or exactly quoted tasks, with their representation recorded [[compilation-measurement-18](#compilation-measurement-18)] and the complete repository, delegated-call, commit, and terminal checks still required [[compilation-measurement-11](#compilation-measurement-11)].

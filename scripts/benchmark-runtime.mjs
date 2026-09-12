@@ -20,6 +20,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const MINIMAL_TASK =
   'Create change.txt containing exactly:\nbenchmark "Boss" task — unchanged\nCommit that change once.';
+const QUOTED_MINIMAL_TASK = MINIMAL_TASK.split('\n')
+  .map((line) => `> ${line}`)
+  .join('\n');
 
 /** The minimal profile supports one normal outcome without semantic payloads. */
 function minimalJudgeReply(prompt) {
@@ -120,6 +123,7 @@ export async function checkMinimalRuntime({
   let setupCaptainCalls = 0;
   let judgeCalls = 0;
   let performingFailure;
+  let taskPresentation;
   const started = performance.now();
   try {
     signal.throwIfAborted();
@@ -162,8 +166,13 @@ export async function checkMinimalRuntime({
           realpathSync(workdir),
           'workflow must use the nested repository root',
         );
+        taskPresentation = prompt.includes(MINIMAL_TASK)
+          ? 'literal'
+          : `\n${prompt}\n`.includes(`\n${QUOTED_MINIMAL_TASK}\n`)
+            ? 'quoted'
+            : undefined;
         assert(
-          prompt.includes(MINIMAL_TASK),
+          taskPresentation !== undefined,
           'first performing prompt must contain the exact Boss task',
         );
         writeFileSync(
@@ -304,6 +313,7 @@ export async function checkMinimalRuntime({
       judgeCalls,
       ownRepository: true,
       exactBossTask: true,
+      taskPresentation,
       commits: 1,
       terminalKind: result.terminal.kind,
       elapsedMs: Math.round(performance.now() - started),
