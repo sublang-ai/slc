@@ -98,11 +98,21 @@ When Boss starts the flow, Captain shall prompt Writer:
 > Do the work.
 `;
 
+const FSM_TYPES = `
+type ActorOutput = { guard: 'ok' } | { guard: 'needsBossReply'; question: string };
+type ActorInput = { sourceItem: string; prompt: string; result: Record<string, string>; player?: string; role?: string; pendingBossQuestion?: PendingQuestion; bossReply?: string };
+type PendingQuestion = { resumeStateId: string; sourceItem: string; question: string; player?: string; questionId?: string; asker?: { kind: string; roleId: string } };
+type Context = { pendingBossQuestion?: PendingQuestion; bossReply?: string };
+type Events = { type: 'GO' } | { type: 'BOSS_INTERRUPT'; targetId: string } | { type: 'BOSS_REPLY'; answer: string };
+`;
+
 const FSM_ARTIFACT = `import { assign, fromPromise, setup } from 'xstate';
 
+${FSM_TYPES}
 export const machine = setup({
+  types: { context: {} as Context, events: {} as Events },
   actors: {
-    captain: fromPromise(async () => {
+    captain: fromPromise<ActorOutput, ActorInput>(async () => {
       throw new Error('captain actor must be provided by the runner');
     }),
   },
@@ -149,7 +159,7 @@ export const machine = setup({
                 resumeStateId: 'work',
                 sourceItem: 'FLOW-1',
                 player: 'Writer',
-                question: event.output.question,
+                question: event.output.guard === 'needsBossReply' ? event.output.question : '',
               }),
             }),
           },
@@ -210,9 +220,11 @@ const SCHEMA_3_FSM_ARTIFACT = `import { assign, fromPromise, setup } from 'xstat
 // The workflow declares no parallel group, so the cohort declaration is empty.
 export const concurrentRoleSets: readonly (readonly string[])[] = [];
 
+${FSM_TYPES}
 export const machine = setup({
+  types: { context: {} as Context, events: {} as Events },
   actors: {
-    player: fromPromise(async () => {
+    player: fromPromise<ActorOutput, ActorInput>(async () => {
       throw new Error('player actor must be provided by the runner');
     }),
   },
@@ -261,7 +273,7 @@ export const machine = setup({
                 questionId: 'work',
                 resumeStateId: 'work',
                 sourceItem: 'FLOW-1',
-                question: event.output.question,
+                question: event.output.guard === 'needsBossReply' ? event.output.question : '',
               }),
             }),
           },
@@ -459,6 +471,11 @@ describe('reserved slc pipeline consumes Playbook definitions (self-hosting-2)',
     try {
       const work = join(root, 'work');
       await mkdir(work, { recursive: true });
+      await symlink(
+        join(repoRoot, 'node_modules'),
+        join(work, 'node_modules'),
+        'dir',
+      );
       const source = join(work, 'text2gears.md');
       await writeFile(source, '# A phase definition\n');
       await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
@@ -532,6 +549,11 @@ describe('playbook pipeline shares Playbook definitions (self-hosting-6, self-ho
     try {
       const work = join(root, 'work');
       await mkdir(work, { recursive: true });
+      await symlink(
+        join(repoRoot, 'node_modules'),
+        join(work, 'node_modules'),
+        'dir',
+      );
       const source = join(work, 'flow.md');
       await writeFile(source, '# A workflow\n');
       await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
@@ -581,6 +603,11 @@ describe('playbook pipeline shares Playbook definitions (self-hosting-6, self-ho
 
       const work = join(root, 'work');
       await mkdir(work, { recursive: true });
+      await symlink(
+        join(repoRoot, 'node_modules'),
+        join(work, 'node_modules'),
+        'dir',
+      );
       const source = join(work, 'flow.md');
       await writeFile(source, '# A workflow\n');
       await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
@@ -915,9 +942,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       cwd: work,
     });
     expect(result.ok).toBe(false);
-    expect(result.diagnostics.join('\n')).toMatch(
-      /FSM conformance could not be checked/,
-    );
+    expect(result.diagnostics.join('\n')).toMatch(/TS[0-9]+:/);
     expect(await exists(join(artDir, 'code.playbook.ts'))).toBe(false);
     expect(await exists(join(artDir, '.slc', 'latest'))).toBe(false);
     expect(await exists(join(artDir, 'code.gears-fsm.test.ts'))).toBe(false);

@@ -21,7 +21,7 @@ Essential project-specific references are `slc`, this project's compiler CLI, an
 
 #### phase-execution-1
 
-The slc command shall perform only generic pipeline mechanics, and shall not contain phase-specific transformation rules, phase-specific prompt notes, or phase-specific semantic validators beyond the existing artifact-verification gates [[phase-execution-51](#phase-execution-51)], [[phase-execution-53](#phase-execution-53)], [[phase-execution-55](#phase-execution-55)], [[phase-execution-59](#phase-execution-59)], [[phase-execution-60](#phase-execution-60)] ([DR-003](../decisions/003-slc-phase-execution.md)).
+The slc command shall perform only generic pipeline mechanics, and shall not contain phase-specific transformation rules, phase-specific prompt notes, or phase-specific semantic validators beyond the existing artifact-verification gates [[phase-execution-51](#phase-execution-51)], [[phase-execution-53](#phase-execution-53)], [[phase-execution-55](#phase-execution-55)], [[phase-execution-59](#phase-execution-59)], [[phase-execution-60](#phase-execution-60)], [[phase-execution-64](#phase-execution-64)] ([DR-003](../decisions/003-slc-phase-execution.md)).
 
 #### phase-execution-2
 
@@ -150,7 +150,11 @@ Where a link phase links exactly one `fsm` object into Playbook's `playbook` lin
 
 #### phase-execution-55
 
-Where a compile phase transforms a `gears` source into an `fsm` target, when its interpreted or compiled performing agent returns successful work, the slc command shall check the live FSM's conformance to that GEARS source [[verification-1](verification.md#verification-1)] using reconciled artifact-schema evidence [[verification-21](verification.md#verification-21)] from the FSM and the actual full-link target when available, without prior linked artifacts or compiler phase pins, relay schema, conformance, and module-import findings through mechanical repair [[phase-execution-56](#phase-execution-56)], and recheck after generic phase acceptance [[phase-execution-4](#phase-execution-4)], [[phase-execution-5](#phase-execution-5)] before any downstream phase; an absent target remains the generic target check's responsibility ([DR-033](../decisions/033-early-conformance-and-mechanical-repair.md)).
+Where a compile phase transforms a `gears` source into an `fsm` target, when its interpreted or compiled performing agent returns successful work, the slc command shall first require a TypeScript target to pass strict artifact checking [[verification-33](verification.md#verification-33)], then check the live FSM's conformance to that GEARS source [[verification-1](verification.md#verification-1)] using reconciled artifact-schema evidence [[verification-21](verification.md#verification-21)] from the FSM and the actual full-link target when available, without prior linked artifacts or compiler phase pins, relay type, schema, conformance, and module-import findings through mechanical repair [[phase-execution-56](#phase-execution-56)], and recheck after generic phase acceptance [[phase-execution-4](#phase-execution-4)], [[phase-execution-5](#phase-execution-5)] before any downstream phase; an absent target remains the generic target check's responsibility ([DR-033](../decisions/033-early-conformance-and-mechanical-repair.md), [DR-039](../decisions/039-strict-fsm-boundary.md)).
+
+#### phase-execution-64
+
+Where a compile phase consumes an `fsm` TypeScript source or a Playbook link consumes one TypeScript FSM object, when execution would begin, the slc command shall require that protected input to pass strict artifact checking [[verification-33](verification.md#verification-33)] before selecting or constructing an executor, reporting any findings as an invalid FSM source and starting no consumer agent ([DR-039](../decisions/039-strict-fsm-boundary.md)).
 
 #### phase-execution-56
 
@@ -335,6 +339,12 @@ Where fixture compilation produces or consumes GEARS, when the runner executes t
 #### phase-execution-63
 
 Where a fixture definition outside the compilation workspace cites a sibling file, when the real interpreted and compiled execution boundaries transport compile and link work, the integration suite shall verify that performing agents can locate and read the sibling through the supplied absolute definition origin, preserve the definition bytes and existing configured options, and leave routing Captain and judge prompts unchanged [[phase-execution-62](#phase-execution-62)].
+
+### Strict FSM boundary acceptance
+
+#### phase-execution-65
+
+Where real TypeScript FSM fixtures enter producer or consumer execution, when the integration suite runs the compiler, the suite shall verify rejection of a loadable but type-invalid FSM before downstream work [[phase-execution-55](#phase-execution-55)], zero consumer executor selections for an invalid supplied FSM [[phase-execution-64](#phase-execution-64)], bounded same-Coder repair followed by acceptance and stopping on cancellation [[phase-execution-56](#phase-execution-56)], and rejection of protected-input edits during repair [[phase-execution-5](#phase-execution-5)].
 
 ## References
 

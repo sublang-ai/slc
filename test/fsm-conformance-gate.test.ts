@@ -24,7 +24,7 @@ export const machine = { config: {
   context: { bossIntent: '' },
   states: { work: {
     meta: { playbook: { stateId: 'work', role: 'agent' } },
-    invoke: { src: 'player', input: ({context}) => ({
+    invoke: { src: 'player', input: ({context}: {context: {bossIntent: string}}) => ({
       stateId: 'work', sourceItem: 'TASK-1', role: 'agent',
       prompt: ${interpolate ? "'Carry out ' + context.bossIntent + '.'" : "'Carry out <boss-intent>.'"},
       bossIntent: context.bossIntent,
@@ -96,7 +96,7 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
       expect(result.diagnostics.join('\n')).toContain(
         content === fsm(true)
           ? 'TASK-1: FSM prompt is not the GEARS prompt verbatim'
-          : 'FSM conformance could not be checked',
+          : 'TS',
       );
       expect(await readFile(source, 'utf8')).toBe(GEARS);
     },

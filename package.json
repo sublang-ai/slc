@@ -60,7 +60,6 @@
     "@anthropic-ai/claude-agent-sdk": "*",
     "@eslint/js": "^10.0.1",
     "@openai/codex-sdk": "*",
-    "@types/node": "^25.9.3",
     "eslint": "^10.5.0",
     "globals": "^17.6.0",
     "p-queue": "^9.3.1",
@@ -72,6 +71,7 @@
     "@sublang/cligent": "^0.24.0",
     "@sublang/playbook": "^12.3.0",
     "@sublang/spex": "^0.3.0",
+    "@types/node": "^25.9.3",
     "typescript": "^6.0.3",
     "xstate": "^5.32.4",
     "yaml": "^2.9.0"

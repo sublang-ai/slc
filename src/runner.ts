@@ -107,6 +107,7 @@ import {
   verifierSupportFiles,
 } from './verify-support.js';
 import { checkSourceGearsContract } from './verify-source.js';
+import { checkFsmTypeScript } from './verify-typescript.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
 export interface CompiledSelection {
@@ -256,6 +257,7 @@ async function runFull(
     optimize: !invocation.noOptimize,
     normalize: invocation.normalize || raw,
     sourceFidelity: invocation.pipeline !== RESERVED_SLC_PIPELINE,
+    signal: deps.signal,
   });
   const verification = {
     pipeline: invocation.pipeline,
@@ -329,7 +331,15 @@ async function runSinglePhase(
     const target =
       (invocation.output === null ? null : resolve(cwd, invocation.output)) ??
       join(artDir, `${basename}.${phase.target.format}.opt${phase.target.ext}`);
-    const step = compileStep(pipeline, phase, source, target, sourceFidelity);
+    const step = compileStep(
+      pipeline,
+      phase,
+      source,
+      target,
+      sourceFidelity,
+      undefined,
+      deps.signal,
+    );
     return executeSteps([step], pipeline, deps);
   }
 
@@ -350,6 +360,8 @@ async function runSinglePhase(
     source,
     artifact.path,
     sourceFidelity,
+    undefined,
+    deps.signal,
   );
   return executeSteps([step], pipeline, deps);
 }
@@ -383,6 +395,7 @@ async function runDirectLink(
         linkTarget: resolve(cwd, invocation.linkTarget),
         options: invocation.options,
         linked,
+        signal: deps.signal,
       }),
     ],
     pipeline,
@@ -422,6 +435,7 @@ async function runFullLink(
     optimize: !invocation.noOptimize,
     normalize,
     sourceFidelity: invocation.pipeline !== RESERVED_SLC_PIPELINE,
+    signal: deps.signal,
     linkTarget: resolve(cwd, invocation.linkTarget),
   });
 
@@ -441,6 +455,7 @@ async function runFullLink(
       linkTarget: resolve(cwd, invocation.linkTarget),
       options: invocation.options,
       linked,
+      signal: deps.signal,
     }),
   ];
   const gearsPlan = plan.find(
@@ -764,6 +779,8 @@ interface PhaseStep {
   compileFidelity?: MechanicalReview;
   /** Existing GEARS source findings must precede consumer construction. */
   gearsSourceContract?: MechanicalReview;
+  /** Strict FSM input checks run before constructing a protected-input consumer. */
+  fsmSourceTypecheck?: MechanicalReview;
   /** Present for a gated `playbook` link step (DR-030, phase-execution-53). */
   linkFidelity?: MechanicalReview;
 }
@@ -866,6 +883,7 @@ function buildCompileSteps(opts: {
   sourceFidelity: boolean;
   /** Concrete generated-artifact target, never a compiler phase pin. */
   linkTarget?: string;
+  signal?: AbortSignal;
 }): PhaseStep[] {
   const { pipeline, plan, artDir, basename } = opts;
   const steps: PhaseStep[] = [];
@@ -917,6 +935,7 @@ function buildCompileSteps(opts: {
           artifact.path,
           opts.sourceFidelity,
           opts.linkTarget,
+          opts.signal,
         ),
       );
       previous = artifact.path;
@@ -934,6 +953,7 @@ function buildCompileSteps(opts: {
         raw,
         opts.sourceFidelity,
         opts.linkTarget,
+        opts.signal,
       ),
     );
     previous = raw;
@@ -953,6 +973,7 @@ function buildCompileSteps(opts: {
           target,
           opts.sourceFidelity,
           opts.linkTarget,
+          opts.signal,
         ),
       );
       previous = target;
@@ -968,6 +989,7 @@ function compileStep(
   target: string,
   sourceFidelity: boolean,
   linkTarget?: string,
+  signal?: AbortSignal,
 ): PhaseStep {
   // Only a text-to-GEARS phase conserves authored Source fragments, and the
   // reserved meta-pipeline compiles definitions under its own fidelity gate
@@ -978,7 +1000,13 @@ function compileStep(
     phase.target.format === 'gears';
   const fsmConformance =
     phase.source.format === 'gears' && phase.target.format === 'fsm'
-      ? () => fsmConformanceFindings(source, target, linkTarget)
+      ? async () => {
+          if (phase.target.ext === '.ts') {
+            const findings = await checkFsmTypeScript(target, signal);
+            if (findings.length > 0) return findings;
+          }
+          return fsmConformanceFindings(source, target, linkTarget);
+        }
       : undefined;
   const checks: MechanicalReview[] = [
     ...(gated ? [() => sourceFidelityFindings(source, target)] : []),
@@ -1007,6 +1035,9 @@ function compileStep(
       : { compileFidelity: mechanicalReview }),
     ...(phase.source.format === 'gears'
       ? { gearsSourceContract: () => gearsContractFindings(source) }
+      : {}),
+    ...(phase.source.format === 'fsm' && phase.source.ext === '.ts'
+      ? { fsmSourceTypecheck: () => checkFsmTypeScript(source, signal) }
       : {}),
   };
 }
@@ -1113,6 +1144,7 @@ function linkStep(opts: {
   linkTarget: string;
   options: readonly LinkOptionPair[];
   linked: string;
+  signal?: AbortSignal;
 }): PhaseStep {
   const { link } = opts;
   const fsmObjects = opts.objects.filter((object) =>
@@ -1136,6 +1168,14 @@ function linkStep(opts: {
     pinKey: 'link',
     targetExt: link.target.ext,
     ...(gated === undefined ? {} : { linkFidelity: gated }),
+    ...(gated !== undefined &&
+    link.source.format === 'fsm' &&
+    link.source.ext === '.ts'
+      ? {
+          fsmSourceTypecheck: () =>
+            checkFsmTypeScript(fsmObjects[0], opts.signal),
+        }
+      : {}),
   };
 }
 
@@ -1389,6 +1429,36 @@ async function executeSteps(
       }
     }
 
+    if (step.fsmSourceTypecheck !== undefined) {
+      let findings: readonly string[];
+      try {
+        findings = await step.fsmSourceTypecheck();
+      } catch (error) {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons: [
+              `FSM TypeScript check could not run: ${messageOf(error)}`,
+            ],
+          }),
+        );
+        return stopped(index);
+      }
+      if (findings.length > 0) {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons: ['invalid FSM source', ...findings],
+          }),
+        );
+        return stopped(index);
+      }
+    }
+
     // Selecting a compiled executor can throw rather than return a verdict —
     // notably a pinned link target whose installed engine declares no
     // supported contract, which the host factory rejects (phase-execution-30).
@@ -1473,7 +1543,12 @@ async function executeSteps(
     // Recheck even custom executors that do not consume mechanicalReview.
     // runPhase has already enforced the unchanged generic protection checks.
     if (step.compileFidelity !== undefined) {
-      const findings = await step.compileFidelity();
+      let findings: readonly string[];
+      try {
+        findings = await step.compileFidelity();
+      } catch (error) {
+        findings = [`mechanical review could not run: ${messageOf(error)}`];
+      }
       if (findings.length > 0) {
         fail();
         diagnostics.push(

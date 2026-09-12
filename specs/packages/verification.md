@@ -79,6 +79,12 @@ Where a direct-Captain or delegated-player GEARS item declares a canonical `Resu
 
 When checking GEARS result syntax independently of an FSM, the slc command shall return exactly its existing parser's item-prefixed result-contract findings for ordinary and nested-call metadata [[verification-13](#verification-13)] and script metadata [[verification-15](#verification-15)], as a pure function of that GEARS text without adding role, schema, item-presence, or natural-language checks; a result block extends to the next item or section heading, so nonblank non-entry text inside it remains malformed while prose outside it and an ordinary item without a Results label remain accepted ([DR-035](../decisions/035-gears-contract-at-producer.md)).
 
+### Strict FSM type checking
+
+#### verification-33
+
+When checking a TypeScript FSM, the slc command shall type-check its unchanged root as standalone ESM with SLC's installed TypeScript, preserving original filenames and import resolution while retaining imported files' actual module formats, under ES2022 NodeNext strict checking with unused-local, unused-parameter, implicit-override, switch-fallthrough, isolated-module, case-consistency, verbatim-module and erasable-syntax checks, allowing native `.ts` imports under `noEmit`, skipping installed declaration checks, and selecting only SLC's installed Node ambient types, without project compiler configuration, source execution, emitted files, or unrelated test inputs, returning deterministic file/line/code diagnostics and failing closed on checker failure, with cancellation checked before local checking and after yielding pending cancellation events ([DR-039](../decisions/039-strict-fsm-boundary.md)).
+
 ### Test generation
 
 #### verification-2
@@ -344,6 +350,12 @@ Where real XState fixtures exercise machine-root and ordinary state identities, 
 | An empty or null own `meta.playbook` namespace on the machine root | The installed runtime rejects snapshot metadata, and conformance rejects the namespace before linking with unchanged source and FSM bytes. |
 | The same fixture with only the root's public-identity metadata removed | The snapshot exposes the ordinary state's identity, conformance accepts it, and the root's XState id, description, and unrelated metadata remain intact. |
 | Existing flat, structured, and historical state-node identities | Conformance preserves their acceptance without relabelling them or extending the root restriction to ordinary nodes. |
+
+### Strict FSM boundary acceptance
+
+#### verification-34
+
+Where real TypeScript fixtures use standalone ESM roots, relative imports, project compiler and ambient declarations, and compiler configuration, when the integration suite checks them, the suite shall verify SLC-owned compiler and Node ambient authority, ignored project compiler configuration, preserved original filenames and imported module formats, strict diagnostics for invalid types, unchanged source and dependency bytes, cancellation, and distinct checker failure [[verification-33](#verification-33)].
 
 ## References
 
