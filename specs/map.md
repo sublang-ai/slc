@@ -56,12 +56,16 @@ meta.md       The spec of specs
 | [DR-028](decisions/028-contract-based-adoption-without-recompilation.md) | 028-contract-based-adoption-without-recompilation.md | Profile selection by the engine's declared ABI and schema, bundle and demo retention by verified equivalence, run-time definition relay, the published host-capabilities facade, and routine decision-free adoption |
 | [DR-029](decisions/029-source-fidelity-gate.md) | 029-source-fidelity-gate.md | Deterministic Source-fidelity gate at the text2gears seam: authored fragments conserved verbatim and in order, no invented prompt line, findings relayed in place of a Reviewer call or failing an unreviewed phase closed |
 | [DR-030](decisions/030-link-fidelity-gate.md) | 030-link-fidelity-gate.md | Deterministic link-fidelity gate before review: the emitted prompt-contract suite's own checks run on the live linked module, relayed as a correction round or failing an unreviewed link closed |
+| [DR-031](decisions/031-measured-compilation-performance.md) | 031-measured-compilation-performance.md | Opt-in bounded cold-compilation measurements, per-call accounting, separate artifact validation, and evidence requirements for performance experiments |
+| [DR-032](decisions/032-noninteractive-source-clarification.md) | 032-noninteractive-source-clarification.md | Stateless structured questions for unresolved source behavior at any phase; edit the source and repeat the command |
 
 ## Packages
 
 | File | Summary |
 | --- | --- |
+| [clarification.md](packages/clarification.md) | Generic noninteractive source questions, executor stopping, structured diagnostics, and original-source reruns |
 | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
+| [compilation-measurement.md](packages/compilation-measurement.md) | Opt-in cold-compilation benchmark, explicit settings, phase and agent-call measurements, cancellation, private local evidence, and artifact validation |
 | [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
 | [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, exact multi-profile runtime contracts, routine locked Playbook adoption, demo acceptance, and package publication checks |
 | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
