@@ -30,4 +30,4 @@ Return existing result-contract findings to the GEARS producer and avoid futile 
 The unchanged measured GEARS now fails the actual runner's consumer preflight in 175.69 ms including pipeline setup, with zero executor selections, compiled-executor constructions, or agent calls; the standalone parser check takes 0.082 ms.
 The replay script and evidence are `/private/tmp/slc-gears-consumer-preflight-probe.mjs` and `/private/tmp/slc-gears-consumer-preflight-evidence.json`.
 Passed 64 tests across the new boundary, Source-fidelity, early-FSM, and clarification suites, plus TypeScript, ESLint, Prettier, Spex 3 lint, and whitespace checks.
-The broader suite passed 1,236 tests and failed one benchmark-runtime fixture newly subject to TypeScript checking; that fixture correction is being handled separately.
+After the benchmark runtime fixture received its actual TypeScript contracts, the complete repository suite passed 1,240 tests across 68 files, with two intentional skips.
