@@ -83,7 +83,7 @@ it itself, and a global SDK is invisible to a project's nested
 ## Quick start
 
 Write a prose workflow as a `.md` or `.txt` file —
-[`demo/workflow.txt`](demo/workflow.txt) is a complete one-paragraph
+[`demo/workflow.txt`](demo/workflow.txt) is a one-paragraph
 example — and compile it from any directory:
 
 ```bash
@@ -102,7 +102,9 @@ playbook run ./my-workflow.ts "<your task>"
 Compilation runs your configured coding agent at each phase. Elapsed time
 depends on the workflow, model, effort and required corrections; the
 [performance report](docs/compilation-performance.md) records measured
-settings, failures and validation separately. `slc` reports each phase,
+settings, failures and validation separately. The [reproduction guide](docs/compilation-reproduction.md)
+recreates the locally measured 3:17 minimal compilation with explicit compiler,
+definition and model versions. `slc` reports each phase,
 each artifact with its elapsed time, and a heartbeat at least every 30
 seconds on stderr. An agent call that goes silent for `stallTimeout`
 seconds fails that phase. Success prints the artifact paths and exits 0;
