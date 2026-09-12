@@ -21,7 +21,7 @@ Essential project-specific references are `slc`, this project's compiler CLI, an
 
 #### phase-execution-1
 
-The slc command shall perform only generic pipeline mechanics, and shall not contain phase-specific transformation rules, phase-specific prompt notes, or phase-specific semantic validators beyond the existing artifact-verification gates [[phase-execution-51](#phase-execution-51)], [[phase-execution-53](#phase-execution-53)], [[phase-execution-55](#phase-execution-55)] ([DR-003](../decisions/003-slc-phase-execution.md)).
+The slc command shall perform only generic pipeline mechanics, and shall not contain phase-specific transformation rules, phase-specific prompt notes, or phase-specific semantic validators beyond the existing artifact-verification gates [[phase-execution-51](#phase-execution-51)], [[phase-execution-53](#phase-execution-53)], [[phase-execution-55](#phase-execution-55)], [[phase-execution-59](#phase-execution-59)], [[phase-execution-60](#phase-execution-60)] ([DR-003](../decisions/003-slc-phase-execution.md)).
 
 #### phase-execution-2
 
@@ -146,6 +146,16 @@ Where a compile phase transforms a `gears` source into an `fsm` target, when its
 #### phase-execution-56
 
 Where a configured performing call has no explicit `allowedTools` property and returns successful non-`BLOCKED` work without a clarification marker [[clarification-6](clarification.md#clarification-6)], when its deterministic mechanical check reports findings, the slc command shall relay them to the same Coder as a numbered `FINDINGS:` list through the existing private correction-envelope protocol [[phase-execution-46](#phase-execution-46)], with or without an independent Reviewer, sharing a maximum of three mechanical-or-Reviewer rounds and two Coder corrections, returning the decoded result immediately when mechanically clean and no Reviewer is configured, creating any independent Reviewer only after mechanical checks are clean, failing closed with the surviving findings after the last round, and stopping before another check or agent call on cancellation or a decoded clarification; calls with neither a mechanical check nor a Reviewer and explicit `allowedTools` control calls retain their single unchanged Coder call ([DR-033](../decisions/033-early-conformance-and-mechanical-repair.md)).
+
+### GEARS result-contract boundary
+
+#### phase-execution-59
+
+Where a compile phase produces the declared `gears` format, including normalization to a GEARS entry format, a format-preserving pass, or the reserved meta-pipeline, when its performing agent returns successful work without a clarification request [[clarification-6](clarification.md#clarification-6)], the slc command shall check the live target's existing GEARS result-contract findings [[verification-29](verification.md#verification-29)] together with any applicable Source-fidelity check [[phase-execution-51](#phase-execution-51)], relay findings through bounded same-Coder repair [[phase-execution-56](#phase-execution-56)], and recheck before accepting the target after generic protection checks [[phase-execution-4](#phase-execution-4)], [[phase-execution-5](#phase-execution-5)], leaving an absent target to those generic checks and preserving source obligations under the authoritative phase definition [[phase-execution-14](#phase-execution-14)] ([DR-035](../decisions/035-gears-contract-at-producer.md)).
+
+#### phase-execution-60
+
+Where a compile phase consuming the declared `gears` format is selected for execution, when its existing source has GEARS result-contract findings [[verification-29](verification.md#verification-29)], the slc command shall fail before selecting its execution strategy or invoking its executor, report the source path and findings with the failed phase and target [[phase-execution-9](#phase-execution-9)], and preserve that protected source [[phase-execution-3](#phase-execution-3)] without consumer repair calls or a source-clarification outcome ([DR-035](../decisions/035-gears-contract-at-producer.md)).
 
 ### Compiled execution
 
@@ -306,6 +316,10 @@ Where fixture compilation produces a GEARS prompt containing a runtime placehold
 #### phase-execution-58
 
 Where configured interpreted and compiled performing calls use fixture transports without an independent Reviewer, when deterministic findings require correction, the integration suite shall verify successful same-Coder recovery, one call for a clean artifact, at most two repairs for recurring findings, private-envelope validation, and stopping on cancellation or decoded clarification [[phase-execution-56](#phase-execution-56)], together with protected-input rejection after a correction [[phase-execution-5](#phase-execution-5)]; an independently configured Reviewer shall be constructed only after the mechanical findings clear [[phase-execution-56](#phase-execution-56)].
+
+#### phase-execution-61
+
+Where fixture compilation produces or consumes GEARS, when the runner executes the boundary cases, the integration suite shall verify that ordinary producers and format-preserving passes repair malformed result metadata while preserving the source's loop obligation and authored prompt, reject persistent findings and malformed normalization output before downstream work, accept roleless and reserved-pipeline valid syntax, and retain Source-fidelity findings and immediate clarification stopping [[phase-execution-59](#phase-execution-59)], while malformed supplied GEARS fails before executor selection with zero executor calls and unchanged input [[phase-execution-60](#phase-execution-60)].
 
 ## References
 

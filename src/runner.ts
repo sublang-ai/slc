@@ -88,6 +88,7 @@ import {
 import {
   artifactSchemaForPlaybookProvenance,
   checkGearsFsmConformance,
+  checkGearsResultContract,
   checkLinkedModuleContract,
   emitFsmCoverageTest,
   emitFsmIntrospectionTest,
@@ -759,12 +760,12 @@ interface PhaseStep {
   /** Pipeline pin key; absent for the host-owned normalization step. */
   pinKey?: string;
   targetExt: string;
-  /** Present for a gated text-to-GEARS step (DR-029, phase-execution-51). */
-  sourceFidelity?: true;
+  /** Composed existing checks over a compile phase's live target. */
+  compileFidelity?: MechanicalReview;
+  /** Existing GEARS source findings must precede consumer construction. */
+  gearsSourceContract?: MechanicalReview;
   /** Present for a gated `playbook` link step (DR-030, phase-execution-53). */
   linkFidelity?: MechanicalReview;
-  /** Existing GEARS-to-FSM conformance checked before downstream work (DR-033). */
-  fsmConformance?: MechanicalReview;
 }
 
 /** A canonical full/full-link invocation eligible for history. */
@@ -876,6 +877,10 @@ function buildCompileSteps(opts: {
       artDir,
       `${basename}.${entry.source.format}${entry.source.ext}`,
     );
+    const gearsContract =
+      entry.source.format === 'gears'
+        ? () => gearsContractFindings(normalized)
+        : undefined;
     steps.push({
       request: {
         kind: 'compile',
@@ -883,9 +888,15 @@ function buildCompileSteps(opts: {
         source: previous,
         target: normalized,
         references: [phaseDefinition(pipeline, entry.name)],
+        ...(gearsContract === undefined
+          ? {}
+          : { mechanicalReview: gearsContract }),
       },
       phase: 'normalize',
       targetExt: entry.source.ext,
+      ...(gearsContract === undefined
+        ? {}
+        : { compileFidelity: gearsContract }),
     });
     previous = normalized;
   }
@@ -969,9 +980,17 @@ function compileStep(
     phase.source.format === 'gears' && phase.target.format === 'fsm'
       ? () => fsmConformanceFindings(source, target, linkTarget)
       : undefined;
-  const mechanicalReview = gated
-    ? () => sourceFidelityFindings(source, target)
-    : fsmConformance;
+  const checks: MechanicalReview[] = [
+    ...(gated ? [() => sourceFidelityFindings(source, target)] : []),
+    ...(phase.target.format === 'gears'
+      ? [() => gearsContractFindings(target)]
+      : []),
+    ...(fsmConformance === undefined ? [] : [fsmConformance]),
+  ];
+  const mechanicalReview =
+    checks.length === 0
+      ? undefined
+      : async () => (await Promise.all(checks.map((check) => check()))).flat();
   return {
     request: {
       kind: 'compile',
@@ -983,9 +1002,23 @@ function compileStep(
     phase: phase.name,
     pinKey: phase.name,
     targetExt: phase.target.ext,
-    ...(gated ? { sourceFidelity: true as const } : {}),
-    ...(fsmConformance === undefined ? {} : { fsmConformance }),
+    ...(mechanicalReview === undefined
+      ? {}
+      : { compileFidelity: mechanicalReview }),
+    ...(phase.source.format === 'gears'
+      ? { gearsSourceContract: () => gearsContractFindings(source) }
+      : {}),
   };
+}
+
+/** Parser-only findings belong to the phase that can still edit the GEARS. */
+async function gearsContractFindings(path: string): Promise<readonly string[]> {
+  try {
+    return checkGearsResultContract(await readFile(path, 'utf8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    return [`GEARS result contract could not be checked: ${messageOf(error)}`];
+  }
 }
 
 /**
@@ -1336,6 +1369,26 @@ async function executeSteps(
         elapsedMs: Date.now() - startedAt,
       });
 
+    // The consumer cannot repair its protected source. Reject these existing
+    // parser findings before selecting or constructing any execution strategy.
+    if (step.gearsSourceContract !== undefined) {
+      const findings = await step.gearsSourceContract();
+      if (findings.length > 0 && step.request.kind === 'compile') {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons: [
+              `invalid GEARS source: ${step.request.source}`,
+              ...findings,
+            ],
+          }),
+        );
+        return stopped(index);
+      }
+    }
+
     // Selecting a compiled executor can throw rather than return a verdict —
     // notably a pinned link target whose installed engine declares no
     // supported contract, which the host factory rejects (phase-execution-30).
@@ -1417,31 +1470,10 @@ async function executeSteps(
       return stopped(index);
     }
     diagnostics.push(...result.diagnostics);
-    // The DR-029 gate on the accepted result: a reviewed loop already relayed
-    // its findings to the Coder for repair, so a finding surviving to here is
-    // an unreviewed — or unrepaired — Source-fidelity break and fails the phase
-    // closed (phase-execution-51).
-    if (step.sourceFidelity === true && step.request.kind === 'compile') {
-      const findings = await sourceFidelityFindings(
-        step.request.source,
-        target,
-      );
-      if (findings.length > 0) {
-        fail();
-        diagnostics.push(
-          formatFailureReport({
-            phase: step.phase,
-            target,
-            reasons: [...findings],
-          }),
-        );
-        return stopped(index);
-      }
-    }
     // Recheck even custom executors that do not consume mechanicalReview.
     // runPhase has already enforced the unchanged generic protection checks.
-    if (step.fsmConformance !== undefined) {
-      const findings = await step.fsmConformance();
+    if (step.compileFidelity !== undefined) {
+      const findings = await step.compileFidelity();
       if (findings.length > 0) {
         fail();
         diagnostics.push(

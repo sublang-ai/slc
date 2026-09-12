@@ -499,6 +499,19 @@ export function parseGearsItems(gears: string): GearsItem[] {
   return items;
 }
 
+function gearsResultFindings(items: readonly GearsItem[]): string[] {
+  return items.flatMap((item) =>
+    (item.resultFindings ?? []).map(
+      (finding) => `GEARS item ${item.id}: ${finding}`,
+    ),
+  );
+}
+
+/** Existing GEARS result-parser findings, without requiring a consumer FSM. */
+export function checkGearsResultContract(gears: string): string[] {
+  return gearsResultFindings(parseGearsItems(gears));
+}
+
 /** The source generation and canonical role/cohort declaration of one GEARS artifact. */
 export interface GearsRoleContract {
   generation: 'schema-1' | 'schema-3' | 'unspecified';
@@ -1509,13 +1522,7 @@ export function checkGearsFsmConformance(
     }
   }
 
-  for (const item of items) {
-    findings.push(
-      ...(item.resultFindings ?? []).map(
-        (finding) => `GEARS item ${item.id}: ${finding}`,
-      ),
-    );
-  }
+  findings.push(...gearsResultFindings(items));
 
   for (const state of states) {
     findings.push(

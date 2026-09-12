@@ -74,6 +74,10 @@ When a Captain result omits the ordinary Boss-reply key and differs from the clo
 
 Where a direct-Captain or delegated-player GEARS item declares a canonical `Results:` block, when checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc command shall parse its ordered single-line ``- `<guardName>`: <nonblank description>`` entries separately from the blockquoted acting prompt and report a finding unless the FSM state's ordered `result` entries equal them exactly after removing only compiler-owned `needsBossReply`; it shall also report a misplaced or malformed label, malformed or duplicate entries, an empty declared block, source-owned `needsBossReply`, or result metadata on a nested-playbook call item, while allowing immutable pre-decision GEARS artifacts to omit the block, and `<guardName>` shall match `[A-Za-z_$][A-Za-z0-9_$]*` ([DR-012](../decisions/012-playbook-routing-control-separation.md)).
 
+#### verification-29
+
+When checking GEARS result syntax independently of an FSM, the slc command shall return exactly its existing parser's item-prefixed result-contract findings for ordinary and nested-call metadata [[verification-13](#verification-13)] and script metadata [[verification-15](#verification-15)], as a pure function of that GEARS text without adding role, schema, item-presence, or natural-language checks; a result block extends to the next item or section heading, so nonblank non-entry text inside it remains malformed while prose outside it and an ordinary item without a Results label remain accepted ([DR-035](../decisions/035-gears-contract-at-producer.md)).
+
 ### Test generation
 
 #### verification-2
@@ -290,6 +294,10 @@ Where the maintained reference Sources `@sublang/playbook` installs are paired w
 #### verification-28
 
 Where a linked module sits beside its FSM, when the link-fidelity check runs over each case, it shall report no finding for every installed maintained bundle whose composers honor the link contract or for a composer that names a declared peer role's identity, name the mismatch for a composer that resolves its player-facing identity from a role the artifact declares nowhere, name the import diagnostic for a module that cannot be imported, and report no finding for an absent module, an unimportable FSM, or a module exposing no composer for an actor the machine invokes [[verification-27](#verification-27)].
+
+#### verification-30
+
+When fixture GEARS enters the real producer or consumer boundary, the integration suite shall verify that standalone result syntax reports the same item-prefixed findings as conformance for malformed, duplicate, empty, misplaced, compiler-owned, nested-call, and script metadata, accepts ordinary omitted Results and roleless work, and distinguishes malformed trailing result text from prose after a section boundary [[verification-29](#verification-29)].
 
 ### Script acceptance
 
