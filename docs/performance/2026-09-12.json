@@ -1,6 +1,6 @@
 {
   "schema": "sublang.slc.performance-progress.v1",
-  "asOf": "2026-09-12T21:03:10.040Z",
+  "asOf": "2026-09-12T21:24:20.627Z",
   "scope": "Settled full-minimal, full-broader-demo, fixed-FSM link, settings-failure and explicitly canceled measurements; scopes are not interchangeable. No accepted successful five-minute full compile; ongoing work omitted.",
   "targetMs": 300000,
   "targetAchieved": false,
@@ -419,6 +419,12 @@
       "observation": "Captured by the benchmark before execution; actual v6 runtime, not the later v7 freeze.",
       "files": 43,
       "sha256": "3ac1c32e3c98c65c41c23e3c3cdb3df68bd327ca7a8c3f7bb7b548fe64b7c3b9"
+    },
+    "compile-kqEmCN": {
+      "path": "/private/tmp/slc-gpt6-current-v8/dist",
+      "observation": "Captured by the benchmark before execution; frozen v8 contains coverage correction 6ba16d0.",
+      "files": 43,
+      "sha256": "94e7e042fd1d44d735cb2c408df6c08f47f919d84451baf2cfcfa7ad8ebf8ee0"
     }
   },
   "runtimeIdentityLimitations": [
@@ -11198,6 +11204,787 @@
       "sourceMatchesRetainedBroaderFsm": true,
       "materializerExecutionConfirmed": false,
       "conclusion": "Separate linking of the unchanged retained broader FSM succeeds in 139.093 seconds; strict TypeScript and linked-contract acceptance add 1.193 seconds. This salvages the failed full run without replacing its history, combining durations into a cold result, or claiming broader runtime acceptance."
+    },
+    {
+      "id": "compile-kqEmCN",
+      "summary": "/private/tmp/slc-performance-evidence/compile-kqEmCN/summary.json",
+      "scope": "full",
+      "workload": "Cold default 292-byte minimal workflow with canonical-storage producer guidance",
+      "startedAt": "2026-09-12T21:15:28.059Z",
+      "finishedAt": "2026-09-12T21:18:23.316Z",
+      "recordedStatus": "failure",
+      "acceptedSuccess": false,
+      "acceptedFullCompilation": false,
+      "comparisonStatus": "generation_under_target_final_strict_acceptance_failed_no_speed_claim",
+      "settings": {
+        "selection": {
+          "agent": "claude-code",
+          "model": "claude-opus-5",
+          "effort": "low"
+        },
+        "cold": true,
+        "optimize": true,
+        "reviewerDisabled": true,
+        "freshPhaseSessions": false,
+        "timeoutSeconds": 900,
+        "nodeVersion": "v25.5.0",
+        "dependencies": {
+          "@sublang/slc": "0.9.0",
+          "@sublang/playbook": "12.3.0",
+          "@sublang/cligent": "0.24.0",
+          "@openai/codex-sdk": "0.153.4",
+          "@anthropic-ai/claude-agent-sdk": "0.3.223",
+          "xstate": "5.32.4",
+          "typescript": "6.0.3"
+        },
+        "stallTimeoutMs": 600000
+      },
+      "source": {
+        "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": null
+      },
+      "lock": {
+        "path": "/private/tmp/slc-gpt6-current-v8/package-lock.json",
+        "bytes": 188194,
+        "sha256": "546a33e16e46b16e12c364550bf1d1cc0d0c685bcf355e66211569b30e05beb1"
+      },
+      "runtimeIdentity": "compile-kqEmCN",
+      "pipelineDefinitions": {
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook": [
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/gears2fsm.md",
+            "bytes": 50917,
+            "sha256": "98d6a28c7309a8933ea7057aec03e0f651a2f9e66c8095ced844fd17bd4e5f8f"
+          },
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/link.md",
+            "bytes": 159645,
+            "sha256": "532b0ad904203200d971b1d4794a7f412db96e151e6c00e49ef2017d8ab22706"
+          },
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/materialize-link.mjs",
+            "bytes": 22784,
+            "sha256": "0d3163b79757e48abd9e2f90a1156309a572e540d2b458a442a2c14c0ee4c253"
+          },
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/optimize.md",
+            "bytes": 5676,
+            "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+          },
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/references/link-contract.md",
+            "bytes": 159699,
+            "sha256": "406541706fad41b89d5afa0118d7ad0a79e104afefb43959820ea84230792e74"
+          },
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/slc.pin-inputs.json",
+            "bytes": 217,
+            "sha256": "6bce47e6270f0771d676ca3aa97d0677ab8110ceeb07202ce0cb111d68899390"
+          },
+          {
+            "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/text2gears.md",
+            "bytes": 20806,
+            "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+          }
+        ]
+      },
+      "pipelineInputClosures": {
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook": {
+          "status": "complete",
+          "boundary": ".",
+          "phases": [
+            {
+              "name": "gears2fsm",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/gears2fsm.md"
+              ]
+            },
+            {
+              "name": "optimize",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/optimize.md"
+              ]
+            },
+            {
+              "name": "text2gears",
+              "declaration": "inline",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/text2gears.md"
+              ]
+            },
+            {
+              "name": "link",
+              "declaration": "sidecar",
+              "paths": [
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/gears2fsm.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/link.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/materialize-link.mjs",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/optimize.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/references/link-contract.md",
+                "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/text2gears.md"
+              ]
+            }
+          ],
+          "files": [
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/gears2fsm.md",
+              "bytes": 50917,
+              "sha256": "98d6a28c7309a8933ea7057aec03e0f651a2f9e66c8095ced844fd17bd4e5f8f"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/link.md",
+              "bytes": 159645,
+              "sha256": "532b0ad904203200d971b1d4794a7f412db96e151e6c00e49ef2017d8ab22706"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/materialize-link.mjs",
+              "bytes": 22784,
+              "sha256": "0d3163b79757e48abd9e2f90a1156309a572e540d2b458a442a2c14c0ee4c253"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/optimize.md",
+              "bytes": 5676,
+              "sha256": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/references/link-contract.md",
+              "bytes": 159699,
+              "sha256": "406541706fad41b89d5afa0118d7ad0a79e104afefb43959820ea84230792e74"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/slc.pin-inputs.json",
+              "bytes": 217,
+              "sha256": "6bce47e6270f0771d676ca3aa97d0677ab8110ceeb07202ce0cb111d68899390"
+            },
+            {
+              "path": "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full/playbook/text2gears.md",
+              "bytes": 20806,
+              "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+            }
+          ],
+          "sha256": "d691efef503d88828feefc8fa3b9514300100ada1b93943d9bdb88d25a7ebd11"
+        }
+      },
+      "verificationHarness": {
+        "files": [
+          {
+            "path": "/private/tmp/slc-gpt6-current-v8/scripts/benchmark-compile.mjs",
+            "bytes": 28021,
+            "sha256": "713db56cf3230bcd791a558a786ffaa472f92408f2563d01cc9d0c4e24d09f07"
+          },
+          {
+            "path": "/private/tmp/slc-gpt6-current-v8/scripts/benchmark-runtime.mjs",
+            "bytes": 10576,
+            "sha256": "775238913f9e1915887bf5fd38813a148e16d217ecf5db14ac18ef71a5cdccb8"
+          }
+        ],
+        "sha256": "e34915cde97a220082aba868560798e8ea8c2a4b9e8149ab0016190bac273a71"
+      },
+      "reproductionCommand": [
+        "node",
+        "/private/tmp/slc-gpt6-current-v8/scripts/benchmark-compile.mjs",
+        "--agent",
+        "claude-code",
+        "--model",
+        "claude-opus-5",
+        "--effort",
+        "low",
+        "--output",
+        "/private/tmp/slc-performance-evidence",
+        "--timeout-seconds",
+        "900",
+        "--pipeline-path",
+        "/Users/basicthinker/Projects/SubLang/slc/.scratch/performance/helper-canonical-storage-v1-full",
+        "--label",
+        "cold-minimal-canonical-storage-opus5-low"
+      ],
+      "commandQualification": "Reconstructed explicit one-agent command with frozen v8 compiler and canonical-storage overlay. Changed provider and compiler/input versions prevent attribution to a single technique against earlier GPT-6 full runs.",
+      "compileMs": 174174,
+      "compileOk": true,
+      "experimentMs": 175253,
+      "agentCalls": 5,
+      "toolCalls": 9,
+      "firstEventSumMs": 17154,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 26713
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 14940
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 14727
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 71148
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 46529
+        }
+      ],
+      "calls": [
+        {
+          "id": 1,
+          "phase": "normalize",
+          "status": "success",
+          "elapsedMs": 27224,
+          "firstEventMs": 7796,
+          "providerDurationMs": 19239,
+          "promptBytes": 6238,
+          "promptSha256": "b264e11cae027295ede5cfbd8842fed15f5d89b0488655421b9a15edb0b1c099",
+          "toolCalls": 2,
+          "events": {
+            "init": 1,
+            "tool_use": 2,
+            "text": 1,
+            "done": 1
+          },
+          "resumed": false,
+          "requestedResume": false,
+          "fastMode": null,
+          "reportedUsage": {
+            "toolUses": 2,
+            "tokens": {
+              "coverage": "complete",
+              "totals": {
+                "input": {
+                  "total": 82917,
+                  "uncached": 6,
+                  "cacheRead": 52538,
+                  "cacheWrite": 30373
+                },
+                "output": {
+                  "total": 728
+                }
+              },
+              "records": [
+                {
+                  "model": "claude-opus-5",
+                  "provider": "firstParty",
+                  "tokens": {
+                    "input": {
+                      "total": 82917,
+                      "uncached": 6,
+                      "cacheRead": 52538,
+                      "cacheWrite": 30373
+                    },
+                    "output": {
+                      "total": 728
+                    }
+                  },
+                  "cost": {
+                    "amount": 0.348229,
+                    "currency": "USD",
+                    "source": "agent-estimate"
+                  },
+                  "pricedUnits": [
+                    {
+                      "name": "web_search_request",
+                      "quantity": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "cost": {
+              "amount": 0.348229,
+              "currency": "USD",
+              "source": "agent-estimate"
+            }
+          }
+        },
+        {
+          "id": 2,
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 15456,
+          "firstEventMs": 2250,
+          "providerDurationMs": 13069,
+          "promptBytes": 24206,
+          "promptSha256": "9f2dd5ce20fcf8edf002e322a70a95569c1f5092d321893f34ac04d9b6be0c2e",
+          "toolCalls": 1,
+          "events": {
+            "init": 1,
+            "tool_use": 1,
+            "text": 1,
+            "done": 1
+          },
+          "resumed": true,
+          "requestedResume": true,
+          "fastMode": null,
+          "reportedUsage": {
+            "toolUses": 1,
+            "tokens": {
+              "coverage": "complete",
+              "totals": {
+                "input": {
+                  "total": 78035,
+                  "uncached": 4,
+                  "cacheRead": 69028,
+                  "cacheWrite": 9003
+                },
+                "output": {
+                  "total": 741
+                }
+              },
+              "records": [
+                {
+                  "model": "claude-opus-5",
+                  "provider": "firstParty",
+                  "tokens": {
+                    "input": {
+                      "total": 78035,
+                      "uncached": 4,
+                      "cacheRead": 69028,
+                      "cacheWrite": 9003
+                    },
+                    "output": {
+                      "total": 741
+                    }
+                  },
+                  "cost": {
+                    "amount": 0.143089,
+                    "currency": "USD",
+                    "source": "agent-estimate"
+                  },
+                  "pricedUnits": [
+                    {
+                      "name": "web_search_request",
+                      "quantity": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "cost": {
+              "amount": 0.143089,
+              "currency": "USD",
+              "source": "agent-estimate"
+            }
+          }
+        },
+        {
+          "id": 3,
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 15242,
+          "firstEventMs": 2235,
+          "providerDurationMs": 12854,
+          "promptBytes": 9071,
+          "promptSha256": "0566be9e31ce2ceaec0edab370c66a1110f86d6b7c77777631fb62edd3cd121a",
+          "toolCalls": 1,
+          "events": {
+            "init": 1,
+            "tool_use": 1,
+            "text": 1,
+            "done": 1
+          },
+          "resumed": true,
+          "requestedResume": true,
+          "fastMode": null,
+          "reportedUsage": {
+            "toolUses": 1,
+            "tokens": {
+              "coverage": "complete",
+              "totals": {
+                "input": {
+                  "total": 86216,
+                  "uncached": 4,
+                  "cacheRead": 82133,
+                  "cacheWrite": 4079
+                },
+                "output": {
+                  "total": 698
+                }
+              },
+              "records": [
+                {
+                  "model": "claude-opus-5",
+                  "provider": "firstParty",
+                  "tokens": {
+                    "input": {
+                      "total": 86216,
+                      "uncached": 4,
+                      "cacheRead": 82133,
+                      "cacheWrite": 4079
+                    },
+                    "output": {
+                      "total": 698
+                    }
+                  },
+                  "cost": {
+                    "amount": 0.0993265,
+                    "currency": "USD",
+                    "source": "agent-estimate"
+                  },
+                  "pricedUnits": [
+                    {
+                      "name": "web_search_request",
+                      "quantity": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "cost": {
+              "amount": 0.0993265,
+              "currency": "USD",
+              "source": "agent-estimate"
+            }
+          }
+        },
+        {
+          "id": 4,
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 70731,
+          "firstEventMs": 2244,
+          "providerDurationMs": 68239,
+          "promptBytes": 54305,
+          "promptSha256": "78a030157e6fa31d51d7c4199014eb9be1bc99d22107b7a7eb178f4b52a9f4d4",
+          "toolCalls": 2,
+          "events": {
+            "init": 1,
+            "tool_use": 2,
+            "text": 1,
+            "done": 1
+          },
+          "resumed": true,
+          "requestedResume": true,
+          "fastMode": null,
+          "reportedUsage": {
+            "toolUses": 2,
+            "tokens": {
+              "coverage": "complete",
+              "totals": {
+                "input": {
+                  "total": 197255,
+                  "uncached": 6,
+                  "cacheRead": 172923,
+                  "cacheWrite": 24326
+                },
+                "output": {
+                  "total": 6228
+                }
+              },
+              "records": [
+                {
+                  "model": "claude-opus-5",
+                  "provider": "firstParty",
+                  "tokens": {
+                    "input": {
+                      "total": 197255,
+                      "uncached": 6,
+                      "cacheRead": 172923,
+                      "cacheWrite": 24326
+                    },
+                    "output": {
+                      "total": 6228
+                    }
+                  },
+                  "cost": {
+                    "amount": 0.48545150000000004,
+                    "currency": "USD",
+                    "source": "agent-estimate"
+                  },
+                  "pricedUnits": [
+                    {
+                      "name": "web_search_request",
+                      "quantity": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "cost": {
+              "amount": 0.48545150000000004,
+              "currency": "USD",
+              "source": "agent-estimate"
+            }
+          }
+        },
+        {
+          "id": 5,
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 46727,
+          "firstEventMs": 2629,
+          "providerDurationMs": 44093,
+          "promptBytes": 163181,
+          "promptSha256": "c06881b3f85a0934e9b05837b75f76f2553c8a501063e85b2c1c6f8f934be157",
+          "toolCalls": 3,
+          "events": {
+            "init": 1,
+            "tool_use": 3,
+            "text": 1,
+            "done": 1
+          },
+          "resumed": true,
+          "requestedResume": true,
+          "fastMode": null,
+          "reportedUsage": {
+            "toolUses": 3,
+            "tokens": {
+              "coverage": "complete",
+              "totals": {
+                "input": {
+                  "total": 510888,
+                  "uncached": 7,
+                  "cacheRead": 448011,
+                  "cacheWrite": 62870
+                },
+                "output": {
+                  "total": 2379
+                }
+              },
+              "records": [
+                {
+                  "model": "claude-opus-5",
+                  "provider": "firstParty",
+                  "tokens": {
+                    "input": {
+                      "total": 510888,
+                      "uncached": 7,
+                      "cacheRead": 448011,
+                      "cacheWrite": 62870
+                    },
+                    "output": {
+                      "total": 2379
+                    }
+                  },
+                  "cost": {
+                    "amount": 0.9122155,
+                    "currency": "USD",
+                    "source": "agent-estimate"
+                  },
+                  "pricedUnits": [
+                    {
+                      "name": "web_search_request",
+                      "quantity": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "cost": {
+              "amount": 0.9122155,
+              "currency": "USD",
+              "source": "agent-estimate"
+            }
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.text.md",
+          "bytes": 356,
+          "sha256": "68e62f91da15fc29714b9c7c1eba1ea71ab97c7aacd52975b8c33179f732c6b8"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.gears.raw.md",
+          "bytes": 558,
+          "sha256": "fdd852c7591ce0d8cde8a205b5897fbc6841f2befb210a17954d671ed8d81150"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.gears.md",
+          "bytes": 650,
+          "sha256": "856a69315f4b066d9ab86818021853ea78a08a61b8c9612c5f4dc8c9fdeeaaf6"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.fsm.ts",
+          "bytes": 12319,
+          "sha256": "24a5cc9db0602b24e9fcda79a04b3cd60eb12d45abfd1b535f115c287b05fd52"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.playbook.ts",
+          "bytes": 4972,
+          "sha256": "02d60cff140495d207e95f16a1ff1587ca7615b0232dd9ef06f984fe6a871de6"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/.slc-verify/hash.js",
+          "bytes": 3269,
+          "sha256": "9546165b310e9863bd029747ba99dbd94006f8cd8c97e9d40e50531ca05273d3"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/.slc-verify/hash.d.ts",
+          "bytes": 1662,
+          "sha256": "bc0a8ba0f9f256c2e19b84a6814e68a7322691d0b9acc001259d021be654de0f"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/.slc-verify/verify.js",
+          "bytes": 121831,
+          "sha256": "37eccacf091da62a23a02aa10fb23ca3cc7c56cd8b6c9bb3c87c48c2998e3d27"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/.slc-verify/verify.d.ts",
+          "bytes": 25879,
+          "sha256": "cb198c0608859b451651830d8edd9288f947c23f419c3fd8d5ec3c20382d6ee3"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/.slc-verify/verify-coverage.js",
+          "bytes": 108321,
+          "sha256": "c5bf101848eba910bcbac2ad8872f6a9e2d906d2e7053adcb3c5b22f118cc0fc"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/.slc-verify/verify-coverage.d.ts",
+          "bytes": 4141,
+          "sha256": "5a6c26bf5b442efe2ab3ab8dd6d25cdec118bfc82adc0fc45a8557d6fe5c83c4"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.gears-fsm.test.ts",
+          "bytes": 1066,
+          "sha256": "3e933963c6ce3ac3da6f993a5fa62cbd6df57526bfafa34c1d3d6ec9653ddd51"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.fsm.introspect.test.ts",
+          "bytes": 2720,
+          "sha256": "476e273330a5bb878d928a5c3d17020b381425d6f7e5fb1e1061138119a60eee"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.prompt-contract.test.ts",
+          "bytes": 2034,
+          "sha256": "af823300a63551bae89e4bc954d10e321c2a50b7561ca5cef67c922e51a1fc25"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.fsm.coverage.test.ts",
+          "bytes": 772,
+          "sha256": "0cee7f849d54dfec49659ffd185421eb2f00bc61ee049f0aa87ce1d5a83d3a79"
+        },
+        {
+          "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.ts",
+          "bytes": 2234,
+          "sha256": "72f282b1472444be916121099b2f2f0a5bf66499f26a89ef394ca15ab72006be"
+        }
+      ],
+      "validation": {
+        "ok": false,
+        "typecheck": {
+          "ok": false,
+          "code": 2,
+          "terminationSignal": null,
+          "unchanged": true,
+          "inputs": [
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.ts",
+              "bytes": 2234,
+              "sha256": "72f282b1472444be916121099b2f2f0a5bf66499f26a89ef394ca15ab72006be"
+            },
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.fsm.ts",
+              "bytes": 12319,
+              "sha256": "24a5cc9db0602b24e9fcda79a04b3cd60eb12d45abfd1b535f115c287b05fd52"
+            },
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.playbook.ts",
+              "bytes": 4972,
+              "sha256": "02d60cff140495d207e95f16a1ff1587ca7615b0232dd9ef06f984fe6a871de6"
+            },
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/.slc-verify/hash.d.ts",
+              "bytes": 1662,
+              "sha256": "bc0a8ba0f9f256c2e19b84a6814e68a7322691d0b9acc001259d021be654de0f"
+            },
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/.slc-verify/verify.d.ts",
+              "bytes": 25879,
+              "sha256": "cb198c0608859b451651830d8edd9288f947c23f419c3fd8d5ec3c20382d6ee3"
+            },
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/.slc-verify/verify-coverage.d.ts",
+              "bytes": 4141,
+              "sha256": "5a6c26bf5b442efe2ab3ab8dd6d25cdec118bfc82adc0fc45a8557d6fe5c83c4"
+            },
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.gears-fsm.test.ts",
+              "bytes": 1066,
+              "sha256": "3e933963c6ce3ac3da6f993a5fa62cbd6df57526bfafa34c1d3d6ec9653ddd51"
+            },
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.fsm.introspect.test.ts",
+              "bytes": 2720,
+              "sha256": "476e273330a5bb878d928a5c3d17020b381425d6f7e5fb1e1061138119a60eee"
+            },
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.prompt-contract.test.ts",
+              "bytes": 2034,
+              "sha256": "af823300a63551bae89e4bc954d10e321c2a50b7561ca5cef67c922e51a1fc25"
+            },
+            {
+              "path": "/private/tmp/slc-performance-evidence/compile-kqEmCN/work/minimal.playbook/minimal.fsm.coverage.test.ts",
+              "bytes": 772,
+              "sha256": "0cee7f849d54dfec49659ffd185421eb2f00bc61ee049f0aa87ce1d5a83d3a79"
+            }
+          ],
+          "compiler": {
+            "path": "/private/tmp/slc-gpt6-current-v8/node_modules/typescript/lib/tsc.js",
+            "bytes": 267,
+            "sha256": "2cffde0b8c6760dfb0b5b0382bbb7e00ba6a8b2d981b9205b256a700a481d983"
+          },
+          "args": [
+            "--ignoreConfig",
+            "--noEmit",
+            "--strict",
+            "--noUnusedLocals",
+            "--noUnusedParameters",
+            "--noImplicitOverride",
+            "--verbatimModuleSyntax",
+            "--esModuleInterop",
+            "--forceConsistentCasingInFileNames",
+            "--skipLibCheck",
+            "--module",
+            "NodeNext",
+            "--moduleResolution",
+            "NodeNext",
+            "--target",
+            "ES2022",
+            "--lib",
+            "ES2022",
+            "--allowImportingTsExtensions",
+            "--erasableSyntaxOnly",
+            "--isolatedModules",
+            "--moduleDetection",
+            "force",
+            "--noFallthroughCasesInSwitch",
+            "--types",
+            "node",
+            "--typeRoots",
+            "/private/tmp/slc-gpt6-current-v8/node_modules/@types",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.ts",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.playbook/minimal.fsm.ts",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.playbook/minimal.playbook.ts",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.playbook/.slc-verify/hash.d.ts",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.playbook/.slc-verify/verify.d.ts",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.playbook/.slc-verify/verify-coverage.d.ts",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.playbook/minimal.gears-fsm.test.ts",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.playbook/minimal.fsm.introspect.test.ts",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.playbook/minimal.prompt-contract.test.ts",
+            "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW/minimal.playbook/minimal.fsm.coverage.test.ts"
+          ],
+          "consumer": "/private/tmp/slc-performance-evidence/compile-kqEmCN/typecheck-jX9IoW",
+          "elapsedMs": 1071
+        },
+        "testFiles": 4,
+        "elapsedMs": 1072
+      },
+      "generatedSuiteCount": 4,
+      "generatedSuitesExecuted": false,
+      "runtimeAcceptanceExecuted": false,
+      "failureClassification": "strict_generated_entry_requires_missing_runtime_option",
+      "conclusion": "All five generation phases complete in 174.174 seconds, but independent strict TypeScript rejects the generated entry for a required linked inputTask option; 175.253 seconds total. Entry loading, generated suites and real runtime acceptance do not run. The original failure is retained; no five-minute success or accepted performance comparison is claimed. Constructor-versus-Boss-turn contract diagnosis is separate from this raw outcome."
     }
   ],
   "clarification": {
@@ -11280,7 +12067,9 @@
       "speedClaim": false,
       "upstreamRepository": "/Users/basicthinker/Projects/SubLang/playbook",
       "commit": "f0f032b",
-      "followupCommit": "40d8538baa062ed2a55d41790348b29f7061cd00"
+      "followupCommit": "40d8538baa062ed2a55d41790348b29f7061cd00",
+      "latestStatus": "later_cold_full_runtime_acceptance_confirms_own_repository_no_isolated_optimizer_speed_claim",
+      "latestRuntimeEvidenceRun": "compile-sxeXw2"
     },
     {
       "technique": "fresh first session per phase",
@@ -11448,6 +12237,20 @@
       "speedClaim": false,
       "evidence": "deterministicProbes.continuationInputBoundary",
       "commit": "5f81da1"
+    },
+    {
+      "technique": "preserve supplied top-level coverage event payloads",
+      "status": "retained_correctness_fix",
+      "commit": "6ba16d0",
+      "evidence": "deterministicProbes.broaderCompleteBundleReplay",
+      "speedClaim": false
+    },
+    {
+      "technique": "explicit canonical Boss-question storage guidance",
+      "status": "upstream_correctness_clarification_performance_unmeasured",
+      "upstreamCommit": "c8a8c47eafffe1fc2a2c28c63ba52cd5cf128183",
+      "evidence": "deterministicProbes.canonicalQuestionStorageGuidance",
+      "speedClaim": false
     }
   ],
   "deterministicProbes": {
@@ -12463,6 +13266,189 @@
       "terminalKind": "success",
       "qualification": "Separate disk-checkpoint restore and real-commit probe of unchanged accepted minimal artifacts; outside original full-compilation timing and independent of the narrower continuation-input gate.",
       "speedClaim": false
+    },
+    "broaderCompleteBundleReplay": {
+      "status": "partial_acceptance_coverage_unresolved",
+      "evidenceRuns": ["compile-bs5rV2", "compile-6Rpcgc"],
+      "evidence": {
+        "path": "/private/tmp/slc-broader-complete-replay/replay-evidence.json",
+        "bytes": 18401,
+        "sha256": "56606fe281b2e5a354046d9fd0c1ef4a96265c7e92158e34aff3250230d0ae43"
+      },
+      "reproduction": {
+        "path": "/private/tmp/slc-broader-complete-replay/README.md",
+        "bytes": 3749,
+        "sha256": "4b0d5e3c188c6b91bee7667ca1176e56c56716673e5c441f9a9991624b0f1b83"
+      },
+      "runtimeProbe": {
+        "path": "/private/tmp/slc-broader-complete-replay/probe-bs.mjs",
+        "bytes": 21620,
+        "sha256": "7f5653fc6cc0b6a4616fdac0c1a8f563be7aed3636949877726e7d9786b81eb7"
+      },
+      "source": {
+        "path": "/Users/basicthinker/Projects/SubLang/slc/docs/performance/clarified-workflow.txt",
+        "bytes": 1540,
+        "sha256": "861b23f2f63fb6588278664a1457ad76ec8eef5308ba5f9a0a7fad778641f8ee"
+      },
+      "fsm": {
+        "path": "/private/tmp/slc-performance-evidence/compile-bs5rV2/work/workflow.playbook/workflow.fsm.ts",
+        "bytes": 41891,
+        "sha256": "9bb4eff14c7791d465e9b18c99ffc2ab5566a0da59881f4601e2964d9b147dd2",
+        "currentSha256": "9bb4eff14c7791d465e9b18c99ffc2ab5566a0da59881f4601e2964d9b147dd2"
+      },
+      "linked": {
+        "path": "/private/tmp/slc-performance-evidence/compile-6Rpcgc/work/workflow.playbook/workflow.playbook.ts",
+        "bytes": 10175,
+        "sha256": "7bd5423a0d9d49e242910b0440ba4ef2e4687cf012e92fe1e5143ddac2022ea3",
+        "currentSha256": "7bd5423a0d9d49e242910b0440ba4ef2e4687cf012e92fe1e5143ddac2022ea3"
+      },
+      "originalsUnchanged": true,
+      "authoredCopiesUnchanged": true,
+      "generatedAssertionsAndEntryUnchanged": true,
+      "strictTypeScriptPassed": true,
+      "generatedSuites": {
+        "gearsFsm": true,
+        "introspection": true,
+        "promptContract": true,
+        "coverage": false,
+        "passedTests": 9,
+        "failedTests": 1
+      },
+      "coverage": {
+        "commit": "6ba16d0",
+        "decision": "DR-034",
+        "intent": "IR-038",
+        "beforeFindings": 44,
+        "afterFindings": 39,
+        "removedCount": 7,
+        "newlyExposedCount": 2,
+        "provenCounterexamplesRemoved": 2,
+        "actualXState": ["ready", "failed", "ready"],
+        "remainingFindingsWaived": false,
+        "reflectiveFieldInferenceAdded": false,
+        "evidenceBefore": {
+          "path": "/private/tmp/slc-broader-complete-replay/coverage-counterexample.json",
+          "bytes": 996,
+          "sha256": "2a9d8844a85c3923f0e79c17910fdf452a0d137096d5bb47c0e2cbe56bf235c9"
+        },
+        "evidenceAfter": {
+          "path": "/private/tmp/slc-broader-complete-replay/coverage-after.json",
+          "bytes": 4281,
+          "sha256": "40293d3c1486ee481853c9c66261bcd7d96e1f085b6510969270edd744676f7d"
+        },
+        "timingComparison": false
+      },
+      "runtime": {
+        "ok": true,
+        "host": {
+          "version": "12.3.0",
+          "packageSha256": "fd763ec971e15068700dfb0a2e8277c119a7faeb4db0cd447fd41722a59af315",
+          "listed": true
+        },
+        "scenarios": [
+          {
+            "scenario": "clean",
+            "ok": true,
+            "performingCalls": 2,
+            "commits": 1,
+            "failureReportCaptainCalls": 0,
+            "terminalKind": "success",
+            "terminalState": "done",
+            "elapsedMs": 916
+          },
+          {
+            "scenario": "agreement",
+            "ok": true,
+            "performingCalls": 6,
+            "commits": 2,
+            "failureReportCaptainCalls": 0,
+            "terminalKind": "success",
+            "terminalState": "done",
+            "elapsedMs": 2119
+          },
+          {
+            "scenario": "caps",
+            "ok": true,
+            "performingCalls": 15,
+            "commits": 3,
+            "failureReportCaptainCalls": 1,
+            "terminalKind": "failure",
+            "terminalState": "loopLimitReached",
+            "elapsedMs": 4952
+          }
+        ],
+        "exactBossAndPlayerRelays": true,
+        "ownNestedRepositories": true,
+        "ancestorRepositoriesUnchanged": true,
+        "cappedFailurePreservesExactLastFindings": true
+      },
+      "qualification": "Separate deterministic reconstruction combines unchanged bs5rV2 artifacts and 6Rpcgc linked output with shipped entry and verification emitters. The source-specific probe supports declared labelled relays and the three clean, agreement and capped-failure scenarios; it does not prove every path or Boss-reply path. Coverage remains failing without waiver. This completes the bounded broader evaluation with limits, not full compilation acceptance or a cold timing result.",
+      "speedClaim": false
+    },
+    "canonicalQuestionStorageGuidance": {
+      "status": "upstream_correctness_clarification_performance_unmeasured",
+      "upstreamCommit": "c8a8c47eafffe1fc2a2c28c63ba52cd5cf128183",
+      "upstreamIntent": "IR-064",
+      "sourceDefinition": {
+        "path": "/private/tmp/playbook-link-materializer/slc/gears2fsm.md",
+        "bytes": 50917,
+        "sha256": "98d6a28c7309a8933ea7057aec03e0f651a2f9e66c8095ced844fd17bd4e5f8f"
+      },
+      "isolatedHelperCandidate": {
+        "path": "/private/tmp/playbook-link-materializer/slc/materialize-link.mjs",
+        "bytes": 22784,
+        "sha256": "0d3163b79757e48abd9e2f90a1156309a572e540d2b458a442a2c14c0ee4c253"
+      },
+      "evidence": {
+        "path": "/private/tmp/slc-question-storage-audit/evidence.json",
+        "bytes": 895,
+        "sha256": "7bb843a9c7d92b9aac08b64eaac73d3dc3e608cab03b1d34366b91c36b528da3"
+      },
+      "overlayProof": {
+        "path": "/private/tmp/playbook-materializer-full-canonical-storage-12.3/experiment-proof.json",
+        "bytes": 2218,
+        "sha256": "d88b6b0aa237bec57e54ff0eb0e0a1e8f3b6ae506785cb9f887b9e76c333a5c0"
+      },
+      "canonicalOverlayProducerSha256": "98d6a28c7309a8933ea7057aec03e0f651a2f9e66c8095ced844fd17bd4e5f8f",
+      "otherDeclaredFullV3MembersUnchanged": true,
+      "realReaderMatrixCasesPassed": 6,
+      "qualification": "Makes existing scalar/keyed machine-context storage and singular input projection explicit; a private wrapper cannot replace the canonical fields. No runtime API or helper bytes changed, no installed release was replaced, and rejected compact inputs retain their prior bytes.",
+      "speedClaim": false
+    },
+    "bossTaskConstructionAndRelay": {
+      "status": "two_authored_contract_defects_proved",
+      "evidenceRun": "compile-kqEmCN",
+      "realCapabilityEvidence": {
+        "path": "/private/tmp/slc-kq-entry-audit/evidence.json",
+        "bytes": 2121,
+        "sha256": "9395246aace1572fbd72eadf35f43774b11f2f2b711ca5a739a4579a529af258"
+      },
+      "producerEvidence": {
+        "path": "/private/tmp/slc-kqEmCN-option-audit/evidence.json",
+        "bytes": 1639,
+        "sha256": "869e53ff535d9947f448d4767546c8370598ba55722142c068ea2f3014924df4"
+      },
+      "reproduction": {
+        "path": "/private/tmp/slc-kqEmCN-option-audit/probe.mjs",
+        "bytes": 3006,
+        "sha256": "207d5faddc6cf227aa6334d6f13f611937b1a55892adce5530cd8cc43cf6e3ee"
+      },
+      "explanation": {
+        "path": "/private/tmp/slc-kqEmCN-option-audit/README.md",
+        "bytes": 3955,
+        "sha256": "f2751d058756ce0b3aede0b82e3ce4142ca9a7e8d021eae450da71caa8d84a7b"
+      },
+      "originalArtifactsAndEvidenceUnchanged": true,
+      "constructorRequiresTask": true,
+      "registryRejectsTaskConfiguration": true,
+      "realFsmStartsReadyWithoutTask": true,
+      "bossEntryCopiesExactText": true,
+      "actorInputTaskFieldPresent": false,
+      "composedPromptCarriesExactTask": false,
+      "unresolvedTaskPlaceholder": true,
+      "classification": "Required constructor copy of future Boss-turn text and independent omitted typed actor-input relay; not missing user intent.",
+      "qualification": "Separate read-only actual installed-host construction and XState/composer probes with synthetic performing actors. They preserve the failed benchmark and prove two contract defects, without full real-Git acceptance or a speed claim. Proposed producer wording remains pending validation; generic entry options are not widened.",
+      "speedClaim": false
     }
   },
   "environmentAudit": {
@@ -12979,7 +13965,19 @@
       "pinsPassed": true,
       "validationEvidenceQualification": "Root task reported successful final tool outcomes after commit 5f81da1; no retained paths or hashes are invented. Earlier standalone checkpoint entries remain historical."
     },
-    "latestValidationCommit": "5f81da1"
+    "latestValidationCommit": "6ba16d0",
+    "coverageEventInputs": {
+      "commit": "6ba16d0",
+      "fullSuitePassed": 1290,
+      "skipped": 2,
+      "focusedCoveragePassed": 78,
+      "buildPassed": true,
+      "changedFileLintPassed": true,
+      "formatPassed": true,
+      "specLintPassed": true,
+      "independentUnchangedArtifactReplayPassed": true,
+      "evidenceQualification": "Committed IR-038 records suite/build/lint results. Retained replay evidence records unchanged artifact acceptance limits; the two proven false coverage findings are removed while 39 remaining findings are not waived."
+    }
   },
   "prioritizedFindings": [
     {
