@@ -17,6 +17,7 @@ import * as runtime from '../src/index.js';
 import {
   benchmarkCompile,
   parseArguments,
+  typecheckArtifacts,
   validateArtifacts,
 } from '../scripts/benchmark-compile.mjs';
 
@@ -437,6 +438,7 @@ describe('opt-in compilation benchmark', () => {
     expect(await validateArtifacts(input)).toMatchObject({
       ok: true,
       testFiles: 4,
+      typecheck: { ok: true, unchanged: true },
     });
     await writeFile(
       join(bundle, 'minimal.prompt-contract.test.ts'),
@@ -446,7 +448,62 @@ describe('opt-in compilation benchmark', () => {
       ok: false,
       suite: { ok: false, code: 1 },
     });
-  });
+  }, 20_000);
+
+  it('checks strict native TypeScript against the installed engine and preserves inputs', async () => {
+    const options = await fixture();
+    const root = fileURLToPath(new URL('..', import.meta.url));
+    const work = join(options.output, 'typed');
+    await mkdir(work, { recursive: true });
+    await symlink(
+      join(root, 'node_modules'),
+      join(work, 'node_modules'),
+      'dir',
+    );
+    const source = join(work, 'fixture.ts');
+    const sibling = join(work, 'value.ts');
+    await writeFile(sibling, 'export const value: number = 1;\n');
+    const variants = [
+      [true, "export { value } from './value.ts';\n"],
+      [false, 'export const wrong: string = 1;\n'],
+      [false, 'const unused = 1; export {};\n'],
+      [
+        false,
+        "import { defaultComposePlayerPrompt } from '@sublang/playbook/xstate-runtime';\nexport function compose(input: Parameters<typeof defaultComposePlayerPrompt>[0]) { return defaultComposePlayerPrompt(input, {}, false, 'extra'); }\n",
+      ],
+    ];
+    for (const [ok, content] of variants) {
+      await writeFile(source, content);
+      const checked = await typecheckArtifacts({
+        files: [source],
+        work,
+        root,
+        signal: new AbortController().signal,
+        log: () => {},
+      });
+      expect(checked).toMatchObject({
+        ok,
+        unchanged: true,
+        elapsedMs: expect.any(Number),
+      });
+      expect(checked.inputs[0]).toMatchObject({
+        path: source,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(await readFile(source, 'utf8')).toBe(content);
+    }
+    const cancelled = new AbortController();
+    cancelled.abort();
+    expect(
+      await typecheckArtifacts({
+        files: [source],
+        work,
+        root,
+        signal: cancelled.signal,
+        log: () => {},
+      }),
+    ).toEqual({ ok: false, status: 'interrupted', elapsedMs: 0 });
+  }, 20_000);
 
   it('rejects unattributable or unbounded measurements before adapter work', async () => {
     expect(() => parseArguments(['--source'])).toThrow('needs a value');
@@ -459,13 +516,13 @@ describe('opt-in compilation benchmark', () => {
 
 const FIXED_FSM = `export const machine = { config: { context: { audience: '' }, states: { write: {
   meta: { playbook: { stateId: 'write', role: 'writer' } },
-  invoke: { src: 'player', input: ({ context }) => ({
+  invoke: { src: 'player', input: ({ context }: { context: { audience: string } }) => ({
     stateId: 'write', sourceItem: 'FIXED-1', role: 'writer',
     prompt: 'Write for <audience>.', audience: context.audience, result: { done: 'Written.' }
   }) }
 } } } };
 `;
-const FAITHFUL_LINK = `export const _internal = { composePlayerPrompt: input => input.prompt.replaceAll('<audience>', input.audience) };
+const FAITHFUL_LINK = `export const _internal = { composePlayerPrompt: (input: {prompt: string; audience: string}) => input.prompt.replaceAll('<audience>', input.audience) };
 export default function createRuntime() { return { init: async()=>{}, handleBossInput: async()=>{}, dispose: async()=>{} }; }
 `;
 

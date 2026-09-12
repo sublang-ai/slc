@@ -42,6 +42,10 @@ Where the benchmark uses its default minimal workflow or an explicitly selected 
 
 Where an explicit link target and explicit `.fsm.ts` source are supplied, when a link-only benchmark runs, the compilation benchmark shall invoke the ordinary single link phase [[pipeline-18](pipeline.md#pipeline-18)] against an unchanged fresh copy of that FSM, record scope `link` instead of the default `full` together with the link-target byte identity and ordinary phase and adapter accounting [[compilation-measurement-2](#compilation-measurement-2)], reject optimization and minimal-runtime selections in this scope, and accept only one linked output whose existing linked-module contract check [[verification-27](verification.md#verification-27)] passes through the measured compiler with an importable unchanged FSM before the experiment deadline; this success shall remain a link-only measurement and shall not replace full-compilation validation [[compilation-measurement-4](#compilation-measurement-4)], [[compilation-measurement-11](#compilation-measurement-11)] or count toward the cold full-compilation target.
 
+### compilation-measurement-16
+
+When full or link-only artifact validation runs, the compilation benchmark shall additionally require the emitted TypeScript and, for linking, its supplied FSM to pass the measured installation's TypeScript compiler in an isolated ESM consumer preserving artifact bytes and dependency resolution, under ES2022 NodeNext strict checking with unused-local, unused-parameter, implicit-override, switch-fallthrough, isolated-module, case-consistency, verbatim-module and erasable-syntax checks, allowing native `.ts` imports under `noEmit`, skipping installed declaration checks, and selecting only Node ambient types, with compiler arguments, input identities, outcome and elapsed time recorded separately, diagnostics confined to the local log, and cancellation bounded by the experiment deadline [[compilation-measurement-3](#compilation-measurement-3)].
+
 ## Verification
 
 ### compilation-measurement-7
@@ -71,3 +75,7 @@ Where a fixture link phase receives a fixed FSM and a supplied link target, when
 ### compilation-measurement-15
 
 Where fixture pipelines declare a helper through a sidecar or a transitive inline reference, a widened recorded boundary, an invalid escaping member, or an older compiler without closure discovery, when the integration suite records ordinary benchmark runs before and after changing the helper bytes, the suite shall verify changed closure identities with unchanged definitions, inclusion of declaration and transitive input identities without their contents, admission only under the applicable boundary, explicit incomplete or unavailable discovery for the respective unsupported cases, and identities for the executing benchmark and runtime-check scripts [[compilation-measurement-2](#compilation-measurement-2)].
+
+### compilation-measurement-17
+
+Where emitted fixture artifacts have valid native TypeScript imports beside variants with a strict type error, an unused local, or an unsupported installed-engine call arity, when the integration suite runs full and link-only benchmark validation, the suite shall accept only the type-correct artifacts, preserve their original bytes, record independent type-check outcomes, and stop before type checking when already cancelled [[compilation-measurement-16](#compilation-measurement-16)].

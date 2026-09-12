@@ -6,15 +6,25 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   appendFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, delimiter, join, resolve } from 'node:path';
+import {
+  basename,
+  dirname,
+  delimiter,
+  join,
+  relative,
+  resolve,
+  sep,
+} from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -276,6 +286,84 @@ function command(commandPath, args, cwd, signal, log) {
   });
 }
 
+/** Check an explicit source-only ESM consumer without changing emitted bytes. */
+export async function typecheckArtifacts({ files, work, root, signal, log }) {
+  const started = performance.now();
+  if (signal.aborted) return { ok: false, status: 'interrupted', elapsedMs: 0 };
+  const consumer = mkdtempSync(join(dirname(work), 'typecheck-'));
+  cpSync(work, consumer, {
+    recursive: true,
+    filter: (path) => !relative(work, path).split(sep).includes('node_modules'),
+  });
+  symlinkSync(
+    realpathSync(join(work, 'node_modules')),
+    join(consumer, 'node_modules'),
+    'dir',
+  );
+  writeFileSync(join(consumer, 'package.json'), '{"type":"module"}\n');
+  const inputs = [...new Set(files)].map(identity);
+  const sources = inputs.map(({ path }) => {
+    const locator = relative(work, path);
+    if (locator === '..' || locator.startsWith(`..${sep}`))
+      throw new Error(
+        'Type-check input is outside the isolated benchmark workspace',
+      );
+    return join(consumer, locator);
+  });
+  const compiler = join(root, 'node_modules/typescript/lib/tsc.js');
+  const args = [
+    '--ignoreConfig',
+    '--noEmit',
+    '--strict',
+    '--noUnusedLocals',
+    '--noUnusedParameters',
+    '--noImplicitOverride',
+    '--verbatimModuleSyntax',
+    '--esModuleInterop',
+    '--forceConsistentCasingInFileNames',
+    '--skipLibCheck',
+    '--module',
+    'NodeNext',
+    '--moduleResolution',
+    'NodeNext',
+    '--target',
+    'ES2022',
+    '--lib',
+    'ES2022',
+    '--allowImportingTsExtensions',
+    '--erasableSyntaxOnly',
+    '--isolatedModules',
+    '--moduleDetection',
+    'force',
+    '--noFallthroughCasesInSwitch',
+    '--types',
+    'node',
+    '--typeRoots',
+    join(root, 'node_modules/@types'),
+    ...sources,
+  ];
+  const result = await command(
+    process.execPath,
+    [compiler, ...args],
+    consumer,
+    signal,
+    log,
+  );
+  const unchanged = inputs.every(
+    ({ path, sha256 }) => identity(path).sha256 === sha256,
+  );
+  return {
+    ...result,
+    ok: result.ok && unchanged,
+    unchanged,
+    inputs,
+    compiler: identity(compiler),
+    args,
+    consumer,
+    elapsedMs: elapsed(started),
+  };
+}
+
 export async function validateArtifacts({
   result,
   work,
@@ -317,6 +405,14 @@ export async function validateArtifacts({
     };
   }
   const entry = join(work, entries[0]);
+  const typecheck = await typecheckArtifacts({
+    files: [entry, ...result.outputs.filter((path) => path.endsWith('.ts'))],
+    work,
+    root,
+    signal,
+    log,
+  });
+  if (!typecheck.ok) return { ok: false, typecheck, testFiles: tests.length };
   const imported = await command(
     process.execPath,
     [
@@ -330,7 +426,12 @@ if (typeof entry?.createRuntime !== 'function') throw new Error('Entry has no cr
     log,
   );
   if (!imported.ok)
-    return { ok: false, entryImport: imported, testFiles: tests.length };
+    return {
+      ok: false,
+      typecheck,
+      entryImport: imported,
+      testFiles: tests.length,
+    };
   const config = join(work, 'benchmark.vitest.config.mjs');
   writeFileSync(
     config,
@@ -373,6 +474,7 @@ if (typeof entry?.createRuntime !== 'function') throw new Error('Entry has no cr
   }
   return {
     ok: suite.ok && (runtimeCheck !== 'minimal' || runtime?.ok === true),
+    typecheck,
     ...(runtime ? { runtime } : {}),
     entryImport: imported,
     suite,
@@ -435,8 +537,19 @@ export async function validateLinkedArtifact({
     );
   if (!sourceUnchanged)
     log('FSM inputs changed during linked-module validation.\n');
+  const typecheck =
+    checked.ok && sourceUnchanged
+      ? await typecheckArtifacts({
+          files: [source, result.outputs[0]],
+          root,
+          work,
+          signal,
+          log,
+        })
+      : undefined;
   return {
-    ok: checked.ok && sourceUnchanged,
+    ok: checked.ok && sourceUnchanged && typecheck?.ok === true,
+    ...(typecheck ? { typecheck } : {}),
     sourceUnchanged,
     linkedContract: checked,
   };
