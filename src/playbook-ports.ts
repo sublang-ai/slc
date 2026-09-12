@@ -76,6 +76,12 @@ export function createPlaybookPorts(opts: {
    * carry it.
    */
   updateContext?: string;
+  /** Generic noninteractive source-question protocol for compiled player work. */
+  playerClarification?: string;
+  /** Invoked immediately before transport dispatch, including queued control calls. */
+  beforeAgentCall?: () => void;
+  /** Observes performing work before releasing the shared Captain queue. */
+  onPerformingResult?: (result: PlayerResult | CaptainResult) => void;
   /**
    * Host-owned deterministic review of what a transformation-performing direct
    * Captain call produces (DR-029, phase-execution-25). It rides that call, so a
@@ -112,17 +118,19 @@ export function createPlaybookPorts(opts: {
       signal: AbortSignal,
       options?: PlayerCallOptions,
     ): Promise<PlayerResult> {
+      opts.beforeAgentCall?.();
       const result = await playerFor(playerId).run({
-        prompt:
-          opts.updateContext === undefined
-            ? prompt
-            : `${prompt}\n\n${opts.updateContext}`,
+        prompt: [prompt, opts.updateContext, opts.playerClarification]
+          .filter((part): part is string => part !== undefined)
+          .join('\n\n'),
         model: opts.models?.[playerId] ?? opts.defaultModel,
         cwd: opts.cwd,
         ...(options !== undefined ? { resume: options.resume } : {}),
         signal,
       });
-      return toPlayerResult(result, signal);
+      const performed = toPlayerResult(result, signal);
+      opts.onPerformingResult?.(performed);
+      return performed;
     },
 
     async callCaptain(
@@ -142,6 +150,7 @@ export function createPlaybookPorts(opts: {
               .join('\n\n')
           : prompt;
       return withSerialCaptain(signal, async () => {
+        opts.beforeAgentCall?.();
         const result = await opts.judge.run({
           prompt: transported,
           model: opts.defaultModel,
@@ -156,12 +165,16 @@ export function createPlaybookPorts(opts: {
             : { allowedTools: isolation.allowedTools }),
           signal,
         });
-        return toCaptainResult(result, signal);
+        const performed = toCaptainResult(result, signal);
+        if (isolation.allowedTools === undefined)
+          opts.onPerformingResult?.(performed);
+        return performed;
       });
     },
 
     async callJudge(prompt: string, signal: AbortSignal): Promise<string> {
       return withSerialCaptain(signal, async () => {
+        opts.beforeAgentCall?.();
         const result = await opts.judge.run({
           prompt,
           model: opts.defaultModel,

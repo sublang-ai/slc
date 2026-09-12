@@ -20,6 +20,7 @@
  */
 
 import { messageOf } from './errors.js';
+import { hasClarificationMarker } from './clarification.js';
 import type {
   AgentClient,
   AgentRunRequest,
@@ -227,7 +228,11 @@ async function pause(ms: number): Promise<void> {
 }
 
 function isReviewable(result: AgentRunResult): boolean {
-  return result.status === 'success' && !/^\s*BLOCKED\b/im.test(result.text);
+  return (
+    result.status === 'success' &&
+    !/^\s*BLOCKED\b/im.test(result.text) &&
+    !hasClarificationMarker(result.text)
+  );
 }
 
 function failClosed(result: AgentRunResult, reason: string): AgentRunResult {

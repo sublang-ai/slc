@@ -11,6 +11,16 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Compilation reports unresolved source questions.** Any phase can stop
+  with structured questions explaining missing, contradictory, or ambiguous
+  behavior. The CLI prints the original source to edit and a machine-readable
+  report on stderr, exits `2`, and accepts no interactive answers or pending
+  session state. Edit the source and repeat the same command; staged output
+  remains unaccepted until compilation succeeds
+  ([DR-032](specs/decisions/032-noninteractive-source-clarification.md)).
+
 ## [0.9.0] - 2026-09-04
 
 ### Added

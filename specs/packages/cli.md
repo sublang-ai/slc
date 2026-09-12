@@ -105,7 +105,7 @@ While `runSlc` is in progress, when the process receives an interrupt, the slc e
 
 ### cli-11
 
-When `runSlc` returns its result, the slc executable shall, on success, write the produced artifact paths or its `up to date` outcome to standard output, write every returned diagnostic to standard error, and return a zero exit code, and otherwise write the failure diagnostics to standard error and return a non-zero exit code ([DR-003](../decisions/003-slc-phase-execution.md), [DR-021](../decisions/021-incremental-compilation.md), [DR-023](../decisions/023-host-settled-link-object-imports.md)).
+Where the result is not a source-clarification outcome [[clarification-8](clarification.md#clarification-8)], when `runSlc` returns its result, the slc executable shall, on success, write the produced artifact paths or its `up to date` outcome to standard output, write every returned diagnostic to standard error, and return a zero exit code, and otherwise write the failure diagnostics to standard error and return a non-zero exit code ([DR-003](../decisions/003-slc-phase-execution.md), [DR-021](../decisions/021-incremental-compilation.md), [DR-023](../decisions/023-host-settled-link-object-imports.md)).
 
 ## Verification
 

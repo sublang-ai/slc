@@ -236,6 +236,8 @@ export function usageText(): string {
     'an entry source with a foreign extension is normalized first, and the',
     'playbook pipeline links against the installed @sublang/playbook runtime',
     'when --link is omitted, also emitting the runnable <basename>.ts entry.',
+    'Unresolved source behavior exits 2 with questions on stderr; edit the',
+    'original source and run the same command again. No interactive answers.',
     '',
     'Options:',
     '  -o <path>                 final output path override',
@@ -370,7 +372,7 @@ export async function run(
   }
   if (result.diagnostics.length > 0)
     stderr(`${result.diagnostics.join('\n')}\n`);
-  return 1;
+  return result.outcome === 'clarification-required' ? 2 : 1;
 }
 
 /**

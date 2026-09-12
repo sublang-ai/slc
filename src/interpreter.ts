@@ -16,6 +16,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { clarificationContract, decodeClarification } from './clarification.js';
 
 import {
   updateContextLines,
@@ -131,6 +132,8 @@ export function buildPhasePrompt(opts: {
       : []),
     'When done, reply with a concise summary of what you produced and any ambiguity you resolved.',
     'If the inputs are malformed under the definition, or the definition is incompatible with them, do not guess: leave the artifact unwritten and reply with a line beginning "BLOCKED:" followed by the concrete reason(s).',
+    '',
+    clarificationContract(),
   ].join('\n');
 }
 
@@ -177,6 +180,17 @@ export function createInterpretedExecutor(opts: {
         };
       }
 
+      const clarification = decodeClarification(response.text);
+      if (clarification.kind === 'invalid') {
+        return { status: 'error', diagnostics: [clarification.reason] };
+      }
+      if (clarification.kind === 'clarification') {
+        return {
+          status: 'clarification',
+          diagnostics: [],
+          questions: clarification.questions,
+        };
+      }
       const blocked = blockedReasons(response.text);
       if (blocked !== null) {
         return { status: 'blocked', diagnostics: blocked };

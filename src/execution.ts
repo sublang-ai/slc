@@ -44,6 +44,7 @@ import {
 } from 'node:path';
 
 import { errorCode, isAbsentPathError, messageOf } from './errors.js';
+import type { ClarificationQuestion } from './clarification.js';
 
 /** An opaque link option pair (pipeline-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
@@ -150,13 +151,16 @@ export type ExecuteRequest =
     };
 
 /** Terminal status an executor reports for a phase run. */
-export type ExecutorStatus = 'ok' | 'blocked' | 'error';
+export type ExecutorStatus = 'ok' | 'blocked' | 'error' | 'clarification';
 
 /** The outcome an executor returns, with diagnostics drained for every status. */
-export interface ExecutorResult {
-  status: ExecutorStatus;
-  diagnostics: string[];
-}
+export type ExecutorResult =
+  | { status: 'ok' | 'blocked' | 'error'; diagnostics: string[] }
+  | {
+      status: 'clarification';
+      diagnostics: string[];
+      questions: ClarificationQuestion[];
+    };
 
 /** Runs one phase or link execution; implemented by the interpreted/compiled executors. */
 export interface PhaseExecutor {
@@ -173,7 +177,11 @@ export interface FailureReport {
 /** The result of a generic-checked phase run. */
 export type PhaseResult =
   | { ok: true; target: string; diagnostics: string[] }
-  | { ok: false; report: FailureReport };
+  | {
+      ok: false;
+      report: FailureReport;
+      clarification?: ClarificationQuestion[];
+    };
 
 /** Options for validating one planned host or executor write target. */
 export interface SafeTargetOptions {
@@ -275,7 +283,11 @@ export async function runPhase(opts: {
     reasons.push(`executor threw: ${messageOf(error)}`);
   }
 
-  if (result !== null && result.status !== 'ok') {
+  if (
+    result !== null &&
+    result.status !== 'ok' &&
+    result.status !== 'clarification'
+  ) {
     reasons.push(...reasonsFor(result));
   }
 
@@ -318,8 +330,28 @@ export async function runPhase(opts: {
     }
   }
 
+  if (result?.status === 'clarification') {
+    try {
+      const targetAfter = await inspectTarget(target, targetProtectedPaths);
+      if (targetBefore.path !== targetAfter.path) {
+        reasons.push(
+          `target "${target}" changed physical location during the run`,
+        );
+      }
+    } catch (error) {
+      reasons.push(messageOf(error));
+    }
+  }
+
   if (reasons.length > 0) {
     return failure(phase, target, reasons);
+  }
+  if (result?.status === 'clarification') {
+    return {
+      ok: false,
+      report: { phase, target, reasons: result.diagnostics },
+      clarification: result.questions,
+    };
   }
   return { ok: true, target, diagnostics: result?.diagnostics ?? [] };
 }

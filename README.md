@@ -109,6 +109,17 @@ seconds fails that phase instead of hanging. Success prints the artifact
 paths and exits 0; a failure prints diagnostics naming the failing phase
 and exits non-zero.
 
+If a phase discovers missing, contradictory, or materially ambiguous behavior,
+`slc` stops with actionable questions and exits **2**. The report names the
+original source to edit, the phase, and the artifact being compiled. Edit that
+source and run the same command again. Questions can arise during normalization,
+compilation, or linking; `slc` never reads interactive answers or saves a pending
+session. Any draft from the stopped phase stays unaccepted and no successful
+build history is published. Standard error also includes one
+`SLC_CLARIFICATION: {…}` line containing schema
+`sublang.slc.clarification.v1`, `phase`, `target`, `sources`, and `questions` for
+tools consuming the diagnostics.
+
 Intermediates are first-class: edit one, re-run a single phase
 (`slc playbook.gears2fsm …`), and it lands in the same place.
 `slc --help` shows all invocation forms and flags, including

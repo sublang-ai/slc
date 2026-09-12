@@ -17,6 +17,10 @@ import { fileURLToPath } from 'node:url';
 
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
 import {
+  formatClarificationReport,
+  type ClarificationReport,
+} from './clarification.js';
+import {
   encodeLocator,
   invalidateBuildHistory,
   loadBuildHistory,
@@ -142,8 +146,9 @@ export interface SlcResult {
   outputs: string[];
   /** Diagnostics: agent summaries on success, or the failure report. */
   diagnostics: string[];
-  /** Present when incremental selection invoked no phase executor. */
-  outcome?: 'up-to-date';
+  /** Distinguishes unchanged success and actionable source questions. */
+  outcome?: 'up-to-date' | 'clarification-required';
+  clarification?: ClarificationReport;
 }
 
 /**
@@ -162,6 +167,25 @@ export async function runSlc(
     return failure(messageOf(error));
   }
 
+  const finish = (result: SlcResult): SlcResult => {
+    if (result.clarification === undefined) return result;
+    const clarification: ClarificationReport = {
+      ...result.clarification,
+      sources: (invocation.kind === 'link'
+        ? invocation.objects
+        : [invocation.source]
+      ).map((path) => resolve(runCwd(deps), path)),
+    };
+    return {
+      ...result,
+      clarification,
+      diagnostics: [
+        ...result.diagnostics,
+        formatClarificationReport(clarification),
+      ],
+    };
+  };
+
   try {
     switch (invocation.kind) {
       case 'full':
@@ -169,23 +193,25 @@ export async function runSlc(
         // (self-hosting-13): a bare full run becomes a full-link against the
         // installed @sublang/playbook runtime contract module (DR-014).
         if (invocation.pipeline === 'playbook') {
-          return await runFullLink(
-            {
-              ...invocation,
-              kind: 'full-link',
-              linkTarget: defaultPlaybookLinkTarget(),
-              options: [],
-            },
-            deps,
+          return finish(
+            await runFullLink(
+              {
+                ...invocation,
+                kind: 'full-link',
+                linkTarget: defaultPlaybookLinkTarget(),
+                options: [],
+              },
+              deps,
+            ),
           );
         }
-        return await runFull(invocation, deps);
+        return finish(await runFull(invocation, deps));
       case 'phase':
-        return await runSinglePhase(invocation, deps);
+        return finish(await runSinglePhase(invocation, deps));
       case 'link':
-        return await runDirectLink(invocation, deps);
+        return finish(await runDirectLink(invocation, deps));
       case 'full-link':
-        return await runFullLink(invocation, deps);
+        return finish(await runFullLink(invocation, deps));
     }
   } catch (error) {
     return failure(messageOf(error));
@@ -1277,7 +1303,9 @@ async function executeSteps(
       targetExt: step.targetExt,
       executor: selection.executor,
       definitions,
-      protectedInputs: stepDeclared.paths,
+      // Original invocation inputs remain immutable even when a later phase
+      // reads an intermediate and asks the author to clarify that original.
+      protectedInputs: [...immutableInputs, ...stepDeclared.paths],
       aliasInputs: [
         ...immutableInputs,
         ...declaredInputs,
@@ -1292,6 +1320,21 @@ async function executeSteps(
     });
     if (!result.ok) {
       fail();
+      if (result.clarification !== undefined) {
+        return {
+          ok: false,
+          outputs,
+          diagnostics,
+          outcome: 'clarification-required',
+          clarification: {
+            schema: 'sublang.slc.clarification.v1',
+            phase: step.phase,
+            target,
+            sources: [],
+            questions: result.clarification,
+          },
+        };
+      }
       diagnostics.push(formatFailureReport(result.report));
       return stopped(index);
     }
