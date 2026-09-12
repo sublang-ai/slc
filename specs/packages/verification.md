@@ -79,7 +79,11 @@ Where a direct-Captain or delegated-player GEARS item declares a canonical `Resu
 
 When checking GEARS result syntax independently of an FSM, the slc command shall return exactly its existing parser's item-prefixed result-contract findings for ordinary and nested-call metadata [[verification-13](#verification-13)] and script metadata [[verification-15](#verification-15)], as a pure function of that GEARS text without adding role, schema, item-presence, or natural-language checks; a result block extends to the next item or section heading, so nonblank non-entry text inside it remains malformed while prose outside it and an ordinary item without a Results label remain accepted ([DR-035](../decisions/035-gears-contract-at-producer.md)).
 
-### Strict FSM type checking
+### FSM boundary checks
+
+#### verification-35
+
+Where an FSM has a resolved artifact schema [[verification-21](#verification-21)], when checking its continuation inputs, the slc command shall reuse the prompt-contract probe's scalar and state-keyed question and reply sentinels [[verification-5](#verification-5)] to require every non-controller acting state with a callable `invoke.input` mapper and a declared `needsBossReply` result to carry both through that mapper, preserving resolved initial context shapes, omitting composer checks, and exempting controller machines [[verification-20](#verification-20)] ([DR-040](../decisions/040-early-continuation-input-contract.md)).
 
 #### verification-33
 
@@ -356,6 +360,12 @@ Where real XState fixtures exercise machine-root and ordinary state identities, 
 #### verification-34
 
 Where real TypeScript fixtures use standalone ESM roots, relative imports, project compiler and ambient declarations, and compiler configuration, when the integration suite checks them, the suite shall verify SLC-owned compiler and Node ambient authority, ignored project compiler configuration, preserved original filenames and imported module formats, strict diagnostics for invalid types, unchanged source and dependency bytes, cancellation, and distinct checker failure [[verification-33](#verification-33)].
+
+### Continuation input acceptance
+
+#### verification-36
+
+Where real FSM input mappers use scalar, keyed, typed nested, historical-player, or direct-Captain continuation contexts, when the integration suite runs continuation verification, the suite shall verify acceptance of canonical question and reply wiring, rejection of omitted or privately nested-only wiring, preservation of unrelated typed context, and controller exemption [[verification-35](#verification-35)], with the linked composition probe reporting the same input defect [[verification-5](#verification-5)].
 
 ## References
 

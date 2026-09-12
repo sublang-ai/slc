@@ -253,18 +253,7 @@ export async function runPhase(opts: {
   const { request, phase, targetExt, executor } = opts;
   const signal = opts.signal ?? new AbortController().signal;
   const target = request.kind === 'compile' ? request.target : request.linked;
-  const inputs =
-    request.kind === 'compile'
-      ? [
-          request.source,
-          ...(request.references ?? []),
-          ...(request.update === undefined ? [] : [request.update.priorInput]),
-        ]
-      : [...request.objects, request.linkTarget];
-  const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
-  const protectedPaths = [
-    ...new Set([...inputs, ...definitions, ...(opts.protectedInputs ?? [])]),
-  ];
+  const protectedPaths = phaseProtectedPaths(request, opts);
   const targetProtectedPaths = [
     ...new Set([...protectedPaths, ...(opts.aliasInputs ?? [])]),
   ];
@@ -276,7 +265,7 @@ export async function runPhase(opts: {
     return failure(phase, target, [messageOf(error)]);
   }
 
-  const before = await snapshot(protectedPaths);
+  const checkProtectedPaths = await watchProtectedPaths(protectedPaths);
 
   if (opts.beforeExecute) {
     try {
@@ -326,12 +315,7 @@ export async function runPhase(opts: {
   // Protected inputs and chain definitions are re-checked after any outcome, so
   // a mutation is caught even when the executor blocks, errors, or throws
   // (phase-execution-5, phase-execution-6).
-  const after = await snapshot(protectedPaths);
-  for (const path of protectedPaths) {
-    if (before.get(path) !== after.get(path)) {
-      reasons.push(`protected path "${path}" changed during the run`);
-    }
-  }
+  reasons.push(...(await checkProtectedPaths()));
 
   if (opts.revalidate) {
     try {
@@ -365,6 +349,41 @@ export async function runPhase(opts: {
     };
   }
   return { ok: true, target, diagnostics: result?.diagnostics ?? [] };
+}
+
+/** The same protected inputs surround phase execution and importing preflight. */
+export function phaseProtectedPaths(
+  request: ExecuteRequest,
+  opts: {
+    definitions?: readonly string[];
+    protectedInputs?: readonly string[];
+  } = {},
+): string[] {
+  const inputs =
+    request.kind === 'compile'
+      ? [
+          request.source,
+          ...(request.references ?? []),
+          ...(request.update === undefined ? [] : [request.update.priorInput]),
+        ]
+      : [...request.objects, request.linkTarget];
+  const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
+  return [
+    ...new Set([...inputs, ...definitions, ...(opts.protectedInputs ?? [])]),
+  ];
+}
+
+/** Capture existing path identities and return their unchanged-input check. */
+export async function watchProtectedPaths(
+  paths: readonly string[],
+): Promise<() => Promise<string[]>> {
+  const before = await snapshot(paths);
+  return async () => {
+    const after = await snapshot(paths);
+    return paths
+      .filter((path) => before.get(path) !== after.get(path))
+      .map((path) => `protected path "${path}" changed during the run`);
+  };
 }
 
 /** Renders a failure report as a multi-line diagnostic string (phase-execution-9). */

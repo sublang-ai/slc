@@ -18,16 +18,17 @@ const GEARS =
   '# Task\n\nRoles:\n\n- Agent\n\n### TASK-1\n\nCaptain shall prompt Agent:\n\n> Carry out <boss-intent>.\n';
 // The measured failure interpolated context.bossIntent into the source prompt
 // prematurely. This executable fixture preserves that same boundary defect.
-const fsm = (interpolate: boolean) => `
+const fsm = (interpolate: boolean, nested = false) => `
 export const concurrentRoleSets = [];
 export const machine = { config: {
-  context: { bossIntent: '' },
+  context: { bossIntent: '', continuation: {} },
   states: { work: {
     meta: { playbook: { stateId: 'work', role: 'agent' } },
-    invoke: { src: 'player', input: ({context}: {context: {bossIntent: string}}) => ({
+    invoke: { src: 'player', input: ({context}: {context: {bossIntent: string; pendingBossQuestion?: unknown; bossReply?: string; continuation?: {pendingBossQuestion?: unknown; bossReply?: string}}}) => ({
       stateId: 'work', sourceItem: 'TASK-1', role: 'agent',
       prompt: ${interpolate ? "'Carry out ' + context.bossIntent + '.'" : "'Carry out <boss-intent>.'"},
       bossIntent: context.bossIntent,
+      ${nested ? '...context.continuation,' : 'pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply,'}
       result: { done: 'Done.', needsBossReply: 'Output shall include \`question:\`' }
     }) }
   } }
@@ -165,6 +166,226 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
       ok: true,
     });
   });
+
+  it('repairs privately nested continuation wiring with the same Coder', async () => {
+    const factory: AdapterFactory = (agent) => ({
+      agent,
+      async isAvailable() {
+        return true;
+      },
+      async *run(prompt) {
+        calls.push(prompt);
+        await writeFile(target, fsm(false, calls.length === 1));
+        yield {
+          type: 'done',
+          agent,
+          timestamp: 1,
+          sessionId: 'coder',
+          payload: {
+            status: 'success',
+            result:
+              calls.length === 1
+                ? 'Wrote FSM.'
+                : envelope('Repaired continuation input.'),
+            usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+            durationMs: 1,
+          },
+        } as never;
+      },
+    });
+    const result = await runSlc(
+      ['flow.gears2fsm', source],
+      deps(
+        createConfiguredExecutor(
+          { agent: 'codex' },
+          { cwd: root, adapterFactory: factory },
+        ),
+      ),
+    );
+    expect(result, JSON.stringify(result.diagnostics)).toMatchObject({
+      ok: true,
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain(
+      'invoke.input does not carry pendingBossQuestion/bossReply',
+    );
+    expect(await readFile(source, 'utf8')).toBe(GEARS);
+  });
+
+  it('rejects a produced continuation defect before downstream work', async () => {
+    const result = await runSlc(
+      ['flow', source],
+      deps(writing(fsm(false, true))),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(result.diagnostics.join('\n')).toContain(
+      'invoke.input does not carry pendingBossQuestion/bossReply',
+    );
+    expect(await readFile(target, 'utf8')).toBe(fsm(false, true));
+    expect(await readFile(source, 'utf8')).toBe(GEARS);
+  });
+
+  it.each(['compile', 'link'])(
+    'rejects supplied continuation defects before %s consumer construction',
+    async (kind) => {
+      const input = join(root, 'task.fsm.ts');
+      await writeFile(input, fsm(false, true));
+      await writeFile(join(pipeline, 'link.md'), definition('fsm', 'playbook'));
+      let constructions = 0;
+      const result = await runSlc(
+        kind === 'compile'
+          ? ['flow.fsm2output', input]
+          : ['flow.link', input, join(root, 'runtime.ts')],
+        {
+          cwd: root,
+          resolver: () => [pipeline],
+          get executor() {
+            constructions++;
+            throw Error('consumer must not be constructed');
+          },
+        },
+      );
+      expect(result.ok).toBe(false);
+      expect(result.diagnostics.join('\n')).toContain(
+        'invoke.input does not carry pendingBossQuestion/bossReply',
+      );
+      expect(constructions).toBe(0);
+      expect(await readFile(input, 'utf8')).toBe(fsm(false, true));
+    },
+  );
+
+  it('keeps an unclassified supplied direct-Captain FSM eligible for its consumer', async () => {
+    const input = join(root, 'task.fsm.ts');
+    const direct = fsm(false, true)
+      .replace("src: 'player'", "src: 'captain'")
+      .replaceAll(", role: 'agent'", '');
+    await writeFile(input, direct);
+    const result = await runSlc(
+      ['flow.fsm2output', input],
+      deps(writing('export const output = true;')),
+    );
+    expect(result, JSON.stringify(result.diagnostics)).toMatchObject({
+      ok: true,
+    });
+    expect(calls).toHaveLength(1);
+    expect(await readFile(input, 'utf8')).toBe(direct);
+  });
+
+  it.each(['cancel', 'clarification'])(
+    'halts continuation repair on %s',
+    async (mode) => {
+      const controller = new AbortController();
+      const factory: AdapterFactory = (agent) => ({
+        agent,
+        async isAvailable() {
+          return true;
+        },
+        async *run(prompt) {
+          calls.push(prompt);
+          await writeFile(target, fsm(false, true));
+          if (mode === 'cancel')
+            controller.abort(new Error('stop continuation repair'));
+          const clarification = `CLARIFICATION: ${JSON.stringify({ questions: [{ id: 'outcome', question: 'Which output is required?', reason: 'The outcome choice is unresolved.', evidence: 'The source asks to carry out a task without specifying its outcome.' }] })}`;
+          yield {
+            type: 'done',
+            agent,
+            timestamp: 1,
+            sessionId: 'coder',
+            payload: {
+              status: 'success',
+              result:
+                calls.length === 1 ? 'Wrote FSM.' : envelope(clarification),
+              usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+              durationMs: 1,
+            },
+          } as never;
+        },
+      });
+      const result = await runSlc(['flow.gears2fsm', source], {
+        ...deps(
+          createConfiguredExecutor(
+            { agent: 'codex' },
+            { cwd: root, adapterFactory: factory },
+          ),
+        ),
+        signal: controller.signal,
+      });
+      expect(result.ok).toBe(false);
+      expect(calls).toHaveLength(mode === 'cancel' ? 1 : 2);
+      if (mode === 'clarification')
+        expect(result.clarification?.questions[0]?.id).toBe('outcome');
+      expect(await readFile(source, 'utf8')).toBe(GEARS);
+    },
+  );
+
+  it.each([
+    ['source', 'clean'],
+    ['source', 'finding'],
+    ['source', 'throw'],
+    ['definition', 'clean'],
+    ['semantic input', 'finding'],
+    ['object', 'clean'],
+    ['link target', 'throw'],
+  ] as const)(
+    'rejects import-time changes to the %s before a %s preflight can select its consumer',
+    async (protectedKind, outcome) => {
+      const input = join(root, 'task.fsm.ts');
+      const runtime = join(root, 'runtime.ts');
+      const semantic = join(pipeline, 'inputs', 'semantic.md');
+      await mkdir(join(pipeline, 'inputs'));
+      const linking =
+        protectedKind === 'object' || protectedKind === 'link target';
+      const consumerDefinition = join(
+        pipeline,
+        linking ? 'link.md' : 'fsm2output.md',
+      );
+      await writeFile(join(pipeline, 'link.md'), definition('fsm', 'playbook'));
+      await writeFile(runtime, 'export {};\n');
+      await writeFile(semantic, 'Declared semantic input.\n');
+      await writeFile(
+        join(pipeline, 'slc.pin-inputs.json'),
+        JSON.stringify({
+          schema: 'sublang.slc.pin-inputs.v1',
+          closures: { fsm2output: ['inputs/semantic.md'] },
+        }),
+      );
+      const changed =
+        protectedKind === 'definition'
+          ? consumerDefinition
+          : protectedKind === 'semantic input'
+            ? semantic
+            : protectedKind === 'link target'
+              ? runtime
+              : input;
+      const content = `import { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(changed)}, '\\n// changed during preflight import\\n');\n${outcome === 'throw' ? "throw new Error('import failed after mutation');\n" : ''}${outcome === 'finding' ? fsm(false, true) : 'export const machine = {config:{states:{}}};\n'}`;
+      await writeFile(input, content);
+      const original = await readFile(changed, 'utf8');
+      let selections = 0;
+      const result = await runSlc(
+        linking ? ['flow.link', input, runtime] : ['flow.fsm2output', input],
+        {
+          cwd: root,
+          resolver: () => [pipeline],
+          get executor() {
+            selections++;
+            throw Error('must not select consumer after preflight mutation');
+          },
+        },
+      );
+      expect(result.ok).toBe(false);
+      expect(selections).toBe(0);
+      const diagnostic = result.diagnostics.join('\n');
+      expect(diagnostic).toContain(
+        `protected path "${changed}" changed during the run`,
+      );
+      expect(diagnostic).not.toContain('invalid FSM source');
+      expect(diagnostic).not.toContain('import failed after mutation');
+      expect(await readFile(changed, 'utf8')).toBe(
+        original + '\n// changed during preflight import\n',
+      );
+    },
+  );
 
   it.each(['source', 'definition'])(
     'fails generic protection after a correction mutates the %s',

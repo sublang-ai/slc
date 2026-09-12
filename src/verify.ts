@@ -2413,6 +2413,92 @@ export function deriveSubstitutions(
   return out;
 }
 
+/** The shared input-only portion of the canonical continuation probe. */
+function probeContinuationInput(
+  state: CaptainState,
+  inputFn: NonNullable<InvokeLike['input']>,
+  initial: Record<string, unknown> | undefined,
+  artifactSchema: 1 | 3,
+): { input: unknown; fields: string[]; question: string; reply: string } {
+  const question = sentinelFor('question');
+  const reply = sentinelFor('bossReply');
+  const pendingBossQuestion = {
+    ...(artifactSchema === 3
+      ? state.actor === 'captain'
+        ? { asker: { kind: 'captain' as const } }
+        : { asker: { kind: 'role' as const, roleId: state.role ?? '' } }
+      : { player: state.actor === 'captain' ? 'Captain' : state.player }),
+    questionId: state.stateId,
+    resumeStateId: state.stateId,
+    sourceItem: state.sourceItem,
+    question,
+  };
+  return {
+    ...withPlaceholderValues(
+      state,
+      inputFn({
+        context: {
+          ...ordinaryTurnContext(probeContextReads(inputFn, initial), initial),
+          pendingBossQuestion,
+          bossReply: reply,
+          pendingBossQuestions: { [state.stateId]: pendingBossQuestion },
+          bossReplies: { [state.stateId]: reply },
+        },
+      }),
+    ),
+    question,
+    reply,
+  };
+}
+
+function continuationInputFinding(
+  stateId: string,
+  input: unknown,
+  question: string,
+  reply: string,
+): string | undefined {
+  return !carriesSentinel(input, question) || !carriesSentinel(input, reply)
+    ? `${stateId}: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn`
+    : undefined;
+}
+
+/** Known-schema FSM input checks, without requiring a linked composer. */
+export function checkFsmContinuationInputs(
+  config: MachineConfigLike,
+  artifactSchema: 1 | 3,
+): string[] {
+  if (isControllerMachine(config)) return [];
+  const initial = initialMachineContext(config);
+  const findings: string[] = [];
+  for (const { state, inputFn } of enumerateCaptainBindings(config)) {
+    if (
+      typeof inputFn !== 'function' ||
+      !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)
+    )
+      continue;
+    try {
+      const { input, question, reply } = probeContinuationInput(
+        state,
+        inputFn,
+        initial,
+        artifactSchema,
+      );
+      const finding = continuationInputFinding(
+        state.stateId,
+        input,
+        question,
+        reply,
+      );
+      if (finding !== undefined) findings.push(finding);
+    } catch (error) {
+      findings.push(
+        `${state.stateId}: invoke.input threw on a continuation turn: ${messageOf(error)}`,
+      );
+    }
+  }
+  return findings;
+}
+
 /**
  * Checks the linked composer against the link contract for every captain state
  * (verification-5), returning findings (empty when conformant): the prompt body is
@@ -2528,35 +2614,14 @@ export function checkPromptComposition(opts: {
     // Q&A blocks before the domain body (gears2fsm.md, link.md).
     const question = sentinelFor('question');
     const reply = sentinelFor('bossReply');
-    const pendingBossQuestion = {
-      ...(artifactSchema === 3
-        ? state.actor === 'captain'
-          ? { asker: { kind: 'captain' as const } }
-          : { asker: { kind: 'role' as const, roleId: state.role ?? '' } }
-        : {
-            player: state.actor === 'captain' ? 'Captain' : state.player,
-          }),
-      questionId: state.stateId,
-      resumeStateId: state.stateId,
-      sourceItem: state.sourceItem,
-      question,
-    };
     let continuation: string;
     let input: unknown;
     try {
-      const probed = withPlaceholderValues(
+      const probed = probeContinuationInput(
         state,
-        inputFn({
-          context: {
-            ...ordinaryTurnContext(reads, initial),
-            pendingBossQuestion,
-            bossReply: reply,
-            pendingBossQuestions: {
-              [state.stateId]: pendingBossQuestion,
-            },
-            bossReplies: { [state.stateId]: reply },
-          },
-        }),
+        inputFn,
+        initial,
+        artifactSchema,
       );
       input = probed.input;
       promptReads = promptSentinelFields(state, reads, probed.fields, roles);
@@ -2570,10 +2635,14 @@ export function checkPromptComposition(opts: {
       );
       continue;
     }
-    if (!carriesSentinel(input, question) || !carriesSentinel(input, reply)) {
-      findings.push(
-        `${state.stateId}: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn`,
-      );
+    const inputFinding = continuationInputFinding(
+      state.stateId,
+      input,
+      question,
+      reply,
+    );
+    if (inputFinding !== undefined) {
+      findings.push(inputFinding);
       continue;
     }
     if (!continuation.startsWith(`${CONTINUATION_PREAMBLE}\n\n`)) {

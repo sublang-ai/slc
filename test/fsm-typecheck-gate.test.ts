@@ -30,7 +30,7 @@ const fsm = (invalid = false) => `
 import { fromPromise, setup } from 'xstate';
 export const concurrentRoleSets = [] as const;
 export const machine = setup({
-  types: {context: {} as {bossIntent: string}, input: {} as {bossIntent?: string}, ${invalid ? 'output: {} as void,' : ''}},
+  types: {context: {} as {bossIntent: string; pendingBossQuestion?: unknown; bossReply?: string}, input: {} as {bossIntent?: string}, ${invalid ? 'output: {} as void,' : ''}},
   actors: {player: fromPromise(async () => { throw new Error('runner provides player'); })},
 }).createMachine({
   context: ({input}) => ({bossIntent: input.bossIntent ?? ''}),
@@ -40,6 +40,7 @@ export const machine = setup({
     invoke: {src: 'player', input: ({context}) => ({
       stateId: 'work', sourceItem: 'TASK-1', role: 'agent',
       prompt: 'Carry out <boss-intent>.', bossIntent: context.bossIntent,
+      pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply,
       result: {done: 'Done.', needsBossReply: 'Output shall include \`question:\`'},
     })},
   }},

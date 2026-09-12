@@ -65,6 +65,7 @@ meta.md       The spec of specs
 | [DR-037](decisions/037-definition-reference-origin.md) | 037-definition-reference-origin.md | Definition locations supplied to performing calls for direct resolution of cited relative inputs |
 | [DR-038](decisions/038-quoted-task-runtime-acceptance.md) | 038-quoted-task-runtime-acceptance.md | Exact literal or quoted task text in runtime benchmark acceptance, with separate retrospective validation |
 | [DR-039](decisions/039-strict-fsm-boundary.md) | 039-strict-fsm-boundary.md | Strict standalone FSM type checking at the producer and before protected-input consumers |
+| [DR-040](decisions/040-early-continuation-input-contract.md) | 040-early-continuation-input-contract.md | Existing canonical Boss-continuation input probe at the FSM producer and before protected-input consumers |
 
 ## Packages
 

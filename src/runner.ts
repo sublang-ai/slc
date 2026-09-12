@@ -42,8 +42,10 @@ import {
   type MechanicalReview,
   type PhaseExecutor,
   formatFailureReport,
+  phaseProtectedPaths,
   pathsAlias,
   runPhase,
+  watchProtectedPaths,
 } from './execution.js';
 import { compareUtf8, hashBytes, isHash, type Hash } from './hash.js';
 import { type Invocation, parseInvocation } from './invocation.js';
@@ -87,6 +89,7 @@ import {
 } from './runtime-contract.js';
 import {
   artifactSchemaForPlaybookProvenance,
+  checkFsmContinuationInputs,
   checkGearsFsmConformance,
   checkGearsResultContract,
   checkLinkedModuleContract,
@@ -100,6 +103,7 @@ import {
   loadLinkedModuleForVerification,
   playbookProvenanceForLinkTarget,
   resolveArtifactSchemaForVerification,
+  type MachineConfigLike,
 } from './verify.js';
 import {
   VERIFIER_SUPPORT_MODULE,
@@ -781,6 +785,8 @@ interface PhaseStep {
   gearsSourceContract?: MechanicalReview;
   /** Strict FSM input checks run before constructing a protected-input consumer. */
   fsmSourceTypecheck?: MechanicalReview;
+  /** Canonical continuation inputs must be valid before consumer construction. */
+  fsmSourceContinuation?: MechanicalReview;
   /** Present for a gated `playbook` link step (DR-030, phase-execution-53). */
   linkFidelity?: MechanicalReview;
 }
@@ -1039,6 +1045,12 @@ function compileStep(
     ...(phase.source.format === 'fsm' && phase.source.ext === '.ts'
       ? { fsmSourceTypecheck: () => checkFsmTypeScript(source, signal) }
       : {}),
+    ...(phase.source.format === 'fsm'
+      ? {
+          fsmSourceContinuation: () =>
+            fsmContinuationFindings(source, linkTarget, signal),
+        }
+      : {}),
   };
 }
 
@@ -1102,21 +1114,7 @@ async function fsmConformanceFindings(
       loadFsmModule(target),
     ]);
     const config = findMachineConfig(fsm);
-    const provenance =
-      linkTarget === undefined
-        ? undefined
-        : await playbookProvenanceForLinkTarget(linkTarget);
-    const runtimeDeclaration =
-      linkTarget === undefined ||
-      artifactSchemaForPlaybookProvenance(provenance) !== undefined
-        ? undefined
-        : await linkTargetRuntimeDeclaration(linkTarget);
-    const schema = resolveArtifactSchemaForVerification({
-      requireContinuationSchema: false,
-      config,
-      ...(provenance === undefined ? {} : { provenance }),
-      ...(runtimeDeclaration === undefined ? {} : { runtimeDeclaration }),
-    });
+    const schema = await fsmSchema(config, linkTarget);
     return [
       ...schema.findings,
       ...checkGearsFsmConformance(gears, config, {
@@ -1125,10 +1123,48 @@ async function fsmConformanceFindings(
           ? {}
           : { artifactSchema: schema.artifactSchema }),
       }),
+      ...(schema.artifactSchema === undefined || schema.findings.length > 0
+        ? []
+        : checkFsmContinuationInputs(config, schema.artifactSchema)),
     ];
   } catch (error) {
     return [`FSM conformance could not be checked: ${messageOf(error)}`];
   }
+}
+
+async function fsmSchema(config: MachineConfigLike, linkTarget?: string) {
+  const provenance =
+    linkTarget === undefined
+      ? undefined
+      : await playbookProvenanceForLinkTarget(linkTarget);
+  const runtimeDeclaration =
+    linkTarget === undefined ||
+    artifactSchemaForPlaybookProvenance(provenance) !== undefined
+      ? undefined
+      : await linkTargetRuntimeDeclaration(linkTarget);
+  return resolveArtifactSchemaForVerification({
+    requireContinuationSchema: false,
+    config,
+    ...(provenance === undefined ? {} : { provenance }),
+    ...(runtimeDeclaration === undefined ? {} : { runtimeDeclaration }),
+  });
+}
+
+async function fsmContinuationFindings(
+  source: string,
+  linkTarget?: string,
+  signal?: AbortSignal,
+): Promise<readonly string[]> {
+  signal?.throwIfAborted();
+  const config = findMachineConfig(await loadFsmModule(source));
+  const schema = await fsmSchema(config, linkTarget);
+  signal?.throwIfAborted();
+  return [
+    ...schema.findings,
+    ...(schema.artifactSchema === undefined || schema.findings.length > 0
+      ? []
+      : checkFsmContinuationInputs(config, schema.artifactSchema)),
+  ];
 }
 
 /**
@@ -1174,6 +1210,16 @@ function linkStep(opts: {
       ? {
           fsmSourceTypecheck: () =>
             checkFsmTypeScript(fsmObjects[0], opts.signal),
+        }
+      : {}),
+    ...(gated !== undefined && link.source.format === 'fsm'
+      ? {
+          fsmSourceContinuation: () =>
+            fsmContinuationFindings(
+              fsmObjects[0],
+              opts.linkTarget,
+              opts.signal,
+            ),
         }
       : {}),
   };
@@ -1409,6 +1455,14 @@ async function executeSteps(
         elapsedMs: Date.now() - startedAt,
       });
 
+    const request: ExecuteRequest =
+      mode.mode === 'update' && step.request.kind === 'compile'
+        ? {
+            ...step.request,
+            update: { priorInput: mode.priorInput, diff: mode.diff },
+          }
+        : step.request;
+
     // The consumer cannot repair its protected source. Reject these existing
     // parser findings before selecting or constructing any execution strategy.
     if (step.gearsSourceContract !== undefined) {
@@ -1429,30 +1483,38 @@ async function executeSteps(
       }
     }
 
-    if (step.fsmSourceTypecheck !== undefined) {
-      let findings: readonly string[];
+    for (const [check, name] of [
+      [step.fsmSourceTypecheck, 'TypeScript'],
+      [step.fsmSourceContinuation, 'continuation'],
+    ] as const) {
+      if (check === undefined) continue;
+      let reasons: string[] = [];
+      let checkProtectedPaths: (() => Promise<string[]>) | undefined;
       try {
-        findings = await step.fsmSourceTypecheck();
+        if (name === 'continuation') {
+          checkProtectedPaths = await watchProtectedPaths(
+            phaseProtectedPaths(request, {
+              definitions,
+              protectedInputs: [...immutableInputs, ...stepDeclared.paths],
+            }),
+          );
+        }
+        const findings = await check();
+        if (findings.length > 0) reasons = ['invalid FSM source', ...findings];
       } catch (error) {
-        fail();
-        diagnostics.push(
-          formatFailureReport({
-            phase: step.phase,
-            target,
-            reasons: [
-              `FSM TypeScript check could not run: ${messageOf(error)}`,
-            ],
-          }),
-        );
-        return stopped(index);
+        reasons = [`FSM ${name} check could not run: ${messageOf(error)}`];
       }
-      if (findings.length > 0) {
+      // Module imports can execute code even when the later probe fails or
+      // throws. Their mutations outrank every checker outcome, before selection.
+      const changes = await checkProtectedPaths?.();
+      if (changes !== undefined && changes.length > 0) reasons = changes;
+      if (reasons.length > 0) {
         fail();
         diagnostics.push(
           formatFailureReport({
             phase: step.phase,
             target,
-            reasons: ['invalid FSM source', ...findings],
+            reasons,
           }),
         );
         return stopped(index);
@@ -1490,14 +1552,6 @@ async function executeSteps(
         text: `updating ${step.phase} → ${target}`,
       });
     }
-    const request: ExecuteRequest =
-      mode.mode === 'update' && step.request.kind === 'compile'
-        ? {
-            ...step.request,
-            update: { priorInput: mode.priorInput, diff: mode.diff },
-          }
-        : step.request;
-
     const result = await runPhase({
       request,
       phase: step.phase,

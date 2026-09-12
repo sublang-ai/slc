@@ -30,6 +30,7 @@ import {
   CONTINUATION_PREAMBLE,
   artifactSchemaForPlaybookProvenance,
   capturePromptContract,
+  checkFsmContinuationInputs,
   checkGearsFsmConformance,
   checkPromptComposition,
   deriveSubstitutions,
@@ -4157,5 +4158,93 @@ describe('emitGearsFsmConformanceTest', () => {
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('canonical continuation input boundary', () => {
+  it.each([
+    ['role', 3],
+    ['captain', 3],
+    ['player', 1],
+  ] as const)(
+    'preserves scalar and keyed %s generation inputs',
+    (actor, schema) => {
+      for (const wiring of ['scalar', 'keyed', 'nested'] as const) {
+        const machine = createMachine({
+          context: { nested: { values: [7] }, continuation: {} },
+          initial: 'work',
+          states: {
+            work: {
+              invoke: {
+                src: actor === 'captain' ? 'captain' : 'player',
+                input: ({ context }: { context: Record<string, unknown> }) => {
+                  expect(
+                    (context.nested as { values: number[] }).values,
+                  ).toEqual([7]);
+                  const questions = context.pendingBossQuestions as
+                    | Record<string, unknown>
+                    | undefined;
+                  const replies = context.bossReplies as
+                    | Record<string, unknown>
+                    | undefined;
+                  const continued = context.continuation as {
+                    pendingBossQuestion?: unknown;
+                    bossReply?: unknown;
+                  };
+                  return {
+                    stateId: 'work',
+                    sourceItem: 'TASK-1',
+                    ...(actor === 'role'
+                      ? { role: 'agent' }
+                      : actor === 'player'
+                        ? { player: 'Coder' }
+                        : {}),
+                    prompt: 'Carry out the task.',
+                    result: {
+                      done: 'Done.',
+                      needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+                    },
+                    pendingBossQuestion:
+                      wiring === 'scalar'
+                        ? context.pendingBossQuestion
+                        : wiring === 'keyed'
+                          ? questions?.work
+                          : continued.pendingBossQuestion,
+                    bossReply:
+                      wiring === 'scalar'
+                        ? context.bossReply
+                        : wiring === 'keyed'
+                          ? replies?.work
+                          : continued.bossReply,
+                  };
+                },
+              },
+            },
+          },
+        });
+        const findings = checkFsmContinuationInputs(
+          machine.config as MachineConfigLike,
+          schema,
+        );
+        const composition = checkPromptComposition({
+          config: machine.config as MachineConfigLike,
+          artifactSchema: schema,
+          compose: defaultComposePlayerPrompt as never,
+        });
+        if (wiring === 'nested') {
+          expect(findings).toEqual([
+            'work: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn',
+          ]);
+          expect(composition).toContain(findings[0]);
+        } else {
+          expect(findings).toEqual([]);
+          expect(composition).toEqual([]);
+        }
+      }
+    },
+  );
+
+  it('retains the controller exemption without synthesizing a continuation', () => {
+    expect(checkFsmContinuationInputs(controllerConfig(), 3)).toEqual([]);
   });
 });
