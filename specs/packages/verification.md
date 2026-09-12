@@ -210,7 +210,7 @@ When checking GEARS↔FSM conformance, the slc command shall recognize as the op
 
 #### verification-16
 
-When checking FSM transition coverage, the slc command shall drive `script` actor states like other work states [[verification-6](#verification-6)] with exactly `guard` and `exitStatus` — the first declared guard with zero and the second with representative nonzero statuses from the bounded candidate set — and satisfy guarded script arms only with those runtime-valid outputs, without inventing payload fields or using malformed bare outputs, so optimized transitions receive faithful coverage ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-034](../decisions/034-faithful-transition-coverage.md)).
+When checking FSM transition coverage, the slc command shall drive `script` actor states like other work states [[verification-6](#verification-6)] with exactly `guard` and `exitStatus` — the first declared guard with zero and the second with representative nonzero statuses from one bounded candidate set shared by result acceptance and arm auditing, capped per arm with its own constants preceding general artifact candidates — require at least one satisfying representative for each result and drive a directly accepting candidate from the accepted union, without inventing payload fields or using malformed bare outputs to satisfy a guarded script arm, so optimized transitions receive faithful reachability coverage without claiming exhaustive safety for every possible exit status ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-034](../decisions/034-faithful-transition-coverage.md)).
 
 ### Emitted-module load integrity
 
@@ -309,6 +309,8 @@ When a GEARS package and FSM contain script behavior, the conformance and covera
 | --- | --- |
 | A script item is realized by a matching `script` actor state. | Pass conformance [[verification-15](#verification-15)] and coverage [[verification-16](#verification-16)]. |
 | Script success and failure outputs route through an explicit success arm and a selected failure fallback, including guards that inspect the required exit status. | Accept the runtime-valid transitions [[verification-16](#verification-16)] and the ordered fallback [[verification-6](#verification-6)]. |
+| A script failure outcome is reachable through an arm accepting a nonzero candidate other than one. | Accept that outcome and drive its satisfying candidate through the real machine [[verification-16](#verification-16)]. |
+| A script declares more status-specific failure arms than the per-arm candidate budget. | Preserve coverage of each reachable arm by prioritizing its own status constant [[verification-16](#verification-16)]. |
 | A script arm accepts only an impossible guard/status pair or invented payload, a declared outcome has no accepting arm, or a preceding arm shadows another guarded arm. | Report the unreachable transition without satisfying it through malformed script outputs [[verification-16](#verification-16)], [[verification-6](#verification-6)]. |
 | The command drifts, a guard is renamed or reordered, `needsBossReply` is added, or the item is realized by a Captain or player state. | Report the conformance drift [[verification-15](#verification-15)]. |
 

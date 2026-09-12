@@ -18,6 +18,8 @@ An invalid synthetic success could therefore leave the working state through fai
 - Evaluate declared outcomes against ordered XState arms, including a fallback only when every preceding guard rejects that valid output.
 - Preserve controller action distinctness and rejection of missing, shadowed, unresolved, or unsatisfiable transitions.
 - Give script probes the actual two-field runtime output: the first declared guard with exit status zero, and the second with representative nonzero exit statuses drawn from the bounded candidate set.
+- Use the same bounded valid-output candidates for declared-result acceptance and arm auditing, and drive a directly accepting candidate; outcome reachability requires one satisfying representative rather than proving every possible exit status safe.
+- Apply the candidate cap per arm, prioritizing that arm's constants over general artifact candidates, so unrelated arms cannot exhaust its search; combine only accepted candidates for runtime driving.
 - Never invent additional script output fields or use a malformed bare script output to satisfy a guarded arm.
 - Keep coverage outside the early compilation gates; this correction changes verification accuracy, not compilation policy.
 

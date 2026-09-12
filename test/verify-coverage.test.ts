@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
-import { assign, fromPromise, setup } from 'xstate';
+import { assign, createActor, fromPromise, setup } from 'xstate';
 
 import {
   checkFsmCoverage,
@@ -187,6 +187,7 @@ const scriptWorkflow = (
     failureArm?: boolean;
     shadowSuccess?: boolean;
     specialFailureStatus?: number;
+    extraFailureStatuses?: number[];
     observed?: Array<{ guard: string; exitStatus: number }>;
   } = {},
 ) => {
@@ -210,6 +211,9 @@ const scriptWorkflow = (
       scriptOk:
         options.guard ??
         (({ event }: any) => scriptOutput(event)?.guard === 'zero'),
+      scriptFailureStatus: ({ event }: any, params: { exitStatus: number }) =>
+        event.output.guard === 'nonzero' &&
+        event.output.exitStatus === params.exitStatus,
     },
     actions: {
       rememberScriptResult: assign(({ event }: any) => {
@@ -252,8 +256,14 @@ const scriptWorkflow = (
                       event.output.guard === 'nonzero' &&
                       event.output.exitStatus === options.specialFailureStatus,
                     target: '#failed',
+                    actions: 'rememberScriptResult',
                   },
                 ]),
+            ...(options.extraFailureStatuses ?? []).map((exitStatus) => ({
+              guard: { type: 'scriptFailureStatus', params: { exitStatus } },
+              target: '#failed',
+              actions: 'rememberScriptResult',
+            })),
             ...(options.failureArm === false
               ? []
               : [{ target: '#failed', actions: 'rememberScriptResult' }]),
@@ -1790,6 +1800,67 @@ describe('checkFsmCoverage (verification-6)', () => {
         { sourceText: 'const specialFailureStatus = 42;' },
       ),
     ).toEqual([]);
+  });
+
+  it('covers an outcome reached by exit status two and drives that valid candidate', async () => {
+    const observed: Array<{ guard: string; exitStatus: number }> = [];
+    const machine = scriptWorkflow({
+      failureArm: false,
+      specialFailureStatus: 2,
+      observed,
+    });
+    const actor = createActor(
+      machine.provide({
+        actors: {
+          script: fromPromise(async () => ({
+            guard: 'nonzero',
+            exitStatus: 2,
+          })) as never,
+        },
+      }),
+    );
+    try {
+      actor.start();
+      actor.send({ type: 'GO' });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(actor.getSnapshot().value).toBe('failed');
+    } finally {
+      actor.stop();
+    }
+    observed.length = 0;
+    expect(
+      await checkFsmCoverage(
+        { machine },
+        { sourceText: 'const specialFailureStatus = 2;' },
+      ),
+    ).toEqual([]);
+    expect(observed).toContainEqual({ guard: 'nonzero', exitStatus: 2 });
+  });
+
+  it('keeps arm-local status candidates beyond the shared eight-status budget', async () => {
+    const machine = scriptWorkflow({
+      failureArm: false,
+      extraFailureStatuses: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    });
+    const actor = createActor(
+      machine.provide({
+        actors: {
+          script: fromPromise(async () => ({
+            guard: 'nonzero',
+            exitStatus: 11,
+          })) as never,
+        },
+      }),
+    );
+    try {
+      actor.start();
+      actor.send({ type: 'GO' });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(actor.getSnapshot().value).toBe('failed');
+    } finally {
+      actor.stop();
+    }
+    expect(await checkFsmCoverage({ machine })).toEqual([]);
   });
 
   it('keeps the actual done-event type fixed during arm probing', async () => {

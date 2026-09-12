@@ -401,6 +401,23 @@ function synthOutput(
   return output;
 }
 
+/** One bounded runtime-valid candidate set for acceptance and arm auditing. */
+function resultOutputCandidates(
+  state: CaptainState,
+  key: string,
+  candidates: readonly unknown[],
+): Record<string, unknown>[] {
+  const output = synthOutput(state, key);
+  if (state.actor !== 'script' || output.exitStatus === 0) return [output];
+  return [...new Set([1, ...candidates])]
+    .filter(
+      (value): value is number =>
+        typeof value === 'number' && Number.isInteger(value) && value > 0,
+    )
+    .slice(0, MAX_SCRIPT_EXIT_STATUSES)
+    .map((exitStatus) => ({ guard: key, exitStatus }));
+}
+
 function invocations(state: StateNodeLike): readonly InvokeLike[] {
   if (Array.isArray(state.invoke)) return state.invoke;
   return state.invoke === undefined ? [] : [state.invoke as InvokeLike];
@@ -2760,11 +2777,15 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
     // Acceptance includes ordered fallbacks. Script arm probes have one zero
     // status and a capped set of nonzero statuses; ordinary actors also probe
     // malformed bare outputs for defensive arms.
+    const resultCandidates =
+      captain.binding.actor === 'script'
+        ? 1 + MAX_SCRIPT_EXIT_STATUSES
+        : resultKeys.length;
     guardProbeCalls +=
-      resultKeys.length * transitionArms(captain.invocation.onDone).length +
+      resultCandidates * transitionArms(captain.invocation.onDone).length +
       guardedDoneArms *
         (captain.binding.actor === 'script'
-          ? 1 + MAX_SCRIPT_EXIT_STATUSES
+          ? resultCandidates
           : resultKeys.length * 2) +
       errorArms;
     // Every result, the blank Boss-reply check, and onError enter through an
@@ -3092,6 +3113,7 @@ export async function checkFsmCoverage(
     for (const key of Object.keys(state.result)) {
       const output = synthOutput(state, key);
       const accepting = new Map<number, ProbeAssignment | undefined>();
+      const acceptedOutputs = new Map<string, Record<string, unknown>>();
       for (const [index, arm] of rawDoneArms.entries()) {
         const target = onDoneArms[index]?.target ?? null;
         const rawGuard = armGuard(arm);
@@ -3113,16 +3135,25 @@ export async function checkFsmCoverage(
             initialCoverageContext,
           );
           if (assignment !== undefined) accepting.set(index, assignment);
-        } else if (
-          doneGuardSatisfiable(
-            guard,
-            doneEvent,
-            output,
-            candidates,
-            state.actor === 'script',
-          )
-        ) {
-          accepting.set(index, undefined);
+        } else {
+          const outputs = resultOutputCandidates(state, key, [
+            ...(resolveGuard(machine, rawGuard)?.probeValues ?? []),
+            ...candidates,
+          ]);
+          for (const candidate of outputs) {
+            if (
+              doneGuardSatisfiable(
+                guard,
+                doneEvent,
+                candidate,
+                candidates,
+                state.actor === 'script',
+              )
+            ) {
+              accepting.set(index, undefined);
+              acceptedOutputs.set(JSON.stringify(candidate), candidate);
+            }
+          }
         }
       }
 
@@ -3157,39 +3188,18 @@ export async function checkFsmCoverage(
         // initial context is a known accepting arm. Encountering an unresolved
         // guard first makes driving unsafe: XState reports that error
         // asynchronously, so the arm audit below owns the finding (c887fc4).
-        let safeToDrive = true;
-        for (const [index, arm] of rawDoneArms.entries()) {
-          const rawGuard = armGuard(arm);
-          if (rawGuard === undefined) {
-            directArm = index;
+        for (const candidate of acceptedOutputs.values()) {
+          const selected = directlySelectedArm(
+            machine,
+            captain,
+            candidate,
+            initialCoverageContext,
+          );
+          if (selected !== undefined && accepting.has(selected)) {
+            directArm = selected;
+            drivenOutput = candidate;
             break;
           }
-          const guard = resolveGuard(machine, rawGuard);
-          if (guard === undefined) {
-            safeToDrive = false;
-            break;
-          }
-          try {
-            if (
-              guard.run({
-                context: initialCoverageContext,
-                event: { ...doneEvent, output },
-              })
-            ) {
-              directArm = index;
-              break;
-            }
-          } catch {
-            safeToDrive = false;
-            break;
-          }
-        }
-        if (
-          !safeToDrive ||
-          directArm === undefined ||
-          !accepting.has(directArm)
-        ) {
-          continue;
         }
       }
       if (directArm === undefined) {
@@ -3393,19 +3403,10 @@ export async function checkFsmCoverage(
       // ordered reachability of later arms unsafe to evaluate.
       if (guard === undefined) continue;
       const anyOutput = Object.keys(state.result).some((key) => {
-        const output = synthOutput(state, key);
-        const outputs =
-          state.actor === 'script' && output.exitStatus !== 0
-            ? [...new Set([1, ...declaredGuard.probeValues, ...candidates])]
-                .filter(
-                  (value): value is number =>
-                    typeof value === 'number' &&
-                    Number.isInteger(value) &&
-                    value > 0,
-                )
-                .slice(0, MAX_SCRIPT_EXIT_STATUSES)
-                .map((exitStatus) => ({ guard: key, exitStatus }))
-            : [output];
+        const outputs = resultOutputCandidates(state, key, [
+          ...declaredGuard.probeValues,
+          ...candidates,
+        ]);
         return (
           outputs.some((candidate) =>
             doneGuardSatisfiable(
