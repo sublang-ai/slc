@@ -16,7 +16,7 @@ When explicitly invoked with a model, the compilation benchmark shall compile th
 
 ### compilation-measurement-2
 
-When the benchmark records an experiment, the compilation benchmark shall retain a machine-readable summary containing source and pipeline-definition byte identities, requested model and effective agent settings, dependency and provider SDK versions, compiled JavaScript runtime byte identities, invocation settings, phase durations, individual adapter-call durations and completion statuses, prompt byte counts and hashes, event and tool-call counts, and usage where the adapter reports it, with unreported accounting absent rather than fabricated.
+When the benchmark records an experiment, the compilation benchmark shall retain a machine-readable summary containing source and complete declared pipeline-input byte identities derived through the measured compiler's sidecar or transitive-inline closure rules [[pinning-17](pinning.md#pinning-17)] and recorded-or-default boundary [[pinning-21](pinning.md#pinning-21)], including declaration files, requested model and effective agent settings, dependency and provider SDK versions, compiled JavaScript runtime and executing verification-harness byte identities, invocation settings, phase durations, individual adapter-call durations and completion statuses, prompt byte counts and hashes, event and tool-call counts, and usage where the adapter reports it, with unavailable older-compiler closure discovery and incomplete discovery explicitly distinguished from complete identities and unreported accounting absent rather than fabricated.
 
 ### compilation-measurement-3
 
@@ -67,3 +67,7 @@ Where a minimal entry uses the installed shared runtime and real host capabiliti
 ### compilation-measurement-14
 
 Where a fixture link phase receives a fixed FSM and a supplied link target, when the integration suite runs the link-only benchmark, the suite shall verify a fresh single link invocation, unchanged input bytes, explicit scope and target identity, preserved adapter metrics, accepted faithful linking, rejected linked prompt drift, and refusal of a missing FSM source or irrelevant options before adapter work [[compilation-measurement-13](#compilation-measurement-13)].
+
+### compilation-measurement-15
+
+Where fixture pipelines declare a helper through a sidecar or a transitive inline reference, a widened recorded boundary, an invalid escaping member, or an older compiler without closure discovery, when the integration suite records ordinary benchmark runs before and after changing the helper bytes, the suite shall verify changed closure identities with unchanged definitions, inclusion of declaration and transitive input identities without their contents, admission only under the applicable boundary, explicit incomplete or unavailable discovery for the respective unsupported cases, and identities for the executing benchmark and runtime-check scripts [[compilation-measurement-2](#compilation-measurement-2)].

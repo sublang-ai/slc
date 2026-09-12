@@ -30,6 +30,78 @@ const identity = (path) => {
 };
 const elapsed = (start) => Math.round(performance.now() - start);
 
+/** Use the measured compiler's private discovery modules, never our own resolver. */
+async function pipelineInputDiscovery(root) {
+  try {
+    const modules = await Promise.all(
+      ['pins', 'pin-inputs', 'pin-closure', 'pipeline'].map(
+        (name) => import(pathToFileURL(join(root, 'dist', `${name}.js`)).href),
+      ),
+    );
+    const api = Object.assign({}, ...modules);
+    if (
+      [
+        'loadPinFile',
+        'loadPinInputsFile',
+        'deriveClosureWithDeclaration',
+        'discoverPhaseFiles',
+      ].some((name) => typeof api[name] !== 'function')
+    )
+      return undefined;
+    return api;
+  } catch {
+    return undefined;
+  }
+}
+
+async function pipelineInputIdentity(pipeline, discovery) {
+  if (!discovery)
+    return {
+      status: 'unavailable',
+      reason: 'measured-compiler-closure-api-unavailable',
+    };
+  try {
+    const pins = await discovery.loadPinFile(pipeline);
+    const boundary = pins.file?.pathBoundary.path ?? '.';
+    const sidecar = await discovery.loadPinInputsFile(pipeline, boundary);
+    const { phaseFiles, linkFile } =
+      await discovery.discoverPhaseFiles(pipeline);
+    const paths = new Set([pins.path, sidecar.path].filter(Boolean));
+    const phases = [];
+    for (const definition of [...phaseFiles, ...(linkFile ? [linkFile] : [])]) {
+      const name = basename(definition, '.md');
+      const closure = await discovery.deriveClosureWithDeclaration(
+        pipeline,
+        boundary,
+        basename(definition),
+        name,
+        (path) => paths.add(path),
+        sidecar,
+      );
+      for (const path of closure.paths) paths.add(path);
+      phases.push({
+        name,
+        declaration: closure.declaration,
+        paths: [...closure.paths].sort(),
+      });
+    }
+    const files = [...paths].sort().map(identity);
+    return {
+      status: 'complete',
+      boundary,
+      phases,
+      files,
+      sha256: hash(JSON.stringify(files)),
+    };
+  } catch (error) {
+    return {
+      status: 'incomplete',
+      reason: 'declared-input-discovery-failed',
+      ...(typeof error.code === 'string' ? { code: error.code } : {}),
+    };
+  }
+}
+
 export function parseArguments(args) {
   const options = { pipelinePaths: [] };
   const values = {
@@ -446,6 +518,14 @@ export async function benchmarkCompile(options, injected = {}) {
     artifacts: [],
     logs: { diagnostics: logPath, metrics: metricPath },
   };
+  const harnessFiles = [
+    fileURLToPath(import.meta.url),
+    fileURLToPath(new URL('./benchmark-runtime.mjs', import.meta.url)),
+  ].map(identity);
+  summary.verificationHarness = {
+    files: harnessFiles,
+    sha256: hash(JSON.stringify(harnessFiles)),
+  };
   for (const name of [
     '@sublang/slc',
     '@sublang/playbook',
@@ -573,22 +653,19 @@ export async function benchmarkCompile(options, injected = {}) {
           adapterFactory,
         }),
     );
+    const discovery = await pipelineInputDiscovery(root);
     const resolver = deps.resolver;
     deps.resolver = async (reference) => {
       const candidates = await resolver(reference);
       summary.resolvedPipelines ??= {};
       summary.resolvedPipelines[reference] = candidates;
       summary.pipelineInputs ??= {};
+      summary.pipelineInputClosures ??= {};
       for (const candidate of candidates) {
-        summary.pipelineInputs[candidate] = readdirSync(candidate)
-          .filter(
-            (name) =>
-              name.endsWith('.md') ||
-              name === 'slc.pins.json' ||
-              name === 'slc.pin-inputs.json',
-          )
-          .sort()
-          .map((name) => identity(join(candidate, name)));
+        const closure = await pipelineInputIdentity(candidate, discovery);
+        summary.pipelineInputClosures[candidate] = closure;
+        if (closure.status === 'complete')
+          summary.pipelineInputs[candidate] = closure.files;
       }
       checkpoint();
       return candidates;

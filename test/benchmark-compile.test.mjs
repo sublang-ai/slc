@@ -162,6 +162,21 @@ describe('opt-in compilation benchmark', () => {
       promptBytes: expect.any(Number),
       promptSha256: expect.any(String),
     });
+    expect(
+      first.summary.verificationHarness.files.map((file) => file.path),
+    ).toEqual([
+      fileURLToPath(
+        new URL('../scripts/benchmark-compile.mjs', import.meta.url),
+      ),
+      fileURLToPath(
+        new URL('../scripts/benchmark-runtime.mjs', import.meta.url),
+      ),
+    ]);
+    for (const file of first.summary.verificationHarness.files)
+      expect(file).toMatchObject({
+        bytes: expect.any(Number),
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
     const summary = await readFile(first.summaryPath, 'utf8');
     const metrics = await readFile(first.summary.logs.metrics, 'utf8');
     expect(summary + metrics).not.toContain('PRIVATE ');
@@ -204,7 +219,126 @@ describe('opt-in compilation benchmark', () => {
       first.summary.compilerRuntime.sha256,
     );
     expect(JSON.stringify(second.summary)).not.toContain('PRIVATE COMPILER');
+    expect(Object.values(second.summary.pipelineInputClosures)).toEqual([
+      {
+        status: 'unavailable',
+        reason: 'measured-compiler-closure-api-unavailable',
+      },
+    ]);
   });
+
+  it.each(['sidecar', 'inline', 'widened-boundary'])(
+    'identifies declared helper changes through the compiler closure: %s',
+    async (declaration) => {
+      const options = await fixture();
+      const pipeline = join(options.pipelinePaths[0], 'fixture');
+      const definition = join(pipeline, 'alpha2beta.md');
+      const references = join(pipeline, 'refs');
+      await mkdir(references);
+      const helper =
+        declaration === 'widened-boundary'
+          ? join(options.pipelinePaths[0], 'helper.mjs')
+          : join(references, 'helper.mjs');
+      const helperLocator =
+        declaration === 'widened-boundary'
+          ? '../helper.mjs'
+          : 'refs/helper.mjs';
+      const reference = join(references, 'contract.md');
+      await writeFile(helper, 'PRIVATE HELPER one');
+      await writeFile(
+        reference,
+        `PRIVATE CONTRACT\n## Pin Inputs\n- \`${helperLocator}\`\n`,
+      );
+      if (declaration === 'inline') {
+        await writeFile(
+          definition,
+          `${await readFile(definition, 'utf8')}\n## Pin Inputs\n- \`refs/contract.md\`\n`,
+        );
+      } else {
+        await writeFile(
+          join(pipeline, 'slc.pin-inputs.json'),
+          JSON.stringify({
+            schema: 'sublang.slc.pin-inputs.v1',
+            closures: { alpha2beta: ['refs/contract.md', helperLocator] },
+          }),
+        );
+      }
+      if (declaration === 'widened-boundary')
+        await writeFile(
+          join(pipeline, 'slc.pins.json'),
+          JSON.stringify({
+            schema: 'sublang.slc.pins.v2',
+            hashAlgorithm: 'sha256',
+            pathBoundary: { path: '..' },
+            pins: {},
+          }),
+        );
+      const injected = {
+        runtime,
+        env: {},
+        adapterFactory: () => adapter([]),
+        validate,
+      };
+      const first = await benchmarkCompile(options, injected);
+      await writeFile(helper, 'PRIVATE HELPER two');
+      const second = await benchmarkCompile(options, injected);
+      expect(first.summary.status).toBe('success');
+      expect(second.summary.status).toBe('success');
+      const before = first.summary.pipelineInputClosures[pipeline];
+      const after = second.summary.pipelineInputClosures[pipeline];
+      expect(before.status).toBe('complete');
+      expect(after.status).toBe('complete');
+      expect(after.sha256).not.toBe(before.sha256);
+      const file = (closure, path) =>
+        closure.files.find((input) => input.path === path);
+      expect(file(after, definition)).toEqual(file(before, definition));
+      expect(file(after, reference)).toEqual(file(before, reference));
+      expect(file(after, helper).sha256).not.toBe(file(before, helper).sha256);
+      if (declaration !== 'inline')
+        expect(
+          file(after, join(pipeline, 'slc.pin-inputs.json')),
+        ).toBeDefined();
+      if (declaration === 'widened-boundary') {
+        expect(after.boundary).toBe('..');
+        expect(file(after, join(pipeline, 'slc.pins.json'))).toBeDefined();
+      }
+      expect(JSON.stringify(second.summary)).not.toContain('PRIVATE ');
+    },
+  );
+
+  it.each(['parent', 'symlink'])(
+    'records incomplete identity without hashing an escaping declared member: %s',
+    async (kind) => {
+      const options = await fixture();
+      const pipeline = join(options.pipelinePaths[0], 'fixture');
+      const outside = join(options.pipelinePaths[0], 'outside.mjs');
+      await writeFile(outside, 'PRIVATE OUTSIDE');
+      if (kind === 'symlink')
+        await symlink(outside, join(pipeline, 'escape.mjs'));
+      await writeFile(
+        join(pipeline, 'slc.pin-inputs.json'),
+        JSON.stringify({
+          schema: 'sublang.slc.pin-inputs.v1',
+          closures: {
+            alpha2beta: [kind === 'symlink' ? 'escape.mjs' : '../outside.mjs'],
+          },
+        }),
+      );
+      const result = await benchmarkCompile(options, {
+        runtime,
+        env: {},
+        adapterFactory: () => adapter([]),
+        validate,
+      });
+      expect(result.summary.pipelineInputClosures[pipeline]).toEqual({
+        status: 'incomplete',
+        reason: 'declared-input-discovery-failed',
+        code: 'pin-invalid',
+      });
+      expect(result.summary.pipelineInputs[pipeline]).toBeUndefined();
+      expect(JSON.stringify(result.summary)).not.toContain('PRIVATE OUTSIDE');
+    },
+  );
 
   it.each([undefined, 'minimal'])(
     'applies only the explicitly selected runtime check to supplied sources: %s',
