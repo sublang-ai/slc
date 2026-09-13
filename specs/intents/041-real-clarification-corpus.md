@@ -13,15 +13,15 @@ Comprehensively verify noninteractive clarification and performance together usi
 
 ## Deliverables
 
-- [ ] Reviewed clean, mutant, and byte-identical restored cases for CODE, DEV, DECIDE, and REVIEW.
+- [x] Reviewed clean, mutant, and byte-identical restored cases for CODE, DEV, DECIDE, and REVIEW.
 - [ ] A diverse typical workflow and a later-phase semantic case.
-- [ ] A phase recorder using ordinary compiler execution with explicit scope and authentic outcome evidence.
+- [x] A phase recorder using ordinary compiler execution with explicit scope and authentic outcome evidence.
 - [ ] Real model results, independent semantic adjudication, and regressions for demonstrated defects.
 - [ ] Full CODE and DEV correctness and matched performance evidence integrated with the source controls.
 
 ## Tasks
 
-1. [ ] Preserve the reviewed experiment design and implement the corpus and phase recorder.
+1. [x] Preserve the reviewed experiment design and implement the corpus and phase recorder.
 2. [ ] Run bounded maintained-source triplets against a validated frozen dependency cohort and resolve demonstrated defects.
 3. [ ] Exercise diverse vocabulary, later discovery, actual interpreted and compiled performing paths, and source-only reruns.
 4. [ ] Validate full workflows and compare supported optimizations with accepted matching controls.

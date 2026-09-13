@@ -25,7 +25,8 @@ Real incompatibilities or malformed protected artifacts remain execution failure
 
 First complete the requested latest-dependency update and its compatibility checks, then freeze the measured compiler, verification harness, provider SDK, selected Playbook runtime, definitions, and transitive declared inputs.
 Record exact versions and byte identities; changing a dependency, definition, model, effort, executor mode, or optimization setting starts a new comparison cohort.
-Use one explicit configuration, fresh output directories outside the source repositories, and no inherited build history or maintained compiled reference bundles in the provider-visible graph.
+Use one explicit configuration, fresh output directories outside the source repositories, and no inherited build history or maintained CODE, DEV, DECIDE, or REVIEW reference outputs in the provider-facing dependency graph.
+SLC statically imports the host-capabilities facade even for interpreted execution; the facade requires the Captain control closure, which is retained and inventoried as an engine dependency rather than a workflow oracle.
 Keep the unchanged references as immutable positive controls and create every mutation in a separate fixture copy.
 
 The initial source baseline is Playbook `a000e37815024acc8051855adda72fcedbbfcedb` (13.2.0).

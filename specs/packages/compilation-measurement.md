@@ -50,6 +50,28 @@ When full or link-only artifact validation runs, the compilation benchmark shall
 
 When checking the minimal runtime's performing prompt, the compilation benchmark shall accept and record either an unchanged literal task substring or a contiguous block of whole lines formed by prefixing every original task line with exactly `> `, preserving every other character and rejecting every other representation without normalization or fuzzy matching ([DR-038](../decisions/038-quoted-task-runtime-acceptance.md)).
 
+### compilation-measurement-20
+
+When explicitly invoked for one `text2gears` or `gears2fsm` phase with a model, source, compiler installation, and configuration, the phase recorder shall execute the ordinary single-phase compiler invocation [[compiler-1](compiler.md#compiler-1)] in a fresh private workspace with no inherited history or independent Reviewer, preserving the selected source under a neutral phase-appropriate filename, recording scope `phase`, and rejecting full-compilation, link-target, runtime-acceptance, and semantic-oracle options before provider work.
+
+### compilation-measurement-21
+
+Where a corpus manifest and case id select a source, when the phase recorder prepares its invocation, the phase recorder shall require exactly one case with a matching source hash and byte count and project only its id, phase, source location, and byte identity into recording options, copying only source bytes into the provider workspace and keeping member labels, mutations, expected outcomes, and semantic oracles outside the performing request.
+
+### compilation-measurement-22
+
+When a phase probe settles, the phase recorder shall retain its experiment accounting [[compilation-measurement-2](#compilation-measurement-2)], bounded cancellation [[compilation-measurement-3](#compilation-measurement-3)], and private diagnostics [[compilation-measurement-5](#compilation-measurement-5)] with these scope-specific outcomes:
+
+| Evidence | Required distinction |
+| --- | --- |
+| Deadline | Supply a five-minute default execution deadline after cohort capture, recording preparation and execution elapsed times separately. |
+| Executor selection | Record every actual interpreted or compiled performing selection with the compiled artifact and pin evidence where applicable; requested compiled execution alone is insufficient. |
+| Compiler outcome | Preserve success, structured clarification, failure, and cancellation separately, retaining raw questions locally and recording their count and report identity in the summary. |
+| CLI behavior | Record an exit code only from an actually invoked CLI process; an API probe records that no CLI ran. |
+| Phase acceptance | Require ordinary applicable phase checks, one materialized output, unchanged source and recorded cohort inputs, complete declared-input identity, and completion before cancellation. |
+| Clarification acceptance | Require protected-input preservation and no accepted draft or newly published successful history. |
+| Scope | Record that phase acceptance establishes neither full-compilation verification nor runtime correctness, leaving semantic adjudication to a separate source-aware review. |
+
 ## Verification
 
 ### compilation-measurement-7
@@ -87,3 +109,7 @@ Where emitted fixture artifacts have valid native TypeScript imports beside vari
 ### compilation-measurement-19
 
 Where minimal entries use the actual shared runtime and host capabilities, when their performing prompts carry literal, correctly quoted, changed, missing, reordered, or inconsistently quoted task lines, the integration suite shall verify acceptance only for unchanged literal or exactly quoted tasks, with their representation recorded [[compilation-measurement-18](#compilation-measurement-18)] and the complete repository, delegated-call, commit, and terminal checks still required [[compilation-measurement-11](#compilation-measurement-11)].
+
+### compilation-measurement-23
+
+Where fixture transports perform ordinary single-phase compiler calls, when the phase-recorder integration suite exercises successful transformation, structured clarification, protected-source mutation, actual fidelity and strict-FSM failures, cooperative deadline cancellation, and a genuinely selected compiled phase, the suite shall verify neutral fresh-source execution [[compilation-measurement-20](#compilation-measurement-20)], rejection of mismatched source identities and exclusion of injected oracle fields [[compilation-measurement-21](#compilation-measurement-21)], and correctly distinguished API outcomes, actual CLI child exit 2, executor evidence, preservation, history, and phase-only acceptance [[compilation-measurement-22](#compilation-measurement-22)].

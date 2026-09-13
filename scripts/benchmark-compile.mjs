@@ -33,15 +33,15 @@ Use one agent to carry out the input task.
 The agent modifies the code in the current directory as the task requires and commits the result to Git.
 `;
 
-const hash = (value) => createHash('sha256').update(value).digest('hex');
-const identity = (path) => {
+export const hash = (value) => createHash('sha256').update(value).digest('hex');
+export const identity = (path) => {
   const bytes = readFileSync(path);
   return { path, bytes: bytes.length, sha256: hash(bytes) };
 };
 const elapsed = (start) => Math.round(performance.now() - start);
 
 /** Use the measured compiler's private discovery modules, never our own resolver. */
-async function pipelineInputDiscovery(root) {
+export async function pipelineInputDiscovery(root) {
   try {
     const modules = await Promise.all(
       ['pins', 'pin-inputs', 'pin-closure', 'pipeline'].map(
@@ -64,7 +64,7 @@ async function pipelineInputDiscovery(root) {
   }
 }
 
-async function pipelineInputIdentity(pipeline, discovery) {
+export async function pipelineInputIdentity(pipeline, discovery) {
   if (!discovery)
     return {
       status: 'unavailable',
