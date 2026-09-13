@@ -247,6 +247,41 @@
       "selectedForNextFullRun": false,
       "helperInvocationEvidence": "not inferred; no helper-use claim without recorded evidence",
       "limits": "Both arms interrupted at the deadline. Retain prototype/evidence historically only; do not claim accepted performance, full workflow acceptance, or helper use beyond recorded evidence."
+    },
+    "linkV7": {
+      "scope": "prepared common authored-question correction inputs",
+      "upstreamCommits": ["fe68dd3", "dac4d33"],
+      "proofs": {
+        "baseline": {
+          "path": "/private/tmp/playbook-13.2-common-v7-baseline/experiment-proof.json",
+          "bytes": 40970,
+          "sha256": "fe2d7d513abbbc0f8b61cded75289fa2ff6e9a2659f5abd43505efc489c7f37c"
+        },
+        "full": {
+          "path": "/private/tmp/playbook-13.2-common-v7-full/experiment-proof.json",
+          "bytes": 40966,
+          "sha256": "ceeb56f50e91b61fa5a7f6e859c6d28fca0420bab785d7bb52a87d263eae817b"
+        }
+      },
+      "commonHashes": {
+        "text2gears": "56f414ec3243fda97bb847871b460fdaaf0bba1585627e0897ccdf95a80d7aa4",
+        "link": "a5c82f9aa30814039f5282d2644373134c076bf9795a6a7df030dc31b6d981a7",
+        "producer": "668b8aad77f16e6cdd0878dd34c536ba06825e3b3b1d0ae509e00aeacd9e1722",
+        "helper": "5024778548509370d899f3709829fd7609d67bc4fe5d72b2c76d5d0ab26f59eb",
+        "catalog": "de862f4b772ffb6860c2cab3ed75ab281b378dffa0a6217ebc8e049302c05dd3",
+        "optimizer": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+      },
+      "deltaFromV6": {
+        "onlyIntent": "IR-085",
+        "authoredQuestionCorrection": {
+          "priorCommonSha256": "c38555a7e5e1d33d0c1c71d34beb3b581e62abea819722905ae1af87775922ae",
+          "currentSha256": "3d175da602a2517c3bcc74705ad293575aa6c7547acc3fe6b9dd73a15c5b8664",
+          "priorSha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+        }
+      },
+      "scaffoldSelected": false,
+      "performanceAccepted": false,
+      "fullWorkflowAccepted": false
     }
   },
   "phaseRuns": [
@@ -1890,6 +1925,42 @@
         }
       },
       "selectionProbe": "interpreted and compiled strategy probes passed; not live semantic evidence"
+    },
+    "C5": {
+      "id": "coverage-compiler-C5",
+      "status": "prepared_inputs_only",
+      "performanceAccepted": false,
+      "fullWorkflowAccepted": false,
+      "productionCommit": "662d73aaefe4f18564c62c63984bd2b9b3b9aca9",
+      "compilerRoot": "/private/tmp/slc-coverage-compiler-p6olqovu",
+      "parentCohort": "/private/tmp/slc-boundary-compiler-w78vq34n",
+      "evidence": {
+        "cohort": {
+          "path": "/private/tmp/slc-coverage-compiler-p6olqovu-evidence/cohort.json",
+          "bytes": 5362,
+          "sha256": "6a9b05791c3b373c45e2ba6456248b78e6ae28c64dca4d42e52375140b165e0b"
+        },
+        "parentComparison": {
+          "path": "/private/tmp/slc-coverage-compiler-p6olqovu-evidence/parent-comparison.json",
+          "bytes": 2884,
+          "sha256": "e31c4be534f3ba06894b82efd20d9b02e1e59fd52217b6b97958a42d3b07dc9a"
+        },
+        "selectionEvidence": {
+          "path": "/private/tmp/slc-coverage-compiler-p6olqovu-evidence/selection-evidence.json",
+          "bytes": 1441,
+          "sha256": "818638f03472eba9ab0e01a22d594694406e16ac3031b5bbabff2844e817fc15"
+        }
+      },
+      "deltaFromC4": {
+        "changedCompilerFiles": [
+          "dist/verify-coverage.d.ts.map",
+          "dist/verify-coverage.js",
+          "dist/verify-coverage.js.map"
+        ],
+        "dependenciesUnchanged": true,
+        "pipelinePinScriptPackageLockBytesUnchanged": true
+      },
+      "selectionProbe": "interpreted and compiled strategy probes passed; not live semantic evidence"
     }
   },
   "correctnessFollowups": {
@@ -1998,6 +2069,56 @@
       "acceptedSpeedRatio": false,
       "distinction": "Observed raw/optimized GEARS omission here is distinct from the proven CKr2Ni actual reconciler/bridge question-field failure.",
       "limits": "Coordinator-cancelled wrapper run; no timeout claim, no runtime acceptance, no full workflow acceptance, and no new runtime claim."
+    },
+    "c4V7CodeSourceQuestion": {
+      "run": "phase-Qe8qAK",
+      "status": "source_phase_success_observed_scope",
+      "evidence": {
+        "path": "/private/tmp/slc-c4-v7-code-source-Qe8qAK-adjudication/evidence.json",
+        "bytes": 3209,
+        "sha256": "39d39ea4ede8003dc71bb12aa1b546478d6fe1f6763b619b021042dbb24ee275"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c4-v7-code-source-evidence/phase-Qe8qAK/summary.json",
+        "bytes": 436158,
+        "sha256": "b81a286a2da55f655599003423eaca113f435ad398edff5b322531ba1b641034"
+      },
+      "source": {
+        "path": "/private/tmp/slc-c4-v7-code-source-evidence/phase-Qe8qAK/work/workflow.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5"
+      },
+      "artifact": {
+        "path": "/private/tmp/slc-c4-v7-code-source-evidence/phase-Qe8qAK/work/workflow.playbook/workflow.gears.md",
+        "bytes": 8861,
+        "sha256": "31fbcca303c5855985afd075f517cf68c213e02b7776f0abf90107bd7cd13572"
+      },
+      "executionElapsedMs": 90771,
+      "elapsedMs": 91538,
+      "calls": [
+        {
+          "id": 1,
+          "elapsedMs": 63771,
+          "toolCalls": 3,
+          "resumed": false
+        },
+        {
+          "id": 2,
+          "elapsedMs": 27609,
+          "toolCalls": 2,
+          "resumed": true
+        }
+      ],
+      "questionDeclaration": {
+        "line": 42,
+        "text": "- `question`: Coder asked Boss about an ambiguously continued IR before changing files and waits for the answer. Output shall include `question: <verbatim final text>`."
+      },
+      "resultContractFindings": 0,
+      "sourceFidelityFindings": 0,
+      "frameworkNeedsBossReplyEmitted": false,
+      "sourceAndInputsPreserved": true,
+      "runtimeAcceptance": false,
+      "causalSpeedClaim": false
     }
   }
 }
