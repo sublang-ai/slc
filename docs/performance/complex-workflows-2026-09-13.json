@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "recordedAt": "2026-09-13",
-  "scope": "Two cold full-compilation failures and separate read-only diagnoses; no accepted full CODE/DEV timing comparison.",
+  "scope": "C5 full CODE/DEV failures plus C6-v8 minimal acceptance and DEV full failure; no accepted full CODE/DEV timing comparison.",
   "compilerCommit": "662d73aaefe4f18564c62c63984bd2b9b3b9aca9",
   "pipelineGeneration": "v7",
   "runs": [
@@ -327,6 +327,143 @@
       "fullWorkflowAccepted": false,
       "acceptedSpeedRatio": false,
       "finding": "The minimal benchmark completed under five minutes with runtime confirmation; it is not a causal speed attribution across compiler or definition versions."
+    },
+    {
+      "run": "compile-uh9JIL",
+      "status": "failure",
+      "scope": "dev-full-materializer",
+      "compilerRoot": "/private/tmp/slc-c6-compiler-ukczlhl3",
+      "pipeline": "/private/tmp/playbook-13.2-common-v8-full",
+      "source": {
+        "path": "/private/tmp/slc-c6-complex-full-evidence/compile-uh9JIL/work/dev.md",
+        "bytes": 5959,
+        "sha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/dev.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c6-complex-full-evidence/compile-uh9JIL/summary.json",
+        "bytes": 38596,
+        "sha256": "dce23127156bda22fdae9d087f57e226b431a2da49679a1cfb4184d3c807d34e"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c6-complex-full-evidence/invocation-QunXbw/proof.json",
+        "bytes": 2736959,
+        "sha256": "c964bd6b1c720fbf42dc0559ea6621525891a152c952036b12f246e66e5cfd4f"
+      },
+      "compile": {
+        "ok": false,
+        "elapsedMs": 850582,
+        "outcome": null
+      },
+      "elapsedMs": 850597,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 132120
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 12692
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 383741
+        },
+        {
+          "name": "link",
+          "status": "error",
+          "elapsedMs": 321942
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "resumed": false,
+          "toolCalls": 2,
+          "elapsedMs": 64383
+        },
+        {
+          "phase": "text2gears",
+          "resumed": true,
+          "toolCalls": 2,
+          "elapsedMs": 68975
+        },
+        {
+          "phase": "optimize",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 13175
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 9,
+          "elapsedMs": 300133
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 7,
+          "elapsedMs": 82703
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 11,
+          "elapsedMs": 172146
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 4,
+          "elapsedMs": 83290
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 2,
+          "elapsedMs": 65677
+        }
+      ],
+      "callCount": 8,
+      "lastAcceptedArtifact": {
+        "phase": "gears2fsm",
+        "path": "/private/tmp/slc-c6-complex-full-evidence/compile-uh9JIL/work/dev.playbook/dev.fsm.ts",
+        "bytes": 47702,
+        "sha256": "2f079ddb92e140a761411e0f0eb84217f7228a32d4405f7c2cb1d27b72b05a3d"
+      },
+      "protectedInputs": {
+        "before": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "generatedSuiteRun": false,
+      "runtimeAcceptanceRun": false,
+      "sourceClarification": false,
+      "findings": [
+        "Link failed after the third checking round while analyzing prompt composition for multiline quoted-relay text.",
+        "The generated FSM is the last accepted phase artifact; no emitted suite or runtime acceptance ran, and no source clarification was reported."
+      ],
+      "compilerCommit": "f44d4c5d751a2b4fbc21b279b5c3cc4a3cf82e2c",
+      "pipelineGeneration": "v8",
+      "diagnosis": {
+        "scope": "read-only final-artifact prompt probe; no runtime acceptance",
+        "evidence": "/private/tmp/slc-c6-uh9JIL-prompt-reproducer-evidence.json",
+        "sha256": "3e4d8b3cbce483ce2177bcdba203ccffeaa843a6fbaaf87f703bf3710d20daa3",
+        "finding": "The composer splits relayed values on CRLF and rejoins with LF. The actual failing probe has no blank lines and loses CRLF separators while retaining quote markers."
+      }
     }
   ],
   "preparedInputs": {
