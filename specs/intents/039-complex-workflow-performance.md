@@ -30,6 +30,7 @@ Measure current CODE and DEV compilation and investigate their execution costs s
 - Use the existing [measurement contract](../packages/compilation-measurement.md) and fresh private output directories with one Opus 5 or GPT-6 compilation agent.
 - Preserve original CODE and current DEV source bytes, including DEV's pull-request paths; never compare its older source as the same workload.
 - Run equivalent settings sequentially, retain failures and clarification outcomes, and require strict and generated-suite acceptance before claiming successful compilation savings.
+- Record the C8 fixed-FSM DEV pair as raw `compile-oQuUMT` and `compile-tKSZCs` link observations only: both passed post-measurement generated and runtime controls, but the baseline public non-JSON option control failed, so no accepted speed ratio exists and the v11 pair remains pending.
 - Check nested-child success proofs, exact quoted relays, and durable Boss discussion continuity against actual runtime contracts.
 - Distinguish synthetic execution timing from model latency and full provider execution; preserve required nested reviews and repository effects.
 - Keep historical reviewed high-effort measurements separate from current controlled comparisons.

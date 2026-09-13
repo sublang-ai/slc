@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "recordedAt": "2026-09-13T10:26:19.182749+00:00",
-  "scope": "C5 full CODE/DEV failures, C6-v8 minimal acceptance, C7 CODE runtime control after failed full benchmark, accepted C7 full DEV, C7 fixed-link materializer candidate evidence, C8-v9 full CODE linker-contract failure, and accepted C8 REVIEW text2gears phase evidence; no accepted CODE full benchmark or percentage fixed-link speed ratio.",
+  "scope": "C5 full CODE/DEV failures, C6-v8 minimal acceptance, C7 CODE runtime control after failed full benchmark, accepted C7 full DEV, C7 fixed-link materializer candidate evidence, C8-v9 full CODE linker-contract failure, and accepted C8 REVIEW text2gears phase evidence; no accepted CODE full benchmark or percentage fixed-link speed ratio, and C8 DEV fixed-FSM paired link controls.",
   "compilerCommit": "662d73aaefe4f18564c62c63984bd2b9b3b9aca9",
   "pipelineGeneration": "v7",
   "runs": [
@@ -1810,6 +1810,271 @@
         "Approved private DEV runtime control passed 24/24 through the staged public entry with zero provider calls and zero staged artifact changes.",
         "No percentage speed ratio is claimed because the paired baseline failed."
       ]
+    },
+    {
+      "run": "compile-oQuUMT",
+      "status": "success-with-contract-caveat",
+      "scope": "C8 DEV fixed-FSM link baseline with post-measurement validation/runtime controls; no accepted linked JSON-contract equivalence",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-baseline",
+      "source": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-oQuUMT/work/dev.fsm.ts",
+        "bytes": 55282,
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b",
+        "original": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-oQuUMT/summary.json",
+        "bytes": 30426,
+        "sha256": "7598d556c43e48f67d9a5e3ee7180e5d8d776c2f3472fdf618c55da5bf029276"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c8-link-evidence/invocation-FNti5v/proof.json",
+        "bytes": 2736474,
+        "sha256": "9ec1f4822df3cd4c70d738bac728eac7f407e726ec7d9ddd82d25b3f11d62adf"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 668211,
+        "outcome": null
+      },
+      "elapsedMs": 669465,
+      "phases": [
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 668219
+        }
+      ],
+      "calls": [
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": false,
+          "requestedResume": false,
+          "toolCalls": 26,
+          "elapsedMs": 368718,
+          "providerDurationMs": 366773,
+          "promptBytes": 159847,
+          "promptSha256": "735fbda9b92917ccebddeb76149ad5f08e986aa7a927fb4633515606a0f44c4e"
+        },
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": true,
+          "requestedResume": true,
+          "toolCalls": 6,
+          "elapsedMs": 88447,
+          "providerDurationMs": 83853,
+          "promptBytes": 164428,
+          "promptSha256": "0f47645236b2253fee0cda4c554169f4a3e8a265f04bfa261b2403461abb4e14"
+        },
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": true,
+          "requestedResume": true,
+          "toolCalls": 11,
+          "elapsedMs": 205277,
+          "providerDurationMs": 202903,
+          "promptBytes": 169572,
+          "promptSha256": "da729f5b48cf23561967d5aa911dd5474c1428fb1f2f4375d3286c62cb46617c"
+        }
+      ],
+      "callCount": 3,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c8-link-evidence/compile-oQuUMT/work/dev.playbook/dev.playbook.ts",
+          "bytes": 17824,
+          "sha256": "13c9f24d6fedcdf89b108b9658e09c758beb9be9dc46f6ca94138328f8908f17"
+        }
+      ],
+      "postMeasurementValidation": {
+        "stageRoot": "/private/tmp/slc-c8-dev-oQuUMT-validation-stage",
+        "readiness": {
+          "path": "/private/tmp/slc-c8-dev-oQuUMT-validation-stage/readiness.json",
+          "bytes": 12478,
+          "sha256": "9083fe56afcbe6e4609f9661909daa437f8dcfb7e07572f4836217123c68360b"
+        },
+        "generatedPublicEntry": {
+          "path": "/private/tmp/slc-c8-dev-oQuUMT-validation-stage/work/dev.ts",
+          "bytes": 1501,
+          "sha256": "e2bb29864125150b6971945c56cb542f1f302baa9bf1f441778040402f98d2a5"
+        },
+        "generatedSuites": 4,
+        "suiteTestsPassed": 8,
+        "typecheckOk": true,
+        "entryImportOk": true,
+        "vitestOk": true,
+        "byteIdentityChecks": {
+          "stagedLinkedMatchesCandidate": true,
+          "stagedTopFsmMatchesCandidate": true,
+          "stagedLocalFsmMatchesCandidate": true,
+          "stagedSourceMatchesWm3i4U": true,
+          "stagedGearsMatchesWm3i4U": true,
+          "c8CompilerUnchanged": true
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "runtimeAcceptance": {
+        "status": "passed",
+        "scenarioCount": 24,
+        "passedCount": 24,
+        "providerCalls": 0,
+        "summary": {
+          "path": "/private/tmp/slc-c8-dev-oQuUMT-runtime-acceptance/summary.json",
+          "bytes": 150884,
+          "sha256": "d6c3d6d81e65c21943b58d22d3a637518b67d6143d39f7e3d974c663817e9613"
+        },
+        "postrun": {
+          "path": "/private/tmp/slc-c8-dev-oQuUMT-runtime-postrun.json",
+          "bytes": 1502,
+          "sha256": "b04791a3f6e9a513f1075a7303facf269412ac44970f71fedbba2779597ea835"
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "optionDescriptorControl": {
+        "status": "failed",
+        "evidence": {
+          "path": "/private/tmp/slc-c8-oQuUMT-option-control.json",
+          "bytes": 5962,
+          "sha256": "ded39e0546cd663ad2eb8f7b13beda1fe740307b2606e0d3f9991fd511bd6523"
+        },
+        "publicEntryAcceptedKnownNonEnumerableOption": true,
+        "sharedSnapshotJsonValueAcceptedSameInput": false,
+        "outcome": "confirmed explicit public JSON-option contract violation"
+      },
+      "fullCompilationSpeedRatio": false,
+      "acceptedSpeedRatio": false,
+      "pairedCandidate": "compile-tKSZCs",
+      "findings": [
+        "Baseline link scope succeeded across three successful link calls, and post-measurement generated-suite and 24-scenario runtime controls passed.",
+        "The public non-JSON descriptor control failed, so this baseline is not accepted for linked JSON-contract equivalence.",
+        "Raw 669465 ms timing is recorded only for comparison context; no speed ratio is accepted."
+      ]
+    },
+    {
+      "run": "compile-tKSZCs",
+      "status": "success",
+      "scope": "C8 DEV fixed-FSM link materializer candidate with post-measurement validation/runtime controls excluded from measured link time",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-prefer-materializer",
+      "source": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-tKSZCs/work/dev.fsm.ts",
+        "bytes": 55282,
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b",
+        "original": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-tKSZCs/summary.json",
+        "bytes": 27277,
+        "sha256": "03662735334adb95d6507a6873667edd94c5a910ee345208389680b8f8cb592c"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c8-link-evidence/invocation-uTKcJp/proof.json",
+        "bytes": 2736661,
+        "sha256": "06a982377fbdecd7333e963d1579ca432200681b3f365268cbae23cb7b665a0c"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 172835,
+        "outcome": null
+      },
+      "elapsedMs": 174185,
+      "phases": [
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 172825
+        }
+      ],
+      "calls": [
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 15,
+          "elapsedMs": 166066
+        }
+      ],
+      "callCount": 1,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c8-link-evidence/compile-tKSZCs/work/dev.playbook/dev.playbook.ts",
+          "bytes": 7745,
+          "sha256": "0ee2ba7c74011fea386bb81fc178e7d2c8ca929a721a615614ca89bbfa2c8e22"
+        }
+      ],
+      "materializer": {
+        "used": true,
+        "evidence": "linked module header and staged artifact use the materialized linked factory",
+        "linkedFactorySha256": "0ee2ba7c74011fea386bb81fc178e7d2c8ca929a721a615614ca89bbfa2c8e22"
+      },
+      "postMeasurementValidation": {
+        "stageRoot": "/private/tmp/slc-c8-dev-tKSZCs-validation-stage",
+        "readiness": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-validation-stage/readiness.json",
+          "bytes": 12487,
+          "sha256": "3beffd7890b8a93a7600cc60595ef926b0712a9360c331426caca7ea223ad0f0"
+        },
+        "generatedPublicEntry": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-validation-stage/work/dev.ts",
+          "bytes": 1501,
+          "sha256": "e2bb29864125150b6971945c56cb542f1f302baa9bf1f441778040402f98d2a5"
+        },
+        "generatedSuites": 4,
+        "suiteTestsPassed": 8,
+        "typecheckOk": true,
+        "entryImportOk": true,
+        "vitestOk": true,
+        "byteIdentityChecks": {
+          "stagedLinkedMatchesCandidate": true,
+          "stagedTopFsmMatchesCandidate": true,
+          "stagedLocalFsmMatchesCandidate": true,
+          "stagedSourceMatchesWm3i4U": true,
+          "stagedGearsMatchesWm3i4U": true,
+          "c8CompilerUnchanged": true
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "runtimeAcceptance": {
+        "status": "passed",
+        "scenarioCount": 24,
+        "passedCount": 24,
+        "providerCalls": 0,
+        "summary": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-runtime-acceptance/summary.json",
+          "bytes": 150834,
+          "sha256": "961ac39628f25d28a1dcacb518930400f693cf21eaa0485c5467c9629da70c3a"
+        },
+        "postrun": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-runtime-postrun.json",
+          "bytes": 1630,
+          "sha256": "01813e44bccd04a07440d1047093cdb0e8875198ee271335c41bd58f2ed51cc3"
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "optionDescriptorControl": {
+        "status": "passed",
+        "evidence": {
+          "path": "/private/tmp/slc-c8-tKSZCs-option-control.json",
+          "bytes": 5887,
+          "sha256": "be2080a1b082b9b0a5b2922a14df6ea3375ca64d3609e02c4e827448d5c7217d"
+        },
+        "publicEntryAcceptedKnownNonEnumerableOption": false,
+        "sharedSnapshotJsonValueAcceptedSameInput": false,
+        "outcome": "materializer public validator rejects the non-enumerable known option like shared snapshotJsonValue"
+      },
+      "fullCompilationSpeedRatio": false,
+      "acceptedSpeedRatio": false,
+      "pairedBaseline": "compile-oQuUMT",
+      "comparisonVerdict": "candidate conforms on the descriptor control and is raw-faster than baseline, but no accepted speed ratio exists because baseline violates the public JSON-option contract",
+      "findings": [
+        "Candidate link scope succeeded with actual materializer selected.",
+        "Independent post-measurement staging emitted a normal C8 public entry and four generated suites without changing candidate bytes.",
+        "Approved DEV runtime control passed 24/24 through the staged public entry with zero provider calls.",
+        "Raw 174185 ms timing is recorded only; no percentage speed-ratio claim is accepted."
+      ]
     }
   ],
   "preparedInputs": {
@@ -2143,7 +2408,10 @@
       "commonProducerSha256": "d6ce9eb0d1c012956a5df8691d66fd8fda0e5a827edd12eba288827af07e2ad0",
       "inverseToV8ProducerSha256": "4e840accb47c1924be6e63a483f928a592d36edb07c57be82dbecff59b022ce9",
       "armDifference": {
-        "changedFiles": ["experiment-proof.json", "playbook/link.md"],
+        "changedFiles": [
+          "experiment-proof.json",
+          "playbook/link.md"
+        ],
         "verdict": "only playbook/link.md differs between pipeline arms; experiment-proof.json differs by mode/output metadata"
       },
       "v8ToV9DefinitionDelta": {
@@ -2225,7 +2493,10 @@
       "candidateRoot": "/private/tmp/playbook-13.2-common-v9-prefer-materializer",
       "baselineProofSha256": "a7cec2eb8efc8d4bc3a3def53060eade59fd92e43a904a9ddebffb6bf8abe1dc",
       "candidateProofSha256": "d993464f9484e2c93c268af9af68625d7b28ced2e921c961809a3e9b98d05a1a",
-      "candidateDeltaFromV9Full": ["experiment-proof.json", "playbook/link.md"],
+      "candidateDeltaFromV9Full": [
+        "experiment-proof.json",
+        "playbook/link.md"
+      ],
       "source": {
         "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts",
         "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b"
@@ -2258,6 +2529,71 @@
       },
       "acceptedSpeedRatio": false,
       "comparisonVerdict": "candidate link succeeded and post-measurement runtime controls passed; no percentage speed-ratio claim because baseline failed"
+    },
+    "c8DevMaterializerSelection": {
+      "status": "baseline and candidate settled; forthcoming v11 pair pending",
+      "scope": "Matched fixed-FSM C8 DEV linking; raw timing only because baseline has a public JSON-option contract violation.",
+      "baselineRoot": "/private/tmp/playbook-13.2-common-v9-baseline",
+      "candidateRoot": "/private/tmp/playbook-13.2-common-v9-prefer-materializer",
+      "source": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts",
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b"
+      },
+      "compiler": {
+        "root": "/private/tmp/slc-c8-compiler-ezn78503",
+        "commit": "46a89ced91ea565cab0f41862f39257885219c93",
+        "cohortSha256": "cc1dbd88f3c167e98ad587d466ebf2a57139c05fa7f18b3f351d509fea4babdf",
+        "privateRuntimeOverlay": "inherits private IR090 Playbook runtime overlay"
+      },
+      "baselineRun": {
+        "run": "compile-oQuUMT",
+        "status": "success-with-contract-caveat",
+        "overallElapsedMs": 669465,
+        "summarySha256": "7598d556c43e48f67d9a5e3ee7180e5d8d776c2f3472fdf618c55da5bf029276",
+        "proofSha256": "9ec1f4822df3cd4c70d738bac728eac7f407e726ec7d9ddd82d25b3f11d62adf",
+        "generatedSuiteTestsPassed": 8,
+        "runtimeScenariosPassed": 24,
+        "optionDescriptorControl": "failed-public-validator-accepted-known-non-enumerable",
+        "callCount": 3,
+        "calls": [
+          {
+            "status": "success",
+            "resumed": false,
+            "toolCalls": 26,
+            "elapsedMs": 368718
+          },
+          {
+            "status": "success",
+            "resumed": true,
+            "toolCalls": 6,
+            "elapsedMs": 88447
+          },
+          {
+            "status": "success",
+            "resumed": true,
+            "toolCalls": 11,
+            "elapsedMs": 205277
+          }
+        ]
+      },
+      "candidateRun": {
+        "run": "compile-tKSZCs",
+        "status": "success",
+        "overallElapsedMs": 174185,
+        "summarySha256": "03662735334adb95d6507a6873667edd94c5a910ee345208389680b8f8cb592c",
+        "proofSha256": "06a982377fbdecd7333e963d1579ca432200681b3f365268cbae23cb7b665a0c",
+        "actualMaterializerUsed": true,
+        "generatedSuiteTestsPassed": 8,
+        "runtimeScenariosPassed": 24,
+        "optionDescriptorControl": "passed-public-validator-rejected-known-non-enumerable"
+      },
+      "rawTimingComparisonMs": {
+        "baseline": 669465,
+        "candidate": 174185
+      },
+      "acceptedSpeedRatio": false,
+      "comparisonVerdict": "candidate conforming on generated suites, runtime scenarios, and descriptor control; no accepted speed-ratio claim because baseline contract failed",
+      "v11Pair": "pending"
     }
   }
 }
