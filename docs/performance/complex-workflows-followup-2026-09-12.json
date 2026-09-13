@@ -1,0 +1,140 @@
+{
+  "schema": "sublang.slc.complex-workflow-followup.v1",
+  "status": "in progress",
+  "cohort": {
+    "id": "current-report-syntax-C2",
+    "productionCommit": "2832d63e4fa3134a04b40eed0a8ba7921a348fa6",
+    "compilerRoot": "/private/tmp/slc-report-compiler-zaf0zuht",
+    "manifest": {
+      "path": "/private/tmp/slc-report-compiler-zaf0zuht-evidence/cohort.json",
+      "sha256": "a51e8d89614b70ec7877c690162fc4e996c4c59105820c1917c6f97f78090830"
+    },
+    "parentComparison": {
+      "path": "/private/tmp/slc-report-compiler-zaf0zuht-evidence/parent-comparison.json",
+      "sha256": "84a8186cdb699ee14c18063a3dd28e019d6e09bbd2daab066a834408f03c0edd"
+    },
+    "change": "Complete JSON syntax guidance in shared performing prompt; strict parsing and all dependency bytes unchanged.",
+    "fixtureSelection": "Both actual interpreted and compiled execution selected successfully; not live semantic evidence."
+  },
+  "pipelineComparisons": {
+    "linkV3": {
+      "path": "/private/tmp/playbook-13.2-relay-common-v3-pair-proof.json",
+      "sha256": "c4ebd3680edb5bbd4fa9e8ed06a1b98d7cadc2abd4b2785e3e946c3954f83fec"
+    },
+    "resultsBoundary": {
+      "path": "/private/tmp/slc-results-boundary-pair-v1/pair-proof.json",
+      "sha256": "38d62f564aaaa69115fed561533895afd84c88e14c3b75740dc29e264f686a97"
+    }
+  },
+  "phaseRuns": [
+    {
+      "caseId": "case-011",
+      "run": "phase-PQ5fc3",
+      "status": "success",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": true,
+        "outcome": "success"
+      },
+      "actualExecutor": "compiled",
+      "executionElapsedMs": 158258,
+      "agentCalls": 3,
+      "sourceSha256": "4542d86a72335eb62dd54491dd907b20ec59da1b87aefd184d22690412e6ec95",
+      "summary": {
+        "path": "/private/tmp/slc-followup-corpus-evidence/phase-PQ5fc3/summary.json",
+        "sha256": "8781c52506e275a69f7ee088e7c71b00f3a0e2dba4078499e1bc8fc4d3b96a6d"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "path": "/private/tmp/slc-followup-corpus-evidence/phase-PQ5fc3/semantic-adjudication.json",
+        "sha256": "57474e04fc4846847fed489d01a60755965db1e89f03b5ec64baf23dc01fcce4",
+        "verdict": "expected first-phase clarification not delivered; later detection untested"
+      },
+      "reportGuidanceEffectiveness": "not established; no report emitted",
+      "incidentalCacheAudit": "No overlap; DEV ended04:40:06.406UTC and first reference Vitest began04:42:03.317UTC."
+    }
+  ],
+  "fullRuns": [
+    {
+      "label": "code-v3-baseline-optimize",
+      "status": "failure",
+      "scope": "full compilation with normal optimization; source-aware runtime acceptance separately pending",
+      "sourceSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "summary": "/private/tmp/slc-complex-full-evidence/compile-VucDX9/summary.json",
+      "runtimeAcceptance": "not reached; no linked artifact",
+      "pipelinePath": "/private/tmp/playbook-13.2-relay-common-v3-baseline",
+      "compileElapsedMs": 640095,
+      "elapsedMs": 640104,
+      "agentCalls": 6,
+      "phaseDurations": [
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 109603
+        },
+        {
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 10648
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "error",
+          "elapsedMs": 519783
+        }
+      ],
+      "summarySha256": "483c223d98d31734af90cf64d8f4401512c788e7d2f6c3a90001604ca8be53a7",
+      "sourceToGears": "independently passed",
+      "optimization": "byte-identical GEARS output after10648ms; not a retained full-run speedup",
+      "failure": "Stale raw nested-text comparison conflicts with composed-child prompt contract; separate generated FSM invented REVIEW output fields and rejects canonical success. Both require correction before accepting the artifact.",
+      "sourceAndCohortUnchanged": true,
+      "proof": "/private/tmp/slc-complex-full-evidence/invocation-yfsTPe/proof.json",
+      "gearsAdjudication": {
+        "path": "/private/tmp/slc-full-code-gears-adjudication/VucDX9.json",
+        "sha256": "83c5482867d14ab783cfe70603ee49ed7a679f71265e39fc400d4b81cc381f34"
+      },
+      "diagnoses": [
+        {
+          "path": "/private/tmp/slc-VucDX9-nested-text-audit/evidence.json",
+          "sha256": "21b9c0c38784ab37acc862cae3fda986b324fcae8721586a78df831c50cded03"
+        },
+        {
+          "path": "/private/tmp/slc-VucDX9-child-contract-audit/evidence.json",
+          "sha256": "0e60a44d0036f377691d1138c75b6c349d55c7eecd1e1d927fdd472829329f3e"
+        }
+      ]
+    }
+  ],
+  "cliReruns": [],
+  "scopeLimit": "No performance technique is retained by prototype checks alone. Preserve all attempts; require matching accepted controls and independent source-aware semantic/runtime verification.",
+  "recordedAt": "2026-09-13T04:48:29.538639+00:00",
+  "checks": {
+    "productionSuite": {
+      "passed": 1330,
+      "skipped": 2,
+      "files": 72,
+      "log": "/private/tmp/slc-comprehensive-current-tests.log"
+    },
+    "runtimeHarnessReadiness": {
+      "scope": "maintained fixtures, not fresh generated artifact acceptance",
+      "passed": 42,
+      "evidence": "/private/tmp/slc-c2-runtime-readiness-gKOJhN/evidence.json",
+      "optionalEntryInputControls": 2,
+      "optionalInputEvidence": "/private/tmp/slc-c2-optional-input-NsXIf7/evidence.json"
+    }
+  },
+  "incidentalCacheAudit": {
+    "path": "/private/tmp/slc-maintained-fixed-link-preparation/closeout.json",
+    "sha256": "7256ce80be8f0ed824232cb3f016214028dafc273f6587daecdba388c57a4598",
+    "finding": "Vitest wrote only its result cache after the DEV rerun ended; exact cache bytes restored and all11888 recorded cohort members reverified before subsequent runs. Future runtime tests use a private cache."
+  }
+}

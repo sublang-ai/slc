@@ -1,7 +1,7 @@
 {
   "schema": "sublang.slc.complex-workflow-evaluation.v1",
-  "status": "in progress",
-  "recordedAt": "2026-09-13T03:54:13.526621+00:00",
+  "status": "initial cohort settled; corrected follow-up evaluation in progress",
+  "recordedAt": "2026-09-13T04:15:33.115509+00:00",
   "sourceBaseline": "a000e37815024acc8051855adda72fcedbbfcedb",
   "corpus": "clarification-corpus/manifest.json",
   "cohort": {
@@ -137,11 +137,11 @@
         "path": "/private/tmp/slc-current-corpus-evidence/phase-wIYKZ1/summary.json",
         "sha256": "bf58648caf01582169a8e4ca6246ccbe742f9061a0f9b7f51c41f296c277d11b"
       },
-      "semanticReason": "Independent review confirms four outcomes, runtime IR clarification and explicit strict scope/exact-revision/no-unsettled-findings predicates on both nested review branches. Full compilation/runtime untested.",
       "adjudication": {
         "path": "/private/tmp/slc-current-code-adjudication/followup-cases-003-004.json",
         "sha256": "93b0b5d28c580dfdd19bb52e3a2c2d40e1131b142c01b4e0b01dfda47b3d6f68"
-      }
+      },
+      "semanticReason": "Independent review confirms four outcomes, runtime IR clarification and explicit strict scope/exact-revision/no-unsettled-findings predicates on both nested review branches. Full compilation/runtime untested."
     },
     {
       "caseId": "case-004",
@@ -177,11 +177,11 @@
         "path": "/private/tmp/slc-current-corpus-evidence/phase-Xs29tk/summary.json",
         "sha256": "c0a218f2cb07c59681a2fd2e202705930b069d5fa6a9954693a0e5f7243806de"
       },
-      "semanticReason": "Independent review confirms concurrent independent proposal dispatch, exact topic prompts, joined synthesis, Reviewer-only relay and strict nested-review scope/revision/failure conditions. Full compilation/runtime untested.",
       "adjudication": {
         "path": "/private/tmp/slc-current-code-adjudication/followup-cases-003-004.json",
         "sha256": "93b0b5d28c580dfdd19bb52e3a2c2d40e1131b142c01b4e0b01dfda47b3d6f68"
-      }
+      },
+      "semanticReason": "Independent review confirms concurrent independent proposal dispatch, exact topic prompts, joined synthesis, Reviewer-only relay and strict nested-review scope/revision/failure conditions. Full compilation/runtime untested."
     },
     {
       "caseId": "case-005",
@@ -217,12 +217,12 @@
         "path": "/private/tmp/slc-current-corpus-evidence/phase-9zSdlp/summary.json",
         "sha256": "a0eb5038b07a2bcea67b2b53440ca8838fbf1e86832f720267728f86c25f02dc"
       },
-      "clarificationReportSha256": "0b40ec4e85207ddb584585d087d3740b2b8389930a8fb6501817e88d52614dbd",
-      "semanticReason": "Independent review confirms the question identifies concurrency versus awaiting Coder completion, cites both adjacent obligations, preserves proposal information isolation, and chooses neither.",
       "adjudication": {
         "path": "/private/tmp/slc-current-code-adjudication/case-005.json",
         "sha256": "b46b56354084bd890da7580599978f1413c4af715b2ca123650ef787443856b0"
-      }
+      },
+      "semanticReason": "Independent review confirms the question identifies concurrency versus awaiting Coder completion, cites both adjacent obligations, preserves proposal information isolation, and chooses neither.",
+      "clarificationReportSha256": "0b40ec4e85207ddb584585d087d3740b2b8389930a8fb6501817e88d52614dbd"
     },
     {
       "caseId": "case-006",
@@ -231,7 +231,7 @@
       "status": "success",
       "apiOutcome": "success",
       "phaseAccepted": true,
-      "semanticVerdict": "pending independent adjudication",
+      "semanticVerdict": "pass: source-to-GEARS fidelity",
       "sourceSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
       "executionElapsedMs": 102195,
       "phaseElapsedMs": 101787,
@@ -257,7 +257,13 @@
       "evidence": {
         "path": "/private/tmp/slc-current-corpus-evidence/phase-hGgCKq/summary.json",
         "sha256": "fa0aeb7cb293ef9451dd2e0c03aa8e9153d089e2cb054fedcb3eaf872fddb095"
-      }
+      },
+      "adjudication": {
+        "path": "/private/tmp/slc-current-code-adjudication/cases-006-009.json",
+        "sha256": "c82c80086d8b4f010fe76d8623d87b13f0f089d48a56f8a27c0745ffd589aab8"
+      },
+      "semanticReason": "Independent source-aware review found the authored behavior and required relays preserved.",
+      "fullArtifactAccepted": false
     },
     {
       "caseId": "case-007",
@@ -266,7 +272,7 @@
       "status": "success",
       "apiOutcome": "success",
       "phaseAccepted": true,
-      "semanticVerdict": "pending independent adjudication",
+      "semanticVerdict": "pass: source-to-GEARS fidelity",
       "sourceSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
       "executionElapsedMs": 101894,
       "phaseElapsedMs": 101519,
@@ -292,7 +298,13 @@
       "evidence": {
         "path": "/private/tmp/slc-current-corpus-evidence/phase-fU5n3T/summary.json",
         "sha256": "385f1756a10234b891e5d7b3a9ed556a3b443a0dbd743b2b56a1f955954eb2b2"
-      }
+      },
+      "adjudication": {
+        "path": "/private/tmp/slc-current-code-adjudication/cases-006-009.json",
+        "sha256": "c82c80086d8b4f010fe76d8623d87b13f0f089d48a56f8a27c0745ffd589aab8"
+      },
+      "semanticReason": "Independent source-aware review found the authored behavior and required relays preserved.",
+      "fullArtifactAccepted": false
     },
     {
       "caseId": "case-008",
@@ -301,7 +313,7 @@
       "status": "clarification-required",
       "apiOutcome": "clarification-required",
       "phaseAccepted": false,
-      "semanticVerdict": "pending independent adjudication",
+      "semanticVerdict": "pass: intended contradiction identified",
       "sourceSha256": "b8179e3e7ff663a59faa4af8f53e2d31e07568385c9eb3ce80eeb9e411bec439",
       "executionElapsedMs": 16862,
       "phaseElapsedMs": 16608,
@@ -328,6 +340,12 @@
         "path": "/private/tmp/slc-current-corpus-evidence/phase-rDLBZc/summary.json",
         "sha256": "0699adc3d38773b6a09f8317621390435439b266a164bc4c7e01ae59af946ac4"
       },
+      "adjudication": {
+        "path": "/private/tmp/slc-current-code-adjudication/cases-006-009.json",
+        "sha256": "c82c80086d8b4f010fe76d8623d87b13f0f089d48a56f8a27c0745ffd589aab8"
+      },
+      "semanticReason": "The question identifies the same-trigger return-versus-next-round contradiction and chooses neither.",
+      "fullArtifactAccepted": false,
       "clarificationReportSha256": "e1a495f160947ea5654147e27b9f2be16360526cb04de2153c316b94eb7bab8f"
     },
     {
@@ -337,7 +355,7 @@
       "status": "success",
       "apiOutcome": "success",
       "phaseAccepted": true,
-      "semanticVerdict": "pending independent adjudication",
+      "semanticVerdict": "fail: authored revision relay omitted",
       "sourceSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
       "executionElapsedMs": 55744,
       "phaseElapsedMs": 55402,
@@ -363,8 +381,275 @@
       "evidence": {
         "path": "/private/tmp/slc-current-corpus-evidence/phase-i1aKuK/summary.json",
         "sha256": "214dcfc31e40d6e9a789d5a50d4cf56559fd65ee52c869a546e39d749e85ddd3"
-      }
+      },
+      "adjudication": {
+        "path": "/private/tmp/slc-current-code-adjudication/cases-006-009.json",
+        "sha256": "c82c80086d8b4f010fe76d8623d87b13f0f089d48a56f8a27c0745ffd589aab8"
+      },
+      "semanticReason": "Source requires exact evaluated revision in every Reviewer and Coder prompt; all four generated prompts omit it despite mentioning revision in conditions/results. Compiler-output loss, not source ambiguity.",
+      "fullArtifactAccepted": false
+    },
+    {
+      "caseId": "case-010",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "success",
+      "apiOutcome": "success",
+      "phaseAccepted": true,
+      "semanticVerdict": "pass: source-to-GEARS fidelity",
+      "sourceSha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+      "executionElapsedMs": 129249,
+      "phaseElapsedMs": 128780,
+      "preparationElapsedMs": 838,
+      "agentCalls": 3,
+      "questions": 0,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-TKUFn2/summary.json",
+        "sha256": "6c34094f4de137c4baca236dc546649e27802cf9f0460dcfd868d5ddf9fadc7b"
+      },
+      "adjudication": {
+        "path": "/private/tmp/slc-current-dev-adjudication/evidence.json",
+        "sha256": "df92884059bc0444b9f3821cb0e8b2a9585dc20d14165b6d3f87fcf563519463"
+      },
+      "semanticReason": "Independent reading confirms six outcomes, runtime discussion/resumption, complete Analyst instructions/labelled relays, child sequencing, canonical identity authority and failure barriers.",
+      "fullArtifactAccepted": false
+    },
+    {
+      "caseId": "case-011",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "failure",
+      "apiOutcome": "failure",
+      "phaseAccepted": false,
+      "semanticVerdict": "fail: malformed clarification delivery; intended defect recognized",
+      "sourceSha256": "4542d86a72335eb62dd54491dd907b20ec59da1b87aefd184d22690412e6ec95",
+      "executionElapsedMs": 53329,
+      "phaseElapsedMs": 52844,
+      "preparationElapsedMs": 905,
+      "agentCalls": 1,
+      "questions": 0,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-iwoikL/summary.json",
+        "sha256": "237784f235c311479c544941df4076ca307fd548bd03e072db9495f453f996e9"
+      },
+      "adjudication": {
+        "path": "/private/tmp/slc-current-dev-adjudication/evidence.json",
+        "sha256": "df92884059bc0444b9f3821cb0e8b2a9585dc20d14165b6d3f87fcf563519463"
+      },
+      "semanticReason": "The model correctly identifies the reachable documentation-only outcome with no route but omits the final JSON brace. Strict decoding rejects the report without output/history; this is not delivered clarification.",
+      "fullArtifactAccepted": false
+    },
+    {
+      "caseId": "case-012",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "success",
+      "apiOutcome": "success",
+      "phaseAccepted": true,
+      "semanticVerdict": "pass: source-to-GEARS fidelity",
+      "sourceSha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+      "executionElapsedMs": 109290,
+      "phaseElapsedMs": 108952,
+      "preparationElapsedMs": 743,
+      "agentCalls": 3,
+      "questions": 0,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-gQ0zYE/summary.json",
+        "sha256": "e34c64b530464eb752a458335c7e33834fa07f1dee7d27d42cd1137c44a9ebaf"
+      },
+      "adjudication": {
+        "path": "/private/tmp/slc-current-dev-adjudication/evidence.json",
+        "sha256": "df92884059bc0444b9f3821cb0e8b2a9585dc20d14165b6d3f87fcf563519463"
+      },
+      "semanticReason": "Independent reading confirms six outcomes, runtime discussion/resumption, complete Analyst instructions/labelled relays, child sequencing, canonical identity authority and failure barriers.",
+      "fullArtifactAccepted": false
+    },
+    {
+      "caseId": "case-013",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "success",
+      "apiOutcome": "success",
+      "phaseAccepted": true,
+      "semanticVerdict": "pass: source-to-GEARS fidelity",
+      "sourceSha256": "5d409209adeec4f682682db20c831985b112b8532b74b9dd14c3ca870327be07",
+      "executionElapsedMs": 58950,
+      "phaseElapsedMs": 58609,
+      "preparationElapsedMs": 684,
+      "agentCalls": 3,
+      "questions": 0,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-vuYQpC/summary.json",
+        "sha256": "ef840434c4b39c363bbd013fbae513cd45e78c39bb151f99f4aa2ee3acae5f86"
+      },
+      "semanticReason": "Independent review confirms exact ticket/reply relays, retired-before-urgent route priority, destinations and same-Specialist repeated runtime questions.",
+      "adjudication": {
+        "path": "/private/tmp/slc-current-triage-adjudication/cases-013-015.json",
+        "sha256": "9fc39ba654040255c518919df5af9b28150ddabaee18e30f4d59e18149ba0727"
+      },
+      "fullArtifactAccepted": false
+    },
+    {
+      "caseId": "case-014",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "clarification-required",
+      "apiOutcome": "clarification-required",
+      "phaseAccepted": false,
+      "semanticVerdict": "pass: intended contradiction identified",
+      "sourceSha256": "7b34e4191d25e5ffe409ed7b8e56a65e8e723b5eef54275dc16f38d45d4ee684",
+      "executionElapsedMs": 15357,
+      "phaseElapsedMs": 15006,
+      "preparationElapsedMs": 785,
+      "agentCalls": 1,
+      "questions": 1,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-aaTwab/summary.json",
+        "sha256": "1ce182f484820587d5a3ff245ea245beea7e443a19cf9ad04cf545e73e681e22"
+      },
+      "clarificationReportSha256": "338244e964f07421f55c5da4c7c8ebfe2c8438cf2259bc14d5d102d92e377abe",
+      "semanticReason": "Independent review confirms the same-trigger urgent destination conflict is identified, neither route selected, and no target/history published.",
+      "adjudication": {
+        "path": "/private/tmp/slc-current-triage-adjudication/cases-013-015.json",
+        "sha256": "9fc39ba654040255c518919df5af9b28150ddabaee18e30f4d59e18149ba0727"
+      },
+      "fullArtifactAccepted": false
+    },
+    {
+      "caseId": "case-015",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "success",
+      "apiOutcome": "success",
+      "phaseAccepted": true,
+      "semanticVerdict": "pass: source-to-GEARS fidelity",
+      "sourceSha256": "5d409209adeec4f682682db20c831985b112b8532b74b9dd14c3ca870327be07",
+      "executionElapsedMs": 64340,
+      "phaseElapsedMs": 63955,
+      "preparationElapsedMs": 763,
+      "agentCalls": 3,
+      "questions": 0,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-ia7t6h/summary.json",
+        "sha256": "0aef60abd1fd9cf2c13f3d31d9662484734c3b63810069122cd86a0109ca2a8b"
+      },
+      "semanticReason": "Independent review confirms exact ticket/reply relays, retired-before-urgent route priority, destinations and same-Specialist repeated runtime questions.",
+      "adjudication": {
+        "path": "/private/tmp/slc-current-triage-adjudication/cases-013-015.json",
+        "sha256": "9fc39ba654040255c518919df5af9b28150ddabaee18e30f4d59e18149ba0727"
+      },
+      "fullArtifactAccepted": false
     }
   ],
-  "scopeLimit": "Phase success and absence of a question do not establish full compilation or semantic/runtime correctness. Keep separate independent adjudications and all attempts."
+  "scopeLimit": "Phase success and absence of a question do not establish full compilation or semantic/runtime correctness. Keep separate independent adjudications and all attempts.",
+  "adjudicationSummary": {
+    "uniquePositiveSources": 5,
+    "positiveInvocations": 10,
+    "positiveSourceToGearsPass": 8,
+    "positiveSourceToGearsInconclusive": 1,
+    "positiveSourceToGearsFail": 1,
+    "positiveInvocationsWithCompilerQuestions": 0,
+    "mutantInvocations": 5,
+    "targetedValidClarificationsDelivered": 4,
+    "malformedReportAfterIntendedDefectRecognized": 1,
+    "protectedSourceAndCohortUnchanged": 15,
+    "publishedHistory": 0,
+    "fullCompilationClaims": 0
+  }
 }
