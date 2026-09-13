@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { normalizePlaybookSnapshot } from '@sublang/playbook/xstate-runtime';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -195,8 +203,9 @@ const fsmSource = (
           playbookId: 'child-review',
           text: 'Review these changes:\\n<changes>',
         })`;
-  return `export const concurrentRoleSets = [];
-export const machine = { config: {
+  return `import { createMachine } from 'xstate';
+export const concurrentRoleSets = [];
+export const machine = createMachine({
   ${rootTag}
   ${context}
   initial: 'parent',
@@ -214,12 +223,16 @@ export const machine = { config: {
           invoke: {
             src: 'playbook',
             input: ${input},
+            onDone: '#done',
+            onError: '#failed',
           },
         },
       },
     },
+    failed: { id: 'failed', tags: 'playbook.parked', meta: {playbook: {stateId: 'failed'}}, on: {BOSS_REPLY: {target: '#callChild', guard: ({event}) => typeof event.answer === 'string' && event.answer.trim() !== ''}} },
+    done: { id: 'done', type: 'final', meta: {playbook: {stateId: 'done', terminal: 'success'}} },
   },
-} };
+});
 `;
 };
 
@@ -243,6 +256,11 @@ describe('FSM child suspension boundary', () => {
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'slc-fsm-child-suspension-'));
+    await symlink(
+      fileURLToPath(new URL('../node_modules', import.meta.url)),
+      join(root, 'node_modules'),
+      'dir',
+    );
     pipeline = join(root, 'pipeline');
     await mkdir(pipeline);
     await writeFile(join(pipeline, 'gears2fsm.md'), definition('gears', 'fsm'));

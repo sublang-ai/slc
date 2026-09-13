@@ -4710,9 +4710,13 @@ function render(context: { unrelatedFirst: string; unrelatedOptional: string; un
 export const machine = createMachine({
   context: { unrelatedFirst: '', unrelatedOptional: '', unrelatedLast: '', unrelatedRevision: '' }, initial: 'ready',
   states: {
-    ready: { id: 'ready', meta: { playbook: { stateId: 'ready' } } },
+    ready: { id: 'ready', meta: { playbook: { stateId: 'ready' } }, on: { BOSS_REQUEST: 'call' } },
     call: { id: 'call', meta: { playbook: { stateId: 'call' } }, tags: 'playbook.suspended',
-      invoke: { src: 'playbook', input: ({ context }) => ({ stateId: 'call', sourceItem: 'NESTED-1', playbookId: 'review', text: render(context) }) }
+      invoke: { src: 'playbook', input: ({ context }) => ({ stateId: 'call', sourceItem: 'NESTED-1', playbookId: 'review', text: render(context) }), onDone: 'done', onError: 'failed' }
+    },
+    done: { id: 'done', type: 'final', meta: { playbook: { stateId: 'done' } } },
+    failed: { id: 'failed', tags: 'playbook.parked', meta: { playbook: { stateId: 'failed' } },
+      on: { BOSS_REPLY: { guard: ({ event }) => 'answer' in event && typeof event.answer === 'string' && event.answer.trim().length > 0, target: 'call' } }
     }
   }
 });\n`;

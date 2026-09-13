@@ -7,10 +7,12 @@ import {
   mkdtemp,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -21,6 +23,8 @@ import {
 import { runSlc, type SlcDeps } from '../src/runner.js';
 
 import { pipelineOutput } from './pipeline-output-fixture.js';
+
+const repository = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats
@@ -102,6 +106,11 @@ beforeEach(async () => {
   srcDir = join(root, 'work');
   await mkdir(pipelineDir);
   await mkdir(srcDir);
+  await symlink(
+    join(repository, 'node_modules'),
+    join(root, 'node_modules'),
+    'dir',
+  );
   await writeFile(
     join(pipelineDir, 'text2gears.md'),
     formats('text', '.md', 'gears', '.md'),
@@ -222,7 +231,7 @@ describe('single-phase run (pipeline-24)', () => {
   it('reuses the artifact directory without nesting when invoked inside it (pipeline-24, pipeline-38)', async () => {
     await mkdir(artDir, { recursive: true });
     const intermediate = join(artDir, 'onboarding.gears.md');
-    await writeFile(intermediate, 'gears');
+    await writeFile(intermediate, pipelineOutput(intermediate));
     const { agent } = makeAgent();
 
     // Invoked from inside the artifact directory: the cwd leaf is already
@@ -240,7 +249,7 @@ describe('single-phase run (pipeline-24)', () => {
   it('honors -o for the terminal phase', async () => {
     await mkdir(artDir, { recursive: true });
     const intermediate = join(artDir, 'onboarding.gears.md');
-    await writeFile(intermediate, 'gears');
+    await writeFile(intermediate, pipelineOutput(intermediate));
     const out = join(srcDir, 'custom.fsm.ts');
     const { agent } = makeAgent();
 
@@ -430,7 +439,7 @@ describe('pass phases and normalization (DR-013, DR-014; pipeline-35, pipeline-3
     await addOptimizePass();
     await mkdir(artDir, { recursive: true });
     const intermediate = join(artDir, 'onboarding.gears.md');
-    await writeFile(intermediate, 'gears');
+    await writeFile(intermediate, pipelineOutput(intermediate));
     const { agent } = makeAgent();
     const result = await runSlc(['flow.optimize', intermediate], deps(agent));
     expect(result.ok).toBe(true);

@@ -68,7 +68,7 @@ export const machine = createMachine({
         onError: 'failed',
       },
     },
-    failed: { tags: 'playbook.parked', meta: { playbook: { stateId: 'failed' } } },
+    failed: { tags: 'playbook.parked', meta: { playbook: { stateId: 'failed' } }, on: {BOSS_REPLY: {target: 'callBranch', guard: ({event}) => typeof event.answer === 'string' && event.answer.trim() !== ''}} },
     done: { type: 'final', meta: { playbook: { stateId: 'done', description: 'The branch is prepared.', terminal: 'success' } } },
   },
 });

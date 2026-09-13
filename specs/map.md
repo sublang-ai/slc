@@ -74,6 +74,7 @@ meta.md       The spec of specs
 | [DR-046](decisions/046-bounded-child-chain-coverage.md) | 046-bounded-child-chain-coverage.md | Bounded child-path replay for non-preemptive workflows and chained children |
 | [DR-047](decisions/047-child-call-quiescence.md) | 047-child-call-quiescence.md | Reject inherited busy tags that prevent nested-child suspension |
 | [DR-048](decisions/048-canonical-actor-diagnostic.md) | 048-canonical-actor-diagnostic.md | Canonical nested-playbook actor-clause diagnostics at the GEARS boundary |
+| [DR-049](decisions/049-early-transition-coverage.md) | 049-early-transition-coverage.md | Exact transition coverage before FSM acceptance and consumption, with cooperative cancellation and protected-input precedence |
 
 ## Packages
 

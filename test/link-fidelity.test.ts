@@ -35,39 +35,82 @@ const sdlc = join(
   'sdlc',
 );
 
+async function prepareTempProject(dir: string): Promise<void> {
+  await writeFile(join(dir, 'package.json'), '{"type":"module"}\n');
+  await symlink(join(repoRoot, 'node_modules'), join(dir, 'node_modules'));
+}
+
+const playerState = (
+  stateId: string,
+  role: string,
+  sourceItem: string,
+  prompt: string,
+) => `      ${stateId}: {
+        meta: { playbook: { stateId: '${stateId}', role: '${role}' } },
+        invoke: {
+          src: 'player',
+          input: ({ context }: { context: Record<string, unknown> }) => ({
+            stateId: '${stateId}',
+            sourceItem: '${sourceItem}',
+            role: '${role}',
+            prompt: '${prompt}',
+            result: {
+              done: 'the draft is written. Output shall include \`response: <final response>\`.',
+              needsBossReply: 'The agent must ask Boss. Output shall include \`question: <question>\`.',
+            },
+            audience: context.audience,
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
+          }),
+          onDone: [
+            { guard: ({ event }: any) => event.output?.guard === 'needsBossReply', target: 'awaitBossReply' },
+            { guard: ({ event }: any) => event.output?.guard === 'done', target: 'done' },
+          ],
+          onError: 'failed',
+        },
+      },`;
+
+const fsmFixture = (
+  extraStates = '',
+): string => `import { fromPromise, setup } from 'xstate';
+export const machine = setup({
+  actors: { player: fromPromise(async () => ({ guard: 'done', response: 'fixture response' })) },
+}).createMachine({
+  context: ({ input }: { input?: { audience?: string } }) => ({ audience: input?.audience ?? '', pendingBossQuestion: undefined, bossReply: undefined }),
+  initial: 'draft',
+  states: {
+${playerState('draft', 'coder', 'X-1', 'Draft for <audience> as <coder-llm>.')}${extraStates}
+    awaitBossReply: {
+      tags: 'playbook.parked',
+      on: { BOSS_REPLY: { target: 'draft', guard: ({ event }: any) => typeof event.answer === 'string' && event.answer.trim().length > 0 } },
+    },
+    failed: {
+      tags: 'playbook.parked',
+      meta: { playbook: { stateId: 'failed' } },
+      on: { BOSS_REPLY: { target: 'draft', guard: ({ event }: any) => typeof event.answer === 'string' && event.answer.trim().length > 0 } },
+    },
+    done: { type: 'final', meta: { playbook: { stateId: 'done', terminal: 'success' } } },
+  },
+});
+`;
+
 /** A schema-3 machine with one delegated `coder` leaf whose prompt names both models. */
-const FSM_FIXTURE = [
-  'export const machine = {',
-  '  config: {',
-  '    states: {',
-  '      draft: {',
-  "        meta: { playbook: { stateId: 'draft', role: 'coder' } },",
-  '        invoke: {',
-  "          src: 'player',",
-  '          input: ({ context }: { context: Record<string, unknown> }) => ({',
-  "            stateId: 'draft',",
-  "            sourceItem: 'X-1',",
-  "            role: 'coder',",
-  "            prompt: 'Draft for <audience> as <coder-llm>.',",
-  "            result: { done: 'the draft is written' },",
-  '            audience: context.audience,',
-  '          }),',
-  '        },',
-  '      },',
-  '    },',
-  '  },',
-  '};',
-  '',
-].join('\n');
+const FSM_FIXTURE = fsmFixture();
 
 /** A linked module whose player composer resolves `<coder-llm>` from `role`. */
 const linkedModule = (role: string): string =>
   [
+    'const continuationPrefix = (input: { pendingBossQuestion?: { question?: string }; bossReply?: string }, resuming?: boolean): string => {',
+    "  if (typeof input.bossReply !== 'string') return '';",
+    '  if (resuming === true) return `Continue the same task using Boss’s reply below.\n\nBoss reply:\n${input.bossReply}\n\n`;',
+    "  return `Continue the same task using Boss’s reply below.\n\nYour previous question:\n${input.pendingBossQuestion?.question ?? ''}\n\nBoss reply:\n${input.bossReply}\n\n`;",
+    '};',
     'const compose = (',
-    '  input: { prompt: string; audience: string },',
+    '  input: { prompt: string; audience: string; pendingBossQuestion?: { question?: string }; bossReply?: string },',
     '  promptIdentity: (roleId: string) => string,',
+    '  resuming?: boolean,',
     '): string =>',
-    '  input.prompt.replace(/<audience>|<coder-llm>/g, token =>',
+    '  continuationPrefix(input, resuming) + input.prompt.replace(/<audience>|<coder-llm>/g, token =>',
     `    token === '<audience>' ? input.audience : promptIdentity('${role}'));`,
     'export const _internal = { composePlayerPrompt: compose };',
     'export default function createPlaybookRuntime() {',
@@ -92,29 +135,15 @@ const WRONG_ROLE_FINDING =
   'draft: composePlayerPrompt threw on an ordinary turn: ' +
   'prompt identity lookup used undeclared role "reviewer"; ' +
   'the artifact declares ["coder"]';
+const WRONG_ROLE_CONTINUATION_FINDING =
+  'draft: composePlayerPrompt threw on a continuation turn: ' +
+  'prompt identity lookup used undeclared role "reviewer"; ' +
+  'the artifact declares ["coder"]';
 
 /** The same machine with a second `reviewer` leaf, so both roles are declared. */
-const TWO_ROLE_FSM_FIXTURE = FSM_FIXTURE.replace(
-  '    },\n  },\n};',
-  [
-    '      review: {',
-    "        meta: { playbook: { stateId: 'review', role: 'reviewer' } },",
-    '        invoke: {',
-    "          src: 'player',",
-    '          input: ({ context }: { context: Record<string, unknown> }) => ({',
-    "            stateId: 'review',",
-    "            sourceItem: 'X-2',",
-    "            role: 'reviewer',",
-    "            prompt: 'Review for <audience>.',",
-    "            result: { done: 'the review is written' },",
-    '            audience: context.audience,',
-    '          }),',
-    '        },',
-    '      },',
-    '    },',
-    '  },',
-    '};',
-  ].join('\n'),
+const TWO_ROLE_FSM_FIXTURE = fsmFixture(
+  `
+${playerState('review', 'reviewer', 'X-2', 'Review for <audience>.')}`,
 );
 
 describe('linked-module contract checks (verification-27, verification-28)', () => {
@@ -186,6 +215,7 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
   it('names an undeclared role a composer resolved its identity from', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-link-contract-'));
     try {
+      await prepareTempProject(dir);
       await writeFile(join(dir, 'case.fsm.ts'), FSM_FIXTURE);
       const linkedPath = join(dir, 'case.playbook.ts');
       await writeFile(linkedPath, CONFORMANT);
@@ -202,7 +232,7 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
           linkedPath,
           fsmPath: join(dir, 'case.fsm.ts'),
         }),
-      ).toEqual([WRONG_ROLE_FINDING]);
+      ).toEqual([WRONG_ROLE_FINDING, WRONG_ROLE_CONTINUATION_FINDING]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -211,6 +241,7 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
   it('accepts one declared role’s prompt naming another declared role’s identity', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-link-contract-peer-'));
     try {
+      await prepareTempProject(dir);
       const fsmPath = join(dir, 'case.fsm.ts');
       const linkedPath = join(dir, 'case.playbook.ts');
       await writeFile(fsmPath, TWO_ROLE_FSM_FIXTURE);
@@ -227,6 +258,7 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
   it('reports an unimportable module as a finding rather than an error', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-link-contract-load-'));
     try {
+      await prepareTempProject(dir);
       await writeFile(join(dir, 'case.fsm.ts'), FSM_FIXTURE);
       await writeFile(
         join(dir, 'case.playbook.ts'),
@@ -250,6 +282,7 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
     const linkedPath = join(dir, 'case.playbook.ts');
     const fsmPath = join(dir, 'case.fsm.ts');
     try {
+      await prepareTempProject(dir);
       // No linked module and no FSM beside it.
       expect(await checkLinkedModuleContract({ linkedPath, fsmPath })).toEqual(
         [],
@@ -314,6 +347,7 @@ describe('playbook link-fidelity gate (phase-execution-53, phase-execution-54)',
     artDir = join(workDir, 'case.flow');
     await mkdir(pipelineDir);
     await mkdir(artDir, { recursive: true });
+    await prepareTempProject(root);
     await writeFile(
       join(pipelineDir, 'text2gears.md'),
       phaseDoc('text', '.md', 'gears', '.md'),
@@ -389,13 +423,13 @@ describe('playbook link-fidelity gate (phase-execution-53, phase-execution-54)',
         : {
             status: 'success',
             text: JSON.stringify({
-              dispositions: [
-                {
-                  finding: 1,
+              dispositions: [...request.prompt.matchAll(/^([0-9]+)\. /gm)].map(
+                ([, finding]) => ({
+                  finding: Number(finding),
                   decision: 'accept',
-                  reason: 'resolved the identity from the state’s own role',
-                },
-              ],
+                  reason: 'resolved the linked fixture finding',
+                }),
+              ),
               result: 'linked the module',
             }),
           };

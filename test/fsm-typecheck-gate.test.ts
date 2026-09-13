@@ -27,23 +27,67 @@ const GEARS =
 const definition = (source: string, target: string) =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${source} | ${source === 'gears' ? '.md' : '.ts'} |\n| target | ${target} | .ts |\n`;
 const fsm = (invalid = false) => `
-import { fromPromise, setup } from 'xstate';
+import { assign, fromPromise, setup } from 'xstate';
 export const concurrentRoleSets = [] as const;
 export const machine = setup({
-  types: {context: {} as {bossIntent: string; pendingBossQuestion?: unknown; bossReply?: string}, input: {} as {bossIntent?: string}, ${invalid ? 'output: {} as void,' : ''}},
-  actors: {player: fromPromise(async () => { throw new Error('runner provides player'); })},
+  types: {
+    context: {} as { bossIntent: string; pendingBossQuestion?: { question: string }; bossReply?: string; failure?: string },
+    input: {} as { bossIntent?: string },
+    events: {} as { type: 'BOSS_REPLY'; answer: string } | { type: 'NO_ACTION' },
+    ${invalid ? 'output: {} as void,' : ''}
+  },
+  actors: { player: fromPromise(async () => { throw new Error('runner provides player'); }) },
+  actions: {
+    rememberQuestion: assign({ pendingBossQuestion: ({ event }) => ({ question: String((event as { output?: { question?: unknown } }).output?.question ?? 'Which output is required?') }) }),
+    rememberBossReply: assign({ bossReply: ({ event }) => (event.type === 'BOSS_REPLY' ? event.answer : undefined) }),
+    rememberFailure: assign({ failure: ({ event }) => String((event as { error?: unknown }).error ?? 'player failed') }),
+  },
+  guards: {
+    playerDone: ({ event }) => (event as { output?: { guard?: string } }).output?.guard === 'done',
+    playerAskedBoss: ({ event }) => (event as { output?: { guard?: string; question?: string } }).output?.guard === 'needsBossReply' && typeof (event as { output?: { question?: unknown } }).output?.question === 'string' && (event as { output?: { question?: string } }).output!.question!.trim() !== '',
+    bossReplyIsNonblank: ({ event }) => event.type === 'BOSS_REPLY' && event.answer.trim() !== '',
+  },
 }).createMachine({
-  context: ({input}) => ({bossIntent: input.bossIntent ?? ''}),
+  context: ({ input }) => ({ bossIntent: input.bossIntent ?? '' }),
   initial: 'work',
-  states: {work: {
-    id: 'work', meta: {playbook: {stateId: 'work', role: 'agent'}},
-    invoke: {src: 'player', input: ({context}) => ({
-      stateId: 'work', sourceItem: 'TASK-1', role: 'agent',
-      prompt: 'Carry out <boss-intent>.', bossIntent: context.bossIntent,
-      pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply,
-      result: {done: 'Done.', needsBossReply: 'Output shall include \`question:\`'},
-    })},
-  }},
+  states: {
+    work: {
+      id: 'work',
+      tags: ['playbook.busy'],
+      meta: { playbook: { stateId: 'work', role: 'agent' } },
+      invoke: {
+        src: 'player',
+        input: ({ context }) => ({
+          stateId: 'work', sourceItem: 'TASK-1', role: 'agent',
+          prompt: 'Carry out <boss-intent>.', bossIntent: context.bossIntent,
+          pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply,
+          result: { done: 'Done.', needsBossReply: 'Output shall include \`question:\`' },
+        }),
+        onDone: [
+          { guard: 'playerDone', target: 'done' },
+          { guard: 'playerAskedBoss', target: 'awaitBossReply', actions: 'rememberQuestion' },
+        ],
+        onError: { target: 'failed', actions: 'rememberFailure' },
+      },
+    },
+    awaitBossReply: {
+      id: 'awaitBossReply',
+      tags: ['playbook.suspended'],
+      meta: { playbook: { stateId: 'awaitBossReply' } },
+      on: { BOSS_REPLY: { guard: 'bossReplyIsNonblank', target: 'work', actions: 'rememberBossReply' } },
+    },
+    failed: {
+      id: 'failed',
+      tags: ['playbook.parked'],
+      type: 'final',
+      meta: { playbook: { stateId: 'failed', terminal: 'failure' } },
+    },
+    done: {
+      id: 'done',
+      type: 'final',
+      meta: { playbook: { stateId: 'done', terminal: 'success' } },
+    },
+  },
 });
 `;
 const correction = JSON.stringify({

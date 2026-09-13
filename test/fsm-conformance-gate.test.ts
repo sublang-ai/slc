@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -13,27 +21,100 @@ import {
 } from '../src/config.js';
 import type { PhaseExecutor } from '../src/execution.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
+import { loadFsmModule } from '../src/verify.js';
 
+const repository = dirname(dirname(fileURLToPath(import.meta.url)));
 const GEARS =
   '# Task\n\nRoles:\n\n- Agent\n\n### TASK-1\n\nCaptain shall prompt Agent:\n\n> Carry out <boss-intent>.\n';
 // The measured failure interpolated context.bossIntent into the source prompt
 // prematurely. This executable fixture preserves that same boundary defect.
 const fsm = (interpolate: boolean, nested = false) => `
-export const concurrentRoleSets = [];
-export const machine = { config: {
-  context: { bossIntent: '', continuation: {} },
-  states: { work: {
-    meta: { playbook: { stateId: 'work', role: 'agent' } },
-    invoke: { src: 'player', input: ({context}: {context: {bossIntent: string; pendingBossQuestion?: unknown; bossReply?: string; continuation?: {pendingBossQuestion?: unknown; bossReply?: string}}}) => ({
-      stateId: 'work', sourceItem: 'TASK-1', role: 'agent',
-      prompt: ${interpolate ? "'Carry out ' + context.bossIntent + '.'" : "'Carry out <boss-intent>.'"},
-      bossIntent: context.bossIntent,
-      ${nested ? '...context.continuation,' : 'pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply,'}
-      result: { done: 'Done.', needsBossReply: 'Output shall include \`question:\`' }
-    }) }
-  } }
-} };
+import { assign, fromPromise, setup } from 'xstate';
+
+export const concurrentRoleSets = [] as const;
+export const machine = setup({
+  types: {
+    context: {} as {
+      bossIntent: string;
+      pendingBossQuestion?: { question: string };
+      bossReply?: string;
+      continuation?: { pendingBossQuestion?: unknown; bossReply?: string };
+      failure?: string;
+    },
+    input: {} as { bossIntent?: string },
+    events: {} as
+      | { type: 'BOSS_REPLY'; answer: string }
+      | { type: 'NO_ACTION' },
+  },
+  actors: {
+    player: fromPromise(async () => { throw new Error('runner provides player'); }),
+    captain: fromPromise(async () => { throw new Error('runner provides captain'); }),
+  },
+  actions: {
+    rememberQuestion: assign({ pendingBossQuestion: ({ event }) => ({ question: String((event as { output?: { question?: unknown } }).output?.question ?? 'Which output is required?') }) }),
+    rememberBossReply: assign({ bossReply: ({ event }) => (event.type === 'BOSS_REPLY' ? event.answer : undefined) }),
+    rememberFailure: assign({ failure: ({ event }) => String((event as { error?: unknown }).error ?? 'player failed') }),
+  },
+  guards: {
+    playerDone: ({ event }) => (event as { output?: { guard?: string } }).output?.guard === 'done',
+    playerAskedBoss: ({ event }) => (event as { output?: { guard?: string; question?: string } }).output?.guard === 'needsBossReply' && typeof (event as { output?: { question?: unknown } }).output?.question === 'string' && (event as { output?: { question?: string } }).output!.question!.trim() !== '',
+    bossReplyIsNonblank: ({ event }) => event.type === 'BOSS_REPLY' && event.answer.trim() !== '',
+  },
+}).createMachine({
+  context: ({ input }) => ({ bossIntent: input.bossIntent ?? '' }),
+  initial: 'work',
+  states: {
+    work: {
+      id: 'work',
+      tags: ['playbook.busy'],
+      meta: { playbook: { stateId: 'work', role: 'agent' } },
+      invoke: {
+        src: 'player',
+        input: ({ context }: { context: { bossIntent: string; pendingBossQuestion?: unknown; bossReply?: string; continuation?: { pendingBossQuestion?: unknown; bossReply?: string } } }) => ({
+          stateId: 'work',
+          sourceItem: 'TASK-1',
+          role: 'agent',
+          prompt: ${interpolate ? "'Carry out ' + context.bossIntent + '.'" : "'Carry out <boss-intent>.'"},
+          bossIntent: context.bossIntent,
+          ${nested ? '...context.continuation,' : 'pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply,'}
+          result: { done: 'Done.', needsBossReply: 'Output shall include \`question:\`' },
+        }),
+        onDone: [
+          { guard: 'playerDone', target: 'done' },
+          { guard: 'playerAskedBoss', target: 'awaitBossReply', actions: 'rememberQuestion' },
+        ],
+        onError: { target: 'failed', actions: 'rememberFailure' },
+      },
+    },
+    awaitBossReply: {
+      id: 'awaitBossReply',
+      tags: ['playbook.suspended'],
+      meta: { playbook: { stateId: 'awaitBossReply' } },
+      on: { BOSS_REPLY: { guard: 'bossReplyIsNonblank', target: 'work', actions: 'rememberBossReply' } },
+    },
+    failed: {
+      id: 'failed',
+      tags: ['playbook.parked'],
+      type: 'final',
+      meta: { playbook: { stateId: 'failed', terminal: 'failure' } },
+    },
+    done: {
+      id: 'done',
+      type: 'final',
+      meta: { playbook: { stateId: 'done', terminal: 'success' } },
+    },
+  },
+});
 `;
+
+const directCaptainFsm = (content: string) =>
+  content
+    .replace("src: 'player'", "src: 'captain'")
+    .replace(
+      "meta: { playbook: { stateId: 'work', role: 'agent' } }",
+      "meta: { playbook: { stateId: 'work' } }",
+    )
+    .replace("          role: 'agent',\n", '');
 
 const definition = (source: string, target: string, ext = '.ts') =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${source} | ${source === 'gears' ? '.md' : '.ts'} |\n| target | ${target} | ${ext} |\n`;
@@ -60,6 +141,11 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
     root = await mkdtemp(join(tmpdir(), 'slc-fsm-gate-'));
     pipeline = join(root, 'pipeline');
     await mkdir(pipeline);
+    await symlink(
+      join(repository, 'node_modules'),
+      join(root, 'node_modules'),
+      'dir',
+    );
     await writeFile(join(pipeline, 'gears2fsm.md'), definition('gears', 'fsm'));
     await writeFile(
       join(pipeline, 'fsm2output.md'),
@@ -154,9 +240,7 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
       'Captain shall prompt Agent:',
       'Captain shall work directly:',
     );
-    const directFsm = fsm(false)
-      .replace("src: 'player'", "src: 'captain'")
-      .replaceAll(", role: 'agent'", '');
+    const directFsm = directCaptainFsm(fsm(false));
     await writeFile(source, directSource);
     const result = await runSlc(
       ['flow.gears2fsm', source],
@@ -257,9 +341,7 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
 
   it('keeps an unclassified supplied direct-Captain FSM eligible for its consumer', async () => {
     const input = join(root, 'task.fsm.ts');
-    const direct = fsm(false, true)
-      .replace("src: 'player'", "src: 'captain'")
-      .replaceAll(", role: 'agent'", '');
+    const direct = directCaptainFsm(fsm(false));
     await writeFile(input, direct);
     const result = await runSlc(
       ['flow.fsm2output', input],
@@ -433,6 +515,146 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
       expect(result.ok).toBe(false);
       expect(calls).toHaveLength(2);
       expect(result.diagnostics.join('\n')).toContain(protectedPath);
+    },
+  );
+  const coverageDefect = () =>
+    fsm(false).replace(
+      "output?.guard === 'done'",
+      "output?.guard === 'impossible'",
+    );
+
+  it('rejects an exact coverage defect after custom producer acceptance before downstream work', async () => {
+    const result = await runSlc(
+      ['flow', source],
+      deps(writing(coverageDefect())),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(result.diagnostics.join('\n')).toContain('state work');
+    expect(result.diagnostics.join('\n')).toContain('done');
+    expect(result.clarification).toBeUndefined();
+    expect(await readFile(source, 'utf8')).toBe(GEARS);
+  });
+
+  it.each([false, true])(
+    'repairs coverage through the existing budget (persistent=%s)',
+    async (persistent) => {
+      const factory: AdapterFactory = (agent) => ({
+        agent,
+        async isAvailable() {
+          return true;
+        },
+        async *run(prompt) {
+          calls.push(prompt);
+          await writeFile(
+            target,
+            calls.length === 1 || persistent ? coverageDefect() : fsm(false),
+          );
+          const findingBlock = prompt.slice(prompt.lastIndexOf('FINDINGS:'));
+          const dispositions = [...findingBlock.matchAll(/^(\d+)\. /gm)].map(
+            (match) => ({
+              finding: Number(match[1]),
+              decision: 'accept',
+              reason: 'Correct the unreachable result transition.',
+            }),
+          );
+          yield {
+            type: 'done',
+            agent,
+            timestamp: 1,
+            sessionId: 'coder-session',
+            payload: {
+              status: 'success',
+              result:
+                calls.length === 1
+                  ? 'Wrote FSM.'
+                  : JSON.stringify({ dispositions, result: 'Repaired FSM.' }),
+              usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+              durationMs: 1,
+            },
+          } as never;
+        },
+      });
+      const result = await runSlc(
+        ['flow.gears2fsm', source],
+        deps(
+          createConfiguredExecutor(
+            { agent: 'codex' },
+            { cwd: root, adapterFactory: factory },
+          ),
+        ),
+      );
+      expect(result.ok, JSON.stringify(result.diagnostics)).toBe(!persistent);
+      expect(calls).toHaveLength(persistent ? 3 : 2);
+      expect(calls[1]).toContain('state work');
+      expect(result.clarification).toBeUndefined();
+      expect(await readFile(source, 'utf8')).toBe(GEARS);
+    },
+  );
+
+  it.each(['compile', 'link'])(
+    'rejects supplied coverage defects before %s construction',
+    async (kind) => {
+      const input = join(root, 'task.fsm.ts');
+      await writeFile(input, coverageDefect());
+      await writeFile(join(pipeline, 'link.md'), definition('fsm', 'playbook'));
+      let selections = 0;
+      const result = await runSlc(
+        kind === 'compile'
+          ? ['flow.fsm2output', input]
+          : ['flow.link', input, join(root, 'runtime.ts')],
+        {
+          cwd: root,
+          resolver: () => [pipeline],
+          get executor() {
+            selections++;
+            throw new Error('consumer must not be selected');
+          },
+        },
+      );
+      expect(result.ok).toBe(false);
+      expect(selections).toBe(0);
+      expect(result.diagnostics.join('\n')).toContain('state work');
+      expect(result.clarification).toBeUndefined();
+      expect(await readFile(input, 'utf8')).toBe(coverageDefect());
+    },
+  );
+
+  it.each(['clean', 'finding', 'cancel'])(
+    'prioritizes action-time protected mutation over a %s post-acceptance coverage outcome',
+    async (outcome) => {
+      const controller = new AbortController();
+      const content =
+        `import { appendFileSync } from 'node:fs';\nlet cancel = () => {};\nexport function abortWhenDriving(callback: () => void) { cancel = callback; }\n${outcome === 'finding' ? coverageDefect() : fsm(false)}`.replace(
+          "      id: 'work',",
+          `      id: 'work', entry: () => { appendFileSync(${JSON.stringify(source)}, '\\nchanged by coverage action\\n'); cancel(); },`,
+        );
+      const result = await runSlc(['flow', source], {
+        ...deps({
+          async run(request) {
+            if (request.kind !== 'compile') throw new Error('unexpected link');
+            calls.push(request.definitionPath);
+            await writeFile(request.target, content);
+            if (outcome === 'cancel') {
+              const fixture = (await loadFsmModule(request.target)) as {
+                abortWhenDriving(callback: () => void): void;
+              };
+              fixture.abortWhenDriving(() =>
+                controller.abort(new Error('cancel during coverage action')),
+              );
+            }
+            return { status: 'ok' };
+          },
+        }),
+        signal: controller.signal,
+      });
+      expect(result.ok).toBe(false);
+      expect(calls).toHaveLength(1);
+      expect(result.diagnostics.join('\n')).toContain(
+        `protected path "${source}" changed during the run`,
+      );
+      expect(result.diagnostics.join('\n')).not.toContain('invalid FSM source');
+      expect(result.clarification).toBeUndefined();
     },
   );
 });

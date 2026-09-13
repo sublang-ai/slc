@@ -279,6 +279,12 @@ When checking an FSM's child-call suspension contract, the verifier shall report
 
 When checking a GEARS actor contract, the verifier shall scan item-scoped unquoted clause lines for the exact near-miss family `Captain shall (first|then|next|finally) call playbook` with word boundaries, report each finding with the item id and canonical `Captain shall call playbook ...:` repair, and ignore blockquotes, `Results:` descriptions, canonical nested-playbook clauses, and other Captain actor clauses ([DR-048](../decisions/048-canonical-actor-diagnostic.md)).
 
+### Cooperative coverage lifetime
+
+#### verification-49
+
+When transition coverage executes [[verification-6](#verification-6)], the checker shall own an isolated per-call cooperative lifetime that observes an optional cancellation signal and a monotonic deadline no longer than its derived timeout or a caller's smaller positive finite bound, yields pending cancellation between bounded work blocks, interrupts settle waits, checks between guard candidates without swallowing interruption as a predicate failure, releases its actors, timers and subscriptions on every exit, and reports deadline exhaustion as incomplete coverage rather than an unsatisfiable transition or Source clarification, without claiming preemption of synchronous artifact code ([DR-049](../decisions/049-early-transition-coverage.md)).
+
 ## Verification
 
 ### Reference acceptance
@@ -472,6 +478,12 @@ Where real XState fixtures include child invocations with leaf, ancestor, root a
 #### verification-48
 
 Where GEARS fixtures include malformed nested-call sequencing, canonical actor clauses, quoted text, and result prose, when the integration suite runs, it shall verify that the actor-contract check catches the actual malformed DEV-5 shape, all four literal and dynamic near-miss words, produced-GEARS findings before downstream work, supplied-GEARS findings before consumer execution, and same-Coder repair to the canonical clause without changing the Source, while accepting canonical nested calls, ordinary direct-Captain clauses, blockquoted literals, and control-result prose [[verification-47](#verification-47)].
+
+### Coverage lifetime acceptance
+
+#### verification-50
+
+Where real XState fixtures expose actor lifetimes and bounded work, when the coverage integration suite supplies cancellation or a shortened deadline, the suite shall verify no actor work for an already canceled call, cleanup after active cancellation and finite synchronous deadline exhaustion, isolation between concurrent canceled and successful checks, clean subsequent checks, and unchanged findings without interruption [[verification-49](#verification-49)].
 
 ## References
 

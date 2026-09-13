@@ -91,11 +91,13 @@ import {
   artifactSchemaForPlaybookProvenance,
   checkFsmContinuationInputs,
   checkFsmChildSuspension,
+  checkFsmCoverage,
   checkGearsActorContract,
   checkGearsFsmConformance,
   checkGearsResultContract,
   checkLinkedModuleContract,
   emitFsmCoverageTest,
+  FsmCoverageDeadlineError,
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
@@ -1021,7 +1023,7 @@ function compileStep(
             const findings = await checkFsmTypeScript(target, signal);
             if (findings.length > 0) return findings;
           }
-          return fsmConformanceFindings(source, target, linkTarget);
+          return fsmConformanceFindings(source, target, linkTarget, signal);
         }
       : undefined;
   const checks: MechanicalReview[] = [
@@ -1113,7 +1115,9 @@ async function fsmConformanceFindings(
   source: string,
   target: string,
   linkTarget?: string,
+  signal?: AbortSignal,
 ): Promise<readonly string[]> {
+  signal?.throwIfAborted();
   try {
     await stat(target);
   } catch (error) {
@@ -1129,7 +1133,7 @@ async function fsmConformanceFindings(
     ]);
     const config = findMachineConfig(fsm);
     const schema = await fsmSchema(config, linkTarget);
-    return [
+    const findings = [
       ...schema.findings,
       ...checkGearsFsmConformance(gears, config, {
         concurrentRoleSets: findConcurrentRoleSets(fsm),
@@ -1141,7 +1145,16 @@ async function fsmConformanceFindings(
         ? []
         : checkFsmContinuationInputs(config, schema.artifactSchema)),
     ];
+    signal?.throwIfAborted();
+    return findings.length > 0
+      ? findings
+      : await checkFsmCoverage(fsm, {
+          sourceText: await readFile(target, 'utf8'),
+          signal,
+        });
   } catch (error) {
+    signal?.throwIfAborted();
+    if (error instanceof FsmCoverageDeadlineError) throw error;
     return [`FSM conformance could not be checked: ${messageOf(error)}`];
   }
 }
@@ -1170,16 +1183,23 @@ async function fsmContinuationFindings(
   signal?: AbortSignal,
 ): Promise<readonly string[]> {
   signal?.throwIfAborted();
-  const config = findMachineConfig(await loadFsmModule(source));
+  const fsm = await loadFsmModule(source);
+  const config = findMachineConfig(fsm);
   const schema = await fsmSchema(config, linkTarget);
   signal?.throwIfAborted();
-  return [
+  const findings = [
     ...schema.findings,
     ...checkFsmChildSuspension(config),
     ...(schema.artifactSchema === undefined || schema.findings.length > 0
       ? []
       : checkFsmContinuationInputs(config, schema.artifactSchema)),
   ];
+  return findings.length > 0
+    ? findings
+    : await checkFsmCoverage(fsm, {
+        sourceText: await readFile(source, 'utf8'),
+        signal,
+      });
 }
 
 /**
@@ -1638,11 +1658,22 @@ async function executeSteps(
     // runPhase has already enforced the unchanged generic protection checks.
     if (step.compileFidelity !== undefined) {
       let findings: readonly string[];
+      let checkProtectedPaths: (() => Promise<string[]>) | undefined;
       try {
+        checkProtectedPaths = await watchProtectedPaths(
+          phaseProtectedPaths(request, {
+            definitions,
+            protectedInputs: [...immutableInputs, ...stepDeclared.paths],
+          }),
+        );
         findings = await step.compileFidelity();
       } catch (error) {
         findings = [`mechanical review could not run: ${messageOf(error)}`];
       }
+      // Coverage executes artifact guards/actions after generic acceptance.
+      // Their protected-input mutations outrank success, findings and errors.
+      const changes = await checkProtectedPaths?.();
+      if (changes !== undefined && changes.length > 0) findings = changes;
       if (findings.length > 0) {
         fail();
         diagnostics.push(

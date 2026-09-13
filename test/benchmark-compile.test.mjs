@@ -551,15 +551,56 @@ describe('opt-in compilation benchmark', () => {
   });
 });
 
-const FIXED_FSM = `export const machine = { config: { context: { audience: '' }, states: { write: {
-  meta: { playbook: { stateId: 'write', role: 'writer' } },
-  invoke: { src: 'player', input: ({ context }: { context: { audience: string } }) => ({
-    stateId: 'write', sourceItem: 'FIXED-1', role: 'writer',
-    prompt: 'Write for <audience>.', audience: context.audience, result: { done: 'Written.' }
-  }) }
-} } } };
+const FIXED_FSM = `import { fromPromise, setup } from 'xstate';
+export const machine = setup({
+  actors: { player: fromPromise(async () => ({ guard: 'done', response: 'fixture response' })) },
+}).createMachine({
+  context: ({ input }: { input?: { audience?: string } }) => ({ audience: input?.audience ?? '', pendingBossQuestion: undefined, bossReply: undefined }),
+  initial: 'write',
+  states: {
+    write: {
+      meta: { playbook: { stateId: 'write', role: 'writer' } },
+      invoke: {
+        src: 'player',
+        input: ({ context }: { context: { audience: string; pendingBossQuestion?: unknown; bossReply?: string } }) => ({
+          stateId: 'write',
+          sourceItem: 'FIXED-1',
+          role: 'writer',
+          prompt: 'Write for <audience>.',
+          audience: context.audience,
+          pendingBossQuestion: context.pendingBossQuestion,
+          bossReply: context.bossReply,
+          result: {
+            done: 'Written. Output shall include \`response: <final response>\`.',
+            needsBossReply: 'Ask Boss. Output shall include \`question: <question>\`.',
+          },
+        }),
+        onDone: [
+          { guard: ({ event }: any) => event.output?.guard === 'needsBossReply', target: 'awaitBossReply' },
+          { guard: ({ event }: any) => event.output?.guard === 'done', target: 'done' },
+        ],
+        onError: 'failed',
+      },
+    },
+    awaitBossReply: {
+      tags: 'playbook.parked',
+      on: { BOSS_REPLY: { target: 'write', guard: ({ event }: any) => typeof event.answer === 'string' && event.answer.trim().length > 0 } },
+    },
+    failed: {
+      tags: 'playbook.parked',
+      meta: { playbook: { stateId: 'failed' } },
+      on: { BOSS_REPLY: { target: 'write', guard: ({ event }: any) => typeof event.answer === 'string' && event.answer.trim().length > 0 } },
+    },
+    done: { type: 'final', meta: { playbook: { stateId: 'done', terminal: 'success' } } },
+  },
+});
 `;
-const FAITHFUL_LINK = `export const _internal = { composePlayerPrompt: (input: {prompt: string; audience: string}) => input.prompt.replaceAll('<audience>', () => input.audience) };
+const FAITHFUL_LINK = `const continuationPrefix = (input: { bossReply?: string; pendingBossQuestion?: { question?: string } }, resuming?: boolean) => {
+  if (typeof input.bossReply !== 'string') return '';
+  if (resuming === true) return \`Continue the same task using Boss’s reply below.\n\nBoss reply:\n\${input.bossReply}\n\n\`;
+  return \`Continue the same task using Boss’s reply below.\n\nYour previous question:\n\${input.pendingBossQuestion?.question ?? ''}\n\nBoss reply:\n\${input.bossReply}\n\n\`;
+};
+export const _internal = { composePlayerPrompt: (input: {prompt: string; audience: string; pendingBossQuestion?: {question?: string}; bossReply?: string}, _promptIdentity: unknown, resuming?: boolean) => continuationPrefix(input, resuming) + input.prompt.replaceAll('<audience>', () => input.audience) };
 export default function createRuntime() { return { init: async()=>{}, handleBossInput: async()=>{}, dispose: async()=>{} }; }
 `;
 
@@ -569,6 +610,11 @@ async function linkFixture() {
   const pipeline = join(options.pipelinePaths[0], 'fixture');
   await rm(pipeline, { recursive: true });
   await mkdir(pipeline);
+  await writeFile(join(root, 'package.json'), '{"type":"module"}\n');
+  await symlink(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'node_modules'),
+    join(root, 'node_modules'),
+  );
   await writeFile(
     join(pipeline, 'gears2fsm.md'),
     '## Formats\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | gears | .md |\n| target | fsm | .ts |\n',

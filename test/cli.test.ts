@@ -8,10 +8,12 @@ import {
   mkdtemp,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -60,6 +62,8 @@ import {
 import { writePlaybookEngineFixture } from './playbook-engine-fixture.js';
 
 import { pipelineOutput } from './pipeline-output-fixture.js';
+
+const repository = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats
@@ -154,6 +158,11 @@ beforeEach(async () => {
   srcDir = join(root, 'work');
   await mkdir(pipelineDir, { recursive: true });
   await mkdir(srcDir);
+  await symlink(
+    join(repository, 'node_modules'),
+    join(root, 'node_modules'),
+    'dir',
+  );
   await writeFile(
     join(pipelineDir, 'text2gears.md'),
     formats('text', '.md', 'gears', '.md'),

@@ -21,8 +21,10 @@
  * test runs it beside the artifacts. See specs/packages/verification.md.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { createActor, fromPromise } from 'xstate';
 
@@ -46,6 +48,80 @@ import {
 
 /** The `gears2fsm`-mandated captain actor name a machine declares. */
 export const CAPTAIN_ACTOR = 'captain';
+
+interface CoverageRun {
+  signal?: AbortSignal;
+  deadline: number;
+  lastYield: number;
+  actors: Set<{ stop(): unknown }>;
+}
+
+// Each check owns its resources, including concurrent checks and async actor
+// callbacks. No current-run variable is shared between invocations.
+const coverageRuns = new AsyncLocalStorage<CoverageRun>();
+
+/** Incomplete coverage is not an unsatisfiable transition or Source question. */
+export class FsmCoverageDeadlineError extends Error {
+  constructor() {
+    super('FSM transition coverage incomplete: cooperative deadline exceeded');
+    this.name = 'FsmCoverageDeadlineError';
+  }
+}
+
+function coverageCheckpoint(): void {
+  const run = coverageRuns.getStore();
+  run?.signal?.throwIfAborted();
+  if (run !== undefined && performance.now() >= run.deadline)
+    throw new FsmCoverageDeadlineError();
+}
+
+/** Deliver pending cancellation between bounded blocks of synchronous work. */
+async function coverageYield(force = false): Promise<void> {
+  coverageCheckpoint();
+  const run = coverageRuns.getStore();
+  if (run !== undefined && (force || performance.now() - run.lastYield >= 8)) {
+    try {
+      await delay(0, undefined, { signal: run.signal });
+    } finally {
+      coverageCheckpoint();
+    }
+    run.lastYield = performance.now();
+  }
+}
+
+function trackCoverageActor<T extends { stop(): unknown }>(actor: T): T {
+  const run = coverageRuns.getStore();
+  if (run !== undefined) {
+    run.actors.add(actor);
+    const stop = actor.stop.bind(actor);
+    actor.stop = () => {
+      try {
+        return stop();
+      } finally {
+        run.actors.delete(actor);
+      }
+    };
+  }
+  return actor;
+}
+
+/** Release every actor without replacing an already propagating failure. */
+function stopCoverageActors(
+  actors: Iterable<{ stop(): unknown }>,
+  preserveFailure: boolean,
+): void {
+  let failed = false;
+  let firstError: unknown;
+  for (const actor of actors) {
+    try {
+      actor.stop();
+    } catch (error) {
+      if (!failed) firstError = error;
+      failed = true;
+    }
+  }
+  if (failed && !preserveFailure) throw firstError;
+}
 
 /** The minimal machine surface the coverage driver needs. */
 interface MachineLike {
@@ -146,6 +222,19 @@ function captainInterruptTarget(captain: CaptainRef): string {
 type GuardArgs = { context: unknown; event: unknown };
 type GuardImplementation = (args: GuardArgs, params?: unknown) => unknown;
 
+function invokeGuard(
+  guard: GuardImplementation,
+  args: GuardArgs,
+  ...params: [] | [unknown]
+): unknown {
+  coverageCheckpoint();
+  try {
+    return guard(args, ...params);
+  } finally {
+    coverageCheckpoint();
+  }
+}
+
 interface ResolvedGuard {
   run(args: GuardArgs): unknown;
   /** Values hidden in an implementation or parameter descriptor seed probing. */
@@ -174,7 +263,7 @@ function resolveGuard(
   if (typeof guard === 'function') {
     const implementation = guard as GuardImplementation;
     return {
-      run: (args) => implementation(args),
+      run: (args) => invokeGuard(implementation, args),
       probeValues: minedLiterals(implementation),
     };
   }
@@ -192,7 +281,8 @@ function resolveGuard(
   const params = descriptor.params;
   return {
     run: (args) =>
-      implementation(
+      invokeGuard(
+        implementation,
         args,
         typeof params === 'function'
           ? (params as (args: GuardArgs) => unknown)(args)
@@ -211,6 +301,7 @@ function guardLabel(guard: unknown): string {
   try {
     return JSON.stringify(guard) ?? String(guard);
   } catch {
+    coverageCheckpoint();
     return String(guard);
   }
 }
@@ -315,16 +406,22 @@ function coverageGuardContext(
 function initializedMachineContext(
   machine: MachineLike,
 ): Record<string, unknown> {
+  let actor: DrivenActor | undefined;
+  let failed = false;
   try {
-    const actor = createActor(
-      machine as never,
-      { input: COVERAGE_MACHINE_INPUT } as never,
-    ) as unknown as DrivenActor;
-    const context = actor.getSnapshot().context;
-    actor.stop();
-    return context;
+    actor = trackCoverageActor(
+      createActor(
+        machine as never,
+        { input: COVERAGE_MACHINE_INPUT } as never,
+      ) as unknown as DrivenActor,
+    );
+    return actor.getSnapshot().context;
   } catch {
+    failed = true;
+    coverageCheckpoint();
     return {};
+  } finally {
+    stopCoverageActors(actor === undefined ? [] : [actor], failed);
   }
 }
 
@@ -548,6 +645,7 @@ function captainRefs(config: MachineConfigLike): CaptainRef[] {
         if (binding.sourceItem !== '') return sourceItem === binding.sourceItem;
         return matchingActor;
       } catch {
+        coverageCheckpoint();
         return matchingActor && binding.sourceItem === '';
       }
     });
@@ -591,6 +689,7 @@ function coverageErrorMessage(error: unknown): string {
   try {
     return error instanceof Error ? error.message : String(error);
   } catch {
+    coverageCheckpoint();
     return 'unknown error';
   }
 }
@@ -604,6 +703,7 @@ function dynamicPlaybookFields(
   try {
     input = playbook.invocation.input({ context: coverageGuardContext() });
   } catch {
+    coverageCheckpoint();
     return undefined;
   }
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -706,21 +806,26 @@ function persistedSnapshotWithContext(
   provided: MachineLike,
   context: Record<string, unknown>,
 ): Record<string, unknown> {
-  const seed = createActor(
-    provided as never,
-    { input: COVERAGE_MACHINE_INPUT } as never,
-  ) as unknown as {
-    getPersistedSnapshot(): Record<string, unknown>;
-    stop(): unknown;
-  };
+  const seed = trackCoverageActor(
+    createActor(
+      provided as never,
+      { input: COVERAGE_MACHINE_INPUT } as never,
+    ) as unknown as {
+      getPersistedSnapshot(): Record<string, unknown>;
+      stop(): unknown;
+    },
+  );
+  let completed = false;
   try {
-    return {
+    const snapshot = {
       ...seed.getPersistedSnapshot(),
       context: { ...context },
       children: {},
     };
+    completed = true;
+    return snapshot;
   } finally {
-    seed.stop();
+    stopCoverageActors([seed], !completed);
   }
 }
 
@@ -731,6 +836,7 @@ function makeActor(
   restoredContext?: Record<string, unknown>,
   observeTransition?: (transition: TransitionObservation) => void,
 ): DrivenActor {
+  coverageCheckpoint();
   const coverageErrors: { eventType: string; error: unknown }[] = [];
   const workActor = fromPromise(
     async ({
@@ -773,69 +879,75 @@ function makeActor(
     restoredContext === undefined
       ? undefined
       : persistedSnapshotWithContext(provided, restoredContext);
-  const actor = createActor(
-    provided as never,
-    {
-      input: COVERAGE_MACHINE_INPUT,
-      ...(restoredSnapshot === undefined ? {} : { snapshot: restoredSnapshot }),
-      inspect: (inspection: unknown) => {
-        if (
-          typeof inspection !== 'object' ||
-          inspection === null ||
-          !('event' in inspection)
-        ) {
-          return;
-        }
-        const inspectedTransitions = (inspection as { _transitions?: unknown })
-          ._transitions;
-        if (
-          (inspection as { type?: unknown }).type === '@xstate.microstep' &&
-          Array.isArray(inspectedTransitions)
-        ) {
-          for (const transition of inspectedTransitions) {
-            if (typeof transition !== 'object' || transition === null) {
-              continue;
+  const actor = trackCoverageActor(
+    createActor(
+      provided as never,
+      {
+        input: COVERAGE_MACHINE_INPUT,
+        ...(restoredSnapshot === undefined
+          ? {}
+          : { snapshot: restoredSnapshot }),
+        inspect: (inspection: unknown) => {
+          if (
+            typeof inspection !== 'object' ||
+            inspection === null ||
+            !('event' in inspection)
+          ) {
+            return;
+          }
+          const inspectedTransitions = (
+            inspection as { _transitions?: unknown }
+          )._transitions;
+          if (
+            (inspection as { type?: unknown }).type === '@xstate.microstep' &&
+            Array.isArray(inspectedTransitions)
+          ) {
+            for (const transition of inspectedTransitions) {
+              if (typeof transition !== 'object' || transition === null) {
+                continue;
+              }
+              const source = (transition as { source?: unknown }).source;
+              const target = (transition as { target?: unknown }).target;
+              observeTransition?.({
+                ...(typeof source === 'object' &&
+                source !== null &&
+                typeof (source as { id?: unknown }).id === 'string'
+                  ? { sourceId: (source as { id: string }).id }
+                  : {}),
+                targetIds: Array.isArray(target)
+                  ? target.flatMap((candidate) =>
+                      typeof candidate === 'object' &&
+                      candidate !== null &&
+                      typeof (candidate as { id?: unknown }).id === 'string'
+                        ? [(candidate as { id: string }).id]
+                        : [],
+                    )
+                  : [],
+              });
             }
-            const source = (transition as { source?: unknown }).source;
-            const target = (transition as { target?: unknown }).target;
-            observeTransition?.({
-              ...(typeof source === 'object' &&
-              source !== null &&
-              typeof (source as { id?: unknown }).id === 'string'
-                ? { sourceId: (source as { id: string }).id }
-                : {}),
-              targetIds: Array.isArray(target)
-                ? target.flatMap((candidate) =>
-                    typeof candidate === 'object' &&
-                    candidate !== null &&
-                    typeof (candidate as { id?: unknown }).id === 'string'
-                      ? [(candidate as { id: string }).id]
-                      : [],
-                  )
-                : [],
+          }
+          const event = (inspection as { event?: unknown }).event;
+          if (typeof event !== 'object' || event === null) return;
+          const eventType = (event as { type?: unknown }).type;
+          if (
+            typeof eventType === 'string' &&
+            eventType.startsWith('xstate.error.actor.')
+          ) {
+            coverageErrors.push({
+              eventType,
+              error: (event as { error?: unknown }).error,
             });
           }
-        }
-        const event = (inspection as { event?: unknown }).event;
-        if (typeof event !== 'object' || event === null) return;
-        const eventType = (event as { type?: unknown }).type;
-        if (
-          typeof eventType === 'string' &&
-          eventType.startsWith('xstate.error.actor.')
-        ) {
-          coverageErrors.push({
-            eventType,
-            error: (event as { error?: unknown }).error,
-          });
-        }
-      },
-    } as never,
-  ) as unknown as DrivenActor;
+        },
+      } as never,
+    ) as unknown as DrivenActor,
+  );
   Object.defineProperty(actor, 'coverageErrors', {
     value: coverageErrors,
   });
   actor.subscribe({ error: () => {} });
   actor.start();
+  coverageCheckpoint();
   return actor;
 }
 
@@ -878,14 +990,32 @@ function settle(
   predicate: (snapshot: Snapshot) => boolean,
   ms = SETTLE_MS,
 ): Promise<boolean> {
-  return new Promise((resolveSettled) => {
+  coverageCheckpoint();
+  const run = coverageRuns.getStore();
+  return new Promise((resolveSettled, reject) => {
     let subscription: { unsubscribe(): void } | undefined = undefined;
+    let settled = false;
     const finish = (outcome: boolean): void => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       subscription?.unsubscribe();
-      resolveSettled(outcome);
+      run?.signal?.removeEventListener('abort', aborted);
+      try {
+        coverageCheckpoint();
+        resolveSettled(outcome);
+      } catch (error) {
+        reject(error);
+      }
     };
-    const timer = setTimeout(() => finish(predicate(actor.getSnapshot())), ms);
+    const aborted = () => finish(false);
+    const remaining =
+      run === undefined ? ms : Math.max(0, run.deadline - performance.now());
+    const timer = setTimeout(
+      () => finish(predicate(actor.getSnapshot())),
+      Math.min(ms, Math.ceil(remaining)),
+    );
+    run?.signal?.addEventListener('abort', aborted, { once: true });
     subscription = actor.subscribe({
       next: (snapshot) => {
         if (predicate(snapshot)) finish(true);
@@ -895,13 +1025,30 @@ function settle(
       // owning probe records the actionable coverage finding.
       error: () => finish(false),
     });
+    if (settled) subscription.unsubscribe();
     if (predicate(actor.getSnapshot())) finish(true);
+    if (run?.signal?.aborted) aborted();
   });
 }
 
 /** Lets XState process an event whose correct outcome is no transition. */
 async function settleNoTransition(): Promise<void> {
-  await new Promise((resolveSettled) => setTimeout(resolveSettled, 10));
+  coverageCheckpoint();
+  const run = coverageRuns.getStore();
+  try {
+    await delay(
+      Math.min(
+        10,
+        run === undefined
+          ? 10
+          : Math.max(0, Math.ceil(run.deadline - performance.now())),
+      ),
+      undefined,
+      { signal: run?.signal },
+    );
+  } finally {
+    coverageCheckpoint();
+  }
 }
 
 function activeStateIds(snapshot: Snapshot): Set<string> {
@@ -1014,7 +1161,10 @@ function directlySelectedEventArm(
     try {
       if (guard.run({ context, event })) return index;
     } catch {
+      coverageCheckpoint();
       return undefined;
+    } finally {
+      coverageCheckpoint();
     }
   }
   return undefined;
@@ -1255,6 +1405,7 @@ function minedLiterals(fn: unknown): string[] {
   try {
     source = String(fn);
   } catch {
+    coverageCheckpoint();
     return [];
   }
   const literals = source.match(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g) ?? [];
@@ -1387,18 +1538,23 @@ function probeGuardAssignment(
   };
 
   const passes = (assignment: ProbeAssignment): boolean => {
+    coverageCheckpoint();
     probes++;
     try {
       return Boolean(
         guard({ context: assignment.context, event: eventFor(assignment) }),
       );
     } catch {
+      coverageCheckpoint();
       return false;
+    } finally {
+      coverageCheckpoint();
     }
   };
 
   // Records the unassigned fields the guard reads under the given assignment.
   const readsUnder = (assignment: ProbeAssignment): string[] => {
+    coverageCheckpoint();
     const reads = new Set<string>();
     const recording = (
       base: object,
@@ -1456,7 +1612,10 @@ function probeGuardAssignment(
         event,
       });
     } catch {
+      coverageCheckpoint();
       // Reads observed before the throw still guide the search.
+    } finally {
+      coverageCheckpoint();
     }
     return [...reads];
   };
@@ -1465,6 +1624,7 @@ function probeGuardAssignment(
     assignment: ProbeAssignment,
     depth: number,
   ): ProbeAssignment | undefined => {
+    coverageCheckpoint();
     if (probes > MAX_PROBES) return undefined;
     if (passes(assignment)) return assignment;
     if (depth >= 4) return undefined;
@@ -1488,6 +1648,7 @@ function probeGuardAssignment(
         ...values.filter((value) => !hasBaseline || value !== baseline),
       ];
       for (const value of candidates) {
+        coverageCheckpoint();
         if (probes > MAX_PROBES) return undefined;
         const nextDepth = depth + (hasBaseline && value === baseline ? 0 : 1);
         const next =
@@ -1874,6 +2035,7 @@ function coverageArmResults(
   }
   const results: Exclude<ScriptResult, null>[] = [];
   for (const base of bases) {
+    coverageCheckpoint();
     if (
       node.kind === 'acting' &&
       node.value.binding.actor === 'script' &&
@@ -1962,6 +2124,7 @@ async function replayCoveragePath(
     );
   let completedPrefix = true;
   for (const step of path.steps) {
+    await coverageYield();
     await wait();
     const current = pending;
     if (
@@ -2081,6 +2244,7 @@ async function searchCoverageEntry(
   let limitation: string | undefined;
   let inputFailure: string | undefined;
   while (queue.length > 0 && attempts < MAX_COVERAGE_PATH_ATTEMPTS) {
+    await coverageYield();
     const path = queue.shift()!;
     attempts++;
     let replay = await replayCoveragePath(machine, nodes, path);
@@ -2826,6 +2990,7 @@ async function probePlaybookOutcome(
   ];
   const findings: string[] = [];
   for (const [armIndex, arm] of rawArms.entries()) {
+    await coverageYield();
     const rawGuard = armGuard(arm);
     if (
       rawGuard !== undefined &&
@@ -2935,6 +3100,7 @@ async function probeNonPreemptiveActor(
         : 'no reachable entry under probing');
 
   for (const key of Object.keys(captain.binding.result)) {
+    await coverageYield();
     const check = (blankReply: boolean) =>
       search(async (actor, pending) => {
         for (const [index, arm] of transitionArms(
@@ -3006,10 +3172,12 @@ async function probeNonPreemptiveActor(
     }
   }
   for (const outcome of ['onDone', 'onError'] as const) {
+    await coverageYield();
     const arms = transitionArms(captain.invocation[outcome]);
     if (outcome === 'onError' && arms.length === 0)
       findings.push(`${label} declares no onError transition`);
     for (const [index, arm] of arms.entries()) {
+      await coverageYield();
       const rawGuard = armGuard(arm);
       if (outcome === 'onDone' && rawGuard === undefined) continue;
       if (
@@ -3206,6 +3374,7 @@ async function probeParallelJoins(
   const normalizedTargets = arms.map((arm) => rawArmTarget(arm) ?? null);
   const findings: string[] = [];
   for (const [armIndex, rawTarget] of normalizedTargets.entries()) {
+    await coverageYield();
     if (rawTarget === null) {
       findings.push(
         `parallel state ${parallel.stableId}: onDone join arm ${armIndex} coverage is unsupported for a target-less arm`,
@@ -3225,6 +3394,7 @@ async function probeParallelJoins(
 
     let exercised = false;
     for (const combination of outputs) {
+      await coverageYield();
       const entries = branches.map((captain, index) => ({
         captain,
         output: combination[index],
@@ -3418,7 +3588,49 @@ export async function checkFsmCoverage(
   opts: {
     /** The artifact's source text, mined for routing-value candidates. */
     sourceText?: string;
+    signal?: AbortSignal;
+    /** A caller may shorten, never extend, the derived cooperative deadline. */
+    timeoutMs?: number;
   } = {},
+): Promise<string[]> {
+  opts.signal?.throwIfAborted();
+  if (
+    opts.timeoutMs !== undefined &&
+    (!Number.isFinite(opts.timeoutMs) || opts.timeoutMs <= 0)
+  )
+    throw new RangeError(
+      'FSM coverage timeout must be a positive finite number',
+    );
+  const started = performance.now();
+  const run: CoverageRun = {
+    signal: opts.signal,
+    deadline:
+      started +
+      Math.min(opts.timeoutMs ?? Infinity, MAX_COVERAGE_TEST_TIMEOUT_MS),
+    lastYield: started,
+    actors: new Set(),
+  };
+  return coverageRuns.run(run, async () => {
+    let completed = false;
+    try {
+      run.deadline = Math.min(
+        run.deadline,
+        started + fsmCoverageTestTimeout(fsmModule),
+      );
+      await coverageYield(true);
+      const findings = await runFsmCoverage(fsmModule, opts.sourceText ?? '');
+      await coverageYield(true);
+      completed = true;
+      return findings;
+    } finally {
+      stopCoverageActors(run.actors, !completed);
+    }
+  });
+}
+
+async function runFsmCoverage(
+  fsmModule: unknown,
+  sourceText: string,
 ): Promise<string[]> {
   const findings: string[] = [];
   const machine = findMachine(fsmModule);
@@ -3431,8 +3643,8 @@ export async function checkFsmCoverage(
     captains.map((captain) => [stateRefKey(captain.ref), captain]),
   );
   const sourceCandidates = [
-    ...identifierLiterals(opts.sourceText ?? ''),
-    ...numericLiterals(opts.sourceText ?? ''),
+    ...identifierLiterals(sourceText),
+    ...numericLiterals(sourceText),
   ];
   const isController = isControllerMachine(config);
   const controllerNearMisses = captains.flatMap((captain) => {
@@ -3453,6 +3665,7 @@ export async function checkFsmCoverage(
   const parallelRefs = refs.filter((ref) => ref.state.type === 'parallel');
   findings.push(...repeatedParallelRoleFindings(refs, captains));
   for (const { captain, nearMiss } of controllerNearMisses) {
+    await coverageYield();
     const detail =
       nearMiss.missing.length > 0
         ? `missing ${JSON.stringify(nearMiss.missing[0])}`
@@ -3462,6 +3675,7 @@ export async function checkFsmCoverage(
     );
   }
   for (const ref of parallelRefs) {
+    await coverageYield();
     if (!normalizeArms(ref.state.onDone).some((arm) => arm.target !== null)) {
       findings.push(`parallel state ${ref.stableId} declares no onDone join`);
     }
@@ -3521,6 +3735,7 @@ export async function checkFsmCoverage(
   }
   if (!isController) {
     for (const playbook of playbooks) {
+      await coverageYield();
       findings.push(
         ...(await probePlaybookInvocation(
           machine,
@@ -3532,6 +3747,7 @@ export async function checkFsmCoverage(
       );
     }
     for (const parallel of canJump ? parallelRefs : []) {
+      await coverageYield();
       findings.push(
         ...(await probeParallelQuestions(
           machine,
@@ -3568,6 +3784,7 @@ export async function checkFsmCoverage(
   // captain state parks in it).
   if (canJump) {
     for (const [armIndex, arm] of rootArms.entries()) {
+      await coverageYield();
       if (arm.target === null) continue;
       const target = stateRefForTarget(refs, arm.target);
       const targetPlaybook = playbooks.find(
@@ -3632,6 +3849,7 @@ export async function checkFsmCoverage(
     ...initialPath.map((ref) => ref.state.on ?? {}),
   );
   for (const [event, raw] of Object.entries(entryArms)) {
+    await coverageYield();
     if (event === INTERRUPT_EVENT) continue;
     const arms = normalizeArms(raw);
     const free = arms.find(
@@ -3666,6 +3884,7 @@ export async function checkFsmCoverage(
   if (unsupportedController) return findings;
 
   for (const captain of captains) {
+    await coverageYield();
     if (!canJump && !isController) {
       findings.push(
         ...(await probeNonPreemptiveActor(
@@ -3693,10 +3912,12 @@ export async function checkFsmCoverage(
     // A fallback is reachable exactly when all preceding guards reject it.
     // Result names alone cannot distinguish authored failure from an orphan.
     for (const key of Object.keys(state.result)) {
+      await coverageYield();
       const output = synthOutput(state, key);
       const accepting = new Map<number, ProbeAssignment | undefined>();
       const acceptedOutputs = new Map<string, Record<string, unknown>>();
       for (const [index, arm] of rawDoneArms.entries()) {
+        await coverageYield();
         const target = onDoneArms[index]?.target ?? null;
         const rawGuard = armGuard(arm);
         if (
@@ -3723,6 +3944,7 @@ export async function checkFsmCoverage(
             ...candidates,
           ]);
           for (const candidate of outputs) {
+            await coverageYield();
             if (
               doneGuardSatisfiable(
                 guard,
@@ -3770,6 +3992,7 @@ export async function checkFsmCoverage(
         // guard first makes driving unsafe: XState reports that error
         // asynchronously, so the arm audit below owns the finding (c887fc4).
         for (const candidate of acceptedOutputs.values()) {
+          await coverageYield();
           const selected = directlySelectedArm(
             machine,
             captain,
@@ -3970,6 +4193,7 @@ export async function checkFsmCoverage(
     // arms. Scripts resolve only their exact runtime guard/exit-status pair;
     // invented payload fields or impossible statuses cannot cover an arm.
     for (const [index, arm] of rawDoneArms.entries()) {
+      await coverageYield();
       const rawGuard = armGuard(arm);
       if (rawGuard === undefined) continue;
       const declaredGuard = resolveGuard(machine, rawGuard);
@@ -4023,6 +4247,7 @@ export async function checkFsmCoverage(
     const forcedError = new Error('coverage: forced captain failure');
     let hasUnresolvableErrorGuard = false;
     for (const [index, arm] of rawErrorArms.entries()) {
+      await coverageYield();
       const rawGuard = armGuard(arm);
       if (rawGuard !== undefined) {
         const declaredGuard = resolveGuard(machine, rawGuard);
@@ -4049,6 +4274,7 @@ export async function checkFsmCoverage(
     let directErrorArm: number | undefined;
     let errorDriveSafe = true;
     for (const [index, arm] of rawErrorArms.entries()) {
+      await coverageYield();
       const rawGuard = armGuard(arm);
       if (rawGuard === undefined) {
         directErrorArm = index;
@@ -4070,8 +4296,11 @@ export async function checkFsmCoverage(
           break;
         }
       } catch {
+        coverageCheckpoint();
         errorDriveSafe = false;
         break;
+      } finally {
+        coverageCheckpoint();
       }
     }
     if (!errorDriveSafe || directErrorArm === undefined) continue;

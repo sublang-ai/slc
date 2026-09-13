@@ -8,10 +8,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
-import { assign, createActor, fromPromise, setup } from 'xstate';
+import { assign, createActor, fromCallback, fromPromise, setup } from 'xstate';
 
 import {
   checkFsmCoverage,
+  FsmCoverageDeadlineError,
   emitFsmCoverageTest,
   findMachine,
   fsmCoverageTestTimeout,
@@ -2867,5 +2868,112 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
     expect(generated).toContain(
       `describe(${JSON.stringify(`${basename}: FSM coverage`)}, () => {`,
     );
+  });
+});
+
+describe('cooperative coverage lifetime', () => {
+  const tracked = (onStart: () => void = () => {}) => {
+    const lifetime = { started: 0, stopped: 0 };
+    const base = goodMachine();
+    const machine = setup({
+      actors: {
+        captain: fromPromise(async () => {
+          throw new Error('coverage supplies captain');
+        }),
+        lifetime: fromCallback(() => {
+          lifetime.started++;
+          onStart();
+          return () => {
+            lifetime.stopped++;
+          };
+        }),
+      },
+    }).createMachine({ ...base.config, invoke: { src: 'lifetime' } } as never);
+    return { machine, lifetime };
+  };
+
+  it('does no actor work for an already canceled check', async () => {
+    const controller = new AbortController();
+    const reason = new Error('cancel coverage before start');
+    controller.abort(reason);
+    const fixture = tracked();
+    await expect(
+      checkFsmCoverage(fixture, { signal: controller.signal }),
+    ).rejects.toBe(reason);
+    expect(fixture.lifetime).toEqual({ started: 0, stopped: 0 });
+  });
+
+  it('cancels pending driving and stops every actual actor', async () => {
+    const controller = new AbortController();
+    const reason = new Error('cancel active coverage');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const fixture = tracked(() => {
+      timer ??= setTimeout(() => controller.abort(reason), 1);
+    });
+    try {
+      await expect(
+        checkFsmCoverage(fixture, { signal: controller.signal }),
+      ).rejects.toBe(reason);
+      expect(fixture.lifetime.started).toBeGreaterThan(0);
+      expect(fixture.lifetime.stopped).toBe(fixture.lifetime.started);
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  it('reports a deadline after finite synchronous actor work and cleans up', async () => {
+    const fixture = tracked(() => {
+      const until = performance.now() + 150;
+      while (performance.now() < until) {
+        /* Deliberately finite, not preemptible. */
+      }
+    });
+    await expect(
+      checkFsmCoverage(fixture, { timeoutMs: 100 }),
+    ).rejects.toBeInstanceOf(FsmCoverageDeadlineError);
+    expect(fixture.lifetime.started).toBeGreaterThan(0);
+    expect(fixture.lifetime.stopped).toBe(fixture.lifetime.started);
+  });
+
+  it('does not convert cancellation inside a throwing guard into a coverage finding', async () => {
+    const controller = new AbortController();
+    const reason = new Error('guard canceled coverage');
+    const machine = goodMachine({
+      guards: {
+        cancel: () => {
+          controller.abort(reason);
+          throw new Error('guard also threw');
+        },
+      },
+      onDone: [{ guard: 'cancel', target: '#done' }, needsBossReplyArm()],
+    });
+    await expect(
+      checkFsmCoverage({ machine }, { signal: controller.signal }),
+    ).rejects.toBe(reason);
+  });
+
+  it('isolates concurrent cancellation and leaves subsequent checks clean', async () => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const canceled = tracked(() => {
+      timer ??= setTimeout(
+        () => controller.abort(new Error('only this run')),
+        1,
+      );
+    });
+    const healthy = tracked();
+    try {
+      const results = await Promise.allSettled([
+        checkFsmCoverage(canceled, { signal: controller.signal }),
+        checkFsmCoverage(healthy),
+      ]);
+      expect(results[0].status).toBe('rejected');
+      expect(results[1]).toEqual({ status: 'fulfilled', value: [] });
+      expect(canceled.lifetime.stopped).toBe(canceled.lifetime.started);
+      expect(healthy.lifetime.stopped).toBe(healthy.lifetime.started);
+      expect(await checkFsmCoverage({ machine: goodMachine() })).toEqual([]);
+    } finally {
+      clearTimeout(timer);
+    }
   });
 });
