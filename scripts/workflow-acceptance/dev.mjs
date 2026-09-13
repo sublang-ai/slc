@@ -231,7 +231,16 @@ export async function runDevScenario(config, scenario) {
         callJudge: guardPort(async (prompt) => {
           const reply = prompt.startsWith('Classify the following Boss message')
             ? bossReply(prompt, pendingQuestion)
-            : governedReply(prompt, profile.select(semantic)).json;
+            : (() => {
+                supported(
+                  typeof planningText === 'string',
+                  'DEV planning profile selection requires actual Analyst finalText',
+                );
+                return governedReply(
+                  prompt,
+                  profile.select(semantic, { finalText: planningText }),
+                ).json;
+              })();
           diagnostics.judges.push({ prompt, reply: JSON.parse(reply) });
           return reply;
         }),

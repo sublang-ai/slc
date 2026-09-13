@@ -7,8 +7,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { runCodeScenario, codeCases } from './code.mjs';
+import { runDevScenario, devCases } from './dev.mjs';
 import { maintainedConfig } from './maintained.mjs';
-import { preserveRun } from './common.mjs';
+import { governedReply, preserveRun } from './common.mjs';
+import { maintainedDevProfile } from './maintained-dev.mjs';
 
 const root = process.env.PLAYBOOK_ACCEPTANCE_FIXTURE_ROOT;
 assert(
@@ -105,4 +107,60 @@ test('changed protected input overrides an ordinary thrown failure', async () =>
   assert.equal(result.artifactsUnchanged, false);
   assert.equal(result.preservationFailure, true);
   assert.notEqual(result.before[0].sha256, result.after[0].sha256);
+});
+
+test('DEV profile selection receives actual Analyst finalText while maintained guard-only payload stays strict', async () => {
+  const devOutput = await mkdtemp(join(tmpdir(), 'dev-finaltext-probe-'));
+  const devConfig = await maintainedConfig(root, 'dev', devOutput);
+  const selected = [];
+  const profile = {
+    ...maintainedDevProfile,
+    select(semantic, context) {
+      const reply = maintainedDevProfile.select(semantic, context);
+      selected.push({ semantic, context, reply });
+      return reply;
+    },
+  };
+  const scenario = devCases.find((row) => row.id === 'dev-code');
+  const result = await runDevScenario(
+    { ...devConfig, profile },
+    { ...scenario, id: 'dev-finaltext-context' },
+  );
+  assert.equal(result.status, 'passed');
+  assert.equal(result.artifactsUnchanged, true);
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].semantic, 'code');
+  assert.deepEqual(selected[0].reply, { guard: 'code' });
+  assert.deepEqual(Object.keys(selected[0].context), ['finalText']);
+  assert.equal(
+    selected[0].context.finalText,
+    maintainedDevProfile.resultText('code'),
+  );
+});
+
+test('governed replies accept only advertised finalText-derived semantic payload fields', () => {
+  const finalText = 'The Analyst asks Boss for the missing deployment target.';
+  const prompt = [
+    'Judge the Analyst result.',
+    '  Reply exactly: {"guard":"code","planningResult":<complete planning result>}',
+    '  Reply exactly: {"guard":"needsBossReply","question":<verbatim final text>}',
+  ].join('\n');
+  assert.equal(
+    governedReply(prompt, { guard: 'code', planningResult: finalText }).json,
+    JSON.stringify({ guard: 'code', planningResult: finalText }),
+  );
+  assert.equal(
+    governedReply(prompt, { guard: 'needsBossReply', question: finalText })
+      .json,
+    JSON.stringify({ guard: 'needsBossReply', question: finalText }),
+  );
+  assert.throws(
+    () =>
+      governedReply(prompt, {
+        guard: 'code',
+        planningResult: finalText,
+        question: finalText,
+      }),
+    /fixture only supplies actually advertised fields/,
+  );
 });

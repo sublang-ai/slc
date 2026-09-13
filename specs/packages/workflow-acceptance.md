@@ -26,6 +26,10 @@ When the workflow-acceptance harness composes governed replies, the harness shal
 
 When the workflow-acceptance harness writes outputs, the harness shall write only under the caller-selected output directory or an operating-system temporary directory, preserve before/after protected hashes, record zero provider calls, and leave the repository default test command unchanged.
 
+### workflow-acceptance-9
+
+When a DEV workflow-acceptance profile selects a governed planning outcome, the harness shall call `profile.select(semantic, { finalText })` where `finalText` is the exact text from the just-returned Analyst fixture result.
+
 ### workflow-acceptance-7
 
 When exercising a CODE question continuation, the workflow-acceptance harness shall apply this validation and acceptance matrix to the profile's explicit `questionRepositoryDisposition`, requiring one public pending Boss question with the expected text and Coder asker before snapshot restore for each supported profile:
@@ -54,3 +58,7 @@ When the opt-in maintained workflow commands run against the current maintained 
 ### workflow-acceptance-8
 
 When verifying CODE question continuation profiles, the verification shall require the maintained CODE profile to pass its restored question cases with `questionRepositoryDisposition: "deferred"` and require a reviewed generated-artifact profile whose source authors an unchanged question outcome to pass its restored question cases with `questionRepositoryDisposition: "unchanged"` and no provider calls, while a missing disposition reports unsupported-profile before repository or capability work [[workflow-acceptance-2](#workflow-acceptance-2)], [[workflow-acceptance-7](#workflow-acceptance-7)].
+
+### workflow-acceptance-10
+
+When verifying DEV planning profiles, the opt-in probe shall run the actual maintained DEV runtime contract and observe the selector receiving the exact Analyst `finalText` while returning the unchanged guard-only reply [[workflow-acceptance-3](#workflow-acceptance-3)], [[workflow-acceptance-9](#workflow-acceptance-9)].
