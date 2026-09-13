@@ -462,6 +462,9 @@ export function parseGearsItems(gears: string): GearsItem[] {
           `${NEEDS_BOSS_REPLY} is compiler-owned and shall not be source metadata`,
         );
       }
+      current.resultFindings.push(
+        ...outputFieldGuidanceFindings(guard, description),
+      );
       current.results.push([guard, description]);
       continue;
     }
@@ -503,6 +506,27 @@ export function parseGearsItems(gears: string): GearsItem[] {
   }
   flush();
   return items;
+}
+
+/** Backticks in an output clause declare fields, never nested prose (DR-051). */
+function outputFieldGuidanceFindings(
+  guard: string,
+  description: string,
+): string[] {
+  const marker = description.indexOf('Output shall include');
+  if (marker < 0) return [];
+  let depth = 0;
+  const findings: string[] = [];
+  for (const [token] of description.slice(marker).matchAll(/`[^`]+`|[()]/g)) {
+    if (token === '(') depth++;
+    else if (token === ')') depth = Math.max(0, depth - 1);
+    else if (depth > 0) {
+      findings.push(
+        `result \`${guard}\` puts ${token} inside parenthetical output guidance; output-clause backticks declare fields, so move the field declaration outside parentheses or use plain guidance text or a complete field annotation`,
+      );
+    }
+  }
+  return findings;
 }
 
 function gearsResultFindings(items: readonly GearsItem[]): string[] {

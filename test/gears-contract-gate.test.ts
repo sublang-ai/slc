@@ -13,6 +13,7 @@ import {
 } from '../src/config.js';
 import type { PhaseExecutor } from '../src/execution.js';
 import { runSlc, type SlcDeps } from '../src/runner.js';
+import { parseGearsContract } from '../src/verify-source.js';
 import {
   checkGearsFsmConformance,
   checkGearsResultContract,
@@ -30,6 +31,11 @@ const REPAIRED = GEARS.replace(
   `The work completed. ${LOOP}`,
 );
 const FINDING = `GEARS item TASK-1: malformed Results entry ${JSON.stringify(LOOP)}`;
+const GUIDANCE_BROKEN = GEARS.replace(
+  'The work completed.',
+  'The work completed. Output shall include `codeCommit` (the new `code`-owned commit from the repository-effect receipt) and `coderOutput: <verbatim final text>`.',
+);
+const GUIDANCE_REPAIRED = GUIDANCE_BROKEN.replace('`code`-owned', 'code-owned');
 const definition = (name: string, from: string, to: string) =>
   `# Phase ${name}\n\n## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${from} | .md |\n| target | ${to} | .md |\n`;
 const envelope = (result: string) =>
@@ -98,7 +104,11 @@ describe('GEARS result-contract producer and consumer boundaries (DR-035)', () =
 
   const configured = (
     brokenPhase: string,
-    opts: { persistent?: boolean; clarification?: boolean } = {},
+    opts: {
+      persistent?: boolean;
+      clarification?: boolean;
+      guidance?: boolean;
+    } = {},
   ) => {
     const byPhase = new Map<string, number>();
     const factory: AdapterFactory = (agent) => ({
@@ -113,18 +123,29 @@ describe('GEARS result-contract producer and consumer boundaries (DR-035)', () =
         byPhase.set(phase, occurrence);
         calls.push(phase);
         const isBroken = phase === brokenPhase;
-        if (isBroken && occurrence > 1) expect(prompt).toContain(FINDING);
+        if (isBroken && occurrence > 1)
+          expect(prompt).toContain(
+            opts.guidance ? 'inside parenthetical output guidance' : FINDING,
+          );
         if (phase === 'gears2output') {
           const input = prompt.match(/^- source to read: (.+)$/m)![1];
           const content = await readFile(input, 'utf8');
           expect(checkGearsResultContract(content)).toEqual([]);
-          expect(parseGearsItems(content)[0].result?.done).toContain(LOOP);
+          expect(parseGearsItems(content)[0].result?.done).toContain(
+            opts.guidance
+              ? 'code-owned commit from the repository-effect receipt'
+              : LOOP,
+          );
         }
         await writeFile(
           target,
           isBroken && (occurrence === 1 || opts.persistent)
-            ? MALFORMED
-            : REPAIRED,
+            ? opts.guidance
+              ? GUIDANCE_BROKEN
+              : MALFORMED
+            : opts.guidance
+              ? GUIDANCE_REPAIRED
+              : REPAIRED,
         );
         const result =
           isBroken && opts.clarification && occurrence > 1
@@ -187,6 +208,76 @@ describe('GEARS result-contract producer and consumer boundaries (DR-035)', () =
     expect(result.diagnostics.join('\n')).toContain(FINDING);
     expect(calls).toEqual(['text2gears', 'text2gears', 'text2gears']);
   });
+
+  it.each(['text2gears', 'optimize'])(
+    'repairs ambiguous output guidance at %s without a Source question',
+    async (brokenPhase) => {
+      if (brokenPhase === 'optimize')
+        await writeFile(
+          join(pipeline, 'optimize.md'),
+          definition('optimize', 'gears', 'gears'),
+        );
+      const result = await runSlc(
+        ['flow', source],
+        deps(configured(brokenPhase, { guidance: true })),
+      );
+      expect(result, JSON.stringify(result.diagnostics)).toMatchObject({
+        ok: true,
+      });
+      expect(result.outcome).not.toBe('clarification-required');
+      expect(calls).toEqual(
+        brokenPhase === 'optimize'
+          ? ['text2gears', 'optimize', 'optimize', 'gears2output']
+          : ['text2gears', 'text2gears', 'gears2output'],
+      );
+      expect(await readFile(source, 'utf8')).toBe(SOURCE);
+    },
+  );
+
+  it('rejects nested output declarations before selecting a protected consumer', async () => {
+    const input = join(root, 'task.gears.md');
+    await writeFile(input, GUIDANCE_BROKEN);
+    let selections = 0;
+    const result = await runSlc(['flow.gears2output', input], {
+      cwd: root,
+      resolver: () => [pipeline],
+      get executor() {
+        selections++;
+        return writing(GUIDANCE_REPAIRED);
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.outcome).toBeUndefined();
+    expect(result.diagnostics.join('\n')).toContain(
+      'result `done` puts `code` inside parenthetical output guidance',
+    );
+    expect(selections).toBe(0);
+    expect(calls).toHaveLength(0);
+    expect(await readFile(input, 'utf8')).toBe(GUIDANCE_BROKEN);
+  });
+
+  it.each([
+    'Before (`concept`), work completed. Output shall include `codeCommit` (new code-owned commit) and `coderOutput: <verbatim final text>`.',
+    'Work completed. Output shall include `codeCommit: <new (code-owned) commit>` and `coderOutput: <verbatim final text>`.',
+    'Work completed. Output shall include `codeCommit` (new (code-owned) commit), `coderOutput: <verbatim final text>`.',
+    'Work completed. Output shall include `codeCommit` (receipt), then return the commit (with its provenance). Output shall include `coderOutput: <verbatim final text>`.',
+  ])(
+    'accepts legal guidance through the producer and preserves extracted fields',
+    async (description) => {
+      const content = GEARS.replace('The work completed.', description);
+      const result = await runSlc(['flow', source], deps(writing(content)));
+      expect(result, JSON.stringify(result.diagnostics)).toMatchObject({
+        ok: true,
+      });
+      expect(calls).toEqual(['text2gears', 'gears2output']);
+      expect(parseGearsItems(content)[0].result?.done).toBe(description);
+      expect(parseGearsContract(content)[0].results[0].fields).toEqual([
+        { name: 'codeCommit', verbatim: false },
+        { name: 'coderOutput', verbatim: true },
+      ]);
+      expect(await readFile(source, 'utf8')).toBe(SOURCE);
+    },
+  );
 
   it('checks normalization when the entry format itself is GEARS', async () => {
     await rm(join(pipeline, 'text2gears.md'));
@@ -287,6 +378,11 @@ describe('GEARS result-contract producer and consumer boundaries (DR-035)', () =
 
   it.each([
     MALFORMED,
+    GUIDANCE_BROKEN,
+    GUIDANCE_BROKEN.replace(
+      'the new `code`-owned',
+      'the new (nested `code`)-owned',
+    ),
     GEARS.replace('Results:', 'Results'),
     GEARS.replace('- `done`: The work completed.\n', ''),
     `${GEARS}- \`done\`: Duplicate.\n`,
