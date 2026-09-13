@@ -774,6 +774,78 @@
       "acceptedSpeedRatio": false
     },
     {
+      "run": "c8-gqcjfn-earlycoverage-gate",
+      "status": "failure",
+      "scope": "real supplied-FSM link preflight rejects unchanged GQcJFN coverage defect before provider work",
+      "compiler": {
+        "commit": "46a89ced91ea565cab0f41862f39257885219c93",
+        "root": "/private/tmp/slc-c8-compiler-ezn78503",
+        "cohortSha256": "cc1dbd88f3c167e98ad587d466ebf2a57139c05fa7f18b3f351d509fea4babdf",
+        "privateRuntimeOverlay": "inherits private IR090 Playbook runtime overlay; not an unmodified published 13.2 runtime"
+      },
+      "evidence": {
+        "path": "/private/tmp/slc-c8-gqcjfn-earlycoverage-cC17Q1/evidence.json",
+        "bytes": 9207,
+        "sha256": "54449e8e80159e7073ed3e23efdd2a7f3ecb226c05353584cec73b80218ee935"
+      },
+      "script": {
+        "path": "/private/tmp/slc-c8-gqcjfn-earlycoverage-probe.mjs",
+        "bytes": 8841,
+        "sha256": "4b236cbf010951d5561a489f426fb297a27b6ea086f32f1a60e44fbb7529559e"
+      },
+      "sourceArtifact": {
+        "run": "compile-GQcJFN",
+        "fsm": {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.fsm.ts",
+          "bytes": 45774,
+          "sha256": "e6e3601ad91db82a132b04a6d09099918b6a0222b7b2bf58a6bacd4a7be3467c"
+        },
+        "historicalLinkElapsedMs": 175820
+      },
+      "elapsedMs": 1554.692,
+      "providerCalls": 0,
+      "adapterRequests": 0,
+      "executorSelections": 0,
+      "compiledSelections": 0,
+      "result": {
+        "ok": false,
+        "nonClarificationFailure": true,
+        "targetWritten": false,
+        "diagnosticCount": 1
+      },
+      "findings": [
+        "state reviewDirectPhase: nested playbook onDone arm 2 is unsatisfiable under probing",
+        "state reviewNewIrPhase: nested playbook onDone arm 2 is unsatisfiable under probing",
+        "state reviewIrTaskPhase: nested playbook onDone arm 3: unsupported repeated-invocation path"
+      ],
+      "protections": {
+        "directChanges": 0,
+        "treeChanges": 0,
+        "c8CompilerTree": {
+          "root": "/private/tmp/slc-c8-compiler-ezn78503",
+          "entries": 13279,
+          "files": 11887,
+          "bytes": 659917353,
+          "sha256": "e9646dad0d5eacedba76220d5df522096cbb46427f3d3d885049daf388a0b01c"
+        },
+        "c7CodeArtifactTree": {
+          "root": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook",
+          "entries": 26,
+          "files": 21,
+          "bytes": 470747,
+          "sha256": "7adc99b2953d62b151304ee5ae701fda7689dc2b667d3147cf781d7fe0df3e97"
+        }
+      },
+      "fullCompilationSpeedRatio": false,
+      "acceptedSpeedRatio": false,
+      "acceptedFullCompilation": false,
+      "notes": [
+        "The probe uses C8 ordinary runSlc link preflight with an adapter factory that would throw if requested.",
+        "It verifies the real GQcJFN coverage defect is routed before provider work.",
+        "It does not adjudicate the concurrently running C8 full CODE hZ8Y1l run."
+      ]
+    },
+    {
       "run": "compile-wm3i4U",
       "status": "success",
       "scope": "dev-full-ordinary-linker",
