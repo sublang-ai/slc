@@ -1,0 +1,204 @@
+{
+  "schema": 1,
+  "recordedAt": "2026-09-13",
+  "scope": "Two cold full-compilation failures and separate read-only diagnoses; no accepted full CODE/DEV timing comparison.",
+  "compilerCommit": "662d73aaefe4f18564c62c63984bd2b9b3b9aca9",
+  "pipelineGeneration": "v7",
+  "runs": [
+    {
+      "run": "compile-anx8n4",
+      "status": "failure",
+      "source": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/compile-anx8n4/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/code.md"
+      },
+      "compilerRoot": "/private/tmp/slc-coverage-compiler-p6olqovu",
+      "pipeline": "/private/tmp/playbook-13.2-common-v7-full",
+      "summary": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/compile-anx8n4/summary.json",
+        "bytes": 40828,
+        "sha256": "f7ced73046a4694cf392c41157bf1fa59212cd797d0af74f039de510d1784a59"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/invocation-dW8AYc/proof.json",
+        "bytes": 2805610,
+        "sha256": "b6d098888d8b524580a81c2d59642c844bc3a35e47573b3a8e757914af32a8fb"
+      },
+      "diagnosis": {
+        "path": "/private/tmp/slc-anx8n4-suspension-audit/evidence.json",
+        "bytes": 5375,
+        "sha256": "42c03073eaf2166d1352d4cc78ade0cda2dbbb6fb988c49548662f66a1a6c608"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 730886,
+        "outcome": null
+      },
+      "elapsedMs": 747623,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 134962
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 14978
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 341453
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 224974
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "resumed": false,
+          "toolCalls": 2,
+          "elapsedMs": 69502
+        },
+        {
+          "phase": "text2gears",
+          "resumed": true,
+          "toolCalls": 2,
+          "elapsedMs": 66476
+        },
+        {
+          "phase": "optimize",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 15462
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 3,
+          "elapsedMs": 340618
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 7,
+          "elapsedMs": 223420
+        }
+      ],
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "findings": [
+        "Two unreachable nested-review fallback arms fail emitted transition coverage.",
+        "Child states inherit busy tags, so the public runtime cannot return a suspended child until cancellation."
+      ],
+      "diagnosticControl": {
+        "delta": "Remove only playbook.busy from two child leaves in a private artifact copy.",
+        "directCodePathPass": true,
+        "elapsedMs": 728.9502500000003,
+        "realOwnGitCommits": 1,
+        "publicEntryAndActualHost": true,
+        "originalCompilationAccepted": false,
+        "authoredQuestionAdjudicated": false
+      }
+    },
+    {
+      "run": "compile-Kdavz2",
+      "status": "failure",
+      "source": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/compile-Kdavz2/work/dev.md",
+        "bytes": 5959,
+        "sha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/dev.md"
+      },
+      "compilerRoot": "/private/tmp/slc-coverage-compiler-p6olqovu",
+      "pipeline": "/private/tmp/playbook-13.2-common-v7-full",
+      "summary": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/compile-Kdavz2/summary.json",
+        "bytes": 34255,
+        "sha256": "dd9786fdf401e4d668f0cfe0890ac49ee56af4c02247641840c5c63d8e147da5"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/invocation-GNWhqu/proof.json",
+        "bytes": 2805220,
+        "sha256": "b306c2a12e8ad2f3c001c1f3edec7283ab3ef3d2a9d6f9adcc259de32c3c71cb"
+      },
+      "diagnosis": {
+        "path": "/private/tmp/slc-c5-v7-dev-Kdavz2-diagnosis/evidence.json",
+        "bytes": 10610,
+        "sha256": "0f93d72e9e51e41883d8b7a5b2d996c7139e7ae6454f78dd9e4052c219f5dd95"
+      },
+      "compile": {
+        "ok": false,
+        "elapsedMs": 572980,
+        "outcome": null
+      },
+      "elapsedMs": 573001,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 147257
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 14590
+        },
+        {
+          "name": "gears2fsm",
+          "status": "error",
+          "elapsedMs": 411049
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "resumed": false,
+          "toolCalls": 2,
+          "elapsedMs": 78859
+        },
+        {
+          "phase": "text2gears",
+          "resumed": true,
+          "toolCalls": 4,
+          "elapsedMs": 69247
+        },
+        {
+          "phase": "optimize",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 15081
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 6,
+          "elapsedMs": 326362
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 44619
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 42861
+        }
+      ],
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "findings": [
+        "DEV-5 uses Captain shall first call playbook instead of the fixed nested-call clause. The current parser treats it as direct Captain; FSM generation blocks without a target. This is generated syntax, not unresolved source behavior."
+      ]
+    }
+  ]
+}
