@@ -24,6 +24,70 @@
     "resultsBoundary": {
       "path": "/private/tmp/slc-results-boundary-pair-v1/pair-proof.json",
       "sha256": "38d62f564aaaa69115fed561533895afd84c88e14c3b75740dc29e264f686a97"
+    },
+    "linkV4": {
+      "scope": "prepared C3 fixed-FSM link comparison inputs",
+      "builderCommit": "671fe37",
+      "baseline": {
+        "path": "/private/tmp/playbook-13.2-common-v4-baseline/experiment-proof.json",
+        "bytes": 37327,
+        "sha256": "0589aa9b2db7b833409877f5be8af094ac934f1007523ba4ee2f7e9606124b06"
+      },
+      "full": {
+        "path": "/private/tmp/playbook-13.2-common-v4-full/experiment-proof.json",
+        "bytes": 37323,
+        "sha256": "12f313944b4388aadfec8efb040705b9a028139ec9fa9778d42bb1d47f87bb3c"
+      },
+      "onlyDifferingMember": "playbook/link.md",
+      "assemblyEvidence": {
+        "path": "/private/tmp/playbook-complex-performance/scripts/experiments/link-experiment-13.2-catalog-scaffold-evidence.json",
+        "bytes": 20618,
+        "sha256": "daa3d14f54a21e6dc9679ad9874a03e0920127949b2b5d8bd1bcc2483ff4e389"
+      },
+      "commonDefinitions": {
+        "text2gears": "1a7d9bb8b29bfa40de8ae14f001dd5eeedc51da140fcecfa61698f4282ce13db",
+        "link": "89e40b53e2bbed25eabceb57a4e61ce27a2fbee14d0cd886215a66ef0160bc86",
+        "producer": "7059aefbdaee40a8fc9abb1973627e6ec891076a03c9571682b8a925ea1d139a",
+        "catalog": "de862f4b772ffb6860c2cab3ed75ab281b378dffa0a6217ebc8e049302c05dd3",
+        "optimizer": "4f3111e1a8a2124c8a174d63752be368ab763493b603f7a4df4bed60c264cfb9"
+      },
+      "publicCatalog": {
+        "sha256": "de862f4b772ffb6860c2cab3ed75ab281b378dffa0a6217ebc8e049302c05dd3",
+        "bytes": 10057,
+        "literalTargetBindings": {
+          "review": "review",
+          "decide": "decide",
+          "code": "code",
+          "branch": "branch",
+          "pr": "pr"
+        }
+      },
+      "readinessEvidence": [
+        {
+          "path": "/private/tmp/slc-c3-v4-acceptance-readiness/baseline-evidence.json",
+          "bytes": 44915,
+          "sha256": "887d5719f9399972698213f5f9d8cd463d9d92e384e096602cd0dd19918ccd76"
+        },
+        {
+          "path": "/private/tmp/slc-c3-v4-acceptance-readiness/full-evidence.json",
+          "bytes": 44703,
+          "sha256": "e695649575ca4b3b5c4db81a5a43acfda30fc3e4171b8340de6e3f93b5e9c2ef"
+        }
+      ],
+      "performanceAccepted": false
+    },
+    "fsmScaffoldV1": {
+      "scope": "prepared C3 fixed-GEARS phase comparison inputs",
+      "pair": {
+        "path": "/private/tmp/playbook-13.2-fsm-scaffold-v1-pair/experiment-proof.json",
+        "bytes": 45415,
+        "sha256": "240757e1d62002818daef4af7a10210dc41c8bc7d1156536d2cce8bd4a5e700b"
+      },
+      "onlyDifferingMember": "playbook/gears2fsm.md",
+      "helperAndGuidancePresentIdenticallyInBothArms": true,
+      "commonCatalogResultsAndTerminalCorrection": true,
+      "performanceAccepted": false,
+      "limits": "Optional incomplete authoring scaffold only; workflow topology and acceptance predicates remain agent-authored, existing strict/fidelity checks remain authoritative."
     }
   },
   "phaseRuns": [
@@ -170,6 +234,454 @@
         "apiAvailable": true,
         "published": false
       }
+    },
+    {
+      "label": "decide-results-baseline",
+      "caseId": "case-004",
+      "run": "phase-HzK0ck",
+      "cohort": "current-report-syntax-C2",
+      "scope": "phase",
+      "status": "success",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": true,
+        "outcome": "success"
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 129649,
+      "elapsedMs": 130434,
+      "agentCalls": 3,
+      "toolCalls": 7,
+      "sourceSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
+      "summary": {
+        "path": "/private/tmp/slc-results-boundary-evidence/phase-HzK0ck/summary.json",
+        "bytes": 434357,
+        "sha256": "d2349f04a9a4e496e72ccfed6ba224600a171ca9455f4b8f2e50bbaa86079786"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": true
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-results-boundary-adjudication/evidence.json",
+          "bytes": 32808,
+          "sha256": "64060f47e0821776333d54b5b19c523a434c6247e33cc3bb8c0095e98aefd94b"
+        },
+        "verdict": "pass",
+        "reason": "Independent source review passes; phase-only acceptance."
+      },
+      "fullArtifactAccepted": false,
+      "currentFindingCounts": [9, 4],
+      "definition": {
+        "path": "/private/tmp/slc-results-boundary-pair-v1/baseline/playbook/text2gears.md",
+        "bytes": 21106,
+        "sha256": "c2fb447a4a3a4708ac75d4cba7364748260a32b6a33ef970dee4a5c79233be56"
+      }
+    },
+    {
+      "label": "decide-results-treatment",
+      "caseId": "case-004",
+      "run": "phase-bhO9RV",
+      "cohort": "current-report-syntax-C2",
+      "scope": "phase",
+      "status": "success",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": true,
+        "outcome": "success"
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 98559,
+      "elapsedMs": 99317,
+      "agentCalls": 2,
+      "toolCalls": 4,
+      "sourceSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
+      "summary": {
+        "path": "/private/tmp/slc-results-boundary-evidence/phase-bhO9RV/summary.json",
+        "bytes": 432449,
+        "sha256": "7e4e65e068ff42ee35a097b03762f5373461d20743e74487c5c66db99ac0d236"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": true
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-results-boundary-adjudication/evidence.json",
+          "bytes": 32808,
+          "sha256": "64060f47e0821776333d54b5b19c523a434c6247e33cc3bb8c0095e98aefd94b"
+        },
+        "verdict": "pass",
+        "reason": "Independent source review passes; phase-only acceptance."
+      },
+      "fullArtifactAccepted": false,
+      "currentFindingCounts": [9],
+      "definition": {
+        "path": "/private/tmp/slc-results-boundary-pair-v1/treatment/playbook/text2gears.md",
+        "bytes": 21485,
+        "sha256": "6cf4e2d5a8f72c9cdbadaf1d0d755c697133449216c707f4273cbc5c7ea13305"
+      }
+    },
+    {
+      "label": "review-common-relay-rerun",
+      "caseId": "case-007",
+      "run": "phase-0NQuZw",
+      "cohort": "current-report-syntax-C2",
+      "scope": "phase",
+      "status": "success",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": true,
+        "outcome": "success"
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 111709,
+      "elapsedMs": 112264,
+      "agentCalls": 2,
+      "toolCalls": 5,
+      "sourceSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "summary": {
+        "path": "/private/tmp/slc-review-relay-evidence/phase-0NQuZw/summary.json",
+        "bytes": 432428,
+        "sha256": "77a66da7c1eb5fcc0114a28ea586278d7e3cb92a50494048cdd74e04c396b885"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": true
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-review-relay-adjudication/evidence.json",
+          "bytes": 11187,
+          "sha256": "b7c5f5e8065d5eb9699403d3df6af7ec57233312ac71cf10deb01856b1cc416d"
+        },
+        "verdict": "pass",
+        "reason": "All four acting prompts deliver the exact revision and complete source fragments. Global cumulative scope, committed-only inspection, receipt authority, presentation independence, findings/fix/rebuttal loops, affirmative completion and explicit exact-revision/no-unsettled-finding return remain. Runtime caller inputs remain placeholders; no unnecessary compiler question."
+      },
+      "fullArtifactAccepted": false,
+      "targetedRevisionRelayCorrected": true,
+      "definition": {
+        "path": "/private/tmp/playbook-13.2-relay-common-v3-baseline/playbook/text2gears.md",
+        "bytes": 21106,
+        "sha256": "c2fb447a4a3a4708ac75d4cba7364748260a32b6a33ef970dee4a5c79233be56"
+      }
+    },
+    {
+      "label": "review-common-relay-rerun",
+      "caseId": "case-008",
+      "run": "phase-tTylRS",
+      "cohort": "current-report-syntax-C2",
+      "scope": "phase",
+      "status": "clarification-required",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": false,
+        "outcome": "clarification-required",
+        "clarification": {
+          "schema": "sublang.slc.clarification.v1",
+          "phase": "text2gears",
+          "target": "/private/tmp/slc-review-relay-evidence/phase-tTylRS/work/workflow.playbook/workflow.gears.md",
+          "sources": [
+            "/private/tmp/slc-review-relay-evidence/phase-tTylRS/work/workflow.md"
+          ],
+          "questionCount": 1,
+          "reportSha256": "250257e0d24df0dfbf732d7353aa81fbbb3ca9a2ea10d3379ae17658192c3412"
+        }
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 18364,
+      "elapsedMs": 19051,
+      "agentCalls": 1,
+      "toolCalls": 1,
+      "sourceSha256": "b8179e3e7ff663a59faa4af8f53e2d31e07568385c9eb3ce80eeb9e411bec439",
+      "summary": {
+        "path": "/private/tmp/slc-review-relay-evidence/phase-tTylRS/summary.json",
+        "bytes": 430725,
+        "sha256": "4689733452f448af3cc83edbb0b42ee5eb47a0e4bbe891660bfaec212702fe91"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": false
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-review-relay-adjudication/evidence.json",
+          "bytes": 11187,
+          "sha256": "b7c5f5e8065d5eb9699403d3df6af7ec57233312ac71cf10deb01856b1cc416d"
+        },
+        "verdict": "pass",
+        "reason": "The sole question presents the mutually exclusive return versus another-round behavior under the exact same affirmative clean-review trigger, quotes both authored clauses, offers their alternatives and selects neither. No question asks for concrete runtime scope, commits or findings."
+      },
+      "fullArtifactAccepted": false,
+      "targetedRevisionRelayCorrected": false,
+      "definition": {
+        "path": "/private/tmp/playbook-13.2-relay-common-v3-baseline/playbook/text2gears.md",
+        "bytes": 21106,
+        "sha256": "c2fb447a4a3a4708ac75d4cba7364748260a32b6a33ef970dee4a5c79233be56"
+      }
+    },
+    {
+      "label": "review-common-relay-rerun",
+      "caseId": "case-009",
+      "run": "phase-JC4eqW",
+      "cohort": "current-report-syntax-C2",
+      "scope": "phase",
+      "status": "success",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": true,
+        "outcome": "success"
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 159506,
+      "elapsedMs": 160186,
+      "agentCalls": 2,
+      "toolCalls": 4,
+      "sourceSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "summary": {
+        "path": "/private/tmp/slc-review-relay-evidence/phase-JC4eqW/summary.json",
+        "bytes": 432461,
+        "sha256": "7b00d9416bb68fa7e8eb27e4d266ac83e1dca7beaf8e4355df20c0494a1477a4"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": true
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-review-relay-adjudication/evidence.json",
+          "bytes": 11187,
+          "sha256": "b7c5f5e8065d5eb9699403d3df6af7ec57233312ac71cf10deb01856b1cc416d"
+        },
+        "verdict": "fail",
+        "reason": "The previously missing exact-revision prompt delivery is repaired in all four prompts, but the generated GEARS drops Source116’s distinct terminal return obligation. Complete-result descriptions mention the evaluated revision and clean condition, then require only reviewerOutput; no retained clause requires returning the revision and no-unsettled-findings fact to the caller. This is generated loss from sufficient source, not a source-author choice."
+      },
+      "fullArtifactAccepted": false,
+      "targetedRevisionRelayCorrected": true,
+      "definition": {
+        "path": "/private/tmp/playbook-13.2-relay-common-v3-baseline/playbook/text2gears.md",
+        "bytes": 21106,
+        "sha256": "c2fb447a4a3a4708ac75d4cba7364748260a32b6a33ef970dee4a5c79233be56"
+      }
+    },
+    {
+      "label": "review-terminal-return-C3-v4",
+      "caseId": "case-009",
+      "run": "phase-S7Qx6S",
+      "cohort": "composed-child-fidelity-C3",
+      "scope": "phase",
+      "status": "failure",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": false,
+        "outcome": "failure"
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 119425,
+      "elapsedMs": 120201,
+      "agentCalls": 3,
+      "toolCalls": 2,
+      "sourceSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "summary": {
+        "path": "/private/tmp/slc-c3-review-terminal-evidence/phase-S7Qx6S/summary.json",
+        "bytes": 437833,
+        "sha256": "a3432669d5c75b0e91017af0988412a8db74ca9803012bed90dff03f09b39fc7"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": false
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-c3-review-009-008-adjudication/evidence.json",
+          "bytes": 6487,
+          "sha256": "72f1a68852020baefbfc2f390dedce4e38dadd95534ff8a0f95f94c267783d06"
+        },
+        "verdict": "not-accepted",
+        "reason": "fail: sixteen added labels on prose-required untemplated relays violate current verification-25, whose added-line exception is only bare > <token>."
+      },
+      "fullArtifactAccepted": false,
+      "targetedTerminalReturn": {
+        "verdict": "pass",
+        "sourceLines": [116, 116],
+        "gearsLines": [48, 88, 126],
+        "reason": "Each complete result explicitly says the workflow returns the exact evaluated revision and the no-unsettled-findings fact; this is an output obligation, not only a completion predicate."
+      }
+    },
+    {
+      "label": "review-terminal-return-C3-v4",
+      "caseId": "case-008",
+      "run": "phase-gr2k8C",
+      "cohort": "composed-child-fidelity-C3",
+      "scope": "phase",
+      "status": "clarification-required",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": false,
+        "outcome": "clarification-required",
+        "clarification": {
+          "schema": "sublang.slc.clarification.v1",
+          "phase": "text2gears",
+          "target": "/private/tmp/slc-c3-review-terminal-evidence/phase-gr2k8C/work/workflow.playbook/workflow.gears.md",
+          "sources": [
+            "/private/tmp/slc-c3-review-terminal-evidence/phase-gr2k8C/work/workflow.md"
+          ],
+          "questionCount": 1,
+          "reportSha256": "695f9d6a0c1c8c0d3c795a44ce3e85e9a8aa921b2a22c4ea604c02068600ff77"
+        }
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 25633,
+      "elapsedMs": 26354,
+      "agentCalls": 1,
+      "toolCalls": 2,
+      "sourceSha256": "b8179e3e7ff663a59faa4af8f53e2d31e07568385c9eb3ce80eeb9e411bec439",
+      "summary": {
+        "path": "/private/tmp/slc-c3-review-terminal-evidence/phase-gr2k8C/summary.json",
+        "bytes": 434453,
+        "sha256": "46ade20725fcb38c5c206fbf521e7cbd9d449e9c9df1cded9835e94eb1033b42"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": false
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-c3-review-009-008-adjudication/evidence.json",
+          "bytes": 6487,
+          "sha256": "72f1a68852020baefbfc2f390dedce4e38dadd95534ff8a0f95f94c267783d06"
+        },
+        "verdict": "pass",
+        "reason": "The question identifies the exact shared affirmative clean-review trigger and opposing return versus repeat obligations, preserves both clauses and their choices, and selects neither. No concrete runtime scope/commit/findings question is requested."
+      },
+      "fullArtifactAccepted": false
     }
   ],
   "fullRuns": [
@@ -270,7 +782,7 @@
     }
   ],
   "scopeLimit": "No performance technique is retained by prototype checks alone. Preserve all attempts; require matching accepted controls and independent source-aware semantic/runtime verification.",
-  "recordedAt": "2026-09-13T05:02:18.544578+00:00",
+  "recordedAt": "2026-09-13T05:49:58.507057+00:00",
   "checks": {
     "productionSuite": {
       "passed": 1330,
@@ -284,11 +796,570 @@
       "evidence": "/private/tmp/slc-c2-runtime-readiness-gKOJhN/evidence.json",
       "optionalEntryInputControls": 2,
       "optionalInputEvidence": "/private/tmp/slc-c2-optional-input-NsXIf7/evidence.json"
+    },
+    "C3ProductionSuite": {
+      "passed": 1344,
+      "skipped": 2,
+      "files": 72,
+      "basis": "root-reported final validation before b091e80 C3 freeze",
+      "log": {
+        "path": "/private/tmp/slc-fidelity-cache-all-tests.log",
+        "bytes": 594,
+        "sha256": "0b72a4e28caddda3d8bd501257e903fe2f7b806996687c3472db0b76a808fa97"
+      },
+      "lintLog": {
+        "path": "/private/tmp/slc-fidelity-cache-lint.log",
+        "bytes": 39,
+        "sha256": "75c3e353fa075ef83d8dad9339fa3a0d9a84223182f69db44c4205141ae663f9"
+      },
+      "formatLog": {
+        "path": "/private/tmp/slc-fidelity-cache-format.log",
+        "bytes": 123,
+        "sha256": "c12949632eb9f42478ff6c96da255e0d2215cdd8adcb6632fb29ede3f94e957d"
+      }
+    },
+    "C3InputAssembly": {
+      "integrationTestsPassed": 14,
+      "strictTestFileTypecheckPassed": true,
+      "spexErrors": 0,
+      "compilerInventoryAndExistingCacheUnchanged": true,
+      "evidence": {
+        "path": "/private/tmp/playbook-complex-performance/scripts/experiments/link-experiment-13.2-catalog-scaffold-evidence.json",
+        "bytes": 20618,
+        "sha256": "daa3d14f54a21e6dc9679ad9874a03e0920127949b2b5d8bd1bcc2483ff4e389"
+      },
+      "scope": "builder and runtime-graph readiness only; no provider or generated-artifact acceptance"
     }
   },
   "incidentalCacheAudit": {
     "path": "/private/tmp/slc-maintained-fixed-link-preparation/closeout.json",
     "sha256": "7256ce80be8f0ed824232cb3f016214028dafc273f6587daecdba388c57a4598",
     "finding": "Vitest wrote only its result cache after the DEV rerun ended; exact cache bytes restored and all11888 recorded cohort members reverified before subsequent runs. Future runtime tests use a private cache."
-  }
+  },
+  "phaseComparisons": {
+    "resultsBoundary": {
+      "status": "retained_scoped_observed_improvement",
+      "runs": ["phase-HzK0ck", "phase-bhO9RV"],
+      "scope": "One sequential matched DECIDE source-to-GEARS phase pair; no full compilation or generated-runtime acceptance.",
+      "evidence": {
+        "path": "/private/tmp/slc-results-boundary-adjudication/evidence.json",
+        "bytes": 32808,
+        "sha256": "64060f47e0821776333d54b5b19c523a434c6247e33cc3bb8c0095e98aefd94b"
+      },
+      "durableUpstreamEvidence": {
+        "path": "/private/tmp/playbook-complex-performance/scripts/experiments/results-boundary-evidence.json",
+        "bytes": 13931,
+        "sha256": "91ae26712415c3c3131bcac4e18e6196ad7f4f8df5f70c62362492a5f37e9a47"
+      },
+      "executionElapsedMs": [129649, 98559],
+      "agentCalls": [3, 2],
+      "toolCalls": [7, 4],
+      "observedSavingMs": 31090,
+      "observedReductionPercent": 23.980130969000918,
+      "mechanism": "Both first corrections contained quote/source-format and Results-placement findings. Baseline needed another correction containing only four malformed Results entries; treatment did not need a second correction.",
+      "limits": [
+        "One baseline-first pair, not randomized or a universal effect estimate.",
+        "Treatment did not prevent the initial formatting errors; all attempts and visible mutation requests are retained.",
+        "Dispatch windows partition successive calls and include local work; reported call elapsed values overlap adapter cleanup and are not summed."
+      ],
+      "activationCommit": "d353c8f867d89cffe5db19623351c123b5bb9fd4"
+    },
+    "reviewRelayRerun": {
+      "status": "targeted_relay_repaired_but_restored_terminal_return_lost",
+      "runs": ["phase-0NQuZw", "phase-tTylRS", "phase-JC4eqW"],
+      "evidence": {
+        "path": "/private/tmp/slc-review-relay-adjudication/evidence.json",
+        "bytes": 11187,
+        "sha256": "b7c5f5e8065d5eb9699403d3df6af7ec57233312ac71cf10deb01856b1cc416d"
+      },
+      "conclusion": "Common relay guidance repaired the targeted prompt-revision omission in both clean/restored outputs and preserved the mutant clarification. Restored009 separately loses the terminal-return obligation, so the whole corrected triplet is not a full positive-fidelity success.",
+      "terminalReturnCorrectionCommit": "c350bee4d73e50f694630add5d683bbe8cbe06be",
+      "terminalReturnCorrectionEffectiveness": "C3/v4 restored output explicitly returns the required facts but remains unaccepted for sixteen un-authored prompt labels; the C3/v4 mutant delivers the targeted question. Formatting guidance alignment remains pending live verification."
+    },
+    "reviewTerminalReturnRerun": {
+      "runs": ["phase-S7Qx6S", "phase-gr2k8C"],
+      "evidence": {
+        "path": "/private/tmp/slc-c3-review-009-008-adjudication/evidence.json",
+        "bytes": 6487,
+        "sha256": "72f1a68852020baefbfc2f390dedce4e38dadd95534ff8a0f95f94c267783d06"
+      },
+      "status": "targeted_return_corrected_but_positive_format_rejected",
+      "unchangedPositiveQuestionCount": 0,
+      "mutantQuestionCount": 1,
+      "sourceAndCohortUnchanged": true,
+      "interpretation": "The strict source gate follows its spec. Prose-required runtime relays need bare quoted placeholders when the Source does not author a label; these compiler formatting failures do not make Source behavior unresolved."
+    }
+  },
+  "linkRuns": [
+    {
+      "run": "compile-A7u5ik",
+      "arm": "baseline",
+      "cohort": "current-report-syntax-C2",
+      "scope": "link",
+      "status": "success",
+      "summary": {
+        "path": "/private/tmp/slc-maintained-fixed-link-evidence/compile-A7u5ik/summary.json",
+        "bytes": 26067,
+        "sha256": "440fb1f13355dd6ee64de5281cb0ebd2a7056009669f04f0becf2db0066f06f7"
+      },
+      "source": {
+        "path": "/private/tmp/slc-maintained-fixed-link-evidence/compile-A7u5ik/work/code.fsm.ts",
+        "bytes": 36725,
+        "sha256": "4884b88d9f6470e2c3bde0e9b22a67455ad1b590c704d895b451951fa2d3f2f3",
+        "original": "/private/tmp/slc-maintained-fixed-link-inputs/code.fsm.ts"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "pipelinePath": "/private/tmp/playbook-13.2-relay-common-v3-baseline",
+      "startedAt": "2026-09-13T05:21:16.376Z",
+      "finishedAt": "2026-09-13T05:26:27.362Z",
+      "compileElapsedMs": 309772,
+      "elapsedMs": 310983,
+      "agentCalls": 1,
+      "toolCalls": 24,
+      "phases": [
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-maintained-fixed-link-evidence/compile-A7u5ik/work/code.playbook/code.playbook.ts",
+          "status": "success",
+          "startMs": 19,
+          "elapsedMs": 309758
+        }
+      ],
+      "callAccounting": [
+        {
+          "id": 1,
+          "status": "success",
+          "elapsedMs": 309401,
+          "promptBytes": 159031,
+          "promptSha256": "6ca70fe1301d5c78f3f365e6fd7735964a3b4d8217dc7b972bb480e615ba10f6",
+          "toolCalls": 24,
+          "firstEventMs": 2143,
+          "providerDurationMs": 307269,
+          "resumed": false,
+          "usage": {
+            "toolUses": 24,
+            "tokens": {
+              "coverage": "complete",
+              "totals": {
+                "input": {
+                  "total": 2776982,
+                  "uncached": 39286,
+                  "cacheRead": 2617038,
+                  "cacheWrite": 120658
+                },
+                "output": {
+                  "total": 14596
+                }
+              },
+              "records": [
+                {
+                  "model": "claude-haiku-4-5",
+                  "provider": "firstParty",
+                  "tokens": {
+                    "input": {
+                      "total": 39236,
+                      "uncached": 39236,
+                      "cacheRead": 0,
+                      "cacheWrite": 0
+                    },
+                    "output": {
+                      "total": 14
+                    }
+                  },
+                  "cost": {
+                    "amount": 0.039306,
+                    "currency": "USD",
+                    "source": "agent-estimate"
+                  },
+                  "pricedUnits": [
+                    {
+                      "name": "web_search_request",
+                      "quantity": 0
+                    }
+                  ]
+                },
+                {
+                  "model": "claude-opus-5",
+                  "provider": "firstParty",
+                  "tokens": {
+                    "input": {
+                      "total": 2737746,
+                      "uncached": 50,
+                      "cacheRead": 2617038,
+                      "cacheWrite": 120658
+                    },
+                    "output": {
+                      "total": 14582
+                    }
+                  },
+                  "cost": {
+                    "amount": 2.8798990000000004,
+                    "currency": "USD",
+                    "source": "agent-estimate"
+                  },
+                  "pricedUnits": [
+                    {
+                      "name": "web_search_request",
+                      "quantity": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "cost": {
+              "amount": 2.9192050000000003,
+              "currency": "USD",
+              "source": "agent-estimate"
+            }
+          }
+        }
+      ],
+      "benchmarkValidation": {
+        "ok": true,
+        "strictPassed": true,
+        "linkedContractPassed": true,
+        "sourceUnchanged": true,
+        "elapsedMs": 1204
+      },
+      "separateAcceptance": {
+        "status": "rejected",
+        "strictPassed": true,
+        "canonicalLinkPassed": true,
+        "maintainedAssertions": {
+          "passed": 23,
+          "failed": 7,
+          "total": 30,
+          "actualExit": 1
+        },
+        "evidence": {
+          "path": "/private/tmp/slc-maintained-fixed-link-preparation/accepted-code-A7u5ik/evidence.json",
+          "bytes": 12764,
+          "sha256": "0816064faa680e736ac557941248e9970a67f5c756cda2a3c38826b394004630"
+        },
+        "observation": {
+          "path": "/private/tmp/slc-maintained-fixed-link-preparation/accepted-code-A7u5ik.observation.json",
+          "bytes": 1747,
+          "sha256": "c7e02934f50a762185d745ca336d26cefac53e2d83d939013b8caf3c2d471349"
+        },
+        "preservation": {
+          "originalLinked": true,
+          "suppliedFsm": true,
+          "originalFsm": true,
+          "copiedFsm": true,
+          "copiedLinked": true,
+          "fixtures": true
+        },
+        "completeInventoriesUnchanged": true,
+        "scope": "fixed maintained FSM candidate link acceptance only",
+        "adjudication": {
+          "path": "/private/tmp/slc-maintained-fixed-link-preparation/accepted-code-A7u5ik/adjudication.json",
+          "bytes": 9960,
+          "sha256": "1d4ba5941cf9c3ed2238ed7c288fa376bd10d1128cc40c6063fbd915a9c5f30b"
+        },
+        "reason": "Player prompt multiline relays lose continuation quote markers, violating the frozen complete link contract.",
+        "limits": [
+          "The candidate is rejected without changing any generated source or assertion.",
+          "Two exact maintained fixture expectations (option diagnostics and context projection) are retained as failures, but are not independently classified as source violations.",
+          "The callback is single-pass; no recursive replacement defect is claimed.",
+          "No accepted link speed comparison, full-compilation result, or provider/model compliance claim follows."
+        ]
+      },
+      "fullArtifactAccepted": false
+    },
+    {
+      "run": "compile-RyJuic",
+      "arm": "treatment",
+      "cohort": "current-report-syntax-C2",
+      "scope": "link",
+      "status": "success",
+      "summary": {
+        "path": "/private/tmp/slc-maintained-fixed-link-evidence/compile-RyJuic/summary.json",
+        "bytes": 25797,
+        "sha256": "2636e4d6728121965f2fed7ed1081455832068c94dfb8fb32b69200ff4537c32"
+      },
+      "source": {
+        "path": "/private/tmp/slc-maintained-fixed-link-evidence/compile-RyJuic/work/code.fsm.ts",
+        "bytes": 36725,
+        "sha256": "4884b88d9f6470e2c3bde0e9b22a67455ad1b590c704d895b451951fa2d3f2f3",
+        "original": "/private/tmp/slc-maintained-fixed-link-inputs/code.fsm.ts"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "pipelinePath": "/private/tmp/playbook-13.2-relay-common-v3-full",
+      "startedAt": "2026-09-13T05:27:42.323Z",
+      "finishedAt": "2026-09-13T05:29:57.072Z",
+      "compileElapsedMs": 133602,
+      "elapsedMs": 134747,
+      "agentCalls": 1,
+      "toolCalls": 12,
+      "phases": [
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-maintained-fixed-link-evidence/compile-RyJuic/work/code.playbook/code.playbook.ts",
+          "status": "success",
+          "startMs": 17,
+          "elapsedMs": 133590
+        }
+      ],
+      "callAccounting": [
+        {
+          "id": 1,
+          "status": "success",
+          "elapsedMs": 133423,
+          "promptBytes": 165875,
+          "promptSha256": "98f32a27c97d6b5d18cd8b8776414e2a4f877260b5332e90f3e60dd310df2ae3",
+          "toolCalls": 12,
+          "firstEventMs": 4256,
+          "providerDurationMs": 129003,
+          "resumed": false,
+          "usage": {
+            "toolUses": 12,
+            "tokens": {
+              "coverage": "complete",
+              "totals": {
+                "input": {
+                  "total": 1291520,
+                  "uncached": 40927,
+                  "cacheRead": 1147535,
+                  "cacheWrite": 103058
+                },
+                "output": {
+                  "total": 7445
+                }
+              },
+              "records": [
+                {
+                  "model": "claude-haiku-4-5",
+                  "provider": "firstParty",
+                  "tokens": {
+                    "input": {
+                      "total": 40901,
+                      "uncached": 40901,
+                      "cacheRead": 0,
+                      "cacheWrite": 0
+                    },
+                    "output": {
+                      "total": 16
+                    }
+                  },
+                  "cost": {
+                    "amount": 0.040981,
+                    "currency": "USD",
+                    "source": "agent-estimate"
+                  },
+                  "pricedUnits": [
+                    {
+                      "name": "web_search_request",
+                      "quantity": 0
+                    }
+                  ]
+                },
+                {
+                  "model": "claude-opus-5",
+                  "provider": "firstParty",
+                  "tokens": {
+                    "input": {
+                      "total": 1250619,
+                      "uncached": 26,
+                      "cacheRead": 1147535,
+                      "cacheWrite": 103058
+                    },
+                    "output": {
+                      "total": 7429
+                    }
+                  },
+                  "cost": {
+                    "amount": 1.7902025000000001,
+                    "currency": "USD",
+                    "source": "agent-estimate"
+                  },
+                  "pricedUnits": [
+                    {
+                      "name": "web_search_request",
+                      "quantity": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "cost": {
+              "amount": 1.8311835,
+              "currency": "USD",
+              "source": "agent-estimate"
+            }
+          }
+        }
+      ],
+      "benchmarkValidation": {
+        "ok": true,
+        "strictPassed": true,
+        "linkedContractPassed": true,
+        "sourceUnchanged": true,
+        "elapsedMs": 1138
+      },
+      "separateAcceptance": {
+        "status": "accepted_fixed_code_source_and_tested_parent_runtime",
+        "strictPassed": true,
+        "canonicalLinkPassed": true,
+        "maintainedAssertions": {
+          "passed": 29,
+          "failed": 1,
+          "total": 30,
+          "actualExit": 1
+        },
+        "evidence": {
+          "path": "/private/tmp/slc-maintained-fixed-link-preparation/accepted-code-RyJuic/evidence.json",
+          "bytes": 12762,
+          "sha256": "d0320dad18931eb97cf40a9f28c66d4dddd502d2e6eec586cc88f738fd691251"
+        },
+        "observation": {
+          "path": "/private/tmp/slc-maintained-fixed-link-preparation/accepted-code-RyJuic.observation.json",
+          "bytes": 1747,
+          "sha256": "8fc4af209dcb076f8b803c5719a68fd58588534c1a9bfc5645253274419a3ccd"
+        },
+        "preservation": {
+          "originalLinked": true,
+          "suppliedFsm": true,
+          "originalFsm": true,
+          "copiedFsm": true,
+          "copiedLinked": true,
+          "fixtures": true
+        },
+        "completeInventoriesUnchanged": true,
+        "scope": "fixed maintained FSM candidate link acceptance only",
+        "reason": "All required source/runtime/prompt/effect/child behaviors pass. The sole failed assertion demands the maintained implementation’s exact context projection, while the complete link contract expressly leaves that projection to the linked artifact. The treatment adds effect-derived latestCommit to phase, a safe and relevant progress fact.",
+        "quotingLiteralAndOptionChecksPassed": true,
+        "adjudication": {
+          "path": "/private/tmp/slc-maintained-fixed-link-preparation/accepted-code-RyJuic/adjudication.json",
+          "bytes": 4317,
+          "sha256": "b243efaf64c2adaa0af31948bae2c9d5c8f60200944643373ab5e66edcbdacec"
+        },
+        "sourceApplicableAssertions": {
+          "passed": 29,
+          "failed": 0,
+          "inapplicableExactProjectionAssertions": 1
+        },
+        "requiredCoverage": [
+          "Direct own commit and nested REVIEW exact quoted context.",
+          "Runtime IR task path, Boss question/reply and one retained Coder conversation.",
+          "Source terminal and child success/failure handling, error propagation, telemetry and effect receipt constraints.",
+          "Literal multiline/identity substitution, optional run-results relay, and continuation prefix.",
+          "Invalid runtime options rejected and option snapshot behavior."
+        ],
+        "limits": [
+          "Fixed maintained FSM linking only, not natural-language compilation or child implementation execution.",
+          "The unchanged raw 30-assertion suite remains failed; this separate source-aware adjudication classifies its exact projection assertion as inapplicable without rewriting it.",
+          "Baseline A7u5ik has conclusive quoting defects, so this comparison yields no ratio between two accepted link builds or general performance guarantee.",
+          "No provider invocation, original artifact mutation, replacement factory, or assertion rewrite occurred."
+        ],
+        "rawSuiteStillFailed": true,
+        "citationCorrection": {
+          "path": "/private/tmp/slc-maintained-fixed-link-preparation/accepted-code-RyJuic/citation-correction.json",
+          "bytes": 973,
+          "sha256": "6f5d7ef3eb1701842fa8efd1d82c05ebd74f105a4ea7cca490ee03a76ab59ed0"
+        }
+      },
+      "fullArtifactAccepted": false
+    }
+  ],
+  "linkComparisonOutcome": {
+    "runs": ["compile-A7u5ik", "compile-RyJuic"],
+    "status": "no_accepted_speed_comparison",
+    "reason": "Baseline A7u5ik has independently proven multiline relay quoting defects. RyJuic passes separate source-aware fixed-CODE parent-runtime adjudication, while its unchanged raw suite remains failed on one inapplicable exact context-projection assertion. The raw elapsed difference is not a ratio between two accepted builds.",
+    "observedGenerationElapsedMs": [309772, 133602],
+    "observedRatioClaimed": false,
+    "fixedFsmSha256": "4884b88d9f6470e2c3bde0e9b22a67455ad1b590c704d895b451951fa2d3f2f3",
+    "fullCompilationMeasured": false
+  },
+  "subsequentCohorts": [
+    {
+      "id": "composed-child-fidelity-C3",
+      "productionCommit": "b091e80c1dd7a3c745796495cf766c74bf69f3b5",
+      "measurementHarnessCommit": "b091e80c1dd7a3c745796495cf766c74bf69f3b5",
+      "compilerRoot": "/private/tmp/slc-fidelity-compiler-ehkjoo54",
+      "manifest": {
+        "path": "/private/tmp/slc-fidelity-compiler-ehkjoo54-evidence/cohort.json",
+        "bytes": 6574,
+        "sha256": "a998071122dae487626d864d49c7b626d76b8ce3df86632382d9ceaff0a502b9"
+      },
+      "parentComparison": {
+        "path": "/private/tmp/slc-fidelity-compiler-ehkjoo54-evidence/parent-comparison.json",
+        "bytes": 895,
+        "sha256": "68e0e5bbada49da453f6bcecce3d505ecc959a51fe716024b900adbd9d106e8d"
+      },
+      "changedCompilerFiles": [
+        "dist/verify.d.ts",
+        "dist/verify.d.ts.map",
+        "dist/verify.js",
+        "dist/verify.js.map",
+        "scripts/benchmark-compile.mjs"
+      ],
+      "allDependencyBytesIdentical": true,
+      "allPipelineAndPinBytesIdentical": true,
+      "actualInterpretedAndCompiledSelectionProbe": "passed",
+      "compilerInventory": {
+        "path": "/private/tmp/slc-fidelity-compiler-ehkjoo54-evidence/compiler-inventory.json",
+        "bytes": 29424,
+        "sha256": "14b4a8d75dd06fa8d063023f37cbe89352d85a73ad9554768ed22d8a8eec8fae"
+      },
+      "dependencyInventory": {
+        "path": "/private/tmp/slc-fidelity-compiler-ehkjoo54-evidence/dependencies-inventory.json",
+        "bytes": 1842034,
+        "sha256": "6e0a2978980fbcec1ec097295eb33a802c2261f542f02fc7221bdd487d52dc43"
+      },
+      "change": "Composed literal child input fidelity plus private artifact-validation caches; static and dynamic identity checks and ordinary validation suites retained. No public interface overlay or optional performance guidance is included until separately declared pipeline selection.",
+      "pipelineCorrectionsSelectedSeparately": true,
+      "providerReadinessIsNotSemanticAcceptance": true
+    }
+  ],
+  "provenanceNotes": [
+    {
+      "observedAt": "2026-09-13T05:44:52.860988+00:00",
+      "originalPath": "/private/tmp/slc-VucDX9-child-contract-audit/evidence.json",
+      "historicalRecordedSha256": "0e60a44d0036f377691d1138c75b6c349d55c7eecd1e1d927fdd472829329f3e",
+      "currentSnapshot": {
+        "path": "/private/tmp/slc-complex-report-checkpoint/child-contract-audit-observed-20260913T054452Z/evidence.json",
+        "bytes": 3319,
+        "sha256": "e9731d789f816f99db3969cd1822288690dac516f0a338445da13fcacfe9462e"
+      },
+      "exactInverseChange": {
+        "from": "Playbook playbook-26,",
+        "to": "Playbook playbook-22,",
+        "occurrences": 1,
+        "reconstructedSha256": "0e60a44d0036f377691d1138c75b6c349d55c7eecd1e1d927fdd472829329f3e",
+        "matchesHistoricalSha256": true
+      },
+      "adjacentFiles": [
+        {
+          "path": "/private/tmp/slc-VucDX9-child-contract-audit/README.md",
+          "bytes": 3251,
+          "sha256": "2fb6f42dedba16fcd927c8567789e2bd2d7944875eaad558926b30fbeac8c8a3",
+          "modifiedAt": "2026-09-13T04:59:46.628332+00:00"
+        },
+        {
+          "path": "/private/tmp/slc-VucDX9-child-contract-audit/probe.mjs",
+          "bytes": 3288,
+          "sha256": "24fdee0c7c9b7787fe3c9322568eaad7d6333c41d5b484c8db06ef00d3cca5af",
+          "modifiedAt": "2026-09-13T04:59:46.628875+00:00"
+        },
+        {
+          "path": "/private/tmp/slc-VucDX9-child-contract-audit/evidence.json",
+          "bytes": 3319,
+          "sha256": "e9731d789f816f99db3969cd1822288690dac516f0a338445da13fcacfe9462e",
+          "modifiedAt": "2026-09-13T04:59:46.629239+00:00"
+        }
+      ],
+      "artifactUnchanged": true,
+      "scope": "Read-only identity audit; no execution or artifact mutation. Exact inverse hash proves the private evidence byte change is solely the normative item citation."
+    }
+  ]
 }

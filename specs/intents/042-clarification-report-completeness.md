@@ -29,4 +29,5 @@ Reinforce complete report serialization after a real DEV omission probe identifi
 - Treat subsequent live success as observed report delivery, not proof that wording eliminates all model formatting failures.
 
 The shared prompt and unchanged strict boundary pass 44 compiler/executor/phase-recorder integration cases, including a truncated top-level report.
-Lint, build, and Spex checks pass; live rerun remains pending.
+Lint, build, and Spex checks pass.
+The C2 affected-case rerun delivered no report and therefore does not establish this guidance's effectiveness; checking the original source through the full pipeline remains pending.
