@@ -22,6 +22,7 @@ const FENCE_END = /^```\s*$/;
 const BLOCKQUOTE = /^>\s?(.*)$/;
 const PLACEHOLDER = /<([A-Za-z_$#][A-Za-z0-9_$#-]*)>/g;
 const RELAY_PLACEHOLDER_LINE = /^>\s+<[A-Za-z_$#][A-Za-z0-9_$#-]*>$/;
+const RAW_PLACEHOLDER_LINE = /^<[A-Za-z_$#][A-Za-z0-9_$#-]*>$/;
 const RESULT_BULLET = /^-\s+`([A-Za-z_$][A-Za-z0-9_$]*)`:\s+(.+)$/;
 // A result-field entry names one output property, optionally annotating its
 // ownership; the name is captured as authored so a non-identifier is reported
@@ -362,6 +363,12 @@ export function checkSourceGearsContract(
     for (const line of item.prompt) {
       if (line === '' || authoredLines.has(line)) continue;
       if (RELAY_PLACEHOLDER_LINE.test(line)) continue;
+      if (RAW_PLACEHOLDER_LINE.test(line)) {
+        findings.push(
+          `${item.id}: additional placeholder line ${JSON.stringify(line)} lacks a literal quote marker in the prompt; use ${JSON.stringify(`> > ${line}`)} in GEARS to retain ${JSON.stringify(`> ${line}`)} as prompt content`,
+        );
+        continue;
+      }
       findings.push(
         `${item.id}: prompt line is not an authored fragment: ${JSON.stringify(line)}`,
       );

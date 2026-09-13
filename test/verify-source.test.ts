@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { defaultComposePlayerPrompt } from '@sublang/playbook/xstate-runtime';
 
 import {
   checkSourceGearsContract,
@@ -270,6 +271,68 @@ When a fabricated condition holds, Captain shall prompt Coder:
       `${itemId}: relayed player field callerInput lacks a literal quote marker`,
     );
   });
+
+  it('explains the two GEARS quote layers for an additional token and delivers the exact quoted value', () => {
+    const source =
+      authoredSource([['Inspect the supplied evidence.']]) +
+      '\n\nCaptain shall relay the evidence in quotes (`>`).\n';
+    const unquoted = gearsPrompt([
+      'Inspect the supplied evidence.',
+      '<evidence>',
+    ]);
+    const quoted = gearsPrompt([
+      'Inspect the supplied evidence.',
+      '> <evidence>',
+    ]);
+    expect(checkSourceGearsContract(source, unquoted)).toEqual([
+      'FLOW-1: additional placeholder line "<evidence>" lacks a literal quote marker in the prompt; use "> > <evidence>" in GEARS to retain "> <evidence>" as prompt content',
+    ]);
+    expect(checkSourceGearsContract(source, quoted)).toEqual([]);
+    const [item] = parseGearsContract(quoted);
+    const input = {
+      stateId: 'inspect',
+      role: 'worker',
+      sourceItem: item.id,
+      prompt: item.prompt.join('\n'),
+      result: { done: 'Inspection is complete.' },
+      evidence: 'Exact evidence $& <other-token>.',
+    };
+    expect(defaultComposePlayerPrompt(input)).toBe(
+      'Inspect the supplied evidence.\n> Exact evidence $& <other-token>.',
+    );
+    expect(
+      checkSourceGearsContract(
+        source,
+        gearsPrompt([
+          'Inspect the supplied evidence.',
+          '> Evidence: <evidence>',
+        ]),
+      ),
+    ).toEqual([
+      'FLOW-1: prompt line is not an authored fragment: "> Evidence: <evidence>"',
+    ]);
+  });
+
+  it.each(['<run-results>', '<#>', '<$detail>', '<_value>', '\\<evidence\\>'])(
+    'explains an additional standalone %s while preserving authored raw tokens and plain prose',
+    (token) => {
+      const source = authoredSource([['Inspect the supplied evidence.']]);
+      const gears = gearsPrompt(['Inspect the supplied evidence.', token]);
+      const normalized = token.replace(/\\([<>])/g, '$1');
+      expect(checkSourceGearsContract(source, gears)).toEqual([
+        `FLOW-1: additional placeholder line "${normalized}" lacks a literal quote marker in the prompt; use "> > ${normalized}" in GEARS to retain "> ${normalized}" as prompt content`,
+      ]);
+      expect(
+        checkSourceGearsContract(
+          authoredSource([['Inspect the supplied evidence.', token]]),
+          gears,
+        ),
+      ).toEqual([]);
+      expect(
+        checkSourceGearsContract('Inspect the supplied evidence.', gears),
+      ).toEqual([]);
+    },
+  );
 
   it('names a result that declares a non-identifier output property', () => {
     const { source, gears } = maintained('decide');

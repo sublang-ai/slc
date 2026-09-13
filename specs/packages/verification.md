@@ -228,7 +228,7 @@ When the slc command checks a GEARS package's fidelity to the Source it was comp
 | --- | --- |
 | Every authored fragment's lines appear contiguously and in order inside at least one item's prompt. | That fragment, named by its Source line, was dropped or changed. |
 | Complete nonoverlapping authored fragment occurrences in an item have an order-preserving Source attribution; an occurrence contained in a larger fully matched fragment belongs to that larger fragment, and identical source fragments are alternative attributions of one occurrence. | That item's authored prompt fragments are out of Source order. |
-| Where the Source authors at least one fragment, every non-empty prompt line of every item is an authored fragment line or a bare quoted relay placeholder `> <token>`. | That item's prompt line is not an authored fragment. |
+| Where the Source authors at least one fragment, every non-empty prompt line of every item is an authored fragment line or a bare quoted relay placeholder `> <token>`. | That item's prompt line is not an authored fragment; for an otherwise unaccepted exact standalone `<token>` line, the finding explains that GEARS needs `> > <token>` to retain `> <token>` as prompt content. |
 | Every result field's name matches the ASCII identifier pattern `[A-Za-z_$][A-Za-z0-9_$]*` a guard name matches [[verification-13](#verification-13)]. | That item's named result declares that non-identifier output property. |
 | No result field is owned verbatim in one item and left judge-authored in another. | That field mixes verbatim and judge-authored ownership. |
 | Wherever an item's prompt line reads a relayed field's placeholder, that line carries a literal `>` quote marker. | That item's relayed field lacks a literal quote marker. |
@@ -334,7 +334,7 @@ Where synthetic definitions and GEARS exercise a preserved section beside unrela
 
 #### verification-26
 
-Where maintained and fixture Sources are paired with their GEARS packages, when the Source-fidelity check runs over each pair, it shall accept every unmutated maintained pair, plain prose without authored fragments, shared lines contained in larger matched fragments, and repeated identical fragments with an order-preserving attribution, while naming drift from an invented item, a dropped fragment, genuinely reversed nonoverlapping fragments including later repeated occurrences, an unquoted relay, a non-identifier result property, or mixed result-field ownership [[verification-25](#verification-25)].
+Where maintained and fixture Sources are paired with their GEARS packages, when the Source-fidelity check runs over each pair, it shall accept every unmutated maintained pair, plain prose without authored fragments, authored raw-token lines, shared lines contained in larger matched fragments, and repeated identical fragments with an order-preserving attribution, while naming drift from an invented item, a dropped fragment, genuinely reversed nonoverlapping fragments including later repeated occurrences, an unquoted relay with the two-layer GEARS example for an additional standalone token, a non-identifier result property, or mixed result-field ownership [[verification-25](#verification-25)].
 
 ### Link-fidelity acceptance
 
