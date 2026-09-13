@@ -161,10 +161,92 @@
       "currentInitializerAndGuideIdenticalAcrossArms": true,
       "changedVersusHistoricalV2": true,
       "actualGuidePath": "playbook/experiments/fsm-scaffold-guidance.md",
-      "runningEvidenceExcluded": "/private/tmp/slc-fixed-gears-scaffold-v3-evidence/baseline",
-      "runningEvidenceStatus": "currently running; not read or recorded as settled evidence",
+      "settledRuns": {
+        "baseline": {
+          "run": "phase-Jdsomt",
+          "path": "/private/tmp/slc-fixed-gears-scaffold-v3-evidence/baseline/phase-Jdsomt",
+          "status": "interrupted",
+          "executionElapsedMs": 600809,
+          "calls": [
+            {
+              "id": 1,
+              "status": "interrupted",
+              "elapsedMs": 601980,
+              "toolCalls": 20
+            }
+          ],
+          "sourceAndCohortPreserved": true,
+          "correctedAudit": {
+            "path": "/private/tmp/slc-scaffold-v3-baseline-Jdsomt-audit/corrected-evidence.json",
+            "bytes": 4842,
+            "sha256": "11cf59fdfca87830ada082b60e9279d24b134db159c4e4addb5aab51c31bea22",
+            "verdict": "corrected_conformance_and_continuation_pass_interrupted_phase_still_unaccepted"
+          },
+          "supersededAudit": {
+            "path": "/private/tmp/slc-scaffold-v3-baseline-Jdsomt-audit/evidence.json",
+            "supersededFindings": [
+              "gearsFsmConformance",
+              "continuationInputs",
+              "fsmCoverage"
+            ],
+            "reason": "Wrong API invocation shape; do not report those conformance, continuation, or coverage findings as real defects."
+          },
+          "mechanicalChecks": {
+            "strictTypeScript": "retained from superseded audit: pass",
+            "moduleLoad": "retained from superseded audit: pass",
+            "gearsFsmConformanceFindings": 0,
+            "continuationFindings": 0
+          }
+        },
+        "treatment": {
+          "run": "phase-ciw7B9",
+          "path": "/private/tmp/slc-fixed-gears-scaffold-v3-evidence/scaffold/phase-ciw7B9",
+          "status": "interrupted",
+          "executionElapsedMs": 600810,
+          "calls": [
+            {
+              "id": 1,
+              "status": "success",
+              "elapsedMs": 504424,
+              "toolCalls": 22
+            },
+            {
+              "id": 2,
+              "status": "interrupted",
+              "elapsedMs": 97491,
+              "toolCalls": 4
+            }
+          ],
+          "sourceAndCohortPreserved": true,
+          "audit": {
+            "path": "/private/tmp/slc-scaffold-v3-treatment-ciw7B9-audit/evidence.json",
+            "bytes": 7836,
+            "sha256": "eb593c532c38d64b0e3bb34af30e4437e77fbcc79e9d3ca56135fdb98ded9f57",
+            "verdict": "treatment_mechanical_findings_present_interrupted_phase_unaccepted"
+          },
+          "artifact": {
+            "path": "/private/tmp/slc-fixed-gears-scaffold-v3-evidence/scaffold/phase-ciw7B9/work/workflow.playbook/workflow.fsm.ts",
+            "bytes": 38381,
+            "sha256": "3967050afdb58d85e5133fce207c3a592d766384ac0e82d0fd1bcfb9199d3d9c"
+          },
+          "mechanicalChecks": {
+            "strictTypeScriptFindings": 0,
+            "moduleLoad": "pass",
+            "gearsFsmConformanceFindings": [
+              "CODE-3: FSM playbook text does not preserve literal substitutions and quoted continuation lines",
+              "CODE-4: FSM playbook text does not preserve literal substitutions and quoted continuation lines"
+            ],
+            "continuationFindings": 0
+          }
+        }
+      },
       "performanceAccepted": false,
-      "fullWorkflowAccepted": false
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "guidanceRetentionEarned": false,
+      "selectedForNextFullRun": false,
+      "helperInvocationEvidence": "not inferred; no helper-use claim without recorded evidence",
+      "limits": "Both arms interrupted at the deadline. Retain prototype/evidence historically only; do not claim accepted performance, full workflow acceptance, or helper use beyond recorded evidence."
     }
   },
   "phaseRuns": [
@@ -1865,6 +1947,57 @@
       "implementedGateClaimed": false,
       "oldArtifactAccepted": false,
       "guardSearchLimit": "Existing guard search can synthesize missing fields; failed closed probing was not generalized into guard-read requiredness inference."
+    },
+    "c4V6FullCodeCancellation": {
+      "run": "compile-sTXoB6",
+      "invocation": "invocation-jyb4yc",
+      "status": "coordinator_cancelled_not_timeout_or_acceptance",
+      "evidence": {
+        "path": "/private/tmp/slc-c4-v6-compile-sTXoB6-cancellation-audit/evidence.json",
+        "bytes": 4618,
+        "sha256": "86653eeb436c9532e94e5f9853022fbc2859bc750256a4773bc6cdd7dbf699b7"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c4-complex-full-evidence/compile-sTXoB6/summary.json",
+        "bytes": 35364,
+        "sha256": "9959bd6507fbec00a5fbfa5c10941276aca586747a067f6b39bd3d1b2b76938a"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c4-complex-full-evidence/invocation-jyb4yc/proof.json",
+        "bytes": 2805610,
+        "sha256": "37f078d84072e8f617a8522b30cd4221d30e3add831836464185623da26dd586",
+        "inputEntries": 11907,
+        "beforeAfterEntriesUnchanged": true
+      },
+      "wrapperSignal": {
+        "signal": "SIGINT",
+        "pid": 1248,
+        "reason": "coordinator cancellation after repeated observed omission of `question: <verbatim final text>` in raw/optimized GEARS"
+      },
+      "compileElapsedMs": 589044,
+      "overallElapsedMs": 589054,
+      "phaseElapsedMs": {
+        "text2gears": 114906,
+        "optimize": 11276,
+        "gears2fsm": 459464,
+        "linkCancelled": 3345
+      },
+      "rawOptimizedGears": {
+        "bytes": 8479,
+        "sha256": "7961ba623023e00f7043802652edd6648241c769e316600e5c0aeabe89d30414",
+        "observedOmission": "`question: <verbatim final text>`"
+      },
+      "acceptedPhaseArtifactsBeforeCancel": [
+        "text2gears",
+        "optimize",
+        "gears2fsm"
+      ],
+      "cancelLandedAt": "link",
+      "runtimeAcceptance": false,
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "distinction": "Observed raw/optimized GEARS omission here is distinct from the proven CKr2Ni actual reconciler/bridge question-field failure.",
+      "limits": "Coordinator-cancelled wrapper run; no timeout claim, no runtime acceptance, no full workflow acceptance, and no new runtime claim."
     }
   }
 }
