@@ -485,6 +485,213 @@
         },
         "observationCorrection": "The first probe consumed a shared label array; adjudication supersedes only its derived presence booleans using the recorded actual finalText and prompt strings. No recorded call or runtime result was changed."
       }
+    },
+    {
+      "run": "compile-GQcJFN",
+      "status": "failure",
+      "scope": "code-full-materializer",
+      "compilerRoot": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "pipeline": "/private/tmp/playbook-13.2-common-v8-full",
+      "source": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/code.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/summary.json",
+        "bytes": 40775,
+        "sha256": "5d2738566cd8c230eb3e52570477f1a08b6f122ac21439f0d85162ff4c0b2566"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/invocation-Gr0KXT/proof.json",
+        "bytes": 2737212,
+        "sha256": "8fd11385672aa91a828c2f6264a9684c23e73ebec0631b2d37cc99fc474baf0d"
+      },
+      "log": {
+        "path": "/private/tmp/slc-c7-v8-code-full-v2.log",
+        "bytes": 12684,
+        "sha256": "5aa1dbe1afb7058a655d847a4d31af1afc3e0b7b6199a1f053a80eae936d5396"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 738641,
+        "outcome": null
+      },
+      "elapsedMs": 742618,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 83229
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 12813
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 466102
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 175820
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "resumed": false,
+          "toolCalls": 4,
+          "elapsedMs": 83718
+        },
+        {
+          "phase": "optimize",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 13312
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 10,
+          "elapsedMs": 381579
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 6,
+          "elapsedMs": 83829
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 7,
+          "elapsedMs": 174484
+        }
+      ],
+      "callCount": 5,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.gears.raw.md",
+          "bytes": 9967,
+          "sha256": "327af44e36ffb06d4983e1cc3f70ec23c372de6e1888d09fea4eb8dc9289adf9"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.gears.md",
+          "bytes": 9967,
+          "sha256": "327af44e36ffb06d4983e1cc3f70ec23c372de6e1888d09fea4eb8dc9289adf9"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.fsm.ts",
+          "bytes": 45774,
+          "sha256": "e6e3601ad91db82a132b04a6d09099918b6a0222b7b2bf58a6bacd4a7be3467c"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.playbook.ts",
+          "bytes": 9014,
+          "sha256": "0e2cac68d33aeb5e401a6298a1f3f0b271b09bb983b8bd7c8e6c8e6642daaafb"
+        }
+      ],
+      "validation": {
+        "ok": false,
+        "typecheck": {
+          "ok": true,
+          "elapsedMs": 1123
+        },
+        "entryImport": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null
+        },
+        "suite": {
+          "ok": false,
+          "code": 1,
+          "terminationSignal": null
+        },
+        "testFiles": 4,
+        "elapsedMs": 3965,
+        "tests": {
+          "passed": 7,
+          "failed": 1
+        }
+      },
+      "verificationSummary": {
+        "strictTypeScript": true,
+        "entryImport": true,
+        "promptContract": true,
+        "gearsFsmConformance": true,
+        "introspection": true,
+        "generatedSuiteRun": true,
+        "generatedSuitePassed": false
+      },
+      "generatedCoverageFindings": [
+        "state reviewDirectPhase: nested playbook onDone arm 2 is unsatisfiable under probing",
+        "state reviewNewIrPhase: nested playbook onDone arm 2 is unsatisfiable under probing",
+        "state reviewIrTaskPhase: nested playbook onDone arm 3: unsupported repeated-invocation path"
+      ],
+      "protectedInputs": {
+        "before": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "materializer": {
+        "used": true,
+        "mode": "actual flat-labelled materializer",
+        "evidence": "generated entry header names slc/materialize-link.mjs and the linked artifact uses the descriptor-shaped flat entry"
+      },
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "runtimeAcceptanceRun": false,
+      "sourceClarification": false,
+      "sourceAwareReachabilityProof": "complete: read-only coverage audit shows redundant final onDone fallbacks",
+      "diagnosis": {
+        "scope": "coverage-only; no runtime acceptance or matched speed result",
+        "evidence": "/private/tmp/slc-GQcJFN-coverage-audit/evidence.json",
+        "sha256": "c646a74022daabdf3a783e12196d5801a930b137c0429faf805c86cb85824582",
+        "finding": "The three generated coverage findings are redundant final onDone fallbacks after earlier guards already handle successful child results; the checker still rejects the original artifact."
+      },
+      "compilerCommit": "c7419edcf1f609bc9bcb9074b9414586f9d7be03",
+      "pipelineGeneration": "v8",
+      "privateRuntimePatch": "@sublang/playbook package bytes patched from upstream IR090 runtime files; package/lock version remains 13.2.0 and is not an unmodified published install",
+      "findings": [
+        "Compilation returned ok after all four phases, but the full benchmark failed generated-suite validation.",
+        "A read-only actual XState audit covered 12 cases and found all three retained coverage findings are redundant final onDone fallbacks, not missing Source behavior.",
+        "Original full benchmark status remains failure; no runtime acceptance, matched speed ratio, source change, verifier relaxation, or provider rerun occurred."
+      ],
+      "coverageAudit": {
+        "scope": "read-only actual XState coverage diagnosis; original full benchmark remains failed",
+        "evidence": {
+          "path": "/private/tmp/slc-GQcJFN-coverage-audit/evidence.json",
+          "bytes": 22753,
+          "sha256": "c646a74022daabdf3a783e12196d5801a930b137c0429faf805c86cb85824582"
+        },
+        "readme": {
+          "path": "/private/tmp/slc-GQcJFN-coverage-audit/README.md",
+          "bytes": 7049,
+          "sha256": "18d4060b5142689c0f0a5d52f152ef276a7f06c3468f00c7d4d5bd358df318c5"
+        },
+        "providers": 0,
+        "cases": 12,
+        "checkerElapsedMs": 500,
+        "checkerTimeoutMs": 300000,
+        "artifactFilesUnchanged": 24,
+        "dependencyEntriesUnchanged": 11660,
+        "contextInjection": false,
+        "artifactModification": false,
+        "finding": "All three reported final onDone arms are unreachable redundant fallbacks; all six real review entries assign a nonblank commit before reaching a review state.",
+        "retainedBenchmarkStatus": "failure"
+      }
     }
   ],
   "preparedInputs": {
@@ -793,6 +1000,99 @@
         "shared": "all wrappers protect pipeline tree, source, C7 compiler inventory, and C7 dependency inventory before and after; link also protects the link target; all import benchmarkCompile from the C7 compiler root and use real default adapter with observational executor wrappers"
       },
       "notes": "Private C7 preparation overlays exactly two @sublang/playbook runtime source files from upstream IR090 while package and lock metadata remain 13.2.0; this record adds no accepted runtime, full CODE, full DEV, or timing result."
+    },
+    "v9": {
+      "status": "prepared-only",
+      "pipelineGeneration": "v9",
+      "corrections": "Definition-only IR091 source-state preservation guidance added to the common FSM producer relative to v8; no scaffold selected and no provider acceptance claimed.",
+      "baselinePipeline": "/private/tmp/playbook-13.2-common-v9-baseline",
+      "fullPipeline": "/private/tmp/playbook-13.2-common-v9-full",
+      "readiness": {
+        "path": "/private/tmp/playbook-13.2-common-v9-readiness/readiness.json",
+        "bytes": 4355,
+        "sha256": "bfe705884ef3c2c821c5e848b1040c65d6faad2fe8e8ac266c54665bc68ca616"
+      },
+      "baselineProof": {
+        "path": "/private/tmp/playbook-13.2-common-v9-baseline/experiment-proof.json",
+        "bytes": 43313,
+        "sha256": "a7cec2eb8efc8d4bc3a3def53060eade59fd92e43a904a9ddebffb6bf8abe1dc"
+      },
+      "fullProof": {
+        "path": "/private/tmp/playbook-13.2-common-v9-full/experiment-proof.json",
+        "bytes": 43309,
+        "sha256": "e9f9ad9603a9866c18b320a06078a20a3680bc106df56eaa1b8389da27edfab5"
+      },
+      "commonProducerSha256": "d6ce9eb0d1c012956a5df8691d66fd8fda0e5a827edd12eba288827af07e2ad0",
+      "inverseToV8ProducerSha256": "4e840accb47c1924be6e63a483f928a592d36edb07c57be82dbecff59b022ce9",
+      "armDifference": {
+        "changedFiles": ["experiment-proof.json", "playbook/link.md"],
+        "verdict": "only playbook/link.md differs between pipeline arms; experiment-proof.json differs by mode/output metadata"
+      },
+      "v8ToV9DefinitionDelta": {
+        "baseline": [
+          {
+            "path": "playbook/gears2fsm.md",
+            "v8Sha256": "4e840accb47c1924be6e63a483f928a592d36edb07c57be82dbecff59b022ce9",
+            "v9Sha256": "d6ce9eb0d1c012956a5df8691d66fd8fda0e5a827edd12eba288827af07e2ad0"
+          }
+        ],
+        "full": [
+          {
+            "path": "playbook/gears2fsm.md",
+            "v8Sha256": "4e840accb47c1924be6e63a483f928a592d36edb07c57be82dbecff59b022ce9",
+            "v9Sha256": "d6ce9eb0d1c012956a5df8691d66fd8fda0e5a827edd12eba288827af07e2ad0"
+          }
+        ],
+        "verdict": "only playbook/gears2fsm.md changes among checked pipeline definition bytes"
+      },
+      "focusedValidation": {
+        "command": "PLAYBOOK_EXPERIMENT_COMPILER=/private/tmp/slc-c7-compiler-y4iln8vx ./node_modules/.bin/vitest run src/link-experiment-13.2.test.ts --reporter=verbose",
+        "passedTests": 11,
+        "providerCalls": false
+      },
+      "compilerRoot": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "c7EvidenceRoot": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence",
+      "c7PrivateRuntimePatchNotice": "@sublang/playbook remains version 13.2.0 in package and lock metadata, but two installed runtime source files are private patched bytes from upstream IR090; do not describe this as an unmodified published install.",
+      "c7RuntimePatch": {
+        "upstreamRepo": "/private/tmp/playbook-complex-performance",
+        "upstreamCommit": "4b51a7edfd2670f6a4cb4f23285a897ae836e612",
+        "upstreamParent": "3db1d9d707ca6a34ce79c83924fd6bc72809934b",
+        "subject": "fix(runtime): retain question outcome origin",
+        "commitChangedFiles": [
+          "specs/intents/090-pending-question-outcome-origin.md",
+          "specs/packages/playbook-runtime.md",
+          "src/pending-question-origin.test.ts",
+          "src/xstate-playbook-runtime.js",
+          "src/xstate-playbook-runtime.ts"
+        ],
+        "overlaidRuntimeFiles": [
+          "src/xstate-playbook-runtime.js",
+          "src/xstate-playbook-runtime.ts"
+        ],
+        "overlayPatchSha256": "91a1059e34ec59495d0f435a4200602512b891bb651376f2145434e40d3e92a9",
+        "files": [
+          {
+            "packagePath": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.ts",
+            "upstreamPath": "src/xstate-playbook-runtime.ts",
+            "originalSha256": "c24b37ab859c5d2bdfe01b9aa8e5973f32ef5f7c87f6b9fd05349337c36a1ee9",
+            "patchedSha256": "7c856c0f45608464f764c3a229c8e55ad1937f5171f5d48947909e5544220d48",
+            "bytes": 336684
+          },
+          {
+            "packagePath": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.js",
+            "upstreamPath": "src/xstate-playbook-runtime.js",
+            "originalSha256": "e3137c9b7be363c410d143e1e85524bbaf3626fb7eb0b9b0f8c11e7c1c859b5b",
+            "patchedSha256": "de4480b705833fa764e4724b25a4932f72616adda74e55934aa29bd39cbc79f5",
+            "bytes": 320456
+          }
+        ],
+        "verifiedAgainstOriginalPackage": true,
+        "allowedOverlayDeltas": [
+          "runtime question-origin retention in xstate-playbook-runtime.ts/.js only"
+        ]
+      },
+      "selectionEvidenceSha256": "3dbc2a431fb638538d3d29f9e95f79d71a078fc5be879b0f8f6236d2bddb08a3",
+      "notes": "Prepared inputs only. The pipeline definitions keep Playbook 13.2 provenance, while the supplied C7 compiler dependency graph includes the private IR090 runtime overlay recorded in C7 evidence."
     }
   }
 }
