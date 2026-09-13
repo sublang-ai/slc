@@ -265,7 +265,7 @@ assert.match(
 
 assert.deepEqual(manifest.scripts.build.split(' && ').slice(0, 2), [
   'rm -rf dist',
-  'tsc',
+  'node node_modules/@typescript/native/bin/tsc --project tsconfig.json',
 ]);
 
 assert.equal(workflow.permissions['id-token'], 'write');

@@ -42,15 +42,11 @@ export interface Phase {
 
 /** Machine-readable reason a `## Formats` table was refused. */
 export type FormatsErrorCode =
-  | 'missing-formats'
-  | 'malformed-formats'
-  | 'missing-role';
+  'missing-formats' | 'malformed-formats' | 'missing-role';
 
 /** Machine-readable reason a phase was refused. */
 export type PhaseErrorCode =
-  | FormatsErrorCode
-  | 'filename-mismatch'
-  | 'extension-conflict';
+  FormatsErrorCode | 'filename-mismatch' | 'extension-conflict';
 
 /** Raised when a phase definition is refused under DR-001. */
 export class PhaseError extends Error {

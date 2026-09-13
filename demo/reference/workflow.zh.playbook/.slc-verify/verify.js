@@ -32,7 +32,44 @@ import { hashFile } from './hash.js';
  */
 export const NEEDS_BOSS_REPLY = 'needsBossReply';
 export const BOSS_QUESTION_MARKER = 'Output shall include `question:';
-/** Artifact schema selected only by a complete reviewed Playbook provenance. */
+/**
+ * True when the declaration admits the roleless schema-3 `composed-v3`
+ * generation: `RUNTIME_ABI` is exactly `1` and `SUPPORTED_ARTIFACT_SCHEMAS`
+ * contains `3` (DR-028).
+ */
+export function declaresComposedV3(declaration) {
+  return (
+    declaration.runtimeAbi === 1 &&
+    Array.isArray(declaration.supportedArtifactSchemas) &&
+    declaration.supportedArtifactSchemas.includes(3)
+  );
+}
+/** Names a declaration for fail-closed diagnostics. */
+export function describeRuntimeDeclaration(declaration) {
+  const abi =
+    declaration.runtimeAbi === undefined
+      ? 'no RUNTIME_ABI'
+      : `RUNTIME_ABI ${renderDeclared(declaration.runtimeAbi)}`;
+  const schemas =
+    declaration.supportedArtifactSchemas === undefined
+      ? 'no SUPPORTED_ARTIFACT_SCHEMAS'
+      : `SUPPORTED_ARTIFACT_SCHEMAS ${renderDeclared(declaration.supportedArtifactSchemas)}`;
+  return `${declaration.provenance} declares ${abi} and ${schemas}`;
+}
+function renderDeclared(value) {
+  try {
+    const json = JSON.stringify(value);
+    return json === undefined ? String(value) : json;
+  } catch {
+    return String(value);
+  }
+}
+/**
+ * Artifact schema recorded for an exact reviewed Playbook provenance: the
+ * historical map kept as recorded (DR-028). A later release supplies its
+ * schema through the installed engine's declaration instead
+ * ({@link resolveArtifactSchemaForVerification}).
+ */
 export function artifactSchemaForPlaybookProvenance(provenance) {
   switch (provenance) {
     case '@sublang/playbook@0.10.0':
@@ -287,6 +324,17 @@ export function parseGearsItems(gears) {
   flush();
   return items;
 }
+function gearsResultFindings(items) {
+  return items.flatMap((item) =>
+    (item.resultFindings ?? []).map(
+      (finding) => `GEARS item ${item.id}: ${finding}`,
+    ),
+  );
+}
+/** Existing GEARS result-parser findings, without requiring a consumer FSM. */
+export function checkGearsResultContract(gears) {
+  return gearsResultFindings(parseGearsItems(gears));
+}
 const ROLE_DECLARATION = /^(?:#{1,6}\s+(Roles|Players)|(Roles|Players):)\s*$/;
 /** Canonical lowercase local-role id used by schema-3 artifacts. */
 export function canonicalRoleId(name) {
@@ -504,6 +552,13 @@ function metadataRole(state) {
   if (typeof playbook !== 'object' || playbook === null) return undefined;
   return playbook.role;
 }
+/** The published terminal kind a root final state declares, if any. */
+function metadataTerminal(state) {
+  if (typeof state.meta !== 'object' || state.meta === null) return undefined;
+  const playbook = state.meta.playbook;
+  if (typeof playbook !== 'object' || playbook === null) return undefined;
+  return playbook.terminal;
+}
 function stateIdConsistencyFindings(node, inputStateId) {
   if (!isNonEmptyString(inputStateId)) return [];
   const findings = [];
@@ -551,14 +606,49 @@ function structuredStateIdentityFindings(nodes) {
   }
   return findings;
 }
+/**
+ * A schema-3 machine publishes each of its own terminal outcomes as
+ * `success` or `failure`, so a caller reads the child's meaning from the
+ * state it reached rather than from its output fields. Only the machine's own
+ * root final states carry that kind: a final inside a parallel region merely
+ * stages the join and publishes no workflow outcome.
+ *
+ * Artifacts compiled before the definition declared the kind carry none at
+ * all, and they are retained rather than rebuilt, so the requirement engages
+ * once the artifact declares one — a partly declared artifact is drift.
+ */
+function terminalKindFindings(nodes, schema3) {
+  if (!schema3) return [];
+  const finals = nodes.filter(
+    ({ path, state }) => path.length === 1 && state.type === 'final',
+  );
+  if (!finals.some(({ state }) => metadataTerminal(state) !== undefined)) {
+    return [];
+  }
+  const findings = [];
+  for (const { statePath, state } of finals) {
+    const terminal = metadataTerminal(state);
+    if (terminal === undefined) {
+      findings.push(
+        `FSM final state ${statePath}: state.meta.playbook.terminal is missing while other final states declare it`,
+      );
+    } else if (terminal !== 'success' && terminal !== 'failure') {
+      findings.push(
+        `FSM final state ${statePath}: state.meta.playbook.terminal ${JSON.stringify(terminal)} is neither "success" nor "failure"`,
+      );
+    }
+  }
+  return findings;
+}
 function enumerateCaptainBindings(config) {
   const out = [];
+  const initial = initialMachineContext(config) ?? {};
   for (const node of walkStateNodes(config)) {
     for (const invoke of normalizeInvokes(node.state.invoke)) {
       const source = invokeSource(invoke.src);
       const explicitlyWorkActor = source === 'captain' || source === 'player';
       if (!explicitlyWorkActor && invoke.src !== undefined) continue;
-      const inspected = invocationInput(invoke);
+      const inspected = invocationInput(invoke, initial);
       if ('error' in inspected) {
         if (explicitlyWorkActor) {
           const actor = source === 'player' ? 'player' : 'captain';
@@ -717,10 +807,11 @@ export function enumerateCaptainStates(config) {
 }
 function enumeratePlaybookBindings(config) {
   const out = [];
+  const initial = initialMachineContext(config) ?? {};
   for (const node of walkStateNodes(config)) {
     for (const invoke of normalizeInvokes(node.state.invoke)) {
       if (invokeSource(invoke.src) !== 'playbook') continue;
-      const inspected = invocationInput(invoke);
+      const inspected = invocationInput(invoke, initial);
       if ('error' in inspected) {
         out.push({
           state: malformedPlaybookState(
@@ -773,6 +864,7 @@ function enumeratePlaybookBindings(config) {
           const playbookIdSentinel = sentinelFor(fields.playbookIdContext);
           const textSentinel = sentinelFor(fields.textContext);
           const wired = invocationInput(invoke, {
+            ...initial,
             [fields.playbookIdContext]: playbookIdSentinel,
             [fields.textContext]: textSentinel,
           });
@@ -852,6 +944,7 @@ export function enumeratePlaybookStates(config) {
  */
 export function enumerateScriptStates(config) {
   const out = [];
+  const initial = initialMachineContext(config) ?? {};
   for (const node of walkStateNodes(config)) {
     for (const invoke of normalizeInvokes(node.state.invoke)) {
       if (invokeSource(invoke.src) !== 'script') continue;
@@ -863,7 +956,7 @@ export function enumerateScriptStates(config) {
         ...nestedStatePath(node),
         bindingFindings: [finding],
       });
-      const inspected = invocationInput(invoke);
+      const inspected = invocationInput(invoke, initial);
       if ('error' in inspected) {
         out.push(
           malformed(
@@ -1098,6 +1191,15 @@ export function checkGearsFsmConformance(gears, config, options = {}) {
   const playbookStates = enumeratePlaybookStates(config);
   const scriptStates = enumerateScriptStates(config);
   const findings = [];
+  if (
+    typeof config.meta === 'object' &&
+    config.meta !== null &&
+    Object.hasOwn(config.meta, 'playbook')
+  ) {
+    findings.push(
+      'FSM machine root declares meta.playbook; public playbook metadata belongs only to state nodes under states',
+    );
+  }
   for (const { state, nearMiss } of controllerNearMisses) {
     const detail =
       nearMiss.missing.length > 0
@@ -1107,13 +1209,15 @@ export function checkGearsFsmConformance(gears, config, options = {}) {
       `FSM state ${state.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
     );
   }
-  findings.push(...structuredStateIdentityFindings(walkStateNodes(config)));
+  const nodes = walkStateNodes(config);
+  findings.push(...structuredStateIdentityFindings(nodes));
   findings.push(...roleContract.findings);
-  const requiresConcurrentRoleSets =
+  const schema3 =
     roleContract.generation === 'schema-3' ||
     controller ||
     options.artifactSchema === 3;
-  if (requiresConcurrentRoleSets) {
+  findings.push(...terminalKindFindings(nodes, schema3));
+  if (schema3) {
     const actual = concurrentRoleSets(options.concurrentRoleSets);
     if (actual === undefined) {
       findings.push('schema-3 FSM exports no valid concurrentRoleSets array');
@@ -1125,13 +1229,7 @@ export function checkGearsFsmConformance(gears, config, options = {}) {
       );
     }
   }
-  for (const item of items) {
-    findings.push(
-      ...(item.resultFindings ?? []).map(
-        (finding) => `GEARS item ${item.id}: ${finding}`,
-      ),
-    );
-  }
+  findings.push(...gearsResultFindings(items));
   for (const state of states) {
     findings.push(
       ...(state.bindingFindings ?? []).map(
@@ -1601,11 +1699,14 @@ export function pinIntrospection(config) {
  * linked composer replaces. The derived facts are pinned into the emitted test
  * so contract drift fails it (DR-009).
  */
-/** The exact continuation preamble the link contract mandates (link.md). */
+/** The historical full continuation format, retained for schema-1 and old composers. */
 export const CONTINUATION_PREAMBLE =
   'You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.';
 export const BOSS_QUESTION_LABEL = 'Boss question:';
 export const BOSS_REPLY_LABEL = 'Boss reply:';
+const CURRENT_CONTINUATION_PREAMBLE =
+  'Continue the same task using Boss’s reply below.';
+const CURRENT_BOSS_QUESTION_LABEL = 'Your previous question:';
 // Direct Captain prompts cross the callCaptain boundary and therefore must
 // not acquire player-only routing or session-control text. Match the stable
 // labelled form as well as natural-language variants; occurrence deltas below
@@ -1630,14 +1731,18 @@ const sentinelFor = (field) => `«${field}»`;
  * Traces which context fields an `invoke.input` thunk reads, via a recording
  * proxy context; reads collected up to a throw are kept.
  */
-export function probeContextReads(inputFn) {
+export function probeContextReads(
+  inputFn,
+  /** The machine's initial context, so a typed field does not truncate the trace. */
+  initial = {},
+) {
   const reads = new Set();
   const context = new Proxy(
-    {},
+    { ...initial },
     {
-      get(_target, prop) {
+      get(target, prop) {
         if (typeof prop === 'string') reads.add(prop);
-        return undefined;
+        return Reflect.get(target, prop);
       },
       has() {
         return true;
@@ -1667,6 +1772,112 @@ function ordinaryContext(reads) {
     reads.filter((field) => !BOSS_CONTEXT_FIELDS.includes(field)),
   );
 }
+/**
+ * The machine's resolved initial context (verification-5): a literal record, or
+ * the config's factory resolved with the declared initial input, so a typed
+ * context field an ordinary turn reads keeps its initial shape instead of a
+ * string sentinel. Returns undefined when no initial snapshot can be produced
+ * without running the machine — the caller then degrades to sentinels alone.
+ */
+function initialMachineContext(config) {
+  const declared = config.context;
+  if (declared === undefined) return {};
+  if (typeof declared === 'object' && declared !== null) {
+    return { ...declared };
+  }
+  if (typeof declared !== 'function') return undefined;
+  try {
+    const resolved = declared({
+      input: {},
+      spawn: () => undefined,
+      self: undefined,
+      event: { type: 'xstate.init' },
+    });
+    return typeof resolved === 'object' && resolved !== null
+      ? { ...resolved }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+/**
+ * The context an ordinary-turn probe drives an `invoke.input` thunk with: the
+ * machine's initial context, overlaid with one string sentinel per traced read
+ * whose initial value is absent or itself a string, and never a Boss-reply
+ * field (verification-5).
+ */
+function ordinaryTurnContext(
+  reads,
+  initial,
+  /** Traces the Boss-reply fields too, for wiring capture rather than a turn. */
+  includeBossFields = false,
+) {
+  if (initial === undefined) {
+    return includeBossFields ? sentinelContext(reads) : ordinaryContext(reads);
+  }
+  const context = { ...initial };
+  if (!includeBossFields) {
+    for (const field of BOSS_CONTEXT_FIELDS) delete context[field];
+  }
+  for (const field of reads) {
+    if (!includeBossFields && BOSS_CONTEXT_FIELDS.includes(field)) continue;
+    const current = context[field];
+    if (current === undefined || typeof current === 'string') {
+      context[field] = sentinelFor(field);
+    }
+  }
+  return context;
+}
+// Input fields the composition contract itself owns: a placeholder naming one
+// of them relays no runtime value, so the probe never overwrites it.
+const CONTRACT_INPUT_FIELDS = [
+  'prompt',
+  'result',
+  'stateId',
+  'sourceItem',
+  'role',
+  'player',
+  ...BOSS_CONTEXT_FIELDS,
+];
+/** The canonical field a `<kebab-token>` placeholder relays: its segments joined camel-case. */
+function placeholderField(token) {
+  const segments = token.replace(/^<|>$/g, '').split('-');
+  return segments
+    .map((segment, index) =>
+      index === 0
+        ? segment
+        : segment.charAt(0).toUpperCase() + segment.slice(1),
+    )
+    .join('');
+}
+/**
+ * Overlays one string sentinel on every placeholder-derived input field the
+ * prompt relays, so a field the machine's initial context leaves empty or
+ * derives through a typed value still evidences substitution (verification-5).
+ * Returns the probed input and the sentinel field names it carries.
+ */
+function withPlaceholderValues(state, input) {
+  if (typeof input !== 'object' || input === null) return { input, fields: [] };
+  const record = input;
+  const probed = { ...record };
+  const fields = [];
+  for (const token of placeholdersIn(state.prompt)) {
+    const field = placeholderField(token);
+    if (field === '' || CONTRACT_INPUT_FIELDS.includes(field)) continue;
+    if (typeof record[field] !== 'string') continue;
+    probed[field] = sentinelFor(field);
+    if (!fields.includes(field)) fields.push(field);
+  }
+  return { input: probed, fields };
+}
+/** Every canonical local role the artifact's player states declare (verification-1). */
+function declaredLocalRoles(config) {
+  const roles = new Set();
+  for (const state of enumerateCaptainStates(config)) {
+    if (state.role !== undefined) roles.add(state.role);
+  }
+  return [...roles].sort();
+}
 function carriesSentinel(value, sentinel) {
   try {
     return (JSON.stringify(value) ?? '').includes(sentinel);
@@ -1681,13 +1892,16 @@ function carriesSentinel(value, sentinel) {
  */
 export function capturePromptContract(config) {
   const rows = [];
+  const initial = initialMachineContext(config);
   for (const binding of enumerateCaptainBindings(config)) {
     const { state, inputFn } = binding;
     if (typeof inputFn !== 'function') continue;
-    const reads = probeContextReads(inputFn);
+    const reads = probeContextReads(inputFn, initial);
     const wires = {};
     try {
-      const input = inputFn({ context: sentinelContext(reads) });
+      const input = inputFn({
+        context: ordinaryTurnContext(reads, initial, true),
+      });
       if (typeof input === 'object' && input !== null) {
         for (const [key, value] of Object.entries(input)) {
           const carried = reads.filter((field) =>
@@ -1719,17 +1933,19 @@ export function capturePromptContract(config) {
  */
 export function deriveSubstitutions(config, compose, actor) {
   const out = {};
+  const roles = declaredLocalRoles(config);
+  const initial = initialMachineContext(config);
   for (const binding of enumerateCaptainBindings(config)) {
     const { state, inputFn } = binding;
     if (actor !== undefined && state.actor !== actor) continue;
     if (typeof inputFn !== 'function') continue;
     try {
-      const reads = probeContextReads(inputFn);
-      const composed = composeForState(
-        compose,
+      const reads = probeContextReads(inputFn, initial);
+      const probed = withPlaceholderValues(
         state,
-        inputFn({ context: ordinaryContext(reads) }),
+        inputFn({ context: ordinaryTurnContext(reads, initial) }),
       );
+      const composed = composeForState(compose, state, probed.input, roles);
       if (typeof composed !== 'string') {
         out[state.stateId] = [];
         continue;
@@ -1740,7 +1956,12 @@ export function deriveSubstitutions(config, compose, actor) {
       // hide valid evidence, while merely deleting a token still cannot
       // masquerade as substitution.
       const evidenced = new Set();
-      const promptReads = promptSentinelFields(state, reads);
+      const promptReads = promptSentinelFields(
+        state,
+        reads,
+        probed.fields,
+        roles,
+      );
       for (const line of state.prompt.split('\n')) {
         for (const token of matchPromptBody(line, composed, promptReads)
           ?.substitutions ?? []) {
@@ -1756,17 +1977,94 @@ export function deriveSubstitutions(config, compose, actor) {
   }
   return out;
 }
+/** The shared input-only portion of the canonical continuation probe. */
+function probeContinuationInput(state, inputFn, initial, artifactSchema) {
+  const question = sentinelFor('question');
+  const reply = sentinelFor('bossReply');
+  const pendingBossQuestion = {
+    ...(artifactSchema === 3
+      ? state.actor === 'captain'
+        ? { asker: { kind: 'captain' } }
+        : { asker: { kind: 'role', roleId: state.role ?? '' } }
+      : { player: state.actor === 'captain' ? 'Captain' : state.player }),
+    questionId: state.stateId,
+    resumeStateId: state.stateId,
+    sourceItem: state.sourceItem,
+    question,
+  };
+  return {
+    ...withPlaceholderValues(
+      state,
+      inputFn({
+        context: {
+          ...ordinaryTurnContext(probeContextReads(inputFn, initial), initial),
+          pendingBossQuestion,
+          bossReply: reply,
+          pendingBossQuestions: { [state.stateId]: pendingBossQuestion },
+          bossReplies: { [state.stateId]: reply },
+        },
+      }),
+    ),
+    question,
+    reply,
+  };
+}
+function continuationInputFinding(stateId, input, question, reply) {
+  return !carriesSentinel(input, question) || !carriesSentinel(input, reply)
+    ? `${stateId}: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn`
+    : undefined;
+}
+/** Known-schema FSM input checks, without requiring a linked composer. */
+export function checkFsmContinuationInputs(config, artifactSchema) {
+  if (isControllerMachine(config)) return [];
+  const initial = initialMachineContext(config);
+  const findings = [];
+  for (const { state, inputFn } of enumerateCaptainBindings(config)) {
+    if (
+      typeof inputFn !== 'function' ||
+      !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)
+    )
+      continue;
+    try {
+      const { input, question, reply } = probeContinuationInput(
+        state,
+        inputFn,
+        initial,
+        artifactSchema,
+      );
+      const finding = continuationInputFinding(
+        state.stateId,
+        input,
+        question,
+        reply,
+      );
+      if (finding !== undefined) findings.push(finding);
+    } catch (error) {
+      findings.push(
+        `${state.stateId}: invoke.input threw on a continuation turn: ${messageOf(error)}`,
+      );
+    }
+  }
+  return findings;
+}
 /**
  * Checks the linked composer against the link contract for every captain state
  * (verification-5), returning findings (empty when conformant): the prompt body is
  * preserved modulo substituted placeholders, the adjudicator-facing Boss-reply
  * contract never leaks into a player prompt, no continuation appears on an
- * ordinary turn, and a Boss-reply continuation turn opens with the exact
- * preamble and labelled Q&A blocks before the body.
+ * ordinary turn, and a Boss-reply continuation turn opens with a supported exact
+ * prefix. Only an explicitly resumed schema-3 player may omit the question.
  */
 export function checkPromptComposition(opts) {
   const findings = [];
   const controller = isControllerMachine(opts.config);
+  const roles = declaredLocalRoles(opts.config);
+  const initial = initialMachineContext(opts.config);
+  if (initial === undefined) {
+    opts.diagnostics?.push(
+      'the machine has no resolvable initial context; ordinary-turn input is synthesized from context sentinels alone',
+    );
+  }
   const schemaResolution = resolveArtifactSchemaForVerification({
     config: opts.config,
     ...(opts.artifactSchema === undefined
@@ -1787,166 +2085,164 @@ export function checkPromptComposition(opts) {
     const { state, inputFn } = binding;
     if (opts.actor !== undefined && state.actor !== opts.actor) continue;
     if (typeof inputFn !== 'function') continue;
-    const reads = probeContextReads(inputFn);
-    const promptReads = promptSentinelFields(state, reads);
+    const reads = probeContextReads(inputFn, initial);
     const substituted = substitutions[state.stateId] ?? [];
-    let ordinary;
-    try {
-      ordinary = composeForState(
-        opts.compose,
-        state,
-        inputFn({ context: ordinaryContext(reads) }),
-      );
-      if (typeof ordinary !== 'string') {
-        throw new Error(`${composerName} returned a non-string value`);
-      }
-    } catch (error) {
-      findings.push(
-        `${state.stateId}: ${composerName} threw on an ordinary turn: ${messageOf(error)}`,
-      );
-      continue;
-    }
-    findings.push(
-      ...bodyFindings(state, ordinary, substituted, promptReads, 'ordinary'),
-    );
-    pushUnique(findings, ...promptControlFindings(state, ordinary));
-    // A self-hosted playbook's domain body may legitimately quote the
-    // adjudicator contract or the continuation texts (it instructs a compiler
-    // about them); only occurrences the composer ADDS beyond the body's own
-    // are leaks.
-    if (
-      occurrences(ordinary, BOSS_QUESTION_MARKER) >
-      occurrences(state.prompt, BOSS_QUESTION_MARKER)
-    ) {
-      findings.push(
-        `${state.stateId}: the adjudicator-facing ${NEEDS_BOSS_REPLY} contract leaks into the player prompt`,
-      );
-    }
-    if (
-      [CONTINUATION_PREAMBLE, BOSS_QUESTION_LABEL, BOSS_REPLY_LABEL].some(
-        (needle) =>
-          occurrences(ordinary, needle) > occurrences(state.prompt, needle),
-      )
-    ) {
-      findings.push(
-        `${state.stateId}: continuation blocks appear on an ordinary turn`,
-      );
-    }
-    // Controllers own no Boss-reply wait. A missing ordinary result is already
-    // diagnosed by conformance, so do not fabricate a continuation contract.
-    if (controller || !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)) continue;
     const artifactSchema =
       schemaResolution.findings.length > 0
         ? undefined
         : (inferredArtifactSchema ??
           (state.role !== undefined ? 3 : state.player !== '' ? 1 : undefined));
+    const modes =
+      artifactSchema === 3 && state.actor === 'player'
+        ? [undefined, false, true]
+        : [undefined];
+    let promptReads;
+    for (const resuming of modes) {
+      let ordinary;
+      try {
+        const probed = withPlaceholderValues(
+          state,
+          inputFn({ context: ordinaryTurnContext(reads, initial) }),
+        );
+        promptReads = promptSentinelFields(state, reads, probed.fields, roles);
+        ordinary = composeForState(
+          opts.compose,
+          state,
+          probed.input,
+          roles,
+          resuming,
+        );
+        if (typeof ordinary !== 'string') {
+          throw new Error(`${composerName} returned a non-string value`);
+        }
+      } catch (error) {
+        pushUnique(
+          findings,
+          `${state.stateId}: ${composerName} threw on an ordinary turn: ${messageOf(error)}`,
+        );
+        continue;
+      }
+      pushUnique(
+        findings,
+        ...bodyFindings(state, ordinary, substituted, promptReads, 'ordinary'),
+      );
+      pushUnique(findings, ...promptControlFindings(state, ordinary));
+      // A self-hosted playbook's domain body may legitimately quote the
+      // adjudicator contract or the continuation texts (it instructs a compiler
+      // about them); only occurrences the composer ADDS beyond the body's own
+      // are leaks.
+      if (
+        occurrences(ordinary, BOSS_QUESTION_MARKER) >
+        occurrences(state.prompt, BOSS_QUESTION_MARKER)
+      ) {
+        pushUnique(
+          findings,
+          `${state.stateId}: the adjudicator-facing ${NEEDS_BOSS_REPLY} contract leaks into the player prompt`,
+        );
+      }
+      if (
+        [
+          CONTINUATION_PREAMBLE,
+          CURRENT_CONTINUATION_PREAMBLE,
+          BOSS_QUESTION_LABEL,
+          CURRENT_BOSS_QUESTION_LABEL,
+          BOSS_REPLY_LABEL,
+        ].some(
+          (needle) =>
+            occurrences(ordinary, needle) > occurrences(state.prompt, needle),
+        )
+      ) {
+        pushUnique(
+          findings,
+          `${state.stateId}: continuation blocks appear on an ordinary turn`,
+        );
+      }
+    }
+    // Controllers own no Boss-reply wait. A missing ordinary result is already
+    // diagnosed by conformance, so do not fabricate a continuation contract.
+    if (controller || !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)) continue;
     if (artifactSchema === undefined) {
       findings.push(
         `${state.stateId}: prompt composition requires artifactSchema 1 or 3 to probe this direct-Captain continuation`,
       );
       continue;
     }
-    // A Boss-reply continuation turn: the thunk carries the pending question
-    // and reply, and the composer opens with the exact preamble and labelled
-    // Q&A blocks before the domain body (gears2fsm.md, link.md).
-    const question = sentinelFor('question');
-    const reply = sentinelFor('bossReply');
-    const pendingBossQuestion = {
-      ...(artifactSchema === 3
-        ? state.actor === 'captain'
-          ? { asker: { kind: 'captain' } }
-          : { asker: { kind: 'role', roleId: state.role ?? '' } }
-        : {
-            player: state.actor === 'captain' ? 'Captain' : state.player,
-          }),
-      questionId: state.stateId,
-      resumeStateId: state.stateId,
-      sourceItem: state.sourceItem,
-      question,
-    };
-    let continuation;
-    let input;
-    try {
-      input = inputFn({
-        context: {
-          ...ordinaryContext(reads),
-          pendingBossQuestion,
-          bossReply: reply,
-          pendingBossQuestions: {
-            [state.stateId]: pendingBossQuestion,
-          },
-          bossReplies: { [state.stateId]: reply },
-        },
-      });
-      continuation = composeForState(opts.compose, state, input);
-      if (typeof continuation !== 'string') {
-        throw new Error(`${composerName} returned a non-string value`);
-      }
-    } catch (error) {
-      findings.push(
-        `${state.stateId}: ${composerName} threw on a continuation turn: ${messageOf(error)}`,
-      );
-      continue;
-    }
-    if (!carriesSentinel(input, question) || !carriesSentinel(input, reply)) {
-      findings.push(
-        `${state.stateId}: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn`,
-      );
-      continue;
-    }
-    if (!continuation.startsWith(`${CONTINUATION_PREAMBLE}\n\n`)) {
-      findings.push(
-        `${state.stateId}: a continuation turn does not open with the exact preamble`,
-      );
-    }
-    const bodyStart = bodyIndex(state, continuation, substituted, promptReads);
-    const questionBlock = `${BOSS_QUESTION_LABEL}\n${question}`;
-    const replyBlock = `${BOSS_REPLY_LABEL}\n${reply}`;
-    for (const [label, value] of [
-      [BOSS_QUESTION_LABEL, questionBlock],
-      [BOSS_REPLY_LABEL, replyBlock],
-    ]) {
-      // The composer must ADD the labelled block (beyond any body-carried
-      // occurrence), with its sentinel value immediately below the label and
-      // before the body.
-      const at = continuation.indexOf(value);
-      if (
-        occurrences(continuation, value) <= occurrences(state.prompt, value)
-      ) {
-        findings.push(
-          `${state.stateId}: a continuation turn lacks the "${label}" block`,
+    // Probe absent and explicit fresh modes separately: wrappers may forward
+    // the optional argument incorrectly. Historical composers may ignore it
+    // and keep their complete Q&A prefix even when a player resumes.
+    for (const resuming of modes) {
+      const question = sentinelFor('question');
+      const reply = sentinelFor('bossReply');
+      let continuation;
+      let input;
+      try {
+        const probed = probeContinuationInput(
+          state,
+          inputFn,
+          initial,
+          artifactSchema,
         );
-      } else if (bodyStart !== -1 && at > bodyStart) {
-        findings.push(
-          `${state.stateId}: the "${label}" block appears after the domain prompt body`,
+        input = probed.input;
+        promptReads = promptSentinelFields(state, reads, probed.fields, roles);
+        continuation = composeForState(
+          opts.compose,
+          state,
+          input,
+          roles,
+          resuming,
         );
+        if (typeof continuation !== 'string') {
+          throw new Error(`${composerName} returned a non-string value`);
+        }
+      } catch (error) {
+        pushUnique(
+          findings,
+          `${state.stateId}: ${composerName} threw on a continuation turn: ${messageOf(error)}`,
+        );
+        continue;
       }
-    }
-    const exactContinuationPrefix = `${CONTINUATION_PREAMBLE}\n\n${questionBlock}\n\n${replyBlock}\n\n`;
-    if (!continuation.startsWith(exactContinuationPrefix)) {
-      findings.push(
-        `${state.stateId}: a continuation turn does not preserve the exact ordered Boss question/reply blocks`,
+      const inputFinding = continuationInputFinding(
+        state.stateId,
+        input,
+        question,
+        reply,
+      );
+      if (inputFinding !== undefined) {
+        pushUnique(findings, inputFinding);
+        continue;
+      }
+      pushUnique(
+        findings,
+        ...continuationPrefixFindings(
+          state,
+          continuation,
+          substituted,
+          promptReads,
+          artifactSchema,
+          resuming,
+          question,
+          reply,
+        ),
+        ...bodyFindings(
+          state,
+          continuation,
+          substituted,
+          promptReads,
+          'continuation',
+        ),
+        ...promptControlFindings(state, continuation),
       );
     }
-    findings.push(
-      ...bodyFindings(
-        state,
-        continuation,
-        substituted,
-        promptReads,
-        'continuation',
-      ),
-    );
-    pushUnique(findings, ...promptControlFindings(state, continuation));
   }
   return findings;
 }
-function promptSentinelFields(state, reads) {
+function promptSentinelFields(state, reads, placeholderFields, declaredRoles) {
+  const fields = [...reads, ...placeholderFields];
   return state.role === undefined
-    ? [...reads]
-    : [...reads, `promptIdentity:${state.role}`];
+    ? fields
+    : [...fields, ...declaredRoles.map((role) => `promptIdentity:${role}`)];
 }
-function composeForState(compose, state, input) {
+function composeForState(compose, state, input, declaredRoles, resuming) {
   // Schema-1 composers and the shared default composer use their second
   // positional argument as a placeholder-field map. A callable proxy with a
   // property-clean view is therefore both an invocation-scoped schema-3 lookup
@@ -1958,9 +2254,12 @@ function composeForState(compose, state, input) {
         `prompt identity lookup used role ${JSON.stringify(roleId)} for a direct-Captain or historical state`,
       );
     }
-    if (roleId !== state.role) {
+    // A prompt may name any declared role's identity — a Coder prompt reaches
+    // the Reviewer's `<reviewer-llm>` — so only an undeclared role is drift
+    // (link.md, "Player prompt composition").
+    if (!declaredRoles.includes(roleId)) {
       throw new Error(
-        `prompt identity lookup used role ${JSON.stringify(roleId)} instead of canonical local role ${JSON.stringify(state.role)}`,
+        `prompt identity lookup used undeclared role ${JSON.stringify(roleId)}; the artifact declares ${JSON.stringify(declaredRoles)}`,
       );
     }
     return sentinelFor(`promptIdentity:${roleId}`);
@@ -1972,8 +2271,94 @@ function composeForState(compose, state, input) {
     getOwnPropertyDescriptor: () => undefined,
   });
   return state.actor === 'player' && state.role !== undefined
-    ? compose(input, promptIdentity)
+    ? resuming === undefined
+      ? compose(input, promptIdentity)
+      : compose(input, promptIdentity, resuming)
     : compose(input);
+}
+function continuationPrefixFindings(
+  state,
+  composed,
+  substituted,
+  reads,
+  artifactSchema,
+  resuming,
+  question,
+  reply,
+) {
+  const fullProfiles = [
+    { preamble: CONTINUATION_PREAMBLE, questionLabel: BOSS_QUESTION_LABEL },
+    ...(artifactSchema === 3
+      ? [
+          {
+            preamble: CURRENT_CONTINUATION_PREAMBLE,
+            questionLabel: CURRENT_BOSS_QUESTION_LABEL,
+          },
+        ]
+      : []),
+  ];
+  const compactAllowed =
+    artifactSchema === 3 && state.actor === 'player' && resuming === true;
+  const replyBlock = `${BOSS_REPLY_LABEL}\n${reply}`;
+  const prefixes = fullProfiles.map(
+    ({ preamble, questionLabel }) =>
+      `${preamble}\n\n${questionLabel}\n${question}\n\n${replyBlock}\n\n`,
+  );
+  const compactPrefix = `${CURRENT_CONTINUATION_PREAMBLE}\n\n${replyBlock}\n\n`;
+  const compact = compactAllowed && composed.startsWith(compactPrefix);
+  if (compactAllowed) prefixes.push(compactPrefix);
+  const findings = [];
+  if (
+    compact &&
+    [BOSS_QUESTION_LABEL, CURRENT_BOSS_QUESTION_LABEL].some(
+      (label) =>
+        occurrences(composed, `${label}\n${question}`) >
+        occurrences(state.prompt, `${label}\n${question}`),
+    )
+  ) {
+    findings.push(
+      `${state.stateId}: a compact continuation adds the Boss question outside its domain prompt body`,
+    );
+  }
+  if (
+    !fullProfiles.some(({ preamble }) => composed.startsWith(`${preamble}\n\n`))
+  ) {
+    findings.push(
+      `${state.stateId}: a continuation turn does not open with the exact preamble`,
+    );
+  }
+  // Select diagnostics by the observed full format, without permitting a
+  // hybrid label or using function arity/package versions as capability evidence.
+  const profile =
+    fullProfiles.find(({ preamble }) =>
+      composed.startsWith(`${preamble}\n\n`),
+    ) ?? fullProfiles[0];
+  const blocks = [
+    ...(!compact
+      ? [[profile.questionLabel, `${profile.questionLabel}\n${question}`]]
+      : []),
+    [BOSS_REPLY_LABEL, replyBlock],
+  ];
+  const bodyStart = bodyIndex(state, composed, substituted, reads);
+  for (const [label, value] of blocks) {
+    // Authored domain text can itself quote the framework contract; a real
+    // continuation must add its own sentinel-bearing blocks before that body.
+    if (occurrences(composed, value) <= occurrences(state.prompt, value)) {
+      findings.push(
+        `${state.stateId}: a continuation turn lacks the "${label}" block`,
+      );
+    } else if (bodyStart !== -1 && composed.indexOf(value) > bodyStart) {
+      findings.push(
+        `${state.stateId}: the "${label}" block appears after the domain prompt body`,
+      );
+    }
+  }
+  if (!prefixes.some((prefix) => composed.startsWith(prefix))) {
+    findings.push(
+      `${state.stateId}: a continuation turn does not preserve the exact ordered Boss question/reply blocks`,
+    );
+  }
+  return findings;
 }
 function promptControlFindings(state, composed) {
   const findings = [];
@@ -2189,7 +2574,7 @@ import { describe, expect, it } from 'vitest';
 import { checkGearsFsmConformance, findConcurrentRoleSets, findMachineConfig } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 
-const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
+const SCHEMA_FINDINGS: readonly string[] = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
 
 describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
   it('uses consistent artifact-schema evidence', () => {
@@ -2307,7 +2692,7 @@ import { describe, expect, it } from 'vitest';
 import { findMachineConfig, pinIntrospection } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 
-const PINNED = ${JSON.stringify(opts.pins, null, 2)};
+const PINNED = ${JSON.stringify(opts.pins, null, 2)} as const;
 
 describe(${sourceString(`${opts.basename}: FSM introspection`)}, () => {
   it('matches the machine topology pinned at build time', () => {
@@ -2338,7 +2723,7 @@ export function generatePromptContractTest(opts) {
       const compose = `compose${label === 'Captain' ? 'Captain' : 'Player'}`;
       return [
         `
-const ${constant} = ${JSON.stringify(substituted, null, 2)};
+const ${constant} = ${JSON.stringify(substituted, null, 2)} as const;
 
 const ${compose} = (
   playbook as unknown as {
@@ -2390,8 +2775,8 @@ import {
 } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 ${composerImports}
-const CONTRACT = ${JSON.stringify(opts.rows, null, 2)};
-const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
+const CONTRACT = ${JSON.stringify(opts.rows, null, 2)} as const;
+const SCHEMA_FINDINGS: readonly string[] = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
 
 describe(${sourceString(`${opts.basename}: prompt contract`)}, () => {
   it('uses consistent artifact-schema evidence', () => {
@@ -2462,7 +2847,14 @@ function linkedArtifactSchemaSignal(linked) {
     ? { schema: 3, historicalFallback: false, invalidCompatibility: false }
     : { historicalFallback: false, invalidCompatibility: true };
 }
-/** Schema decision shared by generated and standalone artifact verification. */
+/**
+ * Schema decision shared by generated and standalone artifact verification
+ * (verification-21). Reviewed provenance is evidence through its exact
+ * historical map; any other provenance is evidence only through the engine
+ * declaration read from the link target's installed package — `RUNTIME_ABI`
+ * `1` with artifact schema `3` — and is otherwise reported unsupported
+ * (DR-028).
+ */
 export function resolveArtifactSchemaForVerification(opts) {
   const candidates = [];
   const invalidSignalFindings = [];
@@ -2472,17 +2864,25 @@ export function resolveArtifactSchemaForVerification(opts) {
       schema: opts.artifactSchema,
     });
   }
-  const provenanceSchema = artifactSchemaForPlaybookProvenance(opts.provenance);
-  if (opts.provenance !== undefined && provenanceSchema === undefined) {
-    invalidSignalFindings.push(
-      `artifact schema has unsupported link-target provenance ${JSON.stringify(opts.provenance)}`,
-    );
-  }
+  const provenance = opts.provenance ?? opts.runtimeDeclaration?.provenance;
+  const provenanceSchema = artifactSchemaForPlaybookProvenance(provenance);
   if (provenanceSchema !== undefined) {
     candidates.push({
       source: 'reviewed link-target provenance',
       schema: provenanceSchema,
     });
+  } else if (provenance !== undefined) {
+    if (opts.runtimeDeclaration === undefined) {
+      invalidSignalFindings.push(
+        `artifact schema has unsupported link-target provenance ${JSON.stringify(provenance)}`,
+      );
+    } else if (declaresComposedV3(opts.runtimeDeclaration)) {
+      candidates.push({ source: 'declared link-target contract', schema: 3 });
+    } else {
+      invalidSignalFindings.push(
+        `artifact schema has an unsupported link-target contract: ${describeRuntimeDeclaration(opts.runtimeDeclaration)}`,
+      );
+    }
   }
   if (opts.config !== undefined) {
     const configSignals = promptArtifactSchemaSignalsFromConfig(opts.config);
@@ -2527,6 +2927,7 @@ export function resolveArtifactSchemaForVerification(opts) {
     return { artifactSchema: 1, findings: [] };
   }
   const hasAmbiguousCaptainContinuation =
+    opts.requireContinuationSchema !== false &&
     opts.config !== undefined &&
     enumerateCaptainStates(opts.config).some(
       (state) =>
@@ -2540,6 +2941,132 @@ export function resolveArtifactSchemaForVerification(opts) {
         ],
       }
     : { findings: [] };
+}
+/** The `_internal` composer export serving one state actor (verification-5). */
+const COMPOSER_EXPORTS = {
+  captain: 'composeCaptainPrompt',
+  player: 'composePlayerPrompt',
+};
+/**
+ * Runs the deterministic prompt-contract checks over one live linked module
+ * beside its FSM (verification-5, verification-27): the module imports through
+ * the ephemeral TypeScript FSM edge, its schema evidence reconciles, and every
+ * actor the machine invokes has a composer that honors the link contract.
+ *
+ * Shared by the emitted suite's generator, which pins the derived substitutions
+ * and degrades each observation to a diagnostic, and by the link-fidelity gate,
+ * which relays the same observations as findings — so the gate adds no check of
+ * its own (DR-030).
+ */
+async function inspectLinkedPromptContract(opts) {
+  const { config, evidence } = opts;
+  const withoutModule = (extra) => {
+    const resolution = resolveArtifactSchemaForVerification({
+      config,
+      ...evidence,
+    });
+    return {
+      ...(resolution.artifactSchema === undefined
+        ? {}
+        : { artifactSchema: resolution.artifactSchema }),
+      schemaFindings: resolution.findings,
+      present: true,
+      composers: [],
+      ...extra,
+    };
+  };
+  if (!existsSync(opts.linkedPath)) return withoutModule({ present: false });
+  let linked;
+  try {
+    linked = await loadLinkedModuleForVerification({
+      linkedPath: opts.linkedPath,
+      fsmPath: opts.fsmPath,
+    });
+  } catch (error) {
+    return withoutModule({ loadError: messageOf(error) });
+  }
+  const resolution = resolveArtifactSchemaForVerification({
+    config,
+    linked,
+    ...evidence,
+  });
+  const artifactSchema = resolution.artifactSchema;
+  const actors = new Set(
+    enumerateCaptainStates(config).map(({ actor }) => actor),
+  );
+  const composers = [];
+  for (const actor of ['captain', 'player']) {
+    if (!actors.has(actor)) continue;
+    const exportName = COMPOSER_EXPORTS[actor];
+    const compose = linked._internal?.[exportName];
+    if (typeof compose !== 'function') {
+      composers.push({ actor, exportName, findings: [], diagnostics: [] });
+      continue;
+    }
+    const typedCompose = compose;
+    const diagnostics = [];
+    composers.push({
+      actor,
+      exportName,
+      substitutions: deriveSubstitutions(config, typedCompose, actor),
+      findings: checkPromptComposition({
+        config,
+        compose: typedCompose,
+        actor,
+        ...(artifactSchema === undefined ? {} : { artifactSchema }),
+        diagnostics,
+      }),
+      diagnostics,
+    });
+  }
+  return {
+    ...(artifactSchema === undefined ? {} : { artifactSchema }),
+    schemaFindings: resolution.findings,
+    present: true,
+    composers,
+  };
+}
+/**
+ * The deterministic link-fidelity checks over one live linked `playbook` module
+ * beside its FSM (verification-27): exactly the checks the emitted
+ * prompt-contract suite asserts, decided from those two paths alone and
+ * returning one finding per violation.
+ *
+ * The gate that runs this before any Reviewer call must never throw into the
+ * executor it guards (DR-030, phase-execution-53), so a module that cannot be
+ * imported yields its import diagnostic as a finding. An absent module or FSM
+ * yields none: an artifact the performing call has not written is the generic
+ * target check's business (phase-execution-4). An FSM that cannot be imported
+ * yields none either — the suite's checks derive from that machine, so they
+ * degrade exactly as emission degrades its prompt-contract test to a
+ * diagnostic (verification-5).
+ */
+export async function checkLinkedModuleContract(opts) {
+  if (!existsSync(opts.linkedPath) || !existsSync(opts.fsmPath)) return [];
+  let config;
+  try {
+    config = findMachineConfig(await loadFsmModule(opts.fsmPath));
+  } catch {
+    return [];
+  }
+  const contract = await inspectLinkedPromptContract({
+    config,
+    linkedPath: opts.linkedPath,
+    fsmPath: opts.fsmPath,
+    evidence: {},
+  });
+  const findings = [...contract.schemaFindings];
+  if (contract.loadError !== undefined) {
+    findings.push(`linked module could not be imported: ${contract.loadError}`);
+    return findings;
+  }
+  // A module exposing no matching composer degrades exactly as emission does
+  // (verification-5): the suite asserts nothing about it, so neither does the
+  // gate that reuses the suite's checks.
+  for (const composer of contract.composers) {
+    findings.push(...composer.findings);
+  }
+  return findings;
 }
 /**
  * Emits the prompt-contract test beside a compiled `playbook` artifact
@@ -2560,79 +3087,52 @@ export async function emitPromptContractTest(opts) {
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const config = findMachineConfig(await loadFsmModule(fsmPath));
   const rows = capturePromptContract(config);
-  let schemaResolution = resolveArtifactSchemaForVerification({
-    config,
+  const evidence = {
     ...(opts.provenance === undefined ? {} : { provenance: opts.provenance }),
+    ...(opts.runtimeDeclaration === undefined
+      ? {}
+      : { runtimeDeclaration: opts.runtimeDeclaration }),
     ...(opts.artifactSchema === undefined
       ? {}
       : { artifactSchema: opts.artifactSchema }),
+  };
+  const contract = await inspectLinkedPromptContract({
+    config,
+    linkedPath: join(opts.artifactDir, `${opts.basename}.playbook.ts`),
+    fsmPath,
+    evidence,
   });
-  let artifactSchema = schemaResolution.artifactSchema;
-  let composer;
-  const linkedPath = join(opts.artifactDir, `${opts.basename}.playbook.ts`);
-  if (existsSync(linkedPath)) {
-    try {
-      const linked = await loadLinkedModuleForVerification({
-        linkedPath,
-        fsmPath,
-      });
-      schemaResolution = resolveArtifactSchemaForVerification({
-        config,
-        linked,
-        ...(opts.provenance === undefined
-          ? {}
-          : { provenance: opts.provenance }),
-        ...(opts.artifactSchema === undefined
-          ? {}
-          : { artifactSchema: opts.artifactSchema }),
-      });
-      artifactSchema = schemaResolution.artifactSchema;
-      const actors = new Set(
-        enumerateCaptainStates(config).map(({ actor }) => actor),
+  const artifactSchema = contract.artifactSchema;
+  if (contract.loadError !== undefined) {
+    diagnostics.push(
+      `prompt contract: linked module could not be imported (${contract.loadError}); composition checks not emitted`,
+    );
+  }
+  const substitutions = {};
+  for (const inspected of contract.composers) {
+    if (inspected.substitutions === undefined) {
+      diagnostics.push(
+        `prompt contract: linked module exposes no _internal.${inspected.exportName}; ${inspected.actor} composition checks not emitted`,
       );
-      const substitutions = {};
-      for (const actor of ['captain', 'player']) {
-        if (!actors.has(actor)) continue;
-        const exportName =
-          actor === 'captain' ? 'composeCaptainPrompt' : 'composePlayerPrompt';
-        const compose = linked._internal?.[exportName];
-        if (typeof compose !== 'function') {
-          diagnostics.push(
-            `prompt contract: linked module exposes no _internal.${exportName}; ${actor} composition checks not emitted`,
-          );
-          continue;
-        }
-        const typedCompose = compose;
-        substitutions[actor] = deriveSubstitutions(config, typedCompose, actor);
-        const findings = checkPromptComposition({
-          config,
-          compose: typedCompose,
-          actor,
-          ...(artifactSchema === undefined ? {} : { artifactSchema }),
-        });
-        diagnostics.push(
-          ...findings.map((finding) => `prompt contract: ${finding}`),
-        );
-      }
-      if (
-        substitutions.captain !== undefined ||
-        substitutions.player !== undefined
-      ) {
-        composer = {
+      continue;
+    }
+    substitutions[inspected.actor] = inspected.substitutions;
+    diagnostics.push(
+      ...inspected.diagnostics.map(
+        (diagnostic) => `prompt contract: ${diagnostic}`,
+      ),
+      ...inspected.findings.map((finding) => `prompt contract: ${finding}`),
+    );
+  }
+  const composer =
+    substitutions.captain !== undefined || substitutions.player !== undefined
+      ? {
           playbookModule: `./${opts.basename}.playbook.js`,
           ...substitutions,
-        };
-      }
-    } catch (error) {
-      diagnostics.push(
-        `prompt contract: linked module could not be imported (${messageOf(error)}); composition checks not emitted`,
-      );
-    }
-  }
+        }
+      : undefined;
   diagnostics.unshift(
-    ...schemaResolution.findings.map(
-      (finding) => `prompt contract: ${finding}`,
-    ),
+    ...contract.schemaFindings.map((finding) => `prompt contract: ${finding}`),
   );
   const content = generatePromptContractTest({
     basename: opts.basename,
@@ -2640,7 +3140,7 @@ export async function emitPromptContractTest(opts) {
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
     rows,
     ...(artifactSchema === undefined ? {} : { artifactSchema }),
-    schemaFindings: schemaResolution.findings,
+    schemaFindings: contract.schemaFindings,
     composer,
   });
   await mkdir(opts.artifactDir, { recursive: true });

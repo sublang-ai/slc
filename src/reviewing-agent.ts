@@ -406,8 +406,7 @@ function parseCorrectionEnvelope(
 }
 
 type CorrectionSource =
-  | { kind: 'source'; source: string }
-  | { kind: 'malformed'; reason: string };
+  { kind: 'source'; source: string } | { kind: 'malformed'; reason: string };
 
 /**
  * Isolates the envelope: the last complete top-level JSON object in the reply,

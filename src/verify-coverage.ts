@@ -3178,8 +3178,7 @@ export async function checkFsmCoverage(
           continue;
         }
         const selected = accepting.entries().next().value as
-          | [number, ProbeAssignment | undefined]
-          | undefined;
+          [number, ProbeAssignment | undefined] | undefined;
         directArm = selected?.[0];
         const assignment = selected?.[1];
         if (assignment !== undefined) {

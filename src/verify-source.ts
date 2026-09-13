@@ -231,12 +231,13 @@ function placeholderField(token: string): string {
   );
 }
 
-/** First exact contiguous occurrence of `needle` in `haystack`. */
-function fragmentIndex(
+/** Every exact contiguous occurrence of `needle` in `haystack`. */
+function fragmentIndices(
   haystack: readonly string[],
   needle: readonly string[],
-): number {
-  if (needle.length === 0 || needle.length > haystack.length) return -1;
+): number[] {
+  const indices: number[] = [];
+  if (needle.length === 0 || needle.length > haystack.length) return indices;
   outer: for (
     let index = 0;
     index <= haystack.length - needle.length;
@@ -245,9 +246,61 @@ function fragmentIndex(
     for (let offset = 0; offset < needle.length; offset++) {
       if (haystack[index + offset] !== needle[offset]) continue outer;
     }
-    return index;
+    indices.push(index);
   }
-  return -1;
+  return indices;
+}
+
+/** Whether complete, nonoverlapping matches admit an ordered attribution. */
+function fragmentsAreInSourceOrder(
+  prompt: readonly string[],
+  fragments: readonly SourceFragment[],
+): boolean {
+  const spans = new Map<
+    string,
+    { start: number; end: number; sourceStarts: number[] }
+  >();
+  for (const fragment of fragments) {
+    for (const start of fragmentIndices(prompt, fragment.lines)) {
+      const end = start + fragment.lines.length;
+      const key = `${start}:${end}`;
+      const span = spans.get(key) ?? { start, end, sourceStarts: [] };
+      // Fragments arrive in Source order. Identical matches are alternatives,
+      // not independent fragments competing for the same prompt position.
+      span.sourceStarts.push(fragment.start);
+      spans.set(key, span);
+    }
+  }
+
+  const ordered = [...spans.values()].sort(
+    (left, right) => left.start - right.start || right.end - left.end,
+  );
+  let furthestEnd = -1;
+  let sourceFloor = -1;
+  let completed = 0;
+  const attributed: Array<{ end: number; sourceStart: number }> = [];
+  for (const span of ordered) {
+    // A shorter full match inside another full fragment is incidental content
+    // of that larger fragment, not a second independently ordered occurrence.
+    if (span.end <= furthestEnd) continue;
+    furthestEnd = span.end;
+
+    // Remaining ends increase strictly. Only disjoint prior spans establish
+    // order; crossing overlaps do not invent an ordering of shared lines.
+    while (
+      completed < attributed.length &&
+      attributed[completed].end <= span.start
+    ) {
+      sourceFloor = Math.max(sourceFloor, attributed[completed].sourceStart);
+      completed++;
+    }
+    // The earliest compatible attribution leaves every later choice available,
+    // so failure here means no order-preserving attribution exists.
+    const sourceStart = span.sourceStarts.find((start) => start >= sourceFloor);
+    if (sourceStart === undefined) return false;
+    attributed.push({ end: span.end, sourceStart });
+  }
+  return true;
 }
 
 /**
@@ -286,7 +339,9 @@ export function checkSourceGearsContract(
 
   for (const fragment of fragments) {
     if (
-      !items.some((item) => fragmentIndex(item.prompt, fragment.lines) >= 0)
+      !items.some(
+        (item) => fragmentIndices(item.prompt, fragment.lines).length > 0,
+      )
     ) {
       findings.push(
         `source ${fragment.kind} fragment at line ${fragment.start + 1} was dropped or changed`,
@@ -295,20 +350,10 @@ export function checkSourceGearsContract(
   }
 
   for (const item of items) {
-    const matches = fragments
-      .map((fragment) => ({
-        fragment,
-        promptIndex: fragmentIndex(item.prompt, fragment.lines),
-      }))
-      .filter((entry) => entry.promptIndex >= 0)
-      .sort((left, right) => left.promptIndex - right.promptIndex);
-    for (let index = 1; index < matches.length; index++) {
-      if (matches[index - 1].fragment.start > matches[index].fragment.start) {
-        findings.push(
-          `${item.id}: authored prompt fragments are out of Source order`,
-        );
-        break;
-      }
+    if (!fragmentsAreInSourceOrder(item.prompt, fragments)) {
+      findings.push(
+        `${item.id}: authored prompt fragments are out of Source order`,
+      );
     }
 
     // A Source that authors no fragment leaves prompt wording to the compiler

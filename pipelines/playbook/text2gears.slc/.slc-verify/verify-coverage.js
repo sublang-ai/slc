@@ -266,11 +266,29 @@ function synthesizedFieldValue(field) {
 }
 /** Synthesizes a captain output that selects `key` under the state's contract. */
 function synthOutput(state, key) {
+  if (state.actor === 'script') {
+    return {
+      guard: key,
+      exitStatus: Object.keys(state.result)[0] === key ? 0 : 1,
+    };
+  }
   const output = { guard: key };
   for (const field of requiredFields(state.result[key] ?? '')) {
     output[field] = synthesizedFieldValue(field);
   }
   return output;
+}
+/** One bounded runtime-valid candidate set for acceptance and arm auditing. */
+function resultOutputCandidates(state, key, candidates) {
+  const output = synthOutput(state, key);
+  if (state.actor !== 'script' || output.exitStatus === 0) return [output];
+  return [...new Set([1, ...candidates])]
+    .filter(
+      (value) =>
+        typeof value === 'number' && Number.isInteger(value) && value > 0,
+    )
+    .slice(0, MAX_SCRIPT_EXIT_STATUSES)
+    .map((exitStatus) => ({ guard: key, exitStatus }));
 }
 function invocations(state) {
   if (Array.isArray(state.invoke)) return state.invoke;
@@ -941,6 +959,7 @@ const GENERIC_VALUES = [
   COVERAGE_ENABLED_PLAYBOOKS,
 ];
 const MAX_PROBES = 30_000;
+const MAX_SCRIPT_EXIT_STATUSES = 8;
 const PROBES_PER_TIMEOUT_MILLISECOND = 50;
 const COVERAGE_TIMEOUT_MARGIN_MS = 5_000;
 const MIN_COVERAGE_TEST_TIMEOUT_MS = 10_000;
@@ -1023,7 +1042,10 @@ function probeGuardAssignment(
     let event = { ...fixedEvent };
     for (const payload of payloads) {
       if (payload.eventField === undefined) {
-        event = overlaidObject(event, assignment.payloads[payload.tag] ?? {});
+        event = overlaidObject(
+          overlaidObject(payload.base, event),
+          assignment.payloads[payload.tag] ?? {},
+        );
       } else {
         event[payload.eventField] = overlaidObject(
           payload.base,
@@ -1075,7 +1097,7 @@ function probeGuardAssignment(
       for (const payload of payloads) {
         if (payload.eventField === undefined) {
           event = recording(
-            event,
+            overlaidObject(payload.base, event),
             assignment.payloads[payload.tag] ?? {},
             payload.tag,
           );
@@ -1173,11 +1195,17 @@ function overlaidObject(base, assigned) {
  * named nested payloads are assignable; event-level fields such as `type` and
  * `actorId` remain the values XState actually supplies.
  */
-function doneGuardSatisfiable(guard, event, output, extraValues) {
+function doneGuardSatisfiable(
+  guard,
+  event,
+  output,
+  extraValues,
+  fixedOutput = false,
+) {
   return probeGuardSatisfiable(
     guard.run,
-    event,
-    [{ eventField: 'output', tag: 'o:', base: output }],
+    fixedOutput ? { ...event, output } : event,
+    fixedOutput ? [] : [{ eventField: 'output', tag: 'o:', base: output }],
     [...guard.probeValues, ...extraValues],
   );
 }
@@ -1314,6 +1342,11 @@ function playbookCoverageInput(machine, playbook, dynamic) {
     return undefined;
   }
 }
+/**
+ * The value the bridge resolves a completed child with: a child that reached
+ * a success terminal, or an older child that published no terminal kind,
+ * resolves with its own output and reaches `onDone`.
+ */
 function nestedSuccessOutput() {
   return {
     outcome: 'terminal',
@@ -1335,6 +1368,35 @@ function nestedFailure(playbookId) {
         name: 'Error',
         message: 'coverage: forced nested playbook failure',
       },
+    },
+  });
+  return error;
+}
+/**
+ * A child that completed at its own authored failure terminal. The bridge
+ * rejects the call with that exact `ok` result, so a recovering first
+ * `onError` arm written for it is satisfiable under probing.
+ */
+function nestedFailureTerminal(playbookId) {
+  const terminal = {
+    stateId: 'coverageFailureTerminal',
+    kind: 'failure',
+    description: 'coverage: the child reported its own failure terminal',
+  };
+  const error = new Error(
+    `Child playbook ${playbookId} reached failure terminal ${terminal.stateId}`,
+  );
+  error.name = 'NestedPlaybookCallError';
+  Object.defineProperty(error, 'result', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: {
+      status: 'ok',
+      playbookId,
+      childSessionId: 'coverage-child-session',
+      output: { response: 'coverage: nested playbook failure terminal' },
+      terminal,
     },
   });
   return error;
@@ -1890,6 +1952,9 @@ async function probePlaybookOutcome(
     } else {
       const errors = [
         nestedFailure(expectedPlaybookId),
+        // A completed child that reached its own failure terminal arrives on
+        // this same path, so an arm written only for that shape is driven too.
+        nestedFailureTerminal(expectedPlaybookId),
         new Error('coverage: generic nested playbook failure'),
       ];
       for (const base of errors) {
@@ -2218,9 +2283,20 @@ export function fsmCoverageTestTimeout(fsmModule) {
       (arm) => armGuard(arm) !== undefined,
     ).length;
     const errorArms = transitionArms(captain.invocation.onError).length;
-    // Result acceptance probes each guarded arm once, then the arm audit probes
-    // every result's structured and bare output forms.
-    guardProbeCalls += resultKeys.length * guardedDoneArms * 3 + errorArms;
+    // Acceptance includes ordered fallbacks. Script arm probes have one zero
+    // status and a capped set of nonzero statuses; ordinary actors also probe
+    // malformed bare outputs for defensive arms.
+    const resultCandidates =
+      captain.binding.actor === 'script'
+        ? 1 + MAX_SCRIPT_EXIT_STATUSES
+        : resultKeys.length;
+    guardProbeCalls +=
+      resultCandidates * transitionArms(captain.invocation.onDone).length +
+      guardedDoneArms *
+        (captain.binding.actor === 'script'
+          ? resultCandidates
+          : resultKeys.length * 2) +
+      errorArms;
     // Every result, the blank Boss-reply check, and onError enter through an
     // independently context-probed interrupt plan.
     guardProbeCalls +=
@@ -2519,23 +2595,21 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
     const rawDoneArms = transitionArms(captain.invocation.onDone);
     const onDoneArms = normalizeArms(captain.invocation.onDone);
     const controllerResultByArm = new Map();
-    // Every declared result needs an arm that explicitly accepts its complete
-    // valid output. A sole unguarded arm accepts the whole local result
-    // contract; an array's unguarded arm is a fallback and cannot make an
-    // otherwise orphaned key look covered.
+    // Every declared result needs an ordered arm accepting its valid output.
+    // A fallback is reachable exactly when all preceding guards reject it.
+    // Result names alone cannot distinguish authored failure from an orphan.
     for (const key of Object.keys(state.result)) {
       const output = synthOutput(state, key);
       const accepting = new Map();
+      const acceptedOutputs = new Map();
       for (const [index, arm] of rawDoneArms.entries()) {
         const target = onDoneArms[index]?.target ?? null;
         const rawGuard = armGuard(arm);
-        if (rawGuard === undefined) {
-          if (rawDoneArms.length === 1 && target !== null) {
-            accepting.set(index, undefined);
-          }
-          continue;
-        }
-        if (target === null || resolveGuard(machine, rawGuard) === undefined) {
+        if (
+          target === null ||
+          (rawGuard !== undefined &&
+            resolveGuard(machine, rawGuard) === undefined)
+        ) {
           continue;
         }
         const guard = orderedArmPredicate(machine, rawDoneArms, index);
@@ -2549,8 +2623,25 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
             initialCoverageContext,
           );
           if (assignment !== undefined) accepting.set(index, assignment);
-        } else if (doneGuardSatisfiable(guard, doneEvent, output, candidates)) {
-          accepting.set(index, undefined);
+        } else {
+          const outputs = resultOutputCandidates(state, key, [
+            ...(resolveGuard(machine, rawGuard)?.probeValues ?? []),
+            ...candidates,
+          ]);
+          for (const candidate of outputs) {
+            if (
+              doneGuardSatisfiable(
+                guard,
+                doneEvent,
+                candidate,
+                candidates,
+                state.actor === 'script',
+              )
+            ) {
+              accepting.set(index, undefined);
+              acceptedOutputs.set(JSON.stringify(candidate), candidate);
+            }
+          }
         }
       }
       if (accepting.size === 0) {
@@ -2581,39 +2672,18 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
         // initial context is a known accepting arm. Encountering an unresolved
         // guard first makes driving unsafe: XState reports that error
         // asynchronously, so the arm audit below owns the finding (c887fc4).
-        let safeToDrive = true;
-        for (const [index, arm] of rawDoneArms.entries()) {
-          const rawGuard = armGuard(arm);
-          if (rawGuard === undefined) {
-            directArm = index;
+        for (const candidate of acceptedOutputs.values()) {
+          const selected = directlySelectedArm(
+            machine,
+            captain,
+            candidate,
+            initialCoverageContext,
+          );
+          if (selected !== undefined && accepting.has(selected)) {
+            directArm = selected;
+            drivenOutput = candidate;
             break;
           }
-          const guard = resolveGuard(machine, rawGuard);
-          if (guard === undefined) {
-            safeToDrive = false;
-            break;
-          }
-          try {
-            if (
-              guard.run({
-                context: initialCoverageContext,
-                event: { ...doneEvent, output },
-              })
-            ) {
-              directArm = index;
-              break;
-            }
-          } catch {
-            safeToDrive = false;
-            break;
-          }
-        }
-        if (
-          !safeToDrive ||
-          directArm === undefined ||
-          !accepting.has(directArm)
-        ) {
-          continue;
         }
       }
       if (directArm === undefined) {
@@ -2792,8 +2862,9 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
       actor.stop();
     }
     // Every onDone arm is satisfiable under the actual done-event identity.
-    // Try each key's full output and bare malformed form; neither probe may
-    // invent a different event type or actor id.
+    // Ordinary actors also probe bare malformed forms for authored defensive
+    // arms. Scripts resolve only their exact runtime guard/exit-status pair;
+    // invented payload fields or impossible statuses cannot cover an arm.
     for (const [index, arm] of rawDoneArms.entries()) {
       const rawGuard = armGuard(arm);
       if (rawGuard === undefined) continue;
@@ -2808,16 +2879,25 @@ export async function checkFsmCoverage(fsmModule, opts = {}) {
       // A prior unresolvable arm already owns the actionable finding, and makes
       // ordered reachability of later arms unsafe to evaluate.
       if (guard === undefined) continue;
-      const anyOutput = Object.keys(state.result).some(
-        (key) =>
-          doneGuardSatisfiable(
-            guard,
-            doneEvent,
-            synthOutput(state, key),
-            candidates,
+      const anyOutput = Object.keys(state.result).some((key) => {
+        const outputs = resultOutputCandidates(state, key, [
+          ...declaredGuard.probeValues,
+          ...candidates,
+        ]);
+        return (
+          outputs.some((candidate) =>
+            doneGuardSatisfiable(
+              guard,
+              doneEvent,
+              candidate,
+              candidates,
+              state.actor === 'script',
+            ),
           ) ||
-          doneGuardSatisfiable(guard, doneEvent, { guard: key }, candidates),
-      );
+          (state.actor !== 'script' &&
+            doneGuardSatisfiable(guard, doneEvent, { guard: key }, candidates))
+        );
+      });
       if (!anyOutput) {
         findings.push(
           `state ${stateKey}: onDone arm ${index} (target ${onDoneArms[index]?.target ?? 'none'}) is unsatisfiable under probing`,

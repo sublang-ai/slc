@@ -334,33 +334,27 @@ export const workflowMachine = setup({
       context.reviewLoops < MAX_REVIEW_LOOPS,
   },
   actions: {
-    startRun: assign(
-      ({ context, event }): Partial<WorkflowContext> => ({
-        inputTask: event.type === 'START' ? event.inputTask : context.inputTask,
-        reviewLoops: 0,
-        judgmentCount: 0,
-        reviewFindings: undefined,
-        coderJudgment: undefined,
-        reviewerArgument: undefined,
-        pendingBossQuestion: undefined,
-        bossReply: undefined,
-        lastError: undefined,
-      }),
-    ),
-    startReviewLoop: assign(
-      ({ context }): Partial<WorkflowContext> => ({
-        reviewLoops: context.reviewLoops + 1,
-        judgmentCount: 0,
-      }),
-    ),
-    countFirstJudgment: assign(
-      (): Partial<WorkflowContext> => ({ judgmentCount: 1 }),
-    ),
-    countNextJudgment: assign(
-      ({ context }): Partial<WorkflowContext> => ({
-        judgmentCount: context.judgmentCount + 1,
-      }),
-    ),
+    startRun: assign(({ context, event }): Partial<WorkflowContext> => ({
+      inputTask: event.type === 'START' ? event.inputTask : context.inputTask,
+      reviewLoops: 0,
+      judgmentCount: 0,
+      reviewFindings: undefined,
+      coderJudgment: undefined,
+      reviewerArgument: undefined,
+      pendingBossQuestion: undefined,
+      bossReply: undefined,
+      lastError: undefined,
+    })),
+    startReviewLoop: assign(({ context }): Partial<WorkflowContext> => ({
+      reviewLoops: context.reviewLoops + 1,
+      judgmentCount: 0,
+    })),
+    countFirstJudgment: assign((): Partial<WorkflowContext> => ({
+      judgmentCount: 1,
+    })),
+    countNextJudgment: assign(({ context }): Partial<WorkflowContext> => ({
+      judgmentCount: context.judgmentCount + 1,
+    })),
     recordReviewFindings: assign(({ event }): Partial<WorkflowContext> => {
       const output = playerOutputOf(event);
       return output?.guard === 'findings'
@@ -394,21 +388,16 @@ export const workflowMachine = setup({
         };
       },
     ),
-    recordBossReply: assign(
-      ({ event }): Partial<WorkflowContext> =>
-        event.type === 'BOSS_REPLY' ? { bossReply: event.answer } : {},
+    recordBossReply: assign(({ event }): Partial<WorkflowContext> =>
+      event.type === 'BOSS_REPLY' ? { bossReply: event.answer } : {},
     ),
-    clearBossReplyContext: assign(
-      (): Partial<WorkflowContext> => ({
-        pendingBossQuestion: undefined,
-        bossReply: undefined,
-      }),
-    ),
-    rememberActorError: assign(
-      ({ event }): Partial<WorkflowContext> => ({
-        lastError: normalizeError(errorOf(event)),
-      }),
-    ),
+    clearBossReplyContext: assign((): Partial<WorkflowContext> => ({
+      pendingBossQuestion: undefined,
+      bossReply: undefined,
+    })),
+    rememberActorError: assign(({ event }): Partial<WorkflowContext> => ({
+      lastError: normalizeError(errorOf(event)),
+    })),
     rememberScriptFailure: assign(({ event }): Partial<WorkflowContext> => {
       const output = scriptOutputOf(event);
       return {
@@ -421,24 +410,20 @@ export const workflowMachine = setup({
         },
       };
     }),
-    rememberInvalidResult: assign(
-      (): Partial<WorkflowContext> => ({
-        lastError: {
-          name: 'InvalidActorResult',
-          message:
-            "The invoked actor returned a result outside the state's declared result contract.",
-        },
-      }),
-    ),
-    rememberInvalidBossReply: assign(
-      (): Partial<WorkflowContext> => ({
-        lastError: {
-          name: 'InvalidBossReply',
-          message:
-            'BOSS_REPLY carried no non-empty answer for the pending question.',
-        },
-      }),
-    ),
+    rememberInvalidResult: assign((): Partial<WorkflowContext> => ({
+      lastError: {
+        name: 'InvalidActorResult',
+        message:
+          "The invoked actor returned a result outside the state's declared result contract.",
+      },
+    })),
+    rememberInvalidBossReply: assign((): Partial<WorkflowContext> => ({
+      lastError: {
+        name: 'InvalidBossReply',
+        message:
+          'BOSS_REPLY carried no non-empty answer for the pending question.',
+      },
+    })),
   },
 }).createMachine({
   id: 'workflow',

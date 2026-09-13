@@ -21,7 +21,10 @@ import { describe, expect, it } from 'vitest';
 import { createActor, createMachine } from 'xstate';
 
 import { normalizePlaybookSnapshot } from '@sublang/playbook/xstate-runtime';
-import { defaultComposePlayerPrompt } from '../node_modules/@sublang/playbook/src/xstate-playbook-runtime.js';
+import {
+  defaultComposeCaptainPrompt,
+  defaultComposePlayerPrompt,
+} from '../node_modules/@sublang/playbook/src/xstate-playbook-runtime.js';
 import { runSlc } from '../src/runner.js';
 import { emitVerifierSupport } from '../src/verify-support.js';
 
@@ -675,11 +678,9 @@ const schema3PlayerInput =
   ) =>
   ({ context }: { context: Record<string, unknown> }) => {
     const keyedQuestions = context.pendingBossQuestions as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     const keyedReplies = context.bossReplies as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     return {
       stateId,
       role,
@@ -3446,6 +3447,290 @@ describe('checkPromptComposition (verification-5)', () => {
     ).toMatch(/requires artifactSchema 1 or 3/);
   });
 
+  const currentPreamble = 'Continue the same task using Boss’s reply below.';
+  const currentQuestion = 'Your previous question:';
+  const currentPlayerCompose = (
+    input: unknown,
+    _identity: (roleId: string) => string,
+    resuming?: boolean,
+  ): string =>
+    defaultComposePlayerPrompt(
+      input as Parameters<typeof defaultComposePlayerPrompt>[0],
+      {},
+      resuming,
+    );
+
+  it('checks the installed player composer in absent, explicit fresh, and resumed modes', () => {
+    const calls: { arity: number; resuming: unknown; text: string }[] = [];
+    const compose = (
+      ...args: Parameters<typeof currentPlayerCompose>
+    ): string => {
+      const text = currentPlayerCompose(...args);
+      if ((args[0] as ComposerInput).pendingBossQuestion !== undefined) {
+        calls.push({ arity: args.length, resuming: args[2], text });
+      }
+      return text;
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }),
+    ).toEqual([]);
+    for (const arity of [2, 3])
+      expect(calls.some((call) => call.arity === arity)).toBe(true);
+    expect(new Set(calls.map((call) => call.resuming))).toEqual(
+      new Set([undefined, false, true]),
+    );
+    for (const call of calls) {
+      expect(call.text.startsWith(`${currentPreamble}\n\n`)).toBe(true);
+      expect(call.text.includes(`${currentQuestion}\n«question»`)).toBe(
+        call.resuming !== true,
+      );
+      expect(call.text).toContain('Boss reply:\n«bossReply»');
+    }
+  });
+
+  it('accepts legacy full composers that ignore the optional player resume flag', () => {
+    const modes: (boolean | undefined)[] = [];
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose: (input, identity, resuming) => {
+          if ((input as ComposerInput).pendingBossQuestion)
+            modes.push(resuming);
+          return composeSchema3Prompt(input, identity);
+        },
+        actor: 'player',
+      }),
+    ).toEqual([]);
+    expect(new Set(modes)).toEqual(new Set([undefined, false, true]));
+    expect(
+      checkPromptComposition({
+        config: contractConfig(),
+        compose: goodCompose,
+        artifactSchema: 1,
+      }),
+    ).toEqual([]);
+    expect(
+      checkPromptComposition({
+        config: contractConfig(),
+        compose: currentPlayerCompose,
+        artifactSchema: 1,
+      }).join('\n'),
+    ).toMatch(/exact preamble/);
+  });
+
+  it('keeps the installed Captain composer full and invokes it with only the input', () => {
+    const calls: { arity: number; text: string }[] = [];
+    const config: MachineConfigLike = {
+      states: {
+        route: directCaptainContract('ROUTE-1', ['Route this intent.']),
+      },
+    };
+    const compose = (...args: unknown[]): string => {
+      const input = args[0] as Parameters<
+        typeof defaultComposeCaptainPrompt
+      >[0];
+      const text = defaultComposeCaptainPrompt(input);
+      if (input.pendingBossQuestion) calls.push({ arity: args.length, text });
+      return text;
+    };
+    expect(
+      checkPromptComposition({
+        config,
+        compose,
+        actor: 'captain',
+        artifactSchema: 3,
+      }),
+    ).toEqual([]);
+    expect(calls).toEqual([
+      {
+        arity: 1,
+        text: `${currentPreamble}\n\n${currentQuestion}\n«question»\n\nBoss reply:\n«bossReply»\n\nRoute this intent.`,
+      },
+    ]);
+    expect(
+      checkPromptComposition({
+        config,
+        compose: (input, identity) =>
+          currentPlayerCompose(input, identity, true),
+        actor: 'captain',
+        artifactSchema: 3,
+      }).join('\n'),
+    ).toMatch(/lacks the "Your previous question:" block/);
+  });
+
+  it.each([undefined, false] as const)(
+    'rejects a player wrapper that sends a compact prompt in fresh mode %s',
+    (badMode) => {
+      const compose = (
+        input: unknown,
+        identity: (role: string) => string,
+        resuming?: boolean,
+      ): string =>
+        currentPlayerCompose(
+          input,
+          identity,
+          resuming === badMode ? true : resuming,
+        );
+      const findings = checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }).join('\n');
+      expect(findings).toMatch(/lacks the "Your previous question:" block/);
+      expect(findings).toMatch(/exact ordered Boss question\/reply blocks/);
+    },
+  );
+
+  it.each([
+    [
+      'question text',
+      (text: string) => text.replace('«question»', 'a paraphrased question'),
+    ],
+    [
+      'reply text',
+      (text: string) => text.replace('«bossReply»', 'a paraphrased reply'),
+    ],
+    [
+      'question label',
+      (text: string) => text.replace(currentQuestion, 'Boss question:'),
+    ],
+    [
+      'block order',
+      (text: string) =>
+        text.replace(
+          `${currentQuestion}\n«question»\n\nBoss reply:\n«bossReply»`,
+          `Boss reply:\n«bossReply»\n\n${currentQuestion}\n«question»`,
+        ),
+    ],
+    [
+      'block adjacency',
+      (text: string) =>
+        text.replace(
+          `${currentQuestion}\n`,
+          `${currentQuestion}\nextra line\n`,
+        ),
+    ],
+    [
+      'domain body',
+      (text: string) =>
+        text.replace('> Preserve this quoted context.', 'Altered task.'),
+    ],
+  ] as const)(
+    'rejects current fresh continuation drift in %s',
+    (_label, mutate) => {
+      const compose = (
+        input: unknown,
+        identity: (role: string) => string,
+        resuming?: boolean,
+      ): string => {
+        const text = currentPlayerCompose(input, identity, resuming);
+        // Mutate only the continuation, retaining the ordinary substitution probe.
+        return (input as ComposerInput).pendingBossQuestion &&
+          resuming === false
+          ? mutate(text)
+          : text;
+      };
+      expect(
+        checkPromptComposition({
+          config: schema3Config(),
+          compose,
+          actor: 'player',
+        }),
+      ).not.toEqual([]);
+    },
+  );
+
+  it('rejects resumed reply drift without requiring the intentionally omitted question', () => {
+    const compose = (
+      input: unknown,
+      identity: (role: string) => string,
+      resuming?: boolean,
+    ): string => {
+      const text = currentPlayerCompose(input, identity, resuming);
+      return resuming === true
+        ? text.replace('«bossReply»', 'wrong reply')
+        : text;
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }).join('\n'),
+    ).toMatch(/Boss reply:/);
+  });
+
+  it('rejects a resumed wrapper that moves the question after the reply', () => {
+    const compose = (
+      input: unknown,
+      identity: (role: string) => string,
+      resuming?: boolean,
+    ): string => {
+      const text = currentPlayerCompose(input, identity, resuming);
+      return resuming === true && (input as ComposerInput).pendingBossQuestion
+        ? text.replace(
+            'Boss reply:\n«bossReply»\n\n',
+            `Boss reply:\n«bossReply»\n\n${currentQuestion}\n«question»\n\n`,
+          )
+        : text;
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }).join('\n'),
+    ).toMatch(/compact continuation adds the Boss question/);
+  });
+
+  it('rejects a wrapper that invents continuation blocks only on resumed ordinary turns', () => {
+    const compose = (
+      input: unknown,
+      identity: (role: string) => string,
+      resuming?: boolean,
+    ): string => {
+      const text = currentPlayerCompose(input, identity, resuming);
+      return resuming === true && !(input as ComposerInput).pendingBossQuestion
+        ? `${currentPreamble}\n\n${text}`
+        : text;
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }).join('\n'),
+    ).toMatch(/continuation blocks appear on an ordinary turn/);
+  });
+
+  it.each([currentPreamble, currentQuestion])(
+    'rejects newly added current continuation marker %s on ordinary turns',
+    (marker) => {
+      const compose = (
+        input: unknown,
+        identity: (role: string) => string,
+        resuming?: boolean,
+      ): string =>
+        `${marker}\n\n${currentPlayerCompose(input, identity, resuming)}`;
+      const findings = checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      });
+      expect(
+        findings.filter(
+          (finding) =>
+            finding ===
+            'coderWork: continuation blocks appear on an ordinary turn',
+        ),
+      ).toHaveLength(1);
+    },
+  );
+
   it('flags continuation blocks on an ordinary turn', () => {
     const compose = (raw: unknown): string =>
       `${CONTINUATION_PREAMBLE}\n\n${goodCompose(raw)}`;
@@ -4182,11 +4467,9 @@ describe('canonical continuation input boundary', () => {
                     (context.nested as { values: number[] }).values,
                   ).toEqual([7]);
                   const questions = context.pendingBossQuestions as
-                    | Record<string, unknown>
-                    | undefined;
+                    Record<string, unknown> | undefined;
                   const replies = context.bossReplies as
-                    | Record<string, unknown>
-                    | undefined;
+                    Record<string, unknown> | undefined;
                   const continued = context.continuation as {
                     pendingBossQuestion?: unknown;
                     bossReply?: unknown;
@@ -4229,7 +4512,8 @@ describe('canonical continuation input boundary', () => {
         const composition = checkPromptComposition({
           config: machine.config as MachineConfigLike,
           artifactSchema: schema,
-          compose: defaultComposePlayerPrompt as never,
+          compose:
+            schema === 1 ? goodCompose : (defaultComposePlayerPrompt as never),
         });
         if (wiring === 'nested') {
           expect(findings).toEqual([

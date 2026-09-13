@@ -13,15 +13,15 @@ Adopt current published dependencies before the comprehensive performance and cl
 
 ## Deliverables
 
-- [ ] Registry-audited runtime, provider SDK, and development dependency updates.
-- [ ] Reviewed Spex grammar and Playbook definition adoption with current pins.
-- [ ] A supported TypeScript CLI and programmatic API arrangement.
+- [x] Registry-audited runtime, provider SDK, and development dependency updates.
+- [x] Reviewed Spex grammar and Playbook definition adoption with current pins.
+- [x] A supported TypeScript CLI and programmatic API arrangement.
 - [ ] Passing release checks and an immutable experiment baseline.
 
 ## Tasks
 
-1. [ ] Review dependency changes and update the manifest and lockfile.
-2. [ ] Reconcile installed definitions, grammar inputs, retained artifacts, and pins under [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md).
+1. [x] Review dependency changes and update the manifest and lockfile.
+2. [x] Reconcile installed definitions, grammar inputs, retained artifacts, and pins under [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md).
 3. [ ] Run the complete release checks, update affected reproduction guidance, and freeze the validated baseline.
 
 ## Verification

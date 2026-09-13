@@ -1,0 +1,453 @@
+{
+  "schema": "sublang.slc.dependency-adoption.v1",
+  "date": "2026-09-12",
+  "snapshotAt": "2026-09-13T03:03:01.900431+00:00",
+  "status": "dependency adoption validated; isolated experiment cohort freeze follows",
+  "adoptionComplete": true,
+  "providerMeasurementsForThisDependencyGraph": false,
+  "snapshot": {
+    "repositoryHead": "006f8c8119ef02c2ffeedec1c67ab123d00e6997",
+    "manifest": {
+      "path": "package.json",
+      "bytes": 2758,
+      "sha256": "c9b39b529b5a257f3a581135dadefed03cd15ddb559da9bb6a6d66b1c36dafe1"
+    },
+    "lockfile": {
+      "path": "package-lock.json",
+      "bytes": 201787,
+      "sha256": "53f91c2b006475257e7138424a03f5d6cd53b102cb195c3e06fd5832153bbee5"
+    },
+    "nodeVersion": "v25.5.0",
+    "topLevelDependencies": {
+      "dependencies": {
+        "@sublang/cligent": {
+          "range": "^0.27.0",
+          "lockedVersion": "0.27.0",
+          "installedVersion": "0.27.0"
+        },
+        "@sublang/playbook": {
+          "range": "^13.2.0",
+          "lockedVersion": "13.2.0",
+          "installedVersion": "13.2.0"
+        },
+        "@sublang/spex": {
+          "range": "^3.0.0",
+          "lockedVersion": "3.0.0",
+          "installedVersion": "3.0.0"
+        },
+        "@types/node": {
+          "range": "^25.9.6",
+          "lockedVersion": "25.9.6",
+          "installedVersion": "25.9.6"
+        },
+        "typescript": {
+          "range": "^6.0.3",
+          "lockedVersion": "6.0.3",
+          "installedVersion": "6.0.3"
+        },
+        "xstate": {
+          "range": "^5.33.0",
+          "lockedVersion": "5.33.0",
+          "installedVersion": "5.33.0"
+        },
+        "yaml": {
+          "range": "^2.9.1",
+          "lockedVersion": "2.9.1",
+          "installedVersion": "2.9.1"
+        }
+      },
+      "devDependencies": {
+        "@anthropic-ai/claude-agent-sdk": {
+          "range": "^0.3.270",
+          "lockedVersion": "0.3.270",
+          "installedVersion": "0.3.270"
+        },
+        "@eslint/js": {
+          "range": "^10.0.1",
+          "lockedVersion": "10.0.1",
+          "installedVersion": "10.0.1"
+        },
+        "@openai/codex-sdk": {
+          "range": "^0.154.0",
+          "lockedVersion": "0.154.0",
+          "installedVersion": "0.154.0"
+        },
+        "@typescript/native": {
+          "range": "npm:typescript@^7.0.2",
+          "lockedVersion": "7.0.2",
+          "installedVersion": "7.0.2"
+        },
+        "eslint": {
+          "range": "^10.10.0",
+          "lockedVersion": "10.10.0",
+          "installedVersion": "10.10.0"
+        },
+        "globals": {
+          "range": "^17.12.0",
+          "lockedVersion": "17.12.0",
+          "installedVersion": "17.12.0"
+        },
+        "p-queue": {
+          "range": "^9.3.3",
+          "lockedVersion": "9.3.3",
+          "installedVersion": "9.3.3"
+        },
+        "prettier": {
+          "range": "^3.9.6",
+          "lockedVersion": "3.9.6",
+          "installedVersion": "3.9.6"
+        },
+        "typescript-eslint": {
+          "range": "^8.70.0",
+          "lockedVersion": "8.70.0",
+          "installedVersion": "8.70.0"
+        },
+        "vitest": {
+          "range": "^4.1.11",
+          "lockedVersion": "4.1.11",
+          "installedVersion": "4.1.11"
+        }
+      }
+    },
+    "workingTreeCandidate": true
+  },
+  "compatibilityChoices": {
+    "typescript": {
+      "apiPackage": "typescript",
+      "apiVersion": "6.0.3",
+      "nativeAlias": "@typescript/native",
+      "nativeVersion": "7.0.2",
+      "qualifiedBuildCommand": "node node_modules/@typescript/native/bin/tsc --project tsconfig.json",
+      "compatibilityWrapperAdopted": false,
+      "compatibilityWrapperAudit": {
+        "package": "@typescript/typescript6",
+        "wrapperVersion": "6.0.2",
+        "forwardedApiVersion": "6.0.3"
+      },
+      "reason": "Native 7 exposes no stable createProgram/createSourceFile API. Direct 6 remains the compiler API authority; the qualified native path avoids tsc bin collisions. Native platform optional dependencies must be installed."
+    },
+    "nodeTypes": {
+      "selectedVersion": "25.9.6",
+      "selectedRange": "^25.9.6",
+      "observedLatestTagMajor": 22,
+      "observedLatestTagVersion": "22.20.2",
+      "reason": "Keep Node 25.9.6 declarations for the current Node 25 environment; latest points to older-major 22.20.2, and the ts6.0 tag names Node 26.5.1 declarations.",
+      "observedTs6TagVersion": "26.5.1"
+    },
+    "providerSDKs": {
+      "declaredAs": "devDependencies",
+      "realAdapterImportsUseInstalledSDKs": true,
+      "codexEntry": "node_modules/@openai/codex-sdk/dist/index.js",
+      "claudeEntry": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+      "productionConsumerNote": "Omitting dev dependencies does not install these selected provider SDKs for a consumer; provider-enabled environments need the appropriate SDK available."
+    }
+  },
+  "grammar": {
+    "authority": "published @sublang/spex scaffold grammar; DR-016",
+    "from": "0.3.0",
+    "to": "3.0.0",
+    "byteEquivalent": false,
+    "repositoryMetaMigrated": false,
+    "locatorsUnchanged": true,
+    "english": {
+      "path": "node_modules/@sublang/spex/scaffold/specs/meta.md",
+      "bytes": 8439,
+      "sha256": "ed90e3e82e18d3893e52d18e80d795406bc9a0b5915416ee73295a4d7c7ff52a"
+    },
+    "chinese": {
+      "path": "node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
+      "bytes": 9153,
+      "sha256": "78e528aee1d8f5b4946c53e119a81c7548df53bd09f8458152c2c2aaa386cd82"
+    },
+    "review": "English removes literal The and uses behavior(s); Chinese updates natural-language wording. Fixed-English Playbook actor/result wire syntax remains owned by its phase definition."
+  },
+  "playbook": {
+    "version": "13.2.0",
+    "runtimeABI": 1,
+    "supportedArtifactSchemas": [3],
+    "phases": {
+      "text2gears": {
+        "vendored": {
+          "path": "pipelines/playbook/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        },
+        "installed": {
+          "path": "node_modules/@sublang/playbook/slc/text2gears.md",
+          "bytes": 20806,
+          "sha256": "48a6a5d3f02a1d90dcc0883170da74e16c29b1554533913eb4fd7cefc49251bb"
+        },
+        "byteIdentical": true
+      },
+      "gears2fsm": {
+        "vendored": {
+          "path": "pipelines/playbook/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        "installed": {
+          "path": "node_modules/@sublang/playbook/slc/gears2fsm.md",
+          "bytes": 50379,
+          "sha256": "c549458f39337b4ce1697e1103ee2010656ced0b8a08b2fe57a103f9186c2b1e"
+        },
+        "byteIdentical": true
+      },
+      "link": {
+        "vendored": {
+          "path": "pipelines/playbook/link.md",
+          "bytes": 154025,
+          "sha256": "294f41c6ebeeb970fb53d2b801e2769dbff3c18a5910b7569c5b547b3daaea5d"
+        },
+        "installed": {
+          "path": "node_modules/@sublang/playbook/slc/link.md",
+          "bytes": 154025,
+          "sha256": "294f41c6ebeeb970fb53d2b801e2769dbff3c18a5910b7569c5b547b3daaea5d"
+        },
+        "byteIdentical": true
+      },
+      "optimize": {
+        "vendored": {
+          "path": "pipelines/playbook/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        "installed": {
+          "path": "node_modules/@sublang/playbook/slc/optimize.md",
+          "bytes": 4468,
+          "sha256": "dc8c59f02c73165f1e65b40187f2dc07def9ba43b884a04d992e400c20db6e66"
+        },
+        "byteIdentical": true
+      }
+    },
+    "compiledExecutionAudit": {
+      "text2gears": {
+        "applicable": true,
+        "findings": [],
+        "item": "TEXT2GEARS-1"
+      },
+      "gears2fsm": {
+        "applicable": true,
+        "findings": [],
+        "item": "GEARS2FSM-1"
+      },
+      "link": {
+        "applicable": true,
+        "findings": [],
+        "item": "LINK-1"
+      }
+    },
+    "retentionRule": "DR-028: preserve only bundles with matching Compiled execution and passing generated suites plus independent installed-engine review; identity changes require regenerated pins. All five retained bundles passed independent retention review.",
+    "publishedDefinitionsIncludePrivatePerformanceOverlay": false,
+    "runtimeDeclarationFiles": [
+      {
+        "path": "node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17633,
+        "sha256": "34816df58b51006a9df27369b2a80f361225724c95edad3032f53cccce680365"
+      },
+      {
+        "path": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.ts",
+        "bytes": 334762,
+        "sha256": "c24b37ab859c5d2bdfe01b9aa8e5973f32ef5f7c87f6b9fd05349337c36a1ee9"
+      },
+      {
+        "path": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.js",
+        "bytes": 318489,
+        "sha256": "e3137c9b7be363c410d143e1e85524bbaf3626fb7eb0b9b0f8c11e7c1c859b5b"
+      },
+      {
+        "path": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.d.ts",
+        "bytes": 27247,
+        "sha256": "89b5d010b6a54957a93aacf2bf04af4c038c09a07711522eab75cbcd1ae7398f"
+      }
+    ]
+  },
+  "compatibilityCorrections": {
+    "continuationChecker": "Recognizes historical complete and current complete schema-3 continuations; absent/false player resume modes retain full Q&A, explicit true may use the current compact reply form. Captain remains full. Exact body/question/reply/labels/order checks stay enforced.",
+    "sourceFidelityChecker": "All complete occurrences are considered; proper-contained subfragments are incidental, identical fragments have alternative Source attributions. Nonoverlapping swaps and later out-of-order repeats remain rejected.",
+    "releaseStatus": "validated",
+    "publishedDevExport": "Playbook13.2 _internal exposes its private two-argument helper, while runtimeSpec uses the correct canonical three-argument composer. The raw finding is retained; an isolated copy exposing that exact runtimeSpec function passes. Production checks do not infer arity or patch installed dependencies."
+  },
+  "confirmedChecks": {
+    "privateSpexAndPlaybookTarballIntegrity": true,
+    "grammarPackageSubpathsResolve": true,
+    "compiledExecutionFidelityFindings": 0,
+    "privateNativeBuildAndEmittedApiFixture": true,
+    "sourceFidelityIntegrationCasesPassed": 17,
+    "sourceFidelityLintAndNativeNoEmit": true,
+    "fullWorkingTreeSuite": {
+      "files": 71,
+      "passed": 1326,
+      "skipped": 2,
+      "log": "/private/tmp/slc-current-tests.log",
+      "note": "Includes the phase-recorder work prepared concurrently; adoption code and existing suites pass."
+    },
+    "format": true,
+    "eslint": true,
+    "nativeRepositoryBuild": true,
+    "immutableDefinitions": true,
+    "releaseWorkflow": true,
+    "metaArtifacts": 3,
+    "demoLanguages": ["en", "zh"],
+    "packageSmokeFiles": 177,
+    "pinsCurrent": ["text2gears", "gears2fsm", "link"],
+    "specLint": "no problems found",
+    "demoEnvironment": "Disposable smoke commits use process-only commit.gpgsign=false because inherited SSH signing cannot sign the synthetic commits. No saved configuration changed."
+  },
+  "pendingChecks": [
+    "Immutable experiment cohort freeze and real model cases; no new-graph provider measurement is claimed."
+  ],
+  "privateAuditArtifacts": [
+    {
+      "path": "/private/tmp/slc-spex-adoption-audit/README.md",
+      "bytes": 5660,
+      "sha256": "522f4ea91f524cb60d6ec7748a5328ae1a33ea02e94d7b49affdf92edec6a2a8"
+    },
+    {
+      "path": "/private/tmp/slc-spex-adoption-audit/grammar-evidence.json",
+      "bytes": 1049,
+      "sha256": "769c6778d93d29e0664ffeaa72c86bacf5f54acdac16868ec2d5da2135b19606"
+    },
+    {
+      "path": "/private/tmp/slc-spex-adoption-audit/resolution-evidence.json",
+      "bytes": 356,
+      "sha256": "f8b47b327c0d0c4d47ae21f14093b78900be42ea2792637b9cd67f760aed2c8a"
+    },
+    {
+      "path": "/private/tmp/slc-spex-adoption-audit/playbook-evidence.json",
+      "bytes": 1603,
+      "sha256": "eb9d5a26a6e608ee86fb3a36161edd01cd29812699975df05e873a3e15a5637f"
+    },
+    {
+      "path": "/private/tmp/slc-spex-adoption-audit/compiled-fidelity-evidence.json",
+      "bytes": 271,
+      "sha256": "af609008c946a3dd6123ff1398ee20d4169cfb327d1abc850bba684789fa1b80"
+    },
+    {
+      "path": "/private/tmp/slc-spex-adoption-audit/latest-spex-metadata.json",
+      "bytes": 811,
+      "sha256": "843bb07f2e89c27c4c47ea8d44841ad72b4ff9dac7a96c82541e19712d651fa3"
+    },
+    {
+      "path": "/private/tmp/slc-spex-adoption-audit/latest-playbook-metadata.json",
+      "bytes": 438,
+      "sha256": "2208a0f461fd742ce33fefee0cd97a15b905d522c29cc259fae80f57faf3a8ec"
+    },
+    {
+      "path": "/private/tmp/slc-spex-adoption-audit/retention-before-manifest.json",
+      "bytes": 10127,
+      "sha256": "7ef53239e36e12afdfd6dc8fd61765977e73177a4993ffd30b7d858119396028"
+    },
+    {
+      "path": "/private/tmp/slc-spex-adoption-audit/retention-before-pins.json",
+      "bytes": 7076,
+      "sha256": "548d913061ba4ba0c7e2affee341c5169e141484fe11c79a308c559eeba1ae46"
+    },
+    {
+      "path": "/private/tmp/slc-typescript-7-audit/README.md",
+      "bytes": 3259,
+      "sha256": "e17cbe4ed45c7c0ddb0e9307bf7ab3d358d39df431283a2cbf107e19f9c5251b"
+    },
+    {
+      "path": "/private/tmp/slc-typescript-7-audit/evidence.json",
+      "bytes": 7625,
+      "sha256": "7dd09c4f07644c44dd01ed1bf732a9facd5e8c87b1d1fc50265f2273957b40e0"
+    },
+    {
+      "path": "/private/tmp/slc-typescript-7-audit/probe.mjs",
+      "bytes": 4328,
+      "sha256": "4abade52f59610cd54a49cac617b9029dd32470c10a786005399867acd9125a4"
+    },
+    {
+      "path": "/private/tmp/slc-typescript-7-audit/package-lock.json",
+      "bytes": 13575,
+      "sha256": "655b3eb9afb9d52f1037bafdc7ae33359214fd109e0585cb5e70d64e22cc7633"
+    },
+    {
+      "path": "/private/tmp/slc-dependency-outdated-after.json",
+      "bytes": 409,
+      "sha256": "2336044a156a0cfba9847101aa9096733d19ba10f02b39c03f98750f656ca8a8"
+    },
+    {
+      "path": "/private/tmp/slc-node-types-dist-tags.json",
+      "bytes": 914,
+      "sha256": "8904c324c37e5b6034ccc8566d2616fb6c0c0e298147fca1118107f949d8de0b"
+    },
+    {
+      "path": "/private/tmp/slc-current-retention-review/evidence.json",
+      "bytes": 31124,
+      "sha256": "d02dd6a0566c7822365d5466bb9d5b4dd67e1622ead60118068caca97172b603"
+    },
+    {
+      "path": "/private/tmp/slc-current-retention-review/README.md",
+      "bytes": 3360,
+      "sha256": "a47be99358d49628a5201f80938ed4e52cd7ad22bd8a7ca82a3954b29f94b1d6"
+    },
+    {
+      "path": "/private/tmp/slc-current-retention-review/audit.mjs",
+      "bytes": 7364,
+      "sha256": "fb22cbf2c251419802d5b776554dd35522f4982511942ffcf73a609274ec2e58"
+    }
+  ],
+  "historicalMinimalMeasurement": {
+    "runId": "compile-9lTnki",
+    "elapsedMs": 196601,
+    "sourceSha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+    "dependencies": {
+      "@sublang/slc": "0.9.0",
+      "@sublang/playbook": "12.3.0",
+      "@sublang/cligent": "0.24.0",
+      "@openai/codex-sdk": "0.153.4",
+      "@anthropic-ai/claude-agent-sdk": "0.3.223",
+      "xstate": "5.32.4",
+      "typescript": "6.0.3"
+    },
+    "lockfile": {
+      "path": "/private/tmp/slc-gpt6-current-v8/package-lock.json",
+      "bytes": 188194,
+      "sha256": "546a33e16e46b16e12c364550bf1d1cc0d0c685bcf355e66211569b30e05beb1"
+    },
+    "summary": {
+      "path": "/private/tmp/slc-performance-evidence/compile-9lTnki/summary.json",
+      "bytes": 35499,
+      "sha256": "957190d310e74eb73300ae9e6693961438fe9dec1927ce9567d4b59ce3e60540"
+    },
+    "newDependencyMeasurement": false,
+    "reproductionCompilerCommit": "6ba16d093ece135f67a11203e09d4c7f6821e1bd",
+    "reproduction": "docs/compilation-reproduction.md",
+    "privateHistoricalInstallUsesArchivedLock": true,
+    "archivedLockCodexSDK": "0.146.1",
+    "measuredPrivateGraphCodexSDK": "0.153.4",
+    "providerForHistoricalRecipe": "claude-code",
+    "limitation": "The Claude recipe preserves its historical Claude SDK and runtime, but does not claim an identical unused Codex dependency environment."
+  },
+  "registryAudit": {
+    "outdated": {
+      "path": "/private/tmp/slc-dependency-outdated-after.json",
+      "bytes": 409,
+      "sha256": "2336044a156a0cfba9847101aa9096733d19ba10f02b39c03f98750f656ca8a8"
+    },
+    "nodeTypesDistTags": {
+      "evidence": {
+        "path": "/private/tmp/slc-node-types-dist-tags.json",
+        "bytes": 914,
+        "sha256": "8904c324c37e5b6034ccc8566d2616fb6c0c0e298147fca1118107f949d8de0b"
+      },
+      "latest": "22.20.2",
+      "ts6.0": "26.5.1"
+    },
+    "onlyOutdatedTopLevelPackages": ["@types/node", "typescript"],
+    "otherTopLevelSelectionsReportedOutdated": false,
+    "npmOutdated": {
+      "@types/node": {
+        "current": "25.9.6",
+        "wanted": "25.9.6",
+        "latest": "22.20.2"
+      },
+      "typescript": {
+        "current": "6.0.3",
+        "wanted": "6.0.3",
+        "latest": "7.0.2"
+      }
+    }
+  }
+}

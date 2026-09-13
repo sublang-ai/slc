@@ -2090,11 +2090,14 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
  * so contract drift fails it (DR-009).
  */
 
-/** The exact continuation preamble the link contract mandates (link.md). */
+/** The historical full continuation format, retained for schema-1 and old composers. */
 export const CONTINUATION_PREAMBLE =
   'You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.';
 export const BOSS_QUESTION_LABEL = 'Boss question:';
 export const BOSS_REPLY_LABEL = 'Boss reply:';
+const CURRENT_CONTINUATION_PREAMBLE =
+  'Continue the same task using Boss’s reply below.';
+const CURRENT_BOSS_QUESTION_LABEL = 'Your previous question:';
 
 // Direct Captain prompts cross the callCaptain boundary and therefore must
 // not acquire player-only routing or session-control text. Match the stable
@@ -2504,8 +2507,8 @@ export function checkFsmContinuationInputs(
  * (verification-5), returning findings (empty when conformant): the prompt body is
  * preserved modulo substituted placeholders, the adjudicator-facing Boss-reply
  * contract never leaks into a player prompt, no continuation appears on an
- * ordinary turn, and a Boss-reply continuation turn opens with the exact
- * preamble and labelled Q&A blocks before the body.
+ * ordinary turn, and a Boss-reply continuation turn opens with a supported exact
+ * prefix. Only an explicitly resumed schema-3 player may omit the question.
  */
 export function checkPromptComposition(opts: {
   config: MachineConfigLike;
@@ -2549,59 +2552,81 @@ export function checkPromptComposition(opts: {
     const reads = probeContextReads(inputFn, initial);
     const substituted = substitutions[state.stateId] ?? [];
 
-    let ordinary: string;
-    let promptReads: string[];
-    try {
-      const probed = withPlaceholderValues(
-        state,
-        inputFn({ context: ordinaryTurnContext(reads, initial) }),
-      );
-      promptReads = promptSentinelFields(state, reads, probed.fields, roles);
-      ordinary = composeForState(opts.compose, state, probed.input, roles);
-      if (typeof ordinary !== 'string') {
-        throw new Error(`${composerName} returned a non-string value`);
-      }
-    } catch (error) {
-      findings.push(
-        `${state.stateId}: ${composerName} threw on an ordinary turn: ${messageOf(error)}`,
-      );
-      continue;
-    }
-    findings.push(
-      ...bodyFindings(state, ordinary, substituted, promptReads, 'ordinary'),
-    );
-    pushUnique(findings, ...promptControlFindings(state, ordinary));
-    // A self-hosted playbook's domain body may legitimately quote the
-    // adjudicator contract or the continuation texts (it instructs a compiler
-    // about them); only occurrences the composer ADDS beyond the body's own
-    // are leaks.
-    if (
-      occurrences(ordinary, BOSS_QUESTION_MARKER) >
-      occurrences(state.prompt, BOSS_QUESTION_MARKER)
-    ) {
-      findings.push(
-        `${state.stateId}: the adjudicator-facing ${NEEDS_BOSS_REPLY} contract leaks into the player prompt`,
-      );
-    }
-    if (
-      [CONTINUATION_PREAMBLE, BOSS_QUESTION_LABEL, BOSS_REPLY_LABEL].some(
-        (needle) =>
-          occurrences(ordinary, needle) > occurrences(state.prompt, needle),
-      )
-    ) {
-      findings.push(
-        `${state.stateId}: continuation blocks appear on an ordinary turn`,
-      );
-    }
-    // Controllers own no Boss-reply wait. A missing ordinary result is already
-    // diagnosed by conformance, so do not fabricate a continuation contract.
-    if (controller || !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)) continue;
-
     const artifactSchema =
       schemaResolution.findings.length > 0
         ? undefined
         : (inferredArtifactSchema ??
           (state.role !== undefined ? 3 : state.player !== '' ? 1 : undefined));
+    const modes: readonly (boolean | undefined)[] =
+      artifactSchema === 3 && state.actor === 'player'
+        ? [undefined, false, true]
+        : [undefined];
+    let promptReads: string[];
+    for (const resuming of modes) {
+      let ordinary: string;
+      try {
+        const probed = withPlaceholderValues(
+          state,
+          inputFn({ context: ordinaryTurnContext(reads, initial) }),
+        );
+        promptReads = promptSentinelFields(state, reads, probed.fields, roles);
+        ordinary = composeForState(
+          opts.compose,
+          state,
+          probed.input,
+          roles,
+          resuming,
+        );
+        if (typeof ordinary !== 'string') {
+          throw new Error(`${composerName} returned a non-string value`);
+        }
+      } catch (error) {
+        pushUnique(
+          findings,
+          `${state.stateId}: ${composerName} threw on an ordinary turn: ${messageOf(error)}`,
+        );
+        continue;
+      }
+      pushUnique(
+        findings,
+        ...bodyFindings(state, ordinary, substituted, promptReads, 'ordinary'),
+      );
+      pushUnique(findings, ...promptControlFindings(state, ordinary));
+      // A self-hosted playbook's domain body may legitimately quote the
+      // adjudicator contract or the continuation texts (it instructs a compiler
+      // about them); only occurrences the composer ADDS beyond the body's own
+      // are leaks.
+      if (
+        occurrences(ordinary, BOSS_QUESTION_MARKER) >
+        occurrences(state.prompt, BOSS_QUESTION_MARKER)
+      ) {
+        pushUnique(
+          findings,
+          `${state.stateId}: the adjudicator-facing ${NEEDS_BOSS_REPLY} contract leaks into the player prompt`,
+        );
+      }
+      if (
+        [
+          CONTINUATION_PREAMBLE,
+          CURRENT_CONTINUATION_PREAMBLE,
+          BOSS_QUESTION_LABEL,
+          CURRENT_BOSS_QUESTION_LABEL,
+          BOSS_REPLY_LABEL,
+        ].some(
+          (needle) =>
+            occurrences(ordinary, needle) > occurrences(state.prompt, needle),
+        )
+      ) {
+        pushUnique(
+          findings,
+          `${state.stateId}: continuation blocks appear on an ordinary turn`,
+        );
+      }
+    }
+    // Controllers own no Boss-reply wait. A missing ordinary result is already
+    // diagnosed by conformance, so do not fabricate a continuation contract.
+    if (controller || !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)) continue;
+
     if (artifactSchema === undefined) {
       findings.push(
         `${state.stateId}: prompt composition requires artifactSchema 1 or 3 to probe this direct-Captain continuation`,
@@ -2609,86 +2634,72 @@ export function checkPromptComposition(opts: {
       continue;
     }
 
-    // A Boss-reply continuation turn: the thunk carries the pending question
-    // and reply, and the composer opens with the exact preamble and labelled
-    // Q&A blocks before the domain body (gears2fsm.md, link.md).
-    const question = sentinelFor('question');
-    const reply = sentinelFor('bossReply');
-    let continuation: string;
-    let input: unknown;
-    try {
-      const probed = probeContinuationInput(
-        state,
-        inputFn,
-        initial,
-        artifactSchema,
-      );
-      input = probed.input;
-      promptReads = promptSentinelFields(state, reads, probed.fields, roles);
-      continuation = composeForState(opts.compose, state, input, roles);
-      if (typeof continuation !== 'string') {
-        throw new Error(`${composerName} returned a non-string value`);
-      }
-    } catch (error) {
-      findings.push(
-        `${state.stateId}: ${composerName} threw on a continuation turn: ${messageOf(error)}`,
-      );
-      continue;
-    }
-    const inputFinding = continuationInputFinding(
-      state.stateId,
-      input,
-      question,
-      reply,
-    );
-    if (inputFinding !== undefined) {
-      findings.push(inputFinding);
-      continue;
-    }
-    if (!continuation.startsWith(`${CONTINUATION_PREAMBLE}\n\n`)) {
-      findings.push(
-        `${state.stateId}: a continuation turn does not open with the exact preamble`,
-      );
-    }
-    const bodyStart = bodyIndex(state, continuation, substituted, promptReads);
-    const questionBlock = `${BOSS_QUESTION_LABEL}\n${question}`;
-    const replyBlock = `${BOSS_REPLY_LABEL}\n${reply}`;
-    for (const [label, value] of [
-      [BOSS_QUESTION_LABEL, questionBlock],
-      [BOSS_REPLY_LABEL, replyBlock],
-    ] as const) {
-      // The composer must ADD the labelled block (beyond any body-carried
-      // occurrence), with its sentinel value immediately below the label and
-      // before the body.
-      const at = continuation.indexOf(value);
-      if (
-        occurrences(continuation, value) <= occurrences(state.prompt, value)
-      ) {
-        findings.push(
-          `${state.stateId}: a continuation turn lacks the "${label}" block`,
+    // Probe absent and explicit fresh modes separately: wrappers may forward
+    // the optional argument incorrectly. Historical composers may ignore it
+    // and keep their complete Q&A prefix even when a player resumes.
+    for (const resuming of modes) {
+      const question = sentinelFor('question');
+      const reply = sentinelFor('bossReply');
+      let continuation: string;
+      let input: unknown;
+      try {
+        const probed = probeContinuationInput(
+          state,
+          inputFn,
+          initial,
+          artifactSchema,
         );
-      } else if (bodyStart !== -1 && at > bodyStart) {
-        findings.push(
-          `${state.stateId}: the "${label}" block appears after the domain prompt body`,
+        input = probed.input;
+        promptReads = promptSentinelFields(state, reads, probed.fields, roles);
+        continuation = composeForState(
+          opts.compose,
+          state,
+          input,
+          roles,
+          resuming,
         );
+        if (typeof continuation !== 'string') {
+          throw new Error(`${composerName} returned a non-string value`);
+        }
+      } catch (error) {
+        pushUnique(
+          findings,
+          `${state.stateId}: ${composerName} threw on a continuation turn: ${messageOf(error)}`,
+        );
+        continue;
       }
-    }
-    const exactContinuationPrefix = `${CONTINUATION_PREAMBLE}\n\n${questionBlock}\n\n${replyBlock}\n\n`;
-    if (!continuation.startsWith(exactContinuationPrefix)) {
-      findings.push(
-        `${state.stateId}: a continuation turn does not preserve the exact ordered Boss question/reply blocks`,
+      const inputFinding = continuationInputFinding(
+        state.stateId,
+        input,
+        question,
+        reply,
+      );
+      if (inputFinding !== undefined) {
+        pushUnique(findings, inputFinding);
+        continue;
+      }
+      pushUnique(
+        findings,
+        ...continuationPrefixFindings(
+          state,
+          continuation,
+          substituted,
+          promptReads,
+          artifactSchema,
+          resuming,
+          question,
+          reply,
+        ),
+        ...bodyFindings(
+          state,
+          continuation,
+          substituted,
+          promptReads,
+          'continuation',
+        ),
+        ...promptControlFindings(state, continuation),
       );
     }
-    findings.push(
-      ...bodyFindings(
-        state,
-        continuation,
-        substituted,
-        promptReads,
-        'continuation',
-      ),
-    );
-    pushUnique(findings, ...promptControlFindings(state, continuation));
   }
   return findings;
 }
@@ -2697,6 +2708,7 @@ type PromptIdentity = (roleId: string) => string;
 type PromptComposer = (
   input: unknown,
   promptIdentity: PromptIdentity,
+  resuming?: boolean,
 ) => string;
 
 function promptSentinelFields(
@@ -2716,6 +2728,7 @@ function composeForState(
   state: CaptainState,
   input: unknown,
   declaredRoles: readonly string[],
+  resuming?: boolean,
 ): string {
   // Schema-1 composers and the shared default composer use their second
   // positional argument as a placeholder-field map. A callable proxy with a
@@ -2745,8 +2758,96 @@ function composeForState(
     getOwnPropertyDescriptor: () => undefined,
   });
   return state.actor === 'player' && state.role !== undefined
-    ? compose(input, promptIdentity)
+    ? resuming === undefined
+      ? compose(input, promptIdentity)
+      : compose(input, promptIdentity, resuming)
     : (compose as (value: unknown) => string)(input);
+}
+
+function continuationPrefixFindings(
+  state: CaptainState,
+  composed: string,
+  substituted: readonly string[],
+  reads: readonly string[],
+  artifactSchema: 1 | 3,
+  resuming: boolean | undefined,
+  question: string,
+  reply: string,
+): string[] {
+  const fullProfiles = [
+    { preamble: CONTINUATION_PREAMBLE, questionLabel: BOSS_QUESTION_LABEL },
+    ...(artifactSchema === 3
+      ? [
+          {
+            preamble: CURRENT_CONTINUATION_PREAMBLE,
+            questionLabel: CURRENT_BOSS_QUESTION_LABEL,
+          },
+        ]
+      : []),
+  ];
+  const compactAllowed =
+    artifactSchema === 3 && state.actor === 'player' && resuming === true;
+  const replyBlock = `${BOSS_REPLY_LABEL}\n${reply}`;
+  const prefixes = fullProfiles.map(
+    ({ preamble, questionLabel }) =>
+      `${preamble}\n\n${questionLabel}\n${question}\n\n${replyBlock}\n\n`,
+  );
+  const compactPrefix = `${CURRENT_CONTINUATION_PREAMBLE}\n\n${replyBlock}\n\n`;
+  const compact = compactAllowed && composed.startsWith(compactPrefix);
+  if (compactAllowed) prefixes.push(compactPrefix);
+
+  const findings: string[] = [];
+  if (
+    compact &&
+    [BOSS_QUESTION_LABEL, CURRENT_BOSS_QUESTION_LABEL].some(
+      (label) =>
+        occurrences(composed, `${label}\n${question}`) >
+        occurrences(state.prompt, `${label}\n${question}`),
+    )
+  ) {
+    findings.push(
+      `${state.stateId}: a compact continuation adds the Boss question outside its domain prompt body`,
+    );
+  }
+  if (
+    !fullProfiles.some(({ preamble }) => composed.startsWith(`${preamble}\n\n`))
+  ) {
+    findings.push(
+      `${state.stateId}: a continuation turn does not open with the exact preamble`,
+    );
+  }
+  // Select diagnostics by the observed full format, without permitting a
+  // hybrid label or using function arity/package versions as capability evidence.
+  const profile =
+    fullProfiles.find(({ preamble }) =>
+      composed.startsWith(`${preamble}\n\n`),
+    ) ?? fullProfiles[0];
+  const blocks = [
+    ...(!compact
+      ? [[profile.questionLabel, `${profile.questionLabel}\n${question}`]]
+      : []),
+    [BOSS_REPLY_LABEL, replyBlock],
+  ];
+  const bodyStart = bodyIndex(state, composed, substituted, reads);
+  for (const [label, value] of blocks) {
+    // Authored domain text can itself quote the framework contract; a real
+    // continuation must add its own sentinel-bearing blocks before that body.
+    if (occurrences(composed, value) <= occurrences(state.prompt, value)) {
+      findings.push(
+        `${state.stateId}: a continuation turn lacks the "${label}" block`,
+      );
+    } else if (bodyStart !== -1 && composed.indexOf(value) > bodyStart) {
+      findings.push(
+        `${state.stateId}: the "${label}" block appears after the domain prompt body`,
+      );
+    }
+  }
+  if (!prefixes.some((prefix) => composed.startsWith(prefix))) {
+    findings.push(
+      `${state.stateId}: a continuation turn does not preserve the exact ordered Boss question/reply blocks`,
+    );
+  }
+  return findings;
 }
 
 function promptControlFindings(

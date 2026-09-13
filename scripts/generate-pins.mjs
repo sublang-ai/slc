@@ -26,7 +26,7 @@ const pipelineDir = join(repoRoot, 'pipelines', 'playbook');
 // root so its identity can be pinned (pinning-15).
 const boundary = { boundary: '../..' };
 
-const expectedXstateVersion = '5.32.4';
+const expectedXstateVersion = '5.33.0';
 const rootPackage = JSON.parse(
   readFileSync(join(repoRoot, 'package.json'), 'utf8'),
 );

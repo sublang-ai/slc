@@ -250,6 +250,12 @@ npm test
 npm run lint
 ```
 
+The repository build explicitly uses the native TypeScript 7 compiler.
+SLC retains TypeScript 6 as a runtime dependency for its programmatic AST,
+emission, and strict artifact checks; TypeScript 7 has no stable compiler
+API yet. The explicit build path avoids relying on which `tsc` executable
+npm links.
+
 A checkout's own [`slc.config.yaml`](slc.config.yaml) routes the
 `playbook` pipeline to the bundled copy under `pipelines/`, so repo
 compiles exercise the pinned artifacts. CI additionally re-verifies the

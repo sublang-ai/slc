@@ -5,9 +5,9 @@
 
 The minimal three-line workflow completed a cold compilation and all acceptance checks in **196.601 seconds** with Opus 5 at low effort and no independent Reviewer. The [performance report](compilation-performance.md) separates this measured result from failed experiments and the broader workflow's remaining coverage findings. One successful measurement is not a latency guarantee.
 
-This recipe builds SLC commit `6ba16d093ece135f67a11203e09d4c7f6821e1bd` in a fresh private directory and reconstructs the reviewed Playbook 12.3 definition overlay from Playbook commit `1c5a4e67162ba58ab1e96e0f91df56ae13f39d71`. It invokes that build directly, so a global `slc` executable cannot override it. The installed runtime stays at Playbook 12.3.0; archiving the Playbook authoring commit does not adopt its 13.1 package or runtime. These commands install and publish nothing and change no saved configuration.
+This recipe builds SLC commit `6ba16d093ece135f67a11203e09d4c7f6821e1bd` in a fresh private directory and reconstructs the reviewed Playbook 12.3 definition overlay from Playbook commit `1c5a4e67162ba58ab1e96e0f91df56ae13f39d71`. It installs that historical compiler's locked dependencies privately and invokes its build directly. The runtime stays at Playbook 12.3.0 even after the working repository upgrades; archiving the Playbook authoring commit does not adopt its 13.1 package or runtime. These commands publish nothing and change no saved configuration or global installation.
 
-Prerequisites are the already installed repository dependency tree, Node >=23.6, and existing Claude Code authentication with access to `claude-opus-5`. Run the setup in one Bash or zsh session; the later commands reuse its variables. Setup is local and makes no provider call.
+Prerequisites are npm registry access, Node >=23.6, and existing Claude Code authentication with access to `claude-opus-5`. Run the setup in one Bash or zsh session; the later commands reuse its variables. Setup installs dependencies but makes no model call. The historical lock retains Claude SDK 0.3.223, Playbook 12.3.0, TypeScript 6.0.3, and XState 5.32.4. Its unused Codex SDK is 0.146.1; the measured private graph had 0.153.4, so this Claude-only recipe does not claim an identical Codex environment.
 
 ```bash
 set -euo pipefail
@@ -20,8 +20,8 @@ repro=$(mktemp -d /private/tmp/slc-reproduction.XXXXXX)
 mkdir "$repro/compiler" "$repro/playbook-authoring" "$repro/pipelines" "$repro/work"
 git -C "$slc_repo" archive "$slc_commit" | tar -x -C "$repro/compiler"
 git -C "$playbook_repo" archive "$playbook_commit" | tar -x -C "$repro/playbook-authoring"
-ln -s "$slc_repo/node_modules" "$repro/compiler/node_modules"
-ln -s "$slc_repo/node_modules" "$repro/work/node_modules"
+npm --prefix "$repro/compiler" ci --ignore-scripts --no-audit --no-fund
+ln -s "$repro/compiler/node_modules" "$repro/work/node_modules"
 cat > "$repro/work/package.json" <<'JSON'
 {"private":true,"type":"module"}
 JSON
@@ -30,7 +30,7 @@ cat > "$repro/empty.yaml" <<'YAML'
 YAML
 npm --prefix "$repro/compiler" run build
 node "$repro/playbook-authoring/scripts/build-link-experiment-12.3.mjs" \
-  "$slc_repo/node_modules/@sublang/playbook" \
+  "$repro/compiler/node_modules/@sublang/playbook" \
   "$repro/pipelines/playbook" --full > "$repro/overlay-build.json"
 node "$repro/compiler/dist/cli.js" --version
 node "$repro/compiler/dist/cli.js" --help
@@ -44,7 +44,7 @@ cd "$repro/work"
 set +e
 ```
 
-The version output must be `slc 0.9.0`. The builder fails closed if the installed Playbook version or reviewed definition hashes differ. `SLC_PIPELINE_PATH` below is the **parent** directory containing `playbook/`, not the `playbook/` directory itself. Both the compiler and generated artifacts resolve dependencies through the existing repository `node_modules`; the default link target therefore remains its installed `@sublang/playbook/src/runtime.ts`.
+The version output must be `slc 0.9.0`. The builder fails closed if the installed Playbook version or reviewed definition hashes differ. `SLC_PIPELINE_PATH` below is the **parent** directory containing `playbook/`, not the `playbook/` directory itself. Both the compiler and generated artifacts resolve dependencies through the private historical compiler's `node_modules`; the default link target therefore remains its installed `@sublang/playbook/src/runtime.ts`.
 
 Setup disables shell exit-on-error before compilation so an expected clarification exit 2 leaves the session available for editing and rerunning. Define this ordinary CLI wrapper in the same session. The explicit empty private config prevents cwd/home configuration discovery and first-run seeding. Clearing all Reviewer settings disables the optional second compilation agent; clearing `SLC_FAST_MODE` leaves the provider's ordinary default. Model and effort are explicit for every compilation call. A two-role compiled workflow still contains its two runtime roles.
 
@@ -73,3 +73,5 @@ slc_local playbook "$repro/work/workflow.txt"
 A clarification exits with code 2 and prints questions on stderr. Edit the selected private `.txt` source and repeat its command; the CLI does not ask for terminal answers. Successful unchanged reruns use incremental reuse. `--rebuild` forces every phase to run but leaves existing artifacts in place; use a fresh private working directory for another cold measurement. `SLC_STALL_TIMEOUT=600` is an inactivity watchdog, not a total runtime limit. Do not run the generated workflow merely to compile it: executing it is a separate task that acts on its runtime working directory.
 
 Local verification on 2026-09-12 rebuilt the exact SLC commit, reconstructed the overlay, and ran `--version`, `--help`, the actual config resolver, pipeline loader, and artifact dependency resolver without provider calls. Evidence is `/private/tmp/slc-reproduction.NVU2Y8/local-evidence.json` and its sibling `overlay-build.json`; the literal setup/help check is `/private/tmp/slc-final-reproduction-task-input-local-check.log`. Earlier local proofs remain intact. The resolved selection is exactly Claude Code / `claude-opus-5` / low with no Reviewer; the pipeline resolves to the private `pipelines/playbook` directory with `text2gears`, `gears2fsm`, `optimize`, and `link`; runtime resolution points to installed Playbook 12.3. The new producer SHA-256 is `576218f65416b0589197c3543aca4cd087e6d7061a466648df6337864eee9bda`; helper SHA-256 is `0d3163b79757e48abd9e2f90a1156309a572e540d2b458a442a2c14c0ee4c253`.
+
+After the dependency update, the revised private-install setup was verified separately at `/private/tmp/slc-legacy-reproduction-5vf1dfzk`: a clean historical `npm ci`, build, exact overlay reconstruction, version, and help all passed without a model call. This setup check does not replace or repeat the historical timing result.

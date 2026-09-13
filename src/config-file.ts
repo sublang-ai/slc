@@ -87,9 +87,7 @@ export interface LoadConfigFileOptions {
 
 /** Machine-readable reason a config file was rejected (cli-21). */
 export type ConfigFileErrorCode =
-  | 'config-not-found'
-  | 'config-parse'
-  | 'config-invalid';
+  'config-not-found' | 'config-parse' | 'config-invalid';
 
 /** Raised when an explicit `--config` file is missing, malformed, or invalid (cli-21). */
 export class ConfigFileError extends Error {
