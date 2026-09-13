@@ -578,6 +578,221 @@
         "sha256": "c86d23c1d2b5f472e205219eacadf7ca117f19413f6282642df6382ac089af59"
       },
       "selectionReadiness": "closed input checks recorded in readiness evidence; no measured result claimed"
+    },
+    "c7": {
+      "status": "prepared-only; CODE v2 wrapper launch in progress when recorded; no new measured result yet",
+      "compilerRoot": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "evidenceRoot": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence",
+      "productionSourceCommit": "c7419edcf1f609bc9bcb9074b9414586f9d7be03",
+      "parentCohort": "/private/tmp/slc-c6-compiler-ukczlhl3",
+      "privateRuntimePatchNotice": "@sublang/playbook remains version 13.2.0 in package and lock metadata, but two installed runtime source files are private patched bytes from upstream IR090; do not describe this as an unmodified published install.",
+      "cohort": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/cohort.json",
+        "bytes": 8952,
+        "sha256": "519aca78c24093b75eb525cb45e5e820d98b077cc0ee5809cf20b5ef2ef4ced2"
+      },
+      "parentComparison": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/parent-comparison.json",
+        "bytes": 7142,
+        "sha256": "4455c3621e6a0d9b4fe4fcb62eba285fec1265b1d1b84969a2db9ef96f7080fb"
+      },
+      "preparation": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/preparation.json",
+        "bytes": 2811,
+        "sha256": "b1712b3ff75cd257d87c25926cdd1fab6cdf8145b9aee5526e0172164bcc5c06"
+      },
+      "wrapperV2Adjudication": {
+        "path": "/private/tmp/slc-c7-wrapper-v2-adjudication.json",
+        "bytes": 8271,
+        "sha256": "fe8a175267748cdcdad3234c27d97c34aff7d226696a565e09fefd6167d7b3c8"
+      },
+      "wrapperV2ReadinessHistorical": {
+        "path": "/private/tmp/slc-c7-wrapper-v2-readiness.json",
+        "bytes": 5541,
+        "sha256": "c1eba4eb988035d9a37fb28dc5753bc6327401026d8e2a14a3911d5c6597150f"
+      },
+      "wrapperPreProviderFailureLog": {
+        "path": "/private/tmp/slc-c7-v8-code-full.log",
+        "bytes": 1008,
+        "sha256": "dae36f83f4e4c95a65bba1579843f55d6772f1f40c62024513d121f626ad042a"
+      },
+      "productionSourceTreeSha256": "fe589890bcc4900464d6ceebfe7c70556f4136e03b9c02271f52f639a17154b9",
+      "productionScriptsTreeSha256": "1f542eab5fee97a9fd65d361a5f8dd690a96cb654e9bcf85771b41ab5349f90a",
+      "productionSourcePatchSha256": "f49764c1e1212a26885e66de3ba0ece65c513516ca32d9bd2097e1ca7c486d90",
+      "sourceFilesChangedSinceParent": [
+        "scripts/workflow-acceptance/README.md",
+        "scripts/workflow-acceptance/code.mjs",
+        "scripts/workflow-acceptance/maintained.mjs",
+        "src/verify.ts"
+      ],
+      "sourceDiffStatSinceParent": " scripts/workflow-acceptance/README.md      |  3 ++\n scripts/workflow-acceptance/code.mjs       | 41 +++++++++++++++++++++-----\n scripts/workflow-acceptance/maintained.mjs |  1 +\n src/verify.ts                              | 47 +++++++++++++++++++++++++-----\n 4 files changed, 77 insertions(+), 15 deletions(-)\n",
+      "changedCompilerFiles": [
+        "dist/verify.d.ts.map",
+        "dist/verify.js",
+        "dist/verify.js.map",
+        "pipelines/playbook/slc.pins.json",
+        "scripts/workflow-acceptance/README.md",
+        "scripts/workflow-acceptance/code.mjs",
+        "scripts/workflow-acceptance/maintained.mjs"
+      ],
+      "changedDependencyFiles": [
+        "node_modules/@sublang/playbook/src/xstate-playbook-runtime.js",
+        "node_modules/@sublang/playbook/src/xstate-playbook-runtime.ts"
+      ],
+      "runtimePatch": {
+        "upstreamRepo": "/private/tmp/playbook-complex-performance",
+        "upstreamCommit": "4b51a7edfd2670f6a4cb4f23285a897ae836e612",
+        "upstreamParent": "3db1d9d707ca6a34ce79c83924fd6bc72809934b",
+        "subject": "fix(runtime): retain question outcome origin",
+        "commitChangedFiles": [
+          "specs/intents/090-pending-question-outcome-origin.md",
+          "specs/packages/playbook-runtime.md",
+          "src/pending-question-origin.test.ts",
+          "src/xstate-playbook-runtime.js",
+          "src/xstate-playbook-runtime.ts"
+        ],
+        "overlaidRuntimeFiles": [
+          "src/xstate-playbook-runtime.js",
+          "src/xstate-playbook-runtime.ts"
+        ],
+        "overlayPatchSha256": "91a1059e34ec59495d0f435a4200602512b891bb651376f2145434e40d3e92a9",
+        "files": [
+          {
+            "packagePath": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.ts",
+            "upstreamPath": "src/xstate-playbook-runtime.ts",
+            "originalSha256": "c24b37ab859c5d2bdfe01b9aa8e5973f32ef5f7c87f6b9fd05349337c36a1ee9",
+            "patchedSha256": "7c856c0f45608464f764c3a229c8e55ad1937f5171f5d48947909e5544220d48",
+            "bytes": 336684
+          },
+          {
+            "packagePath": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.js",
+            "upstreamPath": "src/xstate-playbook-runtime.js",
+            "originalSha256": "e3137c9b7be363c410d143e1e85524bbaf3626fb7eb0b9b0f8c11e7c1c859b5b",
+            "patchedSha256": "de4480b705833fa764e4724b25a4932f72616adda74e55934aa29bd39cbc79f5",
+            "bytes": 320456
+          }
+        ],
+        "verifiedAgainstOriginalPackage": true,
+        "allowedOverlayDeltas": [
+          "runtime question-origin retention in xstate-playbook-runtime.ts/.js only"
+        ]
+      },
+      "unchangedInventories": {
+        "pipelinesExceptPins": true,
+        "packageManifestAndLock": true,
+        "dependenciesExceptPrivateRuntimePatch": true
+      },
+      "pinGeneration": {
+        "method": "node evidence/regenerate-private-pins.mjs using built dist/pin-generate.js and dist/pin-currency.js",
+        "afterArtifactVerification": true,
+        "log": {
+          "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/generate-pins.log",
+          "bytes": 130,
+          "sha256": "f9104e24581d8cc7dca533f00ba3fa09b8a25aded27d8b58a819ec3de6cc2bb4"
+        },
+        "generator": {
+          "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/regenerate-private-pins.mjs",
+          "bytes": 3392,
+          "sha256": "28ebb7a5f0972198339b69715fec0c6fd20656099a3d2ae485a634e489c9c38c"
+        },
+        "pins": {
+          "path": "/private/tmp/slc-c7-compiler-y4iln8vx/pipelines/playbook/slc.pins.json",
+          "bytes": 7646,
+          "sha256": "df0f75a45ac9f723d562e2bb0c3f25a03cdaea3d634692cfa5f4c13744511779"
+        },
+        "privatePlaybookProvenance": "@sublang/playbook@13.2.0 private overlay 4b51a7edfd2670f6a4cb4f23285a897ae836e612 (IR090 xstate-playbook-runtime.ts/js)"
+      },
+      "pins": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx/pipelines/playbook/slc.pins.json",
+        "bytes": 7646,
+        "sha256": "df0f75a45ac9f723d562e2bb0c3f25a03cdaea3d634692cfa5f4c13744511779"
+      },
+      "compilerInventory": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/compiler-inventory.json",
+        "bytes": 31701,
+        "sha256": "fb5ebe51a7b7aeb98f224a7fd7840ea532d2e5674a9813baf65ebb1a0b193f77"
+      },
+      "dependencyInventory": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/dependencies-inventory.json",
+        "bytes": 1842034,
+        "sha256": "996a63f6fc31f84ce8d4b229ec20b14d9ae8609aad30560679bab887a712d5ad"
+      },
+      "dependencyFiles": 11642,
+      "dependencyBytes": 656995360,
+      "selectionProbe": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/selection-evidence.json",
+        "bytes": 1433,
+        "sha256": "3dbc2a431fb638538d3d29f9e95f79d71a078fc5be879b0f8f6236d2bddb08a3"
+      },
+      "artifactVerification": {
+        "text2gears": {
+          "exitCode": 0,
+          "log": {
+            "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/verify-text2gears.log",
+            "bytes": 867,
+            "sha256": "0a5445af3b2291b378b686b00be6dd1fa8bb5d53f3825d30bef0c9433d506601"
+          }
+        },
+        "gears2fsm": {
+          "exitCode": 0,
+          "log": {
+            "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/verify-gears2fsm.log",
+            "bytes": 850,
+            "sha256": "3c3c4cef89325e2f3bf646754d042b0270a3101a38e1b02e4797bfea9a8fa86d"
+          }
+        },
+        "link": {
+          "exitCode": 0,
+          "log": {
+            "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/verify-link.log",
+            "bytes": 821,
+            "sha256": "a759c65a8fd321216f989ad115902ad8991e9fb06c1b2aa14c29be7607a5ea33"
+          }
+        }
+      },
+      "wrappers": {
+        "originalBrokenParseHistorical": {
+          "full": {
+            "path": "/private/tmp/slc-c7-complex-full-run.mjs",
+            "bytes": 5314,
+            "sha256": "96da3588a956634310fbfb5ece8bf69b714bb65fb5f36e031123ece584bd4556"
+          },
+          "minimal": {
+            "path": "/private/tmp/slc-c7-minimal-run.mjs",
+            "bytes": 5311,
+            "sha256": "2acdc81c10d60bf407aaa482047bd0f9d675401bd042223242b7ebb066ef97bf"
+          },
+          "link": {
+            "path": "/private/tmp/slc-c7-link-run.mjs",
+            "bytes": 5305,
+            "sha256": "e5101e880f6b93dbac212ebc350aae19086f173671bed31f22aa1428ce728b0b"
+          }
+        },
+        "v2": {
+          "full": {
+            "path": "/private/tmp/slc-c7-complex-full-run-v2.mjs",
+            "bytes": 5315,
+            "sha256": "49f27ca07d66dfd421738e9817d5f7ecb2eb27ef817ac3cdd74cbec7b9ba0fab"
+          },
+          "minimal": {
+            "path": "/private/tmp/slc-c7-minimal-run-v2.mjs",
+            "bytes": 5312,
+            "sha256": "44a77bc0ea30cf7a2c6ce7a97f3bbd24a3fc1fd94d42a41e2262dea0f2fd32d0"
+          },
+          "link": {
+            "path": "/private/tmp/slc-c7-link-run-v2.mjs",
+            "bytes": 5306,
+            "sha256": "dba11421489d406948e64e226f03545f5ee41d48b8ac515a8119be9e83e70346"
+          }
+        }
+      },
+      "wrapperApiFacts": {
+        "full": "mode full; output /private/tmp/slc-c7-complex-full-evidence; timeoutSeconds 1200; optimize defaults from absent/--no-optimize fifth arg; no configured runtimeCheck",
+        "minimal": "mode minimal; output /private/tmp/slc-c7-minimal-evidence; timeoutSeconds 600; optimize defaults from absent/--no-optimize fifth arg; runtimeCheck minimal",
+        "link": "mode link; output /private/tmp/slc-c7-link-evidence; timeoutSeconds 600; requires link target as fifth argument; rejects a sixth argument; passes linkTarget only, with no optimize or runtimeCheck option",
+        "shared": "all wrappers protect pipeline tree, source, C7 compiler inventory, and C7 dependency inventory before and after; link also protects the link target; all import benchmarkCompile from the C7 compiler root and use real default adapter with observational executor wrappers"
+      },
+      "notes": "Private C7 preparation overlays exactly two @sublang/playbook runtime source files from upstream IR090 while package and lock metadata remain 13.2.0; this record adds no accepted runtime, full CODE, full DEV, or timing result."
     }
   }
 }
