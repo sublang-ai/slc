@@ -88,6 +88,21 @@
       "commonCatalogResultsAndTerminalCorrection": true,
       "performanceAccepted": false,
       "limits": "Optional incomplete authoring scaffold only; workflow topology and acceptance predicates remain agent-authored, existing strict/fidelity checks remain authoritative."
+    },
+    "commonV5": {
+      "scope": "C3 shared bare-relay and Results placement corrections; historical v4 closures preserved",
+      "evidence": {
+        "path": "/private/tmp/playbook-complex-performance/scripts/experiments/link-experiment-13.2-representation-evidence.json",
+        "bytes": 21678,
+        "sha256": "c4745507a74cb4724f0980b85fdb81ca9a0e5733bb68b1a96bc38eef1c9e5596"
+      },
+      "text2gears": {
+        "path": "/private/tmp/playbook-13.2-common-v5-baseline/playbook/text2gears.md",
+        "bytes": 22057,
+        "sha256": "bbefc6806bd84c5b181ef1014a7cbe2d21663be3ce4e2098499b07b134835970"
+      },
+      "performanceAccepted": false,
+      "observedReviewResults": ["phase-V4nTvl", "phase-1y1wBw", "phase-AegKvB"]
     }
   },
   "phaseRuns": [
@@ -545,7 +560,7 @@
           "sha256": "b7c5f5e8065d5eb9699403d3df6af7ec57233312ac71cf10deb01856b1cc416d"
         },
         "verdict": "fail",
-        "reason": "The previously missing exact-revision prompt delivery is repaired in all four prompts, but the generated GEARS drops Source116’s distinct terminal return obligation. Complete-result descriptions mention the evaluated revision and clean condition, then require only reviewerOutput; no retained clause requires returning the revision and no-unsettled-findings fact to the caller. This is generated loss from sufficient source, not a source-author choice."
+        "reason": "The previously missing exact-revision prompt delivery is repaired in all four prompts, but the generated GEARS drops Source116\u2019s distinct terminal return obligation. Complete-result descriptions mention the evaluated revision and clean condition, then require only reviewerOutput; no retained clause requires returning the revision and no-unsettled-findings fact to the caller. This is generated loss from sufficient source, not a source-author choice."
       },
       "fullArtifactAccepted": false,
       "targetedRevisionRelayCorrected": true,
@@ -682,6 +697,184 @@
         "reason": "The question identifies the exact shared affirmative clean-review trigger and opposing return versus repeat obligations, preserves both clauses and their choices, and selects neither. No concrete runtime scope/commit/findings question is requested."
       },
       "fullArtifactAccepted": false
+    },
+    {
+      "label": "review-bare-relay-C3-v5",
+      "caseId": "case-009",
+      "run": "phase-V4nTvl",
+      "cohort": "composed-child-fidelity-C3",
+      "scope": "phase",
+      "status": "success",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": true,
+        "outcome": "success"
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 100682,
+      "elapsedMs": 101541,
+      "agentCalls": 2,
+      "toolCalls": 5,
+      "sourceSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "summary": {
+        "path": "/private/tmp/slc-c3-review-bare-relay-evidence/phase-V4nTvl/summary.json",
+        "bytes": 436182,
+        "sha256": "29b7a351dd4f6532ded358200bb3b9a108260a2517ce4b8b75dc998972c180c4"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": true
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-review-v5-V4nTvl-adjudication/evidence.json",
+          "bytes": 5396,
+          "sha256": "c5f02488ee64a6f63d74ac5ac537ec667729c15780811890af3d00b57c6f3323"
+        },
+        "verdict": "pass",
+        "reason": "All four required relays and explicit terminal return obligations are preserved; added relays have literal quote markers."
+      },
+      "fullArtifactAccepted": false
+    },
+    {
+      "label": "review-bare-relay-C3-v5",
+      "caseId": "case-008",
+      "run": "phase-1y1wBw",
+      "cohort": "composed-child-fidelity-C3",
+      "scope": "phase",
+      "status": "clarification-required",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": false,
+        "outcome": "clarification-required",
+        "clarification": {
+          "schema": "sublang.slc.clarification.v1",
+          "phase": "text2gears",
+          "target": "/private/tmp/slc-c3-review-bare-relay-evidence/phase-1y1wBw/work/workflow.playbook/workflow.gears.md",
+          "sources": [
+            "/private/tmp/slc-c3-review-bare-relay-evidence/phase-1y1wBw/work/workflow.md"
+          ],
+          "questionCount": 1,
+          "reportSha256": "286896a1d52bb3fdbe0a735deb7384b9bcec7f52729d64030e4ce609ed491096"
+        }
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 15822,
+      "elapsedMs": 16621,
+      "agentCalls": 1,
+      "toolCalls": 1,
+      "sourceSha256": "b8179e3e7ff663a59faa4af8f53e2d31e07568385c9eb3ce80eeb9e411bec439",
+      "summary": {
+        "path": "/private/tmp/slc-c3-review-bare-relay-evidence/phase-1y1wBw/summary.json",
+        "bytes": 434463,
+        "sha256": "e44cf61fa12c714f70418e5f03cfad9ab863ed161058ac35efa06efc9ba3b9cb"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": false
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-review-v5-007-008-adjudication/evidence.json",
+          "bytes": 7304,
+          "sha256": "82b77f524cfcfe1a35a57f1df9e100d70118170ac1718ab75823994aec41e05c"
+        },
+        "verdict": "pass",
+        "reason": "A valid targeted question identifies the same-condition return-versus-another-round contradiction and names the original source."
+      },
+      "fullArtifactAccepted": false
+    },
+    {
+      "label": "review-bare-relay-C3-v5",
+      "caseId": "case-007",
+      "run": "phase-AegKvB",
+      "cohort": "composed-child-fidelity-C3",
+      "scope": "phase",
+      "status": "failure",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": false,
+        "outcome": "failure"
+      },
+      "actualCliExit": null,
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 107786,
+      "elapsedMs": 108702,
+      "agentCalls": 3,
+      "toolCalls": 2,
+      "sourceSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "summary": {
+        "path": "/private/tmp/slc-c3-review-bare-relay-evidence/phase-AegKvB/summary.json",
+        "bytes": 437846,
+        "sha256": "1a30b5588d10abe29fb45a022dd8334f986ee604ffa2ae990501bc9e6bd0ef5a"
+      },
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "phaseAcceptance": {
+        "basis": "ordinary runSlc single-phase generic and applicable registered checks",
+        "fullArtifactValidation": false,
+        "ok": false
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "semanticAdjudication": {
+        "evidence": {
+          "path": "/private/tmp/slc-review-v5-007-008-adjudication/evidence.json",
+          "bytes": 7304,
+          "sha256": "82b77f524cfcfe1a35a57f1df9e100d70118170ac1718ab75823994aec41e05c"
+        },
+        "verdict": "fail",
+        "reason": "Seven additional relay tokens retain only the outer GEARS marker, so parsed prompt content is unquoted. No source question is warranted; exact revision delivery also requires downstream proof."
+      },
+      "fullArtifactAccepted": false
     }
   ],
   "fullRuns": [
@@ -733,6 +926,145 @@
           "sha256": "0e60a44d0036f377691d1138c75b6c349d55c7eecd1e1d927fdd472829329f3e"
         }
       ]
+    },
+    {
+      "label": "C3-v4-code-full-baseline",
+      "run": "compile-CKr2Ni",
+      "status": "failure",
+      "scope": "full original-source compilation with normal optimization",
+      "cohort": "composed-child-fidelity-C3",
+      "sourceSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "summary": "/private/tmp/slc-c3-complex-full-evidence/compile-CKr2Ni/summary.json",
+      "summarySha256": "a03abb8bd5265c79a64dc3da3798690d4bc9ad6bdffda7ade1001f5596abbb61",
+      "pipelinePath": "/private/tmp/playbook-13.2-common-v4-baseline",
+      "compile": {
+        "ok": true,
+        "elapsedMs": 762093,
+        "outcome": null
+      },
+      "compileElapsedMs": 762093,
+      "elapsedMs": 763494,
+      "agentCalls": 5,
+      "phaseDurations": [
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 142457
+        },
+        {
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 14979
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 405712
+        },
+        {
+          "phase": "link",
+          "status": "success",
+          "elapsedMs": 193521
+        }
+      ],
+      "sourceAndCohortUnchanged": true,
+      "proof": {
+        "path": "/private/tmp/slc-c3-complex-full-evidence/invocation-hTul1i/proof.json",
+        "bytes": 2804871,
+        "sha256": "a7b92be90ab1272f2ed818079135dd04217c58eb4b502b3aa42c82baf06a2fc4"
+      },
+      "verdict": "generated artifact failed strict entry validation; no full runtime acceptance",
+      "fullArtifactAccepted": false,
+      "sourceToGears": "independently passed; raw and optimized GEARS are identical",
+      "runtimeAcceptance": "not reached through valid public entry",
+      "failure": "Generated required callerInput duplicates first-turn Boss text; the old deterministic entry cannot represent the linked options. Separate generated child-failure validation rejects four host-valid envelopes. Ten old child-coverage findings are disproved by actual transition driving.",
+      "diagnoses": [
+        {
+          "path": "/private/tmp/slc-CKr2Ni-semantic-audit/evidence.json",
+          "bytes": 10985,
+          "sha256": "62d06c507e6c64fc5a44c787a7f06e30704a2e229d369a00934c2b26061a2abe"
+        },
+        {
+          "path": "/private/tmp/slc-CKr2Ni-semantic-audit/child-failure-evidence.json",
+          "bytes": 4115,
+          "sha256": "5ed8ec026a9ccab7f96742e9604009fafacf305f772dac0ed7c4f606d92723a4"
+        },
+        {
+          "path": "/private/tmp/slc-CKr2Ni-coverage-audit/evidence.json",
+          "bytes": 15149,
+          "sha256": "6f056cd135aa79ee3ca234eeb2037300c99cb7935867f17d11001d2e4363f6cf"
+        },
+        {
+          "path": "/private/tmp/slc-CKr2Ni-coverage-audit/corrected-evidence.json",
+          "bytes": 6500,
+          "sha256": "9c105cd0f82585a0e5f09bcf4d9442d1f5eea161f1628be10cdc1472b367dd99"
+        },
+        {
+          "path": "/private/tmp/slc-CKr2Ni-code-runtime-prep/preparation.json",
+          "bytes": 1724,
+          "sha256": "3ada81bf8605f4e207622ce6849f8a40095ae9539df617b81f0d72c269d8d717"
+        }
+      ],
+      "limits": "The 40 pure canonical review-guard checks and reached child-transition probes do not accept a linked runtime. Prepared runtime cases were not executed by bypassing the invalid entry."
+    },
+    {
+      "label": "C3-v5-dev-original-source-mutant",
+      "run": "compile-SQkdsA",
+      "status": "failure",
+      "scope": "full original-source compilation with normal optimization",
+      "cohort": "composed-child-fidelity-C3",
+      "sourceSha256": "4542d86a72335eb62dd54491dd907b20ec59da1b87aefd184d22690412e6ec95",
+      "summary": "/private/tmp/slc-c3-complex-full-evidence/compile-SQkdsA/summary.json",
+      "summarySha256": "7874602b435a6109a4a480594d77d09a27503c55d276ddf96068cfeb553d54fd",
+      "pipelinePath": "/private/tmp/playbook-13.2-common-v5-baseline",
+      "compile": {
+        "ok": false,
+        "elapsedMs": 190888,
+        "outcome": "clarification-required"
+      },
+      "compileElapsedMs": 190888,
+      "elapsedMs": 190906,
+      "agentCalls": 4,
+      "phaseDurations": [
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "elapsedMs": 134434
+        },
+        {
+          "phase": "optimize",
+          "status": "success",
+          "elapsedMs": 11633
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "error",
+          "elapsedMs": 44097
+        }
+      ],
+      "sourceAndCohortUnchanged": true,
+      "proof": {
+        "path": "/private/tmp/slc-c3-complex-full-evidence/invocation-dvdpOF/proof.json",
+        "bytes": 2804631,
+        "sha256": "b3cf91230caab7da8e83187f1fdc3cb54773be0e04b3b34c664f2d6a6d688eb2"
+      },
+      "verdict": "targeted later-phase clarification passed; no runnable artifact expected",
+      "fullArtifactAccepted": false,
+      "clarification": {
+        "phase": "gears2fsm",
+        "questionCount": 1,
+        "source": "/private/tmp/slc-c3-complex-full-evidence/compile-SQkdsA/work/source.md",
+        "topic": "The reachable documentation-only planning outcome has no action, continuation or terminal meaning."
+      },
+      "semanticAdjudication": {
+        "path": "/private/tmp/slc-dev-later-SQkdsA-adjudication/evidence.json",
+        "bytes": 5269,
+        "sha256": "083fe81bc8695cadc2c81b53b997ebd498402ae01f7f69c5b2c83ed29af5fe0f"
+      },
+      "runtimeAcceptance": "not applicable; targeted source defect stops compilation",
+      "noFsmOrEntry": true,
+      "actualSlcCliExitObserved": false,
+      "reportGuidanceEffectiveness": "Successful complete report delivery observed; neither isolated wording causation nor universal detection is established."
     }
   ],
   "cliReruns": [
@@ -782,7 +1114,7 @@
     }
   ],
   "scopeLimit": "No performance technique is retained by prototype checks alone. Preserve all attempts; require matching accepted controls and independent source-aware semantic/runtime verification.",
-  "recordedAt": "2026-09-13T05:49:58.507057+00:00",
+  "recordedAt": "2026-09-13T06:39:42.170529+00:00",
   "checks": {
     "productionSuite": {
       "passed": 1330,
@@ -829,6 +1161,19 @@
         "sha256": "daa3d14f54a21e6dc9679ad9874a03e0920127949b2b5d8bd1bcc2483ff4e389"
       },
       "scope": "builder and runtime-graph readiness only; no provider or generated-artifact acceptance"
+    },
+    "literalRelayCheckpoint": {
+      "fullTests": {
+        "passed": 1355,
+        "skipped": 2,
+        "files": 72,
+        "log": {
+          "path": "/private/tmp/slc-literal-relay-final-all-tests.log",
+          "bytes": 595,
+          "sha256": "5e7662719d76581e32cf5a8a4f37da3bc29a6c89843948148c1b93fb7a735318"
+        }
+      },
+      "subsequentScopedChecks": "83 child-coverage cases; 23 source-fidelity cases; combined changes await a coordinated full build and suite."
     }
   },
   "incidentalCacheAudit": {
@@ -1236,7 +1581,7 @@
         },
         "completeInventoriesUnchanged": true,
         "scope": "fixed maintained FSM candidate link acceptance only",
-        "reason": "All required source/runtime/prompt/effect/child behaviors pass. The sole failed assertion demands the maintained implementation’s exact context projection, while the complete link contract expressly leaves that projection to the linked artifact. The treatment adds effect-derived latestCommit to phase, a safe and relevant progress fact.",
+        "reason": "All required source/runtime/prompt/effect/child behaviors pass. The sole failed assertion demands the maintained implementation\u2019s exact context projection, while the complete link contract expressly leaves that projection to the linked artifact. The treatment adds effect-derived latestCommit to phase, a safe and relevant progress fact.",
         "quotingLiteralAndOptionChecksPassed": true,
         "adjudication": {
           "path": "/private/tmp/slc-maintained-fixed-link-preparation/accepted-code-RyJuic/adjudication.json",
@@ -1361,5 +1706,42 @@
       "artifactUnchanged": true,
       "scope": "Read-only identity audit; no execution or artifact mutation. Exact inverse hash proves the private evidence byte change is solely the normative item citation."
     }
-  ]
+  ],
+  "correctnessFollowups": {
+    "literalPromptRelays": {
+      "commit": "f1424bd",
+      "evidence": {
+        "path": "/private/tmp/slc-ir045-linked-regression-v3/evidence.json",
+        "bytes": 3116,
+        "sha256": "0567dd031f0b48039ace76f5476ecd46302de3516fada61630696a7567beb592"
+      },
+      "result": "Rejects the preserved A7u5ik multiline relay defect while accepting RyJuic; single-pass literal replacements preserve metacharacters and multiline quoting."
+    },
+    "staticChildCoverage": {
+      "commit": "6633268",
+      "evidence": {
+        "path": "/private/tmp/slc-CKr2Ni-coverage-audit/corrected-evidence.json",
+        "bytes": 6500,
+        "sha256": "9c105cd0f82585a0e5f09bcf4d9442d1f5eea161f1628be10cdc1472b367dd99"
+      },
+      "result": "Actual reached-context driving eliminates ten false child coverage findings on unchanged CKr2Ni; the separate child-failure contract defect remains.",
+      "limits": "One preceding actor hop only; deeper and non-preemptive coverage remains under IR-049."
+    },
+    "quotedRelayDiagnostic": {
+      "commit": "e11033b",
+      "evidence": {
+        "path": "/private/tmp/slc-review-v5-007-008-adjudication/diagnostic-replay.json",
+        "bytes": 3614,
+        "sha256": "7c12cd95c9d2162f01158031ec463e315b053016f4ea2b1816ec9080f77e50b6"
+      },
+      "result": "The same seven failures now explain the two GEARS quote layers; accepted forms remain unchanged."
+    },
+    "canonicalChildValidatorReuse": {
+      "upstreamCommit": "889f497",
+      "result": "Public validation replaces handwritten copies of the child-result union; 22 focused cases include 15 real bridge envelopes.",
+      "structuralOnly": true,
+      "providerLatencyMeasured": false,
+      "limits": "Not present in frozen v5; requires new common inputs before live evaluation."
+    }
+  }
 }

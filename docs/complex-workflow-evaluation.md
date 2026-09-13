@@ -3,7 +3,7 @@
 
 # Complex workflow evaluation
 
-Evaluation is in progress. One accepted matched DECIDE phase pair shows a 31.1-second (24.0%) reduction with Results-boundary guidance, which is now retained. CODE’s new linker candidate passes source-aware acceptance for a fixed maintained FSM, but its rejected baseline prevents an accepted speed comparison. Full CODE/DEV compilation and runtime acceptance remain open. The [reviewed design](clarification-corpus-design.md) predates these runs; the [follow-up record](performance/complex-workflows-followup-2026-09-12.json) preserves exact outcomes and evidence.
+Evaluation is in progress. One accepted matched DECIDE phase pair shows a 31.1-second (24.0%) reduction with Results-boundary guidance, which is now retained. CODE’s new linker candidate passes source-aware acceptance for a fixed maintained FSM, but its rejected baseline prevents an accepted speed comparison. A full DEV mutant now delivers the intended clarification in a later phase. Successful full CODE/DEV compilation and runtime acceptance remain open. The [reviewed design](clarification-corpus-design.md) predates these runs; the [follow-up record](performance/complex-workflows-followup-2026-09-12.json) preserves exact outcomes and evidence.
 
 ## Initial current-dependency cohort
 
@@ -53,3 +53,31 @@ Frozen C3 uses production and harness commit `b091e80`. Relative to C2, only the
 Upstream commit `671fe37` freezes two independent comparison pairs. The v4 link pair differs only in `playbook/link.md`. The fixed-GEARS scaffold pair differs only in `playbook/gears2fsm.md`; the optional helper and guide are present identically in both arms. The scaffold preserves literal constants and supplies an incomplete typed action skeleton, leaving routing and acceptance predicates to the compiler agent. It remains unmeasured. Fourteen real C3 assembly/discovery tests pass, the compiler inventory and existing cache remain unchanged, and independent readiness confirms the same Playbook/XState runtime graph. These checks establish input readiness, not generated-artifact acceptance.
 
 All optimization comparisons require accepted matching artifacts and source-specific validation. Full CODE/DEV latency and correctness remain separate from phase and fixed-FSM measurements; failed attempts are retained.
+
+## Later-phase clarification and full CODE diagnosis
+
+The original DEV omission mutant now passes its end-to-end clarification oracle. Run SQkdsA accepts the intermediate GEARS, then stops in `gears2fsm` after 190.888 seconds with one complete question about the reachable documentation-only outcome. The source defines neither its action nor its terminal meaning. The report identifies the original source to edit, gives distinct possible source changes, and selects none. No FSM or entry is emitted, and all 11,903 recorded inputs remain unchanged. This satisfies the first-or-later-phase requirement; it establishes observed report delivery, not a causal estimate for the JSON wording or a universal detection rate. The benchmark wrapper reports failure because no runnable artifact was produced; the actual API outcome is `clarification-required`.
+
+The second full CODE attempt, CKr2Ni, generates all four phases in 762.093 seconds but fails strict entry validation. Its accepted GEARS preserves the source, and its canonical REVIEW success predicates pass 40 pure guard checks. Remaining problems are distinct:
+
+| Finding | Evidence and correction |
+| --- | --- |
+| First-turn Boss text became required startup configuration; the deterministic entry also cannot express legitimate structured or required options. | Source guidance distinguishes actual pre-turn requirements from Boss-entry text. Current entries will use the linked artifact's own pure option validator, with a strict factory-derived type and the existing bounded repair path. |
+| Handwritten child-failure validation disagrees with the host's public union. | Four host-valid failure envelopes are rejected. Upstream commit `889f497` reuses the public validator; its focused actual-bridge cases pass. The structural reduction is not a measured provider-latency saving. |
+| Ten child-coverage findings are false. | Actual XState paths enter and settle all ten unchanged arms. Commit `6633268` follows real predecessor transitions and uses reached context; deeper and non-preemptive coverage is being extended separately. |
+
+No linked runtime is accepted by bypassing the invalid public entry. Prepared CODE runtime cases and pure guard checks remain separate from full acceptance. The larger workflow's measured phase costs are 142.457 seconds for text translation, 14.979 for a byte-identical optimization result, 405.712 for FSM generation, and 193.521 for linking. This makes FSM authoring and linking the next performance targets; the unchanged optimization output alone does not establish a safe general skip.
+
+## REVIEW representation controls
+
+The v5 common guidance aligns bare relay formatting and Results placement. Three fresh C3 phase observations preserve the full repeated-run record:
+
+| Run | Time / calls | Independent outcome |
+| --- | ---: | --- |
+| V4nTvl, exact restored REVIEW | 100.682 s / 2 | Translation accepted: all four required relays and explicit terminal return obligations are present. |
+| 1y1wBw, contradictory REVIEW | 15.822 s / 1 | One valid targeted clarification; no GEARS artifact or history. |
+| AegKvB, exact original REVIEW | 107.786 s / 3 | Rejected: seven added tokens have only the outer GEARS marker, leaving unquoted prompt content. No source clarification is warranted. |
+
+The two sufficient cases contain identical source bytes; their different outcomes demonstrate remaining generation variation. Commit `e11033b` keeps the same strict rejection but now gives the exact `> > <token>` GEARS example needed to preserve `> <token>` in a prompt. Upstream quote-layer wording makes the same distinction. Runtime delivery of AegKvB's receipt-owned revision relay still requires downstream proof; its field name alone is not a semantic rejection.
+
+The literal relay correction passed 1,355 integration/system tests with two expected skips. Subsequent focused checks pass 83 child-coverage cases and 23 source-fidelity cases; a coordinated combined build and suite will validate the next frozen compiler. Historical C1–C3 compilers and v3–v5 definitions remain unchanged.
