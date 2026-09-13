@@ -297,6 +297,8 @@ const SECTION_HEADING = /^##\s/;
 const RESULTS_LABEL = /^Results:\s*$/;
 const RESULTS_LABEL_NEAR_MISS = /^Results\s*:?[ \t]*$/;
 const RESULT_BULLET = /^-\s+`([A-Za-z_$][A-Za-z0-9_$]*)`:\s+(\S(?:.*\S)?)\s*$/;
+const PLAYBOOK_CALL_SEQUENCING_NEAR_MISS =
+  /\bCaptain shall (first|then|next|finally) call playbook\b/u;
 
 /**
  * Parses the GEARS items from a `gears` artifact: each `### <ID>` item's player,
@@ -511,9 +513,46 @@ function gearsResultFindings(items: readonly GearsItem[]): string[] {
   );
 }
 
+function gearsActorFindings(gears: string): string[] {
+  const findings: string[] = [];
+  let item: string | undefined;
+  let inResults = false;
+  for (const line of gears.split('\n')) {
+    const heading = ITEM_HEADING.exec(line);
+    if (heading !== null) {
+      item = heading[1];
+      inResults = false;
+      continue;
+    }
+    if (SECTION_HEADING.test(line)) {
+      item = undefined;
+      inResults = false;
+      continue;
+    }
+    if (item === undefined) continue;
+    if (BLOCKQUOTE.test(line)) continue;
+    if (RESULTS_LABEL.test(line) || RESULTS_LABEL_NEAR_MISS.test(line)) {
+      inResults = true;
+      continue;
+    }
+    if (inResults) continue;
+    const nearMiss = PLAYBOOK_CALL_SEQUENCING_NEAR_MISS.exec(line);
+    if (nearMiss === null) continue;
+    findings.push(
+      `GEARS item ${item}: ${JSON.stringify(nearMiss[0])} is not a valid nested-playbook acting clause; use exact \`Captain shall call playbook ...:\` and preserve sequencing in When/While or continuation prose`,
+    );
+  }
+  return findings;
+}
+
 /** Existing GEARS result-parser findings, without requiring a consumer FSM. */
 export function checkGearsResultContract(gears: string): string[] {
   return gearsResultFindings(parseGearsItems(gears));
+}
+
+/** GEARS actor-clause findings, without changing parser classification. */
+export function checkGearsActorContract(gears: string): string[] {
+  return gearsActorFindings(gears);
 }
 
 /** The source generation and canonical role/cohort declaration of one GEARS artifact. */
@@ -1605,6 +1644,7 @@ export function checkGearsFsmConformance(
   }
 
   findings.push(...gearsResultFindings(items));
+  findings.push(...gearsActorFindings(gears));
 
   for (const state of states) {
     findings.push(

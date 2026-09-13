@@ -91,6 +91,7 @@ import {
   artifactSchemaForPlaybookProvenance,
   checkFsmContinuationInputs,
   checkFsmChildSuspension,
+  checkGearsActorContract,
   checkGearsFsmConformance,
   checkGearsResultContract,
   checkLinkedModuleContract,
@@ -1066,10 +1067,14 @@ function compileStep(
 /** Parser-only findings belong to the phase that can still edit the GEARS. */
 async function gearsContractFindings(path: string): Promise<readonly string[]> {
   try {
-    return checkGearsResultContract(await readFile(path, 'utf8'));
+    const gears = await readFile(path, 'utf8');
+    return [
+      ...checkGearsResultContract(gears),
+      ...checkGearsActorContract(gears),
+    ];
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    return [`GEARS result contract could not be checked: ${messageOf(error)}`];
+    return [`GEARS contract could not be checked: ${messageOf(error)}`];
   }
 }
 

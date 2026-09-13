@@ -73,6 +73,7 @@ meta.md       The spec of specs
 | [DR-045](decisions/045-static-child-coverage-entry.md) | 045-static-child-coverage-entry.md | Bounded child coverage through actual predecessor transitions and reached context |
 | [DR-046](decisions/046-bounded-child-chain-coverage.md) | 046-bounded-child-chain-coverage.md | Bounded child-path replay for non-preemptive workflows and chained children |
 | [DR-047](decisions/047-child-call-quiescence.md) | 047-child-call-quiescence.md | Reject inherited busy tags that prevent nested-child suspension |
+| [DR-048](decisions/048-canonical-actor-diagnostic.md) | 048-canonical-actor-diagnostic.md | Canonical nested-playbook actor-clause diagnostics at the GEARS boundary |
 
 ## Packages
 
@@ -92,4 +93,4 @@ meta.md       The spec of specs
 | [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |
 | [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, routine adoption retaining bundles by verified equivalence, and system acceptance |
 | [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, runtime, compiled-execution, Source-fidelity, and link-fidelity checks; portable generated tests; and emitted-module load integrity |
-| [workflow-acceptance.md](packages/workflow-acceptance.md) | Opt-in maintained CODE and DEV runtime acceptance harness with scripted children, protected hashes, and nested Git receipts |
+| [workflow-acceptance.md](packages/workflow-acceptance.md) | Opt-in maintained CODE and DEV runtime acceptance harness with scripted children, question-profile ledger oracles, protected hashes, and nested Git receipts |

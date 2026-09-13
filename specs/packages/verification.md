@@ -273,6 +273,12 @@ When the slc command emits a `.ts` or `.js` module as a linked target after full
 
 When checking an FSM's child-call suspension contract, the verifier shall report each nested-playbook invocation whose state, an ancestor state, or the machine root carries `playbook.busy`, identifying the invocation and the offending tag locations while excluding sibling states from inheritance and accepting either string or array tag declarations ([DR-047](../decisions/047-child-call-quiescence.md)).
 
+### GEARS actor clauses
+
+#### verification-47
+
+When checking a GEARS actor contract, the verifier shall scan item-scoped unquoted clause lines for the exact near-miss family `Captain shall (first|then|next|finally) call playbook` with word boundaries, report each finding with the item id and canonical `Captain shall call playbook ...:` repair, and ignore blockquotes, `Results:` descriptions, canonical nested-playbook clauses, and other Captain actor clauses ([DR-048](../decisions/048-canonical-actor-diagnostic.md)).
+
 ## Verification
 
 ### Reference acceptance
@@ -460,6 +466,12 @@ Where real XState fixtures contain non-preemptive actor and child paths, when th
 #### verification-46
 
 Where real XState fixtures include child invocations with leaf, ancestor, root and sibling busy tags, when the integration suite runs, it shall verify that the child-call findings agree with actual tag inheritance and shared-runtime quiescence under a pending child, preserving valid suspended children and independently busy siblings [[verification-45](#verification-45)].
+
+### GEARS actor contract acceptance
+
+#### verification-48
+
+Where GEARS fixtures include malformed nested-call sequencing, canonical actor clauses, quoted text, and result prose, when the integration suite runs, it shall verify that the actor-contract check catches the actual malformed DEV-5 shape, all four literal and dynamic near-miss words, produced-GEARS findings before downstream work, supplied-GEARS findings before consumer execution, and same-Coder repair to the canonical clause without changing the Source, while accepting canonical nested calls, ordinary direct-Captain clauses, blockquoted literals, and control-result prose [[verification-47](#verification-47)].
 
 ## References
 
