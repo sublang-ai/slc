@@ -6,6 +6,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -401,17 +402,46 @@ describe('opt-in compilation benchmark', () => {
     );
   });
 
-  it('loads the emitted entry and fails on an actual generated-suite assertion', async () => {
+  it('preserves shared caches while loading the entry and rejecting generated-suite drift', async () => {
     const options = await fixture();
     const work = join(options.output, 'validation');
     const root = fileURLToPath(new URL('..', import.meta.url));
     const bundle = join(work, 'minimal.playbook');
     await mkdir(bundle, { recursive: true });
-    await symlink(
-      join(root, 'node_modules'),
-      join(work, 'node_modules'),
-      'dir',
+    // Model the frozen dependency link without permitting this regression
+    // fixture itself to alter the repository's actual Vitest cache.
+    const dependencies = join(options.output, 'dependencies');
+    await mkdir(dependencies);
+    for (const name of await readdir(join(root, 'node_modules'))) {
+      if (name === '.vite') continue;
+      await symlink(join(root, 'node_modules', name), join(dependencies, name));
+    }
+    const sharedCache = join(dependencies, '.vite');
+    const resultCache = join(
+      sharedCache,
+      'vitest',
+      'da39a3ee5e6b4b0d3255bfef95601890afd80709',
     );
+    await mkdir(resultCache, { recursive: true });
+    await writeFile(
+      join(resultCache, 'results.json'),
+      '{"version":"4.1.11","results":[]}\n',
+    );
+    const cacheInventory = async (directory) =>
+      Object.fromEntries(
+        await Promise.all(
+          (await readdir(directory, { withFileTypes: true })).map(
+            async (entry) => [
+              entry.name,
+              entry.isDirectory()
+                ? await cacheInventory(join(directory, entry.name))
+                : (await readFile(join(directory, entry.name))).toString('hex'),
+            ],
+          ),
+        ),
+      );
+    const beforeCache = await cacheInventory(sharedCache);
+    await symlink(dependencies, join(work, 'node_modules'), 'dir');
     await writeFile(
       join(work, 'minimal.ts'),
       'export default { createRuntime() {} };\n',
@@ -440,6 +470,12 @@ describe('opt-in compilation benchmark', () => {
       testFiles: 4,
       typecheck: { ok: true, unchanged: true },
     });
+    expect(await cacheInventory(sharedCache)).toEqual(beforeCache);
+    const validationConfig = (
+      await import(join(work, 'benchmark.vitest.config.mjs'))
+    ).default;
+    expect(validationConfig.cacheDir).toBe(join(work, '.vite'));
+    expect(validationConfig.test.cache).toBe(false);
     await writeFile(
       join(bundle, 'minimal.prompt-contract.test.ts'),
       "import { it, expect } from 'vitest'; it('artifact drift', () => expect(false).toBe(true));\n",
@@ -448,6 +484,7 @@ describe('opt-in compilation benchmark', () => {
       ok: false,
       suite: { ok: false, code: 1 },
     });
+    expect(await cacheInventory(sharedCache)).toEqual(beforeCache);
   }, 20_000);
 
   it('checks strict native TypeScript against the installed engine and preserves inputs', async () => {

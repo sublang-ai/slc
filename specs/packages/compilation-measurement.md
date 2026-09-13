@@ -72,6 +72,10 @@ When a phase probe settles, the phase recorder shall retain its experiment accou
 | Clarification acceptance | Require protected-input preservation and no accepted draft or newly published successful history. |
 | Scope | Record that phase acceptance establishes neither full-compilation verification nor runtime correctness, leaving semantic adjudication to a separate source-aware review. |
 
+### compilation-measurement-24
+
+When full-artifact validation executes its emitted suites [[compilation-measurement-4](#compilation-measurement-4)], the compilation benchmark shall confine validation caches to its fresh workspace with result caching disabled, preserving any dependency-tree cache reached through the workspace dependency link.
+
 ## Verification
 
 ### compilation-measurement-7
@@ -113,3 +117,7 @@ Where minimal entries use the actual shared runtime and host capabilities, when 
 ### compilation-measurement-23
 
 Where fixture transports perform ordinary single-phase compiler calls, when the phase-recorder integration suite exercises successful transformation, structured clarification, protected-source mutation, actual fidelity and strict-FSM failures, cooperative deadline cancellation, and a genuinely selected compiled phase, the suite shall verify neutral fresh-source execution [[compilation-measurement-20](#compilation-measurement-20)], rejection of mismatched source identities and exclusion of injected oracle fields [[compilation-measurement-21](#compilation-measurement-21)], and correctly distinguished API outcomes, actual CLI child exit 2, executor evidence, preservation, history, and phase-only acceptance [[compilation-measurement-22](#compilation-measurement-22)].
+
+### compilation-measurement-25
+
+Where a real generated-suite fixture resolves dependencies through a link to a tree containing a preexisting cache, when full-artifact validation executes its passing and failing suites, the integration suite shall verify unchanged dependency-cache members and bytes with the configured cache confined to the private workspace and result caching disabled [[compilation-measurement-24](#compilation-measurement-24)], retaining ordinary suite outcomes [[compilation-measurement-4](#compilation-measurement-4)].

@@ -435,7 +435,14 @@ if (typeof entry?.createRuntime !== 'function') throw new Error('Entry has no cr
   const config = join(work, 'benchmark.vitest.config.mjs');
   writeFileSync(
     config,
-    `export default { test: { include: ['**/*.test.ts'], exclude: ['**/node_modules/**'] } };\n`,
+    `export default ${JSON.stringify({
+      cacheDir: join(work, '.vite'),
+      test: {
+        cache: false,
+        include: ['**/*.test.ts'],
+        exclude: ['**/node_modules/**'],
+      },
+    })};\n`,
   );
   const suite = await command(
     process.execPath,

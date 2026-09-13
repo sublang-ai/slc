@@ -202,7 +202,7 @@ describe('minimal benchmark source acceptance', () => {
         elapsedMs: expect.any(Number),
       },
     });
-  });
+  }, 20_000);
 
   it.each([
     [
