@@ -144,6 +144,18 @@ Continuation profiles use exactly two line feeds between the preamble, each labe
 An ordinary turn admits none of these framework blocks outside its authored body.
 
 
+#### verification-41
+
+When checking player or Captain prompt composition, the verifier shall extend each established ordinary and continuation body match with bounded literal-string probes through the same composer and turn mode, applying this matrix without changing captured contract rows or inferring new input fields ([DR-042](../decisions/042-literal-prompt-relay-fidelity.md)):
+
+| Case | Required outcome |
+| --- | --- |
+| Observed raw-string substitution | Group equal non-contract input string values evidenced uniformly as raw substitutions by the whole-template match, excluding unchanged literal tokens, identity-lookup sentinel values, and an entire group if any occurrence uses JSON encoding, change aliases together, and require exact single-pass substitution of distinct values containing replacement metacharacters and original placeholder-looking text. |
+| Complete standalone or labelled quoted relay | Additionally probe LF/CRLF multiline values when every occurrence of the observed value occupies a complete quoted relay slot, preserving the original text, separators, and continuation quote markers. |
+| Inline identifier, deterministic JSON slot, or typed value | Keep inline substitutions single-line and retain existing JSON and non-string checks without inventing multiline domain values or changing structured input shapes [[verification-5](#verification-5)]. |
+| Runtime identity, contract metadata, and surrounding framework | Preserve the original identity lookup and metadata, existing continuation profile, and body prefix/suffix while reconstructing expected replacements once from the original template. |
+| Rendering drift or probe failure | Emit one finding per state and literal or quoted-relay violation across turn modes, through both the ordinary link gate and emitted prompt suite [[verification-27](#verification-27)]. |
+
 #### verification-6
 
 When a compiled `playbook` artifact's `gears` and `fsm` are produced at their canonical `<basename>.playbook/` locations [[pipeline-7](pipeline.md#pipeline-7)], [[pipeline-8](pipeline.md#pipeline-8)], the slc command shall emit a transition-coverage test beside the artifacts that drives the machine with distinct scripted Captain, player, and playbook actors and applies the complete coverage contract ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md)):
@@ -408,6 +420,12 @@ Where current installed composers and historical full-format composers process a
 #### verification-40
 
 Where real XState literal-child fixtures contain static object-valued or function-composed inputs, when ordinary producer-to-consumer chains and emitted conformance suites execute the fixtures, the integration suite shall accept exact templates with unrelated context-field names, repeated values, preserved non-string context, multiline literal quoting, and empty standalone relays, while rejecting static deletion or invention, inconsistent repeated-token mappings, recursive substitution, JSON-encoded string relays, unquoted continuation lines, and unprovable input shapes [[verification-39](#verification-39)], retaining dynamic-call metadata checks [[verification-1](#verification-1)].
+
+### Literal prompt-relay acceptance
+
+#### verification-42
+
+Where real composers process FSM-derived string inputs, when the integration suite executes link checking, same-Coder repair, and emitted prompt tests, it shall accept installed literal and quoted composers with their supported full or compact continuation profiles, preserve typed structures, aliases and role lookup, and reject replacement expansion, recursive substitution, missing multiline quote markers, or static drift while retaining the original failed artifact bytes [[verification-41](#verification-41)].
 
 ## References
 

@@ -2718,7 +2718,7 @@ const goodCompose = (raw: unknown): string => {
   }
   let body = input.prompt;
   if (input.audience !== undefined) {
-    body = body.replaceAll('<audience>', input.audience);
+    body = body.replaceAll('<audience>', () => input.audience!);
   }
   blocks.push(body);
   return blocks.join('\n\n');
@@ -2742,13 +2742,9 @@ const composeSchema3Prompt = (
       `Boss reply:\n${input.bossReply}`,
     );
   }
-  let body = input.prompt;
-  if (input.topic !== undefined) {
-    body = body.replaceAll('<topic>', input.topic);
-  }
-  if (body.includes('<coder-llm>')) {
-    body = body.replaceAll('<coder-llm>', promptIdentity('coder'));
-  }
+  const body = input.prompt.replace(/<topic>|<coder-llm>/g, (token) =>
+    token === '<topic>' ? (input.topic ?? token) : promptIdentity('coder'),
+  );
   blocks.push(body);
   return blocks.join('\n\n');
 };
@@ -2943,9 +2939,11 @@ describe('checkPromptComposition (verification-5)', () => {
       promptIdentity: (roleId: string) => string,
     ): string => {
       const input = raw as { prompt: string; topic?: string };
-      return input.prompt
-        .replaceAll('<topic>', input.topic ?? '<topic>')
-        .replaceAll('<coder-llm>', promptIdentity('auditor'));
+      return input.prompt.replace(/<topic>|<coder-llm>/g, (token) =>
+        token === '<topic>'
+          ? (input.topic ?? token)
+          : promptIdentity('auditor'),
+      );
     };
     expect(
       checkPromptComposition({
@@ -2969,9 +2967,11 @@ describe('checkPromptComposition (verification-5)', () => {
         pendingBossQuestion?: { question: string };
         bossReply?: string;
       };
-      const body = input.prompt
-        .replaceAll('<topic>', input.topic ?? '<topic>')
-        .replaceAll('<coder-llm>', promptIdentity('reviewer'));
+      const body = input.prompt.replace(/<topic>|<coder-llm>/g, (token) =>
+        token === '<topic>'
+          ? (input.topic ?? token)
+          : promptIdentity('reviewer'),
+      );
       return input.pendingBossQuestion && input.bossReply
         ? [
             CONTINUATION_PREAMBLE,
@@ -3046,8 +3046,11 @@ describe('checkPromptComposition (verification-5)', () => {
             ),
         )
         .join('\n')
-        .replaceAll('<discussion-context>', input.discussionContext)
-        .replaceAll('<topic>', input.topic ?? '<topic>');
+        .replace(/<discussion-context>|<topic>/g, (token) =>
+          token === '<topic>'
+            ? (input.topic ?? token)
+            : input.discussionContext.replace(/\n/g, '\n> '),
+        );
       return input.pendingBossQuestion && input.bossReply
         ? [
             CONTINUATION_PREAMBLE,
@@ -3104,7 +3107,10 @@ describe('checkPromptComposition (verification-5)', () => {
         pendingBossQuestion?: { question: string };
         bossReply?: string;
       };
-      const body = input.prompt.replaceAll('<topic>', input.topic ?? '<topic>');
+      const body = input.prompt.replaceAll(
+        '<topic>',
+        () => input.topic ?? '<topic>',
+      );
       return input.pendingBossQuestion && input.bossReply
         ? [
             CONTINUATION_PREAMBLE,
@@ -3961,7 +3967,7 @@ describe('emitPromptContractTest (verification-5)', () => {
           '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
           '  }',
           '  let body: string = input.prompt;',
-          "  if (input.audience !== undefined) body = body.replaceAll('<audience>', input.audience);",
+          "  if (input.audience !== undefined) body = body.replaceAll('<audience>', () => input.audience!);",
           '  blocks.push(body);',
           "  return blocks.join('\\n\\n');",
           '};',
@@ -4006,7 +4012,7 @@ describe('emitPromptContractTest (verification-5)', () => {
         '  if (input.pendingBossQuestion && input.bossReply) {',
         '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
         '  }',
-        "  blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+        "  blocks.push(input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
         "  return blocks.join('\\n\\n');",
         '};',
         'export const _internal = { composeCaptainPrompt: compose };',
@@ -4048,8 +4054,8 @@ describe('emitPromptContractTest (verification-5)', () => {
       await writeFile(
         linkedPath,
         linkedSource.replace(
-          "blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
-          "blocks.push('mutated ' + input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+          "blocks.push(input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
+          "blocks.push('mutated ' + input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
         ),
       );
       const rerun = await emitPromptContractTest({
@@ -4085,7 +4091,7 @@ describe('emitPromptContractTest (verification-5)', () => {
           "    if (input.pendingBossQuestion.player !== 'Captain' || 'asker' in input.pendingBossQuestion) throw new Error('wrong schema');",
           '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
           '  }',
-          "  blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+          "  blocks.push(input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
           "  return blocks.join('\\n\\n');",
           '};',
           'export const _internal = { composeCaptainPrompt: compose };',
@@ -4124,7 +4130,7 @@ describe('emitPromptContractTest (verification-5)', () => {
         "    if (input.pendingBossQuestion.asker?.kind !== 'captain' || 'player' in input.pendingBossQuestion) throw new Error('wrong schema');",
         '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
         '  }',
-        "  blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+        "  blocks.push(input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
         "  return blocks.join('\\n\\n');",
         '};',
         'function createPlaybookRuntime() { return {}; }',
@@ -4819,4 +4825,241 @@ export const machine = createMachine({
       await rm(root, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+describe('literal prompt relays (verification-41, verification-42)', () => {
+  const prompt =
+    'Keep this instruction.\n> Message: <message>\n> <message>\nUse <identifier> as <identity>.';
+  const config = (
+    actor: 'player' | 'captain' = 'player',
+    identityCollision = false,
+  ): MachineConfigLike =>
+    findMachineConfig({
+      machine: createMachine({
+        context: {
+          sourceText: '',
+          code: '',
+          options: { enabled: true, list: [1, 2] },
+        },
+        initial: 'work',
+        states: {
+          work: {
+            meta: {
+              playbook: {
+                stateId: 'work',
+                ...(actor === 'player' ? { role: 'writer' } : {}),
+              },
+            },
+            invoke: {
+              src: actor,
+              input: ({ context }: { context: Record<string, unknown> }) => ({
+                stateId: 'work',
+                sourceItem: 'RELAY-1',
+                ...(actor === 'player' ? { role: 'writer' } : {}),
+                prompt,
+                result: {
+                  done: 'Finished.',
+                  needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+                },
+                payload: identityCollision
+                  ? '«promptIdentity:writer»'
+                  : context.sourceText,
+                alias: identityCollision
+                  ? '«promptIdentity:writer»'
+                  : context.sourceText,
+                identifier: context.code,
+                options: context.options,
+                unrelatedLiteral: '<identity>',
+                ...(context.pendingBossQuestion && context.bossReply
+                  ? {
+                      pendingBossQuestion: context.pendingBossQuestion,
+                      bossReply: context.bossReply,
+                    }
+                  : {}),
+              }),
+            },
+          },
+        },
+      }),
+    });
+  type Input = Parameters<typeof defaultComposePlayerPrompt>[0] & {
+    payload: string;
+    alias: string;
+    identifier: string;
+    options: { enabled: boolean; list: number[] };
+  };
+  const composer =
+    (fault = '', actor: 'player' | 'captain' = 'player', legacy = false) =>
+    (
+      raw: unknown,
+      identity: (role: string) => string,
+      resuming?: boolean,
+    ): string => {
+      const input = raw as Input;
+      expect(input.options).toEqual({ enabled: true, list: [1, 2] });
+      expect(input.alias).toBe(input.payload);
+      expect(input.identifier).not.toContain('\n');
+      const values: Record<string, string> = {
+        '<message>': input.payload,
+        '<identifier>': input.identifier,
+        '<identity>': actor === 'player' ? identity('writer') : '<identity>',
+      };
+      let body = input.prompt.replace(
+        /<message>|<identifier>|<identity>/g,
+        (token) => {
+          const value = values[token];
+          return token === '<message>' && fault !== 'unquoted'
+            ? value.replace(/\n/g, '\n> ')
+            : value;
+        },
+      );
+      if (fault === 'recursive')
+        body = body.replaceAll('<identity>', values['<identity>']);
+      if (fault === 'replacement-string')
+        body = input.prompt
+          .replaceAll('<message>', input.payload)
+          .replaceAll('<identifier>', () => input.identifier)
+          .replaceAll('<identity>', () => values['<identity>']);
+      if (fault === 'static')
+        body = body.replace('Keep this instruction.', 'Invented instruction.');
+      if (legacy) return goodCompose({ ...input, prompt: body });
+      // The installed continuation composer supplies the actual current
+      // full/compact player prefix, while direct Captain always remains full.
+      return actor === 'player'
+        ? defaultComposePlayerPrompt({ ...input, prompt: '' }, {}, resuming) +
+            body
+        : defaultComposeCaptainPrompt({ ...input, prompt: '' }) + body;
+    };
+
+  it.each([
+    ['player', false],
+    ['player', true],
+    ['captain', false],
+  ] as const)(
+    'preserves literal aliases, typed input and %s continuation (legacy=%s)',
+    (actor, legacy) => {
+      expect(
+        checkPromptComposition({
+          config: config(actor),
+          compose: composer('', actor, legacy),
+          actor,
+          artifactSchema: 3,
+        }),
+      ).toEqual([]);
+    },
+  );
+
+  it('does not infer substitution from an unrelated input equal to a preserved token', () => {
+    expect(
+      checkPromptComposition({
+        config: config('captain'),
+        compose: composer('', 'captain'),
+        actor: 'captain',
+        artifactSchema: 3,
+      }),
+    ).toEqual([]);
+  });
+
+  it('does not infer dataflow from a data value identical to a role-identity sentinel', () => {
+    expect(
+      checkPromptComposition({
+        config: config('player', true),
+        compose: composer(),
+        actor: 'player',
+      }),
+    ).toEqual([]);
+  });
+
+  it.each(['unquoted', 'recursive', 'replacement-string', 'static'])(
+    'rejects %s rendering through the actual FSM input mapper',
+    (fault) => {
+      const findings = checkPromptComposition({
+        config: config(),
+        compose: composer(fault),
+        actor: 'player',
+      });
+      expect(findings.join('\n')).toMatch(
+        fault === 'static'
+          ? /does not preserve the body line/
+          : /literal-relay|quoted-relay/,
+      );
+      if (fault === 'unquoted')
+        expect(findings).toEqual([
+          'work: prompt composition does not preserve multiline quoted-relay text',
+        ]);
+    },
+  );
+});
+
+describe('emitted literal prompt-relay suite (verification-42)', () => {
+  it('keeps the gate and real emitted suite aligned for good and unquoted links', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-literal-relay-suite-'));
+    try {
+      await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
+      await writeFile(join(root, 'package.json'), '{"type":"module"}');
+      await writeFile(
+        join(root, 'vitest.config.mjs'),
+        `export default { cacheDir: ${JSON.stringify(join(root, '.vite'))}, test: { cache: false } };\n`,
+      );
+      const fsm = `export const machine = { config: { states: { draft: {
+        invoke: { src: 'player', input: ({ context }: { context: Record<string, unknown> }) => ({
+          player: 'Writer', stateId: 'draft', sourceItem: 'X-1',
+          prompt: 'Keep this sentence.\\n> Request: <audience>', audience: context.audience,
+          result: { done: 'Finished.', needsBossReply: ${JSON.stringify(NEEDS_BOSS_REPLY_TEXT)} },
+          ...(context.pendingBossQuestion && context.bossReply ? { pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply } : {}),
+        }) }
+      } } } };\n`;
+      for (const quoted of [true, false]) {
+        const basename = quoted ? 'good' : 'bad';
+        const fsmPath = join(root, `${basename}.fsm.ts`);
+        const linkedPath = join(root, `${basename}.playbook.ts`);
+        const linked = `const compose = (input: { prompt: string; audience: string; pendingBossQuestion?: { question: string }; bossReply?: string }): string => {
+          const body = input.prompt.replaceAll('<audience>', () => ${quoted ? "input.audience.replace(/\\n/g, '\\n> ')" : 'input.audience'});
+          return input.pendingBossQuestion && input.bossReply
+            ? [${JSON.stringify(CONTINUATION_PREAMBLE)}, 'Boss question:\\n' + input.pendingBossQuestion.question, 'Boss reply:\\n' + input.bossReply, body].join('\\n\\n') : body;
+        };
+        export const _internal = { composePlayerPrompt: compose };\n`;
+        await writeFile(fsmPath, fsm);
+        await writeFile(linkedPath, linked);
+        await emitVerifierSupport(root);
+        const emitted = await emitPromptContractTest({
+          artifactDir: root,
+          basename,
+          verifyModule: './.slc-verify/verify.js',
+        });
+        expect(
+          emitted.diagnostics.some((line) =>
+            line.includes('multiline quoted-relay'),
+          ),
+        ).toBe(!quoted);
+        const result = await execFileAsync(
+          process.execPath,
+          [
+            join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+            'run',
+            '--root',
+            root,
+            '--config',
+            join(root, 'vitest.config.mjs'),
+            `${basename}.prompt-contract.test.ts`,
+          ],
+          { cwd: root, timeout: 15_000 },
+        ).then(
+          ({ stdout, stderr }) => ({ ok: true, output: stdout + stderr }),
+          (error: { stdout?: string; stderr?: string }) => ({
+            ok: false,
+            output: `${error.stdout ?? ''}${error.stderr ?? ''}`,
+          }),
+        );
+        expect(result.ok, result.output).toBe(quoted);
+        expect(result.output).toMatch(
+          quoted ? /4 passed/ : /multiline quoted-relay/,
+        );
+        expect(await readFile(fsmPath, 'utf8')).toBe(fsm);
+        expect(await readFile(linkedPath, 'utf8')).toBe(linked);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 40_000);
 });

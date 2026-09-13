@@ -559,7 +559,7 @@ const FIXED_FSM = `export const machine = { config: { context: { audience: '' },
   }) }
 } } } };
 `;
-const FAITHFUL_LINK = `export const _internal = { composePlayerPrompt: (input: {prompt: string; audience: string}) => input.prompt.replaceAll('<audience>', input.audience) };
+const FAITHFUL_LINK = `export const _internal = { composePlayerPrompt: (input: {prompt: string; audience: string}) => input.prompt.replaceAll('<audience>', () => input.audience) };
 export default function createRuntime() { return { init: async()=>{}, handleBossInput: async()=>{}, dispose: async()=>{} }; }
 `;
 
@@ -667,7 +667,7 @@ describe('fixed-FSM link-only benchmark', () => {
           await writeFile(
             compiled.outputs[0],
             FAITHFUL_LINK.replace(
-              "input.prompt.replaceAll('<audience>', input.audience)",
+              "input.prompt.replaceAll('<audience>', () => input.audience)",
               "'Dropped the original prompt.'",
             ),
           );

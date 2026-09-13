@@ -2622,11 +2622,13 @@ export function checkPromptComposition(opts: {
     let promptReads: string[];
     for (const resuming of modes) {
       let ordinary: string;
+      let input: unknown;
       try {
         const probed = withPlaceholderValues(
           state,
           inputFn({ context: ordinaryTurnContext(reads, initial) }),
         );
+        input = probed.input;
         promptReads = promptSentinelFields(state, reads, probed.fields, roles);
         ordinary = composeForState(
           opts.compose,
@@ -2648,6 +2650,16 @@ export function checkPromptComposition(opts: {
       pushUnique(
         findings,
         ...bodyFindings(state, ordinary, substituted, promptReads, 'ordinary'),
+        ...literalPromptRelayFindings(
+          state,
+          ordinary,
+          input,
+          substituted,
+          promptReads,
+          opts.compose,
+          roles,
+          resuming,
+        ),
       );
       pushUnique(findings, ...promptControlFindings(state, ordinary));
       // A self-hosted playbook's domain body may legitimately quote the
@@ -2756,6 +2768,16 @@ export function checkPromptComposition(opts: {
           'continuation',
         ),
         ...promptControlFindings(state, continuation),
+        ...literalPromptRelayFindings(
+          state,
+          continuation,
+          input,
+          substituted,
+          promptReads,
+          opts.compose,
+          roles,
+          resuming,
+        ),
       );
     }
   }
@@ -3062,6 +3084,102 @@ function matchPromptBody(
     };
   }
   return null;
+}
+
+/** Probe observed string relays without inventing context fields or input shapes. */
+function literalPromptRelayFindings(
+  state: CaptainState,
+  composed: string,
+  input: unknown,
+  substituted: readonly string[],
+  reads: readonly string[],
+  compose: PromptComposer,
+  roles: readonly string[],
+  resuming?: boolean,
+): string[] {
+  if (typeof input !== 'object' || input === null) return [];
+  const match = matchPromptBody(state.prompt, composed, reads, substituted);
+  if (match === null) return []; // Existing body diagnostics own this case.
+  const tokens = [...state.prompt.matchAll(PLACEHOLDER)];
+  const groups = new Map<string, string[]>();
+  for (const [field, value] of Object.entries(input)) {
+    if (
+      CONTRACT_INPUT_FIELDS.includes(field) ||
+      typeof value !== 'string' ||
+      roles.some((role) => value === sentinelFor(`promptIdentity:${role}`)) ||
+      !match.values.some(
+        (matched, index) =>
+          matched === value && substituted.includes(tokens[index][0]),
+      ) ||
+      match.values.includes(JSON.stringify(value))
+    )
+      continue;
+    // Equal values may be intentional aliases. Changing them together avoids
+    // guessing which of several indistinguishable fields supplied the token.
+    const fields = groups.get(value) ?? [];
+    fields.push(field);
+    groups.set(value, fields);
+  }
+  if (groups.size === 0) return [];
+  const quotedGroups = new Set(
+    [...groups.keys()].filter((value) =>
+      tokens.every((token, index) => {
+        if (match.values[index] !== value) return true;
+        const start = state.prompt.lastIndexOf('\n', token.index - 1) + 1;
+        const next = state.prompt.indexOf('\n', token.index);
+        const line = state.prompt
+          .slice(start, next < 0 ? undefined : next)
+          .replace(/\r$/, '');
+        return /^> [^<>\r\n]*(<[^\s<>`]{1,60}>)$/.exec(line)?.[1] === token[0];
+      }),
+    ),
+  );
+  const findings: string[] = [];
+  for (const multiline of [false, true]) {
+    const values = new Map<string, string>();
+    for (const [index, value] of [...groups.keys()].entries()) {
+      if (multiline && !quotedGroups.has(value)) continue;
+      const literal = `relay-${index}: $& $$ $\` $' ${placeholdersIn(state.prompt).join(' ')}`;
+      // No empty-line policy is inferred here; all segments are nonempty.
+      values.set(
+        value,
+        multiline ? `${literal}\nsecond-${index}\r\nthird-${index}` : literal,
+      );
+    }
+    if (values.size === 0) continue;
+    const probed = { ...input } as Record<string, unknown>;
+    for (const [value, replacement] of values) {
+      for (const field of groups.get(value)!) probed[field] = replacement;
+    }
+    let index = 0;
+    const body = state.prompt.replace(PLACEHOLDER, () => {
+      const value = match.values[index++];
+      const replacement = values.get(value);
+      return replacement === undefined
+        ? value
+        : multiline
+          ? replacement.replace(/\n/g, '\n> ')
+          : replacement;
+    });
+    const expected =
+      composed.slice(0, match.index) + body + composed.slice(match.end);
+    const label = multiline
+      ? 'multiline quoted-relay'
+      : 'single-pass literal-relay';
+    try {
+      if (composeForState(compose, state, probed, roles, resuming) === expected)
+        continue;
+      findings.push(
+        `${state.stateId}: prompt composition does not preserve ${label} text`,
+      );
+    } catch {
+      // One state/representation diagnostic also covers mode-dependent errors.
+      findings.push(
+        `${state.stateId}: prompt composition does not preserve ${label} text`,
+      );
+    }
+  }
+  return findings;
 }
 
 /** Verify the FSM-owned composer; child inputs reach the bridge already rendered. */

@@ -67,6 +67,7 @@ meta.md       The spec of specs
 | [DR-039](decisions/039-strict-fsm-boundary.md) | 039-strict-fsm-boundary.md | Strict standalone FSM type checking at the producer and before protected-input consumers |
 | [DR-040](decisions/040-early-continuation-input-contract.md) | 040-early-continuation-input-contract.md | Existing canonical Boss-continuation input probe at the FSM producer and before protected-input consumers |
 | [DR-041](decisions/041-composed-child-input-fidelity.md) | 041-composed-child-input-fidelity.md | Whole-template verification of composed literal child input with observed placeholder dataflow |
+| [DR-042](decisions/042-literal-prompt-relay-fidelity.md) | 042-literal-prompt-relay-fidelity.md | Literal single-pass and multiline quoted prompt-relay verification |
 | [DR-043](decisions/043-stall-watchdog-default-window.md) | 043-stall-watchdog-default-window.md | The agent-stall watchdog's default window becomes 2400 seconds, amending [DR-019](decisions/019-compile-progress-stall-watchdog.md); the watchdog's other rules stand |
 
 ## Packages

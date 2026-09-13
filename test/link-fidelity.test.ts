@@ -67,9 +67,8 @@ const linkedModule = (role: string): string =>
     '  input: { prompt: string; audience: string },',
     '  promptIdentity: (roleId: string) => string,',
     '): string =>',
-    '  input.prompt',
-    "    .replaceAll('<audience>', input.audience)",
-    `    .replaceAll('<coder-llm>', promptIdentity('${role}'));`,
+    '  input.prompt.replace(/<audience>|<coder-llm>/g, token =>',
+    `    token === '<audience>' ? input.audience : promptIdentity('${role}'));`,
     'export const _internal = { composePlayerPrompt: compose };',
     'export default function createPlaybookRuntime() {',
     '  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };',
@@ -393,6 +392,39 @@ describe('playbook link-fidelity gate (phase-execution-53, phase-execution-54)',
             }),
           };
     },
+  });
+
+  it('repairs a literal multiline relay with the same Coder before accepting the link (verification-42)', async () => {
+    const originalFsm = FSM_FIXTURE.replace(
+      'Draft for <audience> as <coder-llm>.',
+      'Draft as <coder-llm>.\\n> Request: <audience>',
+    );
+    await writeFile(object, originalFsm);
+    const quoted = CONFORMANT.replace(
+      '? input.audience :',
+      "? input.audience.replace(/\\n/g, '\\n> ') :",
+    );
+    const coderCalls: AgentRunRequest[] = [];
+    const result = await runSlc(
+      ['flow.link', object, linkTarget],
+      deps(
+        createInterpretedExecutor({
+          agent: createReviewingAgent({
+            coder: queuedCoder([CONFORMANT, quoted], coderCalls),
+          }),
+        }),
+      ),
+    );
+    expect(result, result.diagnostics.join('\n')).toMatchObject({
+      ok: true,
+      outputs: [linked],
+    });
+    expect(coderCalls).toHaveLength(2);
+    expect(coderCalls[1].prompt).toContain(
+      'FINDINGS:\n1. draft: prompt composition does not preserve multiline quoted-relay text',
+    );
+    expect(await readFile(object, 'utf8')).toBe(originalFsm);
+    expect(await readFile(linked, 'utf8')).toBe(quoted);
   });
 
   it('relays a finding to the Coder in place of the Reviewer call, then reviews the repair', async () => {
