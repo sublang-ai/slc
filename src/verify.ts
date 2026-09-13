@@ -239,9 +239,11 @@ export interface MachineConfigLike {
   context?: unknown;
 }
 
+type InputMapper = (arg: { context: Record<string, unknown> }) => unknown;
+
 interface InvokeLike {
   src?: unknown;
-  input?: (arg: { context: Record<string, unknown> }) => unknown;
+  input?: InputMapper | Record<string, unknown>;
   onDone?: unknown;
   onError?: unknown;
 }
@@ -701,7 +703,7 @@ interface CaptainBinding {
   state: CaptainState;
   node: StateNodeRef;
   invoke: InvokeLike;
-  inputFn?: InvokeLike['input'];
+  inputFn?: InputMapper;
   /** Pins only the new explicit actor model, preserving legacy pin bytes. */
   pinActor: boolean;
 }
@@ -744,7 +746,16 @@ function normalizeInvokes(invoke: StateLike['invoke']): readonly InvokeLike[] {
 function invocationInput(
   invoke: InvokeLike,
   context: Record<string, unknown> = {},
+  allowStatic = false,
 ): { value: Record<string, unknown> } | { error: string } | { invalid: true } {
+  if (
+    allowStatic &&
+    typeof invoke.input === 'object' &&
+    invoke.input !== null &&
+    !Array.isArray(invoke.input)
+  ) {
+    return { value: invoke.input };
+  }
   if (typeof invoke.input !== 'function') return { invalid: true };
   let value: unknown;
   try {
@@ -908,7 +919,8 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
             ),
             node,
             invoke,
-            inputFn: invoke.input,
+            inputFn:
+              typeof invoke.input === 'function' ? invoke.input : undefined,
             pinActor: true,
           });
         }
@@ -928,7 +940,8 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
             ),
             node,
             invoke,
-            inputFn: invoke.input,
+            inputFn:
+              typeof invoke.input === 'function' ? invoke.input : undefined,
             pinActor: true,
           });
         }
@@ -1040,7 +1053,7 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
         },
         node,
         invoke,
-        inputFn: invoke.input,
+        inputFn: typeof invoke.input === 'function' ? invoke.input : undefined,
         pinActor,
       });
     }
@@ -1066,7 +1079,7 @@ function enumeratePlaybookBindings(
   for (const node of walkStateNodes(config)) {
     for (const invoke of normalizeInvokes(node.state.invoke)) {
       if (invokeSource(invoke.src) !== 'playbook') continue;
-      const inspected = invocationInput(invoke, initial);
+      const inspected = invocationInput(invoke, initial, true);
       if ('error' in inspected) {
         out.push({
           state: malformedPlaybookState(
@@ -1118,11 +1131,15 @@ function enumeratePlaybookBindings(
         ) {
           const playbookIdSentinel = sentinelFor(fields.playbookIdContext);
           const textSentinel = sentinelFor(fields.textContext);
-          const wired = invocationInput(invoke, {
-            ...initial,
-            [fields.playbookIdContext]: playbookIdSentinel,
-            [fields.textContext]: textSentinel,
-          });
+          const wired = invocationInput(
+            invoke,
+            {
+              ...initial,
+              [fields.playbookIdContext]: playbookIdSentinel,
+              [fields.textContext]: textSentinel,
+            },
+            true,
+          );
           if ('error' in wired) {
             bindingFindings.push(
               `invoke.input threw during dynamic context introspection: ${wired.error}`,
@@ -1488,7 +1505,32 @@ export function checkGearsFsmConformance(
       .filter(({ pinActor }) => pinActor)
       .map(({ state }) => state),
   );
-  const playbookStates = enumeratePlaybookStates(config);
+  const playbookBindings = enumeratePlaybookBindings(config);
+  const playbookStates = playbookBindings.map(({ state }) => state);
+  const initialContext = initialMachineContext(config);
+  const literalChecks = new Map<
+    PlaybookInvocationState,
+    Map<string, string | undefined>
+  >();
+  const literalFinding = (
+    item: GearsItem,
+    state: PlaybookInvocationState,
+  ): string | undefined => {
+    let checked = literalChecks.get(state);
+    if (checked === undefined) literalChecks.set(state, (checked = new Map()));
+    if (!checked.has(item.prompt)) {
+      const binding = playbookBindings.find(
+        (candidate) => candidate.state === state,
+      );
+      checked.set(
+        item.prompt,
+        binding === undefined
+          ? 'has no inspectable invocation'
+          : literalPlaybookTextFinding(item.prompt, binding, initialContext),
+      );
+    }
+    return checked.get(item.prompt);
+  };
   const scriptStates = enumerateScriptStates(config);
   const findings: string[] = [];
 
@@ -1634,6 +1676,23 @@ export function checkGearsFsmConformance(
     }
   }
 
+  // Composed literal inputs have no static text signature. The optional
+  // sourceItem remains optional: match otherwise unbound calls by their whole
+  // observable template, never by guessed context-field names.
+  for (const item of playbookItems) {
+    if (item.playbookIdContext !== undefined || playbookMatchesByItem.has(item))
+      continue;
+    const state = playbookStates.find(
+      (candidate) =>
+        candidate.sourceItem === undefined &&
+        !matchedPlaybookStates.has(candidate) &&
+        candidate.playbookIdContext === undefined &&
+        candidate.playbookId === item.playbookId &&
+        literalFinding(item, candidate) === undefined,
+    );
+    if (state !== undefined) addPlaybookMatch(item, state);
+  }
+
   for (const item of items) {
     if (isPlaybookItem(item)) {
       const matched = playbookMatchesByItem.get(item) ?? [];
@@ -1669,10 +1728,9 @@ export function checkGearsFsmConformance(
             `${item.id}: FSM playbook "${state.playbookId ?? ''}" is not GEARS playbook "${item.playbookId ?? ''}"`,
           );
         }
-        if (state.text !== item.prompt) {
-          findings.push(
-            `${item.id}: FSM playbook text is not the GEARS prompt verbatim`,
-          );
+        const textFinding = literalFinding(item, state);
+        if (textFinding !== undefined) {
+          findings.push(`${item.id}: FSM playbook text ${textFinding}`);
         }
       }
       continue;
@@ -2419,7 +2477,7 @@ export function deriveSubstitutions(
 /** The shared input-only portion of the canonical continuation probe. */
 function probeContinuationInput(
   state: CaptainState,
-  inputFn: NonNullable<InvokeLike['input']>,
+  inputFn: InputMapper,
   initial: Record<string, unknown> | undefined,
   artifactSchema: 1 | 3,
 ): { input: unknown; fields: string[]; question: string; reply: string } {
@@ -2905,7 +2963,9 @@ function occurrences(hay: string, needle: string): number {
 
 interface PromptBodyMatch {
   index: number;
+  end: number;
   substitutions: string[];
+  values: string[];
 }
 
 /**
@@ -2974,7 +3034,12 @@ function matchPromptBody(
     if (attempt === null) continue;
 
     if (expectedSubstitutions !== undefined) {
-      return { index: start, substitutions: [...expectedSubstitutions] };
+      return {
+        index: start,
+        end: attempt.end,
+        substitutions: [...expectedSubstitutions],
+        values: attempt.values,
+      };
     }
     const modes = new Map<string, Set<'literal' | 'sentinel'>>();
     for (let gap = 0; gap < tokens.length; gap++) {
@@ -2989,9 +3054,140 @@ function matchPromptBody(
     const substitutions = placeholdersIn(prompt).filter(
       (token) => modes.get(token)?.has('sentinel') === true,
     );
-    return { index: start, substitutions };
+    return {
+      index: start,
+      end: attempt.end,
+      substitutions,
+      values: attempt.values,
+    };
   }
   return null;
+}
+
+/** Verify the FSM-owned composer; child inputs reach the bridge already rendered. */
+function literalPlaybookTextFinding(
+  prompt: string,
+  binding: PlaybookBinding,
+  initial: Record<string, unknown> | undefined,
+): string | undefined {
+  const input = binding.invoke.input;
+  if (typeof input !== 'function') {
+    return binding.state.text === prompt
+      ? undefined
+      : 'does not preserve the complete GEARS child-input template';
+  }
+  const base = initial ?? {};
+  const fields = new Set<string>();
+  let context: Record<string, unknown> = { ...base };
+  // Later reads can be behind a string-valued branch. Discover them without
+  // overwriting an initialized object, array, boolean, or numeric context field.
+  for (let pass = 0; pass < 4; pass++) {
+    const before = fields.size;
+    for (const field of probeContextReads(input, context)) {
+      if (base[field] === undefined || typeof base[field] === 'string')
+        fields.add(field);
+    }
+    if (fields.size > 128)
+      return 'has unsupported composition (too many scalar reads)';
+    context = {
+      ...base,
+      ...Object.fromEntries(
+        [...fields].map((field) => [field, sentinelFor(field)]),
+      ),
+    };
+    if (fields.size === before) break;
+    if (pass === 3)
+      return 'has unsupported composition (context reads did not stabilize)';
+  }
+  const probe = (values: Record<string, unknown>): string | undefined => {
+    const result = invocationInput(binding.invoke, values);
+    return 'value' in result &&
+      result.value.playbookId === binding.state.playbookId &&
+      result.value.stateId === binding.state.stateId &&
+      typeof result.value.text === 'string'
+      ? result.value.text
+      : undefined;
+  };
+  const text = probe(context);
+  if (text === undefined)
+    return 'has unsupported composition (input evaluation or literal identity changed)';
+  const matched = matchPromptBody(prompt, text, [...fields]);
+  if (matched === null || matched.index !== 0 || matched.end !== text.length) {
+    return 'does not preserve the complete GEARS child-input template';
+  }
+  const tokens = [...prompt.matchAll(PLACEHOLDER)].map((match) => match[0]);
+  const mapping = new Map<string, { field: string }>();
+  const observed = new Map<string, string>();
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index],
+      value = matched.values[index];
+    if (observed.has(token) && observed.get(token) !== value) {
+      return `uses inconsistent context substitutions for ${token}`;
+    }
+    observed.set(token, value);
+    if (value === token) continue;
+    const field = [...fields].find((name) => value === sentinelFor(name));
+    if (field === undefined) return `has unsupported composition for ${token}`;
+    mapping.set(token, { field });
+  }
+  // A source-labelled complete relay can carry arbitrary prose. Inline slots
+  // can instead be constrained identifiers (for example a commit identity),
+  // so do not invent multiline identifier inputs merely because TS erased the
+  // narrower domain contract. Neither decision depends on the field's name.
+  const multilineFields = new Set<string>();
+  for (const line of prompt.split(/\r?\n/)) {
+    const token = /^> [^<>\r\n]*(<[^\s<>`]{1,60}>)$/.exec(line)?.[1];
+    const field = token === undefined ? undefined : mapping.get(token)?.field;
+    if (field !== undefined) multilineFields.add(field);
+  }
+  const payloads = Object.fromEntries(
+    [...fields].map((field) => [
+      field,
+      `«${field}:literal» $& $$ $\x60 $' ${[...new Set(tokens)].join(' ')}` +
+        (multilineFields.has(field) ? `\n\n«${field}:second»` : ''),
+    ]),
+  );
+  const render = (values: Record<string, string>): string => {
+    // Only the source-defined standalone relay form owns empty-line removal.
+    const template = prompt
+      .split(/(?<=\n)/)
+      .filter((line) => {
+        const token = /^> (<[^\s<>`]{1,60}>)(?:\r?\n)?$/.exec(line)?.[1];
+        const mapped = token === undefined ? undefined : mapping.get(token);
+        return mapped === undefined || values[mapped.field] !== '';
+      })
+      .join('');
+    return template.replace(PLACEHOLDER, (token: string, offset: number) => {
+      const mapped = mapping.get(token);
+      if (mapped === undefined) return token;
+      const value = values[mapped.field];
+      const lineStart = template.lastIndexOf('\n', offset - 1) + 1;
+      return template.startsWith('> ', lineStart)
+        ? value.replace(/\r?\n/g, (separator) => `${separator}> `)
+        : value;
+    });
+  };
+  const composed = probe({ ...base, ...payloads });
+  if (composed === undefined || composed !== render(payloads)) {
+    return 'does not preserve literal substitutions and quoted continuation lines';
+  }
+  const emptyFields = new Set<string>();
+  for (const line of prompt.split(/\r?\n/)) {
+    const token = /^> (<[^\s<>`]{1,60}>)$/.exec(line)?.[1];
+    const field = token === undefined ? undefined : mapping.get(token)?.field;
+    if (field !== undefined) emptyFields.add(field);
+  }
+  if (emptyFields.size > 0) {
+    const values = {
+      ...payloads,
+      ...Object.fromEntries([...emptyFields].map((field) => [field, ''])),
+    };
+    const emptyText = probe({ ...base, ...values });
+    if (emptyText === undefined || emptyText !== render(values)) {
+      return 'does not preserve source-defined empty standalone relay omission';
+    }
+  }
+  return undefined;
 }
 
 /** Findings when a composed prompt does not preserve the domain body (verification-5). */

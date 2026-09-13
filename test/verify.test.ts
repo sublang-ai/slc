@@ -2101,7 +2101,7 @@ describe('checkGearsFsmConformance', () => {
     );
     expect(findings).toMatch(/FSM playbook "security-review"/);
     expect(findings).toMatch(
-      /FSM playbook text is not the GEARS prompt verbatim/,
+      /FSM playbook text does not preserve the complete GEARS child-input template/,
     );
   });
 
@@ -2337,7 +2337,7 @@ const referenceFsm = async (): Promise<unknown> =>
 // model DR-009's verification contract and exercise the generator against the
 // reference artifacts. The installed @sublang/playbook ships them.
 describe('conformance against the reference artifacts', () => {
-  it('finds nothing on the reference code.gears.md + code.fsm', async () => {
+  it('preserves composed CODE text while retaining its missing schema declaration', async () => {
     const referenceGears = readFileSync(
       join(referenceDir, 'code.gears.md'),
       'utf8',
@@ -2362,9 +2362,9 @@ describe('conformance against the reference artifacts', () => {
     // Playbook 10.0.0's shipped reference does not satisfy its own gears2fsm
     // definition, which requires that "the artifact shall export
     // `concurrentRoleSets` as a deeply readonly array"; `code.fsm.ts` declares
-    // role `coder` yet exports no such array, and the two nested `review` calls
-    // do not carry their GEARS prompt verbatim. The conformance checker is
-    // correct to report all three, and every artifact this repository compiles
+    // role `coder` yet exports no such array. Its nested review inputs are
+    // correctly composed at invocation time and pass the observed-template
+    // probe. The missing declaration remains a finding; every artifact here
     // exports `concurrentRoleSets` and passes cleanly. Pinning the exact
     // findings keeps the checker honest about upstream while making any change
     // in either the checker or a later Playbook release visible here.
@@ -2373,11 +2373,7 @@ describe('conformance against the reference artifacts', () => {
         artifactSchema: 3,
         concurrentRoleSets: findConcurrentRoleSets(fsm),
       }),
-    ).toEqual([
-      'schema-3 FSM exports no valid concurrentRoleSets array',
-      'CODE-2: FSM playbook text is not the GEARS prompt verbatim',
-      'CODE-4: FSM playbook text is not the GEARS prompt verbatim',
-    ]);
+    ).toEqual(['schema-3 FSM exports no valid concurrentRoleSets array']);
   });
 });
 
@@ -4531,4 +4527,296 @@ describe('canonical continuation input boundary', () => {
   it('retains the controller exemption without synthesizing a continuation', () => {
     expect(checkFsmContinuationInputs(controllerConfig(), 3)).toEqual([]);
   });
+});
+
+describe('composed literal child-input fidelity', () => {
+  const template = [
+    'Preserve this sentence.',
+    '> Request: <request>',
+    '> Again: <request>',
+    '> <optional>',
+    '> Evidence: <evidence>',
+    'Review revision <revision> in this scope.',
+    'Finish exactly.',
+  ].join('\n');
+  const gears = `### NESTED-1\n\nCaptain shall call playbook \`review\`:\n${template
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n')}\n`;
+  const render = (context: Record<string, unknown>, fault = ''): string => {
+    const values: Record<string, string> = {
+      '<request>':
+        typeof context.unrelatedFirst === 'string'
+          ? context.unrelatedFirst
+          : '',
+      '<optional>':
+        typeof context.unrelatedOptional === 'string'
+          ? context.unrelatedOptional
+          : '',
+      '<evidence>':
+        typeof context.unrelatedLast === 'string' ? context.unrelatedLast : '',
+      '<revision>':
+        typeof context.unrelatedRevision === 'string'
+          ? context.unrelatedRevision
+          : '',
+    };
+    expect(context.typed).toEqual({ nested: [7], enabled: false });
+    let text = template
+      .split(/(?<=\n)/)
+      .filter(
+        (line) => line !== '> <optional>\n' || values['<optional>'] !== '',
+      )
+      .join('');
+    text = text.replace(/<[^>]+>/g, (token, offset: number) => {
+      let value = values[token] ?? token;
+      if (fault === 'repeated' && text.slice(0, offset).endsWith('Again: '))
+        value = values['<evidence>'];
+      if (fault === 'json') value = JSON.stringify(value);
+      return fault === 'unquoted' ? value : value.replace(/\n/g, '\n> ');
+    });
+    if (fault === 'delete')
+      text = text.replace('Preserve this sentence.\n', '');
+    if (fault === 'invent') text += '\nAn invented instruction.';
+    if (fault === 'recursive')
+      text = text.replaceAll('<evidence>', values['<evidence>']);
+    if (fault === 'empty' && values['<optional>'] === '')
+      text = text.replace('> Evidence:', '> \n> Evidence:');
+    return text;
+  };
+  const config = (fault = '', sourceItem = true): MachineConfigLike =>
+    createMachine({
+      context: {
+        typed: { nested: [7], enabled: false },
+        unrelatedFirst: '',
+        unrelatedOptional: '',
+        unrelatedLast: '',
+        unrelatedRevision: '',
+      },
+      initial: 'ready',
+      states: {
+        ready: { id: 'ready', meta: { playbook: { stateId: 'ready' } } },
+        call: {
+          id: 'call',
+          meta: { playbook: { stateId: 'call' } },
+          tags: 'playbook.suspended',
+          invoke: {
+            src: 'playbook',
+            input: ({ context }: { context: Record<string, unknown> }) => ({
+              stateId: 'call',
+              ...(sourceItem ? { sourceItem: 'NESTED-1' } : {}),
+              playbookId: 'review',
+              text: render(context, fault),
+            }),
+          },
+        },
+      },
+    }).config;
+
+  it.each([true, false])(
+    'accepts observable mapping without field-name assumptions (sourceItem %s)',
+    (sourceItem) => {
+      const machine = config('', sourceItem);
+      expect(checkGearsFsmConformance(gears, machine)).toEqual([]);
+      expect(machine.context).toEqual({
+        typed: { nested: [7], enabled: false },
+        unrelatedFirst: '',
+        unrelatedOptional: '',
+        unrelatedLast: '',
+        unrelatedRevision: '',
+      });
+    },
+  );
+
+  it.each([
+    'delete',
+    'invent',
+    'repeated',
+    'recursive',
+    'unquoted',
+    'empty',
+    'json',
+  ])('rejects %s composition drift', (fault) => {
+    const findings = checkGearsFsmConformance(gears, config(fault));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatch(/^NESTED-1: FSM playbook text /);
+  });
+
+  it.each([false, true])(
+    'checks exact static object-valued child input (changed %s)',
+    (changed) => {
+      const machine = createMachine({
+        initial: 'call',
+        states: {
+          call: {
+            id: 'call',
+            meta: { playbook: { stateId: 'call' } },
+            tags: 'playbook.suspended',
+            invoke: {
+              src: 'playbook',
+              input: {
+                stateId: 'call',
+                sourceItem: 'NESTED-1',
+                playbookId: 'review',
+                text: template + (changed ? '\nAn invented instruction.' : ''),
+              },
+            },
+          },
+        },
+      });
+      expect(checkGearsFsmConformance(gears, machine.config)).toEqual(
+        changed
+          ? [
+              'NESTED-1: FSM playbook text does not preserve the complete GEARS child-input template',
+            ]
+          : [],
+      );
+    },
+  );
+
+  it('rejects an unprovable structured read without replacing its initialized shape', () => {
+    const machine = config();
+    machine.states!.call.invoke = {
+      src: 'playbook',
+      input: ({ context }) => ({
+        stateId: 'call',
+        sourceItem: 'NESTED-1',
+        playbookId: 'review',
+        text: String((context.typed as { nested: number[] }).nested[0]),
+      }),
+    };
+    expect(checkGearsFsmConformance(gears, machine).join('\n')).toMatch(
+      /complete GEARS child-input template/,
+    );
+    expect(machine.context).toMatchObject({
+      typed: { nested: [7], enabled: false },
+    });
+  });
+
+  const sourceModule = (
+    fault = '',
+  ): string => `import { createMachine } from 'xstate';
+const template = ${JSON.stringify(template)};
+function render(context: { unrelatedFirst: string; unrelatedOptional: string; unrelatedLast: string; unrelatedRevision: string }): string {
+  const values: Record<string, string> = { '<request>': context.unrelatedFirst, '<optional>': context.unrelatedOptional, '<evidence>': context.unrelatedLast, '<revision>': context.unrelatedRevision };
+  const text = template.split(/(?<=\\n)/).filter(line => line !== '> <optional>\\n' || values['<optional>'] !== '').join('');
+  return text.replace(/<[^>]+>/g, token => (values[token] ?? token).replace(/\\n/g, '\\n> '))${fault === 'invent' ? " + '\\nAn invented instruction.'" : ''};
+}
+export const machine = createMachine({
+  context: { unrelatedFirst: '', unrelatedOptional: '', unrelatedLast: '', unrelatedRevision: '' }, initial: 'ready',
+  states: {
+    ready: { id: 'ready', meta: { playbook: { stateId: 'ready' } } },
+    call: { id: 'call', meta: { playbook: { stateId: 'call' } }, tags: 'playbook.suspended',
+      invoke: { src: 'playbook', input: ({ context }) => ({ stateId: 'call', sourceItem: 'NESTED-1', playbookId: 'review', text: render(context) }) }
+    }
+  }
+});\n`;
+
+  it('enforces composed fidelity at the real producer and consumer boundaries', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-child-text-boundary-'));
+    try {
+      await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
+      await writeFile(join(root, 'package.json'), '{"type":"module"}');
+      const pipeline = join(root, 'pipeline');
+      await mkdir(pipeline);
+      const formats = (from: string, to: string, extension: string) =>
+        `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${from} | ${extension} |\n| target | ${to} | .ts |\n`;
+      await writeFile(
+        join(pipeline, 'gears2fsm.md'),
+        formats('gears', 'fsm', '.md'),
+      );
+      await writeFile(
+        join(pipeline, 'link.md'),
+        formats('fsm', 'playbook', '.ts'),
+      );
+      const source = join(root, 'case.gears.md');
+      await writeFile(source, gears);
+      const target = join(root, 'runtime.ts');
+      await writeFile(target, 'export const runtime = true;\n');
+      for (const fault of ['', 'invent']) {
+        const generated = sourceModule(fault);
+        const result = await runSlc(['flow.gears2fsm', source], {
+          cwd: root,
+          resolver: () => [pipeline],
+          executor: {
+            async run(request) {
+              await writeFile(request.target, generated);
+              return { status: 'ok' };
+            },
+          },
+        });
+        expect(result.ok, result.diagnostics.join('\n')).toBe(fault === '');
+        const fsm = join(root, 'case.fsm.ts');
+        await writeFile(fsm, generated);
+        let calls = 0;
+        const consumer = await runSlc(['flow', source, '--link', target], {
+          cwd: root,
+          resolver: () => [pipeline],
+          executor: {
+            async run(request) {
+              if (request.kind !== 'link') {
+                await writeFile(request.target, generated);
+                return { status: 'ok', diagnostics: [] };
+              }
+              calls++;
+              return {
+                status: 'blocked',
+                diagnostics: ['consumer reached after producer checks'],
+              };
+            },
+          },
+        });
+        expect(calls, consumer.diagnostics.join('\n')).toBe(
+          fault === '' ? 1 : 0,
+        );
+        if (fault)
+          expect(consumer.diagnostics.join('\n')).toContain(
+            'complete GEARS child-input template',
+          );
+        expect(await readFile(source, 'utf8')).toBe(gears);
+        expect(await readFile(fsm, 'utf8')).toBe(generated);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('executes an emitted conformance suite against faithful and drifted child composers', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-child-text-suite-'));
+    try {
+      await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
+      await writeFile(join(root, 'package.json'), '{"type":"module"}');
+      await writeFile(join(root, 'case.gears.md'), gears);
+      await writeFile(join(root, 'case.fsm.ts'), sourceModule());
+      const suite = generateGearsFsmConformanceTest({
+        basename: 'case',
+        fsmModule: './case.fsm.js',
+        gearsFile: './case.gears.md',
+        verifyModule: join(repoRoot, 'src/verify.ts'),
+      });
+      await writeFile(join(root, 'case.gears-fsm.test.ts'), suite);
+      const config = join(root, 'vitest.config.mjs');
+      await writeFile(
+        config,
+        `export default ${JSON.stringify({ cacheDir: join(root, '.vite'), test: { cache: false, include: ['case.gears-fsm.test.ts'] } })};\n`,
+      );
+      const args = [
+        join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+        'run',
+        '--root',
+        root,
+        '--config',
+        config,
+      ];
+      await execFileAsync(process.execPath, args, { cwd: root });
+      await writeFile(join(root, 'case.fsm.ts'), sourceModule('invent'));
+      await expect(
+        execFileAsync(process.execPath, args, { cwd: root }),
+      ).rejects.toMatchObject({ code: 1 });
+      expect(await readFile(join(root, 'case.gears-fsm.test.ts'), 'utf8')).toBe(
+        suite,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

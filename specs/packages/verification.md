@@ -29,12 +29,25 @@ When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc 
 | Schema-3 delegated-role leaf | Invoke `player`, carry `meta.playbook.role` and `invoke.input.role` equal to the source role's canonical lowercase local id, omit `invoke.input.player`, and preserve the role locally without encoding a concrete player or alias. |
 | Schema-3 `Roles` declaration | Derive each local role id by lowercasing its source name, require it to match `[a-z][a-z0-9_-]*`, reject the reserved id `captain`, and reject removed aliases, repeated declarations, or distinct names that collide after derivation. |
 | Immutable schema-1 delegated-player leaf | Invoke `player` and carry its source-declared player through the historical `invoke.input.player` contract without being relabelled as schema 3. |
-| Literal nested-playbook leaf | Invoke `playbook` and carry the same id, literal target, and child-input body verbatim. |
+| Literal nested-playbook leaf | Invoke `playbook`, carry the same id and literal target, and preserve the child-input template through the composed-text check [[verification-39](#verification-39)]. |
 | Dynamic nested-playbook leaf | Invoke `playbook`, carry the same id, preserve the GEARS target-field name and sole child-text placeholder as literal `playbookIdContext` and `textContext` metadata, and evaluate `playbookId` and `text` to independent sentinel values supplied through those exact named context fields without source-text inspection. |
 | Schema-3 parallel group | Represent each simultaneously active region by its canonical role id, require those region ids to be pairwise distinct, and appear exactly once in the FSM's `concurrentRoleSets` export in source group and region order. |
 | Schema-3 artifact with no parallel group | Export `concurrentRoleSets` as the exact empty array. |
 | Schema-3 root final state, once any root final state of the artifact declares a terminal kind | Carry `meta.playbook.terminal` equal to exactly `success` or `failure`, so a caller reads the reached outcome's published meaning from the machine; a final inside a parallel region stages the join and declares no kind, and an artifact retained from before the kind was compiled declares none at all and is exempt. |
 | Schema-1 artifact whose FSM module independently exports `concurrentRoleSets` | Preserve schema-1 classification because the export is not artifact-schema evidence [[verification-21](#verification-21)]. |
+
+#### verification-39
+
+When checking a literal nested-playbook input [[verification-1](#verification-1)], the conformance check shall verify the complete GEARS child-text template through the invocation's observable composition under this case matrix, without assuming that a placeholder's spelling names a context field or inspecting function source ([DR-041](../decisions/041-composed-child-input-fidelity.md)):
+
+| Case | Required outcome |
+| --- | --- |
+| Static text from an object-valued input or function | Retain exact whole-text equality, including order, whitespace, and absence of added prefix or suffix. |
+| Runtime substitution | Preserve resolved non-string context shapes and probe observed string or absent scalar reads with distinct values; admit only complete literal template segments separated by unchanged tokens or exact unencoded probe values, with every repeated token using the same observed substitution. |
+| Observed mapping | Infer correspondence only from the complete template match, then require the same correspondence with distinct literal values containing placeholder-looking text and replacement metacharacters, using multiline values for complete standalone or labelled quoted relay slots and single-line values for inline slots; every continuation line of a relayed multiline value retains its quote marker. |
+| Empty standalone quoted relay | Omit exactly a complete `> <placeholder>` line and its separator when its observed value is empty, preserving the rest of the template. |
+| Unprovable composition | Report a composition finding for missing or inconsistent correspondence, unsupported value shapes, input evaluation failure, more than 128 observed scalar reads, or reads not stabilizing within four passes rather than inventing startup defaults, guessing field names, or accepting drift. |
+| Matching without `sourceItem` | Retain one-to-one literal-target/template matching in declaration order after explicit source-item and exact-signature matches. |
 
 #### verification-3
 
@@ -389,6 +402,12 @@ Where a real XState fixture reads supplied event type and target id through own-
 #### verification-38
 
 Where current installed composers and historical full-format composers process actual FSM continuation inputs, when the prompt-contract suite runs, the suite shall verify full question/reply/body preservation for fresh players and direct Captain, compact reply/body acceptance only for explicitly resumed schema-3 players, compatibility with older composers ignoring the resume argument, and rejection of missing or reordered blocks, compact fresh turns, changed bodies, and continuation framework text on ordinary turns [[verification-5](#verification-5)].
+
+### Composed child-input acceptance
+
+#### verification-40
+
+Where real XState literal-child fixtures contain static object-valued or function-composed inputs, when ordinary producer-to-consumer chains and emitted conformance suites execute the fixtures, the integration suite shall accept exact templates with unrelated context-field names, repeated values, preserved non-string context, multiline literal quoting, and empty standalone relays, while rejecting static deletion or invention, inconsistent repeated-token mappings, recursive substitution, JSON-encoded string relays, unquoted continuation lines, and unprovable input shapes [[verification-39](#verification-39)], retaining dynamic-call metadata checks [[verification-1](#verification-1)].
 
 ## References
 
