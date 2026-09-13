@@ -155,7 +155,7 @@ When checking player or Captain prompt composition, the verifier shall extend ea
 | Complete standalone or labelled quoted relay | Additionally probe LF/CRLF multiline values when every occurrence of the observed value occupies a complete quoted relay slot, preserving the original text, separators, and continuation quote markers. |
 | Inline identifier, deterministic JSON slot, or typed value | Keep inline substitutions single-line and retain existing JSON and non-string checks without inventing multiline domain values or changing structured input shapes [[verification-5](#verification-5)]. |
 | Runtime identity, contract metadata, and surrounding framework | Preserve the original identity lookup and metadata, existing continuation profile, and body prefix/suffix while reconstructing expected replacements once from the original template. |
-| Rendering drift or probe failure | Emit one finding per state and literal or quoted-relay violation across turn modes, through both the ordinary link gate and emitted prompt suite [[verification-27](#verification-27)]. |
+| Rendering drift or probe failure | Emit one finding per state and literal or quoted-relay violation across turn modes, through both the ordinary link gate and emitted prompt suite, and for rendered mismatches include the zero-based first differing UTF-16 code-unit offset plus JSON-escaped expected and actual excerpts capped at 24 UTF-16 code units each, using `<end>` when a side has no character at that offset, so LF/CRLF separator and quote-marker drift is auditable without logging the full prompt [[verification-27](#verification-27)]. |
 
 #### verification-6
 

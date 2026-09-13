@@ -4922,6 +4922,7 @@ describe('literal prompt relays (verification-41, verification-42)', () => {
           .replaceAll('<identity>', () => values['<identity>']);
       if (fault === 'static')
         body = body.replace('Keep this instruction.', 'Invented instruction.');
+      if (fault === 'crlf-normalized') body = body.replace(/\r\n/g, '\n');
       if (legacy) return goodCompose({ ...input, prompt: body });
       // The installed continuation composer supplies the actual current
       // full/compact player prefix, while direct Captain always remains full.
@@ -4970,29 +4971,45 @@ describe('literal prompt relays (verification-41, verification-42)', () => {
     ).toEqual([]);
   });
 
-  it.each(['unquoted', 'recursive', 'replacement-string', 'static'])(
-    'rejects %s rendering through the actual FSM input mapper',
-    (fault) => {
-      const findings = checkPromptComposition({
-        config: config(),
-        compose: composer(fault),
-        actor: 'player',
-      });
-      expect(findings.join('\n')).toMatch(
-        fault === 'static'
-          ? /does not preserve the body line/
-          : /literal-relay|quoted-relay/,
+  it.each([
+    'unquoted',
+    'recursive',
+    'replacement-string',
+    'static',
+    'crlf-normalized',
+  ])('rejects %s rendering through the actual FSM input mapper', (fault) => {
+    const modes: (boolean | undefined)[] = [];
+    const baseComposer = composer(fault);
+    const findings = checkPromptComposition({
+      config: config(),
+      compose: (...args) => {
+        modes.push(args[2]);
+        return baseComposer(...args);
+      },
+      actor: 'player',
+    });
+    expect(findings.join('\n')).toMatch(
+      fault === 'static'
+        ? /does not preserve the body line/
+        : /literal-relay|quoted-relay/,
+    );
+    if (fault === 'unquoted') expect(findings).toHaveLength(1);
+    if (fault === 'crlf-normalized') {
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toContain(
+        'work: prompt composition does not preserve multiline quoted-relay text',
       );
-      if (fault === 'unquoted')
-        expect(findings).toEqual([
-          'work: prompt composition does not preserve multiline quoted-relay text',
-        ]);
-    },
-  );
+      expect(new Set(modes)).toEqual(new Set([undefined, false, true]));
+      expect(findings[0]).toContain('UTF-16 offset');
+      expect(findings[0]).toContain('LF/CRLF separators/quote markers');
+      expect(findings[0]).toContain('expected "\\r\\n> third-0');
+      expect(findings[0]).toContain('actual "\\n> third-0');
+    }
+  });
 });
 
 describe('emitted literal prompt-relay suite (verification-42)', () => {
-  it('keeps the gate and real emitted suite aligned for good and unquoted links', async () => {
+  it('keeps the gate and real emitted suite aligned for faithful and drifting links', async () => {
     const root = await mkdtemp(join(tmpdir(), 'slc-literal-relay-suite-'));
     try {
       await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
@@ -5009,12 +5026,32 @@ describe('emitted literal prompt-relay suite (verification-42)', () => {
           ...(context.pendingBossQuestion && context.bossReply ? { pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply } : {}),
         }) }
       } } } };\n`;
-      for (const quoted of [true, false]) {
-        const basename = quoted ? 'good' : 'bad';
+      const cases = [
+        {
+          basename: 'good',
+          expression: "input.audience.replace(/\\n/g, '\\n> ')",
+          ok: true,
+          diagnostic: /4 passed/,
+        },
+        {
+          basename: 'unquoted',
+          expression: 'input.audience',
+          ok: false,
+          diagnostic: /multiline quoted-relay/,
+        },
+        {
+          basename: 'crlf-normalized',
+          expression:
+            "input.audience.replace(/\\r\\n/g, '\\n').replace(/\\n/g, '\\n> ')",
+          ok: false,
+          diagnostic: /\\\\r\\\\n> third-0.*\\\\n> third-0/s,
+        },
+      ] as const;
+      for (const { basename, expression, ok, diagnostic } of cases) {
         const fsmPath = join(root, `${basename}.fsm.ts`);
         const linkedPath = join(root, `${basename}.playbook.ts`);
         const linked = `const compose = (input: { prompt: string; audience: string; pendingBossQuestion?: { question: string }; bossReply?: string }): string => {
-          const body = input.prompt.replaceAll('<audience>', () => ${quoted ? "input.audience.replace(/\\n/g, '\\n> ')" : 'input.audience'});
+          const body = input.prompt.replaceAll('<audience>', () => ${expression});
           return input.pendingBossQuestion && input.bossReply
             ? [${JSON.stringify(CONTINUATION_PREAMBLE)}, 'Boss question:\\n' + input.pendingBossQuestion.question, 'Boss reply:\\n' + input.bossReply, body].join('\\n\\n') : body;
         };
@@ -5031,7 +5068,7 @@ describe('emitted literal prompt-relay suite (verification-42)', () => {
           emitted.diagnostics.some((line) =>
             line.includes('multiline quoted-relay'),
           ),
-        ).toBe(!quoted);
+        ).toBe(!ok);
         const result = await execFileAsync(
           process.execPath,
           [
@@ -5051,10 +5088,8 @@ describe('emitted literal prompt-relay suite (verification-42)', () => {
             output: `${error.stdout ?? ''}${error.stderr ?? ''}`,
           }),
         );
-        expect(result.ok, result.output).toBe(quoted);
-        expect(result.output).toMatch(
-          quoted ? /4 passed/ : /multiline quoted-relay/,
-        );
+        expect(result.ok, result.output).toBe(ok);
+        expect(result.output).toMatch(diagnostic);
         expect(await readFile(fsmPath, 'utf8')).toBe(fsm);
         expect(await readFile(linkedPath, 'utf8')).toBe(linked);
       }

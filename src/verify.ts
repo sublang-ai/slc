@@ -2678,6 +2678,7 @@ export function checkPromptComposition(opts: {
     if (typeof inputFn !== 'function') continue;
     const reads = probeContextReads(inputFn, initial);
     const substituted = substitutions[state.stateId] ?? [];
+    const relayFindingKeys = new Set<string>();
 
     const artifactSchema =
       schemaResolution.findings.length > 0
@@ -2727,6 +2728,7 @@ export function checkPromptComposition(opts: {
           promptReads,
           opts.compose,
           roles,
+          relayFindingKeys,
           resuming,
         ),
       );
@@ -2845,6 +2847,7 @@ export function checkPromptComposition(opts: {
           promptReads,
           opts.compose,
           roles,
+          relayFindingKeys,
           resuming,
         ),
       );
@@ -3164,6 +3167,7 @@ function literalPromptRelayFindings(
   reads: readonly string[],
   compose: PromptComposer,
   roles: readonly string[],
+  findingKeys: Set<string>,
   resuming?: boolean,
 ): string[] {
   if (typeof input !== 'object' || input === null) return [];
@@ -3235,20 +3239,49 @@ function literalPromptRelayFindings(
     const label = multiline
       ? 'multiline quoted-relay'
       : 'single-pass literal-relay';
+    const key = `${state.stateId}:${label}`;
+    const prefix = `${state.stateId}: prompt composition does not preserve ${label} text`;
     try {
-      if (composeForState(compose, state, probed, roles, resuming) === expected)
-        continue;
-      findings.push(
-        `${state.stateId}: prompt composition does not preserve ${label} text`,
+      const actual = composeForState(compose, state, probed, roles, resuming);
+      if (actual === expected) continue;
+      pushRelayFinding(
+        findings,
+        findingKeys,
+        key,
+        `${prefix}; probe preserves literal text and LF/CRLF separators/quote markers; ${firstDifferenceDiagnostic(expected, actual)}`,
       );
     } catch {
       // One state/representation diagnostic also covers mode-dependent errors.
-      findings.push(
-        `${state.stateId}: prompt composition does not preserve ${label} text`,
-      );
+      pushRelayFinding(findings, findingKeys, key, prefix);
     }
   }
   return findings;
+}
+
+function pushRelayFinding(
+  findings: string[],
+  findingKeys: Set<string>,
+  key: string,
+  finding: string,
+): void {
+  if (findingKeys.has(key)) return;
+  findingKeys.add(key);
+  findings.push(finding);
+}
+
+function firstDifferenceDiagnostic(expected: string, actual: string): string {
+  let offset = 0;
+  const length = Math.max(expected.length, actual.length);
+  while (offset < length && expected[offset] === actual[offset]) offset++;
+  return `first difference at UTF-16 offset ${offset}: expected ${boundedJsonSnippet(
+    expected,
+    offset,
+  )}, actual ${boundedJsonSnippet(actual, offset)}`;
+}
+
+function boundedJsonSnippet(value: string, offset: number): string {
+  if (offset >= value.length) return '<end>';
+  return JSON.stringify(value.slice(offset, offset + 24));
 }
 
 /** Verify the FSM-owned composer; child inputs reach the bridge already rendered. */

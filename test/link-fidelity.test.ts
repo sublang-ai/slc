@@ -77,6 +77,14 @@ const linkedModule = (role: string): string =>
   ].join('\n');
 
 const CONFORMANT = linkedModule('coder');
+const QUOTED_RELAY = CONFORMANT.replace(
+  '? input.audience :',
+  "? input.audience.replace(/\\n/g, '\\n> ') :",
+);
+const CRLF_NORMALIZED_RELAY = CONFORMANT.replace(
+  '? input.audience :',
+  "? input.audience.replace(/\\r\\n/g, '\\n').replace(/\\n/g, '\\n> ') :",
+);
 /** `reviewer` is declared by no state of {@link FSM_FIXTURE}. */
 const WRONG_ROLE = linkedModule('reviewer');
 
@@ -394,38 +402,55 @@ describe('playbook link-fidelity gate (phase-execution-53, phase-execution-54)',
     },
   });
 
-  it('repairs a literal multiline relay with the same Coder before accepting the link (verification-42)', async () => {
-    const originalFsm = FSM_FIXTURE.replace(
-      'Draft for <audience> as <coder-llm>.',
-      'Draft as <coder-llm>.\\n> Request: <audience>',
-    );
-    await writeFile(object, originalFsm);
-    const quoted = CONFORMANT.replace(
-      '? input.audience :',
-      "? input.audience.replace(/\\n/g, '\\n> ') :",
-    );
-    const coderCalls: AgentRunRequest[] = [];
-    const result = await runSlc(
-      ['flow.link', object, linkTarget],
-      deps(
-        createInterpretedExecutor({
-          agent: createReviewingAgent({
-            coder: queuedCoder([CONFORMANT, quoted], coderCalls),
+  it.each([
+    {
+      label: 'unquoted',
+      draft: CONFORMANT,
+      expectedDetail: undefined,
+    },
+    {
+      label: 'CRLF-normalizing',
+      draft: CRLF_NORMALIZED_RELAY,
+      expectedDetail: 'expected "\\r\\n> third-0", actual "\\n> third-0"',
+    },
+  ])(
+    'repairs a $label literal multiline relay with the same Coder before accepting the link (verification-42)',
+    async ({ draft, expectedDetail }) => {
+      const originalFsm = FSM_FIXTURE.replace(
+        'Draft for <audience> as <coder-llm>.',
+        'Draft as <coder-llm>.\\n> Request: <audience>',
+      );
+      await writeFile(object, originalFsm);
+      const coderCalls: AgentRunRequest[] = [];
+      const result = await runSlc(
+        ['flow.link', object, linkTarget],
+        deps(
+          createInterpretedExecutor({
+            agent: createReviewingAgent({
+              coder: queuedCoder([draft, QUOTED_RELAY], coderCalls),
+            }),
           }),
-        }),
-      ),
-    );
-    expect(result, result.diagnostics.join('\n')).toMatchObject({
-      ok: true,
-      outputs: [linked],
-    });
-    expect(coderCalls).toHaveLength(2);
-    expect(coderCalls[1].prompt).toContain(
-      'FINDINGS:\n1. draft: prompt composition does not preserve multiline quoted-relay text',
-    );
-    expect(await readFile(object, 'utf8')).toBe(originalFsm);
-    expect(await readFile(linked, 'utf8')).toBe(quoted);
-  });
+        ),
+      );
+      expect(result, result.diagnostics.join('\n')).toMatchObject({
+        ok: true,
+        outputs: [linked],
+      });
+      expect(coderCalls).toHaveLength(2);
+      expect(coderCalls[1].prompt).toContain(
+        'FINDINGS:\n1. draft: prompt composition does not preserve multiline quoted-relay text',
+      );
+      expect(
+        coderCalls[1].prompt.match(
+          /draft: prompt composition does not preserve multiline quoted-relay text/g,
+        ),
+      ).toHaveLength(1);
+      if (expectedDetail !== undefined)
+        expect(coderCalls[1].prompt).toContain(expectedDetail);
+      expect(await readFile(object, 'utf8')).toBe(originalFsm);
+      expect(await readFile(linked, 'utf8')).toBe(QUOTED_RELAY);
+    },
+  );
 
   it('relays a finding to the Coder in place of the Reviewer call, then reviews the repair', async () => {
     const coderCalls: AgentRunRequest[] = [];
