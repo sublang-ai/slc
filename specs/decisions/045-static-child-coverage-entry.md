@@ -7,6 +7,10 @@
 
 Accepted.
 
+### Bounded path extension
+
+[DR-046](046-bounded-child-chain-coverage.md) extends the original one-predecessor limit and preemption-dependent selection with finite child chains and ordinary acting-result coverage; the reached-context and no-private-jump requirements remain in force.
+
 ## Context
 
 A generated CODE workflow enters static review calls only after a coding actor assigns its result to context.

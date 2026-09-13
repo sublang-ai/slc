@@ -71,6 +71,7 @@ meta.md       The spec of specs
 | [DR-043](decisions/043-stall-watchdog-default-window.md) | 043-stall-watchdog-default-window.md | The agent-stall watchdog's default window becomes 2400 seconds, amending [DR-019](decisions/019-compile-progress-stall-watchdog.md); the watchdog's other rules stand |
 | [DR-044](decisions/044-artifact-owned-entry-options.md) | 044-artifact-owned-entry-options.md | Artifact-owned entry options with explicit new-output validation and legacy compatibility |
 | [DR-045](decisions/045-static-child-coverage-entry.md) | 045-static-child-coverage-entry.md | Bounded child coverage through actual predecessor transitions and reached context |
+| [DR-046](decisions/046-bounded-child-chain-coverage.md) | 046-bounded-child-chain-coverage.md | Bounded child-path replay for non-preemptive workflows and chained children |
 
 ## Packages
 

@@ -26,6 +26,7 @@ const referenceDir = fileURLToPath(
     import.meta.url,
   ),
 );
+const referenceFsm: unknown = await import(join(referenceDir, 'code.fsm.js'));
 
 const NEEDS_BOSS_REPLY_TEXT =
   "The player's prose surfaces a clarifying question for Boss. Output shall include `question: <verbatim question text>`.";
@@ -1024,6 +1025,272 @@ const accumulatedChildMachine = (
   } as any);
 };
 
+/** Non-preemptive planning plus a DEV-like branch/decision/code/PR chain. */
+const childChainMachine = (
+  opts: {
+    deadDecision?: boolean;
+    repeatBranch?: boolean;
+    blankResumes?: boolean;
+  } = {},
+) => {
+  const exactApproval = (value: any) =>
+    value !== null &&
+    typeof value === 'object' &&
+    Object.keys(value).every(
+      (key) => key === 'approved' || key === 'revision',
+    ) &&
+    value.approved === true &&
+    typeof value.revision === 'string' &&
+    value.revision !== '';
+  const errorArms = [
+    {
+      target: '#childFailed',
+      guard: ({ event }: any) =>
+        event.error instanceof Error && event.error.result?.status === 'error',
+    },
+    { target: '#failed' },
+  ];
+  const child = (
+    id: string,
+    arms: unknown[],
+    inputCheck?: (context: any) => void,
+  ) => ({
+    id,
+    invoke: {
+      src: 'playbook',
+      input: ({ context }: any) => {
+        if (context.mode === undefined)
+          throw new Error('planning must execute');
+        inputCheck?.(context);
+        return { stateId: id, playbookId: id, text: context.mode };
+      },
+      onDone: arms,
+      onError: errorArms,
+    },
+  });
+  return setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('provide planner');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('provide child');
+      }),
+    },
+  }).createMachine({
+    id: 'childChain',
+    initial: 'ready',
+    context: { branches: 0 } as any,
+    states: {
+      ready: { id: 'ready', on: { START: { target: 'plan' } } },
+      plan: {
+        id: 'plan',
+        invoke: {
+          src: 'player',
+          input: () => ({
+            stateId: 'plan',
+            sourceItem: 'CHAIN-1',
+            role: 'planner',
+            prompt: 'Plan the request.',
+            result: {
+              direct: 'Call code.',
+              decide: 'Call decide then code.',
+              branch: 'Call branch then code and PR.',
+              both: 'Call branch, decide, code and PR.',
+              discuss: 'Complete the discussion after a reply.',
+              needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            },
+          }),
+          onDone: [
+            ...[
+              ['direct', 'code'],
+              ['decide', 'decide'],
+              ['branch', 'branch'],
+              ['both', 'branch'],
+            ].map(([key, target]) => ({
+              guard: ({ event }: any) => event.output.guard === key,
+              target,
+              actions: assign(({ event }: any) => ({
+                mode: event.output.guard,
+              })),
+            })),
+            {
+              target: 'done',
+              guard: ({ context, event }: any) =>
+                context.answered === true && event.output.guard === 'discuss',
+            },
+            {
+              target: 'awaitBossReply',
+              guard: ({ event }: any) =>
+                event.output.guard === 'needsBossReply' &&
+                typeof event.output.question === 'string',
+              actions: assign(({ event }: any) => ({
+                pendingBossQuestion: {
+                  resumeStateId: 'plan',
+                  question: event.output.question,
+                },
+              })),
+            },
+            { target: 'failed' },
+          ],
+          onError: { target: 'failed' },
+        },
+      },
+      branch: child('branch', [
+        {
+          target: 'decide',
+          guard: ({ context, event }: any) =>
+            context.mode === 'both' && exactApproval(event.output),
+          actions: assign(({ context }: any) => ({
+            branches: context.branches + 1,
+          })),
+        },
+        {
+          target: 'code',
+          guard: ({ context, event }: any) =>
+            context.mode === 'branch' && exactApproval(event.output),
+          actions: assign(({ context }: any) => ({
+            branches: context.branches + 1,
+          })),
+        },
+        { target: 'childFailed' },
+      ]),
+      decide: child('decide', [
+        {
+          target: 'code',
+          guard: ({ event }: any) =>
+            opts.deadDecision !== true && exactApproval(event.output),
+          actions: assign(({ event }: any) => ({
+            decisionRevision: event.output.revision,
+          })),
+        },
+        { target: 'childFailed' },
+      ]),
+      code: child(
+        'code',
+        [
+          {
+            target: 'pr',
+            guard: ({ context, event }: any) =>
+              ['branch', 'both'].includes(context.mode) &&
+              (opts.repeatBranch !== true || context.branches >= 2) &&
+              exactApproval(event.output),
+            actions: assign(({ event }: any) => ({
+              codeRevision: event.output.revision,
+            })),
+          },
+          ...(opts.repeatBranch === true
+            ? [
+                {
+                  target: 'branch',
+                  guard: ({ context, event }: any) =>
+                    ['branch', 'both'].includes(context.mode) &&
+                    context.branches < 2 &&
+                    exactApproval(event.output),
+                },
+              ]
+            : []),
+          {
+            target: 'done',
+            guard: ({ context, event }: any) =>
+              ['direct', 'decide'].includes(context.mode) &&
+              exactApproval(event.output),
+          },
+          { target: 'childFailed' },
+        ],
+        (context) => {
+          if (
+            ['decide', 'both'].includes(context.mode) &&
+            typeof context.decisionRevision !== 'string'
+          )
+            throw new Error('decision must execute');
+        },
+      ),
+      pr: child('pr', [{ target: 'done' }], (context) => {
+        if (context.branches < 1 || typeof context.codeRevision !== 'string')
+          throw new Error('branch and code must execute');
+      }),
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        tags: 'playbook.parked',
+        on: {
+          BOSS_REPLY: {
+            target: 'plan',
+            guard: ({ event }: any) =>
+              opts.blankResumes === true ||
+              (typeof event.answer === 'string' && event.answer.trim() !== ''),
+            actions: assign(() => ({ answered: true })),
+          },
+        },
+      },
+      done: { id: 'done', type: 'final' },
+      childFailed: { id: 'childFailed', type: 'final' },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+    },
+  } as any);
+};
+
+const boundedPathMachine = (opts: { depth?: number; branching?: boolean }) => {
+  const states: Record<string, any> = {
+    ready: { id: 'ready', on: {} },
+    done: { id: 'done', type: 'final' },
+    failed: { id: 'failed', tags: 'playbook.parked' },
+    awaitBossReply: { id: 'awaitBossReply', tags: 'playbook.parked' },
+  };
+  const invocation = (id: string, target: string) => ({
+    id,
+    invoke: {
+      src: 'playbook',
+      input: () => ({
+        stateId: id,
+        playbookId: 'child',
+        text: 'Exact child request.',
+      }),
+      onDone: {
+        target,
+        guard: ({ event }: any) => Object.keys(event.output).length === 0,
+      },
+      onError: { target: 'failed' },
+    },
+  });
+  if (opts.depth !== undefined) {
+    states.ready.on.START = { target: 'step0' };
+    for (let index = 0; index < opts.depth; index++)
+      states[`step${index}`] = invocation(
+        `step${index}`,
+        index + 1 === opts.depth ? 'done' : `step${index + 1}`,
+      );
+  } else if (opts.branching) {
+    states.ready.on.START = { target: 'step0' };
+    for (let index = 0; index < 7; index++) {
+      states[`step${index}`] = invocation(
+        `step${index}`,
+        index === 6 ? 'last' : `step${index + 1}`,
+      );
+      const target = states[`step${index}`].invoke.onDone.target;
+      states[`step${index}`].invoke.onDone = ['left', 'right'].map((key) => ({
+        target,
+        guard:
+          key === 'left'
+            ? ({ event }: any) => event.output.guard === 'left'
+            : ({ event }: any) => event.output.guard === 'right',
+        actions: assign(({ context }: any) => ({
+          path: `${context.path ?? ''}/${key}`,
+        })),
+      }));
+    }
+    states.last = invocation('last', 'done');
+  }
+  return setup({
+    actors: { playbook: fromPromise(async () => ({})) },
+  }).createMachine({
+    id: 'boundedPaths',
+    initial: 'ready',
+    context: {},
+    states,
+  } as any);
+};
+
 const controllerActions = [
   'respond',
   'resume',
@@ -1399,6 +1666,75 @@ type ScriptGuardArgs = {
 };
 
 describe('guardSatisfiable (verification-6)', () => {
+  it('preserves descriptor-bearing actor outputs through probing and actual XState execution', async () => {
+    const symbol = Symbol('coverage fixture');
+    const getter = () => 'accepted';
+    const setter = () => {};
+    const cases = [
+      Object.defineProperty({}, 'value', {
+        get: getter,
+        set: setter,
+        enumerable: true,
+        configurable: true,
+      }),
+      Object.defineProperty({}, 'value', {
+        value: 'accepted',
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      }),
+      { [symbol]: 'accepted' },
+      Object.assign(Object.create(null) as object, { value: 'accepted' }),
+    ];
+    for (const output of cases) {
+      const descriptors = Object.getOwnPropertyDescriptors(output);
+      const prototype = Object.getPrototypeOf(output) as object | null;
+      const guard = ({
+        context,
+        event,
+      }: {
+        context: Record<string, unknown>;
+        event: { output?: object };
+      }) => {
+        if (
+          event.output === undefined ||
+          Object.getPrototypeOf(event.output) !== prototype
+        )
+          return false;
+        for (const key of Reflect.ownKeys(descriptors)) {
+          const expected = descriptors[key as keyof typeof descriptors];
+          const actual = Object.getOwnPropertyDescriptor(event.output, key);
+          if (
+            actual === undefined ||
+            Reflect.ownKeys(expected).some(
+              (member) =>
+                Reflect.get(actual, member) !== Reflect.get(expected, member),
+            )
+          )
+            return false;
+        }
+        return context.route === 'accepted';
+      };
+      expect(guardSatisfiable(guard as never, output)).toBe(true);
+      const machine = setup({
+        actors: { work: fromPromise(async () => output) },
+      }).createMachine({
+        initial: 'work',
+        context: { route: 'accepted' },
+        states: {
+          work: { invoke: { src: 'work', onDone: { guard, target: 'done' } } },
+          done: { type: 'final' },
+        },
+      });
+      const actor = createActor(machine);
+      actor.start();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(actor.getSnapshot().status).toBe('done');
+      actor.stop();
+      expect(Object.getOwnPropertyDescriptors(output)).toEqual(descriptors);
+    }
+  });
+
   it('satisfies a conjunctive guard by iterative deepening over its literals', () => {
     const guard = ({
       context,
@@ -1768,6 +2104,70 @@ describe('checkFsmCoverage (verification-6)', () => {
     ).toEqual([]);
   });
 
+  it('covers a non-preemptive branch/decide/code/PR chain and a real question/reply revisit', async () => {
+    expect(await checkFsmCoverage({ machine: childChainMachine() })).toEqual(
+      [],
+    );
+  });
+
+  it('retains dead child approval and blank-reply failures without context patches', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: childChainMachine({ deadDecision: true }),
+      }),
+    ).toContain(
+      'state decide: nested playbook onDone arm 0 is unsatisfiable under probing',
+    );
+    expect(
+      (
+        await checkFsmCoverage({
+          machine: childChainMachine({ blankResumes: true }),
+        })
+      ).some((finding) =>
+        finding.includes('a blank BOSS_REPLY answer must not resume'),
+      ),
+    ).toBe(true);
+  });
+
+  it('reports a required non-question cycle as unsupported rather than skipping it', async () => {
+    const findings = await checkFsmCoverage({
+      machine: childChainMachine({ repeatBranch: true }),
+    });
+    expect(
+      findings.some(
+        (finding) =>
+          finding.startsWith('state pr:') &&
+          finding.includes('unsupported repeated-invocation'),
+      ),
+    ).toBe(true);
+  });
+
+  it('reports explicit depth and attempt exhaustion for otherwise runnable child paths', async () => {
+    const deep = boundedPathMachine({ depth: 9 });
+    const actor = createActor(deep);
+    actor.start();
+    actor.send({ type: 'START' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(actor.getSnapshot().status).toBe('done');
+    actor.stop();
+    expect(
+      (await checkFsmCoverage({ machine: deep })).some((finding) =>
+        finding.includes('exhausted 8-invocation path depth'),
+      ),
+    ).toBe(true);
+    expect(
+      (
+        await checkFsmCoverage({
+          machine: boundedPathMachine({ branching: true }),
+        })
+      ).some(
+        (finding) =>
+          finding.startsWith('state last:') &&
+          finding.includes('exhausted 64-attempt path budget'),
+      ),
+    ).toBe(true);
+  });
+
   it('retains initialized context when the child is initially active (verification-43)', async () => {
     const machine = setup({
       actors: {
@@ -1782,7 +2182,7 @@ describe('checkFsmCoverage (verification-6)', () => {
       on: {
         BOSS_INTERRUPT: {
           target: '#ready',
-          guard: ({ event }: any) => event.targetId === 'ready',
+          guard: ({ event }) => event.targetId === 'ready',
         },
       },
       states: {
@@ -2273,11 +2673,17 @@ describe('checkFsmCoverage (verification-6)', () => {
     );
   });
 
-  it('finds nothing on the reference machine', async () => {
-    const fsm: unknown = await import(join(referenceDir, 'code.fsm.js'));
-    const sourceText = readFileSync(join(referenceDir, 'code.fsm.ts'), 'utf8');
-    expect(await checkFsmCoverage(fsm, { sourceText })).toEqual([]);
-  });
+  it(
+    'finds nothing on the reference machine',
+    async () => {
+      const sourceText = readFileSync(
+        join(referenceDir, 'code.fsm.ts'),
+        'utf8',
+      );
+      expect(await checkFsmCoverage(referenceFsm, { sourceText })).toEqual([]);
+    },
+    fsmCoverageTestTimeout(referenceFsm),
+  );
 });
 
 describe('named guards (setup implementations)', () => {
@@ -2368,6 +2774,16 @@ describe('findMachine', () => {
 });
 
 describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
+  it('caps maintained DEV scheduling at five minutes while preserving smaller derived bounds', async () => {
+    const fsm: unknown = await import(
+      join(referenceDir, '../dev.playbook/dev.fsm.js')
+    );
+    expect(fsmCoverageTestTimeout(fsm)).toBe(300_000);
+    expect(fsmCoverageTestTimeout({ machine: goodMachine() })).toBeLessThan(
+      300_000,
+    );
+  });
+
   it('derives a timeout above the default from bounded checker work', () => {
     expect(
       fsmCoverageTestTimeout({ machine: dynamicCaptainMachine() }),

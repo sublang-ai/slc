@@ -255,6 +255,8 @@ const SETTLE_MS = 1_000;
 const PARALLEL_SETTLE_MS = 250;
 const PARALLEL_QUESTION_SETTLE_MS = 500;
 const MAX_PARALLEL_COMBINATIONS = 64;
+const MAX_COVERAGE_PATH_STEPS = 8;
+const MAX_COVERAGE_PATH_ATTEMPTS = 64;
 
 /** Stable values shared by machine input, result output, and guard probing. */
 const COVERAGE_PLAYBOOK_ID = 'coverage-child-playbook';
@@ -691,7 +693,10 @@ interface TransitionObservation {
 
 /** A scripted invocation resolves an output, rejects, or hangs (`null`). */
 type ScriptResult = Record<string, unknown> | Error | null;
-type CaptainScript = (input: Record<string, unknown>) => ScriptResult;
+type CaptainScript = (
+  input: Record<string, unknown>,
+  actorId: string,
+) => ScriptResult | Promise<ScriptResult>;
 type PlaybookScript = (
   input: Record<string, unknown>,
   actorId: string,
@@ -728,8 +733,14 @@ function makeActor(
 ): DrivenActor {
   const coverageErrors: { eventType: string; error: unknown }[] = [];
   const workActor = fromPromise(
-    async ({ input }: { input: Record<string, unknown> }) => {
-      const output = script(input ?? {});
+    async ({
+      input,
+      self,
+    }: {
+      input: Record<string, unknown>;
+      self: { id: string };
+    }) => {
+      const output = await script(input ?? {}, self.id);
       if (output === null) return new Promise(() => {});
       if (output instanceof Error) throw output;
       return output;
@@ -1237,6 +1248,7 @@ const MAX_SCRIPT_EXIT_STATUSES = 8;
 const PROBES_PER_TIMEOUT_MILLISECOND = 50;
 const COVERAGE_TIMEOUT_MARGIN_MS = 5_000;
 const MIN_COVERAGE_TEST_TIMEOUT_MS = 10_000;
+const MAX_COVERAGE_TEST_TIMEOUT_MS = 300_000;
 
 function minedLiterals(fn: unknown): string[] {
   let source: string;
@@ -1325,6 +1337,31 @@ function probeGuardAssignment(
   options: ProbeOptions = {},
 ): ProbeAssignment | undefined {
   const baseContext = { ...(options.initialContext ?? {}) };
+  // Guards are predicates over fixed seed objects. Snapshot their descriptors
+  // once within this probe, while keeping every candidate independently mutable
+  // and retaining accessors, prototypes and non-enumerable Error properties.
+  const bases = new WeakMap<
+    object,
+    { prototype: object | null; descriptors: PropertyDescriptorMap }
+  >();
+  const overlay = (
+    base: object,
+    assigned: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    let shape = bases.get(base);
+    if (shape === undefined) {
+      shape = {
+        prototype: Object.getPrototypeOf(base) as object | null,
+        descriptors: Object.getOwnPropertyDescriptors(base),
+      };
+      bases.set(base, shape);
+    }
+    const copy = Object.create(shape.prototype, shape.descriptors) as Record<
+      string,
+      unknown
+    >;
+    return Object.assign(copy, assigned);
+  };
   // Guard-source literals first: the likeliest matches are tried earliest.
   const values = [
     ...new Set([...minedLiterals(guard), ...extraValues, ...GENERIC_VALUES]),
@@ -1335,12 +1372,12 @@ function probeGuardAssignment(
     let event = { ...fixedEvent };
     for (const payload of payloads) {
       if (payload.eventField === undefined) {
-        event = overlaidObject(
-          overlaidObject(payload.base, event),
+        event = overlay(
+          overlay(payload.base, event),
           assignment.payloads[payload.tag] ?? {},
         );
       } else {
-        event[payload.eventField] = overlaidObject(
+        event[payload.eventField] = overlay(
           payload.base,
           assignment.payloads[payload.tag] ?? {},
         );
@@ -1369,7 +1406,7 @@ function probeGuardAssignment(
       tag: string,
       varyExisting = false,
     ): unknown =>
-      new Proxy(overlaidObject(base, assigned), {
+      new Proxy(overlay(base, assigned), {
         get(target, prop) {
           if (typeof prop !== 'string') return undefined;
           if (prop in target) {
@@ -1397,7 +1434,7 @@ function probeGuardAssignment(
       for (const payload of payloads) {
         if (payload.eventField === undefined) {
           event = recording(
-            overlaidObject(payload.base, event),
+            overlay(payload.base, event),
             assignment.payloads[payload.tag] ?? {},
             payload.tag,
           ) as Record<string, unknown>;
@@ -1731,86 +1768,435 @@ function childCoverageDrive(
     : undefined;
 }
 
-/** Finite one-hop candidates; actual execution decides which enter the call. */
-function childCoverageEntries(
-  machine: MachineLike,
-  playbook: PlaybookRef,
-  refs: readonly StateRef[],
-  captains: readonly CaptainRef[],
-  candidates: readonly unknown[],
-): ChildCoverageEntry[] {
-  const entries: ChildCoverageEntry[] = [];
-  const direct = childCoverageDrive(
-    machine,
-    refs,
-    playbook.ref,
-    interruptTargetForRef(playbook.ref, playbook.ref.stableId),
-    candidates,
-  );
-  if (direct !== undefined) entries.push(direct);
-  const dynamic = dynamicPlaybookFields(playbook);
-  for (const captain of captains) {
-    if (captain.binding.actor === 'script') continue;
-    const targetsChild = transitionArms(captain.invocation.onDone).some(
-      (arm) => {
-        const target = rawArmTarget(arm);
-        return (
-          target !== undefined &&
-          sameStateRef(
-            stateRefForTarget(refs, target, captain.ref),
-            playbook.ref,
-          )
-        );
-      },
-    );
-    if (!targetsChild) continue;
-    const drive = childCoverageDrive(
-      machine,
-      refs,
-      captain.ref,
-      captainInterruptTarget(captain),
-      candidates,
-    );
-    if (drive === undefined) continue;
-    for (const key of Object.keys(captain.binding.result)) {
-      const output = synthOutput(captain.binding, key);
-      if (dynamic !== undefined) {
-        output[dynamic.playbookIdContext] = COVERAGE_PLAYBOOK_ID;
-        output[dynamic.textContext] = COVERAGE_PLAYBOOK_INPUT;
-      }
-      entries.push({ ...drive, preceding: { captain, output } });
-    }
-  }
-  return entries;
+type CoverageInvocation =
+  { kind: 'acting'; value: CaptainRef } | { kind: 'child'; value: PlaybookRef };
+
+interface CoveragePathStep {
+  node: CoverageInvocation;
+  result: Exclude<ScriptResult, null>;
+  next: CoverageInvocation;
+  questionWait?: StateRef;
 }
 
-/** Upper bound includes the direct route and every one-hop declared result. */
-function childCoverageEntryBudget(
-  playbook: PlaybookRef,
+interface CoveragePath {
+  root: CoverageInvocation;
+  drive?: InterruptDrive;
+  steps: readonly CoveragePathStep[];
+}
+
+interface PendingCoverageInvocation {
+  node: CoverageInvocation;
+  input: Record<string, unknown>;
+  complete(result: ScriptResult): void;
+}
+
+function coverageNodeKey(node: CoverageInvocation): string {
+  return `${stateRefKey(node.value.ref)}:${node.value.invocationIndex}`;
+}
+
+function coverageNodes(
+  captains: readonly CaptainRef[],
+  playbooks: readonly PlaybookRef[],
+): CoverageInvocation[] {
+  return [
+    ...captains.map((value): CoverageInvocation => ({ kind: 'acting', value })),
+    ...playbooks.map((value): CoverageInvocation => ({ kind: 'child', value })),
+  ];
+}
+
+/** The exact ordered output candidates used both for entry and target arms. */
+function coverageArmResults(
+  machine: MachineLike,
+  node: CoverageInvocation,
+  outcome: PlaybookOutcome,
+  armIndex: number,
+  context: Record<string, unknown>,
+  input: Record<string, unknown>,
+  candidates: readonly unknown[],
+  dynamicTarget?: DynamicPlaybookFields,
+  requiredResult?: string,
+  includeBare = false,
+  firstOnly = false,
+): Exclude<ScriptResult, null>[] {
+  const arms = transitionArms(node.value.invocation[outcome]);
+  const guard = orderedArmPredicate(machine, arms, armIndex);
+  if (guard === undefined) return [];
+  const actorId = invocationActorId(machine, node.value);
+  const event = {
+    type: `xstate.${outcome === 'onDone' ? 'done' : 'error'}.actor.${actorId}`,
+    actorId,
+  };
+  const bases: Exclude<ScriptResult, null>[] =
+    outcome === 'onError'
+      ? node.kind === 'child'
+        ? [
+            nestedFailure(
+              typeof input.playbookId === 'string'
+                ? input.playbookId
+                : COVERAGE_PLAYBOOK_ID,
+            ),
+            nestedFailureTerminal(
+              typeof input.playbookId === 'string'
+                ? input.playbookId
+                : COVERAGE_PLAYBOOK_ID,
+            ),
+            new Error('coverage: generic nested playbook failure'),
+          ]
+        : [new Error('coverage: forced captain failure')]
+      : node.kind === 'child'
+        ? [{}, nestedSuccessOutput(), { invalidCoverageOutput: undefined }]
+        : (requiredResult === undefined
+            ? Object.keys(node.value.binding.result)
+            : [requiredResult]
+          ).flatMap((key) =>
+            resultOutputCandidates(node.value.binding, key, [
+              ...guard.probeValues,
+              ...candidates,
+            ]).map((output) => ({
+              ...output,
+              ...(dynamicTarget === undefined
+                ? {}
+                : {
+                    [dynamicTarget.playbookIdContext]: COVERAGE_PLAYBOOK_ID,
+                    [dynamicTarget.textContext]: COVERAGE_PLAYBOOK_INPUT,
+                  }),
+            })),
+          );
+  if (
+    includeBare &&
+    node.kind === 'acting' &&
+    node.value.binding.actor !== 'script' &&
+    outcome === 'onDone'
+  ) {
+    bases.push(
+      ...Object.keys(node.value.binding.result).map((guard) => ({ guard })),
+    );
+  }
+  const results: Exclude<ScriptResult, null>[] = [];
+  for (const base of bases) {
+    if (
+      node.kind === 'acting' &&
+      node.value.binding.actor === 'script' &&
+      outcome === 'onDone'
+    ) {
+      if (
+        directlySelectedEventArm(
+          machine,
+          arms,
+          { ...event, output: base },
+          context,
+        ) === armIndex
+      ) {
+        results.push(base);
+        if (firstOnly) return results;
+      }
+      continue;
+    }
+    const assignment = probeGuardAssignment(
+      guard.run,
+      event,
+      [
+        {
+          eventField: outcome === 'onDone' ? 'output' : 'error',
+          tag: outcome === 'onDone' ? 'o:' : 'r:',
+          base,
+          ...(outcome === 'onError' ? { varyExisting: true } : {}),
+        },
+      ],
+      [...guard.probeValues, ...GENERIC_VALUES, ...candidates],
+      { initialContext: context, assignContext: false },
+    );
+    if (assignment !== undefined) {
+      results.push(
+        assignedPayload(base, assignment, outcome === 'onDone' ? 'o:' : 'r:'),
+      );
+      if (firstOnly) return results;
+    }
+  }
+  return results;
+}
+
+/** Replay every prefix transition; no persisted private-state restoration. */
+async function replayCoveragePath(
+  machine: MachineLike,
+  nodes: readonly CoverageInvocation[],
+  path: CoveragePath,
+): Promise<{
+  actor: DrivenActor;
+  pending?: PendingCoverageInvocation;
+  inputFailure?: string;
+}> {
+  const gate = { armed: path.drive === undefined };
+  let expected = path.root;
+  let pending: PendingCoverageInvocation | undefined;
+  const script: CaptainScript = (input, actorId) => {
+    const node = nodes.find(
+      (candidate) => invocationActorId(machine, candidate.value) === actorId,
+    );
+    if (
+      !gate.armed ||
+      node === undefined ||
+      coverageNodeKey(node) !== coverageNodeKey(expected)
+    )
+      return null;
+    const stateId =
+      node.kind === 'acting'
+        ? captainPublicStateId(node.value)
+        : node.value.ref.stableId;
+    if (input.stateId !== stateId) return null;
+    return new Promise<ScriptResult>((complete) => {
+      pending = { node, input, complete };
+    });
+  };
+  const actor = makeActor(machine, script, script, path.drive?.context);
+  gate.armed = true;
+  if (path.drive !== undefined) actor.send(path.drive.event);
+  const wait = () =>
+    settle(
+      actor,
+      (snapshot) =>
+        (pending !== undefined && atState(expected.value.ref)(snapshot)) ||
+        snapshot.status === 'done' ||
+        snapshot.status === 'error',
+      PARALLEL_SETTLE_MS,
+    );
+  let completedPrefix = true;
+  for (const step of path.steps) {
+    await wait();
+    const current = pending;
+    if (
+      current === undefined ||
+      coverageNodeKey(current.node) !== coverageNodeKey(step.node)
+    ) {
+      completedPrefix = false;
+      break;
+    }
+    pending = undefined;
+    expected = step.next;
+    current.complete(step.result);
+    if (step.questionWait !== undefined) {
+      if (
+        !(await settle(actor, atState(step.questionWait), PARALLEL_SETTLE_MS))
+      ) {
+        completedPrefix = false;
+        break;
+      }
+      actor.send({
+        type: BOSS_REPLY_EVENT,
+        questionId: captainPublicStateId(
+          (step.node as Extract<CoverageInvocation, { kind: 'acting' }>).value,
+        ),
+        answer: 'Proceed as planned.',
+      });
+    }
+  }
+  await wait();
+  const snapshot = actor.getSnapshot();
+  const failure = actor.coverageErrors.find(
+    ({ eventType }) =>
+      eventType ===
+      `xstate.error.actor.${invocationActorId(machine, expected.value)}`,
+  );
+  return {
+    actor,
+    ...(!completedPrefix ||
+    pending === undefined ||
+    !atState(expected.value.ref)(snapshot)
+      ? {}
+      : { pending }),
+    ...(failure !== undefined
+      ? { inputFailure: coverageErrorMessage(failure.error) }
+      : snapshot.status === 'error'
+        ? { inputFailure: coverageErrorMessage(snapshot.error) }
+        : {}),
+  };
+}
+
+interface CoverageSearchResult {
+  covered: boolean;
+  entered: boolean;
+  limitation?: string;
+  inputFailure?: string;
+}
+
+/** Finite path replay, with one canonical question/reply revisit at most. */
+async function searchCoverageEntry(
+  machine: MachineLike,
+  target: CoverageInvocation,
   refs: readonly StateRef[],
   captains: readonly CaptainRef[],
-): number {
-  return (
-    1 +
-    captains.reduce((total, captain) => {
-      if (captain.binding.actor === 'script') return total;
-      const targetsChild = transitionArms(captain.invocation.onDone).some(
-        (arm) => {
-          const target = rawArmTarget(arm);
-          return (
-            target !== undefined &&
-            sameStateRef(
-              stateRefForTarget(refs, target, captain.ref),
-              playbook.ref,
-            )
-          );
-        },
-      );
-      return (
-        total + (targetsChild ? Object.keys(captain.binding.result).length : 0)
-      );
-    }, 0)
-  );
+  playbooks: readonly PlaybookRef[],
+  candidates: readonly unknown[],
+  check: (
+    actor: DrivenActor,
+    pending: PendingCoverageInvocation,
+  ) => Promise<boolean>,
+): Promise<CoverageSearchResult> {
+  const nodes = coverageNodes(captains, playbooks);
+  const nodeForTarget = (raw: unknown, source: StateRef) => {
+    const targetName = rawArmTarget(raw);
+    const targetRef =
+      targetName === undefined
+        ? undefined
+        : stateRefForTarget(refs, targetName, source);
+    return nodes.find((node) => sameStateRef(node.value.ref, targetRef));
+  };
+  const reachable = new Set([coverageNodeKey(target)]);
+  for (let pass = 0; pass < nodes.length; pass++) {
+    for (const node of nodes) {
+      if (
+        ['onDone', 'onError'].some((outcome) =>
+          transitionArms(
+            node.value.invocation[outcome as PlaybookOutcome],
+          ).some((arm) => {
+            const next = nodeForTarget(arm, node.value.ref);
+            return next !== undefined && reachable.has(coverageNodeKey(next));
+          }),
+        )
+      )
+        reachable.add(coverageNodeKey(node));
+    }
+  }
+  const queue: CoveragePath[] = [];
+  for (const node of [
+    target,
+    ...nodes.filter(
+      (node) => coverageNodeKey(node) !== coverageNodeKey(target),
+    ),
+  ]) {
+    if (!reachable.has(coverageNodeKey(node))) continue;
+    const entry = childCoverageDrive(
+      machine,
+      refs,
+      node.value.ref,
+      node.kind === 'acting'
+        ? captainInterruptTarget(node.value)
+        : interruptTargetForRef(node.value.ref, node.value.ref.stableId),
+      candidates,
+    );
+    if (entry !== undefined) queue.push({ root: node, ...entry, steps: [] });
+  }
+  let attempts = 0;
+  let entered = false;
+  let limitation: string | undefined;
+  let inputFailure: string | undefined;
+  while (queue.length > 0 && attempts < MAX_COVERAGE_PATH_ATTEMPTS) {
+    const path = queue.shift()!;
+    attempts++;
+    let replay = await replayCoveragePath(machine, nodes, path);
+    try {
+      if (replay.inputFailure !== undefined) inputFailure = replay.inputFailure;
+      if (
+        replay.pending !== undefined &&
+        coverageNodeKey(replay.pending.node) === coverageNodeKey(target)
+      ) {
+        entered = true;
+        if (await check(replay.actor, replay.pending))
+          return { covered: true, entered };
+        // A target check may have completed its actor. Re-enter the same
+        // authored prefix before considering successors, charging that replay
+        // against the same attempt limit.
+        replay.actor.stop();
+        if (attempts >= MAX_COVERAGE_PATH_ATTEMPTS) {
+          limitation = `exhausted ${MAX_COVERAGE_PATH_ATTEMPTS}-attempt path budget`;
+          break;
+        }
+        attempts++;
+        replay = await replayCoveragePath(machine, nodes, path);
+      }
+      const pending = replay.pending;
+      if (pending === undefined) continue;
+      const node = pending.node;
+      const context = replay.actor.getSnapshot().context;
+      const nextSteps: CoveragePathStep[] = [];
+      for (const outcome of ['onDone', 'onError'] as const) {
+        for (const [index, arm] of transitionArms(
+          node.value.invocation[outcome],
+        ).entries()) {
+          const next = nodeForTarget(arm, node.value.ref);
+          if (next === undefined || !reachable.has(coverageNodeKey(next)))
+            continue;
+          const dynamic =
+            next.kind === 'child'
+              ? dynamicPlaybookFields(next.value)
+              : undefined;
+          for (const result of coverageArmResults(
+            machine,
+            node,
+            outcome,
+            index,
+            context,
+            pending.input,
+            candidates,
+            dynamic,
+          )) {
+            nextSteps.push({ node, result, next });
+          }
+        }
+      }
+      if (
+        node.kind === 'acting' &&
+        Object.hasOwn(node.value.binding.result, NEEDS_BOSS_REPLY) &&
+        !path.steps.some((step) => step.questionWait !== undefined)
+      ) {
+        for (const [index, arm] of transitionArms(
+          node.value.invocation.onDone,
+        ).entries()) {
+          const rawTarget = rawArmTarget(arm);
+          const waitRef =
+            rawTarget === undefined
+              ? undefined
+              : stateRefForTarget(refs, rawTarget, node.value.ref);
+          if (
+            waitRef === undefined ||
+            (waitRef.stableId !== AWAIT_BOSS_REPLY_STATE &&
+              !tagsOf(waitRef.state).includes('playbook.parked'))
+          )
+            continue;
+          for (const result of coverageArmResults(
+            machine,
+            node,
+            'onDone',
+            index,
+            context,
+            pending.input,
+            candidates,
+            undefined,
+            NEEDS_BOSS_REPLY,
+          )) {
+            nextSteps.push({ node, result, next: node, questionWait: waitRef });
+          }
+        }
+      }
+      for (const step of nextSteps) {
+        if (path.steps.length + 1 >= MAX_COVERAGE_PATH_STEPS) {
+          limitation = `exhausted ${MAX_COVERAGE_PATH_STEPS}-invocation path depth`;
+          continue;
+        }
+        const visited = [path.root, ...path.steps.map((step) => step.next)].map(
+          coverageNodeKey,
+        );
+        if (
+          step.questionWait === undefined &&
+          visited.includes(coverageNodeKey(step.next))
+        ) {
+          limitation ??= 'unsupported repeated-invocation path';
+          continue;
+        }
+        queue.push({ ...path, steps: [...path.steps, step] });
+      }
+    } finally {
+      replay.actor.stop();
+    }
+  }
+  if (queue.length > 0)
+    limitation = `exhausted ${MAX_COVERAGE_PATH_ATTEMPTS}-attempt path budget`;
+  return {
+    covered: false,
+    entered,
+    ...(limitation === undefined ? {} : { limitation }),
+    ...(inputFailure === undefined ? {} : { inputFailure }),
+  };
 }
 
 interface CaptainPredecessorPlan {
@@ -2429,26 +2815,16 @@ async function probePlaybookOutcome(
     ];
   }
 
-  const actorId = invocationActorId(machine, playbook);
-  const dynamic = dynamicPlaybookFields(playbook);
-  const entries = childCoverageEntries(
-    machine,
-    playbook,
-    refs,
-    captains,
-    interruptValues,
-  );
-  const fixedEvent = {
-    type: `xstate.${outcome === 'onDone' ? 'done' : 'error'}.actor.${actorId}`,
-    actorId,
-  };
-  const candidateValues = refs.flatMap((ref) => [
-    ref.key,
-    ref.stableId,
-    ...(ref.configId === undefined ? [] : [ref.configId]),
-  ]);
+  const node: CoverageInvocation = { kind: 'child', value: playbook };
+  const candidateValues = [
+    ...interruptValues,
+    ...refs.flatMap((ref) => [
+      ref.key,
+      ref.stableId,
+      ...(ref.configId === undefined ? [] : [ref.configId]),
+    ]),
+  ];
   const findings: string[] = [];
-
   for (const [armIndex, arm] of rawArms.entries()) {
     const rawGuard = armGuard(arm);
     if (
@@ -2460,8 +2836,6 @@ async function probePlaybookOutcome(
       );
       continue;
     }
-    const guard = orderedArmPredicate(machine, rawArms, armIndex);
-    if (guard === undefined) continue;
     const rawTarget = rawArmTarget(arm);
     const target =
       rawTarget === undefined
@@ -2479,151 +2853,207 @@ async function probePlaybookOutcome(
       );
       continue;
     }
-
-    let covered = false;
-    let entered = false;
     let satisfiable = false;
-    let inputFailure: string | undefined;
-    for (const entry of entries) {
-      const gate: ArmingGate = { armed: entry.drive === undefined };
-      let calls = 0;
-      let actualInput: Record<string, unknown> | undefined;
-      let completeChild: ((result: ScriptResult) => void) | undefined;
-      const actor = makeActor(
-        machine,
-        entry.preceding === undefined
-          ? () => null
-          : onceScript(
-              entry.preceding.captain.binding.sourceItem,
-              entry.preceding.output,
-              gate,
-            ),
-        (actorInput, invokedActorId) => {
-          if (
-            !gate.armed ||
-            calls > 0 ||
-            invokedActorId !== actorId ||
-            actorInput.stateId !== playbook.ref.stableId ||
-            (dynamic !== undefined &&
-              (actorInput.playbookId !== COVERAGE_PLAYBOOK_ID ||
-                actorInput.text !== COVERAGE_PLAYBOOK_INPUT))
-          )
-            return null;
-          calls++;
-          actualInput = actorInput;
-          return new Promise<ScriptResult>((resolve) => {
-            completeChild = resolve;
-          });
-        },
-        entry.drive?.context,
-      );
-      try {
-        let enteredPreceding =
-          entry.preceding !== undefined &&
-          atState(entry.preceding.captain.ref)(actor.getSnapshot());
-        gate.armed = true;
-        if (entry.drive !== undefined) actor.send(entry.drive.event);
-        await settle(actor, (snapshot) => {
-          if (
-            entry.preceding !== undefined &&
-            atState(entry.preceding.captain.ref)(snapshot)
-          ) {
-            enteredPreceding = true;
-          }
-          return (
-            (calls === 1 && atState(playbook.ref)(snapshot)) ||
-            actor.coverageErrors.length > 0 ||
-            snapshot.status === 'done' ||
-            snapshot.status === 'error' ||
-            (enteredPreceding &&
-              entry.preceding !== undefined &&
-              leftState(entry.preceding.captain.ref)(snapshot) &&
-              !atState(playbook.ref)(snapshot))
-          );
-        });
-        const reached = actor.getSnapshot();
-        if (calls !== 1 || !atState(playbook.ref)(reached)) {
-          const failure = actor.coverageErrors.find(
-            ({ eventType }) => eventType === `xstate.error.actor.${actorId}`,
-          );
-          if (failure !== undefined)
-            inputFailure = coverageErrorMessage(failure.error);
-          else if (reached.status === 'error')
-            inputFailure = coverageErrorMessage(reached.error);
-          continue;
-        }
-        entered = true;
-        const context = reached.context;
-        const expectedPlaybookId =
-          typeof actualInput?.playbookId === 'string'
-            ? actualInput.playbookId
-            : COVERAGE_PLAYBOOK_ID;
-        let scriptedResult: Record<string, unknown> | Error | undefined;
-        if (outcome === 'onDone') {
-          for (const base of [
-            nestedSuccessOutput(),
-            { invalidCoverageOutput: undefined },
-          ]) {
-            const assignment = probeGuardAssignment(
-              guard.run,
-              fixedEvent,
-              [{ eventField: 'output', tag: 'o:', base }],
-              [...guard.probeValues, ...candidateValues],
-              { initialContext: context, assignContext: false },
-            );
-            if (assignment !== undefined) {
-              scriptedResult = assignedPayload(base, assignment, 'o:');
-              break;
-            }
-          }
-        } else {
-          for (const base of [
-            nestedFailure(expectedPlaybookId),
-            nestedFailureTerminal(expectedPlaybookId),
-            new Error('coverage: generic nested playbook failure'),
-          ]) {
-            const assignment = probeGuardAssignment(
-              guard.run,
-              fixedEvent,
-              [{ eventField: 'error', tag: 'r:', base, varyExisting: true }],
-              [...guard.probeValues, ...candidateValues],
-              { initialContext: context, assignContext: false },
-            );
-            if (assignment !== undefined) {
-              scriptedResult = assignedPayload(base, assignment, 'r:');
-              break;
-            }
-          }
-        }
-        if (scriptedResult === undefined) continue;
+    const result = await searchCoverageEntry(
+      machine,
+      node,
+      refs,
+      captains,
+      playbookRefs(machine.config),
+      candidateValues,
+      async (actor, pending) => {
+        const outputs = coverageArmResults(
+          machine,
+          node,
+          outcome,
+          armIndex,
+          actor.getSnapshot().context,
+          pending.input,
+          candidateValues,
+          undefined,
+          undefined,
+          false,
+          true,
+        );
+        if (outputs.length === 0) return false;
         satisfiable = true;
-        completeChild!(scriptedResult);
-        const settled = await settle(actor, atState(target));
-        if (settled && atState(target)(actor.getSnapshot())) {
-          covered = true;
-          break;
+        pending.complete(outputs[0]);
+        return await settle(actor, atState(target), PARALLEL_SETTLE_MS);
+      },
+    );
+    if (result.covered) continue;
+    const label = `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex}`;
+    if (result.limitation !== undefined)
+      findings.push(`${label}: ${result.limitation}`);
+    else if (result.inputFailure !== undefined && !result.entered)
+      findings.push(
+        `state ${playbook.ref.stableId}: nested playbook actor failed to start during ${outcome} coverage: ${result.inputFailure}`,
+      );
+    else if (!result.entered)
+      findings.push(`${label} has no reachable entry under probing`);
+    else if (!satisfiable)
+      findings.push(`${label} is unsatisfiable under probing`);
+    else findings.push(`${label} did not reach ${target.stableId}`);
+  }
+  return findings;
+}
+
+/** No preemption is needed to audit ordinary acting outcomes and one reply. */
+async function probeNonPreemptiveActor(
+  machine: MachineLike,
+  captain: CaptainRef,
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+  playbooks: readonly PlaybookRef[],
+  candidates: readonly unknown[],
+): Promise<string[]> {
+  const node: CoverageInvocation = { kind: 'acting', value: captain };
+  const findings: string[] = [];
+  const stateId = captainPublicStateId(captain);
+  const label = `state ${stateId}`;
+  const search = (
+    check: (
+      actor: DrivenActor,
+      pending: PendingCoverageInvocation,
+    ) => Promise<boolean>,
+  ) =>
+    searchCoverageEntry(
+      machine,
+      node,
+      refs,
+      captains,
+      playbooks,
+      candidates,
+      check,
+    );
+  const detail = (result: CoverageSearchResult) =>
+    result.limitation ??
+    (result.inputFailure !== undefined
+      ? `actor failed to start: ${result.inputFailure}`
+      : result.entered
+        ? 'unsatisfiable under reached-context probing'
+        : 'no reachable entry under probing');
+
+  for (const key of Object.keys(captain.binding.result)) {
+    const check = (blankReply: boolean) =>
+      search(async (actor, pending) => {
+        for (const [index, arm] of transitionArms(
+          captain.invocation.onDone,
+        ).entries()) {
+          const outputs = coverageArmResults(
+            machine,
+            node,
+            'onDone',
+            index,
+            actor.getSnapshot().context,
+            pending.input,
+            candidates,
+            undefined,
+            key,
+            false,
+            true,
+          );
+          if (outputs.length === 0) continue;
+          const targetName = rawArmTarget(arm);
+          const target =
+            targetName === undefined
+              ? undefined
+              : stateRefForTarget(refs, targetName, captain.ref);
+          if (target === undefined || sameStateRef(target, captain.ref))
+            return false;
+          pending.complete(outputs[0]);
+          if (!(await settle(actor, atState(target), PARALLEL_SETTLE_MS)))
+            return false;
+          if (key !== NEEDS_BOSS_REPLY) return true;
+          if (
+            target.stableId !== AWAIT_BOSS_REPLY_STATE &&
+            !tagsOf(target.state).includes('playbook.parked')
+          )
+            return false;
+          if (!blankReply && target.stableId !== AWAIT_BOSS_REPLY_STATE) {
+            actor.send({
+              type: BOSS_REPLY_EVENT,
+              questionId: 'coverage-unknown-question',
+              answer: 'This answer belongs to no pending branch.',
+            });
+            await settleNoTransition();
+            if (!atState(target)(actor.getSnapshot())) return false;
+          }
+          actor.send({
+            type: BOSS_REPLY_EVENT,
+            questionId: stateId,
+            answer: blankReply ? '   ' : 'Proceed as planned.',
+          });
+          if (blankReply) {
+            await settleNoTransition();
+            return !atState(captain.ref)(actor.getSnapshot());
+          }
+          return await settle(actor, atState(captain.ref), PARALLEL_SETTLE_MS);
         }
-      } finally {
-        actor.stop();
-      }
+        return false;
+      });
+    const result = await check(false);
+    if (!result.covered)
+      findings.push(
+        `${label}: result "${key}" remains unproved: ${detail(result)}`,
+      );
+    if (key === NEEDS_BOSS_REPLY && result.covered) {
+      const blank = await check(true);
+      if (!blank.covered)
+        findings.push(
+          `${label}: a blank ${BOSS_REPLY_EVENT} answer must not resume the state (${detail(blank)})`,
+        );
     }
-    if (covered) continue;
-    if (inputFailure !== undefined && !entered) {
-      findings.push(
-        `state ${playbook.ref.stableId}: nested playbook actor failed to start during ${outcome} coverage: ${inputFailure}`,
-      );
-    } else if (!entered) {
-      findings.push(
-        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} has no reachable entry under probing`,
-      );
-    } else if (!satisfiable) {
-      findings.push(
-        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} is unsatisfiable under probing`,
-      );
-    } else {
-      findings.push(
-        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} did not reach ${target.stableId}`,
-      );
+  }
+  for (const outcome of ['onDone', 'onError'] as const) {
+    const arms = transitionArms(captain.invocation[outcome]);
+    if (outcome === 'onError' && arms.length === 0)
+      findings.push(`${label} declares no onError transition`);
+    for (const [index, arm] of arms.entries()) {
+      const rawGuard = armGuard(arm);
+      if (outcome === 'onDone' && rawGuard === undefined) continue;
+      if (
+        rawGuard !== undefined &&
+        resolveGuard(machine, rawGuard) === undefined
+      ) {
+        findings.push(
+          `${label}: ${outcome} arm ${index} names an unresolvable guard "${guardLabel(rawGuard)}"`,
+        );
+        continue;
+      }
+      const targetName = rawArmTarget(arm);
+      const target =
+        targetName === undefined
+          ? undefined
+          : stateRefForTarget(refs, targetName, captain.ref);
+      if (target === undefined || sameStateRef(target, captain.ref)) {
+        findings.push(
+          `${label}: ${outcome} arm ${index} has no distinct observable target`,
+        );
+        continue;
+      }
+      const result = await search(async (actor, pending) => {
+        const outputs = coverageArmResults(
+          machine,
+          node,
+          outcome,
+          index,
+          actor.getSnapshot().context,
+          pending.input,
+          candidates,
+          undefined,
+          undefined,
+          true,
+          true,
+        );
+        if (outputs.length === 0) return false;
+        pending.complete(outputs[0]);
+        return await settle(actor, atState(target), PARALLEL_SETTLE_MS);
+      });
+      if (!result.covered)
+        findings.push(
+          `${label}: ${outcome} arm ${index} remains unproved: ${detail(result)}`,
+        );
     }
   }
   return findings;
@@ -2855,8 +3285,29 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
 
   let captainSettles = 0;
   let guardProbeCalls = rootInterruptProbes;
+  let pathSearches = controller
+    ? 0
+    : playbooks.reduce(
+        (total, playbook) =>
+          total +
+          transitionArms(playbook.invocation.onDone).length +
+          transitionArms(playbook.invocation.onError).length,
+        0,
+      );
   for (const captain of captains) {
     const resultKeys = Object.keys(captain.binding.result);
+    const guardedDoneArms = transitionArms(captain.invocation.onDone).filter(
+      (arm) => armGuard(arm) !== undefined,
+    ).length;
+    const errorArms = transitionArms(captain.invocation.onError).length;
+    if (!controller && rootInterruptProbes === 0) {
+      pathSearches +=
+        resultKeys.length +
+        (resultKeys.includes(NEEDS_BOSS_REPLY) ? 1 : 0) +
+        guardedDoneArms +
+        errorArms;
+      continue;
+    }
     captainSettles +=
       resultKeys.reduce(
         (total, key) =>
@@ -2866,10 +3317,6 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
     // One directly selectable onError arm is driven.
     captainSettles += SETTLE_MS;
 
-    const guardedDoneArms = transitionArms(captain.invocation.onDone).filter(
-      (arm) => armGuard(arm) !== undefined,
-    ).length;
-    const errorArms = transitionArms(captain.invocation.onError).length;
     // Acceptance includes ordered fallbacks. Script arm probes have one zero
     // status and a capped set of nonzero statuses; ordinary actors also probe
     // malformed bare outputs for defensive arms.
@@ -2889,29 +3336,49 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
     guardProbeCalls +=
       resultKeys.length + (resultKeys.includes(NEEDS_BOSS_REPLY) ? 1 : 0) + 1;
   }
-  guardProbeCalls += playbooks.reduce(
-    (total, playbook) =>
+  const nodes = coverageNodes(captains, playbooks);
+  const entryArmCount = [
+    config.on ?? {},
+    ...initialActiveRefs(config, refs).map((ref) => ref.state.on ?? {}),
+  ].reduce(
+    (total, events) =>
       total +
-      childCoverageEntryBudget(playbook, refs, captains) *
-        (2 * transitionArms(playbook.invocation.onDone).length +
-          3 * transitionArms(playbook.invocation.onError).length) +
-      4 * (captains.length + 1),
+      Object.values(events).reduce<number>(
+        (count, arms) => count + transitionArms(arms).length,
+        0,
+      ),
     0,
   );
-  // Each one-hop candidate may use an interrupt and initial/root guard probe;
-  // parallel question/join helpers retain their independent entry probes.
+  const maxNodeCandidates = Math.max(
+    0,
+    ...nodes.map((node) => {
+      const done = transitionArms(node.value.invocation.onDone).length;
+      const error = transitionArms(node.value.invocation.onError).length;
+      if (node.kind === 'child') return 3 * (done + error);
+      const keys = Object.keys(node.value.binding.result);
+      const candidates =
+        node.value.binding.actor === 'script'
+          ? keys.length * MAX_SCRIPT_EXIT_STATUSES
+          : 2 * keys.length;
+      // Target malformed-output probes and predecessor question revisits both
+      // fit this allowance; real searches stop early on a satisfying target.
+      return (
+        done * (candidates + (keys.includes(NEEDS_BOSS_REPLY) ? 1 : 0)) + error
+      );
+    }),
+  );
+  guardProbeCalls +=
+    pathSearches *
+    (nodes.length * (1 + entryArmCount) +
+      MAX_COVERAGE_PATH_ATTEMPTS * 2 * maxNodeCandidates);
+  // Parallel question/join helpers retain their independent entry probes.
   guardProbeCalls += 2 * parallels.length;
-
-  const playbookSettles = playbooks.reduce(
-    (total, playbook) =>
-      total +
-      (transitionArms(playbook.invocation.onDone).length +
-        transitionArms(playbook.invocation.onError).length) *
-        childCoverageEntryBudget(playbook, refs, captains) *
-        2 *
-        SETTLE_MS,
-    0,
-  );
+  // Each charged replay contains at most eight invocation waits, one parked
+  // question wait and two target/reply settles, plus no-transition checks.
+  const pathSettles =
+    pathSearches *
+    MAX_COVERAGE_PATH_ATTEMPTS *
+    ((MAX_COVERAGE_PATH_STEPS + 3) * PARALLEL_SETTLE_MS + 2 * 10);
   const parallelSettles = parallels.reduce(
     (total, parallel) =>
       total +
@@ -2924,15 +3391,18 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
   const guardAllowance =
     guardProbeCalls * Math.ceil(MAX_PROBES / PROBES_PER_TIMEOUT_MILLISECOND);
 
-  return Math.max(
-    MIN_COVERAGE_TEST_TIMEOUT_MS,
-    rootSettles +
-      entrySettles +
-      captainSettles +
-      playbookSettles +
-      parallelSettles +
-      guardAllowance +
-      COVERAGE_TIMEOUT_MARGIN_MS,
+  return Math.min(
+    MAX_COVERAGE_TEST_TIMEOUT_MS,
+    Math.max(
+      MIN_COVERAGE_TEST_TIMEOUT_MS,
+      rootSettles +
+        entrySettles +
+        captainSettles +
+        pathSettles +
+        parallelSettles +
+        guardAllowance +
+        COVERAGE_TIMEOUT_MARGIN_MS,
+    ),
   );
 }
 
@@ -3049,7 +3519,7 @@ export async function checkFsmCoverage(
   if (!canJump && handlesInterruptSomewhere && !controllerContractCandidate) {
     findings.push(`machine declares no root ${INTERRUPT_EVENT} event`);
   }
-  if (canJump && !isController) {
+  if (!isController) {
     for (const playbook of playbooks) {
       findings.push(
         ...(await probePlaybookInvocation(
@@ -3061,7 +3531,7 @@ export async function checkFsmCoverage(
         )),
       );
     }
-    for (const parallel of parallelRefs) {
+    for (const parallel of canJump ? parallelRefs : []) {
       findings.push(
         ...(await probeParallelQuestions(
           machine,
@@ -3196,7 +3666,19 @@ export async function checkFsmCoverage(
   if (unsupportedController) return findings;
 
   for (const captain of captains) {
-    if (!canJump && !isController) break;
+    if (!canJump && !isController) {
+      findings.push(
+        ...(await probeNonPreemptiveActor(
+          machine,
+          captain,
+          refs,
+          captains,
+          playbooks,
+          [...stateCandidates, ...sourceCandidates],
+        )),
+      );
+      continue;
+    }
     const state = captain.binding;
     const stateKey = state.stateId;
     const stateId = captainPublicStateId(captain);
