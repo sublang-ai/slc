@@ -61,6 +61,115 @@
       },
       "reportGuidanceEffectiveness": "not established; no report emitted",
       "incidentalCacheAudit": "No overlap; DEV ended04:40:06.406UTC and first reference Vitest began04:42:03.317UTC."
+    },
+    {
+      "caseId": "gears-003",
+      "run": "phase-DEw9ZW",
+      "status": "success",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": true,
+        "outcome": "success"
+      },
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 121873,
+      "agentCalls": 1,
+      "sourceSha256": "1e4caf20c3523ff6b2497ade89f7fd37ffd319c59f0ae5537e2bd477778667de",
+      "summary": {
+        "path": "/private/tmp/slc-followup-gears-evidence/phase-DEw9ZW/summary.json",
+        "sha256": "d1d59f5e1166cfa85044df5431a103e810689f3bbad2e000b609cb8f2dc045dc"
+      },
+      "semanticAdjudication": {
+        "path": "/private/tmp/slc-followup-gears-evidence/phase-DEw9ZW/semantic-adjudication.json",
+        "sha256": "2e6b7559148689bf9135d93d994e6b92033e74d894dd0c1fe128749f24e5f093",
+        "verdict": "six generated-FSM execution cases passed"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      }
+    },
+    {
+      "caseId": "gears-002",
+      "run": "phase-G3hQOg",
+      "status": "clarification-required",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": false,
+        "outcome": "clarification-required",
+        "clarification": {
+          "schema": "sublang.slc.clarification.v1",
+          "phase": "gears2fsm",
+          "target": "/private/tmp/slc-followup-gears-evidence/phase-G3hQOg/work/workflow.playbook/workflow.fsm.ts",
+          "sources": [
+            "/private/tmp/slc-followup-gears-evidence/phase-G3hQOg/work/workflow.gears.md"
+          ],
+          "questionCount": 1,
+          "reportSha256": "1e4360b13e0dac08680b52c0924162021fb845926e927b22354e744f376098f2"
+        }
+      },
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 31794,
+      "agentCalls": 1,
+      "sourceSha256": "ccb83b434a60f258d079bff47a0095fd69050e9e0bf075b833dae03dad7e1460",
+      "summary": {
+        "path": "/private/tmp/slc-followup-gears-evidence/phase-G3hQOg/summary.json",
+        "sha256": "ba784ea6a85bbd312037bb7d39055569b6e8e3a8fa382b9c3323ebeb70b0b4c4"
+      },
+      "semanticAdjudication": {
+        "path": "/private/tmp/slc-followup-gears-evidence/phase-G3hQOg/semantic-adjudication.json",
+        "sha256": "bb0b7bbe15a9a46831cf34793861cc6fb5ecfa2035eefd479e3857d424826bbe",
+        "verdict": "targeted question passed"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      }
+    },
+    {
+      "caseId": "gears-001",
+      "run": "phase-wx6LE8",
+      "status": "success",
+      "api": {
+        "invoked": true,
+        "returned": true,
+        "ok": true,
+        "outcome": "success"
+      },
+      "actualExecutor": "interpreted",
+      "executionElapsedMs": 156076,
+      "agentCalls": 1,
+      "sourceSha256": "1e4caf20c3523ff6b2497ade89f7fd37ffd319c59f0ae5537e2bd477778667de",
+      "summary": {
+        "path": "/private/tmp/slc-followup-gears-evidence/phase-wx6LE8/summary.json",
+        "sha256": "4459b93a03c6c57a0851a73a24f8a4eb90bb3f4271ccf1a64878c09cd8a22b14"
+      },
+      "semanticAdjudication": {
+        "path": "/private/tmp/slc-followup-gears-evidence/phase-wx6LE8/semantic-adjudication.json",
+        "sha256": "4394d405f3d7bde232cbbd796d206983c7b92bd379d86a9963e0fddddbf82b08",
+        "verdict": "six generated-FSM execution cases passed"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      }
     }
   ],
   "fullRuns": [
@@ -114,9 +223,54 @@
       ]
     }
   ],
-  "cliReruns": [],
+  "cliReruns": [
+    {
+      "status": "passed",
+      "summary": {
+        "path": "/private/tmp/slc-real-cli-rerun-qxvz8rjb/summary.json",
+        "sha256": "6e94e69d28b0e039e2a56a62d2092cf7e4136ec18ec140427a23ce4d00a64f5d"
+      },
+      "semanticAdjudication": {
+        "path": "/private/tmp/slc-real-cli-rerun-qxvz8rjb/semantic-adjudication.json",
+        "sha256": "9b57cab791cd4d4c5e9cc5254d9b5a92780a45480f9087596ed6765f37c2b713"
+      },
+      "cohortBefore": {
+        "checked": 11888,
+        "mismatches": [],
+        "unchanged": true
+      },
+      "cohortAfter": {
+        "checked": 11888,
+        "mismatches": [],
+        "unchanged": true
+      },
+      "sourceOnlyRerun": true,
+      "runs": [
+        {
+          "member": "mutant",
+          "elapsedMs": 21017,
+          "actualCliExit": 2,
+          "sourceSha256": "af23d5f74fbd386d2303d1ac76c25cec76c488dfb7f9c035a72975687e42c39a",
+          "stdoutBytes": 0,
+          "clarificationLines": 1,
+          "sourceUnchanged": true,
+          "historyFiles": []
+        },
+        {
+          "member": "restored",
+          "elapsedMs": 106505,
+          "actualCliExit": 0,
+          "sourceSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+          "stdoutBytes": 82,
+          "clarificationLines": 0,
+          "sourceUnchanged": true,
+          "historyFiles": []
+        }
+      ]
+    }
+  ],
   "scopeLimit": "No performance technique is retained by prototype checks alone. Preserve all attempts; require matching accepted controls and independent source-aware semantic/runtime verification.",
-  "recordedAt": "2026-09-13T04:48:29.538639+00:00",
+  "recordedAt": "2026-09-13T05:02:18.544578+00:00",
   "checks": {
     "productionSuite": {
       "passed": 1330,

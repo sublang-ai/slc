@@ -23,7 +23,7 @@ Comprehensively verify noninteractive clarification and performance together usi
 
 1. [x] Preserve the reviewed experiment design and implement the corpus and phase recorder.
 2. [ ] Run bounded maintained-source triplets against a validated frozen dependency cohort and resolve demonstrated defects.
-3. [ ] Exercise diverse vocabulary, later discovery, actual interpreted and compiled performing paths, and source-only reruns.
+3. [x] Exercise diverse vocabulary, later discovery, actual interpreted and compiled performing paths, and source-only reruns.
 4. [ ] Validate full workflows and compare supported optimizations with accepted matching controls.
 5. [ ] Publish the complete result matrix and reproduce the durable regression checks.
 
@@ -36,3 +36,7 @@ Comprehensively verify noninteractive clarification and performance together usi
 - Record every attempt, exact environment and source identities, measured cost, protected-input preservation, history behavior, and independent adjudication.
 - Bound live calls and continue independent local work while a case runs or a provider is unavailable.
 - Retain performance techniques only with comparable accepted evidence and state the scope of every measured saving.
+
+The direct GEARS clean/mutant/restored triplet uses actual interpreted execution; both generated controls pass six XState execution cases and the mutant delivers the targeted terminal-outcome question.
+The actual CLI CODE contradiction exits `2` with one valid stderr report, then an original-source-only edit and identical invocation exit `0` with a semantically accepted GEARS result; all 11,888 recorded cohort members remain unchanged.
+These phase observations do not complete the remaining full CODE/DEV and affected-case acceptance.
