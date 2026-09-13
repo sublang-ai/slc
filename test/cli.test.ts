@@ -583,8 +583,8 @@ describe('progress (cli-36, cli-37)', () => {
 describe('stall timeout resolution (cli-34, cli-35)', () => {
   const env = { SLC_AGENT: 'claude-code' };
 
-  it('defaults to 600 seconds', () => {
-    expect(resolveRunConfig(env, {}).stallTimeoutMs).toBe(600_000);
+  it('defaults to 2400 seconds', () => {
+    expect(resolveRunConfig(env, {}).stallTimeoutMs).toBe(2_400_000);
   });
 
   it('takes the config-file value when the environment is silent', () => {

@@ -164,7 +164,7 @@ reviewerAgent: codex # optional; enables reviewed compilation
 reviewerModel: gpt-5.3-codex # optional reviewer model
 reviewerEffort: xhigh # optional reviewer reasoning effort
 reviewerFastMode: true # optional reviewer fast mode
-stallTimeout: 600 # seconds of agent silence before a stalled call fails
+stallTimeout: 2400 # seconds of agent silence before a stalled call fails
 pipelinePath: # search roots for <pipeline> references; defaults to the cwd
   - ./pipelines
 ```

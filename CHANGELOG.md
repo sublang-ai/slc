@@ -33,6 +33,18 @@ and this project adheres to
 
 ### Changed
 
+- **The stall watchdog now waits 40 minutes by default.** A single
+  `gears2fsm` or `link` call at high reasoning effort routinely runs far
+  longer than ten minutes without emitting one adapter event, so the old
+  600-second default was killing healthy compiles: four phases of one
+  playbook delivery died at the bound, and two consecutive live compiles
+  of a two-role playbook failed in `gears2fsm` before a third succeeded
+  unchanged at a larger budget. The built-in default becomes 2400
+  seconds. Nothing else moves — a hung call still fails loudly naming
+  its phase, target, and inactivity duration — so set `stallTimeout` or
+  `SLC_STALL_TIMEOUT` to tighten the bound, and `0` still disables it
+  ([DR-043](specs/decisions/043-stall-watchdog-default-window.md)).
+
 - **Mechanical findings can be repaired by the same Coder by default.**
   Source, FSM, and link checks allow at most two correction calls without
   requiring an independent Reviewer. Clean unreviewed work still uses one

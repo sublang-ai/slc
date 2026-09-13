@@ -154,8 +154,8 @@ export interface RunConfig {
   stallTimeoutMs: number;
 }
 
-/** Default agent-stall watchdog window in seconds (DR-019, cli-34). */
-export const DEFAULT_STALL_TIMEOUT_SECONDS = 600;
+/** Default agent-stall watchdog window in seconds (DR-019, DR-043, cli-34). */
+export const DEFAULT_STALL_TIMEOUT_SECONDS = 2400;
 
 /**
  * Merges the environment over config-file values per key (DR-006, cli-20): for
@@ -270,7 +270,7 @@ export function usageText(): string {
     '  SLC_REVIEWER_FAST_MODE optional adapter-scoped reviewer fast mode: true | false',
     '  SLC_PIPELINE_PATH  search roots for <pipeline> references (default: cwd)',
     '  SLC_STALL_TIMEOUT  seconds of agent inactivity before a stalled call',
-    '                     fails the run (default: 600; 0 disables)',
+    '                     fails the run (default: 2400; 0 disables)',
     '',
   ].join('\n');
 }

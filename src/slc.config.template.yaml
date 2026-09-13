@@ -15,4 +15,4 @@ agent: claude-code
 # reviewerFastMode: true
 # Seconds of agent inactivity before a stalled call fails the run (DR-019);
 # 0 disables the watchdog.
-# stallTimeout: 600
+# stallTimeout: 2400
