@@ -103,6 +103,68 @@
       },
       "performanceAccepted": false,
       "observedReviewResults": ["phase-V4nTvl", "phase-1y1wBw", "phase-AegKvB"]
+    },
+    "linkV6": {
+      "scope": "prepared common boundary link comparison inputs",
+      "builderCommit": "upstream642875f",
+      "assemblyEvidence": {
+        "path": "/private/tmp/playbook-complex-performance/scripts/experiments/link-experiment-13.2-boundary-evidence.json",
+        "bytes": 23811,
+        "sha256": "eb3481022d9303edb909bde66a8703287f30ccde2994ca557fd894f93fa886e6"
+      },
+      "boundaryProof": {
+        "path": "/private/tmp/playbook-complex-performance/scripts/experiments/link-experiment-13.2-boundary-evidence.json",
+        "bytes": 23811,
+        "sha256": "eb3481022d9303edb909bde66a8703287f30ccde2994ca557fd894f93fa886e6"
+      },
+      "proofs": {
+        "baseline": {
+          "path": "/private/tmp/playbook-13.2-common-v6-baseline/experiment-proof.json",
+          "bytes": 40639,
+          "sha256": "620864622c20cafb3d471dc1df1bf9aed73286daba333258f13738ad35f73851"
+        },
+        "full": {
+          "path": "/private/tmp/playbook-13.2-common-v6-full/experiment-proof.json",
+          "bytes": 40635,
+          "sha256": "9000066456316ed9b4f646c4229d8d7bb9ff2a02fd71e828e1523b5fac92493d"
+        }
+      },
+      "onlyDifferingMember": "playbook/link.md",
+      "performanceAccepted": false,
+      "fullWorkflowAccepted": false,
+      "limits": "Preparation only; no provider run, accepted artifact, or full workflow claim."
+    },
+    "fsmScaffoldV3": {
+      "scope": "prepared C3 fixed-GEARS gears2fsm phase comparison inputs",
+      "builderCommit": "upstream642875f",
+      "readiness": {
+        "path": "/private/tmp/slc-fixed-gears-scaffold-v3-readiness/authoring/readiness.json",
+        "bytes": 18418,
+        "sha256": "a60d33d30703943cc94daf8030e67ac77c046705c87df7ed4aa422b63839a506"
+      },
+      "commands": {
+        "path": "/private/tmp/slc-fixed-gears-scaffold-v3-readiness/authoring/commands.json",
+        "bytes": 1669,
+        "sha256": "94990595f9811e1dadbb8be404893c164f7eac9f13f1f1b026bf1666d6378bcb"
+      },
+      "pair": {
+        "path": "/private/tmp/playbook-13.2-fsm-scaffold-v3-pair/experiment-proof.json",
+        "bytes": 48881,
+        "sha256": "be4cc0f68e6fa4fe910d1b9d352f8690551d9caef96c50aeafa4f7db56e75ccf"
+      },
+      "sourceFixture": {
+        "path": "/private/tmp/slc-fixed-gears-scaffold-v3-readiness/input/workflow.gears.md",
+        "bytes": 8432,
+        "sha256": "23984c2e4461cbcf5ddad2f525b9b8fc962bb6921d33d2949a241e80f87cd5e0"
+      },
+      "onlyDifferingMember": "playbook/gears2fsm.md",
+      "currentInitializerAndGuideIdenticalAcrossArms": true,
+      "changedVersusHistoricalV2": true,
+      "actualGuidePath": "playbook/experiments/fsm-scaffold-guidance.md",
+      "runningEvidenceExcluded": "/private/tmp/slc-fixed-gears-scaffold-v3-evidence/baseline",
+      "runningEvidenceStatus": "currently running; not read or recorded as settled evidence",
+      "performanceAccepted": false,
+      "fullWorkflowAccepted": false
     }
   },
   "phaseRuns": [
@@ -1707,6 +1769,47 @@
       "scope": "Read-only identity audit; no execution or artifact mutation. Exact inverse hash proves the private evidence byte change is solely the normative item citation."
     }
   ],
+  "preparedCompilerCohorts": {
+    "C4": {
+      "id": "boundary-compiler-C4",
+      "status": "prepared_inputs_only",
+      "performanceAccepted": false,
+      "fullWorkflowAccepted": false,
+      "productionCommit": "c0213393918c9de05877be44ff5c398b582eff7e",
+      "compilerRoot": "/private/tmp/slc-boundary-compiler-w78vq34n",
+      "basis": "private archive build from c021339 over immutable C3",
+      "evidence": {
+        "cohort": {
+          "path": "/private/tmp/slc-boundary-compiler-w78vq34n-evidence/cohort.json",
+          "bytes": 7030,
+          "sha256": "4a1682a7668fdb8532eeaa71f49e1c850548a068086a52c718843233d64c3bf9"
+        },
+        "parentComparison": {
+          "path": "/private/tmp/slc-boundary-compiler-w78vq34n-evidence/parent-comparison.json",
+          "bytes": 5027,
+          "sha256": "fedd3d813708beea22b72af44f0912165603d6865a1f689351849cb66eaffd7e"
+        },
+        "selectionEvidence": {
+          "path": "/private/tmp/slc-boundary-compiler-w78vq34n-evidence/selection-evidence.json",
+          "bytes": 1447,
+          "sha256": "3446ada6c0f162a9b8163d18d37cfbd3065389fcffa5012e62a98cb310200cba"
+        }
+      },
+      "deltaFromC3": {
+        "changedDistFiles": 37,
+        "dependenciesUnchanged": true,
+        "pipelinesUnchanged": true,
+        "pinsUnchanged": true,
+        "scriptsUnchanged": true,
+        "externalWatchdog2400Default": {
+          "includedInProductionDifference": true,
+          "externalTask": "8db05c6",
+          "optimizationAttribution": false
+        }
+      },
+      "selectionProbe": "interpreted and compiled strategy probes passed; not live semantic evidence"
+    }
+  },
   "correctnessFollowups": {
     "literalPromptRelays": {
       "commit": "f1424bd",
@@ -1742,6 +1845,26 @@
       "structuralOnly": true,
       "providerLatencyMeasured": false,
       "limits": "Not present in frozen v5; requires new common inputs before live evaluation."
+    },
+    "authoredQuestionBoundary": {
+      "status": "proven_generated_artifact_defect_not_repaired_artifact_acceptance",
+      "evidence": {
+        "path": "/private/tmp/slc-CKr2Ni-authored-question-audit/evidence.json",
+        "bytes": 5359,
+        "sha256": "10aadbe778f3645358ba50a4d53e99b1cae149f3675e3a6a4de8e87d0a98aff2"
+      },
+      "guardProbe": {
+        "path": "/private/tmp/slc-CKr2Ni-authored-question-audit/guard-probe.json",
+        "bytes": 814,
+        "sha256": "864e360fdb3a9df16246b28b9b9ddac425a3e57c5cf7280f4a9c0df49892b60a"
+      },
+      "affectedRun": "compile-CKr2Ni",
+      "sourceAndArtifactsUnchanged": true,
+      "diagnosis": "The source-authored IR-selection question requires an explicit question result field, but the generated FSM/result authority omitted it. The actual reconciler and bridge delivered only the guard, so the unchanged FSM failed; adding presentation-owned authority-data question text reaches awaitBossReply.",
+      "publicEntryBypassed": false,
+      "implementedGateClaimed": false,
+      "oldArtifactAccepted": false,
+      "guardSearchLimit": "Existing guard search can synthesize missing fields; failed closed probing was not generalized into guard-read requiredness inference."
     }
   }
 }
