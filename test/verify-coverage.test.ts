@@ -878,6 +878,152 @@ const nestedMultiArmMachine = (
     },
   } as any);
 
+/** A static child can be entered only by its preceding player's real output. */
+const accumulatedChildMachine = (
+  opts: {
+    deadPredecessor?: boolean;
+    deadChildArm?: boolean;
+    shadowedChildArm?: boolean;
+    inputThrows?: boolean;
+  } = {},
+) => {
+  const plain = (value: unknown): value is Record<string, unknown> => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value))
+      return false;
+    if (Object.getPrototypeOf(value) !== Object.prototype) return false;
+    return Reflect.ownKeys(value).every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return (
+        typeof key === 'string' &&
+        descriptor?.enumerable === true &&
+        'value' in descriptor
+      );
+    });
+  };
+  const approved = ({ event }: any) =>
+    plain(event) &&
+    plain(event.output) &&
+    event.output.approved === true &&
+    typeof event.output.revision === 'string' &&
+    event.output.revision.trim() !== '';
+  return setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('provide player');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('provide child');
+      }),
+    },
+  }).createMachine({
+    id: 'accumulatedChild',
+    context: {} as any,
+    initial: 'ready',
+    on: {
+      BOSS_INTERRUPT: {
+        guard: ({ event }: any) => event.targetId === 'work',
+        target: '#work',
+        reenter: true,
+      },
+    },
+    states: {
+      ready: { id: 'ready', on: { BOSS_REQUEST: { target: '#work' } } },
+      work: {
+        id: 'work',
+        invoke: {
+          src: 'player',
+          input: () => ({
+            stateId: 'work',
+            role: 'writer',
+            sourceItem: 'FLOW-1',
+            prompt: 'Choose a route.',
+            result: {
+              left: 'Select the left route.',
+              right: 'Select the right route.',
+              needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            },
+          }),
+          onDone: [
+            ...['left', 'right'].map((key) => ({
+              target: '#child',
+              guard: ({ event }: any) =>
+                opts.deadPredecessor !== true && event.output.guard === key,
+              actions: assign(({ event }: any) => ({
+                branch: event.output.guard,
+              })),
+            })),
+            needsBossReplyArm(),
+            { target: '#failed' },
+          ],
+          onError: { target: '#failed' },
+        },
+      },
+      child: {
+        id: 'child',
+        invoke: {
+          src: 'playbook',
+          input: ({ context }: any) => {
+            if (opts.inputThrows === true)
+              throw new Error('real reached child input failure');
+            if (context.branch !== 'left' && context.branch !== 'right')
+              throw new Error('missing preceding result');
+            return {
+              stateId: 'child',
+              playbookId: 'review',
+              text: context.branch,
+            };
+          },
+          onDone: [
+            ...(opts.shadowedChildArm === true
+              ? [{ target: '#doneInvalid' }]
+              : []),
+            {
+              target: '#doneLeft',
+              guard: (args: any) =>
+                args.context.branch === 'left' && approved(args),
+            },
+            {
+              target: '#doneRight',
+              guard: (args: any) =>
+                opts.deadChildArm !== true &&
+                args.context.branch === 'right' &&
+                approved(args),
+            },
+            { target: '#doneInvalid' },
+          ],
+          onError: [
+            {
+              target: '#authoredFailure',
+              guard: ({ context, event }: any) =>
+                typeof context.branch === 'string' &&
+                event.error instanceof Error &&
+                event.error.result?.status === 'error',
+            },
+            { target: '#controlFailure' },
+          ],
+        },
+      },
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        tags: 'playbook.parked',
+        on: {
+          BOSS_REPLY: {
+            target: '#work',
+            guard: ({ event }: any) =>
+              typeof event.answer === 'string' && event.answer.trim() !== '',
+          },
+        },
+      },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+      doneLeft: { id: 'doneLeft', type: 'final' },
+      doneRight: { id: 'doneRight', type: 'final' },
+      doneInvalid: { id: 'doneInvalid', type: 'final' },
+      authoredFailure: { id: 'authoredFailure', type: 'final' },
+      controlFailure: { id: 'controlFailure', type: 'final' },
+    },
+  } as any);
+};
+
 const controllerActions = [
   'respond',
   'resume',
@@ -1614,6 +1760,101 @@ describe('checkFsmCoverage (verification-6)', () => {
     expect(
       await checkFsmCoverage({ machine: nestedMultiArmMachine() }),
     ).toEqual([]);
+  });
+
+  it('enters a static child through each real preceding result and probes reached context (verification-43)', async () => {
+    expect(
+      await checkFsmCoverage({ machine: accumulatedChildMachine() }),
+    ).toEqual([]);
+  });
+
+  it('retains initialized context when the child is initially active (verification-43)', async () => {
+    const machine = setup({
+      actors: {
+        playbook: fromPromise(async () => {
+          throw new Error('provide child');
+        }),
+      },
+    }).createMachine({
+      id: 'initialChild',
+      context: { phase: 'initialized' },
+      initial: 'child',
+      on: {
+        BOSS_INTERRUPT: {
+          target: '#ready',
+          guard: ({ event }: any) => event.targetId === 'ready',
+        },
+      },
+      states: {
+        ready: { id: 'ready' },
+        child: {
+          id: 'child',
+          invoke: {
+            src: 'playbook',
+            input: ({ context }) => {
+              if (context.phase !== 'initialized')
+                throw new Error('lost initialized context');
+              return {
+                stateId: 'child',
+                playbookId: 'review',
+                text: context.phase,
+              };
+            },
+            onDone: {
+              target: 'done',
+              guard: ({ context }) => context.phase === 'initialized',
+            },
+            onError: { target: 'failed' },
+          },
+        },
+        done: { id: 'done', type: 'final' },
+        failed: { id: 'failed', type: 'final' },
+      },
+    });
+    // Machine-surface findings remain separate. The unrelated interrupt keeps
+    // ordinary nested coverage enabled but cannot re-enter this initial child.
+    expect(
+      (await checkFsmCoverage({ machine })).filter((finding) =>
+        finding.startsWith('state child:'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('does not invent an entry or accumulated context for a dead predecessor (verification-43)', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: accumulatedChildMachine({ deadPredecessor: true }),
+      }),
+    ).toContain(
+      'state child: nested playbook onDone arm 0 has no reachable entry under probing',
+    );
+  });
+
+  it('retains unsatisfiable and shadowed child arms after actual entry (verification-43)', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: accumulatedChildMachine({ deadChildArm: true }),
+      }),
+    ).toContain(
+      'state child: nested playbook onDone arm 1 is unsatisfiable under probing',
+    );
+    expect(
+      await checkFsmCoverage({
+        machine: accumulatedChildMachine({ shadowedChildArm: true }),
+      }),
+    ).toContain(
+      'state child: nested playbook onDone arm 1 is unsatisfiable under probing',
+    );
+  });
+
+  it('reports an actual child input failure after preceding execution (verification-43)', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: accumulatedChildMachine({ inputThrows: true }),
+      }),
+    ).toContain(
+      'state child: nested playbook actor failed to start during onDone coverage: real reached child input failure',
+    );
   });
 
   it('satisfies a first onError arm written for an authored failure terminal (verification-6, verification-11)', async () => {

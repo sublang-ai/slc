@@ -593,20 +593,6 @@ function coverageErrorMessage(error: unknown): string {
   }
 }
 
-/** Replays a nested input against the context observed after a failed start. */
-function playbookInputFailure(
-  playbook: PlaybookRef,
-  context: Record<string, unknown>,
-): string | undefined {
-  if (typeof playbook.invocation.input !== 'function') return undefined;
-  try {
-    playbook.invocation.input({ context });
-    return undefined;
-  } catch (error) {
-    return coverageErrorMessage(error);
-  }
-}
-
 /** Dynamic target/text context names declared by a nested playbook input. */
 function dynamicPlaybookFields(
   playbook: PlaybookRef,
@@ -709,7 +695,7 @@ type CaptainScript = (input: Record<string, unknown>) => ScriptResult;
 type PlaybookScript = (
   input: Record<string, unknown>,
   actorId: string,
-) => ScriptResult;
+) => ScriptResult | Promise<ScriptResult>;
 
 function persistedSnapshotWithContext(
   provided: MachineLike,
@@ -764,7 +750,7 @@ function makeActor(
           input: Record<string, unknown>;
           self: { id: string };
         }) => {
-          const output = playbookScript(input ?? {}, self.id);
+          const output = await playbookScript(input ?? {}, self.id);
           if (output === null) return new Promise(() => {});
           if (output instanceof Error) throw output;
           return output;
@@ -1715,28 +1701,122 @@ interface PlaybookEntryPlan {
   output: Record<string, unknown>;
 }
 
+interface ChildCoverageEntry {
+  drive?: InterruptDrive;
+  preceding?: PlaybookEntryPlan;
+}
+
+/** One public drive or the actual initialized state, never a private jump. */
+function childCoverageDrive(
+  machine: MachineLike,
+  refs: readonly StateRef[],
+  ref: StateRef,
+  targetId: string,
+  candidates: readonly unknown[],
+): ChildCoverageEntry | undefined {
+  const interrupt = interruptDriveForRef(
+    machine,
+    refs,
+    ref,
+    targetId,
+    candidates,
+  );
+  if (interrupt.satisfiable) return { drive: interrupt };
+  const entry = entryDriveForRef(machine, refs, ref, candidates);
+  if (entry !== undefined) return { drive: entry };
+  return initialActiveRefs(machine.config, refs).some((active) =>
+    sameStateRef(active, ref),
+  )
+    ? {}
+    : undefined;
+}
+
+/** Finite one-hop candidates; actual execution decides which enter the call. */
+function childCoverageEntries(
+  machine: MachineLike,
+  playbook: PlaybookRef,
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+  candidates: readonly unknown[],
+): ChildCoverageEntry[] {
+  const entries: ChildCoverageEntry[] = [];
+  const direct = childCoverageDrive(
+    machine,
+    refs,
+    playbook.ref,
+    interruptTargetForRef(playbook.ref, playbook.ref.stableId),
+    candidates,
+  );
+  if (direct !== undefined) entries.push(direct);
+  const dynamic = dynamicPlaybookFields(playbook);
+  for (const captain of captains) {
+    if (captain.binding.actor === 'script') continue;
+    const targetsChild = transitionArms(captain.invocation.onDone).some(
+      (arm) => {
+        const target = rawArmTarget(arm);
+        return (
+          target !== undefined &&
+          sameStateRef(
+            stateRefForTarget(refs, target, captain.ref),
+            playbook.ref,
+          )
+        );
+      },
+    );
+    if (!targetsChild) continue;
+    const drive = childCoverageDrive(
+      machine,
+      refs,
+      captain.ref,
+      captainInterruptTarget(captain),
+      candidates,
+    );
+    if (drive === undefined) continue;
+    for (const key of Object.keys(captain.binding.result)) {
+      const output = synthOutput(captain.binding, key);
+      if (dynamic !== undefined) {
+        output[dynamic.playbookIdContext] = COVERAGE_PLAYBOOK_ID;
+        output[dynamic.textContext] = COVERAGE_PLAYBOOK_INPUT;
+      }
+      entries.push({ ...drive, preceding: { captain, output } });
+    }
+  }
+  return entries;
+}
+
+/** Upper bound includes the direct route and every one-hop declared result. */
+function childCoverageEntryBudget(
+  playbook: PlaybookRef,
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+): number {
+  return (
+    1 +
+    captains.reduce((total, captain) => {
+      if (captain.binding.actor === 'script') return total;
+      const targetsChild = transitionArms(captain.invocation.onDone).some(
+        (arm) => {
+          const target = rawArmTarget(arm);
+          return (
+            target !== undefined &&
+            sameStateRef(
+              stateRefForTarget(refs, target, captain.ref),
+              playbook.ref,
+            )
+          );
+        },
+      );
+      return (
+        total + (targetsChild ? Object.keys(captain.binding.result).length : 0)
+      );
+    }, 0)
+  );
+}
+
 interface CaptainPredecessorPlan {
   playbook: PlaybookRef;
   entry?: PlaybookEntryPlan;
   childOutput: Record<string, unknown>;
-}
-
-function playbookCoverageInput(
-  machine: MachineLike,
-  playbook: PlaybookRef,
-  dynamic: DynamicPlaybookFields | undefined,
-): Record<string, unknown> | undefined {
-  if (typeof playbook.invocation.input !== 'function') return undefined;
-  try {
-    const input = playbook.invocation.input({
-      context: initializedCoverageContext(machine, dynamic),
-    });
-    return typeof input === 'object' && input !== null && !Array.isArray(input)
-      ? (input as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -2351,37 +2431,17 @@ async function probePlaybookOutcome(
 
   const actorId = invocationActorId(machine, playbook);
   const dynamic = dynamicPlaybookFields(playbook);
-  const entry =
-    dynamic === undefined
-      ? undefined
-      : playbookEntryPlan(machine, playbook, refs, captains, dynamic);
-  if (dynamic !== undefined && entry === undefined) {
-    return [
-      `state ${playbook.ref.stableId}: dynamic nested playbook has no reachable Captain entry transition`,
-    ];
-  }
-  const entryRef = entry?.captain.ref ?? playbook.ref;
-  const entryId =
-    entry === undefined
-      ? interruptTargetForRef(playbook.ref, playbook.ref.stableId)
-      : captainInterruptTarget(entry.captain);
-  const drive = interruptDriveForRef(
+  const entries = childCoverageEntries(
     machine,
+    playbook,
     refs,
-    entryRef,
-    entryId,
+    captains,
     interruptValues,
   );
-  const input = playbookCoverageInput(machine, playbook, dynamic);
-  const expectedPlaybookId =
-    typeof input?.playbookId === 'string'
-      ? input.playbookId
-      : COVERAGE_PLAYBOOK_ID;
   const fixedEvent = {
     type: `xstate.${outcome === 'onDone' ? 'done' : 'error'}.actor.${actorId}`,
     actorId,
   };
-  const context = initializedCoverageContext(machine, dynamic);
   const candidateValues = refs.flatMap((ref) => [
     ref.key,
     ref.stableId,
@@ -2402,58 +2462,6 @@ async function probePlaybookOutcome(
     }
     const guard = orderedArmPredicate(machine, rawArms, armIndex);
     if (guard === undefined) continue;
-
-    let scriptedResult: Record<string, unknown> | Error | undefined;
-    if (outcome === 'onDone') {
-      const outputs = [
-        nestedSuccessOutput(),
-        // A resolved promise may still return a value rejected by the linked
-        // runtime's output validator; fallback arms must be independently
-        // selectable and driven as well.
-        { invalidCoverageOutput: undefined },
-      ];
-      for (const base of outputs) {
-        const assignment = probeGuardAssignment(
-          guard.run,
-          fixedEvent,
-          [{ eventField: 'output', tag: 'o:', base }],
-          [...guard.probeValues, ...candidateValues],
-          { initialContext: context, assignContext: false },
-        );
-        if (assignment !== undefined) {
-          scriptedResult = assignedPayload(base, assignment, 'o:');
-          break;
-        }
-      }
-    } else {
-      const errors = [
-        nestedFailure(expectedPlaybookId),
-        // A completed child that reached its own failure terminal arrives on
-        // this same path, so an arm written only for that shape is driven too.
-        nestedFailureTerminal(expectedPlaybookId),
-        new Error('coverage: generic nested playbook failure'),
-      ];
-      for (const base of errors) {
-        const assignment = probeGuardAssignment(
-          guard.run,
-          fixedEvent,
-          [{ eventField: 'error', tag: 'r:', base, varyExisting: true }],
-          [...guard.probeValues, ...candidateValues],
-          { initialContext: context, assignContext: false },
-        );
-        if (assignment !== undefined) {
-          scriptedResult = assignedPayload(base, assignment, 'r:');
-          break;
-        }
-      }
-    }
-    if (scriptedResult === undefined) {
-      findings.push(
-        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} is unsatisfiable under probing`,
-      );
-      continue;
-    }
-
     const rawTarget = rawArmTarget(arm);
     const target =
       rawTarget === undefined
@@ -2472,62 +2480,147 @@ async function probePlaybookOutcome(
       continue;
     }
 
-    const gate: ArmingGate = { armed: false };
-    let calls = 0;
-    const actor = makeActor(
-      machine,
-      entry === undefined
-        ? () => null
-        : onceScript(entry.captain.binding.sourceItem, entry.output, gate),
-      (actorInput, invokedActorId) => {
-        if (
-          !gate.armed ||
-          calls > 0 ||
-          invokedActorId !== actorId ||
-          actorInput.stateId !== playbook.ref.stableId ||
-          (dynamic !== undefined &&
-            (actorInput.playbookId !== COVERAGE_PLAYBOOK_ID ||
-              actorInput.text !== COVERAGE_PLAYBOOK_INPUT))
-        ) {
-          return null;
-        }
-        calls++;
-        return scriptedResult!;
-      },
-      drive.context,
-    );
-    gate.armed = true;
-    actor.send(drive.event);
-    let enteredCall = false;
-    const settled = await settle(actor, (snapshot) => {
-      if (atState(playbook.ref)(snapshot)) enteredCall = true;
-      return (
-        (calls === 1 && atState(target)(snapshot)) ||
-        (calls === 0 && actor.coverageErrors.length > 0) ||
-        (enteredCall && calls === 0 && leftState(playbook.ref)(snapshot))
+    let covered = false;
+    let entered = false;
+    let satisfiable = false;
+    let inputFailure: string | undefined;
+    for (const entry of entries) {
+      const gate: ArmingGate = { armed: entry.drive === undefined };
+      let calls = 0;
+      let actualInput: Record<string, unknown> | undefined;
+      let completeChild: ((result: ScriptResult) => void) | undefined;
+      const actor = makeActor(
+        machine,
+        entry.preceding === undefined
+          ? () => null
+          : onceScript(
+              entry.preceding.captain.binding.sourceItem,
+              entry.preceding.output,
+              gate,
+            ),
+        (actorInput, invokedActorId) => {
+          if (
+            !gate.armed ||
+            calls > 0 ||
+            invokedActorId !== actorId ||
+            actorInput.stateId !== playbook.ref.stableId ||
+            (dynamic !== undefined &&
+              (actorInput.playbookId !== COVERAGE_PLAYBOOK_ID ||
+                actorInput.text !== COVERAGE_PLAYBOOK_INPUT))
+          )
+            return null;
+          calls++;
+          actualInput = actorInput;
+          return new Promise<ScriptResult>((resolve) => {
+            completeChild = resolve;
+          });
+        },
+        entry.drive?.context,
       );
-    });
-    const finalSnapshot = actor.getSnapshot();
-    const observedStartFailure = actor.coverageErrors.find(
-      ({ eventType }) =>
-        eventType === `xstate.error.actor.${actorId}` || calls === 0,
-    );
-    const inputFailure =
-      calls === 0
-        ? observedStartFailure === undefined
-          ? finalSnapshot.status === 'error'
-            ? coverageErrorMessage(finalSnapshot.error)
-            : playbookInputFailure(playbook, finalSnapshot.context)
-          : coverageErrorMessage(observedStartFailure.error)
-        : undefined;
-    actor.stop();
-    if (inputFailure !== undefined) {
+      try {
+        let enteredPreceding =
+          entry.preceding !== undefined &&
+          atState(entry.preceding.captain.ref)(actor.getSnapshot());
+        gate.armed = true;
+        if (entry.drive !== undefined) actor.send(entry.drive.event);
+        await settle(actor, (snapshot) => {
+          if (
+            entry.preceding !== undefined &&
+            atState(entry.preceding.captain.ref)(snapshot)
+          ) {
+            enteredPreceding = true;
+          }
+          return (
+            (calls === 1 && atState(playbook.ref)(snapshot)) ||
+            actor.coverageErrors.length > 0 ||
+            snapshot.status === 'done' ||
+            snapshot.status === 'error' ||
+            (enteredPreceding &&
+              entry.preceding !== undefined &&
+              leftState(entry.preceding.captain.ref)(snapshot) &&
+              !atState(playbook.ref)(snapshot))
+          );
+        });
+        const reached = actor.getSnapshot();
+        if (calls !== 1 || !atState(playbook.ref)(reached)) {
+          const failure = actor.coverageErrors.find(
+            ({ eventType }) => eventType === `xstate.error.actor.${actorId}`,
+          );
+          if (failure !== undefined)
+            inputFailure = coverageErrorMessage(failure.error);
+          else if (reached.status === 'error')
+            inputFailure = coverageErrorMessage(reached.error);
+          continue;
+        }
+        entered = true;
+        const context = reached.context;
+        const expectedPlaybookId =
+          typeof actualInput?.playbookId === 'string'
+            ? actualInput.playbookId
+            : COVERAGE_PLAYBOOK_ID;
+        let scriptedResult: Record<string, unknown> | Error | undefined;
+        if (outcome === 'onDone') {
+          for (const base of [
+            nestedSuccessOutput(),
+            { invalidCoverageOutput: undefined },
+          ]) {
+            const assignment = probeGuardAssignment(
+              guard.run,
+              fixedEvent,
+              [{ eventField: 'output', tag: 'o:', base }],
+              [...guard.probeValues, ...candidateValues],
+              { initialContext: context, assignContext: false },
+            );
+            if (assignment !== undefined) {
+              scriptedResult = assignedPayload(base, assignment, 'o:');
+              break;
+            }
+          }
+        } else {
+          for (const base of [
+            nestedFailure(expectedPlaybookId),
+            nestedFailureTerminal(expectedPlaybookId),
+            new Error('coverage: generic nested playbook failure'),
+          ]) {
+            const assignment = probeGuardAssignment(
+              guard.run,
+              fixedEvent,
+              [{ eventField: 'error', tag: 'r:', base, varyExisting: true }],
+              [...guard.probeValues, ...candidateValues],
+              { initialContext: context, assignContext: false },
+            );
+            if (assignment !== undefined) {
+              scriptedResult = assignedPayload(base, assignment, 'r:');
+              break;
+            }
+          }
+        }
+        if (scriptedResult === undefined) continue;
+        satisfiable = true;
+        completeChild!(scriptedResult);
+        const settled = await settle(actor, atState(target));
+        if (settled && atState(target)(actor.getSnapshot())) {
+          covered = true;
+          break;
+        }
+      } finally {
+        actor.stop();
+      }
+    }
+    if (covered) continue;
+    if (inputFailure !== undefined && !entered) {
       findings.push(
         `state ${playbook.ref.stableId}: nested playbook actor failed to start during ${outcome} coverage: ${inputFailure}`,
       );
-      continue;
-    }
-    if (!settled || calls !== 1 || !atState(target)(finalSnapshot)) {
+    } else if (!entered) {
+      findings.push(
+        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} has no reachable entry under probing`,
+      );
+    } else if (!satisfiable) {
+      findings.push(
+        `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} is unsatisfiable under probing`,
+      );
+    } else {
       findings.push(
         `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex} did not reach ${target.stableId}`,
       );
@@ -2799,19 +2892,23 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
   guardProbeCalls += playbooks.reduce(
     (total, playbook) =>
       total +
-      transitionArms(playbook.invocation.onDone).length +
-      transitionArms(playbook.invocation.onError).length,
+      childCoverageEntryBudget(playbook, refs, captains) *
+        (2 * transitionArms(playbook.invocation.onDone).length +
+          3 * transitionArms(playbook.invocation.onError).length) +
+      4 * (captains.length + 1),
     0,
   );
-  // Nested success/error and parallel question/join helpers each reuse one
-  // context-probed entry plan per state and outcome.
-  guardProbeCalls += 2 * playbooks.length + 2 * parallels.length;
+  // Each one-hop candidate may use an interrupt and initial/root guard probe;
+  // parallel question/join helpers retain their independent entry probes.
+  guardProbeCalls += 2 * parallels.length;
 
   const playbookSettles = playbooks.reduce(
     (total, playbook) =>
       total +
       (transitionArms(playbook.invocation.onDone).length +
         transitionArms(playbook.invocation.onError).length) *
+        childCoverageEntryBudget(playbook, refs, captains) *
+        2 *
         SETTLE_MS,
     0,
   );
