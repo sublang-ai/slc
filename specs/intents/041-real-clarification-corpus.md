@@ -14,7 +14,7 @@ Comprehensively verify noninteractive clarification and performance together usi
 ## Deliverables
 
 - [x] Reviewed clean, mutant, and byte-identical restored cases for CODE, DEV, DECIDE, and REVIEW.
-- [ ] A diverse typical workflow and a later-phase semantic case.
+- [x] A diverse typical workflow and a later-phase semantic case.
 - [x] A phase recorder using ordinary compiler execution with explicit scope and authentic outcome evidence.
 - [ ] Real model results, independent semantic adjudication, and regressions for demonstrated defects.
 - [ ] Full CODE and DEV correctness and matched performance evidence integrated with the source controls.

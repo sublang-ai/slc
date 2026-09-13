@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "direct-gears-clarification-v1",
+  "status": "reviewed-before-live-experiments",
+  "phase": "playbook.gears2fsm",
+  "providerExposure": {
+    "copyOnly": "Only selected source bytes, renamed workflow.md in a fresh workspace.",
+    "excluded": "Never expose this manifest, oracles, case labels, build script, patches, or evidence to the provider.",
+    "singlePhaseOnly": "Direct GEARS is the original invocation source; phase completion is not full compilation or runtime acceptance."
+  },
+  "cases": [
+    {
+      "id": "gears-001",
+      "sourcePath": "sources/gears-001/source.md",
+      "sourceRelativePath": "source-bank/gears-001/source.md",
+      "sourceSha256": "1e4caf20c3523ff6b2497ade89f7fd37ffd319c59f0ae5537e2bd477778667de",
+      "sourceBytes": 2391,
+      "phase": "playbook.gears2fsm"
+    },
+    {
+      "id": "gears-002",
+      "sourcePath": "sources/gears-002/source.md",
+      "sourceRelativePath": "source-bank/gears-002/source.md",
+      "sourceSha256": "ccb83b434a60f258d079bff47a0095fd69050e9e0bf075b833dae03dad7e1460",
+      "sourceBytes": 2391,
+      "phase": "playbook.gears2fsm"
+    },
+    {
+      "id": "gears-003",
+      "sourcePath": "sources/gears-003/source.md",
+      "sourceRelativePath": "source-bank/gears-003/source.md",
+      "sourceSha256": "1e4caf20c3523ff6b2497ade89f7fd37ffd319c59f0ae5537e2bd477778667de",
+      "sourceBytes": 2391,
+      "phase": "playbook.gears2fsm"
+    }
+  ]
+}

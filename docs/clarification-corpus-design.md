@@ -3,7 +3,7 @@
 
 # Clarification corpus design
 
-Evaluation plan reviewed before live experiments. Fifteen private fixtures and a phase-recorder prototype are prepared; their preparation is not provider evidence.
+Evaluation plan reviewed before live experiments. The fifteen source fixtures, direct-GEARS triplet, and ordinary phase recorder are committed; real evaluation is in progress and recorded in [the current result matrix](performance/complex-workflows-2026-09-12.json). Fixture preparation and deterministic checks are not provider evidence.
 The aim is to measure whether SLC asks only when compilation requires an unresolved domain choice, while preserving its existing stop, protection, and original-source rerun contract.
 The behavioral authority remains [source clarification](../specs/packages/clarification.md) and [DR-032](../specs/decisions/032-noninteractive-source-clarification.md); experiment accounting follows [compilation measurement](../specs/packages/compilation-measurement.md).
 
@@ -135,4 +135,4 @@ After the test author restores or resolves only the fixture's original source, r
 Also use a fresh output directory for the restored member's independent semantic/performance observation, distinguishing that cold record from the same-directory rerun.
 Do not edit generated intermediates, inject an answer through a session, or rewrite the immutable positive reference.
 
-The reviewed private corpus has five unique clean sources and fifteen cases. Ten clean/restored invocations represent five unique positive sources, not ten independent source designs. The next deliverable is the durable corpus and phase recorder, with any new production behavior resolved in the specs first.
+The reviewed private corpus has five unique clean sources and fifteen cases. Ten clean/restored invocations represent five unique positive sources, not ten independent source designs. The durable corpus and phase recorder are implemented; real semantic and complete-workflow acceptance remain separate deliverables, with any new production behavior resolved in the specs first.
