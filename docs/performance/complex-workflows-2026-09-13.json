@@ -463,6 +463,27 @@
         "evidence": "/private/tmp/slc-c6-uh9JIL-prompt-reproducer-evidence.json",
         "sha256": "3e4d8b3cbce483ce2177bcdba203ccffeaa843a6fbaaf87f703bf3710d20daa3",
         "finding": "The composer splits relayed values on CRLF and rejoins with LF. The actual failing probe has no blank lines and loses CRLF separators while retaining quote markers."
+      },
+      "runtimeDiagnosis": {
+        "scope": "separate unchanged linked-factory/real-host observation; original full compilation remains rejected",
+        "providerCalls": 0,
+        "adjudication": {
+          "path": "/private/tmp/slc-uh9JIL-runtime-audit/adjudication.json",
+          "sha256": "9412d6b1db3868a1d204a2bbbf94b239ba862f99a336b2ef67976a8fd8f8afac"
+        },
+        "findings": [
+          "Initial-turn discussionComplete reaches success with zero Boss replies despite the source precondition.",
+          "After two fresh question continuations, the third Analyst prompt loses the earlier CLI-only/UI-preservation constraint; discussionContext remains empty."
+        ],
+        "controls": [
+          "Canonical CODE success preserves exact child output.",
+          "Canonical BRANCH failure preserves exact child output and starts no later child."
+        ],
+        "preservation": {
+          "dependencyEntries": 11660,
+          "changed": []
+        },
+        "observationCorrection": "The first probe consumed a shared label array; adjudication supersedes only its derived presence booleans using the recorded actual finalText and prompt strings. No recorded call or runtime result was changed."
       }
     }
   ],
