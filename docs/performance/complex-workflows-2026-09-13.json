@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "recordedAt": "2026-09-13T10:26:19.182749+00:00",
-  "scope": "C5 full CODE/DEV failures, C6-v8 minimal acceptance, C7 CODE runtime control after failed full benchmark, accepted C7 full DEV, and C7 fixed-link materializer candidate evidence; no accepted CODE full benchmark or percentage fixed-link speed ratio.",
+  "scope": "C5 full CODE/DEV failures, C6-v8 minimal acceptance, C7 CODE runtime control after failed full benchmark, accepted C7 full DEV, C7 fixed-link materializer candidate evidence, C8-v9 full CODE linker-contract failure, and accepted C8 REVIEW text2gears phase evidence; no accepted CODE full benchmark or percentage fixed-link speed ratio.",
   "compilerCommit": "662d73aaefe4f18564c62c63984bd2b9b3b9aca9",
   "pipelineGeneration": "v7",
   "runs": [
@@ -843,6 +843,274 @@
         "The probe uses C8 ordinary runSlc link preflight with an adapter factory that would throw if requested.",
         "It verifies the real GQcJFN coverage defect is routed before provider work.",
         "It does not adjudicate the concurrently running C8 full CODE hZ8Y1l run."
+      ]
+    },
+    {
+      "run": "compile-hZ8Y1l",
+      "status": "failure",
+      "scope": "code-full-c8-v9-source-aware-linker",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "compilerCommit": "46a89ced91ea565cab0f41862f39257885219c93",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-full",
+      "source": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/code.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/summary.json",
+        "bytes": 34701,
+        "sha256": "b59ebe3d1f0c916d2441f08265b6589cbd970b20b4da3c9d45bbfef405de79cf"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/invocation-g7OiUZ/proof.json",
+        "bytes": 2737207,
+        "sha256": "08dbbfe5ccce9912da0f33ffc7ed108c0fe961f27d51a98fb0a835cfe896d449"
+      },
+      "diagnosticsLog": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/diagnostics.log",
+        "bytes": 9214,
+        "sha256": "9e04b1b20f74c950663ad484fc37fd1bb0bff98bf19d65788ec92e39248e26e0"
+      },
+      "metrics": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/metrics.jsonl",
+        "bytes": 10252,
+        "sha256": "bc1e210f17c932c1e479f365688de8b3a216f4202495bacccca5b18421f3384f"
+      },
+      "compile": {
+        "ok": false,
+        "elapsedMs": 661887,
+        "outcome": null
+      },
+      "elapsedMs": 661899,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 126984
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 10714
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 432510
+        },
+        {
+          "name": "link",
+          "status": "error",
+          "elapsedMs": 91639
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 3,
+          "elapsedMs": 69731,
+          "promptSha256": "039a5e669332665fe5cebffd01092f74647686e78d87a2fb3750ce735a949101"
+        },
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 58110,
+          "promptSha256": "21a336419826264d8b29f711a258a4bd9b3def9c1a2fc089b4aafb86e55d597b"
+        },
+        {
+          "phase": "optimize",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 11212,
+          "promptSha256": "d8852183aed29f9676f059ff17b30c14375cacb84e265597dbeee8fb31e73e6f"
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 15,
+          "elapsedMs": 367680,
+          "promptSha256": "a9e0aed90429a7a7eb368a7025526013c96c959357569c8c697ffff99b53b123"
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 4,
+          "elapsedMs": 63803,
+          "promptSha256": "3f186bad6f03bcffff99715ddff52487e74b7bdec61250836366ad111886d166"
+        },
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 3,
+          "elapsedMs": 93621,
+          "promptSha256": "29a8808f48d01a78d66f046bbda31847e5a5fc840c01f0fae1837f8807690111"
+        }
+      ],
+      "callCount": 6,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/work/code.playbook/code.gears.raw.md",
+          "bytes": 8781,
+          "sha256": "ed7b672b617275ef19baaea9bcdf17db7ffee2dc460dd52fabce5f6738916ef4"
+        },
+        {
+          "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/work/code.playbook/code.gears.md",
+          "bytes": 8781,
+          "sha256": "ed7b672b617275ef19baaea9bcdf17db7ffee2dc460dd52fabce5f6738916ef4"
+        },
+        {
+          "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/work/code.playbook/code.fsm.ts",
+          "bytes": 35678,
+          "sha256": "1a91777f9e8f0537c4a8e3e2b6d0704dc3f06051daeec26c927dfbe12c0f45ce"
+        }
+      ],
+      "protectedInputs": {
+        "before": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "earlyCoveragePassed": true,
+      "sourceClarification": false,
+      "targetWritten": false,
+      "lastAcceptedArtifact": "code.fsm.ts",
+      "failure": "Generated code.fsm.ts requires coderLlm in machine input/context for the <coder-llm> prompt-identity token, contradicting the linker contract that prompt identities remain host policy and enter only through runtime role bindings.",
+      "diagnostic": "BLOCKED: the Source FSM cannot be linked under link.md without violating the definition's prompt-identity rule.",
+      "acceptedFullCompilation": false,
+      "runtimeAcceptanceRun": false,
+      "acceptedSpeedRatio": false,
+      "fullCompilationSpeedRatio": false,
+      "notes": [
+        "The accepted live targets are code.gears.raw.md, code.gears.md, and code.fsm.ts; no code.playbook.ts was written.",
+        "The run preserves the last accepted FSM for later analysis and records no diagnosis beyond the linker-contract contradiction.",
+        "This record does not claim runtime acceptance or an accepted CODE full benchmark."
+      ]
+    },
+    {
+      "run": "phase-e3WBnY",
+      "status": "accepted",
+      "scope": "review-case-007-text2gears-phase-only",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "compilerCommit": "46a89ced91ea565cab0f41862f39257885219c93",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-full",
+      "phase": "playbook.text2gears",
+      "caseId": "case-007",
+      "source": {
+        "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/work/workflow.md",
+        "bytes": 6097,
+        "sha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+        "original": "/Users/basicthinker/Projects/SubLang/slc/docs/performance/clarification-corpus/sources/case-007/source.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/summary.json",
+        "bytes": 424139,
+        "sha256": "aa74dd63f6718eff30806303503738a64a5af7e2b3aad7cf6a234c7112bdd1ae"
+      },
+      "adjudication": {
+        "path": "/private/tmp/slc-c8-review-e3WBnY-adjudication.json",
+        "bytes": 6797,
+        "sha256": "3d4b12b2dbfb847ed4351f86519b7c706f0102239f94fd8d16c397b6d16cbeec"
+      },
+      "diagnosticsLog": {
+        "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/diagnostics.log",
+        "bytes": 1682,
+        "sha256": "bb31b939266f855265a1be1c13f09c41bba0d295e0077d0f85d9dff65dcc3d80"
+      },
+      "metrics": {
+        "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/metrics.jsonl",
+        "bytes": 2040,
+        "sha256": "d3e93b49d587561400d15000ca088438fad1b7d3f78b5511cfa85d06e79e2bcc"
+      },
+      "measuredOutcome": {
+        "phaseElapsedMs": 64608,
+        "executionElapsedMs": 64909,
+        "overallElapsedMs": 65673,
+        "agentCalls": 1,
+        "phaseAcceptanceOk": true
+      },
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 64608
+        }
+      ],
+      "executions": [
+        {
+          "kind": "interpreted",
+          "requestKind": "compile",
+          "definition": {
+            "path": "/private/tmp/playbook-13.2-common-v9-full/playbook/text2gears.md",
+            "bytes": 22765,
+            "sha256": "1f146b9cb00a6de016c5e02a528825daa5ce3bda055eae553e1545b6dde0b639"
+          }
+        }
+      ],
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "actualCliExit": null,
+      "cliExecution": "not-invoked",
+      "compiledExecution": "not-run",
+      "runtimeExecution": "not-run",
+      "calls": [
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 2,
+          "elapsedMs": 65122,
+          "providerDurationMs": 61964,
+          "promptSha256": "e8f43647162fe4a2c175bbd3495c85619eadf5f7a45c5bb61dddf241c9807c2c"
+        }
+      ],
+      "callCount": 1,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/work/workflow.playbook/workflow.gears.md",
+          "bytes": 10420,
+          "sha256": "bf70615325625fa955e6b04298a7ac8231949d9f0fe12e5b2ee2f0f62c60d22e"
+        }
+      ],
+      "frozenFidelityOracles": {
+        "passed": 4,
+        "items": [
+          "Review rounds retain the cumulative caller scope and exact repository revision.",
+          "Findings route to Coder acceptance/fix or reasoned rejection, then return to Reviewer.",
+          "Complete only on an affirmative completed review with no unsettled findings, returning exact evaluated revision.",
+          "Concrete caller scope, commits, findings and player model identities remain declared runtime inputs."
+        ]
+      },
+      "questions": 0,
+      "materialFindings": [],
+      "literalIdentitiesRetained": true,
+      "completeCallerInputCarriesOptionalContext": true,
+      "phaseOnly": true,
+      "fullReviewAcceptance": false,
+      "runtimeAcceptanceRun": false,
+      "acceptedSpeedRatio": false,
+      "notes": [
+        "The complete caller-input relay can carry optional caller context; no new context placeholder is required at this phase boundary.",
+        "This record is a semantic adjudication of source-to-GEARS fidelity only and does not validate FSM, link, runtime, or concrete value binding."
       ]
     },
     {
