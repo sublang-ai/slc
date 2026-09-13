@@ -67,8 +67,28 @@ Where a full-link run of the `playbook` pipeline has produced its linked artifac
 | --- | --- |
 | `-o` relocates the linked artifact. | Skip entry-module emission. |
 | `-o` is absent and the raw source physically aliases `<cwd>/<basename>.ts`. | Preserve the compiled bundle, omit the entry, and report the diagnostic required by [[phase-execution-42](phase-execution.md#phase-execution-42)]. |
-| `-o` is absent; the entry path does not alias the raw source; and no two distinct declared role names collide case-insensitively. | Deterministically emit `<cwd>/<basename>.ts` — an erasable-TypeScript module importing the linked module via `./<basename>.<pipeline>/<basename>.playbook.ts` and default-exporting a registry entry with `id` and `command` set to `<basename>`, `requiredRoleIds` set in source order to a `Roles` source's canonical lowercase local role ids — the exact ids its compiled machine's delegated states name — or to a historical `Players` source's verbatim non-alias declared names, `intent` derived from the normalized source's title and lead line, `validateOptions` a fail-closed allowlist that admits only `cwd` when the workflow contains a script item and otherwise admits no linked option, and `createRuntime` validating `captainOptions`, defaulting its omitted `cwd` to `process.cwd()` only for that script-capable case, and calling the linked default factory once — a `Roles` source's entry additionally advertising `artifactSchema: 3`, a `runtimeProfile` holding exactly `kind` `shared-factory` and, as `compat`, the linked factory's own captured `{ artifactSchema, runtimeAbi }` compatibility record rather than any compiler-internal contract name, and the declared concurrent-role sets, composing the validated options with `createRuntime`'s second live-capability parameter into the factory's single `{ configuredOptions, hostCapabilities }` argument, and returning that factory call's runtime unchanged, while a historical `Players` source's entry wraps sessions passed to `init` and optional `restore` so a lowercased runtime player id maps back to its declared form and unknown ids and every other port, runtime member, and optional capability cross unchanged. |
+| `-o` is absent; the entry path does not alias the raw source; and no two distinct declared role names collide case-insensitively. | Deterministically emit `<cwd>/<basename>.ts` — an erasable-TypeScript module importing the linked module via `./<basename>.<pipeline>/<basename>.playbook.ts` and default-exporting a registry entry with `id` and `command` set to `<basename>`, `requiredRoleIds` set in source order to a `Roles` source's canonical lowercase local role ids — the exact ids its compiled machine's delegated states name — or to a historical `Players` source's verbatim non-alias declared names, `intent` derived from the normalized source's title and lead line, `validateOptions` selected through the artifact-owned or retained validation boundary [[self-hosting-17](#self-hosting-17)], and `createRuntime` validating `captainOptions` through that boundary, and calling the linked default factory once — a `Roles` source's entry additionally advertising `artifactSchema: 3`, a `runtimeProfile` holding exactly `kind` `shared-factory` and, as `compat`, the linked factory's own captured `{ artifactSchema, runtimeAbi }` compatibility record rather than any compiler-internal contract name, and the declared concurrent-role sets, composing the validated options with `createRuntime`'s second live-capability parameter into the factory's single `{ configuredOptions, hostCapabilities }` argument, and returning that factory call's runtime unchanged, while a historical `Players` source's entry wraps sessions passed to `init` and optional `restore` so a lowercased runtime player id maps back to its declared form and unknown ids and every other port, runtime member, and optional capability cross unchanged. |
 | `-o` is absent; the entry path does not alias the raw source; and two distinct declared role names collide case-insensitively. | Fail entry-module emission closed with a diagnostic. |
+
+#### self-hosting-17
+
+When emitting an entry's option boundary, the emitter shall apply this capability-based decision without inferring an option schema, invoking the runtime constructor, or using package version, date, or function arity ([DR-044](../decisions/044-artifact-owned-entry-options.md)):
+
+| Linked artifact | Entry validation and construction |
+| --- | --- |
+| Schema-3 artifact exports callable `validateOptions` | Import that function statically, require its TypeScript return type to satisfy the linked factory's configured-options type, and forward its synchronous validated snapshot unchanged with the separately supplied live host capabilities; the linked validator owns requiredness, defaults and JSON validation, including treating absent `undefined` as an empty option slice and rejecting null. |
+| Schema-3 artifact exports a non-callable `validateOptions` | Fail rather than silently falling back. |
+| Retained artifact has no validator export, or historical `Players` generation | Retain the existing fail-closed allowlist accepting only nonempty string `cwd` for a script workflow and no options otherwise, including absent-slice acceptance and script-only `process.cwd()` defaulting. |
+
+#### self-hosting-18
+
+Where a newly executed full link will produce a non-aliased canonical schema-3 entry [[self-hosting-15](#self-hosting-15)], the compiler shall enforce its public validator requirement through this execution sequence, without imposing the requirement on reused or standalone historical artifacts:
+
+1. Derive eligibility from the already produced GEARS role declaration and the planned entry output.
+2. Supply the public synchronous pure `validateOptions` contract to interpreted and compiled performing calls through their output-contract context.
+3. Include missing or non-callable exports, invalid accepted probe results, and strict validator-to-factory type incompatibility using the real linked and declared FSM filenames as ESM roots while preserving their relative imports in the existing bounded same-Coder mechanical findings [[phase-execution-56](phase-execution.md#phase-execution-56)].
+4. Probe only absent or empty option slices and universally invalid non-object inputs, allow validation rejection where real required options are unknown, and require accepted results to be plain JSON records without calling the runtime constructor or inventing a valid required catalog.
+5. Recheck custom executor output before link acceptance and preserve ordinary input protection and legacy entry fallback for exact incremental reuse.
 
 ### Immutable definition adoption
 
@@ -125,6 +145,12 @@ When the slc command resolves the reserved `slc` and the `playbook` references, 
 | --- | --- |
 | A pipeline search root holds a `playbook` directory vendoring the shared definitions. | Resolve both references to that vendored directory. |
 | No search root provides a `playbook` directory. | Resolve both references to the definitions the installed `@sublang/playbook` provides. |
+
+### Artifact-owned option acceptance
+
+#### self-hosting-19
+
+Where real linked modules expose required structured, optional primitive, script, missing, malformed, or asynchronous validator surfaces, when entry emission and an ordinary full-link correction flow run, the integration suite shall verify strict entry typing, exact option and live-capability forwarding, no constructor calls during validation, invalid-input rejection, retained legacy behavior, and same-Coder repair before acceptance [[self-hosting-17](#self-hosting-17)] [[self-hosting-18](#self-hosting-18)].
 
 ### Adoption acceptance
 

@@ -19,6 +19,7 @@ import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { emitEntryModule } from '../src/entry-module.js';
+import { createReviewingAgent } from '../src/reviewing-agent.js';
 import {
   createInterpretedExecutor,
   type AgentClient,
@@ -306,7 +307,13 @@ export const machine = setup({
 
 // The schema-3 linked artifact a Playbook 10 link emits: a shared factory
 // carrying the exact immutable compatibility record (DR-024).
-const SCHEMA_3_PLAYBOOK_MODULE = `${PLAYBOOK_MODULE}
+const SCHEMA_3_PLAYBOOK_MODULE = `${PLAYBOOK_MODULE.replace('createPlaybookRuntime()', 'createPlaybookRuntime(_input: {configuredOptions: Record<string, never>; hostCapabilities: unknown})')}
+export function validateOptions(value: unknown): Record<string, never> {
+  const options = value === undefined ? {} : value;
+  if (options === null || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).length !== 0) throw new TypeError('no options are declared');
+  return {};
+}
+
 Object.defineProperty(createPlaybookRuntime, 'compat', {
   value: Object.freeze({ artifactSchema: 3, runtimeAbi: 1 }),
   enumerable: true,
@@ -670,7 +677,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
 
   it('runs the bare playbook invocation as a full-link against the default runtime target (self-hosting-13)', async () => {
     const result = await runSlc(['playbook', source], deps());
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     // The discovered optimize pass runs by default: the producing phase writes
     // the `.raw` intermediate and the pass the canonical gears (DR-014,
     // pipeline-35).
@@ -1204,9 +1211,80 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     // The linked module is imported by its source-only relative specifier, so
     // the entry and the bundle relocate together.
     expect(module).toContain(
-      "import createPlaybookRuntime from './code.playbook/code.playbook.ts'",
+      "import createPlaybookRuntime, { validateOptions as linkedValidateOptions } from './code.playbook/code.playbook.ts'",
     );
   });
+
+  it('repairs the required public validator with the same Coder before emitting an entry (self-hosting-19)', async () => {
+    const prompts: string[] = [];
+    let links = 0;
+    const writer = writingAgent();
+    const agent: AgentClient = {
+      async run(request) {
+        prompts.push(request.prompt);
+        if (
+          request.prompt.includes('artifact to write:') &&
+          request.prompt.includes(
+            'artifact to write: ' + join(artDir, 'code.playbook.ts'),
+          )
+        ) {
+          links++;
+          await writeFile(
+            join(artDir, 'code.playbook.ts'),
+            links === 1
+              ? SCHEMA_3_PLAYBOOK_MODULE.replace(
+                  'export function validateOptions',
+                  'function validateOptions',
+                ).replace(
+                  'function validateOptions',
+                  'export function privateValidateOptions',
+                )
+              : SCHEMA_3_PLAYBOOK_MODULE,
+          );
+          return {
+            status: 'success',
+            text:
+              links === 1
+                ? 'written'
+                : JSON.stringify({
+                    dispositions: [
+                      {
+                        finding: 1,
+                        decision: 'accept',
+                        reason: 'export the same pure validator',
+                      },
+                    ],
+                    result: 'repaired',
+                  }),
+          };
+        }
+        return writer.run(request);
+      },
+    };
+    const result = await runSlc(['playbook', source], {
+      ...deps(),
+      executor: createInterpretedExecutor({
+        agent: createReviewingAgent({ coder: agent }),
+      }),
+    });
+    expect(result, result.diagnostics.join('\n')).toMatchObject({ ok: true });
+    expect(links).toBe(2);
+    expect(
+      prompts.filter((prompt) =>
+        prompt.includes('Required entry output contract:'),
+      ),
+    ).toHaveLength(2);
+    expect(
+      prompts.some((prompt) =>
+        prompt.includes(
+          'entry options contract: export public validateOptions',
+        ),
+      ),
+    ).toBe(true);
+    expect(await readFile(join(work, 'code.ts'), 'utf8')).toContain(
+      'const validateOptions: (value: unknown) => RuntimeOptions = linkedValidateOptions',
+    );
+  }, 20000);
 
   it('writes no entry module when -o relocates the linked artifact (self-hosting-16)', async () => {
     const out = join(work, 'custom.playbook.ts');

@@ -344,9 +344,14 @@ export function createCompiledExecutor(opts: {
         // transported prompt carries the request's absolute paths and
         // write-scope rules (phase-execution-34).
         captainWorkspace: composeWorkspaceContract(input),
-        definitionContext: definitionReferenceContext(
-          resolve(opts.runRoot, request.definitionPath),
-        ),
+        definitionContext: [
+          definitionReferenceContext(
+            resolve(opts.runRoot, request.definitionPath),
+          ),
+          request.kind === 'link' ? request.outputContract : undefined,
+        ]
+          .filter((part) => part !== undefined)
+          .join('\n\n'),
         playerClarification: clarificationContract(),
         beforeAgentCall: refuseAfterQuestion,
         onPerformingResult: recordPerforming,

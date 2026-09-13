@@ -98,6 +98,7 @@ import {
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
   findConcurrentRoleSets,
+  inspectGearsRoleContract,
   findMachineConfig,
   loadFsmModule,
   loadLinkedModuleForVerification,
@@ -112,6 +113,7 @@ import {
 } from './verify-support.js';
 import { checkSourceGearsContract } from './verify-source.js';
 import { checkFsmTypeScript } from './verify-typescript.js';
+import { checkEntryOptions, ENTRY_OPTIONS_CONTRACT } from './entry-options.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
 export interface CompiledSelection {
@@ -450,18 +452,6 @@ async function runFullLink(
     linked: link.target,
     output: invocation.output === null ? null : resolve(cwd, invocation.output),
   });
-  const steps = [
-    ...compileSteps,
-    linkStep({
-      link,
-      definitionPath: pipeline.linkFile as string,
-      objects: [plan[plan.length - 1].path],
-      linkTarget: resolve(cwd, invocation.linkTarget),
-      options: invocation.options,
-      linked,
-      signal: deps.signal,
-    }),
-  ];
   const gearsPlan = plan.find(
     (artifact) => artifact.phase.target.format === 'gears',
   );
@@ -474,6 +464,22 @@ async function runFullLink(
   const entryAliasesSource =
     entryCandidate !== null && (await pathsAlias(entryCandidate, source));
   const entryPath = entryAliasesSource ? null : entryCandidate;
+  const steps = [
+    ...compileSteps,
+    linkStep({
+      link,
+      definitionPath: pipeline.linkFile as string,
+      objects: [plan[plan.length - 1].path],
+      linkTarget: resolve(cwd, invocation.linkTarget),
+      options: invocation.options,
+      linked,
+      signal: deps.signal,
+      ...(entryPath !== null && gearsPlan !== undefined
+        ? { entryGearsPath: gearsPlan.path }
+        : {}),
+    }),
+  ];
+
   const verification = {
     pipeline: invocation.pipeline,
     plan,
@@ -779,6 +785,8 @@ interface PhaseStep {
   /** Pipeline pin key; absent for the host-owned normalization step. */
   pinKey?: string;
   targetExt: string;
+  /** Host-owned contract for a newly executed entry-bearing link. */
+  outputContract?: () => Promise<string | undefined>;
   /** Composed existing checks over a compile phase's live target. */
   compileFidelity?: MechanicalReview;
   /** Existing GEARS source findings must precede consumer construction. */
@@ -1181,14 +1189,28 @@ function linkStep(opts: {
   options: readonly LinkOptionPair[];
   linked: string;
   signal?: AbortSignal;
+  entryGearsPath?: string;
 }): PhaseStep {
   const { link } = opts;
   const fsmObjects = opts.objects.filter((object) =>
     object.endsWith(`.${link.source.format}${link.source.ext}`),
   );
+  const entryRequired = async (): Promise<boolean> =>
+    opts.entryGearsPath !== undefined &&
+    inspectGearsRoleContract(await readFile(opts.entryGearsPath, 'utf8'))
+      .generation === 'schema-3';
   const gated =
     link.target.format === PLAYBOOK_LINKED_FORMAT && fsmObjects.length === 1
-      ? () => linkFidelityFindings(opts.linked, fsmObjects[0])
+      ? async () => [
+          ...(await linkFidelityFindings(opts.linked, fsmObjects[0])),
+          ...((await entryRequired())
+            ? await checkEntryOptions({
+                linkedPath: opts.linked,
+                fsmPath: fsmObjects[0],
+                signal: opts.signal,
+              })
+            : []),
+        ]
       : undefined;
   return {
     request: {
@@ -1200,6 +1222,12 @@ function linkStep(opts: {
       linked: opts.linked,
       ...(gated === undefined ? {} : { mechanicalReview: gated }),
     },
+    ...(gated !== undefined && opts.entryGearsPath !== undefined
+      ? {
+          outputContract: async () =>
+            (await entryRequired()) ? ENTRY_OPTIONS_CONTRACT : undefined,
+        }
+      : {}),
     phase: 'link',
     pinKey: 'link',
     targetExt: link.target.ext,
@@ -1455,13 +1483,18 @@ async function executeSteps(
         elapsedMs: Date.now() - startedAt,
       });
 
-    const request: ExecuteRequest =
+    let request: ExecuteRequest =
       mode.mode === 'update' && step.request.kind === 'compile'
         ? {
             ...step.request,
             update: { priorInput: mode.priorInput, diff: mode.diff },
           }
         : step.request;
+    if (request.kind === 'link' && step.outputContract !== undefined) {
+      const outputContract = await step.outputContract();
+      if (outputContract !== undefined)
+        request = { ...request, outputContract };
+    }
 
     // The consumer cannot repair its protected source. Reject these existing
     // parser findings before selecting or constructing any execution strategy.

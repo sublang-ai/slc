@@ -153,6 +153,8 @@ export type ExecuteRequest =
       linkTarget: string;
       options: LinkOptionPair[];
       linked: string;
+      /** Explicit host-owned contract required by a planned deterministic output. */
+      outputContract?: string;
       /**
        * Deterministic gate on the produced linked module, supplied by the host
        * for a `playbook` link over an FSM object (DR-030,

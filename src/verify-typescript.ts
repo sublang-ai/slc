@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 export async function checkFsmTypeScript(
   target: string,
   signal?: AbortSignal,
+  additionalEsmRoots: readonly string[] = [],
 ): Promise<readonly string[]> {
   signal?.throwIfAborted();
   try {
@@ -20,14 +21,17 @@ export async function checkFsmTypeScript(
     throw error;
   }
   signal?.throwIfAborted();
-  const findings = check(resolve(target));
+  const findings = check(resolve(target), additionalEsmRoots);
   // Deliver timers/signals that became ready during synchronous TypeScript work.
   await delay(0);
   signal?.throwIfAborted();
   return findings;
 }
 
-function check(target: string): string[] {
+function check(
+  target: string,
+  additionalEsmRoots: readonly string[],
+): string[] {
   const installed = createRequire(import.meta.url);
   const ts = installed('typescript') as typeof import('typescript');
   const parsed = ts.parseCommandLine([
@@ -64,14 +68,17 @@ function check(target: string): string[] {
       ts.flattenDiagnosticMessageText(parsed.errors[0].messageText, '\n'),
     );
   }
-  const bytes = readFileSync(target, 'utf8');
+  const roots = new Set([
+    target,
+    ...additionalEsmRoots.map((path) => resolve(path)),
+  ]);
   const host = ts.createCompilerHost(parsed.options);
   const getSourceFile = host.getSourceFile.bind(host);
   host.getSourceFile = (name, languageVersion, ...rest) =>
-    resolve(name) === target
+    roots.has(resolve(name))
       ? ts.createSourceFile(
           name,
-          bytes,
+          readFileSync(name, 'utf8'),
           {
             ...(typeof languageVersion === 'object'
               ? languageVersion

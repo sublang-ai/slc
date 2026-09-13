@@ -69,6 +69,7 @@ meta.md       The spec of specs
 | [DR-041](decisions/041-composed-child-input-fidelity.md) | 041-composed-child-input-fidelity.md | Whole-template verification of composed literal child input with observed placeholder dataflow |
 | [DR-042](decisions/042-literal-prompt-relay-fidelity.md) | 042-literal-prompt-relay-fidelity.md | Literal single-pass and multiline quoted prompt-relay verification |
 | [DR-043](decisions/043-stall-watchdog-default-window.md) | 043-stall-watchdog-default-window.md | The agent-stall watchdog's default window becomes 2400 seconds, amending [DR-019](decisions/019-compile-progress-stall-watchdog.md); the watchdog's other rules stand |
+| [DR-044](decisions/044-artifact-owned-entry-options.md) | 044-artifact-owned-entry-options.md | Artifact-owned entry options with explicit new-output validation and legacy compatibility |
 | [DR-045](decisions/045-static-child-coverage-entry.md) | 045-static-child-coverage-entry.md | Bounded child coverage through actual predecessor transitions and reached context |
 
 ## Packages

@@ -133,6 +133,9 @@ export function buildPhasePrompt(opts: {
     ...(request.kind === 'compile' && request.update !== undefined
       ? [...updateContextLines(request.update, request.target), '']
       : []),
+    ...(request.kind === 'link' && request.outputContract !== undefined
+      ? [request.outputContract, '']
+      : []),
     'When done, reply with a concise summary of what you produced and any ambiguity you resolved.',
     'If the inputs are malformed under the definition, or the definition is incompatible with them, do not guess: leave the artifact unwritten and reply with a line beginning "BLOCKED:" followed by the concrete reason(s).',
     '',
