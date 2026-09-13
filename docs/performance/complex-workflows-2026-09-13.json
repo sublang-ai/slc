@@ -200,5 +200,98 @@
         "DEV-5 uses Captain shall first call playbook instead of the fixed nested-call clause. The current parser treats it as direct Captain; FSM generation blocks without a target. This is generated syntax, not unresolved source behavior."
       ]
     }
-  ]
+  ],
+  "preparedInputs": {
+    "c6": {
+      "status": "prepared-only",
+      "compilerRoot": "/private/tmp/slc-c6-compiler-ukczlhl3",
+      "evidenceRoot": "/private/tmp/slc-c6-compiler-ukczlhl3-evidence",
+      "productionSourceCommit": "f44d4c5d751a2b4fbc21b279b5c3cc4a3cf82e2c",
+      "excludes": "uncommitted IR054 harness edits",
+      "cohort": {
+        "path": "/private/tmp/slc-c6-compiler-ukczlhl3-evidence/cohort.json",
+        "bytes": 5382,
+        "sha256": "9d10a74a780e14f0b430a3529b92348d55687f689c255b48c708867b96504a32"
+      },
+      "parentComparison": {
+        "path": "/private/tmp/slc-c6-compiler-ukczlhl3-evidence/parent-comparison.json",
+        "bytes": 5444,
+        "sha256": "db712557269603e62cb814545223bc8d86d11758f16a8a7819d0f7f5b5024060"
+      },
+      "productionSourceTreeSha256": "cfc3f482ed5673eb871a7fa71c942281c2b23b0b2efde83d6e578564c94a1164",
+      "productionScriptsTreeSha256": "ebb314cd43846f628d89719500d83e6f955734fbd602776407a78f66cfc9e304",
+      "changedDistFiles": [
+        "dist/runner.d.ts.map",
+        "dist/runner.js",
+        "dist/runner.js.map",
+        "dist/verify.d.ts",
+        "dist/verify.d.ts.map",
+        "dist/verify.js",
+        "dist/verify.js.map"
+      ],
+      "archivedScriptsCopiedFromCommit": [
+        "scripts/benchmark-runtime.mjs",
+        "scripts/test-acceptance.mjs",
+        "scripts/test-package.mjs",
+        "scripts/verify-artifacts.mjs",
+        "scripts/verify-ci-workflow.mjs",
+        "scripts/verify-playbook-definitions.mjs",
+        "scripts/verify-release-workflow.mjs",
+        "scripts/workflow-acceptance/README.md",
+        "scripts/workflow-acceptance/code.mjs",
+        "scripts/workflow-acceptance/common.mjs",
+        "scripts/workflow-acceptance/dev.mjs",
+        "scripts/workflow-acceptance/maintained-dev.mjs",
+        "scripts/workflow-acceptance/maintained.mjs",
+        "scripts/workflow-acceptance/probe.test.mjs"
+      ],
+      "unchangedInputs": {
+        "dependencies": true,
+        "pipelines": true,
+        "pins": true,
+        "packageManifest": true,
+        "lockfile": true
+      },
+      "wrapperReadiness": {
+        "path": "/private/tmp/slc-c6-wrapper-readiness/evidence.json",
+        "bytes": 3921,
+        "sha256": "5f13f83d359706f1bbd15b9e004fc65bbb2e308e4fe592892354116622da5ba2"
+      },
+      "wrappers": {
+        "full": {
+          "path": "/private/tmp/slc-c6-complex-full-run.mjs",
+          "bytes": 3960,
+          "sha256": "8ef679b354c68ed417c776b9fa41bf1ca433932a8f526b02ee91d86154108629"
+        },
+        "minimal": {
+          "path": "/private/tmp/slc-c6-minimal-run.mjs",
+          "bytes": 3977,
+          "sha256": "d6d317c808c367a270654f713c21e00602121e20d8856d70443fd63807703fcd"
+        }
+      }
+    },
+    "v8": {
+      "status": "prepared-only",
+      "pipelineGeneration": "v8",
+      "corrections": "Definition-only corrections for IR087 child busy handling and IR088 canonical call/onDone wording; no scaffold selected.",
+      "baselinePipeline": "/private/tmp/playbook-13.2-common-v8-baseline",
+      "fullPipeline": "/private/tmp/playbook-13.2-common-v8-full",
+      "readiness": {
+        "path": "/private/tmp/playbook-13.2-common-v8-readiness/evidence.json",
+        "bytes": 11485,
+        "sha256": "7a9e79aa28611d2ab2dd95377c06158db84e20443d3d5c2c2f634ea4f2509f85"
+      },
+      "baselineProof": {
+        "path": "/private/tmp/playbook-13.2-common-v8-baseline/experiment-proof.json",
+        "bytes": 42719,
+        "sha256": "0d6f0ffb8c7f101e053bc72d1b2aa655cc6cef224fe9e7722e95faafe9b977ca"
+      },
+      "fullProof": {
+        "path": "/private/tmp/playbook-13.2-common-v8-full/experiment-proof.json",
+        "bytes": 42715,
+        "sha256": "c86d23c1d2b5f472e205219eacadf7ca117f19413f6282642df6382ac089af59"
+      },
+      "selectionReadiness": "closed input checks recorded in readiness evidence; no measured result claimed"
+    }
+  }
 }
