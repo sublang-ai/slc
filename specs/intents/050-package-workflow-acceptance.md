@@ -24,6 +24,7 @@ Package the reviewed private maintained CODE and DEV runtime acceptance harness 
 
 ## Verification
 
+- `vitest.config.ts` excludes only `scripts/workflow-acceptance/**` from default test collection so the harness remains opt-in and `npm test` does not auto-collect fixture-dependent probes.
 - `PLAYBOOK_ACCEPTANCE_FIXTURE_ROOT="$PWD/node_modules/@sublang/playbook" node --test scripts/workflow-acceptance/probe.test.mjs` passed five probe controls with zero failures.
 - `node scripts/workflow-acceptance/maintained.mjs "$PWD/node_modules/@sublang/playbook" "$CODE_OUT"` passed eighteen maintained CODE cases, wrote `$CODE_OUT/summary.json`, recorded zero provider calls, and left protected artifacts unchanged.
 - `node scripts/workflow-acceptance/maintained-dev.mjs "$PWD/node_modules/@sublang/playbook" "$DEV_OUT"` passed twenty-four maintained DEV cases, wrote `$DEV_OUT/summary.json`, recorded zero provider calls, and left protected artifacts unchanged.

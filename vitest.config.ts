@@ -22,12 +22,15 @@ export default defineConfig({
     // pipelines/ DO run their emitted tests here.
     // demo/workflow*.playbook/ are gitignored end-user compile outputs; the
     // committed copies under demo/reference/ are the ones the suite runs.
+    // Workflow acceptance probes are opt-in because they require an explicit
+    // maintained fixture checkout.
     exclude: [
       '**/node_modules/**',
       'dist/**',
       '.scratch/**',
       'demo/workflow.playbook/**',
       'demo/workflow.zh.playbook/**',
+      'scripts/workflow-acceptance/**',
     ],
   },
 });
