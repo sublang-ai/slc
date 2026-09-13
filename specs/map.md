@@ -75,6 +75,7 @@ meta.md       The spec of specs
 | [DR-047](decisions/047-child-call-quiescence.md) | 047-child-call-quiescence.md | Reject inherited busy tags that prevent nested-child suspension |
 | [DR-048](decisions/048-canonical-actor-diagnostic.md) | 048-canonical-actor-diagnostic.md | Canonical nested-playbook actor-clause diagnostics at the GEARS boundary |
 | [DR-049](decisions/049-early-transition-coverage.md) | 049-early-transition-coverage.md | Exact transition coverage before FSM acceptance and consumption, with cooperative cancellation and protected-input precedence |
+| [DR-050](decisions/050-required-child-relay-substitution.md) | 050-required-child-relay-substitution.md | Observable substitution for explicit child-input relay slots, preserving ordinary literal text and inserted payloads |
 
 ## Packages
 

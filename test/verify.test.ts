@@ -4648,8 +4648,17 @@ describe('composed literal child-input fidelity', () => {
   });
 
   it.each([false, true])(
-    'checks exact static object-valued child input (changed %s)',
+    'checks exact static object-valued child input without relay placeholders (changed %s)',
     (changed) => {
+      const fixedText =
+        'Review the already-rendered child request.\nFinish exactly.';
+      const fixedGears =
+        `### NESTED-1\n\nCaptain shall call playbook ` +
+        '`review`' +
+        `:\n${fixedText
+          .split('\n')
+          .map((line) => `> ${line}`)
+          .join('\n')}\n`;
       const machine = createMachine({
         initial: 'call',
         states: {
@@ -4663,13 +4672,13 @@ describe('composed literal child-input fidelity', () => {
                 stateId: 'call',
                 sourceItem: 'NESTED-1',
                 playbookId: 'review',
-                text: template + (changed ? '\nAn invented instruction.' : ''),
+                text: fixedText + (changed ? '\nAn invented instruction.' : ''),
               },
             },
           },
         },
       });
-      expect(checkGearsFsmConformance(gears, machine.config)).toEqual(
+      expect(checkGearsFsmConformance(fixedGears, machine.config)).toEqual(
         changed
           ? [
               'NESTED-1: FSM playbook text does not preserve the complete GEARS child-input template',
@@ -4678,6 +4687,96 @@ describe('composed literal child-input fidelity', () => {
       );
     },
   );
+
+  it.each([
+    [
+      'object-valued input',
+      {
+        stateId: 'call',
+        sourceItem: 'NESTED-1',
+        playbookId: 'review',
+        text: template,
+      },
+    ],
+    [
+      'constant function input',
+      () => ({
+        stateId: 'call',
+        sourceItem: 'NESTED-1',
+        playbookId: 'review',
+        text: template,
+      }),
+    ],
+    [
+      'partial substitution',
+      ({ context }: { context: Record<string, unknown> }) => ({
+        stateId: 'call',
+        sourceItem: 'NESTED-1',
+        playbookId: 'review',
+        text: template.replaceAll(
+          '<request>',
+          typeof context.unrelatedFirst === 'string'
+            ? context.unrelatedFirst
+            : '',
+        ),
+      }),
+    ],
+  ])('rejects unresolved relay placeholders in %s', (_name, input) => {
+    const machine = createMachine({
+      context: { unrelatedFirst: '' },
+      initial: 'call',
+      states: {
+        call: {
+          id: 'call',
+          meta: { playbook: { stateId: 'call' } },
+          tags: 'playbook.suspended',
+          invoke: { src: 'playbook', input },
+        },
+      },
+    });
+
+    const findings = checkGearsFsmConformance(gears, machine.config);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatch(/^NESTED-1: FSM playbook text /);
+  });
+
+  it('accepts inline code placeholders and ordinary angle text as literal static text', () => {
+    const fixedText = [
+      'Use `<model>` as literal inline code.',
+      String.raw`Label: \<escaped>`,
+      String.raw`\<standalone>`,
+      'Keep ordinary angle text <not-a-slot> in prose.',
+      'Finish exactly.',
+    ].join('\n');
+    const fixedGears =
+      `### NESTED-1\n\nCaptain shall call playbook ` +
+      '`review`' +
+      `:\n${fixedText
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n')}\n`;
+    const machine = createMachine({
+      initial: 'call',
+      states: {
+        call: {
+          id: 'call',
+          meta: { playbook: { stateId: 'call' } },
+          tags: 'playbook.suspended',
+          invoke: {
+            src: 'playbook',
+            input: {
+              stateId: 'call',
+              sourceItem: 'NESTED-1',
+              playbookId: 'review',
+              text: fixedText,
+            },
+          },
+        },
+      },
+    });
+
+    expect(checkGearsFsmConformance(fixedGears, machine.config)).toEqual([]);
+  });
 
   it('rejects an unprovable structured read without replacing its initialized shape', () => {
     const machine = config();

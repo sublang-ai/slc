@@ -3291,10 +3291,21 @@ function literalPlaybookTextFinding(
   initial: Record<string, unknown> | undefined,
 ): string | undefined {
   const input = binding.invoke.input;
+  // Only explicit quoted relay notation establishes required runtime slots.
+  // Domain metavariables and inline-code examples remain literal template text.
+  const requiredRelays = new Set(
+    prompt.split(/\r?\n/).flatMap((line) => {
+      const token = /^> (?:[^<>\r\n]+: )?(<[^\s<>`]{1,60}>)$/.exec(line)?.[1];
+      return token === undefined ? [] : [token];
+    }),
+  );
+  const unresolvedRelay = (token: string): string =>
+    `leaves quoted child-input relay ${token} unresolved`;
   if (typeof input !== 'function') {
-    return binding.state.text === prompt
-      ? undefined
-      : 'does not preserve the complete GEARS child-input template';
+    if (binding.state.text !== prompt)
+      return 'does not preserve the complete GEARS child-input template';
+    const token = requiredRelays.values().next().value;
+    return token === undefined ? undefined : unresolvedRelay(token);
   }
   const base = initial ?? {};
   const fields = new Set<string>();
@@ -3345,7 +3356,10 @@ function literalPlaybookTextFinding(
       return `uses inconsistent context substitutions for ${token}`;
     }
     observed.set(token, value);
-    if (value === token) continue;
+    if (value === token) {
+      if (requiredRelays.has(token)) return unresolvedRelay(token);
+      continue;
+    }
     const field = [...fields].find((name) => value === sentinelFor(name));
     if (field === undefined) return `has unsupported composition for ${token}`;
     mapping.set(token, { field });
