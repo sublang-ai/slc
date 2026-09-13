@@ -12,6 +12,7 @@ import { identities } from './common.mjs';
 // they are deliberately not defaults for a freshly generated artifact.
 export const maintainedCodeProfile = {
   role: 'coder',
+  questionRepositoryDisposition: 'deferred',
   select(semantic, { ir, task }) {
     if (semantic === 'question') return { guard: 'needsBossReply' };
     if (semantic === 'direct') return { guard: 'directCommit' };

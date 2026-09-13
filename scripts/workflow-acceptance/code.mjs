@@ -128,6 +128,15 @@ export async function runCodeScenario(config, scenario) {
         (match) => match[1],
       );
       supported(blocks.length === 3, 'source instruction profile changed');
+      const questionRepositoryDisposition = scenario.questionMode
+        ? profile.questionRepositoryDisposition
+        : undefined;
+      if (scenario.questionMode)
+        supported(
+          questionRepositoryDisposition === 'deferred' ||
+            questionRepositoryDisposition === 'unchanged',
+          'CODE question cases require profile.questionRepositoryDisposition',
+        );
       const repo = await nestedGit(output);
       const steps = [...scenario.steps];
       const ownCommits = [],
@@ -410,9 +419,17 @@ export async function runCodeScenario(config, scenario) {
             kind: 'role',
             roleId: profile.role,
           });
-          const operation = snapshot.effectLedger.logicalOperations.at(-1);
-          assert(operation, 'CODE ambiguous IR uses deferred chain');
-          assert.equal(operation.pendingQuestion.question, QUESTION);
+          if (questionRepositoryDisposition === 'deferred') {
+            const operation = snapshot.effectLedger.logicalOperations.at(-1);
+            assert(operation, 'CODE ambiguous IR uses deferred chain');
+            assert.equal(operation.pendingQuestion.question, QUESTION);
+          } else {
+            assert.equal(
+              snapshot.effectLedger.logicalOperations.length,
+              0,
+              'unchanged CODE question does not create a deferred chain',
+            );
+          }
           if (scenario.questionMode === 'resume')
             assert.equal(
               snapshot.roleResumeTokens[profile.role],
@@ -500,11 +517,19 @@ export async function runCodeScenario(config, scenario) {
               'requires public pending-question inspection',
             );
             assert.equal(runtime.describe().pendingQuestions.length, 0);
-            assert.equal(
-              host.effectLedger.snapshot().logicalOperations.at(-1)
-                .logicalReceipt.classification,
-              'one-descendant-commit',
-            );
+            if (questionRepositoryDisposition === 'deferred') {
+              assert.equal(
+                host.effectLedger.snapshot().logicalOperations.at(-1)
+                  .logicalReceipt.classification,
+                'one-descendant-commit',
+              );
+            } else {
+              assert.equal(
+                host.effectLedger.snapshot().logicalOperations.length,
+                0,
+                'unchanged CODE question does not invent a deferred chain after answer',
+              );
+            }
           }
         } else if (expected === 'authored-failure') {
           assert.equal(result.outcome, 'terminal');

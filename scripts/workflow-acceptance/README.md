@@ -52,3 +52,6 @@ A generated artifact can reuse the core runners only through an explicitly revie
 The caller must supply `{ registry, createHost, assertSnapshot, construct, profile, source, output, protectedPaths }` matching the actual generated public entry and fixture scope.
 Do not reuse `maintainedCodeProfile` or `maintainedDevProfile` as defaults for generated artifacts; they encode reviewed maintained-only guard names and result fields.
 If a generated artifact advertises different guards, role ids, entry options, child contracts, or question/result ownership, provide a matching profile or report the artifact unsupported.
+CODE question-continuation profiles must also declare `questionRepositoryDisposition`.
+Use `deferred` for the maintained canonical `needsBossReply` profile, where the checkpoint carries a pending-question logical operation and the final ledger records a one-descendant logical receipt.
+Use `unchanged` for reviewed generated profiles whose source advertises an authored unchanged `question` outcome; those checkpoints and final ledgers must carry no logical operations while the public pending Boss question, snapshot/restore behavior, prompt relays, Git checks, final commit, and review assertions still run.
