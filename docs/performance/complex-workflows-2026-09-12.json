@@ -1,0 +1,216 @@
+{
+  "schema": "sublang.slc.complex-workflow-evaluation.v1",
+  "status": "in progress",
+  "recordedAt": "2026-09-13T03:46:25.833081+00:00",
+  "sourceBaseline": "a000e37815024acc8051855adda72fcedbbfcedb",
+  "corpus": "clarification-corpus/manifest.json",
+  "cohort": {
+    "id": "current-13.2-opus5-low-compiled-1",
+    "compilerRoot": "/private/tmp/slc-current-compiler-MOt9vO",
+    "productionCommit": "84b80bb",
+    "harnessCommit": "39475e7",
+    "manifest": "/private/tmp/slc-current-compiler-MOt9vO-evidence/cohort.json",
+    "manifestSha256": "6beefff5197908a264b252630693d88e8283b5e1d69be912b5c63bb479c3282c",
+    "agent": "claude-code",
+    "model": "claude-opus-5",
+    "effort": "low",
+    "fastMode": false,
+    "reviewer": false,
+    "sourceReferencesExcluded": ["CODE", "DEV", "DECIDE", "REVIEW"],
+    "requiredOperationalException": "CAPTAIN runtime and exact host-capability facade closure; no tested workflow implementation, declaration or source is included."
+  },
+  "runs": [
+    {
+      "caseId": "case-001",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "success",
+      "apiOutcome": "success",
+      "phaseAccepted": true,
+      "semanticVerdict": "inconclusive semantic fidelity; phase/no-ask pass",
+      "sourceSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "executionElapsedMs": 143856,
+      "phaseElapsedMs": 143471,
+      "preparationElapsedMs": 802,
+      "agentCalls": 4,
+      "questions": 0,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-sSZDTt/summary.json",
+        "sha256": "40c20b969447429fdbae73553895873d353eb942b79fa060ebb6b6dbf4d7f0ee"
+      },
+      "fullArtifactAccepted": false,
+      "semanticReason": "The universal exact review-revision predicate is retained under CODE-4 but its application to CODE-3 is ambiguous. Require source-aware bad-child revision runtime tests before full acceptance.",
+      "adjudication": {
+        "path": "/private/tmp/slc-current-code-adjudication/evidence.json",
+        "sha256": "f88e5ea8b107fa91d7d6992d51cc368cce51786a6aa7c58eb1630482e1097671"
+      }
+    },
+    {
+      "caseId": "case-002",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "clarification-required",
+      "apiOutcome": "clarification-required",
+      "phaseAccepted": false,
+      "semanticVerdict": "pass: intended contradiction identified",
+      "sourceSha256": "af23d5f74fbd386d2303d1ac76c25cec76c488dfb7f9c035a72975687e42c39a",
+      "executionElapsedMs": 17884,
+      "phaseElapsedMs": 17538,
+      "preparationElapsedMs": 753,
+      "agentCalls": 1,
+      "questions": 1,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-HqwHkl/summary.json",
+        "sha256": "440418a72e467a7e5cedf4a356a8912c103c315e4ed51cf576eb079d31f126f2"
+      },
+      "clarificationReportSha256": "846aa22dcb5050507f537d9d57edef9239ff1066dcb384132e0f534dc1d1552e",
+      "fullArtifactAccepted": false,
+      "semanticReason": "One question identifies both universal same-trigger review obligations, selects neither, and raises no unrelated runtime-IR question.",
+      "adjudication": {
+        "path": "/private/tmp/slc-current-code-adjudication/evidence.json",
+        "sha256": "f88e5ea8b107fa91d7d6992d51cc368cce51786a6aa7c58eb1630482e1097671"
+      }
+    },
+    {
+      "caseId": "case-003",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "success",
+      "apiOutcome": "success",
+      "phaseAccepted": true,
+      "semanticVerdict": "pass: source-to-GEARS fidelity",
+      "sourceSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "executionElapsedMs": 100228,
+      "phaseElapsedMs": 99476,
+      "preparationElapsedMs": 1021,
+      "agentCalls": 3,
+      "questions": 0,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-wIYKZ1/summary.json",
+        "sha256": "bf58648caf01582169a8e4ca6246ccbe742f9061a0f9b7f51c41f296c277d11b"
+      },
+      "semanticReason": "Independent review confirms four outcomes, runtime IR clarification and explicit strict scope/exact-revision/no-unsettled-findings predicates on both nested review branches. Full compilation/runtime untested."
+    },
+    {
+      "caseId": "case-004",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "success",
+      "apiOutcome": "success",
+      "phaseAccepted": true,
+      "semanticVerdict": "pass: source-to-GEARS fidelity",
+      "sourceSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
+      "executionElapsedMs": 119437,
+      "phaseElapsedMs": 119064,
+      "preparationElapsedMs": 784,
+      "agentCalls": 4,
+      "questions": 0,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-Xs29tk/summary.json",
+        "sha256": "c0a218f2cb07c59681a2fd2e202705930b069d5fa6a9954693a0e5f7243806de"
+      },
+      "semanticReason": "Independent review confirms concurrent independent proposal dispatch, exact topic prompts, joined synthesis, Reviewer-only relay and strict nested-review scope/revision/failure conditions. Full compilation/runtime untested."
+    },
+    {
+      "caseId": "case-005",
+      "scope": "phase",
+      "phase": "playbook.text2gears",
+      "status": "clarification-required",
+      "apiOutcome": "clarification-required",
+      "phaseAccepted": false,
+      "semanticVerdict": "pending independent adjudication",
+      "sourceSha256": "9d02810984c1f935e0cf2bf78273efc63037915670e850565874aa8785e3fd0d",
+      "executionElapsedMs": 23465,
+      "phaseElapsedMs": 23072,
+      "preparationElapsedMs": 715,
+      "agentCalls": 1,
+      "questions": 1,
+      "executorKinds": ["compiled"],
+      "comparison": {
+        "eligible": true,
+        "reasons": [],
+        "scope": "phase-only; no semantic-oracle or full-compilation verdict"
+      },
+      "preservation": {
+        "sourceUnchanged": true,
+        "cohortUnchanged": true,
+        "pipelineClosureComplete": true
+      },
+      "history": {
+        "apiAvailable": true,
+        "published": false
+      },
+      "actualCliExit": null,
+      "evidence": {
+        "path": "/private/tmp/slc-current-corpus-evidence/phase-9zSdlp/summary.json",
+        "sha256": "a0eb5038b07a2bcea67b2b53440ca8838fbf1e86832f720267728f86c25f02dc"
+      },
+      "clarificationReportSha256": "0b40ec4e85207ddb584585d087d3740b2b8389930a8fb6501817e88d52614dbd"
+    }
+  ],
+  "scopeLimit": "Phase success and absence of a question do not establish full compilation or semantic/runtime correctness. Keep separate independent adjudications and all attempts."
+}

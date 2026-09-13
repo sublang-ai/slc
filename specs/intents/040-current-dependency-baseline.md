@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress
+Completed
 
 ## Intent
 
@@ -16,13 +16,13 @@ Adopt current published dependencies before the comprehensive performance and cl
 - [x] Registry-audited runtime, provider SDK, and development dependency updates.
 - [x] Reviewed Spex grammar and Playbook definition adoption with current pins.
 - [x] A supported TypeScript CLI and programmatic API arrangement.
-- [ ] Passing release checks and an immutable experiment baseline.
+- [x] Passing release checks and an immutable experiment baseline.
 
 ## Tasks
 
 1. [x] Review dependency changes and update the manifest and lockfile.
 2. [x] Reconcile installed definitions, grammar inputs, retained artifacts, and pins under [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md).
-3. [ ] Run the complete release checks, update affected reproduction guidance, and freeze the validated baseline.
+3. [x] Run the complete release checks, update affected reproduction guidance, and freeze the validated baseline.
 
 ## Verification
 
@@ -31,3 +31,6 @@ Adopt current published dependencies before the comprehensive performance and cl
 - Keep this repository's spec-authoring law unchanged while separately reviewing the installed Spex semantic grammar.
 - Verify installed Playbook ABI/schema, byte-identical definitions, generated suites and independent contracts, both reference demos, reproducible pins, and production package smoke.
 - Rebuild a reviewed artifact only if its retention checks fail; retain the evidence and explain any compatibility-driven exception.
+
+The validated dependency adoption is committed at `84b80bb`; the isolated compiler and exact dependency inventories are recorded in `docs/performance/complex-workflows-2026-09-12.json`.
+Both ordinary execution strategies were verified before real provider cases began.
