@@ -30,6 +30,7 @@ async function entryFixture({
   classifyWithJudge = false,
   taskPresentation = 'literal',
   taskDrift = 'none',
+  rejectCwdOption = false,
 } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'slc-runtime-entry-'));
   directories.push(directory);
@@ -90,6 +91,7 @@ const factory = createXStatePlaybookRuntime(machine, {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Invalid options');
     const options: Record<string, string> = {};
     for (const [key, field] of Object.entries(value)) {
+      if (${JSON.stringify(rejectCwdOption)} && key === 'cwd') throw new Error('cwd is artifact-owned and not accepted');
       if (typeof field !== 'string') throw new Error('Invalid option value');
       options[key] = field;
     }
@@ -112,6 +114,21 @@ export default {
 describe('minimal benchmark source acceptance', () => {
   it('drives an emitted entry with real host capabilities and a committed exact Boss task', async () => {
     const result = await checkMinimalRuntime({ entry: await entryFixture() });
+    expect(result).toMatchObject({
+      ok: true,
+      ownRepository: true,
+      exactBossTask: true,
+      taskPresentation: 'literal',
+      performingCalls: 1,
+      commits: 1,
+      terminalKind: 'success',
+    });
+  });
+
+  it('drives an artifact-owned-options entry whose validator rejects cwd', async () => {
+    const result = await checkMinimalRuntime({
+      entry: await entryFixture({ rejectCwdOption: true }),
+    });
     expect(result).toMatchObject({
       ok: true,
       ownRepository: true,

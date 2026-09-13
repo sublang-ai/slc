@@ -125,6 +125,7 @@ export async function checkMinimalRuntime({
   let performingFailure;
   let taskPresentation;
   const started = performance.now();
+  const originalCwd = process.cwd();
   try {
     signal.throwIfAborted();
     git(directory, 'init', '-q');
@@ -132,15 +133,17 @@ export async function checkMinimalRuntime({
     git(directory, 'add', 'ancestor.txt');
     commit(directory);
     const ancestorHead = git(directory, 'rev-parse', 'HEAD');
+    const resolvedEntry = resolve(entry);
     mkdirSync(workdir);
-    const registryEntry = (await import(pathToFileURL(resolve(entry)).href))
+    process.chdir(workdir);
+    const registryEntry = (await import(pathToFileURL(resolvedEntry).href))
       .default;
-    const require = createRequire(pathToFileURL(resolve(entry)));
+    const require = createRequire(pathToFileURL(resolvedEntry));
     const { createWorktreeHostCapabilities } = await import(
       pathToFileURL(require.resolve('@sublang/playbook/host-capabilities')).href
     );
     runtime = registryEntry.createRuntime(
-      { captainOptions: { cwd: workdir } },
+      {},
       await createWorktreeHostCapabilities({
         cwd: workdir,
         playbookId: registryEntry.id,
@@ -322,6 +325,7 @@ export async function checkMinimalRuntime({
     try {
       await runtime?.dispose();
     } finally {
+      process.chdir(originalCwd);
       rmSync(directory, { recursive: true, force: true });
     }
   }
