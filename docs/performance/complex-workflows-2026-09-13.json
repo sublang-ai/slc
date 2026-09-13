@@ -199,6 +199,134 @@
       "findings": [
         "DEV-5 uses Captain shall first call playbook instead of the fixed nested-call clause. The current parser treats it as direct Captain; FSM generation blocks without a target. This is generated syntax, not unresolved source behavior."
       ]
+    },
+    {
+      "run": "compile-5eWTLQ",
+      "status": "success",
+      "scope": "minimal-runtime-confirmation",
+      "compilerRoot": "/private/tmp/slc-c6-compiler-ukczlhl3",
+      "pipeline": "/private/tmp/playbook-13.2-common-v8-full",
+      "source": {
+        "path": "/private/tmp/slc-c6-minimal-evidence/compile-5eWTLQ/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": "/private/tmp/slc-performance-evidence/compile-9lTnki/work/minimal.txt"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c6-minimal-evidence/compile-5eWTLQ/summary.json",
+        "bytes": 43504,
+        "sha256": "86dc9e6adf8b69c52068bdec18ae5a6291c020706befee74f59c0eb788ab5216"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c6-minimal-evidence/invocation-UwV4e6/proof.json",
+        "bytes": 2737466,
+        "sha256": "f42205fb9021d9107e352472814438dc691874dfd506079d3cfc5e208055006b"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 237479,
+        "outcome": null
+      },
+      "elapsedMs": 243459,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 36707
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 16458
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 17403
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 98364
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 68402
+        }
+      ],
+      "calls": [
+        {
+          "phase": "normalize",
+          "status": "success",
+          "toolCalls": 5,
+          "elapsedMs": 37059
+        },
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "toolCalls": 1,
+          "elapsedMs": 16942
+        },
+        {
+          "phase": "optimize",
+          "status": "success",
+          "toolCalls": 1,
+          "elapsedMs": 17891
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "success",
+          "toolCalls": 2,
+          "elapsedMs": 69902
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "success",
+          "toolCalls": 2,
+          "elapsedMs": 27880
+        },
+        {
+          "phase": "link",
+          "status": "success",
+          "toolCalls": 7,
+          "elapsedMs": 67101
+        }
+      ],
+      "callCount": 6,
+      "validation": {
+        "ok": true,
+        "strictTypeScript": true,
+        "entryImport": true,
+        "suite": true,
+        "testFiles": 4,
+        "tests": 8,
+        "elapsedMs": 5965
+      },
+      "runtime": {
+        "ok": true,
+        "profile": "minimal",
+        "exactBossTask": true,
+        "taskPresentation": "literal",
+        "ownRepository": true,
+        "commits": 1,
+        "elapsedMs": 1224
+      },
+      "protectedInputs": {
+        "before": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "finding": "The minimal benchmark completed under five minutes with runtime confirmation; it is not a causal speed attribution across compiler or definition versions."
     }
   ],
   "preparedInputs": {
