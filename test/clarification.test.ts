@@ -209,6 +209,7 @@ describe('stateless source clarification integration (clarification-9, clarifica
 
   it.each([
     'CLARIFICATION: not JSON',
+    report.slice(0, -1),
     `CLARIFICATION: ${JSON.stringify({ questions: [] })}`,
     `CLARIFICATION: ${JSON.stringify({ questions: [...questions, ...questions] })}`,
     `CLARIFICATION: ${JSON.stringify({ questions: [{ ...questions[0], evidence: '' }] })}`,

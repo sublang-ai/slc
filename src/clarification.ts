@@ -101,6 +101,7 @@ export function clarificationContract(): string {
     '- Only when unresolved source behavior requires clarification, end your reply with CLARIFICATION: followed by one JSON object and no trailing prose or Markdown fence:',
     'CLARIFICATION: {"questions":[{"id":"q1","question":"What behavior should the source specify?","reason":"Why this choice is necessary to compile.","evidence":"Exact source excerpt or location of missing information."}]}',
     '- Use exactly the shown fields, with nonblank strings and unique question ids; each question may additionally include "choices", an array of at least two distinct nonblank alternatives. Never select an answer.',
+    '- Before sending, verify that the report is complete, syntactically valid JSON: escape strings and close every array and object, including the final top-level object. A truncated report is an execution error and cannot deliver your questions.',
     '- When the source is sufficient, complete the artifact normally and omit the CLARIFICATION marker entirely. Never emit an empty questions array or a no-clarification report.',
     '- This host report protocol also applies when the definition describes unresolved behavior as BLOCKED; use BLOCKED for other malformed or incompatible inputs.',
   ].join('\n');
