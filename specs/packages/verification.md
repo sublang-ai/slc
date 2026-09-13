@@ -31,6 +31,7 @@ When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc 
 | Immutable schema-1 delegated-player leaf | Invoke `player` and carry its source-declared player through the historical `invoke.input.player` contract without being relabelled as schema 3. |
 | Literal nested-playbook leaf | Invoke `playbook`, carry the same id and literal target, and preserve the child-input template through the composed-text check [[verification-39](#verification-39)]. |
 | Dynamic nested-playbook leaf | Invoke `playbook`, carry the same id, preserve the GEARS target-field name and sole child-text placeholder as literal `playbookIdContext` and `textContext` metadata, and evaluate `playbookId` and `text` to independent sentinel values supplied through those exact named context fields without source-text inspection. |
+| Nested-playbook invocation | Pass the child-call busy-tag check [[verification-45](#verification-45)]. |
 | Schema-3 parallel group | Represent each simultaneously active region by its canonical role id, require those region ids to be pairwise distinct, and appear exactly once in the FSM's `concurrentRoleSets` export in source group and region order. |
 | Schema-3 artifact with no parallel group | Export `concurrentRoleSets` as the exact empty array. |
 | Schema-3 root final state, once any root final state of the artifact declares a terminal kind | Carry `meta.playbook.terminal` equal to exactly `success` or `failure`, so a caller reads the reached outcome's published meaning from the machine; a final inside a parallel region stages the join and declares no kind, and an artifact retained from before the kind was compiled declares none at all and is exempt. |
@@ -266,6 +267,12 @@ When checking FSM transition coverage, the slc command shall drive `script` acto
 
 When the slc command emits a `.ts` or `.js` module as a linked target after full or direct linking [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)] and generic post-link settlement [[pipeline-40](pipeline.md#pipeline-40)], or as a `playbook` entry module [[self-hosting-15](self-hosting.md#self-hosting-15)], it shall verify that every relative import specifier in the emitted module resolves exactly from the module's own location and shall fail the run with a diagnostic naming the module and each unresolvable specifier ([DR-023](../decisions/023-host-settled-link-object-imports.md)); a compile whose output cannot load is a failed compile, not a success with a latent runtime error, as exposed by the [[release-17](release.md#release-17)] acceptance gate when an interpreted link emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.
 
+### Child-call tags
+
+#### verification-45
+
+When checking an FSM's child-call suspension contract, the verifier shall report each nested-playbook invocation whose state, an ancestor state, or the machine root carries `playbook.busy`, identifying the invocation and the offending tag locations while excluding sibling states from inheritance and accepting either string or array tag declarations ([DR-047](../decisions/047-child-call-quiescence.md)).
+
 ## Verification
 
 ### Reference acceptance
@@ -447,6 +454,12 @@ Where real XState fixtures contain non-preemptive actor and child paths, when th
 | Runnable paths exceeding eight invocations or 64 replay attempts | Report the specific exhausted limit without treating the finite search as proof of semantic impossibility. |
 | Actor output seeds with accessors, non-enumerable or immutable data properties, symbol keys and a null prototype | Agree with actual XState guard execution while preserving the original seed descriptors and fresh candidate isolation. |
 | Emitted maintained DEV coverage test and a shorter bounded fixture | Execute the emitted test with the derived timeout capped at 300,000 milliseconds, and preserve the shorter fixture's smaller derived bound. |
+
+### Child-call quiescence
+
+#### verification-46
+
+Where real XState fixtures include child invocations with leaf, ancestor, root and sibling busy tags, when the integration suite runs, it shall verify that the child-call findings agree with actual tag inheritance and shared-runtime quiescence under a pending child, preserving valid suspended children and independently busy siblings [[verification-45](#verification-45)].
 
 ## References
 

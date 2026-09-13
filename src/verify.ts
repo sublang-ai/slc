@@ -233,6 +233,7 @@ export async function playbookProvenanceForLinkTarget(
 export interface MachineConfigLike {
   initial?: string;
   meta?: unknown;
+  tags?: string | readonly string[];
   states?: Record<string, StateLike>;
   on?: Record<string, unknown>;
   /** The machine's initial context: a literal record or an input-taking factory. */
@@ -1467,6 +1468,33 @@ function concurrentRoleSets(value: unknown): string[][] | undefined {
   return sets;
 }
 
+/** Reject tags that prevent the public runtime returning a pending child. */
+export function checkFsmChildSuspension(config: MachineConfigLike): string[] {
+  const nodes = walkStateNodes(config);
+  const busy = (tags: MachineConfigLike['tags']): boolean =>
+    typeof tags === 'string'
+      ? tags === 'playbook.busy'
+      : tags?.includes('playbook.busy') === true;
+  return enumeratePlaybookBindings(config).flatMap(({ node, state }) => {
+    const locations = [
+      ...(busy(config.tags) ? ['machine root'] : []),
+      ...nodes
+        .filter(
+          (ancestor) =>
+            ancestor.path.length <= node.path.length &&
+            ancestor.path.every((key, index) => key === node.path[index]) &&
+            busy(ancestor.state.tags),
+        )
+        .map((ancestor) => ancestor.statePath),
+    ];
+    return locations.length === 0
+      ? []
+      : [
+          `FSM playbook state ${state.stateId}: playbook.busy on ${locations.join(', ')} prevents returning a suspended child call; remove that tag from the call state and its ancestors`,
+        ];
+  });
+}
+
 /**
  * Checks GEARS↔FSM conformance and returns human-readable findings (empty when
  * conformant): every GEARS item maps to one state with the same player and the
@@ -1555,6 +1583,7 @@ export function checkGearsFsmConformance(
   }
 
   const nodes = walkStateNodes(config);
+  findings.push(...checkFsmChildSuspension(config));
   findings.push(...structuredStateIdentityFindings(nodes));
   findings.push(...roleContract.findings);
   const schema3 =

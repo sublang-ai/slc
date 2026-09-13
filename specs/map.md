@@ -72,6 +72,7 @@ meta.md       The spec of specs
 | [DR-044](decisions/044-artifact-owned-entry-options.md) | 044-artifact-owned-entry-options.md | Artifact-owned entry options with explicit new-output validation and legacy compatibility |
 | [DR-045](decisions/045-static-child-coverage-entry.md) | 045-static-child-coverage-entry.md | Bounded child coverage through actual predecessor transitions and reached context |
 | [DR-046](decisions/046-bounded-child-chain-coverage.md) | 046-bounded-child-chain-coverage.md | Bounded child-path replay for non-preemptive workflows and chained children |
+| [DR-047](decisions/047-child-call-quiescence.md) | 047-child-call-quiescence.md | Reject inherited busy tags that prevent nested-child suspension |
 
 ## Packages
 

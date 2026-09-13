@@ -90,6 +90,7 @@ import {
 import {
   artifactSchemaForPlaybookProvenance,
   checkFsmContinuationInputs,
+  checkFsmChildSuspension,
   checkGearsFsmConformance,
   checkGearsResultContract,
   checkLinkedModuleContract,
@@ -1169,6 +1170,7 @@ async function fsmContinuationFindings(
   signal?.throwIfAborted();
   return [
     ...schema.findings,
+    ...checkFsmChildSuspension(config),
     ...(schema.artifactSchema === undefined || schema.findings.length > 0
       ? []
       : checkFsmContinuationInputs(config, schema.artifactSchema)),
