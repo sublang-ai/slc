@@ -3,6 +3,8 @@
 
 # Compilation performance: 2026-09-12 results
 
+> Current status: the accepted C10/v13 CODE result is a resumed phase-chain from accepted GEARS with a matched link-pair comparison, recorded in `docs/performance/code-link-pair-2026-09-14.json`; it is not a cold full-source CODE timing. See `docs/compilation-verification.md` and `docs/performance/complex-workflows-2026-09-13.json` for final scoped evidence.
+
 The five-minute target is **demonstrated**: the [cold minimal Opus 5 run](</private/tmp/slc-performance-evidence/compile-9lTnki/summary.json>) completes generation in **193.61 seconds** and every acceptance check in **196.60 seconds (3 minutes 16.60 seconds)**. It uses one compilation agent at low effort, five calls and eight tools. Strict TypeScript, entry import, all four generated suites/eight tests, and real Git runtime acceptance pass in the original run; exactly one delegated call receives the literal Boss task and makes one commit in its own repository. This is one accepted observation, not a general latency guarantee or an isolated model/technique comparison.
 
 Use the [exact local reproduction recipe](compilation-reproduction.md) to rebuild the measured compiler and definition overlay with explicit settings, without relying on the global command.

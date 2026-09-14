@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress.
+Complete.
 
 ## Intent
 
@@ -16,12 +16,12 @@ Reject unresolved explicit child-input relays through the existing conformance b
 - [x] Narrow relay-notation decision and synchronized verification contract.
 - [x] Conformance rejection for static, constant-function, and partially substituted required relay slots.
 - [x] Integration coverage preserving literal metavariables, repeated mappings, and quoted runtime payloads.
-- [ ] Immutable real-artifact controls and an accepted corrected CODE compilation with runtime verification.
+- [x] Immutable real-artifact controls and an accepted corrected CODE compilation with runtime verification.
 
 ## Tasks
 
 1. [x] Implement and verify required relay substitution at the existing conformance boundary.
-2. [ ] Freeze corrected compiler inputs, validate the preserved failing and accepted artifacts, and record the real CODE result.
+2. [x] Freeze corrected compiler inputs, validate the preserved failing and accepted artifacts, and record the real CODE result.
 
 ## Verification
 
@@ -32,4 +32,4 @@ Reject unresolved explicit child-input relays through the existing conformance b
 - An earlier concurrent full run had eight timeout-shaped failures across four files; all 100 tests in those files passed in isolation before the successful complete rerun, with no assertions or timeouts changed.
 - `/private/tmp/slc-ir058-real-artifact-control.json` with SHA-256 `95fe7fec22884550ea83d05f03e2836e58a18113c5635307b8cc844035687e9d` records the previous checker accepting preserved `pYzD5x`, the corrected checker rejecting its two unresolved child relays, and both checkers accepting unchanged DEV `wm3i4U`; all 11905 C8 compiler/dependency records and four source artifacts remained unchanged.
 - The real-artifact control supplied each FSM's actual exported `concurrentRoleSets`; its initial private attempt omitted that checker option and is preserved separately as a harness setup failure.
-- Build, scoped lint, and global Spex validation passed; corrected provider/runtime acceptance remains pending.
+- Build, scoped lint, and global Spex validation passed. Historically, C8 `compile-pYzD5x` remains the retained failing artifact for the missing relay. The final accepted C10/v13 phase-chain evidence records the original source, unchanged accepted GEARS, real FSM, real link, normal entry emission, and both matched link arms passing 18 runtime cases.

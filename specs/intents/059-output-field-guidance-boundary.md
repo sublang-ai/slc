@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress.
+Complete.
 
 ## Intent
 
@@ -15,12 +15,12 @@ Reject ambiguous generated output-field guidance before downstream compilation w
 
 - [x] Record the bounded syntax decision and synchronize verification requirements.
 - [x] Implement the producer diagnostic and integration coverage for repair, protected consumption, and legal guidance.
-- [ ] Record preserved real-artifact controls and a corrected live compilation with runtime acceptance.
+- [x] Record preserved real-artifact controls and a corrected live compilation with runtime acceptance.
 
 ## Tasks
 
 1. [x] Implement and validate the result-guidance boundary with unchanged runtime field extraction.
-2. [ ] Record real-run evidence and corrected workflow acceptance.
+2. [x] Record real-run evidence and corrected workflow acceptance.
 
 ## Verification
 
@@ -34,4 +34,4 @@ Reject ambiguous generated output-field guidance before downstream compilation w
 - That control is not a compilation: its postrun proof, SHA-256 `fa6fe2d32df5204d569513bbf4b591594cb84bbcdcb0b35378af39db69363cc0`, records zero provider calls and all 11935 protected records unchanged.
 - The initial control setup expected one occurrence instead of the actual two and stopped before execution; the first runtime control passed 16 cases because two private negative fixtures accidentally mutated the parent-output field name rather than the child REVIEW field `evaluatedRevision`.
 - The corrected profile restores those two child mutations and explicitly asserts their malformed shape before running the unchanged acceptance harness; the initial setup, original profile, and 16-case result remain preserved.
-- Build, scoped ESLint, global Spex, published-definition verification, artifact verification, and unchanged pin currentness passed; live corrected compilation remains pending.
+- Build, scoped ESLint, global Spex, published-definition verification, artifact verification, and unchanged pin currentness passed. Historically, C9 `compile-LoUfNr` remains the retained failing artifact and the retrospective copy remains non-compilation control evidence. The final accepted C10/v13 phase-chain evidence records corrected workflow acceptance through original source, unchanged accepted GEARS, real FSM, real link, normal entry emission, and both matched link arms passing 18 runtime cases.

@@ -1,9 +1,7 @@
 {
   "schema": 1,
-  "recordedAt": "2026-09-13T14:12:01.270587+00:00",
-  "scope": "C5 full CODE/DEV failures, C6-v8 minimal acceptance, C7 CODE runtime control after failed full benchmark, accepted C7 full DEV, C7 fixed-link materializer candidate evidence, C8-v9 full CODE linker-contract failure, and accepted C8 REVIEW text2gears phase evidence; no accepted CODE full benchmark or percentage fixed-link speed ratio, C8 DEV fixed-FSM paired link controls, and v11 CODE/DEV compiler-stage/runtime audit results.",
-  "compilerCommit": "662d73aaefe4f18564c62c63984bd2b9b3b9aca9",
-  "pipelineGeneration": "v7",
+  "recordedAt": "2026-09-14T09:07:39.326934+00:00",
+  "scope": "Historical C5\u2013C10 attempts; accepted current-dependency minimal and full DEV; accepted C10/v13 resumed CODE source-to-entry correctness and a matched fixed-FSM CODE link comparison. Earlier failures are retained; no accepted cold full-source CODE timing or DEV speed ratio.",
   "runs": [
     {
       "run": "compile-anx8n4",
@@ -2584,6 +2582,448 @@
       "fullWorkflowAccepted": false,
       "acceptedSpeedRatio": null,
       "correctiveScope": "Resume real FSM generation from its accepted GEARS, then fresh matched links, preserving original source/GEARS/artifacts. This does not become a new cold full-source benchmark."
+    },
+    {
+      "run": "phase-2E2YFN",
+      "status": "phase-success",
+      "scope": "C10/v13 resumed CODE gears2fsm from accepted C10 GEARS; phase-chain scope, not a cold full-source benchmark",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v13-full",
+      "phase": "playbook.gears2fsm",
+      "elapsedMs": 510560,
+      "executionElapsedMs": 509832,
+      "summary": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/summary.json",
+        "bytes": 427798,
+        "sha256": "ab681bbaf0c8a7e14a880e438bf3f42aa1ef8d20bf8b3d657710698d83bbe873"
+      },
+      "source": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.gears.md",
+        "bytes": 8788,
+        "sha256": "56f5310b37bae6f40cc132cdccd1cf7ffa5cef4ef22eff7801d25e8d779252ef"
+      },
+      "sourceFixture": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.gears.md",
+        "bytes": 8788,
+        "sha256": "56f5310b37bae6f40cc132cdccd1cf7ffa5cef4ef22eff7801d25e8d779252ef"
+      },
+      "acceptedFsm": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts",
+        "bytes": 33116,
+        "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d"
+      },
+      "entryControl": {
+        "path": "/private/tmp/slc-c10-v13-entry-control.json",
+        "bytes": 528,
+        "sha256": "9e3ab82caa3f0182ace7c5990c4f14dc5d36febfb594a670687e23eecf90ffd5"
+      },
+      "entryControlScope": "Accepted resumed FSM through actual XState with empty construction options; no linked runtime or full compilation claim",
+      "callCount": 2,
+      "calls": [
+        {
+          "id": 1,
+          "status": "success",
+          "resumed": false,
+          "elapsedMs": 425943,
+          "providerDurationMs": 421053,
+          "toolCalls": 21
+        },
+        {
+          "id": 2,
+          "status": "success",
+          "resumed": true,
+          "elapsedMs": 77257,
+          "providerDurationMs": 72815,
+          "toolCalls": 7
+        }
+      ],
+      "phases": [
+        {
+          "name": "gears2fsm",
+          "target": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts",
+          "status": "success",
+          "startMs": 15,
+          "elapsedMs": 509631
+        }
+      ],
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": null,
+      "notes": [
+        "Accepted FSM phase only; link and runtime acceptance are recorded as the subsequent matched pair.",
+        "Original source and accepted GEARS provenance are retained from compile-9tWwI3."
+      ]
+    },
+    {
+      "run": "compile-crYwRj",
+      "status": "link-and-runtime-accepted",
+      "scope": "C10/v13 CODE accepted-FSM baseline link; phase-chain scope, not a cold full-source benchmark",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v13-baseline",
+      "pairedArm": "compile-aMUkFr",
+      "compile": {
+        "ok": true,
+        "elapsedMs": 636735,
+        "outcome": null
+      },
+      "elapsedMs": 638219,
+      "summary": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/summary.json",
+        "bytes": 28777,
+        "sha256": "fa4984e8de0dedb6e5e8ae8df028a260b2663054d23ce0f56446da2d256efbb8"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/invocation-qVAsVR/proof.json",
+        "bytes": 2748435,
+        "sha256": "e89faec5d4c7576d93b7ccdedf172e0e1ee4fff770f505997a1f482ce161f9f4"
+      },
+      "protectedInputs": {
+        "checked": 11921,
+        "changed": [],
+        "unchanged": true
+      },
+      "source": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/work/workflow.fsm.ts",
+        "bytes": 33116,
+        "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d",
+        "original": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts"
+      },
+      "linkTarget": {
+        "path": "/private/tmp/slc-c10-compiler-axfv25ji/node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17633,
+        "sha256": "34816df58b51006a9df27369b2a80f361225724c95edad3032f53cccce680365"
+      },
+      "linkedFactory": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/work/workflow.playbook/workflow.playbook.ts",
+        "bytes": 17459,
+        "sha256": "363748f18c9be475b4e467540c2e4c589ff444655dc32caac1b097fde65560db"
+      },
+      "callCount": 2,
+      "providerCallCount": 2,
+      "toolCalls": 40,
+      "calls": [
+        {
+          "id": 1,
+          "status": "success",
+          "resumed": false,
+          "elapsedMs": 557998,
+          "providerDurationMs": 551685,
+          "toolCalls": 36
+        },
+        {
+          "id": 2,
+          "status": "success",
+          "resumed": true,
+          "elapsedMs": 75097,
+          "providerDurationMs": 68994,
+          "toolCalls": 4
+        }
+      ],
+      "phases": [
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/work/workflow.playbook/workflow.playbook.ts",
+          "status": "success",
+          "startMs": 24,
+          "elapsedMs": 636729
+        }
+      ],
+      "stage": {
+        "readiness": {
+          "path": "/private/tmp/slc-c10-v13-stage-link-run-HAR0So/readiness.json",
+          "bytes": 15079,
+          "sha256": "10aef72ed482478617a104a0e0d5c24886a6acbf82790747cdfc9c5aa4d3027b"
+        },
+        "validationOk": true,
+        "byteIdentityChecks": {
+          "stagedLinkedMatchesCandidate": true,
+          "stagedTopWorkflowFsmAliasMatchesCandidate": true,
+          "stagedLocalCodeFsmMatchesCandidate": true,
+          "stagedLocalWorkflowFsmAliasMatchesCandidate": true,
+          "candidateFsmMatchesAcceptedFsm": true,
+          "stagedSourceMatchesOriginalCode": true,
+          "stagedGearsMatchesAccepted": true,
+          "c10CompilerUnchanged": true
+        }
+      },
+      "runtimeAcceptance": {
+        "status": "passed",
+        "passed": 18,
+        "total": 18,
+        "summary": {
+          "path": "/private/tmp/slc-c10-v13-code-baseline-runtime/summary.json",
+          "bytes": 130590,
+          "sha256": "50e40de8ffdab83fc4304905be55f0b55667dba2844d1612cab6684ca626a432"
+        },
+        "postrunProof": {
+          "path": "/private/tmp/slc-c10-v13-code-baseline-postrun-proof.json",
+          "bytes": 9112,
+          "sha256": "1be9e31fa2d1d5f9844468d2e3c53fa03bcc08ea87f142f6b291e661d0d66ecb"
+        },
+        "providerCalls": 0,
+        "protectedCountPerCase": [14],
+        "allCaseArtifactsUnchanged": true
+      },
+      "metadataOptionsPassed": true,
+      "generatedValidation": {
+        "strict": true,
+        "import": true,
+        "generatedSuiteTestsPassed": 8
+      },
+      "fullWorkflowAccepted": true,
+      "acceptedSpeedRatio": null,
+      "notes": [
+        "Accepted link/runtime artifact for the resumed phase chain; not a cold full CODE timing."
+      ],
+      "acceptanceScope": "resumed original-source-to-entry chain with independent runtime acceptance",
+      "coldFullBenchmarkAccepted": false
+    },
+    {
+      "run": "compile-aMUkFr",
+      "status": "link-and-runtime-accepted",
+      "scope": "C10/v13 CODE accepted-FSM preferMaterializer link; phase-chain scope, not a cold full-source benchmark",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v13-prefer-materializer",
+      "pairedArm": "compile-crYwRj",
+      "compile": {
+        "ok": true,
+        "elapsedMs": 205227,
+        "outcome": null
+      },
+      "elapsedMs": 206865,
+      "summary": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/summary.json",
+        "bytes": 27591,
+        "sha256": "a554c936b689f517e442ac2f8502d1c70b79ec39aa452984b12d864556608c9d"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/invocation-LgUXii/proof.json",
+        "bytes": 2748823,
+        "sha256": "3f952b82f2178b10f80bb69d1919289a7096b382735934d72df3f751d634a6bc"
+      },
+      "protectedInputs": {
+        "checked": 11922,
+        "changed": [],
+        "unchanged": true
+      },
+      "source": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/work/workflow.fsm.ts",
+        "bytes": 33116,
+        "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d",
+        "original": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts"
+      },
+      "linkTarget": {
+        "path": "/private/tmp/slc-c10-compiler-axfv25ji/node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17633,
+        "sha256": "34816df58b51006a9df27369b2a80f361225724c95edad3032f53cccce680365"
+      },
+      "linkedFactory": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/work/workflow.playbook/workflow.playbook.ts",
+        "bytes": 8980,
+        "sha256": "c9bd3ffd760dc1ac9f849e548653d2d9db910eab84bc7105dec2cc6e5e7dbb46"
+      },
+      "callCount": 1,
+      "providerCallCount": 1,
+      "toolCalls": 13,
+      "calls": [
+        {
+          "id": 1,
+          "status": "success",
+          "resumed": false,
+          "elapsedMs": 200422,
+          "providerDurationMs": 195906,
+          "toolCalls": 13
+        }
+      ],
+      "phases": [
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/work/workflow.playbook/workflow.playbook.ts",
+          "status": "success",
+          "startMs": 47,
+          "elapsedMs": 205200
+        }
+      ],
+      "stage": {
+        "readiness": {
+          "path": "/private/tmp/slc-c10-v13-code-prefer-stage/readiness.json",
+          "bytes": 14868,
+          "sha256": "141d4a19c321dbbf4a1756f92ae79cd73a8817287d0bc5baf8b4a14392b9d573"
+        },
+        "validationOk": true,
+        "byteIdentityChecks": {
+          "stagedLinkedMatchesCandidate": true,
+          "stagedTopWorkflowFsmAliasMatchesCandidate": true,
+          "stagedLocalCodeFsmMatchesCandidate": true,
+          "stagedLocalWorkflowFsmAliasMatchesCandidate": true,
+          "candidateFsmMatchesAcceptedFsm": true,
+          "stagedSourceMatchesOriginalCode": true,
+          "stagedGearsMatchesAccepted": true,
+          "c10CompilerUnchanged": true
+        }
+      },
+      "runtimeAcceptance": {
+        "status": "passed",
+        "passed": 18,
+        "total": 18,
+        "summary": {
+          "path": "/private/tmp/slc-c10-v13-code-prefer-runtime/summary.json",
+          "bytes": 129397,
+          "sha256": "b6a595827edc8dccf521f37d54349792780b05ac503b3a5634ccf1ee5372bbcb"
+        },
+        "postrunProof": {
+          "path": "/private/tmp/slc-c10-v13-code-prefer-postrun-proof.json",
+          "bytes": 9109,
+          "sha256": "c7edc8e8551eacf5645ad2a17b1093fc02e672b5a1b353baaa87a2254a119b9e"
+        },
+        "providerCalls": 0,
+        "protectedCountPerCase": [14],
+        "allCaseArtifactsUnchanged": true
+      },
+      "metadataOptionsPassed": true,
+      "generatedValidation": {
+        "strict": true,
+        "import": true,
+        "generatedSuiteTestsPassed": 8
+      },
+      "fullWorkflowAccepted": true,
+      "acceptedSpeedRatio": null,
+      "notes": [
+        "Accepted link/runtime artifact for the resumed phase chain; not a cold full CODE timing."
+      ],
+      "acceptanceScope": "resumed original-source-to-entry chain with independent runtime acceptance",
+      "coldFullBenchmarkAccepted": false
+    },
+    {
+      "run": "c10-v13-code-link-pair",
+      "status": "accepted-private-pair",
+      "scope": "Matched C10/v13 CODE link pair from the same accepted resumed FSM; not a cold full-source CODE benchmark",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "sameFsmSha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d",
+      "report": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-accepted-report.json",
+        "bytes": 18863,
+        "sha256": "f66a3f29cf088decf8a6600925f32ddad5b2aee98661261dcef5de3bcf71afb2"
+      },
+      "baseline": {
+        "run": "compile-crYwRj",
+        "elapsedMs": 638219,
+        "compileElapsedMs": 636735,
+        "providerCallCount": 2,
+        "linkedFactorySha256": "363748f18c9be475b4e467540c2e4c589ff444655dc32caac1b097fde65560db"
+      },
+      "preferMaterializer": {
+        "run": "compile-aMUkFr",
+        "elapsedMs": 206865,
+        "compileElapsedMs": 205227,
+        "providerCallCount": 1,
+        "linkedFactorySha256": "c9bd3ffd760dc1ac9f849e548653d2d9db910eab84bc7105dec2cc6e5e7dbb46"
+      },
+      "runtimeAcceptance": {
+        "baselinePassed": 18,
+        "preferPassed": 18,
+        "totalPerArm": 18
+      },
+      "stageAndOptions": "strict, import, eight generated tests, metadata, options, and runtime acceptance passed for both arms; final accepted report records one paired sample for each arm and no runtime provider calls.",
+      "acceptedSpeedRatio": {
+        "scope": "phase-chain link only from accepted FSM; no cold full CODE timing",
+        "sampleSize": "one baseline link sample and one prefer-materializer link sample",
+        "baselineTotalMs": 638219,
+        "preferTotalMs": 206865,
+        "totalReductionPercent": 67.58714485153216,
+        "baselineCompileMs": 636735,
+        "preferCompileMs": 205227,
+        "compileReductionPercent": 67.76885203420575
+      },
+      "fullWorkflowAccepted": true,
+      "notes": [
+        "The accepted ratio applies only to matched link work from the accepted FSM; no cold full CODE latency is claimed.",
+        "The private preference is retained only after the corresponding upstream helper preference is committed/adopted."
+      ],
+      "protectedProof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-accepted-protected-proof.json",
+        "bytes": 342605,
+        "sha256": "b09ddca9293d3056f1bff568f6619eda66bf1bc140092912ae4734f29d4e8c51"
+      },
+      "rawRatios": {
+        "compile": {
+          "baselineMs": 636735,
+          "preferMs": 205227,
+          "preferOverBaseline": 0.3223114796579425,
+          "reductionPercent": 67.76885203420575
+        },
+        "total": {
+          "baselineMs": 638219,
+          "preferMs": 206865,
+          "preferOverBaseline": 0.32412855148467845,
+          "reductionPercent": 67.58714485153216
+        }
+      },
+      "sharedIdentities": {
+        "profile": {
+          "path": "/private/tmp/slc-c10-v13-code-runtime-profile/corrected-profile/profile.mjs",
+          "bytes": 3078,
+          "sha256": "6b1ebb4deb239406c5b1591f3f57df051b6957b9c195e12a73fcf7fbe3e97549"
+        },
+        "config": {
+          "path": "/private/tmp/slc-c10-v13-code-runtime-profile/acceptance-config.from-stage.mjs",
+          "bytes": 8595,
+          "sha256": "5d69c506dfdb6056bb3f23b9086cf609216bfba716b635200ab75ebd298ef7b7"
+        },
+        "runner": {
+          "path": "/private/tmp/slc-c10-v13-code-runtime-profile/run-18-from-stage.mjs",
+          "bytes": 1938,
+          "sha256": "5a0cef06d4d3382cf8f41d9a57ca70c8edfd2429c25817428c36f1f37cbf2e68"
+        },
+        "stageScript": {
+          "path": "/private/tmp/slc-c10-v13-stage-link.mjs",
+          "bytes": 15799,
+          "sha256": "d563d9ffd35460a43c08951f80294d135dd62ee223aaace25a28c26a2205cfff"
+        },
+        "sourceAndFsmChecks": {
+          "originalSourceSame": true,
+          "acceptedFsmSame": true,
+          "candidateFsmSame": true,
+          "sourceFsm2E2YFNSame": true,
+          "gearsSame": true
+        },
+        "source": {
+          "path": "/private/tmp/slc-code-dev-acceptance-design/code.md",
+          "bytes": 5687,
+          "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5"
+        },
+        "acceptedFsm2E2YFN": {
+          "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts",
+          "bytes": 33116,
+          "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d"
+        },
+        "acceptedGears": {
+          "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.gears.md",
+          "bytes": 8788,
+          "sha256": "56f5310b37bae6f40cc132cdccd1cf7ffa5cef4ef22eff7801d25e8d779252ef"
+        },
+        "compilerRuntimeShaSame": true,
+        "verificationHarnessShaSame": true
+      },
+      "pipelineClosures": {
+        "baseline": {
+          "/private/tmp/playbook-13.2-common-v13-baseline/playbook": {
+            "fileCount": 13,
+            "sha256": "7bde5cab387a340c5d9f69ab2e056c79de7edf6ae97fc7e1858df98192e0654c",
+            "status": "complete"
+          }
+        },
+        "preferMaterializer": {
+          "/private/tmp/playbook-13.2-common-v13-prefer-materializer/playbook": {
+            "fileCount": 13,
+            "sha256": "34a36a1b3593603041f57267996867aeee61b8bf0032eca747f1a8967923135a",
+            "status": "complete"
+          }
+        },
+        "note": "13-file pipeline closure summaries are retained, but accepted evidence relies on wrapper proof input inventories of 11921 baseline and 11922 candidate entries rechecked after runtime."
+      },
+      "repoEvidencePath": "docs/performance/code-link-pair-2026-09-14.json",
+      "acceptanceScope": "resumed original-source-to-entry chain with independent runtime acceptance",
+      "coldFullBenchmarkAccepted": false
     }
   ],
   "preparedInputs": {
@@ -3142,7 +3582,7 @@
       "runningProof": "/private/tmp/slc-c10-complex-full-evidence/invocation-u78rYP/proof.json"
     },
     "c10v13": {
-      "status": "FSM resumption running under ordinary phase recorder",
+      "status": "accepted resumed FSM and matched CODE link pair; not a cold full compile",
       "plan": {
         "path": "/private/tmp/slc-c10-v13-resumption-plan.json",
         "bytes": 4737,
@@ -3150,7 +3590,65 @@
       },
       "upstreamCommit": "4c2441f988fb1fd9a05e9509c5ceefe9f69e236b",
       "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
-      "scope": "Resumption from original accepted GEARS, not a new cold full compile"
+      "scope": "Resumption from original accepted GEARS and matched link pair evidence",
+      "resumedFsmSummary": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/summary.json",
+        "bytes": 427798,
+        "sha256": "ab681bbaf0c8a7e14a880e438bf3f42aa1ef8d20bf8b3d657710698d83bbe873"
+      },
+      "entryControl": {
+        "path": "/private/tmp/slc-c10-v13-entry-control.json",
+        "bytes": 528,
+        "sha256": "9e3ab82caa3f0182ace7c5990c4f14dc5d36febfb594a670687e23eecf90ffd5"
+      },
+      "pairReport": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-accepted-report.json",
+        "bytes": 18863,
+        "sha256": "f66a3f29cf088decf8a6600925f32ddad5b2aee98661261dcef5de3bcf71afb2"
+      },
+      "baselineLinkSummary": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/summary.json",
+        "bytes": 28777,
+        "sha256": "fa4984e8de0dedb6e5e8ae8df028a260b2663054d23ce0f56446da2d256efbb8"
+      },
+      "preferMaterializerLinkSummary": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/summary.json",
+        "bytes": 27591,
+        "sha256": "a554c936b689f517e442ac2f8502d1c70b79ec39aa452984b12d864556608c9d"
+      },
+      "baselineLinkProof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/invocation-qVAsVR/proof.json",
+        "bytes": 2748435,
+        "sha256": "e89faec5d4c7576d93b7ccdedf172e0e1ee4fff770f505997a1f482ce161f9f4"
+      },
+      "preferMaterializerLinkProof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/invocation-LgUXii/proof.json",
+        "bytes": 2748823,
+        "sha256": "3f952b82f2178b10f80bb69d1919289a7096b382735934d72df3f751d634a6bc"
+      },
+      "acceptedFsm": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts",
+        "bytes": 33116,
+        "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d"
+      },
+      "v13Baseline": "/private/tmp/playbook-13.2-common-v13-baseline",
+      "v13Full": "/private/tmp/playbook-13.2-common-v13-full",
+      "v13PreferMaterializer": "/private/tmp/playbook-13.2-common-v13-prefer-materializer",
+      "acceptedProtectedProof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-accepted-protected-proof.json",
+        "bytes": 342605,
+        "sha256": "b09ddca9293d3056f1bff568f6619eda66bf1bc140092912ae4734f29d4e8c51"
+      },
+      "acceptedPairReportForRepoCopy": "docs/performance/code-link-pair-2026-09-14.json"
     }
+  },
+  "initialCohortMetadata": {
+    "compilerCommit": "662d73aaefe4f18564c62c63984bd2b9b3b9aca9",
+    "pipelineGeneration": "v7"
+  },
+  "latestAcceptedCohort": {
+    "compilerCommit": "092e242d134e8681109ec390a9c9707476a79b36",
+    "pipelineGeneration": "v13",
+    "retainedUpstreamCommit": "69ed4ab4d94ed0bd218db9e0d375828a67f57cc0"
   }
 }
