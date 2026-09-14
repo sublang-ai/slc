@@ -1,11 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
+import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  copyFile,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
 import { assign, createActor, fromCallback, fromPromise, setup } from 'xstate';
@@ -28,6 +37,10 @@ const referenceDir = fileURLToPath(
   ),
 );
 const referenceFsm: unknown = await import(join(referenceDir, 'code.fsm.js'));
+const devFsm: unknown = await import(
+  join(referenceDir, '../dev.playbook/dev.fsm.js')
+);
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 const NEEDS_BOSS_REPLY_TEXT =
   "The player's prose surfaces a clarifying question for Boss. Output shall include `question: <verbatim question text>`.";
@@ -2111,6 +2124,183 @@ describe('checkFsmCoverage (verification-6)', () => {
     );
   });
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  it.each(
+    ['compound', 'parallel'].flatMap((shape) =>
+      [
+        'initial',
+        'local-event',
+        'root-event',
+        'interrupt',
+        'player-done',
+        'player-error',
+        'child-done',
+        'child-error',
+      ].map((entry) => ({ shape, entry })),
+    ),
+  )(
+    'enters $shape invocation descendants through $entry',
+    async ({ shape, entry }) => {
+      const child = (id: string) => ({
+        id,
+        invoke: {
+          src: 'playbook',
+          input: ({ context }: any) => {
+            if (context.entered !== true)
+              throw new Error('entry action must run');
+            return { stateId: id, playbookId: 'review', text: 'Review it.' };
+          },
+          onDone: '#done',
+          onError: '#failed',
+        },
+      });
+      const route = {
+        target: '#reviewGroup',
+        actions: assign({ entered: true }),
+      };
+      const region = (id: string) => ({
+        initial: 'review',
+        states: { review: child(id) },
+      });
+      const group =
+        shape === 'parallel'
+          ? {
+              id: 'reviewGroup',
+              type: 'parallel',
+              states: { east: region('review'), west: region('audit') },
+              onDone: '#done',
+            }
+          : {
+              id: 'reviewGroup',
+              initial: 'phase',
+              states: { phase: region('review') },
+            };
+      const predecessor =
+        entry.startsWith('player') || entry.startsWith('child');
+      const fromChild = entry.startsWith('child');
+      const machine = setup({
+        actors: {
+          player: fromPromise(async () => {
+            throw new Error('provide player');
+          }),
+          playbook: fromPromise(async () => {
+            throw new Error('provide child');
+          }),
+        },
+      }).createMachine({
+        id: 'hierarchicalEntry',
+        context: { entered: entry === 'initial' },
+        initial:
+          entry === 'initial' ? 'reviewGroup' : predecessor ? 'plan' : 'ready',
+        on:
+          entry === 'root-event'
+            ? { GO: route }
+            : entry === 'interrupt'
+              ? {
+                  BOSS_INTERRUPT: {
+                    ...route,
+                    reenter: true,
+                    guard: ({ event }: any) => event.targetId === 'reviewGroup',
+                  },
+                }
+              : {},
+        states: {
+          ready: { on: entry === 'local-event' ? { GO: route } : {} },
+          ...(predecessor
+            ? {
+                plan: {
+                  id: 'plan',
+                  invoke: {
+                    src: fromChild ? 'playbook' : 'player',
+                    input: () =>
+                      fromChild
+                        ? {
+                            stateId: 'plan',
+                            playbookId: 'plan',
+                            text: 'Plan it.',
+                          }
+                        : {
+                            stateId: 'plan',
+                            role: 'planner',
+                            sourceItem: 'FLOW-1',
+                            prompt: 'Plan it.',
+                            result: { done: 'Planned.' },
+                          },
+                    onDone: entry.endsWith('done')
+                      ? {
+                          ...route,
+                          ...(!fromChild
+                            ? {
+                                guard: ({ event }: any) =>
+                                  event.output.guard === 'done',
+                              }
+                            : {}),
+                        }
+                      : '#done',
+                    onError: entry.endsWith('error') ? route : '#failed',
+                  },
+                },
+              }
+            : {}),
+          reviewGroup: group,
+          awaitBossReply: { id: 'awaitBossReply' },
+          done: { id: 'done', type: 'final' },
+          failed: { id: 'failed', type: 'final' },
+        },
+      } as any);
+      const findings = await checkFsmCoverage({ machine });
+      // Parallel join probing still requires acting leaves; child entry itself
+      // is independently covered in both regions without inventing a join.
+      expect(findings).toEqual(
+        shape === 'parallel' && entry === 'interrupt'
+          ? [
+              'parallel state reviewGroup: onDone join coverage is unsupported without one Captain leaf per branch',
+            ]
+          : [],
+      );
+    },
+  );
+
+  it('does not treat inactive compound descendants as entered', async () => {
+    const machine = setup({
+      actors: { playbook: fromPromise(async () => ({})) },
+    }).createMachine({
+      initial: 'group',
+      states: {
+        group: {
+          initial: 'idle',
+          states: {
+            idle: {},
+            review: {
+              id: 'review',
+              invoke: {
+                src: 'playbook',
+                input: {
+                  stateId: 'review',
+                  playbookId: 'review',
+                  text: 'Review.',
+                },
+                onDone: '#done',
+                onError: '#failed',
+              },
+            },
+          },
+        },
+        awaitBossReply: { id: 'awaitBossReply' },
+        done: { id: 'done', type: 'final' },
+        failed: { id: 'failed', type: 'final' },
+      },
+    });
+    const findings = await checkFsmCoverage({ machine });
+    expect(findings).toHaveLength(2);
+    expect(
+      findings.every((finding) =>
+        finding.includes('dead or unsupported entry path'),
+      ),
+    ).toBe(true);
+  });
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
   it('retains dead child approval and blank-reply failures without context patches', async () => {
     expect(
       await checkFsmCoverage({
@@ -2227,7 +2417,7 @@ describe('checkFsmCoverage (verification-6)', () => {
         machine: accumulatedChildMachine({ deadPredecessor: true }),
       }),
     ).toContain(
-      'state child: nested playbook onDone arm 0 has no reachable entry under probing',
+      'state child: nested playbook onDone arm 0 has no reachable entry under probing (dead or unsupported entry path)',
     );
   });
 
@@ -2775,15 +2965,58 @@ describe('findMachine', () => {
 });
 
 describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
-  it('caps maintained DEV scheduling at five minutes while preserving smaller derived bounds', async () => {
-    const fsm: unknown = await import(
-      join(referenceDir, '../dev.playbook/dev.fsm.js')
-    );
-    expect(fsmCoverageTestTimeout(fsm)).toBe(300_000);
-    expect(fsmCoverageTestTimeout({ machine: goodMachine() })).toBeLessThan(
-      300_000,
-    );
-  });
+  it(
+    'executes emitted maintained DEV coverage with its capped timeout and preserves smaller bounds',
+    async () => {
+      expect(fsmCoverageTestTimeout(devFsm)).toBe(300_000);
+      expect(fsmCoverageTestTimeout({ machine: goodMachine() })).toBeLessThan(
+        300_000,
+      );
+      const root = await mkdtemp(join(tmpdir(), 'slc-dev-coverage-suite-'));
+      try {
+        await symlink(
+          join(repoRoot, 'node_modules'),
+          join(root, 'node_modules'),
+        );
+        await writeFile(join(root, 'package.json'), '{"type":"module"}');
+        for (const ext of ['ts', 'js'])
+          await copyFile(
+            join(referenceDir, `../dev.playbook/dev.fsm.${ext}`),
+            join(root, `dev.fsm.${ext}`),
+          );
+        await writeFile(
+          join(root, 'dev.fsm.coverage.test.ts'),
+          generateFsmCoverageTest({
+            basename: 'dev',
+            fsmModule: './dev.fsm.js',
+            fsmSourceFile: './dev.fsm.ts',
+            verifyModule: join(repoRoot, 'src/verify-coverage.ts'),
+          }),
+        );
+        const config = join(root, 'vitest.config.mjs');
+        await writeFile(
+          config,
+          `export default ${JSON.stringify({ cacheDir: join(root, '.vite'), test: { cache: false, include: ['dev.fsm.coverage.test.ts'] } })};\n`,
+        );
+        const { stdout } = await promisify(execFile)(
+          process.execPath,
+          [
+            join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+            'run',
+            '--root',
+            root,
+            '--config',
+            config,
+          ],
+          { cwd: root, timeout: 310_000 },
+        );
+        expect(stdout).toContain('1 passed');
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+    fsmCoverageTestTimeout(devFsm) + 10_000,
+  );
 
   it('derives a timeout above the default from bounded checker work', () => {
     expect(

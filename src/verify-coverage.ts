@@ -565,24 +565,50 @@ function stateRefs(config: MachineConfigLike): StateRef[] {
   return out;
 }
 
-/** The root initial state followed through every compound initial child. */
+/** States entered by default, including every active parallel region. */
+function enteredStateRefs(
+  state: Pick<StateNodeLike, 'type' | 'initial' | 'states'>,
+  refs: readonly StateRef[],
+  parent?: StateRef,
+): StateRef[] {
+  const active: StateRef[] = [];
+  const keys =
+    state.type === 'parallel'
+      ? Object.keys(state.states ?? {})
+      : typeof state.initial === 'string'
+        ? [state.initial]
+        : [];
+  for (const key of keys) {
+    const path = [...(parent?.path ?? []), key];
+    const ref = refs.find(
+      (candidate) => candidate.path.join('\u0000') === path.join('\u0000'),
+    );
+    if (ref === undefined) continue;
+    active.push(ref, ...enteredStateRefs(ref.state, refs, ref));
+  }
+  return active;
+}
+
 function initialActiveRefs(
   config: MachineConfigLike,
   refs: readonly StateRef[],
 ): StateRef[] {
-  const active: StateRef[] = [];
-  let path: string[] = [];
-  let initial = config.initial;
-  while (typeof initial === 'string') {
-    path = [...path, initial];
-    const ref = refs.find(
-      (candidate) => candidate.path.join('\u0000') === path.join('\u0000'),
-    );
-    if (ref === undefined) break;
-    active.push(ref);
-    initial = ref.state.initial;
-  }
-  return active;
+  return enteredStateRefs(config as StateNodeLike, refs);
+}
+
+/** A target enters itself and only its default active descendants. */
+function targetEntersRef(
+  refs: readonly StateRef[],
+  target: StateRef | undefined,
+  invocation: StateRef,
+): boolean {
+  return (
+    target !== undefined &&
+    (sameStateRef(target, invocation) ||
+      enteredStateRefs(target.state, refs, target).some((ref) =>
+        sameStateRef(ref, invocation),
+      ))
+  );
 }
 
 /** Captain bindings paired with the nested state node that owns the invoke. */
@@ -1077,6 +1103,7 @@ function activeStateIds(snapshot: Snapshot): Set<string> {
       return;
     }
     for (const [key, nested] of Object.entries(value)) {
+      ids.add([...prefix, key].join('.'));
       walkValue(nested, [...prefix, key]);
     }
   };
@@ -1224,7 +1251,6 @@ function interruptDriveForRef(
   extraValues: readonly unknown[] = [],
   selectedArmIndex?: number,
 ): InterruptDrive {
-  const base = { type: INTERRUPT_EVENT, targetId };
   const arms = transitionArms((machine.config.on ?? {})[INTERRUPT_EVENT]);
   const armIndex =
     selectedArmIndex ??
@@ -1233,10 +1259,20 @@ function interruptDriveForRef(
       if (rawTarget === undefined) return false;
       const resolvedTarget = stateRefForTarget(refs, rawTarget);
       return (
-        sameStateRef(resolvedTarget, target) ||
+        targetEntersRef(refs, resolvedTarget, target) ||
         resolvedTarget?.stableId === targetId
       );
     });
+  const rawTarget = rawArmTarget(arms[armIndex]);
+  const entryTarget =
+    rawTarget === undefined ? undefined : stateRefForTarget(refs, rawTarget);
+  const base = {
+    type: INTERRUPT_EVENT,
+    targetId:
+      entryTarget !== undefined && !sameStateRef(entryTarget, target)
+        ? entryTarget.stableId
+        : targetId,
+  };
   const targetPlaybook = playbookRefs(machine.config).find((playbook) =>
     sameStateRef(playbook.ref, target),
   );
@@ -1304,7 +1340,11 @@ function entryDriveForRef(
         const rawTarget = rawArmTarget(arm);
         if (
           rawTarget === undefined ||
-          !sameStateRef(stateRefForTarget(refs, rawTarget, source), target)
+          !targetEntersRef(
+            refs,
+            stateRefForTarget(refs, rawTarget, source),
+            target,
+          )
         ) {
           continue;
         }
@@ -2196,13 +2236,15 @@ async function searchCoverageEntry(
   ) => Promise<boolean>,
 ): Promise<CoverageSearchResult> {
   const nodes = coverageNodes(captains, playbooks);
-  const nodeForTarget = (raw: unknown, source: StateRef) => {
+  const nodesForTarget = (raw: unknown, source: StateRef) => {
     const targetName = rawArmTarget(raw);
     const targetRef =
       targetName === undefined
         ? undefined
         : stateRefForTarget(refs, targetName, source);
-    return nodes.find((node) => sameStateRef(node.value.ref, targetRef));
+    return nodes.filter((node) =>
+      targetEntersRef(refs, targetRef, node.value.ref),
+    );
   };
   const reachable = new Set([coverageNodeKey(target)]);
   for (let pass = 0; pass < nodes.length; pass++) {
@@ -2212,8 +2254,9 @@ async function searchCoverageEntry(
           transitionArms(
             node.value.invocation[outcome as PlaybookOutcome],
           ).some((arm) => {
-            const next = nodeForTarget(arm, node.value.ref);
-            return next !== undefined && reachable.has(coverageNodeKey(next));
+            return nodesForTarget(arm, node.value.ref).some((next) =>
+              reachable.has(coverageNodeKey(next)),
+            );
           }),
         )
       )
@@ -2277,24 +2320,24 @@ async function searchCoverageEntry(
         for (const [index, arm] of transitionArms(
           node.value.invocation[outcome],
         ).entries()) {
-          const next = nodeForTarget(arm, node.value.ref);
-          if (next === undefined || !reachable.has(coverageNodeKey(next)))
-            continue;
-          const dynamic =
-            next.kind === 'child'
-              ? dynamicPlaybookFields(next.value)
-              : undefined;
-          for (const result of coverageArmResults(
-            machine,
-            node,
-            outcome,
-            index,
-            context,
-            pending.input,
-            candidates,
-            dynamic,
-          )) {
-            nextSteps.push({ node, result, next });
+          for (const next of nodesForTarget(arm, node.value.ref)) {
+            if (!reachable.has(coverageNodeKey(next))) continue;
+            const dynamic =
+              next.kind === 'child'
+                ? dynamicPlaybookFields(next.value)
+                : undefined;
+            for (const result of coverageArmResults(
+              machine,
+              node,
+              outcome,
+              index,
+              context,
+              pending.input,
+              candidates,
+              dynamic,
+            )) {
+              nextSteps.push({ node, result, next });
+            }
           }
         }
       }
@@ -2458,7 +2501,8 @@ function playbookEntryPlan(
       const rawTarget = rawArmTarget(arm);
       if (
         rawTarget === undefined ||
-        !sameStateRef(
+        !targetEntersRef(
+          refs,
           stateRefForTarget(refs, rawTarget, captain.ref),
           playbook.ref,
         )
@@ -2520,7 +2564,8 @@ function captainPredecessorPlan(
       const rawTarget = rawArmTarget(arm);
       if (
         rawTarget === undefined ||
-        !sameStateRef(
+        !targetEntersRef(
+          refs,
           stateRefForTarget(refs, rawTarget, playbook.ref),
           target.ref,
         )
@@ -2615,9 +2660,8 @@ function controllerCaptainEntryPlan(
         output,
         initialContext,
       );
-      const nextCaptain = captains.find(
-        (candidate) =>
-          nextRef !== undefined && sameStateRef(candidate.ref, nextRef),
+      const nextCaptain = captains.find((candidate) =>
+        targetEntersRef(refs, nextRef, candidate.ref),
       );
       if (
         nextCaptain !== undefined &&
@@ -2675,7 +2719,7 @@ function controllerCaptainExitPlan(
   }
 
   const firstCaptain = captains.find((candidate) =>
-    sameStateRef(candidate.ref, firstTarget),
+    targetEntersRef(refs, firstTarget, candidate.ref),
   );
   if (firstCaptain === undefined) {
     return { following: [], outcome: 'runtime' };
@@ -2711,7 +2755,7 @@ function controllerCaptainExitPlan(
         return { following, outcome: 'planned' };
       }
       const nextCaptain = captains.find((candidate) =>
-        sameStateRef(candidate.ref, nextRef),
+        targetEntersRef(refs, nextRef, candidate.ref),
       );
       if (
         nextCaptain !== undefined &&
@@ -3055,7 +3099,9 @@ async function probePlaybookOutcome(
         `state ${playbook.ref.stableId}: nested playbook actor failed to start during ${outcome} coverage: ${result.inputFailure}`,
       );
     else if (!result.entered)
-      findings.push(`${label} has no reachable entry under probing`);
+      findings.push(
+        `${label} has no reachable entry under probing (dead or unsupported entry path)`,
+      );
     else if (!satisfiable)
       findings.push(`${label} is unsatisfiable under probing`);
     else findings.push(`${label} did not reach ${target.stableId}`);
@@ -3096,8 +3142,8 @@ async function probeNonPreemptiveActor(
     (result.inputFailure !== undefined
       ? `actor failed to start: ${result.inputFailure}`
       : result.entered
-        ? 'unsatisfiable under reached-context probing'
-        : 'no reachable entry under probing');
+        ? 'no candidate completed at the declared target under reached-context probing'
+        : 'no reachable entry under probing (dead or unsupported entry path)');
 
   for (const key of Object.keys(captain.binding.result)) {
     await coverageYield();

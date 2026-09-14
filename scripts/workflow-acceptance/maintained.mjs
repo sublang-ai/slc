@@ -2,9 +2,10 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import assert from 'node:assert/strict';
+import { existsSync, realpathSync } from 'node:fs';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { codeCases, runCodeScenario } from './code.mjs';
 import { identities } from './common.mjs';
 
@@ -121,11 +122,16 @@ export async function maintainedConfig(root, workflow, output) {
 
 if (
   process.argv[1] &&
-  resolve(process.argv[1]) === new URL(import.meta.url).pathname
+  existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const root = resolve(process.argv[2]);
   const output = resolve(process.argv[3]);
   const only = process.argv[4];
+  const cases = codeCases.filter(
+    (row) => only === undefined || row.id.includes(only),
+  );
+  assert(cases.length > 0, 'case filter matched no CODE cases');
   await mkdir(output, { recursive: true });
   const config = await maintainedConfig(root, 'code', output);
   const expectedSource =
@@ -136,9 +142,7 @@ if (
     'fixture source stays exact task-start CODE',
   );
   const results = [];
-  for (const scenario of codeCases.filter(
-    (row) => only === undefined || row.id.includes(only),
-  )) {
+  for (const scenario of cases) {
     const result = await runCodeScenario(config, scenario);
     results.push(result);
     console.log(

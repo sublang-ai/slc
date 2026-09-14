@@ -92,10 +92,16 @@ export const codeCases = [
     questionMode: 'fresh',
     ir: 'Ω42',
   },
-  ...['unchanged', 'multiple', 'residual', 'rewritten'].map((effect) => ({
+  ...[
+    ['unchanged', 'unchanged'],
+    ['multiple', 'multiple-commits'],
+    ['residual', 'observation-ambiguous'],
+    ['rewritten', 'rewritten-or-non-descendant'],
+  ].map(([effect, classification]) => ({
     id: `code-effect-${effect}`,
     steps: ['direct'],
     effect,
+    classification,
     expected: 'effect-rejected',
   })),
 ];
@@ -538,6 +544,20 @@ export async function runCodeScenario(config, scenario) {
           assert.equal(playerCount, 1);
           assert.equal(reviewCount, 1);
         } else if (expected === 'effect-rejected') {
+          diagnostics.effectLedger = host.effectLedger.snapshot();
+          const boundaries = diagnostics.effectLedger.boundaries.filter(
+            (boundary) => boundary.roleId === profile.role,
+          );
+          assert.equal(boundaries.length, 1, 'one governed Coder boundary');
+          assert(
+            scenario.classification,
+            'effect case declares its receipt oracle',
+          );
+          assert.equal(
+            boundaries[0].physicalReceipt?.classification,
+            scenario.classification,
+            `${scenario.id}: actual Git receipt classification`,
+          );
           assert.notEqual(result.terminal?.kind, 'success');
           assert.equal(reviewCount, 0);
           assert.equal(playerCount, 1);

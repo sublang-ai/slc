@@ -16,7 +16,7 @@ Use the installed package root from this repository by default:
 PLAYBOOK_ROOT="$PWD/node_modules/@sublang/playbook"
 ```
 
-Run the five probe controls:
+Run the probe controls:
 
 ```sh
 PLAYBOOK_ACCEPTANCE_FIXTURE_ROOT="$PLAYBOOK_ROOT" node --test scripts/workflow-acceptance/probe.test.mjs

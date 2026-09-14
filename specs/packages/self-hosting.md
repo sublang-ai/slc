@@ -150,7 +150,7 @@ When the slc command resolves the reserved `slc` and the `playbook` references, 
 
 #### self-hosting-19
 
-Where real linked modules expose required structured, optional primitive, script, missing, malformed, or asynchronous validator surfaces, when entry emission and an ordinary full-link correction flow run, the integration suite shall verify strict entry typing, exact option and live-capability forwarding, no constructor calls during validation, invalid-input rejection, retained legacy behavior, and same-Coder repair before acceptance [[self-hosting-17](#self-hosting-17)] [[self-hosting-18](#self-hosting-18)].
+Where real linked modules expose required structured, optional primitive, script, missing, malformed, asynchronous, or runtime-valid but factory-incompatible validator surfaces, when entry emission and an ordinary full-link correction flow run, the integration suite shall verify strict entry typing and validator-to-factory assignability, exact option and live-capability forwarding, no constructor calls during validation, invalid-input rejection, retained legacy behavior, and same-Coder repair before acceptance [[self-hosting-17](#self-hosting-17)] [[self-hosting-18](#self-hosting-18)].
 
 ### Adoption acceptance
 

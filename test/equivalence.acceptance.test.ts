@@ -2238,21 +2238,25 @@ Captain shall prompt Reviewer:
   // The real acceptance: `slc playbook <source>` output compared to the manual
   // reference under verification-9 and DR-009. Gated on a produced directory —
   // a real agent compile — so a clean checkout skips rather than fails.
-  it('accepts real slc playbook output when produced (gated)', async (context) => {
-    const producedDir =
-      process.env.SLC_EQUIVALENCE_DIR ??
-      join(repoRoot, '.scratch/sdlc/code.playbook');
-    if (!existsSync(join(producedDir, 'code.playbook.ts'))) {
-      console.warn(
-        `equivalence: no produced output at ${producedDir}; run \`slc playbook <code.md> --link @sublang/playbook\` there first`,
+  it(
+    'accepts real slc playbook output when produced (gated)',
+    async (context) => {
+      const producedDir =
+        process.env.SLC_EQUIVALENCE_DIR ??
+        join(repoRoot, '.scratch/sdlc/code.playbook');
+      if (!existsSync(join(producedDir, 'code.playbook.ts'))) {
+        console.warn(
+          `equivalence: no produced output at ${producedDir}; run \`slc playbook <code.md> --link @sublang/playbook\` there first`,
+        );
+        context.skip();
+        return;
+      }
+      const produced = await loadProduced(producedDir);
+      const reference = await loadReference();
+      expect(await checkReferenceEquivalence({ produced, reference })).toEqual(
+        [],
       );
-      context.skip();
-      return;
-    }
-    const produced = await loadProduced(producedDir);
-    const reference = await loadReference();
-    expect(await checkReferenceEquivalence({ produced, reference })).toEqual(
-      [],
-    );
-  });
+    },
+    referenceEquivalenceTestTimeout,
+  );
 });

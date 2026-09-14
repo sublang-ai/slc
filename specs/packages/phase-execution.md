@@ -21,7 +21,7 @@ Essential project-specific references are `slc`, this project's compiler CLI, an
 
 #### phase-execution-1
 
-The slc command shall perform only generic pipeline mechanics, and shall not contain phase-specific transformation rules, phase-specific prompt notes, or phase-specific semantic validators beyond the existing artifact-verification gates [[phase-execution-51](#phase-execution-51)], [[phase-execution-53](#phase-execution-53)], [[phase-execution-55](#phase-execution-55)], [[phase-execution-59](#phase-execution-59)], [[phase-execution-60](#phase-execution-60)], [[phase-execution-64](#phase-execution-64)], [[phase-execution-66](#phase-execution-66)] ([DR-003](../decisions/003-slc-phase-execution.md)).
+The slc command shall perform only generic pipeline mechanics, with no phase-specific transformation rules, no phase-specific prompt notes except the required entry-output contract [[self-hosting-18](self-hosting.md#self-hosting-18)], and no phase-specific semantic validators beyond that entry-options gate [[self-hosting-18](self-hosting.md#self-hosting-18)] and the existing artifact-verification gates [[phase-execution-51](#phase-execution-51)], [[phase-execution-53](#phase-execution-53)], [[phase-execution-55](#phase-execution-55)], [[phase-execution-59](#phase-execution-59)], [[phase-execution-60](#phase-execution-60)], [[phase-execution-64](#phase-execution-64)], [[phase-execution-66](#phase-execution-66)] ([DR-003](../decisions/003-slc-phase-execution.md), [DR-044](../decisions/044-artifact-owned-entry-options.md)).
 
 #### phase-execution-2
 

@@ -160,12 +160,26 @@ describe('artifact-owned entry option integration (self-hosting-19)', () => {
         ),
       'plain JSON option record',
     ],
+    [
+      'runtime-valid but factory-incompatible return type',
+      linked
+        .replace('export function validateOptions', 'function snapshotOptions')
+        .replace('snapshotOptions: validateOptions', 'snapshotOptions')
+        .concat(
+          '\nexport function validateOptions(value: unknown): {readonly other: string} { if (value !== undefined && (value === null || typeof value !== "object" || Array.isArray(value))) throw new TypeError("object required"); return {other: "valid JSON"}; }',
+        ),
+      'TS2322',
+    ],
   ])(
     'rejects %s surfaces without constructing a runtime',
     async (_name, source, diagnostic) => {
       await writeFile(linkedPath, source);
       const findings = await checkEntryOptions({ linkedPath, fsmPath });
       expect(findings.join('\n')).toContain(diagnostic);
+      if (diagnostic === 'TS2322') {
+        expect(findings).toHaveLength(1);
+        expect(findings[0]).toContain('catalog');
+      }
     },
   );
 });

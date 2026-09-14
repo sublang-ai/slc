@@ -2,10 +2,13 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { runCodeScenario, codeCases } from './code.mjs';
 import { runDevScenario, devCases } from './dev.mjs';
 import { maintainedConfig } from './maintained.mjs';
@@ -20,6 +23,54 @@ assert(
 const output = await mkdtemp(join(tmpdir(), 'code-dev-probe-tests-'));
 const config = await maintainedConfig(root, 'code', output);
 const direct = codeCases.find((row) => row.id === 'code-direct');
+
+test('maintained commands execute every case from an escaped path and reject empty selections', async () => {
+  const scripts = join(output, 'harness with spaces # and %');
+  await cp(fileURLToPath(new URL('.', import.meta.url)), scripts, {
+    recursive: true,
+  });
+  const exec = promisify(execFile);
+  for (const [command, count] of [
+    ['maintained.mjs', 18],
+    ['maintained-dev.mjs', 24],
+  ]) {
+    const destination = join(output, command);
+    const args = [join(scripts, command), root, destination];
+    const { stdout } = await exec(process.execPath, args, { timeout: 120_000 });
+    assert.equal(stdout.trim().split('\n').length, count);
+    const summary = JSON.parse(
+      await readFile(join(destination, 'summary.json'), 'utf8'),
+    );
+    assert.equal(summary.results.length, count);
+    assert(
+      summary.results.every(
+        (result) => result.status === 'passed' && result.artifactsUnchanged,
+      ),
+    );
+    await assert.rejects(
+      exec(process.execPath, [...args, 'no-such-case']),
+      (error) => {
+        assert.equal(error.code, 1);
+        assert.match(error.stderr, /case filter matched no (CODE|DEV) cases/);
+        return true;
+      },
+    );
+  }
+});
+
+test('swapping Git effects cannot satisfy each case-specific receipt oracle', async () => {
+  const effects = codeCases.filter((row) => row.expected === 'effect-rejected');
+  for (const [index, scenario] of effects.entries()) {
+    const result = await runCodeScenario(config, {
+      ...scenario,
+      id: `${scenario.id}-swapped`,
+      effect: effects[(index + 1) % effects.length].effect,
+    });
+    assert.equal(result.status, 'failed');
+    assert.match(result.error.message, /actual Git receipt classification/);
+    assert.equal(result.artifactsUnchanged, true);
+  }
+});
 
 test('real current host / maintained source positive control', async () => {
   const result = await runCodeScenario(config, { ...direct, id: 'positive' });

@@ -5,7 +5,7 @@
 
 This recipe reconstructs the measured C10 compiler and the retained Playbook definitions from committed source and locked dependencies. It includes the private runtime correction used by the CODE/DEV experiments. Package metadata remains Playbook 13.2.0; these patched bytes are not an unmodified registry install. See the [verification results](compilation-verification.md) for the accepted measurements and their scopes.
 
-The setup pins SLC `092e242d134e8681109ec390a9c9707476a79b36`, Playbook `69ed4ab4d94ed0bd218db9e0d375828a67f57cc0`, and runtime correction `4b51a7edfd2670f6a4cb4f23285a897ae836e612`. It verifies the stock runtime preimages before applying the two committed runtime files, rebuilds SLC, and checks the resulting pipeline definitions. It installs privately and makes no provider call.
+The setup pins SLC `a528ed98fa74574b6c29882f87bd88311673d630`, Playbook `69ed4ab4d94ed0bd218db9e0d375828a67f57cc0`, and runtime correction `4b51a7edfd2670f6a4cb4f23285a897ae836e612`. The reachable SLC revision has the identical tree `1f172a1ae98c2abb4e94dfdaa8d8c077e28d16a5` as historical measurement commit `092e242d134e8681109ec390a9c9707476a79b36`; the evidence retains that original identity. It verifies the stock runtime preimages before applying the two committed runtime files, rebuilds SLC, and checks the resulting pipeline definitions. It installs privately and makes no provider call.
 
 Run from the SLC checkout with Node >=23.6, npm registry access, and both Git repositories available. The defaults are `/Users/basicthinker/Projects/SubLang/slc` and `/Users/basicthinker/Projects/SubLang/playbook`; `SLC_REPO` and `PLAYBOOK_REPO` override them. Keep this shell session for the later commands.
 

@@ -2,8 +2,10 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import assert from 'node:assert/strict';
+import { existsSync, realpathSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { maintainedConfig } from './maintained.mjs';
 import { devCases, runDevScenario } from './dev.mjs';
 import { identities } from './common.mjs';
@@ -104,11 +106,14 @@ export const maintainedDevProfile = {
 
 if (
   process.argv[1] &&
-  resolve(process.argv[1]) === new URL(import.meta.url).pathname
+  existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const root = resolve(process.argv[2]),
     output = resolve(process.argv[3]),
     only = process.argv[4];
+  const cases = devCases.filter((row) => !only || row.id.includes(only));
+  assert(cases.length > 0, 'case filter matched no DEV cases');
   await mkdir(output, { recursive: true });
   const config = await maintainedConfig(root, 'dev', output);
   config.profile = maintainedDevProfile;
@@ -117,9 +122,7 @@ if (
     '608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c',
   );
   const results = [];
-  for (const scenario of devCases.filter(
-    (row) => !only || row.id.includes(only),
-  )) {
+  for (const scenario of cases) {
     const result = await runDevScenario(config, scenario);
     results.push(result);
     console.log(

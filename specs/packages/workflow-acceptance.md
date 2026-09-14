@@ -30,6 +30,10 @@ When the workflow-acceptance harness writes outputs, the harness shall write onl
 
 When a DEV workflow-acceptance profile selects a governed planning outcome, the harness shall call `profile.select(semantic, { finalText })` where `finalText` is the exact text from the just-returned Analyst fixture result.
 
+### workflow-acceptance-11
+
+When invoked as a maintained workflow command, the harness shall execute all cases selected by the optional substring filter regardless of URL-escaped characters or symlinked directories in its filesystem path, rejecting an empty selection with a nonzero exit status.
+
 ### workflow-acceptance-7
 
 When exercising a CODE question continuation, the workflow-acceptance harness shall apply this validation and acceptance matrix to the profile's explicit `questionRepositoryDisposition`, requiring one public pending Boss question with the expected text and Coder asker before snapshot restore for each supported profile:
@@ -52,12 +56,16 @@ When the opt-in maintained workflow commands run against the current maintained 
 
 | Workflow | Required case coverage |
 | --- | --- |
-| CODE | Direct implementation, new-IR two-phase path, existing-IR two-phase paths for two identities, real review fix, malformed review child outcomes, review-authored failure and abort, review control failure, restored resumed and fresh question/answer continuations, and real Git effect violations for unchanged, multiple-commit, residual-worktree, and rewritten-history classifications. |
+| CODE | Direct implementation, new-IR two-phase path, existing-IR two-phase paths for two identities, real review fix, malformed review child outcomes, review-authored failure and abort, review control failure, restored resumed and fresh question/answer continuations, and real Git effect violations asserting the Coder boundary's recorded receipt classification: `unchanged` for no change, `multiple-commits` for two commits, `observation-ambiguous` for one commit with residual worktree changes, and `rewritten-or-non-descendant` for rewritten history. |
 | DEV | Six planning outcomes across question, discussionComplete, code, decideThenCode, codeViaPullRequest, and decideThenCodeViaPullRequest; premature discussionComplete rejection as a separate negative control; four child routes through branch, decide, code, and PR; restored resumed and fresh discussion continuations; child failure, abort, control-error, and missing-field outcomes; and planning worktree and commit effect rejection. |
 
 ### workflow-acceptance-8
 
 When verifying CODE question continuation profiles, the verification shall require the maintained CODE profile to pass its restored question cases with `questionRepositoryDisposition: "deferred"` and require a reviewed generated-artifact profile whose source authors an unchanged question outcome to pass its restored question cases with `questionRepositoryDisposition: "unchanged"` and no provider calls, while a missing disposition reports unsupported-profile before repository or capability work [[workflow-acceptance-2](#workflow-acceptance-2)], [[workflow-acceptance-7](#workflow-acceptance-7)].
+
+### workflow-acceptance-12
+
+When the opt-in integration controls invoke the maintained commands from a path containing spaces, `#`, and `%`, the verification shall require all eighteen CODE and twenty-four DEV cases to execute successfully and unmatched filters to exit nonzero [[workflow-acceptance-11](#workflow-acceptance-11)].
 
 ### workflow-acceptance-10
 
