@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "recordedAt": "2026-09-13T10:26:19.182749+00:00",
+  "recordedAt": "2026-09-13T14:12:01.270587+00:00",
   "scope": "C5 full CODE/DEV failures, C6-v8 minimal acceptance, C7 CODE runtime control after failed full benchmark, accepted C7 full DEV, C7 fixed-link materializer candidate evidence, C8-v9 full CODE linker-contract failure, and accepted C8 REVIEW text2gears phase evidence; no accepted CODE full benchmark or percentage fixed-link speed ratio, C8 DEV fixed-FSM paired link controls, and v11 CODE/DEV compiler-stage/runtime audit results.",
   "compilerCommit": "662d73aaefe4f18564c62c63984bd2b9b3b9aca9",
   "pipelineGeneration": "v7",
@@ -2355,6 +2355,235 @@
       "acceptedSpeedRatio": false,
       "pairedBaseline": "compile-4JLsmu",
       "comparisonVerdict": "candidate conforming; no accepted ratio because paired baseline failed annotation contract"
+    },
+    {
+      "run": "compile-LoUfNr",
+      "status": "compiler-success-runtime-failed",
+      "scope": "C9-v11 full CODE; eight generated tests passed, runtime rejected output authority before player work",
+      "compilerRoot": "/private/tmp/slc-c9-compiler-uiqcyre8",
+      "pipeline": "/private/tmp/playbook-13.2-common-v11-full",
+      "source": {
+        "path": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/summary.json",
+        "bytes": 38866,
+        "sha256": "1cb8036ede3fc8ee41e1c08c380b4b75bd63483ea2887975151e8d97cc459236"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c9-complex-full-evidence/invocation-bEaSYS/proof.json",
+        "bytes": 2737216,
+        "sha256": "55baf7d291a1d60b290122d4b99fc5eeb8e77e7f5f29773a9b9227888659e951"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 594547,
+        "outcome": null
+      },
+      "elapsedMs": 615743,
+      "phases": [
+        {
+          "name": "text2gears",
+          "target": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.playbook/code.gears.raw.md",
+          "status": "success",
+          "startMs": 59,
+          "elapsedMs": 60272
+        },
+        {
+          "name": "optimize",
+          "target": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.playbook/code.gears.md",
+          "status": "success",
+          "startMs": 60332,
+          "elapsedMs": 11095
+        },
+        {
+          "name": "gears2fsm",
+          "target": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.playbook/code.fsm.ts",
+          "status": "success",
+          "startMs": 71429,
+          "elapsedMs": 334898
+        },
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.playbook/code.playbook.ts",
+          "status": "success",
+          "startMs": 406330,
+          "elapsedMs": 169940
+        }
+      ],
+      "callCount": 4,
+      "validation": {
+        "strictTypecheck": true,
+        "entryImport": true,
+        "generatedSuiteTestsPassed": 8
+      },
+      "runtimeAudit": {
+        "passed": 0,
+        "total": 18,
+        "summary": {
+          "path": "/private/tmp/slc-c9-code-LoUfNr-runtime-acceptance/summary.json",
+          "bytes": 98079,
+          "sha256": "b69056404f5da68dc10c87fa14f4d779885f4d4f235a1253512bb435248a0a97"
+        },
+        "postrun": {
+          "path": "/private/tmp/slc-c9-code-LoUfNr-runtime-postrun.json",
+          "bytes": 5939,
+          "sha256": "c9e77d39860bcde36085172b473777f255d122992985bcce20af31b6e0b3e1ca"
+        },
+        "privateProfileCaveat": "Two negative child fixtures used a parent output field name by mistake; all original scenarios stopped earlier on the genuine authority mismatch. The separate corrected-profile control preserves this original profile."
+      },
+      "findings": [
+        "Two GEARS/FSM result descriptions put explanatory `code` backticks inside output-clause parentheses; extraction treats these as an extra required property.",
+        "Outcome authority has no such property, so runtime rejects before a player call."
+      ],
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": null,
+      "retrospectiveControl": {
+        "scope": "Uncompiled copy with only the two explanatory backtick pairs removed in GEARS and FSM; not a full-compile success or speed comparison",
+        "summary": {
+          "path": "/private/tmp/slc-ir059-LoUfNr-guidance-control-v2/runtime-acceptance-corrected-profile/summary.json",
+          "bytes": 98261,
+          "sha256": "f5e9f056d91061b9e61538325c43e08a20872ee03ac3ccf66770c206990e0428"
+        },
+        "postrun": {
+          "path": "/private/tmp/slc-ir059-LoUfNr-guidance-control-v2/runtime-postrun-corrected-profile.json",
+          "bytes": 1732,
+          "sha256": "fa6fe2d32df5204d569513bbf4b591594cb84bbcdcb0b35378af39db69363cc0"
+        },
+        "profileCorrection": {
+          "path": "/private/tmp/slc-ir059-LoUfNr-guidance-control-v2/profile-correction.json",
+          "bytes": 529,
+          "sha256": "6e926b7236d045d59e5b4ec96af27357eafe103b84a2ea0a6beaa4b485bdc0ae"
+        },
+        "passed": 18,
+        "total": 18,
+        "providerCalls": 0
+      },
+      "earlyDiagnostic": {
+        "path": "/private/tmp/slc-ir059-real-artifact-control.json",
+        "bytes": 2752,
+        "sha256": "6422f8556de5e33a520d38c3b1aee27907ad1f719e04668010a41376d75b04bf"
+      }
+    },
+    {
+      "run": "compile-Z0sZ90",
+      "status": "environment-failure",
+      "scope": "C10-v12 full CODE attempt in a sandbox without provider credential access",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v12-full",
+      "summary": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/compile-Z0sZ90/summary.json",
+        "bytes": 21757,
+        "sha256": "6e86d296d1f273e4a2924922d6e7c5f9d37378672a5af46cc2b3a1fda1a9653f"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/invocation-I6rJf4/proof.json",
+        "bytes": 2747777,
+        "sha256": "6bd846806242fdee8428937285dec248ce3c46a73c1947e3e7a7f72d8c3149f9"
+      },
+      "compile": {
+        "ok": false,
+        "elapsedMs": 3407,
+        "outcome": null
+      },
+      "elapsedMs": 3416,
+      "phases": [
+        {
+          "name": "text2gears",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-Z0sZ90/work/code.playbook/code.gears.raw.md",
+          "status": "error",
+          "startMs": 64,
+          "elapsedMs": 3351
+        }
+      ],
+      "diagnosis": "Provider returned Not logged in. Supported CLI auth status in the normal environment subsequently reports loggedIn true; a separate fresh run uses that environment.",
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": null
+    },
+    {
+      "run": "compile-9tWwI3",
+      "status": "compiler-success-entry-audit-failed",
+      "scope": "C10/v12 cold full CODE compiled; independent Source-owned startup-option audit failed before runtime scenarios",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v12-full",
+      "source": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/summary.json",
+        "bytes": 42816,
+        "sha256": "3f02d76f4873c6747ceff33c77f4234fc6d109b21ce09a583faca93253823dd7"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/invocation-u78rYP/proof.json",
+        "bytes": 2749141,
+        "sha256": "f5201ec88680e169854d01c8877845f80a66d47371cab6a292aacb590b0e290e"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 651864,
+        "outcome": null
+      },
+      "elapsedMs": 659530,
+      "phases": [
+        {
+          "name": "text2gears",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.gears.raw.md",
+          "status": "success",
+          "startMs": 60,
+          "elapsedMs": 120524
+        },
+        {
+          "name": "optimize",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.gears.md",
+          "status": "success",
+          "startMs": 120588,
+          "elapsedMs": 13186
+        },
+        {
+          "name": "gears2fsm",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.fsm.ts",
+          "status": "success",
+          "startMs": 133776,
+          "elapsedMs": 225553
+        },
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.playbook.ts",
+          "status": "success",
+          "startMs": 359268,
+          "elapsedMs": 288946
+        }
+      ],
+      "callCount": 6,
+      "validation": {
+        "ok": true,
+        "generatedSuiteTestsPassed": 8,
+        "strictTypecheck": true,
+        "entryImport": true
+      },
+      "entryOptionAudit": {
+        "path": "/private/tmp/slc-c10-9tWwI3-entry-option-control.json",
+        "bytes": 923,
+        "sha256": "630d55601eeae6540480ff69d6ad3ad1adfb47c40376c340244ada09ec29a6db"
+      },
+      "entryGuardControl": {
+        "path": "/private/tmp/slc-c10-9tWwI3-entry-guard-control.json",
+        "bytes": 758,
+        "sha256": "800b6ccc67d63405f5e6f547e34c6594368b8ab033586174bacbe948c99c02f2"
+      },
+      "findings": [
+        "The FSM entry guard requires context.callerInput before the action copies the supplied START callerInput; the linked validator incorrectly promotes that generated guard into an independent Source-bootstrap requirement.",
+        "entryEvent.contextField supports failure retry; it does not update fresh entry context before FSM guards."
+      ],
+      "runtimeCasesExecuted": 0,
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": null,
+      "correctiveScope": "Resume real FSM generation from its accepted GEARS, then fresh matched links, preserving original source/GEARS/artifacts. This does not become a new cold full-source benchmark."
     }
   ],
   "preparedInputs": {
@@ -2688,10 +2917,7 @@
       "commonProducerSha256": "d6ce9eb0d1c012956a5df8691d66fd8fda0e5a827edd12eba288827af07e2ad0",
       "inverseToV8ProducerSha256": "4e840accb47c1924be6e63a483f928a592d36edb07c57be82dbecff59b022ce9",
       "armDifference": {
-        "changedFiles": [
-          "experiment-proof.json",
-          "playbook/link.md"
-        ],
+        "changedFiles": ["experiment-proof.json", "playbook/link.md"],
         "verdict": "only playbook/link.md differs between pipeline arms; experiment-proof.json differs by mode/output metadata"
       },
       "v8ToV9DefinitionDelta": {
@@ -2773,10 +2999,7 @@
       "candidateRoot": "/private/tmp/playbook-13.2-common-v9-prefer-materializer",
       "baselineProofSha256": "a7cec2eb8efc8d4bc3a3def53060eade59fd92e43a904a9ddebffb6bf8abe1dc",
       "candidateProofSha256": "d993464f9484e2c93c268af9af68625d7b28ced2e921c961809a3e9b98d05a1a",
-      "candidateDeltaFromV9Full": [
-        "experiment-proof.json",
-        "playbook/link.md"
-      ],
+      "candidateDeltaFromV9Full": ["experiment-proof.json", "playbook/link.md"],
       "source": {
         "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts",
         "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b"
@@ -2899,6 +3122,35 @@
         "acceptedSpeedRatio": false,
         "comparisonVerdict": "raw 843281 ms versus 152086 ms only; no accepted ratio because baseline failed annotation contract; candidate runtime acceptance reuses tKSZCs 24/24 by exact byte identity"
       }
+    },
+    "c10v12": {
+      "status": "frozen; cold full CODE 9tWwI3 compiled but independent startup-option/entry audit failed",
+      "readiness": {
+        "path": "/private/tmp/slc-c10-v12-readiness.json",
+        "bytes": 5597,
+        "sha256": "97598a204e16c014d9cfc420e3f6e058006e4372936abb478d58324dda591a6c"
+      },
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "productionSourceCommit": "092e242d134e8681109ec390a9c9707476a79b36",
+      "pipelineSourceCommit": "15c71cec7a96773528d72a07acb86fe84663856f",
+      "cohort": {
+        "path": "/private/tmp/slc-c10-compiler-axfv25ji-evidence/cohort.json",
+        "bytes": 8995,
+        "sha256": "3656b837c82245277dacaa4eebbc241b887828ccde46e4c51f8896a403f86c1a"
+      },
+      "privateRuntimeNotice": "Inherits the same private IR090 Playbook 13.2 runtime bytes as C9. Package and lock versions do not imply an unmodified published runtime.",
+      "runningProof": "/private/tmp/slc-c10-complex-full-evidence/invocation-u78rYP/proof.json"
+    },
+    "c10v13": {
+      "status": "FSM resumption running under ordinary phase recorder",
+      "plan": {
+        "path": "/private/tmp/slc-c10-v13-resumption-plan.json",
+        "bytes": 4737,
+        "sha256": "691ea5b916daf67883310f9463d7b40e0b6ede0e18e038858830efa6479d1b8f"
+      },
+      "upstreamCommit": "4c2441f988fb1fd9a05e9509c5ceefe9f69e236b",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "scope": "Resumption from original accepted GEARS, not a new cold full compile"
     }
   }
 }

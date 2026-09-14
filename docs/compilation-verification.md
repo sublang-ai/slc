@@ -1,0 +1,25 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
+
+# Compilation verification status
+
+This is the completion audit for the performance and clarification work. The goal remains open until the pending real CODE and comparable complex-link controls below are resolved. Exact attempts and identities remain in the [current evidence](performance/complex-workflows-2026-09-13.json), [earlier follow-ups](performance/complex-workflows-followup-2026-09-12.json), and [performance analysis](compilation-performance.md).
+
+| Requested outcome | Verified result | Remaining work |
+| --- | --- | --- |
+| Update SLC dependencies | Current reviewed dependencies adopted; build, full suite, package smoke, artifact retention and pins passed. [Versions and exceptions](dependency-adoption.md). | None for the recorded dependency checkpoint. |
+| Compile a simple demo in about five minutes | Current-dependency C6 `compile-5eWTLQ`: 237.479 s compilation, 243.459 s total, eight generated tests and actual Git runtime acceptance. | No general latency guarantee is claimed. |
+| Explain and reduce slow compilation | FSM/link generation dominates; avoidable producer defects trigger expensive repairs in protected downstream inputs. Matched accepted savings: 23.98% for DECIDE text-to-GEARS and 63.1% for flat quoted-relay linking. | A valid complex-link comparison is pending. |
+| Verify complex DEV | Unchanged current DEV `compile-wm3i4U`: 858.323 s total; eight generated tests and 24 runtime cases passed. | DEV link candidates passed, but failed controls prevent a speed ratio. |
+| Verify complex CODE | C9 compilation passed generated checks but failed actual runtime on an extra output-field declaration. A separate representation-only correction passes all 18 runtime cases; SLC now rejects the original defect before consumer selection. | C10/v12 compiled but failed the independent entry-option audit; FSM generation is resuming from its accepted GEARS under corrected entry rules. |
+| Avoid unnecessary compiler questions | None in the ten initial clean/restored phase runs; successful later CODE/DEV compilation phases preserve authored runtime questions. Later REVIEW rerun satisfies all four source oracles. | Original malformed or incomplete artifacts remain failures, even where no question occurred. |
+| Detect intentionally flawed sources | Five reviewed mutation families identify their targeted ambiguity; the initial DEV report was malformed, and a later ordinary run delivers a valid targeted report. Direct-GEARS mutation verifies later discovery. | Integrate final full-workflow acceptance into the aggregate conclusion. |
+| Support ordinary compiler UX | API `clarification-required`; CLI one structured stderr report, empty stdout, exit 2. Actual CODE source-only correction and identical command then exit 0. Authored runtime questions remain distinct. | None for the verified protocol. |
+| Retain only supported optimization claims | Compact prompting, scaffold forcing and omission of optimization are not retained as demonstrated speed techniques. Private materializer preference has no valid complex ratio and is not adopted as common guidance. | Decide the complex materializer extension from an accepted matched pair. |
+| Commit and resume autonomously | SLC and Playbook changes are committed on authorized branches; a 30-minute follow-up remains active for the unfinished goal. | Disable the follow-up only when the completion audit passes. |
+
+The CODE and DEV runtime harnesses use real public entries, real isolated Git repositories and host/runtime code, with controlled player responses and scripted children. Their execution times measure host behavior, not live model latency. Required reviews, quoted payloads, repository receipts, malformed child results, and resumed Boss discussions remain acceptance conditions.
+
+C7–C10 inherit an explicitly private Playbook runtime correction on top of package metadata 13.2.0. The improved producer definitions also live on the authorized Playbook worktree branch. These results do not assert that a published package or the globally installed `slc` command already contains those upstream changes. The historical global-command audit found SLC 0.7.0 with Opus 4.8 at high effort; measured runs explicitly select the frozen branch compiler and one Opus 5 agent at low effort.
+
+Current compiler checks: 1,430 tests passed with two expected skips, plus native build, scoped lint, spec lint, definition verification, retained-artifact checks and current pins. The C9 failure, the first private fixture mistake, the corrected retrospective control, and the sandbox authentication failure are retained separately; none is counted as a successfully accepted fresh CODE compilation. The subsequent C10/v12 cold run also passed generated checks but required startup caller text incorrectly; its corrected stages are being resumed from accepted GEARS, with that scope kept separate from cold compilation.
