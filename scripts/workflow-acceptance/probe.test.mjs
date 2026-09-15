@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -24,18 +24,20 @@ const output = await mkdtemp(join(tmpdir(), 'code-dev-probe-tests-'));
 const config = await maintainedConfig(root, 'code', output);
 const direct = codeCases.find((row) => row.id === 'code-direct');
 
-test('maintained commands execute every case from an escaped path and reject empty selections', async () => {
+test('maintained commands execute every case through an escaped symlink path and reject empty selections', async () => {
   const scripts = join(output, 'harness with spaces # and %');
   await cp(fileURLToPath(new URL('.', import.meta.url)), scripts, {
     recursive: true,
   });
+  const entryDirectory = join(output, 'symlink with spaces # and %');
+  await symlink(scripts, entryDirectory, 'dir');
   const exec = promisify(execFile);
   for (const [command, count] of [
     ['maintained.mjs', 18],
     ['maintained-dev.mjs', 24],
   ]) {
     const destination = join(output, command);
-    const args = [join(scripts, command), root, destination];
+    const args = [join(entryDirectory, command), root, destination];
     const { stdout } = await exec(process.execPath, args, { timeout: 120_000 });
     assert.equal(stdout.trim().split('\n').length, count);
     const summary = JSON.parse(

@@ -2438,6 +2438,39 @@ const introspectableConfig = (): MachineConfigLike => ({
 });
 
 describe('pinIntrospection (verification-4)', () => {
+  it('pins both initial-transition forms and detects root and nested target drift', () => {
+    const config = (
+      objectInitial: boolean,
+      nestedTarget = 'first',
+      rootTarget = 'group',
+    ) => ({
+      initial: objectInitial ? { target: rootTarget } : rootTarget,
+      states: {
+        group: {
+          initial: objectInitial ? { target: nestedTarget } : nestedTarget,
+          states: { first: {}, second: {} },
+        },
+        done: { type: 'final' as const },
+      },
+    });
+    const machine = createMachine(config(true));
+    const actor = createActor(machine).start();
+    try {
+      expect(actor.getSnapshot().value).toEqual({ group: 'first' });
+      const pins = pinIntrospection(machine.config);
+      expect(pins.initial).toBe('group');
+      expect(
+        pins.structured?.states.find((state) => state.path === 'group')
+          ?.initial,
+      ).toBe('first');
+      expect(pins).toEqual(pinIntrospection(config(false)));
+      expect(pins).not.toEqual(pinIntrospection(config(true, 'second')));
+      expect(pins).not.toEqual(pinIntrospection(config(true, 'first', 'done')));
+    } finally {
+      actor.stop();
+    }
+  });
+
   it('pins captain bindings, transition arms, event surfaces, and the jumpable set', () => {
     const pins = pinIntrospection(introspectableConfig());
     expect(pins.initial).toBe('ready');

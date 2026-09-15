@@ -231,7 +231,7 @@ export async function playbookProvenanceForLinkTarget(
 
 /** The minimal XState machine-config shape the introspector walks (`machine.config`). */
 export interface MachineConfigLike {
-  initial?: string;
+  initial?: string | { target: string; actions?: unknown };
   meta?: unknown;
   tags?: string | readonly string[];
   states?: Record<string, StateLike>;
@@ -260,7 +260,7 @@ interface InvokeArrayLike extends ReadonlyArray<InvokeLike> {
 
 interface StateLike {
   id?: string;
-  initial?: string;
+  initial?: MachineConfigLike['initial'];
   type?: string;
   meta?: unknown;
   tags?: string | readonly string[];
@@ -269,6 +269,13 @@ interface StateLike {
   on?: Record<string, unknown>;
   onDone?: unknown;
   onError?: unknown;
+}
+
+/** Both XState initial-transition forms select one immediate child key. */
+export function initialStateTarget(
+  initial: MachineConfigLike['initial'],
+): string | undefined {
+  return typeof initial === 'string' ? initial : initial?.target;
 }
 
 const ITEM_HEADING = /^###\s+([A-Za-z][\w-]*)\s*$/;
@@ -2207,7 +2214,7 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
           id: typeof state.id === 'string' ? state.id : null,
           publicStateId: metadataStateId(state) ?? null,
           type: typeof state.type === 'string' ? state.type : null,
-          initial: typeof state.initial === 'string' ? state.initial : null,
+          initial: initialStateTarget(state.initial) ?? null,
           tags: normalizedTags(state.tags),
           children: Object.keys(state.states ?? {}),
           invokes: normalizeInvokes(state.invoke)
@@ -2220,7 +2227,7 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
       }
     : undefined;
   return {
-    initial: typeof config.initial === 'string' ? config.initial : null,
+    initial: initialStateTarget(config.initial) ?? null,
     captain,
     quiescent,
     rootOn,

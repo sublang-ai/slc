@@ -38,6 +38,7 @@ import {
   controllerDecisionNearMiss,
   enumerateCaptainStates,
   enumerateScriptStates,
+  initialStateTarget,
   isControllerDecisionResult,
   isControllerMachine,
   loadFsmModule,
@@ -146,7 +147,7 @@ interface StateNodeLike {
   meta?: { playbook?: { stateId?: unknown } };
   type?: string;
   tags?: string | readonly string[];
-  initial?: string;
+  initial?: MachineConfigLike['initial'];
   states?: Record<string, StateNodeLike>;
   invoke?: InvokeLike | readonly InvokeLike[];
   onDone?: unknown;
@@ -572,11 +573,12 @@ function enteredStateRefs(
   parent?: StateRef,
 ): StateRef[] {
   const active: StateRef[] = [];
+  const initial = initialStateTarget(state.initial);
   const keys =
     state.type === 'parallel'
       ? Object.keys(state.states ?? {})
-      : typeof state.initial === 'string'
-        ? [state.initial]
+      : initial !== undefined
+        ? [initial]
         : [];
   for (const key of keys) {
     const path = [...(parent?.path ?? []), key];
@@ -1832,16 +1834,9 @@ function parallelBranchCaptains(
   const regions = refs.filter((ref) => ref.parent === parallel);
   const selected: CaptainRef[] = [];
   for (const region of regions) {
-    const candidates = captains.filter((captain) =>
-      isDescendantOf(captain.ref, region),
+    const captain = captains.find((candidate) =>
+      targetEntersRef(refs, region, candidate.ref),
     );
-    const initial = region.state.initial;
-    const captain =
-      (initial === undefined
-        ? undefined
-        : candidates.find(
-            (candidate) => candidate.ref.path[region.path.length] === initial,
-          )) ?? candidates[0];
     if (captain !== undefined) selected.push(captain);
   }
   return selected;
@@ -3479,7 +3474,6 @@ async function probeParallelJoins(
 export function fsmCoverageTestTimeout(fsmModule: unknown): number {
   const machine = findMachine(fsmModule);
   const config = machine.config;
-  const states = (config.states ?? {}) as Record<string, StateNodeLike>;
   const refs = stateRefs(config);
   const captains = captainRefs(config);
   const playbooks = playbookRefs(config);
@@ -3490,10 +3484,10 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
     (config.on ?? {})[INTERRUPT_EVENT],
   ).length;
   const rootSettles = rootInterruptProbes * SETTLE_MS;
-  const initial =
-    typeof config.initial === 'string' ? config.initial : undefined;
   const entryEvents = new Set([
-    ...Object.keys(initial === undefined ? {} : (states[initial]?.on ?? {})),
+    ...initialActiveRefs(config, refs).flatMap((ref) =>
+      Object.keys(ref.state.on ?? {}),
+    ),
     ...Object.keys(config.on ?? {}),
   ]);
   entryEvents.delete(INTERRUPT_EVENT);

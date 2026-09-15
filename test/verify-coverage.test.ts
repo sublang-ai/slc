@@ -2126,21 +2126,27 @@ describe('checkFsmCoverage (verification-6)', () => {
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
   it.each(
-    ['compound', 'parallel'].flatMap((shape) =>
-      [
-        'initial',
-        'local-event',
-        'root-event',
-        'interrupt',
-        'player-done',
-        'player-error',
-        'child-done',
-        'child-error',
-      ].map((entry) => ({ shape, entry })),
+    ['string', 'object'].flatMap((initialForm) =>
+      ['compound', 'parallel'].flatMap((shape) =>
+        [
+          'initial',
+          'local-event',
+          'root-event',
+          'interrupt',
+          'player-done',
+          'player-error',
+          'child-done',
+          'child-error',
+        ].map((entry) => ({ shape, entry, initialForm })),
+      ),
     ),
   )(
-    'enters $shape invocation descendants through $entry',
-    async ({ shape, entry }) => {
+    'enters $shape invocation descendants through $entry with $initialForm initial transitions',
+    async ({ shape, entry, initialForm }) => {
+      const initial = (target: string, marker: string) =>
+        initialForm === 'string'
+          ? target
+          : { target, actions: assign({ [marker]: true }) };
       const child = (id: string) => ({
         id,
         invoke: {
@@ -2148,6 +2154,13 @@ describe('checkFsmCoverage (verification-6)', () => {
           input: ({ context }: any) => {
             if (context.entered !== true)
               throw new Error('entry action must run');
+            if (
+              initialForm === 'object' &&
+              (context.rootInitialized !== true ||
+                context[`${id}Initialized`] !== true ||
+                (shape === 'compound' && context.groupInitialized !== true))
+            )
+              throw new Error('initial-transition actions must run');
             return { stateId: id, playbookId: 'review', text: 'Review it.' };
           },
           onDone: '#done',
@@ -2159,7 +2172,7 @@ describe('checkFsmCoverage (verification-6)', () => {
         actions: assign({ entered: true }),
       };
       const region = (id: string) => ({
-        initial: 'review',
+        initial: initial('review', `${id}Initialized`),
         states: { review: child(id) },
       });
       const group =
@@ -2172,7 +2185,7 @@ describe('checkFsmCoverage (verification-6)', () => {
             }
           : {
               id: 'reviewGroup',
-              initial: 'phase',
+              initial: initial('phase', 'groupInitialized'),
               states: { phase: region('review') },
             };
       const predecessor =
@@ -2190,8 +2203,10 @@ describe('checkFsmCoverage (verification-6)', () => {
       }).createMachine({
         id: 'hierarchicalEntry',
         context: { entered: entry === 'initial' },
-        initial:
+        initial: initial(
           entry === 'initial' ? 'reviewGroup' : predecessor ? 'plan' : 'ready',
+          'rootInitialized',
+        ),
         on:
           entry === 'root-event'
             ? { GO: route }
@@ -2261,44 +2276,75 @@ describe('checkFsmCoverage (verification-6)', () => {
     },
   );
 
-  it('does not treat inactive compound descendants as entered', async () => {
-    const machine = setup({
-      actors: { playbook: fromPromise(async () => ({})) },
-    }).createMachine({
-      initial: 'group',
-      states: {
-        group: {
-          initial: 'idle',
-          states: {
-            idle: {},
-            review: {
-              id: 'review',
-              invoke: {
-                src: 'playbook',
-                input: {
-                  stateId: 'review',
-                  playbookId: 'review',
-                  text: 'Review.',
+  it.each(['string', 'object'])(
+    'does not treat inactive compound descendants as entered with %s initial transitions',
+    async (initialForm) => {
+      const initial = (target: string) =>
+        initialForm === 'string' ? target : { target };
+      const machine = setup({
+        actors: { playbook: fromPromise(async () => ({})) },
+      }).createMachine({
+        initial: initial('group'),
+        states: {
+          group: {
+            initial: initial('idle'),
+            states: {
+              idle: {},
+              review: {
+                id: 'review',
+                invoke: {
+                  src: 'playbook',
+                  input: {
+                    stateId: 'review',
+                    playbookId: 'review',
+                    text: 'Review.',
+                  },
+                  onDone: '#done',
+                  onError: '#failed',
                 },
-                onDone: '#done',
-                onError: '#failed',
               },
             },
           },
+          awaitBossReply: { id: 'awaitBossReply' },
+          done: { id: 'done', type: 'final' },
+          failed: { id: 'failed', type: 'final' },
         },
-        awaitBossReply: { id: 'awaitBossReply' },
-        done: { id: 'done', type: 'final' },
-        failed: { id: 'failed', type: 'final' },
-      },
-    });
-    const findings = await checkFsmCoverage({ machine });
-    expect(findings).toHaveLength(2);
-    expect(
-      findings.every((finding) =>
-        finding.includes('dead or unsupported entry path'),
-      ),
-    ).toBe(true);
-  });
+      });
+      const findings = await checkFsmCoverage({ machine });
+      expect(findings).toHaveLength(2);
+      expect(
+        findings.every((finding) =>
+          finding.includes('dead or unsupported entry path'),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each(['string', 'object'])(
+    'selects the active parallel branch rather than the first declared invocation with %s initial transitions',
+    async (initialForm) => {
+      const config = parallelMachine({ sequentialSameRole: true })
+        .config as any;
+      const left = config.states.parallelRound.states.left;
+      left.initial =
+        initialForm === 'string' ? 'working' : { target: 'working' };
+      left.states = { revision: left.states.revision, ...left.states };
+      const machine = setup({
+        actors: {
+          player: fromPromise(async () => {
+            throw new Error('provide player');
+          }),
+        },
+      }).createMachine(config);
+      const findings = await checkFsmCoverage({ machine });
+      expect(
+        findings.filter((finding) => finding.startsWith('parallel state')),
+      ).toEqual([]);
+      expect(findings.some((finding) => finding.includes('leftRevision'))).toBe(
+        true,
+      );
+    },
+  );
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
   it('retains dead child approval and blank-reply failures without context patches', async () => {
@@ -2965,6 +3011,43 @@ describe('findMachine', () => {
 });
 
 describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
+  it('budgets root and nested entry events equally for both initial-transition forms', () => {
+    const config = (objectInitial: boolean) => ({
+      initial: objectInitial ? { target: 'group' } : 'group',
+      states: {
+        group: {
+          initial: objectInitial ? { target: 'ready' } : 'ready',
+          // Enough distinct events to exceed the minimum timeout floor.
+          states: {
+            ready: {
+              on: Object.fromEntries(
+                Array.from({ length: 6 }, (_, index) => [
+                  `GO_${index}`,
+                  '#done',
+                ]),
+              ),
+            },
+          },
+          on: { CANCEL: '#done' },
+        },
+        done: { id: 'done', type: 'final' as const },
+      },
+    });
+    const stringForm = setup({}).createMachine(config(false));
+    const objectForm = setup({}).createMachine(config(true));
+    expect(fsmCoverageTestTimeout({ machine: objectForm })).toBe(
+      fsmCoverageTestTimeout({ machine: stringForm }),
+    );
+    expect(fsmCoverageTestTimeout({ machine: objectForm })).toBeGreaterThan(
+      fsmCoverageTestTimeout({
+        machine: setup({}).createMachine({
+          initial: 'done',
+          states: { done: { type: 'final' } },
+        }),
+      }),
+    );
+  });
+
   it(
     'executes emitted maintained DEV coverage with its capped timeout and preserves smaller bounds',
     async () => {
@@ -2996,7 +3079,7 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
         const config = join(root, 'vitest.config.mjs');
         await writeFile(
           config,
-          `export default ${JSON.stringify({ cacheDir: join(root, '.vite'), test: { cache: false, include: ['dev.fsm.coverage.test.ts'] } })};\n`,
+          `export default ${JSON.stringify({ cacheDir: join(root, '.vite'), test: { cache: false, maxWorkers: 1, include: ['dev.fsm.coverage.test.ts'] } })};\n`,
         );
         const { stdout } = await promisify(execFile)(
           process.execPath,

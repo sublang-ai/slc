@@ -65,7 +65,7 @@ When verifying CODE question continuation profiles, the verification shall requi
 
 ### workflow-acceptance-12
 
-When the opt-in integration controls invoke the maintained commands from a path containing spaces, `#`, and `%`, the verification shall require all eighteen CODE and twenty-four DEV cases to execute successfully and unmatched filters to exit nonzero [[workflow-acceptance-11](#workflow-acceptance-11)].
+When the opt-in integration controls invoke the maintained commands through a symlinked directory with spaces, `#`, and `%` in the path, the verification shall require all eighteen CODE and twenty-four DEV cases to execute successfully and unmatched filters to exit nonzero [[workflow-acceptance-11](#workflow-acceptance-11)].
 
 ### workflow-acceptance-10
 
