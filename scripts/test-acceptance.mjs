@@ -48,10 +48,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { stringify } from 'yaml';
+
+import { assertSuccessfulWorkflow } from './acceptance-result.mjs';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -92,6 +95,7 @@ const runWorkflow = !args.has('--compile-only');
 
 /** The smallest workflow that still exercises normalize → GEARS → FSM → link. */
 const MINIMAL_WORKFLOW = `Before work begins, ensure the current directory is the root of its own Git repository; if .git is absent there, initialize a repository there.
+Before delegating to the agent, if the repository has no commit, use scripted Git commands to record all existing files in one initial baseline commit.
 Use one agent to carry out the input task.
 The agent modifies the code in the current directory as the task requires and commits the result to Git.
 `;
@@ -569,7 +573,7 @@ function referenceSource() {
  * host's configuration root and session state home at the scratch tree, and
  * invokes the entry's effective slash command (release-17).
  */
-function runStage(consumer, scratch, source) {
+async function runStage(consumer, scratch, source) {
   step(`run the ${source.label} playbook with real agents`);
   const playbook = installedBin(consumer, '@sublang/playbook', 'playbook');
 
@@ -582,6 +586,19 @@ function runStage(consumer, scratch, source) {
   });
   cpSync(join(repoRoot, 'demo', 'sample.c'), join(work, 'sample.c'));
 
+  // The reference workflow only initializes Git. Give run-only mode a clean
+  // baseline; the compiled fixture authors its own scripted baseline setup.
+  // A governed player must not consume pre-existing untracked fixture files.
+  if (!runCompile) {
+    for (const args of [
+      ['init'],
+      ['add', '--all'],
+      ['commit', '-m', 'Record acceptance baseline'],
+    ]) {
+      execFileSync('git', args, { cwd: work, stdio: 'pipe' });
+    }
+  }
+
   const described = JSON.parse(
     execFileSync(
       process.execPath,
@@ -591,6 +608,7 @@ function runStage(consumer, scratch, source) {
         [
           `const entry = (await import('./${source.basename}.ts')).default;`,
           'process.stdout.write(JSON.stringify({',
+          '  id: entry.id,',
           '  command: entry.command ?? entry.id,',
           '  roles: entry.requiredRoleIds ?? [],',
           '}));',
@@ -669,10 +687,8 @@ function runStage(consumer, scratch, source) {
     `${Math.round((Date.now() - started) / 1000)}s`,
   );
 
-  // `--json` prints exactly one `{"sessionId":"…","reply":"…"}` object; the
-  // reached final state's meaning arrives as the Captain's Boss-facing reply
-  // prose, so the terminal evidence this gate pins is behavioral — the
-  // scripted repository, the landed commits, and the repaired sample below.
+  // CLI success means the Boss turn settled, including parked failures.
+  // Read the installed host's own durable state and root terminal trace.
   const envelope = JSON.parse(stdout.slice(stdout.lastIndexOf('\n{') + 1));
   if (
     typeof envelope.sessionId !== 'string' ||
@@ -687,17 +703,50 @@ function runStage(consumer, scratch, source) {
   }
   ok('Captain replied', envelope.reply.slice(0, 80).replaceAll('\n', ' '));
 
+  const requireConsumer = createRequire(join(consumer, 'package.json'));
+  const { createSessionStore } = await import(
+    pathToFileURL(requireConsumer.resolve('@sublang/playbook/session-store'))
+      .href
+  );
+  const store = createSessionStore({ env: { ...process.env, ...hostHomes } });
+  assertSuccessfulWorkflow(
+    await store.read(envelope.sessionId),
+    await store.readStream(envelope.sessionId),
+    described.id,
+  );
+  ok('root workflow reached successful terminal with settled effects');
+
   if (!existsSync(join(work, '.git'))) {
     fail('the scripted step did not initialize a repository');
   }
-  ok('scripted step initialized the repository agent-free');
+  ok(
+    runCompile
+      ? 'scripted setup initialized the repository'
+      : 'reference used the prepared repository',
+  );
 
   const commits = execFileSync('git', ['rev-list', '--count', 'HEAD'], {
     cwd: work,
     encoding: 'utf8',
   }).trim();
-  if (Number(commits) < 1) fail('the loop landed no commit');
-  ok('reviewed commits landed', `${commits} commit(s)`);
+  if (Number(commits) < 2) fail('the loop landed no commit after the baseline');
+  const baseline = execFileSync(
+    'git',
+    ['rev-list', '--max-parents=0', 'HEAD'],
+    {
+      cwd: work,
+      encoding: 'utf8',
+    },
+  ).trim();
+  const originalSample = execFileSync('git', ['show', `${baseline}:sample.c`], {
+    cwd: work,
+  });
+  if (
+    !originalSample.equals(readFileSync(join(repoRoot, 'demo', 'sample.c')))
+  ) {
+    fail('initial baseline did not preserve the original sample');
+  }
+  ok('baseline preserved and agent commits landed', `${commits} commit(s)`);
 
   // Behavioral proof the loop actually fixed the bug, mirroring the demo
   // checker's median driver rather than trusting the agents' own report.
@@ -739,7 +788,7 @@ try {
   const compiled = runCompile ? compileStage(consumer) : referenceSource();
   if (runCompile) await upToDateStage(consumer, compiled);
   if (runUpdate) await updateStage(consumer, compiled);
-  if (runWorkflow) runStage(consumer, scratch, compiled);
+  if (runWorkflow) await runStage(consumer, scratch, compiled);
   console.log(
     `\nacceptance passed (${[
       runCompile ? 'compile + reuse' : null,

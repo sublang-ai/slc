@@ -77,6 +77,11 @@ and this project adheres to
 
 ### Fixed
 
+- **Live release acceptance rejects incomplete workflows.** The gate checks
+  the installed host's durable successful root terminal and unresolved effects,
+  and establishes a tracked fixture baseline before governed agent work.
+  A repaired file and a successful CLI exit alone no longer pass acceptance.
+
 - **Coverage accepts reachable script fallbacks.** Ordered transitions are
   checked with the script runtime's actual guard and exit-status outputs;
   impossible outputs cannot make an unreachable transition pass
