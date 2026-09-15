@@ -17,6 +17,7 @@ The one-predecessor correction in [DR-045](045-static-child-coverage-entry.md) d
 
 - Select ordinary nested-child coverage and ordinary acting-result coverage independently of a preemption event.
 - Explore finite invocation paths from actual initialized or public entry routes, replaying each predecessor output or rejection through XState before observing the next context.
+- Keep invocation entry discovery through eventless (`always`) transitions outside the supported coverage domain; entry expansion follows declared `initial` targets and parallel regions, so a runtime-valid FSM may receive an unsupported-entry or unsupported-parallel-join finding.
 - Preserve distinct paths when different outcomes reach the same invocation with different context; do not assign child-context fields or jump to private states.
 - Bound each target-arm or declared acting-result search to 64 replay attempts and eight invocation steps, excluding repeated invocations from a simple path except one canonical `needsBossReply` outcome, actual Boss wait, and nonblank `BOSS_REPLY` revisit per replay.
 - Use existing bounded guard and runtime-valid result candidates in declaration order; no workflow-specific field names or source-semantic inference select a route.
@@ -34,3 +35,4 @@ Finite path replay increases verification work, and the generated timeout accoun
 Its uncapped scheduling estimate multiplies target searches by replay/settle limits and the existing per-candidate guard-probe allowance; the five-minute test deadline limits that conservative estimate and is not a promised elapsed time or a semantic verdict.
 The benchmark's separate whole-experiment deadline and validation-child termination provide additional protection during live validation.
 The depth and attempt limits bound exploration rather than asserting that larger workflows are incorrect.
+Unsupported eventless-entry findings fail the producer and protected-input consumer coverage gates under [DR-049](049-early-transition-coverage.md), even when the FSM can execute successfully in XState.
