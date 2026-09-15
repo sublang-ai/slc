@@ -16,8 +16,10 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { clarificationContract, decodeClarification } from './clarification.js';
 
 import {
+  definitionReferenceContext,
   updateContextLines,
   type ExecuteRequest,
   type ExecutorResult,
@@ -112,6 +114,8 @@ export function buildPhasePrompt(opts: {
     definition,
     '--- END DEFINITION ---',
     '',
+    definitionReferenceContext(request.definitionPath),
+    '',
     'Inputs:',
     ...inputs.map((line) => `- ${line}`),
     `- artifact to write: ${target}`,
@@ -129,8 +133,13 @@ export function buildPhasePrompt(opts: {
     ...(request.kind === 'compile' && request.update !== undefined
       ? [...updateContextLines(request.update, request.target), '']
       : []),
+    ...(request.kind === 'link' && request.outputContract !== undefined
+      ? [request.outputContract, '']
+      : []),
     'When done, reply with a concise summary of what you produced and any ambiguity you resolved.',
     'If the inputs are malformed under the definition, or the definition is incompatible with them, do not guess: leave the artifact unwritten and reply with a line beginning "BLOCKED:" followed by the concrete reason(s).',
+    '',
+    clarificationContract(),
   ].join('\n');
 }
 
@@ -177,6 +186,17 @@ export function createInterpretedExecutor(opts: {
         };
       }
 
+      const clarification = decodeClarification(response.text);
+      if (clarification.kind === 'invalid') {
+        return { status: 'error', diagnostics: [clarification.reason] };
+      }
+      if (clarification.kind === 'clarification') {
+        return {
+          status: 'clarification',
+          diagnostics: [],
+          questions: clarification.questions,
+        };
+      }
       const blocked = blockedReasons(response.text);
       if (blocked !== null) {
         return { status: 'blocked', diagnostics: blocked };

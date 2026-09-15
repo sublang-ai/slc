@@ -43,7 +43,7 @@ While a phase is executing, when no progress has been reported for the 30-second
 
 ### cli-34
 
-Where the stall timeout — a non-blank `SLC_STALL_TIMEOUT` environment variable, otherwise the config file's `stallTimeout` field, otherwise 600, each in seconds with `0` disabling the watchdog and a value too large to serve as a timer delay refused — elapses while an in-flight agent call reports no activity, the slc executable shall abort that call and fail the run with a failure report naming the phase, its target artifact, and the inactivity duration, rather than waiting indefinitely ([DR-019](../decisions/019-compile-progress-stall-watchdog.md), [[cli-4](#cli-4)], [[phase-execution-36](phase-execution.md#phase-execution-36)]).
+Where the stall timeout — a non-blank `SLC_STALL_TIMEOUT` environment variable, otherwise the config file's `stallTimeout` field, otherwise 2400, each in seconds with `0` disabling the watchdog and a value too large to serve as a timer delay refused — elapses while an in-flight agent call reports no activity, the slc executable shall abort that call and fail the run with a failure report naming the phase, its target artifact, and the inactivity duration, rather than waiting indefinitely ([DR-019](../decisions/019-compile-progress-stall-watchdog.md), [DR-043](../decisions/043-stall-watchdog-default-window.md), [[cli-4](#cli-4)], [[phase-execution-36](phase-execution.md#phase-execution-36)]).
 
 ### cli-22
 
@@ -93,7 +93,7 @@ Where a non-blank `SLC_REVIEWER_AGENT` environment variable, otherwise the confi
 
 ### cli-35
 
-When the slc executable builds run dependencies for a documented invocation form, the executable shall construct a progress reporter that renders phase, streamed-status, and heartbeat events as lines on standard error, inject it into `runSlc` as the run's progress sink, thread it into the compiled-execution factory so streamed runtime status reaches the same reporter, and resolve the stall timeout — a non-blank `SLC_STALL_TIMEOUT` environment variable, otherwise the config file's `stallTimeout` field, otherwise 600 seconds, `0` disabling — into every agent transport it constructs ([DR-019](../decisions/019-compile-progress-stall-watchdog.md), [[cli-8](#cli-8)], [[cli-32](#cli-32)], [[cli-34](#cli-34)], [[phase-execution-36](phase-execution.md#phase-execution-36)]).
+When the slc executable builds run dependencies for a documented invocation form, the executable shall construct a progress reporter that renders phase, streamed-status, and heartbeat events as lines on standard error, inject it into `runSlc` as the run's progress sink, thread it into the compiled-execution factory so streamed runtime status reaches the same reporter, and resolve the stall timeout — a non-blank `SLC_STALL_TIMEOUT` environment variable, otherwise the config file's `stallTimeout` field, otherwise 2400 seconds, `0` disabling — into every agent transport it constructs ([DR-019](../decisions/019-compile-progress-stall-watchdog.md), [DR-043](../decisions/043-stall-watchdog-default-window.md), [[cli-8](#cli-8)], [[cli-32](#cli-32)], [[cli-34](#cli-34)], [[phase-execution-36](phase-execution.md#phase-execution-36)]).
 
 ### cli-9
 
@@ -105,7 +105,7 @@ While `runSlc` is in progress, when the process receives an interrupt, the slc e
 
 ### cli-11
 
-When `runSlc` returns its result, the slc executable shall, on success, write the produced artifact paths or its `up to date` outcome to standard output, write every returned diagnostic to standard error, and return a zero exit code, and otherwise write the failure diagnostics to standard error and return a non-zero exit code ([DR-003](../decisions/003-slc-phase-execution.md), [DR-021](../decisions/021-incremental-compilation.md), [DR-023](../decisions/023-host-settled-link-object-imports.md)).
+Where the result is not a source-clarification outcome [[clarification-8](clarification.md#clarification-8)], when `runSlc` returns its result, the slc executable shall, on success, write the produced artifact paths or its `up to date` outcome to standard output, write every returned diagnostic to standard error, and return a zero exit code, and otherwise write the failure diagnostics to standard error and return a non-zero exit code ([DR-003](../decisions/003-slc-phase-execution.md), [DR-021](../decisions/021-incremental-compilation.md), [DR-023](../decisions/023-host-settled-link-object-imports.md)).
 
 ## Verification
 

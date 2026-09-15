@@ -130,13 +130,23 @@ export declare function playbookProvenanceForLinkTarget(
 ): Promise<string | undefined>;
 /** The minimal XState machine-config shape the introspector walks (`machine.config`). */
 export interface MachineConfigLike {
-  initial?: string;
+  initial?:
+    | string
+    | {
+        target: string;
+        actions?: unknown;
+      };
+  meta?: unknown;
+  tags?: string | readonly string[];
   states?: Record<string, StateLike>;
   on?: Record<string, unknown>;
+  /** The machine's initial context: a literal record or an input-taking factory. */
+  context?: unknown;
 }
+type InputMapper = (arg: { context: Record<string, unknown> }) => unknown;
 interface InvokeLike {
   src?: unknown;
-  input?: (arg: { context: Record<string, unknown> }) => unknown;
+  input?: InputMapper | Record<string, unknown>;
   onDone?: unknown;
   onError?: unknown;
 }
@@ -148,7 +158,7 @@ interface InvokeArrayLike extends ReadonlyArray<InvokeLike> {
 }
 interface StateLike {
   id?: string;
-  initial?: string;
+  initial?: MachineConfigLike['initial'];
   type?: string;
   meta?: unknown;
   tags?: string | readonly string[];
@@ -158,11 +168,19 @@ interface StateLike {
   onDone?: unknown;
   onError?: unknown;
 }
+/** Both XState initial-transition forms select one immediate child key. */
+export declare function initialStateTarget(
+  initial: MachineConfigLike['initial'],
+): string | undefined;
 /**
  * Parses the GEARS items from a `gears` artifact: each `### <ID>` item's player,
  * blockquoted acting prompt, and optional ordered `Results:` metadata.
  */
 export declare function parseGearsItems(gears: string): GearsItem[];
+/** Existing GEARS result-parser findings, without requiring a consumer FSM. */
+export declare function checkGearsResultContract(gears: string): string[];
+/** GEARS actor-clause findings, without changing parser classification. */
+export declare function checkGearsActorContract(gears: string): string[];
 /** The source generation and canonical role/cohort declaration of one GEARS artifact. */
 export interface GearsRoleContract {
   generation: 'schema-1' | 'schema-3' | 'unspecified';
@@ -228,6 +246,10 @@ export declare function isControllerMachine(config: MachineConfigLike): boolean;
 export declare function hasControllerDecisionNearMiss(
   config: MachineConfigLike,
 ): boolean;
+/** Reject tags that prevent the public runtime returning a pending child. */
+export declare function checkFsmChildSuspension(
+  config: MachineConfigLike,
+): string[];
 /**
  * Checks GEARS↔FSM conformance and returns human-readable findings (empty when
  * conformant): every GEARS item maps to one state with the same player and the
@@ -328,7 +350,7 @@ export declare function normalizeArms(raw: unknown): TransitionArm[];
 export declare function pinIntrospection(
   config: MachineConfigLike,
 ): IntrospectionPins;
-/** The exact continuation preamble the link contract mandates (link.md). */
+/** The historical full continuation format, retained for schema-1 and old composers. */
 export declare const CONTINUATION_PREAMBLE =
   'You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.';
 export declare const BOSS_QUESTION_LABEL = 'Boss question:';
@@ -355,6 +377,8 @@ export declare function placeholdersIn(prompt: string): string[];
  */
 export declare function probeContextReads(
   inputFn: (arg: { context: Record<string, unknown> }) => unknown,
+  /** The machine's initial context, so a typed field does not truncate the trace. */
+  initial?: Record<string, unknown>,
 ): string[];
 /**
  * Derives every captain state's prompt contract from the machine config
@@ -375,13 +399,18 @@ export declare function deriveSubstitutions(
   compose: PromptComposer,
   actor?: CaptainState['actor'],
 ): Record<string, string[]>;
+/** Known-schema FSM input checks, without requiring a linked composer. */
+export declare function checkFsmContinuationInputs(
+  config: MachineConfigLike,
+  artifactSchema: 1 | 3,
+): string[];
 /**
  * Checks the linked composer against the link contract for every captain state
  * (verification-5), returning findings (empty when conformant): the prompt body is
  * preserved modulo substituted placeholders, the adjudicator-facing Boss-reply
  * contract never leaks into a player prompt, no continuation appears on an
- * ordinary turn, and a Boss-reply continuation turn opens with the exact
- * preamble and labelled Q&A blocks before the body.
+ * ordinary turn, and a Boss-reply continuation turn opens with a supported exact
+ * prefix. Only an explicitly resumed schema-3 player may omit the question.
  */
 export declare function checkPromptComposition(opts: {
   config: MachineConfigLike;
@@ -390,11 +419,14 @@ export declare function checkPromptComposition(opts: {
   actor?: CaptainState['actor'];
   /** Grounded linked-artifact schema for otherwise ambiguous direct Captain states. */
   artifactSchema?: 1 | 3;
+  /** Collects observations that degrade the probe without failing the contract. */
+  diagnostics?: string[];
 }): string[];
 type PromptIdentity = (roleId: string) => string;
 type PromptComposer = (
   input: unknown,
   promptIdentity: PromptIdentity,
+  resuming?: boolean,
 ) => string;
 /**
  * Package-export default for direct emitter callers. Full reserved-pipeline
@@ -516,6 +548,8 @@ export declare function generatePromptContractTest(opts: {
  * (DR-028).
  */
 export declare function resolveArtifactSchemaForVerification(opts: {
+  /** Conformance before linking has no continuation composer to classify. */
+  requireContinuationSchema?: boolean;
   artifactSchema?: 1 | 3;
   provenance?: unknown;
   /** The link target's installed engine declaration, when the caller read it. */
@@ -528,6 +562,25 @@ export declare function resolveArtifactSchemaForVerification(opts: {
   artifactSchema?: 1 | 3;
   findings: string[];
 };
+/**
+ * The deterministic link-fidelity checks over one live linked `playbook` module
+ * beside its FSM (verification-27): exactly the checks the emitted
+ * prompt-contract suite asserts, decided from those two paths alone and
+ * returning one finding per violation.
+ *
+ * The gate that runs this before any Reviewer call must never throw into the
+ * executor it guards (DR-030, phase-execution-53), so a module that cannot be
+ * imported yields its import diagnostic as a finding. An absent module or FSM
+ * yields none: an artifact the performing call has not written is the generic
+ * target check's business (phase-execution-4). An FSM that cannot be imported
+ * yields none either — the suite's checks derive from that machine, so they
+ * degrade exactly as emission degrades its prompt-contract test to a
+ * diagnostic (verification-5).
+ */
+export declare function checkLinkedModuleContract(opts: {
+  linkedPath: string;
+  fsmPath: string;
+}): Promise<string[]>;
 /**
  * Emits the prompt-contract test beside a compiled `playbook` artifact
  * (verification-5): derives and pins the per-state contract from the physical

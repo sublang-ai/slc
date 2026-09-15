@@ -1,6 +1,10 @@
 import { type MachineConfigLike } from './verify.js';
 /** The `gears2fsm`-mandated captain actor name a machine declares. */
 export declare const CAPTAIN_ACTOR = 'captain';
+/** Incomplete coverage is not an unsatisfiable transition or Source question. */
+export declare class FsmCoverageDeadlineError extends Error {
+  constructor();
+}
 /** The minimal machine surface the coverage driver needs. */
 interface MachineLike {
   config: MachineConfigLike & {
@@ -68,6 +72,9 @@ export declare function checkFsmCoverage(
   opts?: {
     /** The artifact's source text, mined for routing-value candidates. */
     sourceText?: string;
+    signal?: AbortSignal;
+    /** A caller may shorten, never extend, the derived cooperative deadline. */
+    timeoutMs?: number;
   },
 ): Promise<string[]>;
 /**

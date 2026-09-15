@@ -810,6 +810,65 @@ describe('createCompiledExecutor (phase-execution-26)', () => {
     expect(await readFile(join(root, 'out.ts'), 'utf8')).toBe('compiled:hello');
   });
 
+  it('relays the entry output contract only to performing calls in a compiled link (self-hosting-19)', async () => {
+    const performing: string[] = [];
+    const controls: string[] = [];
+    let ports: PlaybookPorts;
+    const target = join(root, 'linked.ts');
+    const executor = createCompiledExecutor({
+      artifactPath: 'fixture',
+      runRoot: root,
+      player: {
+        async run(request) {
+          performing.push(request.prompt);
+          return { status: 'success', text: 'written' };
+        },
+      },
+      judge: {
+        async run(request) {
+          controls.push(request.prompt);
+          return { status: 'success', text: '{}' };
+        },
+      },
+      loadFactory: async () => () => ({
+        async init(value) {
+          ports = value as PlaybookPorts;
+        },
+        async handleBossInput() {
+          await ports.callPlayer(
+            'coder',
+            'Produce the link.',
+            new AbortController().signal,
+            { resume: false },
+          );
+          await ports.callJudge(
+            'Choose the outcome.',
+            new AbortController().signal,
+          );
+          await writeFile(target, 'export default 1;');
+        },
+        async dispose() {},
+      }),
+    });
+    const result = await executor.run(
+      {
+        kind: 'link',
+        definitionPath: join(root, 'link.md'),
+        objects: [],
+        linkTarget: 'runtime.ts',
+        options: [],
+        linked: target,
+        outputContract: 'Entry option validator sentinel.',
+      },
+      new AbortController().signal,
+    );
+    expect(result.status, result.diagnostics.join('\n')).toBe('ok');
+    expect(performing).toHaveLength(1);
+    expect(performing[0]).toContain('Entry option validator sentinel.');
+    expect(controls).toHaveLength(1);
+    expect(controls[0]).not.toContain('Entry option validator sentinel.');
+  });
+
   it('seeds and drives a link request through the fixture runtime (phase-execution-29)', async () => {
     await writeFile(join(root, 'object.ts'), 'object');
     await writeFile(join(root, 'runtime.ts'), 'runtime');

@@ -8,10 +8,12 @@ import {
   mkdtemp,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -58,6 +60,10 @@ import {
 } from '../src/resolver.js';
 
 import { writePlaybookEngineFixture } from './playbook-engine-fixture.js';
+
+import { pipelineOutput } from './pipeline-output-fixture.js';
+
+const repository = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats
@@ -108,7 +114,8 @@ const makeAgent = (
         return { status: 'success', text: 'BLOCKED: the source is malformed' };
       if (opts.error) return { status: 'error', text: 'agent failed' };
       const match = /artifact to write: (.+)/.exec(prompt);
-      if (match && !opts.skip) await writeFile(match[1].trim(), 'output\n');
+      if (match && !opts.skip)
+        await writeFile(match[1].trim(), pipelineOutput(match[1].trim()));
       return { status: 'success', text: 'wrote the artifact' };
     },
   };
@@ -151,6 +158,11 @@ beforeEach(async () => {
   srcDir = join(root, 'work');
   await mkdir(pipelineDir, { recursive: true });
   await mkdir(srcDir);
+  await symlink(
+    join(repository, 'node_modules'),
+    join(root, 'node_modules'),
+    'dir',
+  );
   await writeFile(
     join(pipelineDir, 'text2gears.md'),
     formats('text', '.md', 'gears', '.md'),
@@ -420,7 +432,8 @@ describe('progress (cli-36, cli-37)', () => {
       run: async ({ prompt }) => {
         seenDuringPhase.push([...err]);
         const target = /artifact to write: (.+)/.exec(prompt)?.[1].trim();
-        if (target !== undefined) await writeFile(target, 'output\n');
+        if (target !== undefined)
+          await writeFile(target, pipelineOutput(target));
         return { status: 'success', text: 'wrote the artifact' };
       },
     };
@@ -465,7 +478,8 @@ describe('progress (cli-36, cli-37)', () => {
         signalEntered();
         await released;
         const target = /artifact to write: (.+)/.exec(prompt)?.[1].trim();
-        if (target !== undefined) await writeFile(target, 'output\n');
+        if (target !== undefined)
+          await writeFile(target, pipelineOutput(target));
         return { status: 'success', text: 'wrote the artifact' };
       },
     };
@@ -578,8 +592,8 @@ describe('progress (cli-36, cli-37)', () => {
 describe('stall timeout resolution (cli-34, cli-35)', () => {
   const env = { SLC_AGENT: 'claude-code' };
 
-  it('defaults to 600 seconds', () => {
-    expect(resolveRunConfig(env, {}).stallTimeoutMs).toBe(600_000);
+  it('defaults to 2400 seconds', () => {
+    expect(resolveRunConfig(env, {}).stallTimeoutMs).toBe(2_400_000);
   });
 
   it('takes the config-file value when the environment is silent', () => {

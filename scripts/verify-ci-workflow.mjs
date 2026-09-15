@@ -555,7 +555,7 @@ const exactScripts = new Map([
   ['lint', 'eslint .'],
   [
     'build',
-    'rm -rf dist && tsc && cp src/normalize.md src/slc.config.template.yaml dist/',
+    'rm -rf dist && node node_modules/@typescript/native/bin/tsc --project tsconfig.json && cp src/normalize.md src/slc.config.template.yaml dist/',
   ],
   ['test', 'vitest run'],
   ['verify:definitions', 'node scripts/verify-playbook-definitions.mjs'],

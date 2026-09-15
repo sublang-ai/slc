@@ -23,6 +23,7 @@ import {
   loadFsmModule,
   loadLinkedModuleForVerification,
 } from '../src/verify.js';
+import { fsmCoverageTestTimeout } from '../src/verify-coverage.js';
 import {
   COMPOSED_V3_EVIDENCE_FINDING,
   checkPlaybookIntegrity,
@@ -42,6 +43,11 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const referenceDir = join(
   repoRoot,
   'node_modules/@sublang/playbook/reference/sdlc/code.playbook',
+);
+const referenceFsmModule = await import(join(referenceDir, 'code.fsm.js'));
+const referenceEquivalenceTestTimeout = Math.min(
+  300000,
+  fsmCoverageTestTimeout(referenceFsmModule) * 2,
 );
 const installedPlaybookVersion = (
   JSON.parse(
@@ -77,7 +83,7 @@ async function loadReference(): Promise<CompiledPlaybook> {
       : undefined;
   return {
     gears: readFileSync(join(referenceDir, 'code.gears.md'), 'utf8'),
-    fsm: await import(join(referenceDir, 'code.fsm.js')),
+    fsm: referenceFsmModule,
     playbook: schema3?.playbook ?? playbook,
     fsmSource: readFileSync(join(referenceDir, 'code.fsm.ts'), 'utf8'),
     linkTargetProvenance: installedPlaybookProvenance,
@@ -991,27 +997,31 @@ function schema3ProfileOptions(
 }
 
 describe('reference equivalence harness (verification-9)', () => {
-  it('accepts the reference compared to itself', async () => {
-    const reference = await loadReference();
-    // Playbook 10.0.0's shipped reference does not satisfy its own gears2fsm
-    // definition (no exported `concurrentRoleSets` despite declaring role
-    // `coder`, and two nested `review` calls whose text is not the GEARS prompt
-    // verbatim), and it declares no BOSS_INTERRUPT targets. Comparing it to
-    // itself still establishes equivalence: every finding appears identically
-    // on both sides, so nothing distinguishes produced from reference.
-    const findings = await checkReferenceEquivalence({
-      produced: reference,
-      reference,
-    });
-    const produced = findings
-      .filter((finding) => finding.startsWith('produced: '))
-      .map((finding) => finding.slice('produced: '.length));
-    const mirrored = findings
-      .filter((finding) => finding.startsWith('reference: '))
-      .map((finding) => finding.slice('reference: '.length));
-    expect(produced).toEqual(mirrored);
-    expect(findings).toHaveLength(produced.length + mirrored.length);
-  });
+  it(
+    'accepts the reference compared to itself',
+    async () => {
+      const reference = await loadReference();
+      // Playbook 10.0.0's shipped reference does not satisfy its own gears2fsm
+      // definition (no exported `concurrentRoleSets` despite declaring role
+      // `coder`, and two nested `review` calls whose text is not the GEARS prompt
+      // verbatim), and it declares no BOSS_INTERRUPT targets. Comparing it to
+      // itself still establishes equivalence: every finding appears identically
+      // on both sides, so nothing distinguishes produced from reference.
+      const findings = await checkReferenceEquivalence({
+        produced: reference,
+        reference,
+      });
+      const produced = findings
+        .filter((finding) => finding.startsWith('produced: '))
+        .map((finding) => finding.slice('produced: '.length));
+      const mirrored = findings
+        .filter((finding) => finding.startsWith('reference: '))
+        .map((finding) => finding.slice('reference: '.length));
+      expect(produced).toEqual(mirrored);
+      expect(findings).toHaveLength(produced.length + mirrored.length);
+    },
+    referenceEquivalenceTestTimeout,
+  );
 
   it('accepts each matching exact runtime contract profile', async () => {
     const reference = historicalSchema1Compilation();
@@ -2119,48 +2129,56 @@ describe('reference equivalence harness (verification-9)', () => {
     ).toBe(true);
   });
 
-  it('rejects a compilation that drops or rewrites a prompt line', async () => {
-    const reference = await loadReference();
-    const drifted: CompiledPlaybook = {
-      ...reference,
-      gears: reference.gears.replaceAll(
-        '> Do not implement a later task in this phase.',
-        '> Think about it.',
-      ),
-    };
-    const findings = await checkReferenceEquivalence({
-      produced: drifted,
-      reference,
-    });
-    expect(findings).toContain(
-      'role:coder: produced gears lacks the line "Do not implement a later task in this phase."',
-    );
-    expect(findings).toContain(
-      'role:coder: produced gears adds the line "Think about it."',
-    );
-  });
+  it(
+    'rejects a compilation that drops or rewrites a prompt line',
+    async () => {
+      const reference = await loadReference();
+      const drifted: CompiledPlaybook = {
+        ...reference,
+        gears: reference.gears.replaceAll(
+          '> Do not implement a later task in this phase.',
+          '> Think about it.',
+        ),
+      };
+      const findings = await checkReferenceEquivalence({
+        produced: drifted,
+        reference,
+      });
+      expect(findings).toContain(
+        'role:coder: produced gears lacks the line "Do not implement a later task in this phase."',
+      );
+      expect(findings).toContain(
+        'role:coder: produced gears adds the line "Think about it."',
+      );
+    },
+    referenceEquivalenceTestTimeout,
+  );
 
-  it('rejects a compilation that loses a participant', async () => {
-    const reference = await loadReference();
-    // Collapsing the authored `review` child call into another Coder prompt
-    // drops a distinct participant, the schema-3 analogue of the historical
-    // player-collapse drift.
-    const drifted: CompiledPlaybook = {
-      ...reference,
-      gears: reference.gears.replaceAll(
-        'Captain shall call playbook `review`:',
-        'Captain shall prompt Coder:',
-      ),
-    };
-    const findings = await checkReferenceEquivalence({
-      produced: drifted,
-      reference,
-    });
-    expect(findings).toContain(
-      'player sets differ: produced [role:coder] vs reference [playbook:review, role:coder]',
-    );
-    expect([...playerLineSets(drifted.gears).keys()]).toEqual(['role:coder']);
-  });
+  it(
+    'rejects a compilation that loses a participant',
+    async () => {
+      const reference = await loadReference();
+      // Collapsing the authored `review` child call into another Coder prompt
+      // drops a distinct participant, the schema-3 analogue of the historical
+      // player-collapse drift.
+      const drifted: CompiledPlaybook = {
+        ...reference,
+        gears: reference.gears.replaceAll(
+          'Captain shall call playbook `review`:',
+          'Captain shall prompt Coder:',
+        ),
+      };
+      const findings = await checkReferenceEquivalence({
+        produced: drifted,
+        reference,
+      });
+      expect(findings).toContain(
+        'player sets differ: produced [role:coder] vs reference [playbook:review, role:coder]',
+      );
+      expect([...playerLineSets(drifted.gears).keys()]).toEqual(['role:coder']);
+    },
+    referenceEquivalenceTestTimeout,
+  );
 
   it('binds the reference prompt lines to the coder role and the review child', async () => {
     const reference = await loadReference();
@@ -2220,21 +2238,25 @@ Captain shall prompt Reviewer:
   // The real acceptance: `slc playbook <source>` output compared to the manual
   // reference under verification-9 and DR-009. Gated on a produced directory —
   // a real agent compile — so a clean checkout skips rather than fails.
-  it('accepts real slc playbook output when produced (gated)', async (context) => {
-    const producedDir =
-      process.env.SLC_EQUIVALENCE_DIR ??
-      join(repoRoot, '.scratch/sdlc/code.playbook');
-    if (!existsSync(join(producedDir, 'code.playbook.ts'))) {
-      console.warn(
-        `equivalence: no produced output at ${producedDir}; run \`slc playbook <code.md> --link @sublang/playbook\` there first`,
+  it(
+    'accepts real slc playbook output when produced (gated)',
+    async (context) => {
+      const producedDir =
+        process.env.SLC_EQUIVALENCE_DIR ??
+        join(repoRoot, '.scratch/sdlc/code.playbook');
+      if (!existsSync(join(producedDir, 'code.playbook.ts'))) {
+        console.warn(
+          `equivalence: no produced output at ${producedDir}; run \`slc playbook <code.md> --link @sublang/playbook\` there first`,
+        );
+        context.skip();
+        return;
+      }
+      const produced = await loadProduced(producedDir);
+      const reference = await loadReference();
+      expect(await checkReferenceEquivalence({ produced, reference })).toEqual(
+        [],
       );
-      context.skip();
-      return;
-    }
-    const produced = await loadProduced(producedDir);
-    const reference = await loadReference();
-    expect(await checkReferenceEquivalence({ produced, reference })).toEqual(
-      [],
-    );
-  });
+    },
+    referenceEquivalenceTestTimeout,
+  );
 });

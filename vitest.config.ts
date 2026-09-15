@@ -3,6 +3,7 @@
 
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { availableParallelism } from 'node:os';
 
 export default defineConfig({
   resolve: {
@@ -16,18 +17,27 @@ export default defineConfig({
     },
   },
   test: {
+    // Integration workers also launch TypeScript and emitted-test processes.
+    // Leave CPU capacity for those children instead of saturating the host.
+    maxWorkers: Math.max(
+      1,
+      Math.min(2, Math.floor(availableParallelism() / 2)),
+    ),
     // .scratch/ holds real-agent build evidence (compiled artifacts with their
     // emitted verification tests); it is reviewed by the build-and-review
     // scripts, not by the repo suite. Committed artifact directories under
     // pipelines/ DO run their emitted tests here.
     // demo/workflow*.playbook/ are gitignored end-user compile outputs; the
     // committed copies under demo/reference/ are the ones the suite runs.
+    // Workflow acceptance probes are opt-in because they require an explicit
+    // maintained fixture checkout.
     exclude: [
       '**/node_modules/**',
       'dist/**',
       '.scratch/**',
       'demo/workflow.playbook/**',
       'demo/workflow.zh.playbook/**',
+      'scripts/workflow-acceptance/**',
     ],
   },
 });

@@ -44,11 +44,23 @@ import {
 } from 'node:path';
 
 import { errorCode, isAbsentPathError, messageOf } from './errors.js';
+import type { ClarificationQuestion } from './clarification.js';
 
 /** An opaque link option pair (pipeline-14), structurally compatible with the CLI's LinkOption. */
 export interface LinkOptionPair {
   name: string;
   value: string;
+}
+
+/** Host-owned origin for relative inputs cited by a phase definition (DR-037). */
+export function definitionReferenceContext(definitionPath: string): string {
+  const file = resolve(definitionPath);
+  return [
+    'Definition reference context (read-only):',
+    `- definition file: ${JSON.stringify(file)}`,
+    `- definition directory: ${JSON.stringify(dirname(file))}`,
+    '- resolve relative references in the definition from its directory unless the definition explicitly specifies another base.',
+  ].join('\n');
 }
 
 /**
@@ -141,6 +153,8 @@ export type ExecuteRequest =
       linkTarget: string;
       options: LinkOptionPair[];
       linked: string;
+      /** Explicit host-owned contract required by a planned deterministic output. */
+      outputContract?: string;
       /**
        * Deterministic gate on the produced linked module, supplied by the host
        * for a `playbook` link over an FSM object (DR-030,
@@ -150,13 +164,16 @@ export type ExecuteRequest =
     };
 
 /** Terminal status an executor reports for a phase run. */
-export type ExecutorStatus = 'ok' | 'blocked' | 'error';
+export type ExecutorStatus = 'ok' | 'blocked' | 'error' | 'clarification';
 
 /** The outcome an executor returns, with diagnostics drained for every status. */
-export interface ExecutorResult {
-  status: ExecutorStatus;
-  diagnostics: string[];
-}
+export type ExecutorResult =
+  | { status: 'ok' | 'blocked' | 'error'; diagnostics: string[] }
+  | {
+      status: 'clarification';
+      diagnostics: string[];
+      questions: ClarificationQuestion[];
+    };
 
 /** Runs one phase or link execution; implemented by the interpreted/compiled executors. */
 export interface PhaseExecutor {
@@ -173,7 +190,11 @@ export interface FailureReport {
 /** The result of a generic-checked phase run. */
 export type PhaseResult =
   | { ok: true; target: string; diagnostics: string[] }
-  | { ok: false; report: FailureReport };
+  | {
+      ok: false;
+      report: FailureReport;
+      clarification?: ClarificationQuestion[];
+    };
 
 /** Options for validating one planned host or executor write target. */
 export interface SafeTargetOptions {
@@ -234,18 +255,7 @@ export async function runPhase(opts: {
   const { request, phase, targetExt, executor } = opts;
   const signal = opts.signal ?? new AbortController().signal;
   const target = request.kind === 'compile' ? request.target : request.linked;
-  const inputs =
-    request.kind === 'compile'
-      ? [
-          request.source,
-          ...(request.references ?? []),
-          ...(request.update === undefined ? [] : [request.update.priorInput]),
-        ]
-      : [...request.objects, request.linkTarget];
-  const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
-  const protectedPaths = [
-    ...new Set([...inputs, ...definitions, ...(opts.protectedInputs ?? [])]),
-  ];
+  const protectedPaths = phaseProtectedPaths(request, opts);
   const targetProtectedPaths = [
     ...new Set([...protectedPaths, ...(opts.aliasInputs ?? [])]),
   ];
@@ -257,7 +267,7 @@ export async function runPhase(opts: {
     return failure(phase, target, [messageOf(error)]);
   }
 
-  const before = await snapshot(protectedPaths);
+  const checkProtectedPaths = await watchProtectedPaths(protectedPaths);
 
   if (opts.beforeExecute) {
     try {
@@ -275,7 +285,11 @@ export async function runPhase(opts: {
     reasons.push(`executor threw: ${messageOf(error)}`);
   }
 
-  if (result !== null && result.status !== 'ok') {
+  if (
+    result !== null &&
+    result.status !== 'ok' &&
+    result.status !== 'clarification'
+  ) {
     reasons.push(...reasonsFor(result));
   }
 
@@ -303,12 +317,7 @@ export async function runPhase(opts: {
   // Protected inputs and chain definitions are re-checked after any outcome, so
   // a mutation is caught even when the executor blocks, errors, or throws
   // (phase-execution-5, phase-execution-6).
-  const after = await snapshot(protectedPaths);
-  for (const path of protectedPaths) {
-    if (before.get(path) !== after.get(path)) {
-      reasons.push(`protected path "${path}" changed during the run`);
-    }
-  }
+  reasons.push(...(await checkProtectedPaths()));
 
   if (opts.revalidate) {
     try {
@@ -318,10 +327,65 @@ export async function runPhase(opts: {
     }
   }
 
+  if (result?.status === 'clarification') {
+    try {
+      const targetAfter = await inspectTarget(target, targetProtectedPaths);
+      if (targetBefore.path !== targetAfter.path) {
+        reasons.push(
+          `target "${target}" changed physical location during the run`,
+        );
+      }
+    } catch (error) {
+      reasons.push(messageOf(error));
+    }
+  }
+
   if (reasons.length > 0) {
     return failure(phase, target, reasons);
   }
+  if (result?.status === 'clarification') {
+    return {
+      ok: false,
+      report: { phase, target, reasons: result.diagnostics },
+      clarification: result.questions,
+    };
+  }
   return { ok: true, target, diagnostics: result?.diagnostics ?? [] };
+}
+
+/** The same protected inputs surround phase execution and importing preflight. */
+export function phaseProtectedPaths(
+  request: ExecuteRequest,
+  opts: {
+    definitions?: readonly string[];
+    protectedInputs?: readonly string[];
+  } = {},
+): string[] {
+  const inputs =
+    request.kind === 'compile'
+      ? [
+          request.source,
+          ...(request.references ?? []),
+          ...(request.update === undefined ? [] : [request.update.priorInput]),
+        ]
+      : [...request.objects, request.linkTarget];
+  const definitions = [request.definitionPath, ...(opts.definitions ?? [])];
+  return [
+    ...new Set([...inputs, ...definitions, ...(opts.protectedInputs ?? [])]),
+  ];
+}
+
+/** Capture existing path identities and return their unchanged-input check. */
+export async function watchProtectedPaths(
+  paths: readonly string[],
+): Promise<() => Promise<string[]>> {
+  const before = await snapshot(paths);
+  return async () => {
+    const after = await snapshot(paths);
+    return paths
+      .filter((path) => before.get(path) !== after.get(path))
+      .map((path) => `protected path "${path}" changed during the run`);
+  };
 }
 
 /** Renders a failure report as a multi-line diagnostic string (phase-execution-9). */

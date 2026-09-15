@@ -65,10 +65,7 @@ export interface CaptainResult {
 }
 
 export type RuntimeContractProfile =
-  | 'legacy'
-  | 'session-v1'
-  | 'composed-v2'
-  | 'composed-v3';
+  'legacy' | 'session-v1' | 'composed-v2' | 'composed-v3';
 
 export type JsonValue =
   | null
@@ -85,8 +82,7 @@ export interface NormalizedError {
 }
 
 export type PlaybookStateValue =
-  | string
-  | { readonly [key: string]: PlaybookStateValue };
+  string | { readonly [key: string]: PlaybookStateValue };
 
 export interface PlaybookState {
   value: PlaybookStateValue;
@@ -166,8 +162,7 @@ export type Schema3PlaybookRunResult =
   | { outcome: 'unresolved-effect'; state: PlaybookState };
 
 export type CompatiblePlaybookRunResult =
-  | PlaybookRunResult
-  | Schema3PlaybookRunResult;
+  PlaybookRunResult | Schema3PlaybookRunResult;
 
 /** The six source-owned ports, additive over the locked four-port contract. */
 export interface CompatiblePlaybookPorts extends LegacyPlaybookPorts {
@@ -260,9 +255,7 @@ export interface SessionV1PlaybookRuntime {
 }
 
 export type CompatiblePlaybookRuntime =
-  | LegacyPlaybookRuntime
-  | SessionV1PlaybookRuntime
-  | SessionPlaybookRuntime;
+  LegacyPlaybookRuntime | SessionV1PlaybookRuntime | SessionPlaybookRuntime;
 
 /** Exact shared-factory compatibility required by the schema-3 phase host. */
 export interface ComposedV3FactoryCompat {
@@ -285,8 +278,7 @@ export type ComposedV3PhaseHostCapabilities = HostCapabilities;
  * requires it (DR-028).
  */
 export type ComposedV3ConfiguredOptions =
-  | Record<string, never>
-  | { readonly definition: string };
+  Record<string, never> | { readonly definition: string };
 
 export interface ComposedV3FactoryInput {
   configuredOptions: ComposedV3ConfiguredOptions;

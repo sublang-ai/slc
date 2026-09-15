@@ -10,8 +10,8 @@
  * default-exporting a Playbook registry entry derived entirely from the
  * compiled bundle — `id`/`command` from the basename, `requiredRoleIds` from
  * the gears `Roles:`/`Players:` declaration, `intent` from the normalized
- * source's title and lead line, an option allowlist carrying `cwd` exactly
- * when the source compiled a script item, and `createRuntime` wiring the
+ * source's title and lead line, the linked artifact's public pure option
+ * validator (or the retained legacy allowlist), and `createRuntime` wiring the
  * linked default factory. A current `Roles:` source declares the canonical
  * lowercase local role ids its compiled machine's delegated states name, so
  * the host binds exactly those ids and the session's `callPlayer` port needs
@@ -26,6 +26,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { inspectGearsRoleContract, parseGearsItems } from './verify.js';
+import { linkedOptionsValidator } from './entry-options.js';
 
 /** Options for {@link emitEntryModule}. */
 export interface EmitEntryModuleOptions {
@@ -72,6 +73,20 @@ export async function emitEntryModule(
   const hasScript = parseGearsItems(gears).some(
     (item) => item.actor === 'script',
   );
+  const delegatedOptions =
+    schema3 &&
+    (await linkedOptionsValidator({
+      linkedPath: join(
+        opts.cwd,
+        `${opts.basename}.${opts.pipeline}`,
+        `${opts.basename}.playbook.ts`,
+      ),
+      fsmPath: join(
+        opts.cwd,
+        `${opts.basename}.${opts.pipeline}`,
+        `${opts.basename}.fsm.ts`,
+      ),
+    })) !== undefined;
   const intent = deriveIntent(text) ?? opts.basename;
   const path = join(opts.cwd, `${opts.basename}.ts`);
   await writeFile(
@@ -81,6 +96,7 @@ export async function emitEntryModule(
       bundleLeaf: `${opts.basename}.${opts.pipeline}`,
       roleIds: schema3 ? roleContract.roleIds : roleContract.names,
       hasScript,
+      delegatedOptions,
       intent,
       schema3,
       concurrentRoleSets: schema3 ? roleContract.concurrentRoleSets : [],
@@ -123,14 +139,16 @@ function renderEntryModule(spec: {
   bundleLeaf: string;
   roleIds: readonly string[];
   hasScript: boolean;
+  delegatedOptions: boolean;
   intent: string;
   schema3: boolean;
   concurrentRoleSets: readonly (readonly string[])[];
 }): string {
   const allowed = spec.hasScript ? `['cwd']` : `[]`;
-  const cwdWiring = spec.hasScript
-    ? `{\n      ...validated,\n      cwd: validated.cwd ?? process.cwd(),\n    }`
-    : `validated`;
+  const cwdWiring =
+    spec.hasScript && !spec.delegatedOptions
+      ? `{\n      ...validated,\n      cwd: validated.cwd ?? process.cwd(),\n    }`
+      : `validated`;
   // A schema-3 linked factory takes exactly `configuredOptions` and live
   // `hostCapabilities`; a schema-1 factory keeps its single options argument
   // under its own historical dependency closure (DR-024).
@@ -228,16 +246,19 @@ function withRoleBinding<T extends object>(runtime: T): T {
 // playbook to \`playbook run\`. Derived deterministically from the compiled
 ${roleNote}
 
-import createPlaybookRuntime from './${spec.bundleLeaf}/${spec.basename}.playbook.ts';
+import createPlaybookRuntime${spec.delegatedOptions ? ', { validateOptions as linkedValidateOptions }' : ''} from './${spec.bundleLeaf}/${spec.basename}.playbook.ts';
 
 type FactoryInput = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
 ${runtimeOptionsAlias}
 
-const ALLOWED_OPTION_KEYS: readonly string[] = ${allowed};
+${spec.delegatedOptions ? '' : `const ALLOWED_OPTION_KEYS: readonly string[] = ${allowed};`}
 
 const REQUIRED_ROLE_IDS: readonly string[] = [${spec.roleIds.map(sourceString).join(', ')}];
 ${roleBinding}
-function validateOptions(value: unknown): RuntimeOptions {
+${
+  spec.delegatedOptions
+    ? `const validateOptions: (value: unknown) => RuntimeOptions = linkedValidateOptions;`
+    : `function validateOptions(value: unknown): RuntimeOptions {
   if (value === undefined) return {};
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error('playbook options must be an object');
@@ -255,6 +276,7 @@ function validateOptions(value: unknown): RuntimeOptions {
     options[key] = option;
   }
   return options as RuntimeOptions;
+}`
 }
 
 const entry = {

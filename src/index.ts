@@ -12,6 +12,7 @@
 export * from './app.js';
 export * from './artifacts.js';
 export * from './cligent-agent.js';
+export * from './clarification.js';
 export * from './config.js';
 export * from './execution.js';
 export * from './interpreter.js';

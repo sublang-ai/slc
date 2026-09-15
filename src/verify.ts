@@ -231,16 +231,20 @@ export async function playbookProvenanceForLinkTarget(
 
 /** The minimal XState machine-config shape the introspector walks (`machine.config`). */
 export interface MachineConfigLike {
-  initial?: string;
+  initial?: string | { target: string; actions?: unknown };
+  meta?: unknown;
+  tags?: string | readonly string[];
   states?: Record<string, StateLike>;
   on?: Record<string, unknown>;
   /** The machine's initial context: a literal record or an input-taking factory. */
   context?: unknown;
 }
 
+type InputMapper = (arg: { context: Record<string, unknown> }) => unknown;
+
 interface InvokeLike {
   src?: unknown;
-  input?: (arg: { context: Record<string, unknown> }) => unknown;
+  input?: InputMapper | Record<string, unknown>;
   onDone?: unknown;
   onError?: unknown;
 }
@@ -256,7 +260,7 @@ interface InvokeArrayLike extends ReadonlyArray<InvokeLike> {
 
 interface StateLike {
   id?: string;
-  initial?: string;
+  initial?: MachineConfigLike['initial'];
   type?: string;
   meta?: unknown;
   tags?: string | readonly string[];
@@ -265,6 +269,13 @@ interface StateLike {
   on?: Record<string, unknown>;
   onDone?: unknown;
   onError?: unknown;
+}
+
+/** Both XState initial-transition forms select one immediate child key. */
+export function initialStateTarget(
+  initial: MachineConfigLike['initial'],
+): string | undefined {
+  return typeof initial === 'string' ? initial : initial?.target;
 }
 
 const ITEM_HEADING = /^###\s+([A-Za-z][\w-]*)\s*$/;
@@ -293,6 +304,8 @@ const SECTION_HEADING = /^##\s/;
 const RESULTS_LABEL = /^Results:\s*$/;
 const RESULTS_LABEL_NEAR_MISS = /^Results\s*:?[ \t]*$/;
 const RESULT_BULLET = /^-\s+`([A-Za-z_$][A-Za-z0-9_$]*)`:\s+(\S(?:.*\S)?)\s*$/;
+const PLAYBOOK_CALL_SEQUENCING_NEAR_MISS =
+  /\bCaptain shall (first|then|next|finally) call playbook\b/u;
 
 /**
  * Parses the GEARS items from a `gears` artifact: each `### <ID>` item's player,
@@ -456,6 +469,9 @@ export function parseGearsItems(gears: string): GearsItem[] {
           `${NEEDS_BOSS_REPLY} is compiler-owned and shall not be source metadata`,
         );
       }
+      current.resultFindings.push(
+        ...outputFieldGuidanceFindings(guard, description),
+      );
       current.results.push([guard, description]);
       continue;
     }
@@ -497,6 +513,77 @@ export function parseGearsItems(gears: string): GearsItem[] {
   }
   flush();
   return items;
+}
+
+/** Backticks in an output clause declare fields, never nested prose (DR-051). */
+function outputFieldGuidanceFindings(
+  guard: string,
+  description: string,
+): string[] {
+  const marker = description.indexOf('Output shall include');
+  if (marker < 0) return [];
+  let depth = 0;
+  const findings: string[] = [];
+  for (const [token] of description.slice(marker).matchAll(/`[^`]+`|[()]/g)) {
+    if (token === '(') depth++;
+    else if (token === ')') depth = Math.max(0, depth - 1);
+    else if (depth > 0) {
+      findings.push(
+        `result \`${guard}\` puts ${token} inside parenthetical output guidance; output-clause backticks declare fields, so move the field declaration outside parentheses or use plain guidance text or a complete field annotation`,
+      );
+    }
+  }
+  return findings;
+}
+
+function gearsResultFindings(items: readonly GearsItem[]): string[] {
+  return items.flatMap((item) =>
+    (item.resultFindings ?? []).map(
+      (finding) => `GEARS item ${item.id}: ${finding}`,
+    ),
+  );
+}
+
+function gearsActorFindings(gears: string): string[] {
+  const findings: string[] = [];
+  let item: string | undefined;
+  let inResults = false;
+  for (const line of gears.split('\n')) {
+    const heading = ITEM_HEADING.exec(line);
+    if (heading !== null) {
+      item = heading[1];
+      inResults = false;
+      continue;
+    }
+    if (SECTION_HEADING.test(line)) {
+      item = undefined;
+      inResults = false;
+      continue;
+    }
+    if (item === undefined) continue;
+    if (BLOCKQUOTE.test(line)) continue;
+    if (RESULTS_LABEL.test(line) || RESULTS_LABEL_NEAR_MISS.test(line)) {
+      inResults = true;
+      continue;
+    }
+    if (inResults) continue;
+    const nearMiss = PLAYBOOK_CALL_SEQUENCING_NEAR_MISS.exec(line);
+    if (nearMiss === null) continue;
+    findings.push(
+      `GEARS item ${item}: ${JSON.stringify(nearMiss[0])} is not a valid nested-playbook acting clause; use exact \`Captain shall call playbook ...:\` and preserve sequencing in When/While or continuation prose`,
+    );
+  }
+  return findings;
+}
+
+/** Existing GEARS result-parser findings, without requiring a consumer FSM. */
+export function checkGearsResultContract(gears: string): string[] {
+  return gearsResultFindings(parseGearsItems(gears));
+}
+
+/** GEARS actor-clause findings, without changing parser classification. */
+export function checkGearsActorContract(gears: string): string[] {
+  return gearsActorFindings(gears);
 }
 
 /** The source generation and canonical role/cohort declaration of one GEARS artifact. */
@@ -687,7 +774,7 @@ interface CaptainBinding {
   state: CaptainState;
   node: StateNodeRef;
   invoke: InvokeLike;
-  inputFn?: InvokeLike['input'];
+  inputFn?: InputMapper;
   /** Pins only the new explicit actor model, preserving legacy pin bytes. */
   pinActor: boolean;
 }
@@ -730,7 +817,16 @@ function normalizeInvokes(invoke: StateLike['invoke']): readonly InvokeLike[] {
 function invocationInput(
   invoke: InvokeLike,
   context: Record<string, unknown> = {},
+  allowStatic = false,
 ): { value: Record<string, unknown> } | { error: string } | { invalid: true } {
+  if (
+    allowStatic &&
+    typeof invoke.input === 'object' &&
+    invoke.input !== null &&
+    !Array.isArray(invoke.input)
+  ) {
+    return { value: invoke.input };
+  }
   if (typeof invoke.input !== 'function') return { invalid: true };
   let value: unknown;
   try {
@@ -894,7 +990,8 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
             ),
             node,
             invoke,
-            inputFn: invoke.input,
+            inputFn:
+              typeof invoke.input === 'function' ? invoke.input : undefined,
             pinActor: true,
           });
         }
@@ -914,7 +1011,8 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
             ),
             node,
             invoke,
-            inputFn: invoke.input,
+            inputFn:
+              typeof invoke.input === 'function' ? invoke.input : undefined,
             pinActor: true,
           });
         }
@@ -1026,7 +1124,7 @@ function enumerateCaptainBindings(config: MachineConfigLike): CaptainBinding[] {
         },
         node,
         invoke,
-        inputFn: invoke.input,
+        inputFn: typeof invoke.input === 'function' ? invoke.input : undefined,
         pinActor,
       });
     }
@@ -1052,7 +1150,7 @@ function enumeratePlaybookBindings(
   for (const node of walkStateNodes(config)) {
     for (const invoke of normalizeInvokes(node.state.invoke)) {
       if (invokeSource(invoke.src) !== 'playbook') continue;
-      const inspected = invocationInput(invoke, initial);
+      const inspected = invocationInput(invoke, initial, true);
       if ('error' in inspected) {
         out.push({
           state: malformedPlaybookState(
@@ -1104,11 +1202,15 @@ function enumeratePlaybookBindings(
         ) {
           const playbookIdSentinel = sentinelFor(fields.playbookIdContext);
           const textSentinel = sentinelFor(fields.textContext);
-          const wired = invocationInput(invoke, {
-            ...initial,
-            [fields.playbookIdContext]: playbookIdSentinel,
-            [fields.textContext]: textSentinel,
-          });
+          const wired = invocationInput(
+            invoke,
+            {
+              ...initial,
+              [fields.playbookIdContext]: playbookIdSentinel,
+              [fields.textContext]: textSentinel,
+            },
+            true,
+          );
           if ('error' in wired) {
             bindingFindings.push(
               `invoke.input threw during dynamic context introspection: ${wired.error}`,
@@ -1436,6 +1538,33 @@ function concurrentRoleSets(value: unknown): string[][] | undefined {
   return sets;
 }
 
+/** Reject tags that prevent the public runtime returning a pending child. */
+export function checkFsmChildSuspension(config: MachineConfigLike): string[] {
+  const nodes = walkStateNodes(config);
+  const busy = (tags: MachineConfigLike['tags']): boolean =>
+    typeof tags === 'string'
+      ? tags === 'playbook.busy'
+      : tags?.includes('playbook.busy') === true;
+  return enumeratePlaybookBindings(config).flatMap(({ node, state }) => {
+    const locations = [
+      ...(busy(config.tags) ? ['machine root'] : []),
+      ...nodes
+        .filter(
+          (ancestor) =>
+            ancestor.path.length <= node.path.length &&
+            ancestor.path.every((key, index) => key === node.path[index]) &&
+            busy(ancestor.state.tags),
+        )
+        .map((ancestor) => ancestor.statePath),
+    ];
+    return locations.length === 0
+      ? []
+      : [
+          `FSM playbook state ${state.stateId}: playbook.busy on ${locations.join(', ')} prevents returning a suspended child call; remove that tag from the call state and its ancestors`,
+        ];
+  });
+}
+
 /**
  * Checks GEARS↔FSM conformance and returns human-readable findings (empty when
  * conformant): every GEARS item maps to one state with the same player and the
@@ -1474,9 +1603,44 @@ export function checkGearsFsmConformance(
       .filter(({ pinActor }) => pinActor)
       .map(({ state }) => state),
   );
-  const playbookStates = enumeratePlaybookStates(config);
+  const playbookBindings = enumeratePlaybookBindings(config);
+  const playbookStates = playbookBindings.map(({ state }) => state);
+  const initialContext = initialMachineContext(config);
+  const literalChecks = new Map<
+    PlaybookInvocationState,
+    Map<string, string | undefined>
+  >();
+  const literalFinding = (
+    item: GearsItem,
+    state: PlaybookInvocationState,
+  ): string | undefined => {
+    let checked = literalChecks.get(state);
+    if (checked === undefined) literalChecks.set(state, (checked = new Map()));
+    if (!checked.has(item.prompt)) {
+      const binding = playbookBindings.find(
+        (candidate) => candidate.state === state,
+      );
+      checked.set(
+        item.prompt,
+        binding === undefined
+          ? 'has no inspectable invocation'
+          : literalPlaybookTextFinding(item.prompt, binding, initialContext),
+      );
+    }
+    return checked.get(item.prompt);
+  };
   const scriptStates = enumerateScriptStates(config);
   const findings: string[] = [];
+
+  if (
+    typeof config.meta === 'object' &&
+    config.meta !== null &&
+    Object.hasOwn(config.meta, 'playbook')
+  ) {
+    findings.push(
+      'FSM machine root declares meta.playbook; public playbook metadata belongs only to state nodes under states',
+    );
+  }
 
   for (const { state, nearMiss } of controllerNearMisses) {
     const detail =
@@ -1489,6 +1653,7 @@ export function checkGearsFsmConformance(
   }
 
   const nodes = walkStateNodes(config);
+  findings.push(...checkFsmChildSuspension(config));
   findings.push(...structuredStateIdentityFindings(nodes));
   findings.push(...roleContract.findings);
   const schema3 =
@@ -1509,13 +1674,8 @@ export function checkGearsFsmConformance(
     }
   }
 
-  for (const item of items) {
-    findings.push(
-      ...(item.resultFindings ?? []).map(
-        (finding) => `GEARS item ${item.id}: ${finding}`,
-      ),
-    );
-  }
+  findings.push(...gearsResultFindings(items));
+  findings.push(...gearsActorFindings(gears));
 
   for (const state of states) {
     findings.push(
@@ -1616,6 +1776,23 @@ export function checkGearsFsmConformance(
     }
   }
 
+  // Composed literal inputs have no static text signature. The optional
+  // sourceItem remains optional: match otherwise unbound calls by their whole
+  // observable template, never by guessed context-field names.
+  for (const item of playbookItems) {
+    if (item.playbookIdContext !== undefined || playbookMatchesByItem.has(item))
+      continue;
+    const state = playbookStates.find(
+      (candidate) =>
+        candidate.sourceItem === undefined &&
+        !matchedPlaybookStates.has(candidate) &&
+        candidate.playbookIdContext === undefined &&
+        candidate.playbookId === item.playbookId &&
+        literalFinding(item, candidate) === undefined,
+    );
+    if (state !== undefined) addPlaybookMatch(item, state);
+  }
+
   for (const item of items) {
     if (isPlaybookItem(item)) {
       const matched = playbookMatchesByItem.get(item) ?? [];
@@ -1651,10 +1828,9 @@ export function checkGearsFsmConformance(
             `${item.id}: FSM playbook "${state.playbookId ?? ''}" is not GEARS playbook "${item.playbookId ?? ''}"`,
           );
         }
-        if (state.text !== item.prompt) {
-          findings.push(
-            `${item.id}: FSM playbook text is not the GEARS prompt verbatim`,
-          );
+        const textFinding = literalFinding(item, state);
+        if (textFinding !== undefined) {
+          findings.push(`${item.id}: FSM playbook text ${textFinding}`);
         }
       }
       continue;
@@ -2038,7 +2214,7 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
           id: typeof state.id === 'string' ? state.id : null,
           publicStateId: metadataStateId(state) ?? null,
           type: typeof state.type === 'string' ? state.type : null,
-          initial: typeof state.initial === 'string' ? state.initial : null,
+          initial: initialStateTarget(state.initial) ?? null,
           tags: normalizedTags(state.tags),
           children: Object.keys(state.states ?? {}),
           invokes: normalizeInvokes(state.invoke)
@@ -2051,7 +2227,7 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
       }
     : undefined;
   return {
-    initial: typeof config.initial === 'string' ? config.initial : null,
+    initial: initialStateTarget(config.initial) ?? null,
     captain,
     quiescent,
     rootOn,
@@ -2072,11 +2248,14 @@ export function pinIntrospection(config: MachineConfigLike): IntrospectionPins {
  * so contract drift fails it (DR-009).
  */
 
-/** The exact continuation preamble the link contract mandates (link.md). */
+/** The historical full continuation format, retained for schema-1 and old composers. */
 export const CONTINUATION_PREAMBLE =
   'You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.';
 export const BOSS_QUESTION_LABEL = 'Boss question:';
 export const BOSS_REPLY_LABEL = 'Boss reply:';
+const CURRENT_CONTINUATION_PREAMBLE =
+  'Continue the same task using Boss’s reply below.';
+const CURRENT_BOSS_QUESTION_LABEL = 'Your previous question:';
 
 // Direct Captain prompts cross the callCaptain boundary and therefore must
 // not acquire player-only routing or session-control text. Match the stable
@@ -2395,13 +2574,99 @@ export function deriveSubstitutions(
   return out;
 }
 
+/** The shared input-only portion of the canonical continuation probe. */
+function probeContinuationInput(
+  state: CaptainState,
+  inputFn: InputMapper,
+  initial: Record<string, unknown> | undefined,
+  artifactSchema: 1 | 3,
+): { input: unknown; fields: string[]; question: string; reply: string } {
+  const question = sentinelFor('question');
+  const reply = sentinelFor('bossReply');
+  const pendingBossQuestion = {
+    ...(artifactSchema === 3
+      ? state.actor === 'captain'
+        ? { asker: { kind: 'captain' as const } }
+        : { asker: { kind: 'role' as const, roleId: state.role ?? '' } }
+      : { player: state.actor === 'captain' ? 'Captain' : state.player }),
+    questionId: state.stateId,
+    resumeStateId: state.stateId,
+    sourceItem: state.sourceItem,
+    question,
+  };
+  return {
+    ...withPlaceholderValues(
+      state,
+      inputFn({
+        context: {
+          ...ordinaryTurnContext(probeContextReads(inputFn, initial), initial),
+          pendingBossQuestion,
+          bossReply: reply,
+          pendingBossQuestions: { [state.stateId]: pendingBossQuestion },
+          bossReplies: { [state.stateId]: reply },
+        },
+      }),
+    ),
+    question,
+    reply,
+  };
+}
+
+function continuationInputFinding(
+  stateId: string,
+  input: unknown,
+  question: string,
+  reply: string,
+): string | undefined {
+  return !carriesSentinel(input, question) || !carriesSentinel(input, reply)
+    ? `${stateId}: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn`
+    : undefined;
+}
+
+/** Known-schema FSM input checks, without requiring a linked composer. */
+export function checkFsmContinuationInputs(
+  config: MachineConfigLike,
+  artifactSchema: 1 | 3,
+): string[] {
+  if (isControllerMachine(config)) return [];
+  const initial = initialMachineContext(config);
+  const findings: string[] = [];
+  for (const { state, inputFn } of enumerateCaptainBindings(config)) {
+    if (
+      typeof inputFn !== 'function' ||
+      !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)
+    )
+      continue;
+    try {
+      const { input, question, reply } = probeContinuationInput(
+        state,
+        inputFn,
+        initial,
+        artifactSchema,
+      );
+      const finding = continuationInputFinding(
+        state.stateId,
+        input,
+        question,
+        reply,
+      );
+      if (finding !== undefined) findings.push(finding);
+    } catch (error) {
+      findings.push(
+        `${state.stateId}: invoke.input threw on a continuation turn: ${messageOf(error)}`,
+      );
+    }
+  }
+  return findings;
+}
+
 /**
  * Checks the linked composer against the link contract for every captain state
  * (verification-5), returning findings (empty when conformant): the prompt body is
  * preserved modulo substituted placeholders, the adjudicator-facing Boss-reply
  * contract never leaks into a player prompt, no continuation appears on an
- * ordinary turn, and a Boss-reply continuation turn opens with the exact
- * preamble and labelled Q&A blocks before the body.
+ * ordinary turn, and a Boss-reply continuation turn opens with a supported exact
+ * prefix. Only an explicitly resumed schema-3 player may omit the question.
  */
 export function checkPromptComposition(opts: {
   config: MachineConfigLike;
@@ -2444,60 +2709,96 @@ export function checkPromptComposition(opts: {
     if (typeof inputFn !== 'function') continue;
     const reads = probeContextReads(inputFn, initial);
     const substituted = substitutions[state.stateId] ?? [];
-
-    let ordinary: string;
-    let promptReads: string[];
-    try {
-      const probed = withPlaceholderValues(
-        state,
-        inputFn({ context: ordinaryTurnContext(reads, initial) }),
-      );
-      promptReads = promptSentinelFields(state, reads, probed.fields, roles);
-      ordinary = composeForState(opts.compose, state, probed.input, roles);
-      if (typeof ordinary !== 'string') {
-        throw new Error(`${composerName} returned a non-string value`);
-      }
-    } catch (error) {
-      findings.push(
-        `${state.stateId}: ${composerName} threw on an ordinary turn: ${messageOf(error)}`,
-      );
-      continue;
-    }
-    findings.push(
-      ...bodyFindings(state, ordinary, substituted, promptReads, 'ordinary'),
-    );
-    pushUnique(findings, ...promptControlFindings(state, ordinary));
-    // A self-hosted playbook's domain body may legitimately quote the
-    // adjudicator contract or the continuation texts (it instructs a compiler
-    // about them); only occurrences the composer ADDS beyond the body's own
-    // are leaks.
-    if (
-      occurrences(ordinary, BOSS_QUESTION_MARKER) >
-      occurrences(state.prompt, BOSS_QUESTION_MARKER)
-    ) {
-      findings.push(
-        `${state.stateId}: the adjudicator-facing ${NEEDS_BOSS_REPLY} contract leaks into the player prompt`,
-      );
-    }
-    if (
-      [CONTINUATION_PREAMBLE, BOSS_QUESTION_LABEL, BOSS_REPLY_LABEL].some(
-        (needle) =>
-          occurrences(ordinary, needle) > occurrences(state.prompt, needle),
-      )
-    ) {
-      findings.push(
-        `${state.stateId}: continuation blocks appear on an ordinary turn`,
-      );
-    }
-    // Controllers own no Boss-reply wait. A missing ordinary result is already
-    // diagnosed by conformance, so do not fabricate a continuation contract.
-    if (controller || !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)) continue;
+    const relayFindingKeys = new Set<string>();
 
     const artifactSchema =
       schemaResolution.findings.length > 0
         ? undefined
         : (inferredArtifactSchema ??
           (state.role !== undefined ? 3 : state.player !== '' ? 1 : undefined));
+    const modes: readonly (boolean | undefined)[] =
+      artifactSchema === 3 && state.actor === 'player'
+        ? [undefined, false, true]
+        : [undefined];
+    let promptReads: string[];
+    for (const resuming of modes) {
+      let ordinary: string;
+      let input: unknown;
+      try {
+        const probed = withPlaceholderValues(
+          state,
+          inputFn({ context: ordinaryTurnContext(reads, initial) }),
+        );
+        input = probed.input;
+        promptReads = promptSentinelFields(state, reads, probed.fields, roles);
+        ordinary = composeForState(
+          opts.compose,
+          state,
+          probed.input,
+          roles,
+          resuming,
+        );
+        if (typeof ordinary !== 'string') {
+          throw new Error(`${composerName} returned a non-string value`);
+        }
+      } catch (error) {
+        pushUnique(
+          findings,
+          `${state.stateId}: ${composerName} threw on an ordinary turn: ${messageOf(error)}`,
+        );
+        continue;
+      }
+      pushUnique(
+        findings,
+        ...bodyFindings(state, ordinary, substituted, promptReads, 'ordinary'),
+        ...literalPromptRelayFindings(
+          state,
+          ordinary,
+          input,
+          substituted,
+          promptReads,
+          opts.compose,
+          roles,
+          relayFindingKeys,
+          resuming,
+        ),
+      );
+      pushUnique(findings, ...promptControlFindings(state, ordinary));
+      // A self-hosted playbook's domain body may legitimately quote the
+      // adjudicator contract or the continuation texts (it instructs a compiler
+      // about them); only occurrences the composer ADDS beyond the body's own
+      // are leaks.
+      if (
+        occurrences(ordinary, BOSS_QUESTION_MARKER) >
+        occurrences(state.prompt, BOSS_QUESTION_MARKER)
+      ) {
+        pushUnique(
+          findings,
+          `${state.stateId}: the adjudicator-facing ${NEEDS_BOSS_REPLY} contract leaks into the player prompt`,
+        );
+      }
+      if (
+        [
+          CONTINUATION_PREAMBLE,
+          CURRENT_CONTINUATION_PREAMBLE,
+          BOSS_QUESTION_LABEL,
+          CURRENT_BOSS_QUESTION_LABEL,
+          BOSS_REPLY_LABEL,
+        ].some(
+          (needle) =>
+            occurrences(ordinary, needle) > occurrences(state.prompt, needle),
+        )
+      ) {
+        pushUnique(
+          findings,
+          `${state.stateId}: continuation blocks appear on an ordinary turn`,
+        );
+      }
+    }
+    // Controllers own no Boss-reply wait. A missing ordinary result is already
+    // diagnosed by conformance, so do not fabricate a continuation contract.
+    if (controller || !Object.hasOwn(state.result, NEEDS_BOSS_REPLY)) continue;
+
     if (artifactSchema === undefined) {
       findings.push(
         `${state.stateId}: prompt composition requires artifactSchema 1 or 3 to probe this direct-Captain continuation`,
@@ -2505,103 +2806,83 @@ export function checkPromptComposition(opts: {
       continue;
     }
 
-    // A Boss-reply continuation turn: the thunk carries the pending question
-    // and reply, and the composer opens with the exact preamble and labelled
-    // Q&A blocks before the domain body (gears2fsm.md, link.md).
-    const question = sentinelFor('question');
-    const reply = sentinelFor('bossReply');
-    const pendingBossQuestion = {
-      ...(artifactSchema === 3
-        ? state.actor === 'captain'
-          ? { asker: { kind: 'captain' as const } }
-          : { asker: { kind: 'role' as const, roleId: state.role ?? '' } }
-        : {
-            player: state.actor === 'captain' ? 'Captain' : state.player,
-          }),
-      questionId: state.stateId,
-      resumeStateId: state.stateId,
-      sourceItem: state.sourceItem,
-      question,
-    };
-    let continuation: string;
-    let input: unknown;
-    try {
-      const probed = withPlaceholderValues(
-        state,
-        inputFn({
-          context: {
-            ...ordinaryTurnContext(reads, initial),
-            pendingBossQuestion,
-            bossReply: reply,
-            pendingBossQuestions: {
-              [state.stateId]: pendingBossQuestion,
-            },
-            bossReplies: { [state.stateId]: reply },
-          },
-        }),
-      );
-      input = probed.input;
-      promptReads = promptSentinelFields(state, reads, probed.fields, roles);
-      continuation = composeForState(opts.compose, state, input, roles);
-      if (typeof continuation !== 'string') {
-        throw new Error(`${composerName} returned a non-string value`);
-      }
-    } catch (error) {
-      findings.push(
-        `${state.stateId}: ${composerName} threw on a continuation turn: ${messageOf(error)}`,
-      );
-      continue;
-    }
-    if (!carriesSentinel(input, question) || !carriesSentinel(input, reply)) {
-      findings.push(
-        `${state.stateId}: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn`,
-      );
-      continue;
-    }
-    if (!continuation.startsWith(`${CONTINUATION_PREAMBLE}\n\n`)) {
-      findings.push(
-        `${state.stateId}: a continuation turn does not open with the exact preamble`,
-      );
-    }
-    const bodyStart = bodyIndex(state, continuation, substituted, promptReads);
-    const questionBlock = `${BOSS_QUESTION_LABEL}\n${question}`;
-    const replyBlock = `${BOSS_REPLY_LABEL}\n${reply}`;
-    for (const [label, value] of [
-      [BOSS_QUESTION_LABEL, questionBlock],
-      [BOSS_REPLY_LABEL, replyBlock],
-    ] as const) {
-      // The composer must ADD the labelled block (beyond any body-carried
-      // occurrence), with its sentinel value immediately below the label and
-      // before the body.
-      const at = continuation.indexOf(value);
-      if (
-        occurrences(continuation, value) <= occurrences(state.prompt, value)
-      ) {
-        findings.push(
-          `${state.stateId}: a continuation turn lacks the "${label}" block`,
+    // Probe absent and explicit fresh modes separately: wrappers may forward
+    // the optional argument incorrectly. Historical composers may ignore it
+    // and keep their complete Q&A prefix even when a player resumes.
+    for (const resuming of modes) {
+      const question = sentinelFor('question');
+      const reply = sentinelFor('bossReply');
+      let continuation: string;
+      let input: unknown;
+      try {
+        const probed = probeContinuationInput(
+          state,
+          inputFn,
+          initial,
+          artifactSchema,
         );
-      } else if (bodyStart !== -1 && at > bodyStart) {
-        findings.push(
-          `${state.stateId}: the "${label}" block appears after the domain prompt body`,
+        input = probed.input;
+        promptReads = promptSentinelFields(state, reads, probed.fields, roles);
+        continuation = composeForState(
+          opts.compose,
+          state,
+          input,
+          roles,
+          resuming,
         );
+        if (typeof continuation !== 'string') {
+          throw new Error(`${composerName} returned a non-string value`);
+        }
+      } catch (error) {
+        pushUnique(
+          findings,
+          `${state.stateId}: ${composerName} threw on a continuation turn: ${messageOf(error)}`,
+        );
+        continue;
       }
-    }
-    const exactContinuationPrefix = `${CONTINUATION_PREAMBLE}\n\n${questionBlock}\n\n${replyBlock}\n\n`;
-    if (!continuation.startsWith(exactContinuationPrefix)) {
-      findings.push(
-        `${state.stateId}: a continuation turn does not preserve the exact ordered Boss question/reply blocks`,
+      const inputFinding = continuationInputFinding(
+        state.stateId,
+        input,
+        question,
+        reply,
+      );
+      if (inputFinding !== undefined) {
+        pushUnique(findings, inputFinding);
+        continue;
+      }
+      pushUnique(
+        findings,
+        ...continuationPrefixFindings(
+          state,
+          continuation,
+          substituted,
+          promptReads,
+          artifactSchema,
+          resuming,
+          question,
+          reply,
+        ),
+        ...bodyFindings(
+          state,
+          continuation,
+          substituted,
+          promptReads,
+          'continuation',
+        ),
+        ...promptControlFindings(state, continuation),
+        ...literalPromptRelayFindings(
+          state,
+          continuation,
+          input,
+          substituted,
+          promptReads,
+          opts.compose,
+          roles,
+          relayFindingKeys,
+          resuming,
+        ),
       );
     }
-    findings.push(
-      ...bodyFindings(
-        state,
-        continuation,
-        substituted,
-        promptReads,
-        'continuation',
-      ),
-    );
-    pushUnique(findings, ...promptControlFindings(state, continuation));
   }
   return findings;
 }
@@ -2610,6 +2891,7 @@ type PromptIdentity = (roleId: string) => string;
 type PromptComposer = (
   input: unknown,
   promptIdentity: PromptIdentity,
+  resuming?: boolean,
 ) => string;
 
 function promptSentinelFields(
@@ -2629,6 +2911,7 @@ function composeForState(
   state: CaptainState,
   input: unknown,
   declaredRoles: readonly string[],
+  resuming?: boolean,
 ): string {
   // Schema-1 composers and the shared default composer use their second
   // positional argument as a placeholder-field map. A callable proxy with a
@@ -2658,8 +2941,96 @@ function composeForState(
     getOwnPropertyDescriptor: () => undefined,
   });
   return state.actor === 'player' && state.role !== undefined
-    ? compose(input, promptIdentity)
+    ? resuming === undefined
+      ? compose(input, promptIdentity)
+      : compose(input, promptIdentity, resuming)
     : (compose as (value: unknown) => string)(input);
+}
+
+function continuationPrefixFindings(
+  state: CaptainState,
+  composed: string,
+  substituted: readonly string[],
+  reads: readonly string[],
+  artifactSchema: 1 | 3,
+  resuming: boolean | undefined,
+  question: string,
+  reply: string,
+): string[] {
+  const fullProfiles = [
+    { preamble: CONTINUATION_PREAMBLE, questionLabel: BOSS_QUESTION_LABEL },
+    ...(artifactSchema === 3
+      ? [
+          {
+            preamble: CURRENT_CONTINUATION_PREAMBLE,
+            questionLabel: CURRENT_BOSS_QUESTION_LABEL,
+          },
+        ]
+      : []),
+  ];
+  const compactAllowed =
+    artifactSchema === 3 && state.actor === 'player' && resuming === true;
+  const replyBlock = `${BOSS_REPLY_LABEL}\n${reply}`;
+  const prefixes = fullProfiles.map(
+    ({ preamble, questionLabel }) =>
+      `${preamble}\n\n${questionLabel}\n${question}\n\n${replyBlock}\n\n`,
+  );
+  const compactPrefix = `${CURRENT_CONTINUATION_PREAMBLE}\n\n${replyBlock}\n\n`;
+  const compact = compactAllowed && composed.startsWith(compactPrefix);
+  if (compactAllowed) prefixes.push(compactPrefix);
+
+  const findings: string[] = [];
+  if (
+    compact &&
+    [BOSS_QUESTION_LABEL, CURRENT_BOSS_QUESTION_LABEL].some(
+      (label) =>
+        occurrences(composed, `${label}\n${question}`) >
+        occurrences(state.prompt, `${label}\n${question}`),
+    )
+  ) {
+    findings.push(
+      `${state.stateId}: a compact continuation adds the Boss question outside its domain prompt body`,
+    );
+  }
+  if (
+    !fullProfiles.some(({ preamble }) => composed.startsWith(`${preamble}\n\n`))
+  ) {
+    findings.push(
+      `${state.stateId}: a continuation turn does not open with the exact preamble`,
+    );
+  }
+  // Select diagnostics by the observed full format, without permitting a
+  // hybrid label or using function arity/package versions as capability evidence.
+  const profile =
+    fullProfiles.find(({ preamble }) =>
+      composed.startsWith(`${preamble}\n\n`),
+    ) ?? fullProfiles[0];
+  const blocks = [
+    ...(!compact
+      ? [[profile.questionLabel, `${profile.questionLabel}\n${question}`]]
+      : []),
+    [BOSS_REPLY_LABEL, replyBlock],
+  ];
+  const bodyStart = bodyIndex(state, composed, substituted, reads);
+  for (const [label, value] of blocks) {
+    // Authored domain text can itself quote the framework contract; a real
+    // continuation must add its own sentinel-bearing blocks before that body.
+    if (occurrences(composed, value) <= occurrences(state.prompt, value)) {
+      findings.push(
+        `${state.stateId}: a continuation turn lacks the "${label}" block`,
+      );
+    } else if (bodyStart !== -1 && composed.indexOf(value) > bodyStart) {
+      findings.push(
+        `${state.stateId}: the "${label}" block appears after the domain prompt body`,
+      );
+    }
+  }
+  if (!prefixes.some((prefix) => composed.startsWith(prefix))) {
+    findings.push(
+      `${state.stateId}: a continuation turn does not preserve the exact ordered Boss question/reply blocks`,
+    );
+  }
+  return findings;
 }
 
 function promptControlFindings(
@@ -2717,7 +3088,9 @@ function occurrences(hay: string, needle: string): number {
 
 interface PromptBodyMatch {
   index: number;
+  end: number;
   substitutions: string[];
+  values: string[];
 }
 
 /**
@@ -2786,7 +3159,12 @@ function matchPromptBody(
     if (attempt === null) continue;
 
     if (expectedSubstitutions !== undefined) {
-      return { index: start, substitutions: [...expectedSubstitutions] };
+      return {
+        index: start,
+        end: attempt.end,
+        substitutions: [...expectedSubstitutions],
+        values: attempt.values,
+      };
     }
     const modes = new Map<string, Set<'literal' | 'sentinel'>>();
     for (let gap = 0; gap < tokens.length; gap++) {
@@ -2801,9 +3179,280 @@ function matchPromptBody(
     const substitutions = placeholdersIn(prompt).filter(
       (token) => modes.get(token)?.has('sentinel') === true,
     );
-    return { index: start, substitutions };
+    return {
+      index: start,
+      end: attempt.end,
+      substitutions,
+      values: attempt.values,
+    };
   }
   return null;
+}
+
+/** Probe observed string relays without inventing context fields or input shapes. */
+function literalPromptRelayFindings(
+  state: CaptainState,
+  composed: string,
+  input: unknown,
+  substituted: readonly string[],
+  reads: readonly string[],
+  compose: PromptComposer,
+  roles: readonly string[],
+  findingKeys: Set<string>,
+  resuming?: boolean,
+): string[] {
+  if (typeof input !== 'object' || input === null) return [];
+  const match = matchPromptBody(state.prompt, composed, reads, substituted);
+  if (match === null) return []; // Existing body diagnostics own this case.
+  const tokens = [...state.prompt.matchAll(PLACEHOLDER)];
+  const groups = new Map<string, string[]>();
+  for (const [field, value] of Object.entries(input)) {
+    if (
+      CONTRACT_INPUT_FIELDS.includes(field) ||
+      typeof value !== 'string' ||
+      roles.some((role) => value === sentinelFor(`promptIdentity:${role}`)) ||
+      !match.values.some(
+        (matched, index) =>
+          matched === value && substituted.includes(tokens[index][0]),
+      ) ||
+      match.values.includes(JSON.stringify(value))
+    )
+      continue;
+    // Equal values may be intentional aliases. Changing them together avoids
+    // guessing which of several indistinguishable fields supplied the token.
+    const fields = groups.get(value) ?? [];
+    fields.push(field);
+    groups.set(value, fields);
+  }
+  if (groups.size === 0) return [];
+  const quotedGroups = new Set(
+    [...groups.keys()].filter((value) =>
+      tokens.every((token, index) => {
+        if (match.values[index] !== value) return true;
+        const start = state.prompt.lastIndexOf('\n', token.index - 1) + 1;
+        const next = state.prompt.indexOf('\n', token.index);
+        const line = state.prompt
+          .slice(start, next < 0 ? undefined : next)
+          .replace(/\r$/, '');
+        return /^> [^<>\r\n]*(<[^\s<>`]{1,60}>)$/.exec(line)?.[1] === token[0];
+      }),
+    ),
+  );
+  const findings: string[] = [];
+  for (const multiline of [false, true]) {
+    const values = new Map<string, string>();
+    for (const [index, value] of [...groups.keys()].entries()) {
+      if (multiline && !quotedGroups.has(value)) continue;
+      const literal = `relay-${index}: $& $$ $\` $' ${placeholdersIn(state.prompt).join(' ')}`;
+      // No empty-line policy is inferred here; all segments are nonempty.
+      values.set(
+        value,
+        multiline ? `${literal}\nsecond-${index}\r\nthird-${index}` : literal,
+      );
+    }
+    if (values.size === 0) continue;
+    const probed = { ...input } as Record<string, unknown>;
+    for (const [value, replacement] of values) {
+      for (const field of groups.get(value)!) probed[field] = replacement;
+    }
+    let index = 0;
+    const body = state.prompt.replace(PLACEHOLDER, () => {
+      const value = match.values[index++];
+      const replacement = values.get(value);
+      return replacement === undefined
+        ? value
+        : multiline
+          ? replacement.replace(/\n/g, '\n> ')
+          : replacement;
+    });
+    const expected =
+      composed.slice(0, match.index) + body + composed.slice(match.end);
+    const label = multiline
+      ? 'multiline quoted-relay'
+      : 'single-pass literal-relay';
+    const key = `${state.stateId}:${label}`;
+    const prefix = `${state.stateId}: prompt composition does not preserve ${label} text`;
+    try {
+      const actual = composeForState(compose, state, probed, roles, resuming);
+      if (actual === expected) continue;
+      pushRelayFinding(
+        findings,
+        findingKeys,
+        key,
+        `${prefix}; probe preserves literal text and LF/CRLF separators/quote markers; ${firstDifferenceDiagnostic(expected, actual)}`,
+      );
+    } catch {
+      // One state/representation diagnostic also covers mode-dependent errors.
+      pushRelayFinding(findings, findingKeys, key, prefix);
+    }
+  }
+  return findings;
+}
+
+function pushRelayFinding(
+  findings: string[],
+  findingKeys: Set<string>,
+  key: string,
+  finding: string,
+): void {
+  if (findingKeys.has(key)) return;
+  findingKeys.add(key);
+  findings.push(finding);
+}
+
+function firstDifferenceDiagnostic(expected: string, actual: string): string {
+  let offset = 0;
+  const length = Math.max(expected.length, actual.length);
+  while (offset < length && expected[offset] === actual[offset]) offset++;
+  return `first difference at UTF-16 offset ${offset}: expected ${boundedJsonSnippet(
+    expected,
+    offset,
+  )}, actual ${boundedJsonSnippet(actual, offset)}`;
+}
+
+function boundedJsonSnippet(value: string, offset: number): string {
+  if (offset >= value.length) return '<end>';
+  return JSON.stringify(value.slice(offset, offset + 24));
+}
+
+/** Verify the FSM-owned composer; child inputs reach the bridge already rendered. */
+function literalPlaybookTextFinding(
+  prompt: string,
+  binding: PlaybookBinding,
+  initial: Record<string, unknown> | undefined,
+): string | undefined {
+  const input = binding.invoke.input;
+  // Only explicit quoted relay notation establishes required runtime slots.
+  // Domain metavariables and inline-code examples remain literal template text.
+  const requiredRelays = new Set(
+    prompt.split(/\r?\n/).flatMap((line) => {
+      const token = /^> (?:[^<>\r\n]+: )?(<[^\s<>`]{1,60}>)$/.exec(line)?.[1];
+      return token === undefined ? [] : [token];
+    }),
+  );
+  const unresolvedRelay = (token: string): string =>
+    `leaves quoted child-input relay ${token} unresolved`;
+  if (typeof input !== 'function') {
+    if (binding.state.text !== prompt)
+      return 'does not preserve the complete GEARS child-input template';
+    const token = requiredRelays.values().next().value;
+    return token === undefined ? undefined : unresolvedRelay(token);
+  }
+  const base = initial ?? {};
+  const fields = new Set<string>();
+  let context: Record<string, unknown> = { ...base };
+  // Later reads can be behind a string-valued branch. Discover them without
+  // overwriting an initialized object, array, boolean, or numeric context field.
+  for (let pass = 0; pass < 4; pass++) {
+    const before = fields.size;
+    for (const field of probeContextReads(input, context)) {
+      if (base[field] === undefined || typeof base[field] === 'string')
+        fields.add(field);
+    }
+    if (fields.size > 128)
+      return 'has unsupported composition (too many scalar reads)';
+    context = {
+      ...base,
+      ...Object.fromEntries(
+        [...fields].map((field) => [field, sentinelFor(field)]),
+      ),
+    };
+    if (fields.size === before) break;
+    if (pass === 3)
+      return 'has unsupported composition (context reads did not stabilize)';
+  }
+  const probe = (values: Record<string, unknown>): string | undefined => {
+    const result = invocationInput(binding.invoke, values);
+    return 'value' in result &&
+      result.value.playbookId === binding.state.playbookId &&
+      result.value.stateId === binding.state.stateId &&
+      typeof result.value.text === 'string'
+      ? result.value.text
+      : undefined;
+  };
+  const text = probe(context);
+  if (text === undefined)
+    return 'has unsupported composition (input evaluation or literal identity changed)';
+  const matched = matchPromptBody(prompt, text, [...fields]);
+  if (matched === null || matched.index !== 0 || matched.end !== text.length) {
+    return 'does not preserve the complete GEARS child-input template';
+  }
+  const tokens = [...prompt.matchAll(PLACEHOLDER)].map((match) => match[0]);
+  const mapping = new Map<string, { field: string }>();
+  const observed = new Map<string, string>();
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index],
+      value = matched.values[index];
+    if (observed.has(token) && observed.get(token) !== value) {
+      return `uses inconsistent context substitutions for ${token}`;
+    }
+    observed.set(token, value);
+    if (value === token) {
+      if (requiredRelays.has(token)) return unresolvedRelay(token);
+      continue;
+    }
+    const field = [...fields].find((name) => value === sentinelFor(name));
+    if (field === undefined) return `has unsupported composition for ${token}`;
+    mapping.set(token, { field });
+  }
+  // A source-labelled complete relay can carry arbitrary prose. Inline slots
+  // can instead be constrained identifiers (for example a commit identity),
+  // so do not invent multiline identifier inputs merely because TS erased the
+  // narrower domain contract. Neither decision depends on the field's name.
+  const multilineFields = new Set<string>();
+  for (const line of prompt.split(/\r?\n/)) {
+    const token = /^> [^<>\r\n]*(<[^\s<>`]{1,60}>)$/.exec(line)?.[1];
+    const field = token === undefined ? undefined : mapping.get(token)?.field;
+    if (field !== undefined) multilineFields.add(field);
+  }
+  const payloads = Object.fromEntries(
+    [...fields].map((field) => [
+      field,
+      `«${field}:literal» $& $$ $\x60 $' ${[...new Set(tokens)].join(' ')}` +
+        (multilineFields.has(field) ? `\n\n«${field}:second»` : ''),
+    ]),
+  );
+  const render = (values: Record<string, string>): string => {
+    // Only the source-defined standalone relay form owns empty-line removal.
+    const template = prompt
+      .split(/(?<=\n)/)
+      .filter((line) => {
+        const token = /^> (<[^\s<>`]{1,60}>)(?:\r?\n)?$/.exec(line)?.[1];
+        const mapped = token === undefined ? undefined : mapping.get(token);
+        return mapped === undefined || values[mapped.field] !== '';
+      })
+      .join('');
+    return template.replace(PLACEHOLDER, (token: string, offset: number) => {
+      const mapped = mapping.get(token);
+      if (mapped === undefined) return token;
+      const value = values[mapped.field];
+      const lineStart = template.lastIndexOf('\n', offset - 1) + 1;
+      return template.startsWith('> ', lineStart)
+        ? value.replace(/\r?\n/g, (separator) => `${separator}> `)
+        : value;
+    });
+  };
+  const composed = probe({ ...base, ...payloads });
+  if (composed === undefined || composed !== render(payloads)) {
+    return 'does not preserve literal substitutions and quoted continuation lines';
+  }
+  const emptyFields = new Set<string>();
+  for (const line of prompt.split(/\r?\n/)) {
+    const token = /^> (<[^\s<>`]{1,60}>)$/.exec(line)?.[1];
+    const field = token === undefined ? undefined : mapping.get(token)?.field;
+    if (field !== undefined) emptyFields.add(field);
+  }
+  if (emptyFields.size > 0) {
+    const values = {
+      ...payloads,
+      ...Object.fromEntries([...emptyFields].map((field) => [field, ''])),
+    };
+    const emptyText = probe({ ...base, ...values });
+    if (emptyText === undefined || emptyText !== render(values)) {
+      return 'does not preserve source-defined empty standalone relay omission';
+    }
+  }
+  return undefined;
 }
 
 /** Findings when a composed prompt does not preserve the domain body (verification-5). */
@@ -2930,7 +3579,7 @@ import { describe, expect, it } from 'vitest';
 import { checkGearsFsmConformance, findConcurrentRoleSets, findMachineConfig } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 
-const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
+const SCHEMA_FINDINGS: readonly string[] = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
 
 describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
   it('uses consistent artifact-schema evidence', () => {
@@ -3075,7 +3724,7 @@ import { describe, expect, it } from 'vitest';
 import { findMachineConfig, pinIntrospection } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 
-const PINNED = ${JSON.stringify(opts.pins, null, 2)};
+const PINNED = ${JSON.stringify(opts.pins, null, 2)} as const;
 
 describe(${sourceString(`${opts.basename}: FSM introspection`)}, () => {
   it('matches the machine topology pinned at build time', () => {
@@ -3124,7 +3773,7 @@ export function generatePromptContractTest(opts: {
       const compose = `compose${label === 'Captain' ? 'Captain' : 'Player'}`;
       return [
         `
-const ${constant} = ${JSON.stringify(substituted, null, 2)};
+const ${constant} = ${JSON.stringify(substituted, null, 2)} as const;
 
 const ${compose} = (
   playbook as unknown as {
@@ -3176,8 +3825,8 @@ import {
 } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 ${composerImports}
-const CONTRACT = ${JSON.stringify(opts.rows, null, 2)};
-const SCHEMA_FINDINGS = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
+const CONTRACT = ${JSON.stringify(opts.rows, null, 2)} as const;
+const SCHEMA_FINDINGS: readonly string[] = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
 
 describe(${sourceString(`${opts.basename}: prompt contract`)}, () => {
   it('uses consistent artifact-schema evidence', () => {
@@ -3274,6 +3923,8 @@ function linkedArtifactSchemaSignal(linked: {
  * (DR-028).
  */
 export function resolveArtifactSchemaForVerification(opts: {
+  /** Conformance before linking has no continuation composer to classify. */
+  requireContinuationSchema?: boolean;
   artifactSchema?: 1 | 3;
   provenance?: unknown;
   /** The link target's installed engine declaration, when the caller read it. */
@@ -3354,6 +4005,7 @@ export function resolveArtifactSchemaForVerification(opts: {
     return { artifactSchema: 1, findings: [] };
   }
   const hasAmbiguousCaptainContinuation =
+    opts.requireContinuationSchema !== false &&
     opts.config !== undefined &&
     enumerateCaptainStates(opts.config).some(
       (state) =>

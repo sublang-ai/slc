@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted
+Accepted; unreviewed-finding disposition amended by [DR-033](033-early-conformance-and-mechanical-repair.md).
 
 ## Context
 
@@ -19,7 +19,7 @@ Not every Source authors fragments: the demo Sources are plain prose, leaving pr
 
 - After a text2gears phase outside the reserved meta-pipeline produces a Coder result, and before any Reviewer call on that result, the host runs a deterministic conservation check of the current live target against the invocation Source:
   - every authored fragment — a fenced `markdown` block or a blockquote, with Markdown escapes of `<` and `>` resolved and a blockquote that prose introduces "in quotes (`>`)" kept with its literal `>` markers — appears contiguously in at least one item's prompt;
-  - within one item, authored fragments appear in Source order;
+  - within one item, complete nonoverlapping authored fragments appear in Source order; an occurrence contained in a larger fully matched fragment belongs to that larger fragment, and identical fragments pass when their occurrences have an order-preserving Source attribution;
   - where the Source authors at least one fragment, every non-empty prompt line of every item is an authored line or a bare quoted relay placeholder `> <name>`;
   - every output property a result description names matches the ASCII identifier pattern a guard name matches, since downstream artifacts and calling playbooks consume those properties by name;
   - a result field is not declared verbatim-owned in one item and judge-authored in another;

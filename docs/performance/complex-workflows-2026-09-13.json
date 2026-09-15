@@ -1,0 +1,3654 @@
+{
+  "schema": 1,
+  "recordedAt": "2026-09-14T09:07:39.326934+00:00",
+  "scope": "Historical C5\u2013C10 attempts; accepted current-dependency minimal and full DEV; accepted C10/v13 resumed CODE source-to-entry correctness and a matched fixed-FSM CODE link comparison. Earlier failures are retained; no accepted cold full-source CODE timing or DEV speed ratio.",
+  "runs": [
+    {
+      "run": "compile-anx8n4",
+      "status": "failure",
+      "source": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/compile-anx8n4/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/code.md"
+      },
+      "compilerRoot": "/private/tmp/slc-coverage-compiler-p6olqovu",
+      "pipeline": "/private/tmp/playbook-13.2-common-v7-full",
+      "summary": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/compile-anx8n4/summary.json",
+        "bytes": 40828,
+        "sha256": "f7ced73046a4694cf392c41157bf1fa59212cd797d0af74f039de510d1784a59"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/invocation-dW8AYc/proof.json",
+        "bytes": 2805610,
+        "sha256": "b6d098888d8b524580a81c2d59642c844bc3a35e47573b3a8e757914af32a8fb"
+      },
+      "diagnosis": {
+        "path": "/private/tmp/slc-anx8n4-suspension-audit/evidence.json",
+        "bytes": 5375,
+        "sha256": "42c03073eaf2166d1352d4cc78ade0cda2dbbb6fb988c49548662f66a1a6c608"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 730886,
+        "outcome": null
+      },
+      "elapsedMs": 747623,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 134962
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 14978
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 341453
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 224974
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "resumed": false,
+          "toolCalls": 2,
+          "elapsedMs": 69502
+        },
+        {
+          "phase": "text2gears",
+          "resumed": true,
+          "toolCalls": 2,
+          "elapsedMs": 66476
+        },
+        {
+          "phase": "optimize",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 15462
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 3,
+          "elapsedMs": 340618
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 7,
+          "elapsedMs": 223420
+        }
+      ],
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "findings": [
+        "Two unreachable nested-review fallback arms fail emitted transition coverage.",
+        "Child states inherit busy tags, so the public runtime cannot return a suspended child until cancellation."
+      ],
+      "diagnosticControl": {
+        "delta": "Remove only playbook.busy from two child leaves in a private artifact copy.",
+        "directCodePathPass": true,
+        "elapsedMs": 728.9502500000003,
+        "realOwnGitCommits": 1,
+        "publicEntryAndActualHost": true,
+        "originalCompilationAccepted": false,
+        "authoredQuestionAdjudicated": false
+      }
+    },
+    {
+      "run": "compile-Kdavz2",
+      "status": "failure",
+      "source": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/compile-Kdavz2/work/dev.md",
+        "bytes": 5959,
+        "sha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/dev.md"
+      },
+      "compilerRoot": "/private/tmp/slc-coverage-compiler-p6olqovu",
+      "pipeline": "/private/tmp/playbook-13.2-common-v7-full",
+      "summary": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/compile-Kdavz2/summary.json",
+        "bytes": 34255,
+        "sha256": "dd9786fdf401e4d668f0cfe0890ac49ee56af4c02247641840c5c63d8e147da5"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c5-complex-full-evidence/invocation-GNWhqu/proof.json",
+        "bytes": 2805220,
+        "sha256": "b306c2a12e8ad2f3c001c1f3edec7283ab3ef3d2a9d6f9adcc259de32c3c71cb"
+      },
+      "diagnosis": {
+        "path": "/private/tmp/slc-c5-v7-dev-Kdavz2-diagnosis/evidence.json",
+        "bytes": 10610,
+        "sha256": "0f93d72e9e51e41883d8b7a5b2d996c7139e7ae6454f78dd9e4052c219f5dd95"
+      },
+      "compile": {
+        "ok": false,
+        "elapsedMs": 572980,
+        "outcome": null
+      },
+      "elapsedMs": 573001,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 147257
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 14590
+        },
+        {
+          "name": "gears2fsm",
+          "status": "error",
+          "elapsedMs": 411049
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "resumed": false,
+          "toolCalls": 2,
+          "elapsedMs": 78859
+        },
+        {
+          "phase": "text2gears",
+          "resumed": true,
+          "toolCalls": 4,
+          "elapsedMs": 69247
+        },
+        {
+          "phase": "optimize",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 15081
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 6,
+          "elapsedMs": 326362
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 44619
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 42861
+        }
+      ],
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "findings": [
+        "DEV-5 uses Captain shall first call playbook instead of the fixed nested-call clause. The current parser treats it as direct Captain; FSM generation blocks without a target. This is generated syntax, not unresolved source behavior."
+      ]
+    },
+    {
+      "run": "compile-5eWTLQ",
+      "status": "success",
+      "scope": "minimal-runtime-confirmation",
+      "compilerRoot": "/private/tmp/slc-c6-compiler-ukczlhl3",
+      "pipeline": "/private/tmp/playbook-13.2-common-v8-full",
+      "source": {
+        "path": "/private/tmp/slc-c6-minimal-evidence/compile-5eWTLQ/work/minimal.txt",
+        "bytes": 292,
+        "sha256": "7e627b1d32e3b08fafdad971cbf97ce03ee6d64f5c8ddecf23b518c1e362cf92",
+        "original": "/private/tmp/slc-performance-evidence/compile-9lTnki/work/minimal.txt"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c6-minimal-evidence/compile-5eWTLQ/summary.json",
+        "bytes": 43504,
+        "sha256": "86dc9e6adf8b69c52068bdec18ae5a6291c020706befee74f59c0eb788ab5216"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c6-minimal-evidence/invocation-UwV4e6/proof.json",
+        "bytes": 2737466,
+        "sha256": "f42205fb9021d9107e352472814438dc691874dfd506079d3cfc5e208055006b"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 237479,
+        "outcome": null
+      },
+      "elapsedMs": 243459,
+      "phases": [
+        {
+          "name": "normalize",
+          "status": "success",
+          "elapsedMs": 36707
+        },
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 16458
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 17403
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 98364
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 68402
+        }
+      ],
+      "calls": [
+        {
+          "phase": "normalize",
+          "status": "success",
+          "toolCalls": 5,
+          "elapsedMs": 37059
+        },
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "toolCalls": 1,
+          "elapsedMs": 16942
+        },
+        {
+          "phase": "optimize",
+          "status": "success",
+          "toolCalls": 1,
+          "elapsedMs": 17891
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "success",
+          "toolCalls": 2,
+          "elapsedMs": 69902
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "success",
+          "toolCalls": 2,
+          "elapsedMs": 27880
+        },
+        {
+          "phase": "link",
+          "status": "success",
+          "toolCalls": 7,
+          "elapsedMs": 67101
+        }
+      ],
+      "callCount": 6,
+      "validation": {
+        "ok": true,
+        "strictTypeScript": true,
+        "entryImport": true,
+        "suite": true,
+        "testFiles": 4,
+        "tests": 8,
+        "elapsedMs": 5965
+      },
+      "runtime": {
+        "ok": true,
+        "profile": "minimal",
+        "exactBossTask": true,
+        "taskPresentation": "literal",
+        "ownRepository": true,
+        "commits": 1,
+        "elapsedMs": 1224
+      },
+      "protectedInputs": {
+        "before": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "finding": "The minimal benchmark completed under five minutes with runtime confirmation; it is not a causal speed attribution across compiler or definition versions."
+    },
+    {
+      "run": "compile-uh9JIL",
+      "status": "failure",
+      "scope": "dev-full-materializer",
+      "compilerRoot": "/private/tmp/slc-c6-compiler-ukczlhl3",
+      "pipeline": "/private/tmp/playbook-13.2-common-v8-full",
+      "source": {
+        "path": "/private/tmp/slc-c6-complex-full-evidence/compile-uh9JIL/work/dev.md",
+        "bytes": 5959,
+        "sha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/dev.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c6-complex-full-evidence/compile-uh9JIL/summary.json",
+        "bytes": 38596,
+        "sha256": "dce23127156bda22fdae9d087f57e226b431a2da49679a1cfb4184d3c807d34e"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c6-complex-full-evidence/invocation-QunXbw/proof.json",
+        "bytes": 2736959,
+        "sha256": "c964bd6b1c720fbf42dc0559ea6621525891a152c952036b12f246e66e5cfd4f"
+      },
+      "compile": {
+        "ok": false,
+        "elapsedMs": 850582,
+        "outcome": null
+      },
+      "elapsedMs": 850597,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 132120
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 12692
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 383741
+        },
+        {
+          "name": "link",
+          "status": "error",
+          "elapsedMs": 321942
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "resumed": false,
+          "toolCalls": 2,
+          "elapsedMs": 64383
+        },
+        {
+          "phase": "text2gears",
+          "resumed": true,
+          "toolCalls": 2,
+          "elapsedMs": 68975
+        },
+        {
+          "phase": "optimize",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 13175
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 9,
+          "elapsedMs": 300133
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 7,
+          "elapsedMs": 82703
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 11,
+          "elapsedMs": 172146
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 4,
+          "elapsedMs": 83290
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 2,
+          "elapsedMs": 65677
+        }
+      ],
+      "callCount": 8,
+      "lastAcceptedArtifact": {
+        "phase": "gears2fsm",
+        "path": "/private/tmp/slc-c6-complex-full-evidence/compile-uh9JIL/work/dev.playbook/dev.fsm.ts",
+        "bytes": 47702,
+        "sha256": "2f079ddb92e140a761411e0f0eb84217f7228a32d4405f7c2cb1d27b72b05a3d"
+      },
+      "protectedInputs": {
+        "before": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "generatedSuiteRun": false,
+      "runtimeAcceptanceRun": false,
+      "sourceClarification": false,
+      "findings": [
+        "Link failed after the third checking round while analyzing prompt composition for multiline quoted-relay text.",
+        "The generated FSM is the last accepted phase artifact; no emitted suite or runtime acceptance ran, and no source clarification was reported."
+      ],
+      "compilerCommit": "f44d4c5d751a2b4fbc21b279b5c3cc4a3cf82e2c",
+      "pipelineGeneration": "v8",
+      "diagnosis": {
+        "scope": "read-only final-artifact prompt probe; no runtime acceptance",
+        "evidence": "/private/tmp/slc-c6-uh9JIL-prompt-reproducer-evidence.json",
+        "sha256": "3e4d8b3cbce483ce2177bcdba203ccffeaa843a6fbaaf87f703bf3710d20daa3",
+        "finding": "The composer splits relayed values on CRLF and rejoins with LF. The actual failing probe has no blank lines and loses CRLF separators while retaining quote markers."
+      },
+      "runtimeDiagnosis": {
+        "scope": "separate unchanged linked-factory/real-host observation; original full compilation remains rejected",
+        "providerCalls": 0,
+        "adjudication": {
+          "path": "/private/tmp/slc-uh9JIL-runtime-audit/adjudication.json",
+          "sha256": "9412d6b1db3868a1d204a2bbbf94b239ba862f99a336b2ef67976a8fd8f8afac"
+        },
+        "findings": [
+          "Initial-turn discussionComplete reaches success with zero Boss replies despite the source precondition.",
+          "After two fresh question continuations, the third Analyst prompt loses the earlier CLI-only/UI-preservation constraint; discussionContext remains empty."
+        ],
+        "controls": [
+          "Canonical CODE success preserves exact child output.",
+          "Canonical BRANCH failure preserves exact child output and starts no later child."
+        ],
+        "preservation": {
+          "dependencyEntries": 11660,
+          "changed": []
+        },
+        "observationCorrection": "The first probe consumed a shared label array; adjudication supersedes only its derived presence booleans using the recorded actual finalText and prompt strings. No recorded call or runtime result was changed."
+      }
+    },
+    {
+      "run": "compile-GQcJFN",
+      "status": "failure",
+      "scope": "code-full-materializer",
+      "compilerRoot": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "pipeline": "/private/tmp/playbook-13.2-common-v8-full",
+      "source": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/code.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/summary.json",
+        "bytes": 40775,
+        "sha256": "5d2738566cd8c230eb3e52570477f1a08b6f122ac21439f0d85162ff4c0b2566"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/invocation-Gr0KXT/proof.json",
+        "bytes": 2737212,
+        "sha256": "8fd11385672aa91a828c2f6264a9684c23e73ebec0631b2d37cc99fc474baf0d"
+      },
+      "log": {
+        "path": "/private/tmp/slc-c7-v8-code-full-v2.log",
+        "bytes": 12684,
+        "sha256": "5aa1dbe1afb7058a655d847a4d31af1afc3e0b7b6199a1f053a80eae936d5396"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 738641,
+        "outcome": null
+      },
+      "elapsedMs": 742618,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 83229
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 12813
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 466102
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 175820
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "resumed": false,
+          "toolCalls": 4,
+          "elapsedMs": 83718
+        },
+        {
+          "phase": "optimize",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 13312
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 10,
+          "elapsedMs": 381579
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 6,
+          "elapsedMs": 83829
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 7,
+          "elapsedMs": 174484
+        }
+      ],
+      "callCount": 5,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.gears.raw.md",
+          "bytes": 9967,
+          "sha256": "327af44e36ffb06d4983e1cc3f70ec23c372de6e1888d09fea4eb8dc9289adf9"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.gears.md",
+          "bytes": 9967,
+          "sha256": "327af44e36ffb06d4983e1cc3f70ec23c372de6e1888d09fea4eb8dc9289adf9"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.fsm.ts",
+          "bytes": 45774,
+          "sha256": "e6e3601ad91db82a132b04a6d09099918b6a0222b7b2bf58a6bacd4a7be3467c"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.playbook.ts",
+          "bytes": 9014,
+          "sha256": "0e2cac68d33aeb5e401a6298a1f3f0b271b09bb983b8bd7c8e6c8e6642daaafb"
+        }
+      ],
+      "validation": {
+        "ok": false,
+        "typecheck": {
+          "ok": true,
+          "elapsedMs": 1123
+        },
+        "entryImport": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null
+        },
+        "suite": {
+          "ok": false,
+          "code": 1,
+          "terminationSignal": null
+        },
+        "testFiles": 4,
+        "elapsedMs": 3965,
+        "tests": {
+          "passed": 7,
+          "failed": 1
+        }
+      },
+      "verificationSummary": {
+        "strictTypeScript": true,
+        "entryImport": true,
+        "promptContract": true,
+        "gearsFsmConformance": true,
+        "introspection": true,
+        "generatedSuiteRun": true,
+        "generatedSuitePassed": false
+      },
+      "generatedCoverageFindings": [
+        "state reviewDirectPhase: nested playbook onDone arm 2 is unsatisfiable under probing",
+        "state reviewNewIrPhase: nested playbook onDone arm 2 is unsatisfiable under probing",
+        "state reviewIrTaskPhase: nested playbook onDone arm 3: unsupported repeated-invocation path"
+      ],
+      "protectedInputs": {
+        "before": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "materializer": {
+        "used": true,
+        "mode": "actual flat-labelled materializer",
+        "evidence": "generated entry header names slc/materialize-link.mjs and the linked artifact uses the descriptor-shaped flat entry"
+      },
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": false,
+      "runtimeAcceptanceRun": false,
+      "sourceClarification": false,
+      "sourceAwareReachabilityProof": "complete: read-only coverage audit shows redundant final onDone fallbacks",
+      "diagnosis": {
+        "scope": "coverage-only; no runtime acceptance or matched speed result",
+        "evidence": "/private/tmp/slc-GQcJFN-coverage-audit/evidence.json",
+        "sha256": "c646a74022daabdf3a783e12196d5801a930b137c0429faf805c86cb85824582",
+        "finding": "The three generated coverage findings are redundant final onDone fallbacks after earlier guards already handle successful child results; the checker still rejects the original artifact."
+      },
+      "compilerCommit": "c7419edcf1f609bc9bcb9074b9414586f9d7be03",
+      "pipelineGeneration": "v8",
+      "privateRuntimePatch": "@sublang/playbook package bytes patched from upstream IR090 runtime files; package/lock version remains 13.2.0 and is not an unmodified published install",
+      "findings": [
+        "Compilation returned ok after all four phases, but the full benchmark failed generated-suite validation.",
+        "A read-only actual XState audit covered 12 cases and found all three retained coverage findings are redundant final onDone fallbacks, not missing Source behavior.",
+        "Original full benchmark status remains failure; no runtime acceptance, matched speed ratio, source change, verifier relaxation, or provider rerun occurred."
+      ],
+      "coverageAudit": {
+        "scope": "read-only actual XState coverage diagnosis; original full benchmark remains failed",
+        "evidence": {
+          "path": "/private/tmp/slc-GQcJFN-coverage-audit/evidence.json",
+          "bytes": 22753,
+          "sha256": "c646a74022daabdf3a783e12196d5801a930b137c0429faf805c86cb85824582"
+        },
+        "readme": {
+          "path": "/private/tmp/slc-GQcJFN-coverage-audit/README.md",
+          "bytes": 7049,
+          "sha256": "18d4060b5142689c0f0a5d52f152ef276a7f06c3468f00c7d4d5bd358df318c5"
+        },
+        "providers": 0,
+        "cases": 12,
+        "checkerElapsedMs": 500,
+        "checkerTimeoutMs": 300000,
+        "artifactFilesUnchanged": 24,
+        "dependencyEntriesUnchanged": 11660,
+        "contextInjection": false,
+        "artifactModification": false,
+        "finding": "All three reported final onDone arms are unreachable redundant fallbacks; all six real review entries assign a nonblank commit before reaching a review state.",
+        "retainedBenchmarkStatus": "failure"
+      }
+    },
+    {
+      "run": "compile-GQcJFN-runtime-CODE18",
+      "status": "passed",
+      "scope": "post-benchmark runtime acceptance controls only; original C7-v8 full CODE compile-GQcJFN benchmark remains failed on exact coverage",
+      "source": {
+        "path": "/private/tmp/slc-code-dev-acceptance-design/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5"
+      },
+      "generatedArtifactSourceRun": "compile-GQcJFN",
+      "generatedArtifacts": {
+        "publicEntry": {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.ts",
+          "bytes": 1504,
+          "sha256": "8d8762842b28b4c54bd7d105acca740ce2c9a926b193edf59403732894ca66be"
+        },
+        "linkedFactory": {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.playbook.ts",
+          "bytes": 9014,
+          "sha256": "0e2cac68d33aeb5e401a6298a1f3f0b271b09bb983b8bd7c8e6c8e6642daaafb"
+        },
+        "fsm": {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.fsm.ts",
+          "bytes": 45774,
+          "sha256": "e6e3601ad91db82a132b04a6d09099918b6a0222b7b2bf58a6bacd4a7be3467c"
+        },
+        "gears": {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.gears.md",
+          "bytes": 9967,
+          "sha256": "327af44e36ffb06d4983e1cc3f70ec23c372de6e1888d09fea4eb8dc9289adf9"
+        }
+      },
+      "profile": {
+        "path": "/private/tmp/slc-c7-code-GQcJFN-profile-draft/profile.v2.mjs",
+        "bytes": 2977,
+        "sha256": "441eb851cee12c3fa243e116d139472cbc532f95b6f0b5e9ace4d618febd13b1"
+      },
+      "config": {
+        "path": "/private/tmp/slc-c7-code-GQcJFN-profile-draft/acceptance-config.v2.mjs",
+        "bytes": 6315,
+        "sha256": "5970f0db148f591398b84457408c287ab5dea013a0589e116a8877516a359a18"
+      },
+      "runner": {
+        "path": "/private/tmp/slc-c7-code-GQcJFN-profile-draft/run-18-after-approval.v2.mjs",
+        "bytes": 1403,
+        "sha256": "6f59518028e7a85bb8eb0a8ba536b510e25c780e557481a460ed318935bdacfd"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c7-code-GQcJFN-runtime-acceptance-v2/summary.json",
+        "bytes": 99375,
+        "sha256": "6ed6b4549707b6538e65d9c665cffa484741e998e39297f7d1150da899d52252"
+      },
+      "manifest": {
+        "path": "/private/tmp/slc-c7-code-GQcJFN-profile-draft/runtime-acceptance-v2-manifest.json",
+        "bytes": 15863,
+        "sha256": "38273592426d3f82640bdd7e90dd439073d8000422eae5e749b151791c5a2b42"
+      },
+      "dependencyDirectCheck": {
+        "path": "/private/tmp/slc-c7-code-GQcJFN-profile-draft/dependency-inventory-direct-check.json",
+        "bytes": 432,
+        "sha256": "ec9bc2b03c398235291eb534d9650f12af0422114d103a7c0f3f3c38929b3165"
+      },
+      "scenarioCount": 18,
+      "passedCount": 18,
+      "failed": [],
+      "providerCalls": 0,
+      "runtimeExecution": "actual emitted public entry work/code.ts through C7 host APIs with scripted REVIEW children",
+      "protectedChanged": [],
+      "dependencyEntriesChecked": 11660,
+      "dependencyBytesChecked": 656995360,
+      "fullBenchmarkAccepted": false,
+      "originalFullBenchmark": {
+        "run": "compile-GQcJFN",
+        "status": "failure",
+        "compileOkElapsedMs": 738641,
+        "benchmarkElapsedMs": 742618,
+        "failure": "emitted coverage suite only"
+      },
+      "acceptedSpeedRatio": false
+    },
+    {
+      "run": "c8-gqcjfn-earlycoverage-gate",
+      "status": "failure",
+      "scope": "real supplied-FSM link preflight rejects unchanged GQcJFN coverage defect before provider work",
+      "compiler": {
+        "commit": "46a89ced91ea565cab0f41862f39257885219c93",
+        "root": "/private/tmp/slc-c8-compiler-ezn78503",
+        "cohortSha256": "cc1dbd88f3c167e98ad587d466ebf2a57139c05fa7f18b3f351d509fea4babdf",
+        "privateRuntimeOverlay": "inherits private IR090 Playbook runtime overlay; not an unmodified published 13.2 runtime"
+      },
+      "evidence": {
+        "path": "/private/tmp/slc-c8-gqcjfn-earlycoverage-cC17Q1/evidence.json",
+        "bytes": 9207,
+        "sha256": "54449e8e80159e7073ed3e23efdd2a7f3ecb226c05353584cec73b80218ee935"
+      },
+      "script": {
+        "path": "/private/tmp/slc-c8-gqcjfn-earlycoverage-probe.mjs",
+        "bytes": 8841,
+        "sha256": "4b236cbf010951d5561a489f426fb297a27b6ea086f32f1a60e44fbb7529559e"
+      },
+      "sourceArtifact": {
+        "run": "compile-GQcJFN",
+        "fsm": {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook/code.fsm.ts",
+          "bytes": 45774,
+          "sha256": "e6e3601ad91db82a132b04a6d09099918b6a0222b7b2bf58a6bacd4a7be3467c"
+        },
+        "historicalLinkElapsedMs": 175820
+      },
+      "elapsedMs": 1554.692,
+      "providerCalls": 0,
+      "adapterRequests": 0,
+      "executorSelections": 0,
+      "compiledSelections": 0,
+      "result": {
+        "ok": false,
+        "nonClarificationFailure": true,
+        "targetWritten": false,
+        "diagnosticCount": 1
+      },
+      "findings": [
+        "state reviewDirectPhase: nested playbook onDone arm 2 is unsatisfiable under probing",
+        "state reviewNewIrPhase: nested playbook onDone arm 2 is unsatisfiable under probing",
+        "state reviewIrTaskPhase: nested playbook onDone arm 3: unsupported repeated-invocation path"
+      ],
+      "protections": {
+        "directChanges": 0,
+        "treeChanges": 0,
+        "c8CompilerTree": {
+          "root": "/private/tmp/slc-c8-compiler-ezn78503",
+          "entries": 13279,
+          "files": 11887,
+          "bytes": 659917353,
+          "sha256": "e9646dad0d5eacedba76220d5df522096cbb46427f3d3d885049daf388a0b01c"
+        },
+        "c7CodeArtifactTree": {
+          "root": "/private/tmp/slc-c7-complex-full-evidence/compile-GQcJFN/work/code.playbook",
+          "entries": 26,
+          "files": 21,
+          "bytes": 470747,
+          "sha256": "7adc99b2953d62b151304ee5ae701fda7689dc2b667d3147cf781d7fe0df3e97"
+        }
+      },
+      "fullCompilationSpeedRatio": false,
+      "acceptedSpeedRatio": false,
+      "acceptedFullCompilation": false,
+      "notes": [
+        "The probe uses C8 ordinary runSlc link preflight with an adapter factory that would throw if requested.",
+        "It verifies the real GQcJFN coverage defect is routed before provider work.",
+        "It does not adjudicate the concurrently running C8 full CODE hZ8Y1l run."
+      ]
+    },
+    {
+      "run": "compile-hZ8Y1l",
+      "status": "failure",
+      "scope": "code-full-c8-v9-source-aware-linker",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "compilerCommit": "46a89ced91ea565cab0f41862f39257885219c93",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-full",
+      "source": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/code.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/summary.json",
+        "bytes": 34701,
+        "sha256": "b59ebe3d1f0c916d2441f08265b6589cbd970b20b4da3c9d45bbfef405de79cf"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/invocation-g7OiUZ/proof.json",
+        "bytes": 2737207,
+        "sha256": "08dbbfe5ccce9912da0f33ffc7ed108c0fe961f27d51a98fb0a835cfe896d449"
+      },
+      "diagnosticsLog": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/diagnostics.log",
+        "bytes": 9214,
+        "sha256": "9e04b1b20f74c950663ad484fc37fd1bb0bff98bf19d65788ec92e39248e26e0"
+      },
+      "metrics": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/metrics.jsonl",
+        "bytes": 10252,
+        "sha256": "bc1e210f17c932c1e479f365688de8b3a216f4202495bacccca5b18421f3384f"
+      },
+      "compile": {
+        "ok": false,
+        "elapsedMs": 661887,
+        "outcome": null
+      },
+      "elapsedMs": 661899,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 126984
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 10714
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 432510
+        },
+        {
+          "name": "link",
+          "status": "error",
+          "elapsedMs": 91639
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 3,
+          "elapsedMs": 69731,
+          "promptSha256": "039a5e669332665fe5cebffd01092f74647686e78d87a2fb3750ce735a949101"
+        },
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 58110,
+          "promptSha256": "21a336419826264d8b29f711a258a4bd9b3def9c1a2fc089b4aafb86e55d597b"
+        },
+        {
+          "phase": "optimize",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 11212,
+          "promptSha256": "d8852183aed29f9676f059ff17b30c14375cacb84e265597dbeee8fb31e73e6f"
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 15,
+          "elapsedMs": 367680,
+          "promptSha256": "a9e0aed90429a7a7eb368a7025526013c96c959357569c8c697ffff99b53b123"
+        },
+        {
+          "phase": "gears2fsm",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 4,
+          "elapsedMs": 63803,
+          "promptSha256": "3f186bad6f03bcffff99715ddff52487e74b7bdec61250836366ad111886d166"
+        },
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 3,
+          "elapsedMs": 93621,
+          "promptSha256": "29a8808f48d01a78d66f046bbda31847e5a5fc840c01f0fae1837f8807690111"
+        }
+      ],
+      "callCount": 6,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/work/code.playbook/code.gears.raw.md",
+          "bytes": 8781,
+          "sha256": "ed7b672b617275ef19baaea9bcdf17db7ffee2dc460dd52fabce5f6738916ef4"
+        },
+        {
+          "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/work/code.playbook/code.gears.md",
+          "bytes": 8781,
+          "sha256": "ed7b672b617275ef19baaea9bcdf17db7ffee2dc460dd52fabce5f6738916ef4"
+        },
+        {
+          "path": "/private/tmp/slc-c8-complex-full-evidence/compile-hZ8Y1l/work/code.playbook/code.fsm.ts",
+          "bytes": 35678,
+          "sha256": "1a91777f9e8f0537c4a8e3e2b6d0704dc3f06051daeec26c927dfbe12c0f45ce"
+        }
+      ],
+      "protectedInputs": {
+        "before": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11920,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "earlyCoveragePassed": true,
+      "sourceClarification": false,
+      "targetWritten": false,
+      "lastAcceptedArtifact": "code.fsm.ts",
+      "failure": "Generated code.fsm.ts requires coderLlm in machine input/context for the <coder-llm> prompt-identity token, contradicting the linker contract that prompt identities remain host policy and enter only through runtime role bindings.",
+      "diagnostic": "BLOCKED: the Source FSM cannot be linked under link.md without violating the definition's prompt-identity rule.",
+      "acceptedFullCompilation": false,
+      "runtimeAcceptanceRun": false,
+      "acceptedSpeedRatio": false,
+      "fullCompilationSpeedRatio": false,
+      "notes": [
+        "The accepted live targets are code.gears.raw.md, code.gears.md, and code.fsm.ts; no code.playbook.ts was written.",
+        "The run preserves the last accepted FSM for later analysis and records no diagnosis beyond the linker-contract contradiction.",
+        "This record does not claim runtime acceptance or an accepted CODE full benchmark."
+      ]
+    },
+    {
+      "run": "phase-e3WBnY",
+      "status": "accepted",
+      "scope": "review-case-007-text2gears-phase-only",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "compilerCommit": "46a89ced91ea565cab0f41862f39257885219c93",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-full",
+      "phase": "playbook.text2gears",
+      "caseId": "case-007",
+      "source": {
+        "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/work/workflow.md",
+        "bytes": 6097,
+        "sha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+        "original": "/Users/basicthinker/Projects/SubLang/slc/docs/performance/clarification-corpus/sources/case-007/source.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/summary.json",
+        "bytes": 424139,
+        "sha256": "aa74dd63f6718eff30806303503738a64a5af7e2b3aad7cf6a234c7112bdd1ae"
+      },
+      "adjudication": {
+        "path": "/private/tmp/slc-c8-review-e3WBnY-adjudication.json",
+        "bytes": 6797,
+        "sha256": "3d4b12b2dbfb847ed4351f86519b7c706f0102239f94fd8d16c397b6d16cbeec"
+      },
+      "diagnosticsLog": {
+        "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/diagnostics.log",
+        "bytes": 1682,
+        "sha256": "bb31b939266f855265a1be1c13f09c41bba0d295e0077d0f85d9dff65dcc3d80"
+      },
+      "metrics": {
+        "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/metrics.jsonl",
+        "bytes": 2040,
+        "sha256": "d3e93b49d587561400d15000ca088438fad1b7d3f78b5511cfa85d06e79e2bcc"
+      },
+      "measuredOutcome": {
+        "phaseElapsedMs": 64608,
+        "executionElapsedMs": 64909,
+        "overallElapsedMs": 65673,
+        "agentCalls": 1,
+        "phaseAcceptanceOk": true
+      },
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 64608
+        }
+      ],
+      "executions": [
+        {
+          "kind": "interpreted",
+          "requestKind": "compile",
+          "definition": {
+            "path": "/private/tmp/playbook-13.2-common-v9-full/playbook/text2gears.md",
+            "bytes": 22765,
+            "sha256": "1f146b9cb00a6de016c5e02a528825daa5ce3bda055eae553e1545b6dde0b639"
+          }
+        }
+      ],
+      "selection": {
+        "agent": "claude-code",
+        "model": "claude-opus-5",
+        "effort": "low",
+        "fastMode": false
+      },
+      "actualCliExit": null,
+      "cliExecution": "not-invoked",
+      "compiledExecution": "not-run",
+      "runtimeExecution": "not-run",
+      "calls": [
+        {
+          "phase": "text2gears",
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 2,
+          "elapsedMs": 65122,
+          "providerDurationMs": 61964,
+          "promptSha256": "e8f43647162fe4a2c175bbd3495c85619eadf5f7a45c5bb61dddf241c9807c2c"
+        }
+      ],
+      "callCount": 1,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c8-review-case007-text2gears-evidence/phase-e3WBnY/work/workflow.playbook/workflow.gears.md",
+          "bytes": 10420,
+          "sha256": "bf70615325625fa955e6b04298a7ac8231949d9f0fe12e5b2ee2f0f62c60d22e"
+        }
+      ],
+      "frozenFidelityOracles": {
+        "passed": 4,
+        "items": [
+          "Review rounds retain the cumulative caller scope and exact repository revision.",
+          "Findings route to Coder acceptance/fix or reasoned rejection, then return to Reviewer.",
+          "Complete only on an affirmative completed review with no unsettled findings, returning exact evaluated revision.",
+          "Concrete caller scope, commits, findings and player model identities remain declared runtime inputs."
+        ]
+      },
+      "questions": 0,
+      "materialFindings": [],
+      "literalIdentitiesRetained": true,
+      "completeCallerInputCarriesOptionalContext": true,
+      "phaseOnly": true,
+      "fullReviewAcceptance": false,
+      "runtimeAcceptanceRun": false,
+      "acceptedSpeedRatio": false,
+      "notes": [
+        "The complete caller-input relay can carry optional caller context; no new context placeholder is required at this phase boundary.",
+        "This record is a semantic adjudication of source-to-GEARS fidelity only and does not validate FSM, link, runtime, or concrete value binding."
+      ]
+    },
+    {
+      "run": "compile-wm3i4U",
+      "status": "success",
+      "scope": "dev-full-ordinary-linker",
+      "compilerRoot": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-full",
+      "source": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.md",
+        "bytes": 5959,
+        "sha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/dev.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/summary.json",
+        "bytes": 40745,
+        "sha256": "964bed784c2d8d616fa19efe1c14554f7e08fd136c1ac494c913fb8a18444415"
+      },
+      "log": {
+        "path": "/private/tmp/slc-c7-v9-dev-full.log",
+        "bytes": 12639,
+        "sha256": "5c324f39c7ccde5f5cbb3808d007503a0cd82344d62321ad0030479e8369ae7a"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 851017,
+        "outcome": null
+      },
+      "elapsedMs": 858323,
+      "phases": [
+        {
+          "name": "text2gears",
+          "status": "success",
+          "elapsedMs": 141590
+        },
+        {
+          "name": "optimize",
+          "status": "success",
+          "elapsedMs": 12585
+        },
+        {
+          "name": "gears2fsm",
+          "status": "success",
+          "elapsedMs": 315551
+        },
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 375917
+        }
+      ],
+      "calls": [
+        {
+          "phase": "text2gears",
+          "resumed": false,
+          "toolCalls": 2,
+          "elapsedMs": 74744
+        },
+        {
+          "phase": "text2gears",
+          "resumed": true,
+          "toolCalls": 4,
+          "elapsedMs": 67754
+        },
+        {
+          "phase": "optimize",
+          "resumed": true,
+          "toolCalls": 1,
+          "elapsedMs": 13084
+        },
+        {
+          "phase": "gears2fsm",
+          "resumed": true,
+          "toolCalls": 7,
+          "elapsedMs": 314820
+        },
+        {
+          "phase": "link",
+          "resumed": true,
+          "toolCalls": 25,
+          "elapsedMs": 374582
+        }
+      ],
+      "callCount": 5,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.gears.raw.md",
+          "bytes": 11441,
+          "sha256": "c5733de21cc9b14e1aee0f14d4756196510eebfc26d471395f9e0275bb51aa7a"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.gears.md",
+          "bytes": 11441,
+          "sha256": "c5733de21cc9b14e1aee0f14d4756196510eebfc26d471395f9e0275bb51aa7a"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts",
+          "bytes": 55282,
+          "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.playbook.ts",
+          "bytes": 9258,
+          "sha256": "00813c5cae6ec2ce431d3680c953f82e3ab711f2cbc13f0eef3669007f5e95c0"
+        },
+        {
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.ts",
+          "bytes": 1501,
+          "sha256": "e2bb29864125150b6971945c56cb542f1f302baa9bf1f441778040402f98d2a5"
+        }
+      ],
+      "validation": {
+        "ok": true,
+        "typecheck": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null,
+          "unchanged": true,
+          "inputs": [
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.ts",
+              "bytes": 1501,
+              "sha256": "e2bb29864125150b6971945c56cb542f1f302baa9bf1f441778040402f98d2a5"
+            },
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts",
+              "bytes": 55282,
+              "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b"
+            },
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.playbook.ts",
+              "bytes": 9258,
+              "sha256": "00813c5cae6ec2ce431d3680c953f82e3ab711f2cbc13f0eef3669007f5e95c0"
+            },
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/.slc-verify/hash.d.ts",
+              "bytes": 1662,
+              "sha256": "bc0a8ba0f9f256c2e19b84a6814e68a7322691d0b9acc001259d021be654de0f"
+            },
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/.slc-verify/verify.d.ts",
+              "bytes": 26346,
+              "sha256": "321dc7109501d747833aa01555148512fb79f650d3a8d76c1003e0ed2a2844e1"
+            },
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/.slc-verify/verify-coverage.d.ts",
+              "bytes": 4141,
+              "sha256": "5a6c26bf5b442efe2ab3ab8dd6d25cdec118bfc82adc0fc45a8557d6fe5c83c4"
+            },
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.gears-fsm.test.ts",
+              "bytes": 1054,
+              "sha256": "7642013af156135113fe5b0e718c8a227d59ee0257937d8f1b41a8f1ea8d3e83"
+            },
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.introspect.test.ts",
+              "bytes": 8100,
+              "sha256": "2069dfb3aff876e6c4080d81d2c519a75fcb2a2181a586edc4f5c3b6e90f1ce2"
+            },
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.prompt-contract.test.ts",
+              "bytes": 2418,
+              "sha256": "565ec7a33be7c1a69c7f31af52d38a2d14c0c4113aa00327b3279a4db106fb2a"
+            },
+            {
+              "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.coverage.test.ts",
+              "bytes": 756,
+              "sha256": "ecf728953875b1643334b7162c2999cd0d576477b1b7a63cca0be40635b470a3"
+            }
+          ],
+          "compiler": {
+            "path": "/private/tmp/slc-c7-compiler-y4iln8vx/node_modules/typescript/lib/tsc.js",
+            "bytes": 267,
+            "sha256": "2cffde0b8c6760dfb0b5b0382bbb7e00ba6a8b2d981b9205b256a700a481d983"
+          },
+          "args": [
+            "--ignoreConfig",
+            "--noEmit",
+            "--strict",
+            "--noUnusedLocals",
+            "--noUnusedParameters",
+            "--noImplicitOverride",
+            "--verbatimModuleSyntax",
+            "--esModuleInterop",
+            "--forceConsistentCasingInFileNames",
+            "--skipLibCheck",
+            "--module",
+            "NodeNext",
+            "--moduleResolution",
+            "NodeNext",
+            "--target",
+            "ES2022",
+            "--lib",
+            "ES2022",
+            "--allowImportingTsExtensions",
+            "--erasableSyntaxOnly",
+            "--isolatedModules",
+            "--moduleDetection",
+            "force",
+            "--noFallthroughCasesInSwitch",
+            "--types",
+            "node",
+            "--typeRoots",
+            "/private/tmp/slc-c7-compiler-y4iln8vx/node_modules/@types",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.ts",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.playbook/dev.fsm.ts",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.playbook/dev.playbook.ts",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.playbook/.slc-verify/hash.d.ts",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.playbook/.slc-verify/verify.d.ts",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.playbook/.slc-verify/verify-coverage.d.ts",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.playbook/dev.gears-fsm.test.ts",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.playbook/dev.fsm.introspect.test.ts",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.playbook/dev.prompt-contract.test.ts",
+            "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ/dev.playbook/dev.fsm.coverage.test.ts"
+          ],
+          "consumer": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/typecheck-pXk1nJ",
+          "elapsedMs": 1187
+        },
+        "entryImport": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null
+        },
+        "suite": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null
+        },
+        "testFiles": 4,
+        "elapsedMs": 7293,
+        "tests": null
+      },
+      "verificationSummary": {
+        "strictTypeScript": true,
+        "entryImport": true,
+        "generatedSuiteRun": true,
+        "generatedSuitePassed": true,
+        "generatedSuiteTestFiles": 4,
+        "generatedSuiteTests": null
+      },
+      "linker": {
+        "mode": "ordinary slc/link.md FSM-to-runtime linker shared-factory output",
+        "evidence": "linked factory header says Generated by slc/link.md (FSM-to-Runtime linker); public entry advertises runtimeProfile.kind shared-factory"
+      },
+      "runtimeAcceptanceRun": false,
+      "runtimeAcceptanceStatus": "pending root approval",
+      "runtimeReadiness": {
+        "path": "/private/tmp/slc-c7-dev-wm3i4U-readiness.json",
+        "bytes": 7036,
+        "sha256": "41878b5a298fe47e4d5e79012c2671f400ae5a59f7f994917d7ad0f6d5750544"
+      },
+      "profileReadiness": {
+        "casesPrepared": 24,
+        "configOnlySmoke": {
+          "protectedPaths": 10,
+          "registry": "dev",
+          "role": "analyst",
+          "runtimeProfile": "shared-factory",
+          "status": "passed"
+        },
+        "questionRepositoryDisposition": "unchanged",
+        "needsBossReplyQuestionOwnership": "presentation-owned in linked authority; profile supplies only guard for that path"
+      },
+      "fullWorkflowAccepted": true,
+      "acceptedSpeedRatio": false,
+      "sourceClarification": false,
+      "compilerCommit": "c7419edcf1f609bc9bcb9074b9414586f9d7be03",
+      "pipelineGeneration": "v9",
+      "privateRuntimePatch": "@sublang/playbook package bytes patched from upstream IR090 runtime files; package/lock version remains 13.2.0 and is not an unmodified published install",
+      "findings": [
+        "Compilation and full generated-suite benchmark passed for DEV compile-wm3i4U.",
+        "The artifact uses the ordinary slc/link.md shared-factory linker output and public entry work/dev.ts.",
+        "A separate approved post-benchmark runtime control later passed 24/24 DEV scenarios through the actual public entry with zero provider calls."
+      ]
+    },
+    {
+      "run": "compile-wm3i4U-runtime-DEV24",
+      "status": "passed",
+      "scope": "post-benchmark runtime acceptance controls for accepted C7-v9 full DEV compile-wm3i4U",
+      "source": {
+        "path": "/private/tmp/slc-code-dev-acceptance-design/dev.md",
+        "bytes": 5959,
+        "sha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c"
+      },
+      "generatedArtifactSourceRun": "compile-wm3i4U",
+      "generatedArtifacts": {
+        "publicEntry": {
+          "bytes": 1501,
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.ts",
+          "sha256": "e2bb29864125150b6971945c56cb542f1f302baa9bf1f441778040402f98d2a5"
+        },
+        "linkedFactory": {
+          "bytes": 9258,
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.playbook.ts",
+          "sha256": "00813c5cae6ec2ce431d3680c953f82e3ab711f2cbc13f0eef3669007f5e95c0"
+        },
+        "fsm": {
+          "bytes": 55282,
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts",
+          "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b"
+        },
+        "gears": {
+          "bytes": 11441,
+          "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.gears.md",
+          "sha256": "c5733de21cc9b14e1aee0f14d4756196510eebfc26d471395f9e0275bb51aa7a"
+        }
+      },
+      "profile": {
+        "bytes": 3791,
+        "path": "/private/tmp/slc-c7-dev-wm3i4U-profile.final.mjs",
+        "sha256": "0a5f34d1cc9f2ebfae7f2b866c53023235d086188fbc436a8a999eb755648de6"
+      },
+      "config": {
+        "bytes": 5194,
+        "path": "/private/tmp/slc-c7-dev-wm3i4U-acceptance-config.final2.mjs",
+        "sha256": "6bb149b072fac4254b7739d66e437212bc02b8333a2ed5c39a9d2c768d244244"
+      },
+      "runner": {
+        "bytes": 1377,
+        "path": "/private/tmp/slc-c7-dev-wm3i4U-run-24-after-approval.v2.mjs",
+        "sha256": "ee4a27413d23a252e79f0b7a5efb544338b9e1cb0e5f9021177edc06ee913d2c"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c7-dev-wm3i4U-runtime-acceptance/summary.json",
+        "bytes": 131593,
+        "sha256": "82ff7c803b8272d0a2227400d1b2aa6b7edbd6396d1444ebcef2d346ea2472ff"
+      },
+      "log": {
+        "path": "/private/tmp/slc-c7-dev-wm3i4U-runtime-acceptance.log",
+        "bytes": 1858,
+        "sha256": "11ef58bad9781a187de8150e6561207faf3772b646bb055b6f72be83d47c77c1"
+      },
+      "readiness": {
+        "path": "/private/tmp/slc-c7-dev-wm3i4U-readiness.json",
+        "bytes": 7036,
+        "sha256": "41878b5a298fe47e4d5e79012c2671f400ae5a59f7f994917d7ad0f6d5750544"
+      },
+      "runtimeDirectCheck": {
+        "path": "/private/tmp/slc-c7-dev-wm3i4U-runtime-direct-check.json",
+        "bytes": 1746,
+        "sha256": "cb36c78444ad8d8873f48cdd7048a9f6df7c7693f88e8fb86007fcb3a52e5f41"
+      },
+      "dependencyDirectCheck": {
+        "path": "/private/tmp/slc-c7-dev-wm3i4U-dependency-inventory-direct-check.json",
+        "bytes": 581,
+        "sha256": "eb3de1fe262981e6c1b02df11c7f24e597d5a072112fc98f4bbb4ca3d1fcafb8"
+      },
+      "scenarioCount": 24,
+      "passedCount": 24,
+      "failed": [],
+      "providerCalls": 0,
+      "runtimeExecution": "actual emitted public entry work/dev.ts through C7 host APIs with scripted BRANCH/DECIDE/CODE/PR children",
+      "protectedChanged": [],
+      "dependencyEntriesChecked": 11660,
+      "dependencyBytesChecked": 656995360,
+      "dependencyChangedCount": 0,
+      "fullBenchmarkAccepted": true,
+      "originalFullBenchmark": {
+        "run": "compile-wm3i4U",
+        "status": "success",
+        "compileOkElapsedMs": 851017,
+        "benchmarkElapsedMs": 858323
+      },
+      "acceptedSpeedRatio": false,
+      "contractMapping": {
+        "childFailureFinalOutputShape": "{status:\"child-failed\", result:{playbookId,status,output/error}}",
+        "childSuccessFinalOutputShape": "{status:\"completed\", result:{playbookId,status,output}}",
+        "discussionComplete": {
+          "finalOutput": {
+            "status": "discussion-complete"
+          },
+          "selects": {
+            "guard": "discussionComplete"
+          }
+        },
+        "implementationRoutes": {
+          "code": "code",
+          "code-pr": "codeViaPullRequest",
+          "decide-code": "decideThenCode",
+          "decide-code-pr": "decideThenCodeViaPullRequest",
+          "payload": "planningResult: finalText"
+        },
+        "needsBossReply": {
+          "authorityFieldOwnership": {
+            "question": "presentation"
+          },
+          "fsmOutputRequiresQuestion": true,
+          "profileSuppliesQuestion": false,
+          "selects": {
+            "guard": "needsBossReply"
+          }
+        },
+        "questionRepositoryDisposition": "unchanged",
+        "role": "analyst"
+      }
+    },
+    {
+      "run": "compile-GOLgqj",
+      "status": "failure",
+      "scope": "dev-fixed-fsm-link-baseline",
+      "compilerRoot": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-baseline",
+      "experimentDesign": {
+        "path": "/private/tmp/slc-dev-materializer-selection-design.json",
+        "bytes": 1681,
+        "sha256": "f1380dd8eb6db69b35d18a907e54ef4606255844914c0038a4c119d1405691d2"
+      },
+      "source": {
+        "path": "/private/tmp/slc-c7-link-evidence/compile-GOLgqj/work/dev.fsm.ts",
+        "bytes": 55282,
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b",
+        "original": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts"
+      },
+      "linkTarget": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx/node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17633,
+        "sha256": "34816df58b51006a9df27369b2a80f361225724c95edad3032f53cccce680365"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c7-link-evidence/compile-GOLgqj/summary.json",
+        "bytes": 24856,
+        "sha256": "307a46c506c7b30a97ecbbee99412b5f1e947bbdbf97d714fda243c0ae3952d4"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c7-link-evidence/invocation-k1PJqy/proof.json",
+        "bytes": 2736478,
+        "sha256": "61a24d47db29476f961bc93b7f027fa3820d0418de63db17d72bb534831a5ab5"
+      },
+      "log": {
+        "path": "/private/tmp/slc-c7-v9-dev-fixed-link-baseline.log",
+        "bytes": 1389,
+        "sha256": "6978d52d2216a159328e4547d4d938a5f8da8e17e0f017b84ef3617ae4f7f22c"
+      },
+      "compile": {
+        "ok": false,
+        "elapsedMs": 600516,
+        "outcome": null
+      },
+      "elapsedMs": 600524,
+      "phases": [
+        {
+          "name": "link",
+          "status": "error",
+          "elapsedMs": 600538
+        }
+      ],
+      "calls": [
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 44,
+          "elapsedMs": 585648
+        },
+        {
+          "phase": "link",
+          "status": "interrupted",
+          "resumed": true,
+          "toolCalls": 0,
+          "elapsedMs": 17246
+        }
+      ],
+      "callCount": 2,
+      "protectedInputs": {
+        "before": {
+          "checked": 11921,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11921,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "validation": null,
+      "fullCompilationSpeedRatio": false,
+      "acceptedSpeedRatio": false,
+      "runtimeAcceptanceRun": false,
+      "candidateComparison": {
+        "run": "compile-43wE00",
+        "session": 7215,
+        "status": "success",
+        "scope": "link-only candidate with post-measurement validation/runtime controls",
+        "resultClaim": true,
+        "summarySha256": "b7d27fe043575fc5d06641326c0f68f180a17a972a62aef76629acc9276cca73",
+        "noSpeedRatioBecauseBaselineFailed": true
+      },
+      "findings": [
+        "Baseline fixed-FSM link run reached the 600 second timeout/failure boundary before validation.",
+        "Proof records 11921 protected inputs unchanged before and after.",
+        "Candidate compile-43wE00 later settled successfully, but the failed baseline prevents a percentage speed-ratio claim."
+      ]
+    },
+    {
+      "run": "compile-43wE00",
+      "status": "success",
+      "scope": "dev-fixed-fsm-link-candidate-materializer with post-measurement validation/runtime controls excluded from measured link time",
+      "compilerRoot": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-prefer-materializer",
+      "experimentDesign": {
+        "path": "/private/tmp/slc-dev-materializer-selection-design.json",
+        "bytes": 1681,
+        "sha256": "f1380dd8eb6db69b35d18a907e54ef4606255844914c0038a4c119d1405691d2"
+      },
+      "source": {
+        "path": "/private/tmp/slc-c7-link-evidence/compile-43wE00/work/dev.fsm.ts",
+        "bytes": 55282,
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b",
+        "original": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts"
+      },
+      "linkTarget": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx/node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17633,
+        "sha256": "34816df58b51006a9df27369b2a80f361225724c95edad3032f53cccce680365"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c7-link-evidence/compile-43wE00/summary.json",
+        "bytes": 27277,
+        "sha256": "b7d27fe043575fc5d06641326c0f68f180a17a972a62aef76629acc9276cca73"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c7-link-evidence/invocation-x5BsDb/proof.json",
+        "bytes": 2736664,
+        "sha256": "b80665095601d457a016f5c4d61d03b95855b6a17ce02abe91907f77874f87a0"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 167175,
+        "outcome": null
+      },
+      "elapsedMs": 168355,
+      "phases": [
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 167169
+        }
+      ],
+      "calls": [
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 16,
+          "elapsedMs": 166614
+        }
+      ],
+      "callCount": 1,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c7-link-evidence/compile-43wE00/work/dev.playbook/dev.playbook.ts",
+          "bytes": 7770,
+          "sha256": "3e4c962f11b77df29fa328100fa892c5ba67fecae639d57954c18072c0959781"
+        }
+      ],
+      "materializer": {
+        "used": true,
+        "evidence": "linked module header: Generated by slc/materialize-link.mjs",
+        "linkedFactorySha256": "3e4c962f11b77df29fa328100fa892c5ba67fecae639d57954c18072c0959781"
+      },
+      "protectedInputs": {
+        "before": {
+          "checked": 11921,
+          "changed": [],
+          "unchanged": true
+        },
+        "after": {
+          "checked": 11921,
+          "changed": [],
+          "unchanged": true
+        }
+      },
+      "linkScopeValidation": {
+        "ok": true,
+        "typecheck": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null,
+          "unchanged": true,
+          "inputs": [
+            {
+              "path": "/private/tmp/slc-c7-link-evidence/compile-43wE00/work/dev.fsm.ts",
+              "bytes": 55282,
+              "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b"
+            },
+            {
+              "path": "/private/tmp/slc-c7-link-evidence/compile-43wE00/work/dev.playbook/dev.playbook.ts",
+              "bytes": 7770,
+              "sha256": "3e4c962f11b77df29fa328100fa892c5ba67fecae639d57954c18072c0959781"
+            }
+          ],
+          "compiler": {
+            "path": "/private/tmp/slc-c7-compiler-y4iln8vx/node_modules/typescript/lib/tsc.js",
+            "bytes": 267,
+            "sha256": "2cffde0b8c6760dfb0b5b0382bbb7e00ba6a8b2d981b9205b256a700a481d983"
+          },
+          "args": [
+            "--ignoreConfig",
+            "--noEmit",
+            "--strict",
+            "--noUnusedLocals",
+            "--noUnusedParameters",
+            "--noImplicitOverride",
+            "--verbatimModuleSyntax",
+            "--esModuleInterop",
+            "--forceConsistentCasingInFileNames",
+            "--skipLibCheck",
+            "--module",
+            "NodeNext",
+            "--moduleResolution",
+            "NodeNext",
+            "--target",
+            "ES2022",
+            "--lib",
+            "ES2022",
+            "--allowImportingTsExtensions",
+            "--erasableSyntaxOnly",
+            "--isolatedModules",
+            "--moduleDetection",
+            "force",
+            "--noFallthroughCasesInSwitch",
+            "--types",
+            "node",
+            "--typeRoots",
+            "/private/tmp/slc-c7-compiler-y4iln8vx/node_modules/@types",
+            "/private/tmp/slc-c7-link-evidence/compile-43wE00/typecheck-XWrwIF/dev.fsm.ts",
+            "/private/tmp/slc-c7-link-evidence/compile-43wE00/typecheck-XWrwIF/dev.playbook/dev.playbook.ts"
+          ],
+          "consumer": "/private/tmp/slc-c7-link-evidence/compile-43wE00/typecheck-XWrwIF",
+          "elapsedMs": 993
+        },
+        "sourceUnchanged": true,
+        "linkedContract": {
+          "ok": true,
+          "code": 0,
+          "terminationSignal": null
+        },
+        "elapsedMs": 1163
+      },
+      "postMeasurementValidation": {
+        "stageRoot": "/private/tmp/slc-c7-dev-43wE00-validation-stage",
+        "readiness": {
+          "path": "/private/tmp/slc-c7-dev-43wE00-validation-stage/readiness.json",
+          "bytes": 9204,
+          "sha256": "ea85e16308c95f455c848b5974a6818d76484b58d197c0497acacb3695b60712"
+        },
+        "generatedPublicEntry": {
+          "path": "/private/tmp/slc-c7-dev-43wE00-validation-stage/work/dev.ts",
+          "bytes": 1501,
+          "sha256": "e2bb29864125150b6971945c56cb542f1f302baa9bf1f441778040402f98d2a5"
+        },
+        "generatedSuites": 4,
+        "suiteTestsPassed": 8,
+        "typecheckOk": true,
+        "entryImportOk": true,
+        "vitestOk": true,
+        "byteIdentityChecks": {
+          "stagedLinkedMatchesCandidate": true,
+          "stagedTopFsmMatchesCandidate": true,
+          "stagedLocalFsmMatchesCandidate": true,
+          "stagedSourceMatchesWm3i4U": true,
+          "stagedGearsMatchesWm3i4U": true
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "runtimeAcceptance": {
+        "status": "passed",
+        "scenarioCount": 24,
+        "passedCount": 24,
+        "providerCalls": 0,
+        "summary": {
+          "path": "/private/tmp/slc-c7-dev-43wE00-runtime-acceptance/summary.json",
+          "bytes": 140033,
+          "sha256": "21d68b40c77ed84837373c18d5c1aa0f55fe0f2b273d44591428d77f2a9a7690"
+        },
+        "readiness": {
+          "path": "/private/tmp/slc-c7-dev-43wE00-runtime-readiness.json",
+          "bytes": 5316,
+          "sha256": "2fc2edd091198a61a8c33e09750d0dd9d375cfc756f272b66aa228f82a71b9ce"
+        },
+        "postrun": {
+          "path": "/private/tmp/slc-c7-dev-43wE00-runtime-postrun.json",
+          "bytes": 1662,
+          "sha256": "8c869aff7916395e1f8c5a30181ce4ef64ed0905d6f63fce73b62026fe4eb20c"
+        },
+        "stagedArtifactsChecked": 7,
+        "stagedArtifactChanges": [],
+        "excludedFromMeasuredLinkTime": true
+      },
+      "fullCompilationSpeedRatio": false,
+      "acceptedSpeedRatio": false,
+      "findings": [
+        "Candidate link-only materializer run succeeded with one linked factory artifact and protected inputs unchanged.",
+        "Independent post-measurement staging emitted a normal C7 public entry and four generated suites without changing candidate bytes.",
+        "Approved private DEV runtime control passed 24/24 through the staged public entry with zero provider calls and zero staged artifact changes.",
+        "No percentage speed ratio is claimed because the paired baseline failed."
+      ]
+    },
+    {
+      "run": "compile-oQuUMT",
+      "status": "success-with-contract-caveat",
+      "scope": "C8 DEV fixed-FSM link baseline with post-measurement validation/runtime controls; no accepted linked JSON-contract equivalence",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-baseline",
+      "source": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-oQuUMT/work/dev.fsm.ts",
+        "bytes": 55282,
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b",
+        "original": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-oQuUMT/summary.json",
+        "bytes": 30426,
+        "sha256": "7598d556c43e48f67d9a5e3ee7180e5d8d776c2f3472fdf618c55da5bf029276"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c8-link-evidence/invocation-FNti5v/proof.json",
+        "bytes": 2736474,
+        "sha256": "9ec1f4822df3cd4c70d738bac728eac7f407e726ec7d9ddd82d25b3f11d62adf"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 668211,
+        "outcome": null
+      },
+      "elapsedMs": 669465,
+      "phases": [
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 668219
+        }
+      ],
+      "calls": [
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": false,
+          "requestedResume": false,
+          "toolCalls": 26,
+          "elapsedMs": 368718,
+          "providerDurationMs": 366773,
+          "promptBytes": 159847,
+          "promptSha256": "735fbda9b92917ccebddeb76149ad5f08e986aa7a927fb4633515606a0f44c4e"
+        },
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": true,
+          "requestedResume": true,
+          "toolCalls": 6,
+          "elapsedMs": 88447,
+          "providerDurationMs": 83853,
+          "promptBytes": 164428,
+          "promptSha256": "0f47645236b2253fee0cda4c554169f4a3e8a265f04bfa261b2403461abb4e14"
+        },
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": true,
+          "requestedResume": true,
+          "toolCalls": 11,
+          "elapsedMs": 205277,
+          "providerDurationMs": 202903,
+          "promptBytes": 169572,
+          "promptSha256": "da729f5b48cf23561967d5aa911dd5474c1428fb1f2f4375d3286c62cb46617c"
+        }
+      ],
+      "callCount": 3,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c8-link-evidence/compile-oQuUMT/work/dev.playbook/dev.playbook.ts",
+          "bytes": 17824,
+          "sha256": "13c9f24d6fedcdf89b108b9658e09c758beb9be9dc46f6ca94138328f8908f17"
+        }
+      ],
+      "postMeasurementValidation": {
+        "stageRoot": "/private/tmp/slc-c8-dev-oQuUMT-validation-stage",
+        "readiness": {
+          "path": "/private/tmp/slc-c8-dev-oQuUMT-validation-stage/readiness.json",
+          "bytes": 12478,
+          "sha256": "9083fe56afcbe6e4609f9661909daa437f8dcfb7e07572f4836217123c68360b"
+        },
+        "generatedPublicEntry": {
+          "path": "/private/tmp/slc-c8-dev-oQuUMT-validation-stage/work/dev.ts",
+          "bytes": 1501,
+          "sha256": "e2bb29864125150b6971945c56cb542f1f302baa9bf1f441778040402f98d2a5"
+        },
+        "generatedSuites": 4,
+        "suiteTestsPassed": 8,
+        "typecheckOk": true,
+        "entryImportOk": true,
+        "vitestOk": true,
+        "byteIdentityChecks": {
+          "stagedLinkedMatchesCandidate": true,
+          "stagedTopFsmMatchesCandidate": true,
+          "stagedLocalFsmMatchesCandidate": true,
+          "stagedSourceMatchesWm3i4U": true,
+          "stagedGearsMatchesWm3i4U": true,
+          "c8CompilerUnchanged": true
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "runtimeAcceptance": {
+        "status": "passed",
+        "scenarioCount": 24,
+        "passedCount": 24,
+        "providerCalls": 0,
+        "summary": {
+          "path": "/private/tmp/slc-c8-dev-oQuUMT-runtime-acceptance/summary.json",
+          "bytes": 150884,
+          "sha256": "d6c3d6d81e65c21943b58d22d3a637518b67d6143d39f7e3d974c663817e9613"
+        },
+        "postrun": {
+          "path": "/private/tmp/slc-c8-dev-oQuUMT-runtime-postrun.json",
+          "bytes": 1502,
+          "sha256": "b04791a3f6e9a513f1075a7303facf269412ac44970f71fedbba2779597ea835"
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "optionDescriptorControl": {
+        "status": "failed",
+        "evidence": {
+          "path": "/private/tmp/slc-c8-oQuUMT-option-control.json",
+          "bytes": 5962,
+          "sha256": "ded39e0546cd663ad2eb8f7b13beda1fe740307b2606e0d3f9991fd511bd6523"
+        },
+        "publicEntryAcceptedKnownNonEnumerableOption": true,
+        "sharedSnapshotJsonValueAcceptedSameInput": false,
+        "outcome": "confirmed explicit public JSON-option contract violation"
+      },
+      "fullCompilationSpeedRatio": false,
+      "acceptedSpeedRatio": false,
+      "pairedCandidate": "compile-tKSZCs",
+      "findings": [
+        "Baseline link scope succeeded across three successful link calls, and post-measurement generated-suite and 24-scenario runtime controls passed.",
+        "The public non-JSON descriptor control failed, so this baseline is not accepted for linked JSON-contract equivalence.",
+        "Raw 669465 ms timing is recorded only for comparison context; no speed ratio is accepted."
+      ]
+    },
+    {
+      "run": "compile-tKSZCs",
+      "status": "success",
+      "scope": "C8 DEV fixed-FSM link materializer candidate with post-measurement validation/runtime controls excluded from measured link time",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "pipeline": "/private/tmp/playbook-13.2-common-v9-prefer-materializer",
+      "source": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-tKSZCs/work/dev.fsm.ts",
+        "bytes": 55282,
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b",
+        "original": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-tKSZCs/summary.json",
+        "bytes": 27277,
+        "sha256": "03662735334adb95d6507a6873667edd94c5a910ee345208389680b8f8cb592c"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c8-link-evidence/invocation-uTKcJp/proof.json",
+        "bytes": 2736661,
+        "sha256": "06a982377fbdecd7333e963d1579ca432200681b3f365268cbae23cb7b665a0c"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 172835,
+        "outcome": null
+      },
+      "elapsedMs": 174185,
+      "phases": [
+        {
+          "name": "link",
+          "status": "success",
+          "elapsedMs": 172825
+        }
+      ],
+      "calls": [
+        {
+          "phase": "link",
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 15,
+          "elapsedMs": 166066
+        }
+      ],
+      "callCount": 1,
+      "artifacts": [
+        {
+          "path": "/private/tmp/slc-c8-link-evidence/compile-tKSZCs/work/dev.playbook/dev.playbook.ts",
+          "bytes": 7745,
+          "sha256": "0ee2ba7c74011fea386bb81fc178e7d2c8ca929a721a615614ca89bbfa2c8e22"
+        }
+      ],
+      "materializer": {
+        "used": true,
+        "evidence": "linked module header and staged artifact use the materialized linked factory",
+        "linkedFactorySha256": "0ee2ba7c74011fea386bb81fc178e7d2c8ca929a721a615614ca89bbfa2c8e22"
+      },
+      "postMeasurementValidation": {
+        "stageRoot": "/private/tmp/slc-c8-dev-tKSZCs-validation-stage",
+        "readiness": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-validation-stage/readiness.json",
+          "bytes": 12487,
+          "sha256": "3beffd7890b8a93a7600cc60595ef926b0712a9360c331426caca7ea223ad0f0"
+        },
+        "generatedPublicEntry": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-validation-stage/work/dev.ts",
+          "bytes": 1501,
+          "sha256": "e2bb29864125150b6971945c56cb542f1f302baa9bf1f441778040402f98d2a5"
+        },
+        "generatedSuites": 4,
+        "suiteTestsPassed": 8,
+        "typecheckOk": true,
+        "entryImportOk": true,
+        "vitestOk": true,
+        "byteIdentityChecks": {
+          "stagedLinkedMatchesCandidate": true,
+          "stagedTopFsmMatchesCandidate": true,
+          "stagedLocalFsmMatchesCandidate": true,
+          "stagedSourceMatchesWm3i4U": true,
+          "stagedGearsMatchesWm3i4U": true,
+          "c8CompilerUnchanged": true
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "runtimeAcceptance": {
+        "status": "passed",
+        "scenarioCount": 24,
+        "passedCount": 24,
+        "providerCalls": 0,
+        "summary": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-runtime-acceptance/summary.json",
+          "bytes": 150834,
+          "sha256": "961ac39628f25d28a1dcacb518930400f693cf21eaa0485c5467c9629da70c3a"
+        },
+        "postrun": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-runtime-postrun.json",
+          "bytes": 1630,
+          "sha256": "01813e44bccd04a07440d1047093cdb0e8875198ee271335c41bd58f2ed51cc3"
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "optionDescriptorControl": {
+        "status": "passed",
+        "evidence": {
+          "path": "/private/tmp/slc-c8-tKSZCs-option-control.json",
+          "bytes": 5887,
+          "sha256": "be2080a1b082b9b0a5b2922a14df6ea3375ca64d3609e02c4e827448d5c7217d"
+        },
+        "publicEntryAcceptedKnownNonEnumerableOption": false,
+        "sharedSnapshotJsonValueAcceptedSameInput": false,
+        "outcome": "materializer public validator rejects the non-enumerable known option like shared snapshotJsonValue"
+      },
+      "fullCompilationSpeedRatio": false,
+      "acceptedSpeedRatio": false,
+      "pairedBaseline": "compile-oQuUMT",
+      "comparisonVerdict": "candidate conforms on the descriptor control and is raw-faster than baseline, but no accepted speed ratio exists because baseline violates the public JSON-option contract",
+      "findings": [
+        "Candidate link scope succeeded with actual materializer selected.",
+        "Independent post-measurement staging emitted a normal C8 public entry and four generated suites without changing candidate bytes.",
+        "Approved DEV runtime control passed 24/24 through the staged public entry with zero provider calls.",
+        "Raw 174185 ms timing is recorded only; no percentage speed-ratio claim is accepted."
+      ]
+    },
+    {
+      "run": "compile-pYzD5x",
+      "status": "compiler-success-runtime-failed",
+      "scope": "C8-v11 full CODE compile; generated validation passed, post-measurement runtime audit failed 14/18",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "pipeline": "/private/tmp/playbook-13.2-common-v11-full",
+      "source": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-pYzD5x/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+        "original": "/private/tmp/slc-code-dev-acceptance-design/code.md"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-complex-full-evidence/compile-pYzD5x/summary.json",
+        "bytes": 40880,
+        "sha256": "fcb433bdb8ca143f3656e577f2464570696a076ef600497f2bee3ef92f12f37e"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 466561
+      },
+      "elapsedMs": 469379,
+      "phases": [
+        {
+          "name": "text2gears",
+          "target": "/private/tmp/slc-c8-complex-full-evidence/compile-pYzD5x/work/code.playbook/code.gears.raw.md",
+          "status": "success",
+          "startMs": 66,
+          "elapsedMs": 100379
+        },
+        {
+          "name": "optimize",
+          "target": "/private/tmp/slc-c8-complex-full-evidence/compile-pYzD5x/work/code.playbook/code.gears.md",
+          "status": "success",
+          "startMs": 100446,
+          "elapsedMs": 10925
+        },
+        {
+          "name": "gears2fsm",
+          "target": "/private/tmp/slc-c8-complex-full-evidence/compile-pYzD5x/work/code.playbook/code.fsm.ts",
+          "status": "success",
+          "startMs": 111375,
+          "elapsedMs": 256748
+        },
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c8-complex-full-evidence/compile-pYzD5x/work/code.playbook/code.playbook.ts",
+          "status": "success",
+          "startMs": 368123,
+          "elapsedMs": 97915
+        }
+      ],
+      "callCount": 5,
+      "validation": {
+        "generatedSuitesPassed": true,
+        "generatedSuiteFiles": 4,
+        "generatedSuiteTestsPassed": 8,
+        "typecheck": true,
+        "entryImport": true
+      },
+      "runtimeAudit": {
+        "status": "failed",
+        "passed": 4,
+        "failed": 14,
+        "total": 18,
+        "postrun": {
+          "path": "/private/tmp/slc-c8-code-pYzD5x-runtime-postrun.json",
+          "bytes": 7640,
+          "sha256": "acbb3bf6a67c019a1bc6e7d0f21862b887c745aa83c77922c54388dee40c31ad"
+        },
+        "failureDiagnostic": {
+          "path": "/private/tmp/slc-c8-code-pYzD5x-runtime-failure-diagnostic.json",
+          "bytes": 14061,
+          "sha256": "129498d1e49b90685097d38ba5678415f845ed82c91c3f0fd12eb20f1b38e97d"
+        },
+        "summary": {
+          "path": "/private/tmp/slc-c8-code-pYzD5x-runtime-acceptance/summary.json",
+          "bytes": 96529,
+          "sha256": "e07772fee569671328362f746b6a6066e5a540042f65185a74f6b8b495c69e40"
+        },
+        "dominantFailure": "exact quoted relay missing: Original intent"
+      },
+      "acceptedFullWorkflow": false,
+      "acceptedSpeedRatio": false,
+      "notes": [
+        "Supersedes the earlier C8 CODE compiler failure only at compiler/generated-validation scope.",
+        "Runtime failure is preserved; no accepted full CODE workflow claim."
+      ]
+    },
+    {
+      "run": "compile-4JLsmu",
+      "status": "success-with-annotation-contract-failure",
+      "scope": "C8-v11 DEV fixed-FSM baseline link; post-measurement staging and JSON controls passed, annotation contract failed",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "pipeline": "/private/tmp/playbook-13.2-common-v11-baseline",
+      "source": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-4JLsmu/work/dev.fsm.ts",
+        "bytes": 55282,
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b",
+        "original": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-4JLsmu/summary.json",
+        "bytes": 30476,
+        "sha256": "6ed333270d967d1e4f77d7ffa5ec4f7762963b0577c548119487a5d02a5216e5"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 841791
+      },
+      "elapsedMs": 843281,
+      "phases": [
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c8-link-evidence/compile-4JLsmu/work/dev.playbook/dev.playbook.ts",
+          "status": "success",
+          "startMs": 24,
+          "elapsedMs": 841778
+        }
+      ],
+      "callCount": 3,
+      "calls": [
+        {
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 51,
+          "elapsedMs": 593030,
+          "providerDurationMs": 590119
+        },
+        {
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 4,
+          "elapsedMs": 67382,
+          "providerDurationMs": 62981
+        },
+        {
+          "status": "success",
+          "resumed": true,
+          "toolCalls": 8,
+          "elapsedMs": 175556,
+          "providerDurationMs": 172970
+        }
+      ],
+      "linkedFactory": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-4JLsmu/work/dev.playbook/dev.playbook.ts",
+        "bytes": 18109,
+        "sha256": "3fdefe6f99bcade5eb3878f3954a225c0874c0b7bd59a54019bfcd7f62297a73"
+      },
+      "postMeasurementValidation": {
+        "status": "passed",
+        "generatedSuiteTestsPassed": 8,
+        "readiness": {
+          "path": "/private/tmp/slc-c8-dev-4JLsmu-validation-stage/readiness.json",
+          "bytes": 12479,
+          "sha256": "c844ba452a631bd58f8b8a531147b445bd5c8d697d00de6638b592ded6338933"
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "optionDescriptorControls": {
+        "status": "passed",
+        "evidence": {
+          "path": "/private/tmp/slc-c8-4JLsmu-option-controls.json",
+          "bytes": 6568,
+          "sha256": "5e7ffe0f1016f37a24c9bccc9f3ab21688d995f9f6663c9e02f283d6241c834b"
+        },
+        "knownNonEnumerableRejectedLikeSharedHelper": true,
+        "knownAccessorRejectedLikeSharedHelper": true,
+        "accessorGetterReads": 0
+      },
+      "contractFailure": {
+        "status": "failed",
+        "evidence": {
+          "path": "/private/tmp/slc-c8-dev-4JLsmu-runtime-readiness-held.json",
+          "bytes": 4707,
+          "sha256": "aab61a41d780ded500bce3cfb6011782de031b3db3af9d31668d8ef5863c00e9"
+        },
+        "reason": "linked artifact invents planningResult as a presentation-owned verbatim payload"
+      },
+      "runtimeAcceptanceRun": false,
+      "acceptedSpeedRatio": false,
+      "pairedCandidate": "compile-7694Jg"
+    },
+    {
+      "run": "compile-7694Jg",
+      "status": "success-reuses-tKSZCs-runtime-by-identity",
+      "scope": "C8-v11 DEV fixed-FSM materializer candidate; fresh stage/JSON controls passed and prior tKSZCs 24/24 runtime is reused by byte identity",
+      "compilerRoot": "/private/tmp/slc-c8-compiler-ezn78503",
+      "pipeline": "/private/tmp/playbook-13.2-common-v11-prefer-materializer",
+      "source": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-7694Jg/work/dev.fsm.ts",
+        "bytes": 55282,
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b",
+        "original": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-7694Jg/summary.json",
+        "bytes": 27347,
+        "sha256": "feafff46245ff5f3c5b4be23369ae3304e4941d6cf8cf636905f808cbd1bb5e2"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 150533
+      },
+      "elapsedMs": 152086,
+      "phases": [
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c8-link-evidence/compile-7694Jg/work/dev.playbook/dev.playbook.ts",
+          "status": "success",
+          "startMs": 29,
+          "elapsedMs": 150453
+        }
+      ],
+      "callCount": 1,
+      "calls": [
+        {
+          "status": "success",
+          "resumed": false,
+          "toolCalls": 12,
+          "elapsedMs": 142099,
+          "providerDurationMs": 136671
+        }
+      ],
+      "linkedFactory": {
+        "path": "/private/tmp/slc-c8-link-evidence/compile-7694Jg/work/dev.playbook/dev.playbook.ts",
+        "bytes": 7745,
+        "sha256": "0ee2ba7c74011fea386bb81fc178e7d2c8ca929a721a615614ca89bbfa2c8e22"
+      },
+      "actualMaterializerUsed": true,
+      "postMeasurementValidation": {
+        "status": "passed",
+        "generatedSuiteTestsPassed": 8,
+        "readiness": {
+          "path": "/private/tmp/slc-c8-dev-7694Jg-validation-stage/readiness.json",
+          "bytes": 12488,
+          "sha256": "a5800ea1f7ea4bb82c7fa6f6a9626b7a7b06a2dad01a4f850db63e2fb184da04"
+        },
+        "excludedFromMeasuredLinkTime": true
+      },
+      "optionDescriptorControl": {
+        "status": "passed",
+        "evidence": {
+          "path": "/private/tmp/slc-c8-7694Jg-option-control.json",
+          "bytes": 5815,
+          "sha256": "b572de6d7aa8681878988d58d5c01fee85fbe828ab91ee2819851dad447f0c6e"
+        },
+        "knownNonEnumerableRejectedLikeSharedHelper": true
+      },
+      "runtimeAcceptanceReuse": {
+        "status": "reused-by-byte-identity",
+        "evidence": {
+          "path": "/private/tmp/slc-c8-dev-7694Jg-equivalence-to-tKSZCs.json",
+          "bytes": 10255,
+          "sha256": "ebfa6ef8d056c735bffb1ccb4c51682e135be06d218690f51954897f50a2f63f"
+        },
+        "referenceRun": "compile-tKSZCs",
+        "runtimeScenariosPassed": 24,
+        "freshRuntimeRun": false,
+        "referenceRuntimePostrun": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-runtime-postrun.json",
+          "bytes": 1630,
+          "sha256": "01813e44bccd04a07440d1047093cdb0e8875198ee271335c41bd58f2ed51cc3"
+        },
+        "referenceRuntimeSummary": {
+          "path": "/private/tmp/slc-c8-dev-tKSZCs-runtime-acceptance/summary.json",
+          "bytes": 150834,
+          "sha256": "961ac39628f25d28a1dcacb518930400f693cf21eaa0485c5467c9629da70c3a"
+        }
+      },
+      "byteEquivalenceToTKSZCs": {
+        "fsmSha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b",
+        "linkedFactorySha256": "0ee2ba7c74011fea386bb81fc178e7d2c8ca929a721a615614ca89bbfa2c8e22",
+        "publicEntrySha256": "e2bb29864125150b6971945c56cb542f1f302baa9bf1f441778040402f98d2a5",
+        "c8InventoryUnchanged": true
+      },
+      "acceptedSpeedRatio": false,
+      "pairedBaseline": "compile-4JLsmu",
+      "comparisonVerdict": "candidate conforming; no accepted ratio because paired baseline failed annotation contract"
+    },
+    {
+      "run": "compile-LoUfNr",
+      "status": "compiler-success-runtime-failed",
+      "scope": "C9-v11 full CODE; eight generated tests passed, runtime rejected output authority before player work",
+      "compilerRoot": "/private/tmp/slc-c9-compiler-uiqcyre8",
+      "pipeline": "/private/tmp/playbook-13.2-common-v11-full",
+      "source": {
+        "path": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/summary.json",
+        "bytes": 38866,
+        "sha256": "1cb8036ede3fc8ee41e1c08c380b4b75bd63483ea2887975151e8d97cc459236"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c9-complex-full-evidence/invocation-bEaSYS/proof.json",
+        "bytes": 2737216,
+        "sha256": "55baf7d291a1d60b290122d4b99fc5eeb8e77e7f5f29773a9b9227888659e951"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 594547,
+        "outcome": null
+      },
+      "elapsedMs": 615743,
+      "phases": [
+        {
+          "name": "text2gears",
+          "target": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.playbook/code.gears.raw.md",
+          "status": "success",
+          "startMs": 59,
+          "elapsedMs": 60272
+        },
+        {
+          "name": "optimize",
+          "target": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.playbook/code.gears.md",
+          "status": "success",
+          "startMs": 60332,
+          "elapsedMs": 11095
+        },
+        {
+          "name": "gears2fsm",
+          "target": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.playbook/code.fsm.ts",
+          "status": "success",
+          "startMs": 71429,
+          "elapsedMs": 334898
+        },
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c9-complex-full-evidence/compile-LoUfNr/work/code.playbook/code.playbook.ts",
+          "status": "success",
+          "startMs": 406330,
+          "elapsedMs": 169940
+        }
+      ],
+      "callCount": 4,
+      "validation": {
+        "strictTypecheck": true,
+        "entryImport": true,
+        "generatedSuiteTestsPassed": 8
+      },
+      "runtimeAudit": {
+        "passed": 0,
+        "total": 18,
+        "summary": {
+          "path": "/private/tmp/slc-c9-code-LoUfNr-runtime-acceptance/summary.json",
+          "bytes": 98079,
+          "sha256": "b69056404f5da68dc10c87fa14f4d779885f4d4f235a1253512bb435248a0a97"
+        },
+        "postrun": {
+          "path": "/private/tmp/slc-c9-code-LoUfNr-runtime-postrun.json",
+          "bytes": 5939,
+          "sha256": "c9e77d39860bcde36085172b473777f255d122992985bcce20af31b6e0b3e1ca"
+        },
+        "privateProfileCaveat": "Two negative child fixtures used a parent output field name by mistake; all original scenarios stopped earlier on the genuine authority mismatch. The separate corrected-profile control preserves this original profile."
+      },
+      "findings": [
+        "Two GEARS/FSM result descriptions put explanatory `code` backticks inside output-clause parentheses; extraction treats these as an extra required property.",
+        "Outcome authority has no such property, so runtime rejects before a player call."
+      ],
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": null,
+      "retrospectiveControl": {
+        "scope": "Uncompiled copy with only the two explanatory backtick pairs removed in GEARS and FSM; not a full-compile success or speed comparison",
+        "summary": {
+          "path": "/private/tmp/slc-ir059-LoUfNr-guidance-control-v2/runtime-acceptance-corrected-profile/summary.json",
+          "bytes": 98261,
+          "sha256": "f5e9f056d91061b9e61538325c43e08a20872ee03ac3ccf66770c206990e0428"
+        },
+        "postrun": {
+          "path": "/private/tmp/slc-ir059-LoUfNr-guidance-control-v2/runtime-postrun-corrected-profile.json",
+          "bytes": 1732,
+          "sha256": "fa6fe2d32df5204d569513bbf4b591594cb84bbcdcb0b35378af39db69363cc0"
+        },
+        "profileCorrection": {
+          "path": "/private/tmp/slc-ir059-LoUfNr-guidance-control-v2/profile-correction.json",
+          "bytes": 529,
+          "sha256": "6e926b7236d045d59e5b4ec96af27357eafe103b84a2ea0a6beaa4b485bdc0ae"
+        },
+        "passed": 18,
+        "total": 18,
+        "providerCalls": 0
+      },
+      "earlyDiagnostic": {
+        "path": "/private/tmp/slc-ir059-real-artifact-control.json",
+        "bytes": 2752,
+        "sha256": "6422f8556de5e33a520d38c3b1aee27907ad1f719e04668010a41376d75b04bf"
+      }
+    },
+    {
+      "run": "compile-Z0sZ90",
+      "status": "environment-failure",
+      "scope": "C10-v12 full CODE attempt in a sandbox without provider credential access",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v12-full",
+      "summary": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/compile-Z0sZ90/summary.json",
+        "bytes": 21757,
+        "sha256": "6e86d296d1f273e4a2924922d6e7c5f9d37378672a5af46cc2b3a1fda1a9653f"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/invocation-I6rJf4/proof.json",
+        "bytes": 2747777,
+        "sha256": "6bd846806242fdee8428937285dec248ce3c46a73c1947e3e7a7f72d8c3149f9"
+      },
+      "compile": {
+        "ok": false,
+        "elapsedMs": 3407,
+        "outcome": null
+      },
+      "elapsedMs": 3416,
+      "phases": [
+        {
+          "name": "text2gears",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-Z0sZ90/work/code.playbook/code.gears.raw.md",
+          "status": "error",
+          "startMs": 64,
+          "elapsedMs": 3351
+        }
+      ],
+      "diagnosis": "Provider returned Not logged in. Supported CLI auth status in the normal environment subsequently reports loggedIn true; a separate fresh run uses that environment.",
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": null
+    },
+    {
+      "run": "compile-9tWwI3",
+      "status": "compiler-success-entry-audit-failed",
+      "scope": "C10/v12 cold full CODE compiled; independent Source-owned startup-option audit failed before runtime scenarios",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v12-full",
+      "source": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.md",
+        "bytes": 5687,
+        "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5"
+      },
+      "summary": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/summary.json",
+        "bytes": 42816,
+        "sha256": "3f02d76f4873c6747ceff33c77f4234fc6d109b21ce09a583faca93253823dd7"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/invocation-u78rYP/proof.json",
+        "bytes": 2749141,
+        "sha256": "f5201ec88680e169854d01c8877845f80a66d47371cab6a292aacb590b0e290e"
+      },
+      "compile": {
+        "ok": true,
+        "elapsedMs": 651864,
+        "outcome": null
+      },
+      "elapsedMs": 659530,
+      "phases": [
+        {
+          "name": "text2gears",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.gears.raw.md",
+          "status": "success",
+          "startMs": 60,
+          "elapsedMs": 120524
+        },
+        {
+          "name": "optimize",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.gears.md",
+          "status": "success",
+          "startMs": 120588,
+          "elapsedMs": 13186
+        },
+        {
+          "name": "gears2fsm",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.fsm.ts",
+          "status": "success",
+          "startMs": 133776,
+          "elapsedMs": 225553
+        },
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.playbook.ts",
+          "status": "success",
+          "startMs": 359268,
+          "elapsedMs": 288946
+        }
+      ],
+      "callCount": 6,
+      "validation": {
+        "ok": true,
+        "generatedSuiteTestsPassed": 8,
+        "strictTypecheck": true,
+        "entryImport": true
+      },
+      "entryOptionAudit": {
+        "path": "/private/tmp/slc-c10-9tWwI3-entry-option-control.json",
+        "bytes": 923,
+        "sha256": "630d55601eeae6540480ff69d6ad3ad1adfb47c40376c340244ada09ec29a6db"
+      },
+      "entryGuardControl": {
+        "path": "/private/tmp/slc-c10-9tWwI3-entry-guard-control.json",
+        "bytes": 758,
+        "sha256": "800b6ccc67d63405f5e6f547e34c6594368b8ab033586174bacbe948c99c02f2"
+      },
+      "findings": [
+        "The FSM entry guard requires context.callerInput before the action copies the supplied START callerInput; the linked validator incorrectly promotes that generated guard into an independent Source-bootstrap requirement.",
+        "entryEvent.contextField supports failure retry; it does not update fresh entry context before FSM guards."
+      ],
+      "runtimeCasesExecuted": 0,
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": null,
+      "correctiveScope": "Resume real FSM generation from its accepted GEARS, then fresh matched links, preserving original source/GEARS/artifacts. This does not become a new cold full-source benchmark."
+    },
+    {
+      "run": "phase-2E2YFN",
+      "status": "phase-success",
+      "scope": "C10/v13 resumed CODE gears2fsm from accepted C10 GEARS; phase-chain scope, not a cold full-source benchmark",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v13-full",
+      "phase": "playbook.gears2fsm",
+      "elapsedMs": 510560,
+      "executionElapsedMs": 509832,
+      "summary": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/summary.json",
+        "bytes": 427798,
+        "sha256": "ab681bbaf0c8a7e14a880e438bf3f42aa1ef8d20bf8b3d657710698d83bbe873"
+      },
+      "source": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.gears.md",
+        "bytes": 8788,
+        "sha256": "56f5310b37bae6f40cc132cdccd1cf7ffa5cef4ef22eff7801d25e8d779252ef"
+      },
+      "sourceFixture": {
+        "path": "/private/tmp/slc-c10-complex-full-evidence/compile-9tWwI3/work/code.playbook/code.gears.md",
+        "bytes": 8788,
+        "sha256": "56f5310b37bae6f40cc132cdccd1cf7ffa5cef4ef22eff7801d25e8d779252ef"
+      },
+      "acceptedFsm": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts",
+        "bytes": 33116,
+        "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d"
+      },
+      "entryControl": {
+        "path": "/private/tmp/slc-c10-v13-entry-control.json",
+        "bytes": 528,
+        "sha256": "9e3ab82caa3f0182ace7c5990c4f14dc5d36febfb594a670687e23eecf90ffd5"
+      },
+      "entryControlScope": "Accepted resumed FSM through actual XState with empty construction options; no linked runtime or full compilation claim",
+      "callCount": 2,
+      "calls": [
+        {
+          "id": 1,
+          "status": "success",
+          "resumed": false,
+          "elapsedMs": 425943,
+          "providerDurationMs": 421053,
+          "toolCalls": 21
+        },
+        {
+          "id": 2,
+          "status": "success",
+          "resumed": true,
+          "elapsedMs": 77257,
+          "providerDurationMs": 72815,
+          "toolCalls": 7
+        }
+      ],
+      "phases": [
+        {
+          "name": "gears2fsm",
+          "target": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts",
+          "status": "success",
+          "startMs": 15,
+          "elapsedMs": 509631
+        }
+      ],
+      "fullWorkflowAccepted": false,
+      "acceptedSpeedRatio": null,
+      "notes": [
+        "Accepted FSM phase only; link and runtime acceptance are recorded as the subsequent matched pair.",
+        "Original source and accepted GEARS provenance are retained from compile-9tWwI3."
+      ]
+    },
+    {
+      "run": "compile-crYwRj",
+      "status": "link-and-runtime-accepted",
+      "scope": "C10/v13 CODE accepted-FSM baseline link; phase-chain scope, not a cold full-source benchmark",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v13-baseline",
+      "pairedArm": "compile-aMUkFr",
+      "compile": {
+        "ok": true,
+        "elapsedMs": 636735,
+        "outcome": null
+      },
+      "elapsedMs": 638219,
+      "summary": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/summary.json",
+        "bytes": 28777,
+        "sha256": "fa4984e8de0dedb6e5e8ae8df028a260b2663054d23ce0f56446da2d256efbb8"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/invocation-qVAsVR/proof.json",
+        "bytes": 2748435,
+        "sha256": "e89faec5d4c7576d93b7ccdedf172e0e1ee4fff770f505997a1f482ce161f9f4"
+      },
+      "protectedInputs": {
+        "checked": 11921,
+        "changed": [],
+        "unchanged": true
+      },
+      "source": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/work/workflow.fsm.ts",
+        "bytes": 33116,
+        "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d",
+        "original": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts"
+      },
+      "linkTarget": {
+        "path": "/private/tmp/slc-c10-compiler-axfv25ji/node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17633,
+        "sha256": "34816df58b51006a9df27369b2a80f361225724c95edad3032f53cccce680365"
+      },
+      "linkedFactory": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/work/workflow.playbook/workflow.playbook.ts",
+        "bytes": 17459,
+        "sha256": "363748f18c9be475b4e467540c2e4c589ff444655dc32caac1b097fde65560db"
+      },
+      "callCount": 2,
+      "providerCallCount": 2,
+      "toolCalls": 40,
+      "calls": [
+        {
+          "id": 1,
+          "status": "success",
+          "resumed": false,
+          "elapsedMs": 557998,
+          "providerDurationMs": 551685,
+          "toolCalls": 36
+        },
+        {
+          "id": 2,
+          "status": "success",
+          "resumed": true,
+          "elapsedMs": 75097,
+          "providerDurationMs": 68994,
+          "toolCalls": 4
+        }
+      ],
+      "phases": [
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/work/workflow.playbook/workflow.playbook.ts",
+          "status": "success",
+          "startMs": 24,
+          "elapsedMs": 636729
+        }
+      ],
+      "stage": {
+        "readiness": {
+          "path": "/private/tmp/slc-c10-v13-stage-link-run-HAR0So/readiness.json",
+          "bytes": 15079,
+          "sha256": "10aef72ed482478617a104a0e0d5c24886a6acbf82790747cdfc9c5aa4d3027b"
+        },
+        "validationOk": true,
+        "byteIdentityChecks": {
+          "stagedLinkedMatchesCandidate": true,
+          "stagedTopWorkflowFsmAliasMatchesCandidate": true,
+          "stagedLocalCodeFsmMatchesCandidate": true,
+          "stagedLocalWorkflowFsmAliasMatchesCandidate": true,
+          "candidateFsmMatchesAcceptedFsm": true,
+          "stagedSourceMatchesOriginalCode": true,
+          "stagedGearsMatchesAccepted": true,
+          "c10CompilerUnchanged": true
+        }
+      },
+      "runtimeAcceptance": {
+        "status": "passed",
+        "passed": 18,
+        "total": 18,
+        "summary": {
+          "path": "/private/tmp/slc-c10-v13-code-baseline-runtime/summary.json",
+          "bytes": 130590,
+          "sha256": "50e40de8ffdab83fc4304905be55f0b55667dba2844d1612cab6684ca626a432"
+        },
+        "postrunProof": {
+          "path": "/private/tmp/slc-c10-v13-code-baseline-postrun-proof.json",
+          "bytes": 9112,
+          "sha256": "1be9e31fa2d1d5f9844468d2e3c53fa03bcc08ea87f142f6b291e661d0d66ecb"
+        },
+        "providerCalls": 0,
+        "protectedCountPerCase": [14],
+        "allCaseArtifactsUnchanged": true
+      },
+      "metadataOptionsPassed": true,
+      "generatedValidation": {
+        "strict": true,
+        "import": true,
+        "generatedSuiteTestsPassed": 8
+      },
+      "fullWorkflowAccepted": true,
+      "acceptedSpeedRatio": null,
+      "notes": [
+        "Accepted link/runtime artifact for the resumed phase chain; not a cold full CODE timing."
+      ],
+      "acceptanceScope": "resumed original-source-to-entry chain with independent runtime acceptance",
+      "coldFullBenchmarkAccepted": false
+    },
+    {
+      "run": "compile-aMUkFr",
+      "status": "link-and-runtime-accepted",
+      "scope": "C10/v13 CODE accepted-FSM preferMaterializer link; phase-chain scope, not a cold full-source benchmark",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "pipeline": "/private/tmp/playbook-13.2-common-v13-prefer-materializer",
+      "pairedArm": "compile-crYwRj",
+      "compile": {
+        "ok": true,
+        "elapsedMs": 205227,
+        "outcome": null
+      },
+      "elapsedMs": 206865,
+      "summary": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/summary.json",
+        "bytes": 27591,
+        "sha256": "a554c936b689f517e442ac2f8502d1c70b79ec39aa452984b12d864556608c9d"
+      },
+      "proof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/invocation-LgUXii/proof.json",
+        "bytes": 2748823,
+        "sha256": "3f952b82f2178b10f80bb69d1919289a7096b382735934d72df3f751d634a6bc"
+      },
+      "protectedInputs": {
+        "checked": 11922,
+        "changed": [],
+        "unchanged": true
+      },
+      "source": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/work/workflow.fsm.ts",
+        "bytes": 33116,
+        "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d",
+        "original": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts"
+      },
+      "linkTarget": {
+        "path": "/private/tmp/slc-c10-compiler-axfv25ji/node_modules/@sublang/playbook/src/runtime.ts",
+        "bytes": 17633,
+        "sha256": "34816df58b51006a9df27369b2a80f361225724c95edad3032f53cccce680365"
+      },
+      "linkedFactory": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/work/workflow.playbook/workflow.playbook.ts",
+        "bytes": 8980,
+        "sha256": "c9bd3ffd760dc1ac9f849e548653d2d9db910eab84bc7105dec2cc6e5e7dbb46"
+      },
+      "callCount": 1,
+      "providerCallCount": 1,
+      "toolCalls": 13,
+      "calls": [
+        {
+          "id": 1,
+          "status": "success",
+          "resumed": false,
+          "elapsedMs": 200422,
+          "providerDurationMs": 195906,
+          "toolCalls": 13
+        }
+      ],
+      "phases": [
+        {
+          "name": "link",
+          "target": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/work/workflow.playbook/workflow.playbook.ts",
+          "status": "success",
+          "startMs": 47,
+          "elapsedMs": 205200
+        }
+      ],
+      "stage": {
+        "readiness": {
+          "path": "/private/tmp/slc-c10-v13-code-prefer-stage/readiness.json",
+          "bytes": 14868,
+          "sha256": "141d4a19c321dbbf4a1756f92ae79cd73a8817287d0bc5baf8b4a14392b9d573"
+        },
+        "validationOk": true,
+        "byteIdentityChecks": {
+          "stagedLinkedMatchesCandidate": true,
+          "stagedTopWorkflowFsmAliasMatchesCandidate": true,
+          "stagedLocalCodeFsmMatchesCandidate": true,
+          "stagedLocalWorkflowFsmAliasMatchesCandidate": true,
+          "candidateFsmMatchesAcceptedFsm": true,
+          "stagedSourceMatchesOriginalCode": true,
+          "stagedGearsMatchesAccepted": true,
+          "c10CompilerUnchanged": true
+        }
+      },
+      "runtimeAcceptance": {
+        "status": "passed",
+        "passed": 18,
+        "total": 18,
+        "summary": {
+          "path": "/private/tmp/slc-c10-v13-code-prefer-runtime/summary.json",
+          "bytes": 129397,
+          "sha256": "b6a595827edc8dccf521f37d54349792780b05ac503b3a5634ccf1ee5372bbcb"
+        },
+        "postrunProof": {
+          "path": "/private/tmp/slc-c10-v13-code-prefer-postrun-proof.json",
+          "bytes": 9109,
+          "sha256": "c7edc8e8551eacf5645ad2a17b1093fc02e672b5a1b353baaa87a2254a119b9e"
+        },
+        "providerCalls": 0,
+        "protectedCountPerCase": [14],
+        "allCaseArtifactsUnchanged": true
+      },
+      "metadataOptionsPassed": true,
+      "generatedValidation": {
+        "strict": true,
+        "import": true,
+        "generatedSuiteTestsPassed": 8
+      },
+      "fullWorkflowAccepted": true,
+      "acceptedSpeedRatio": null,
+      "notes": [
+        "Accepted link/runtime artifact for the resumed phase chain; not a cold full CODE timing."
+      ],
+      "acceptanceScope": "resumed original-source-to-entry chain with independent runtime acceptance",
+      "coldFullBenchmarkAccepted": false
+    },
+    {
+      "run": "c10-v13-code-link-pair",
+      "status": "accepted-private-pair",
+      "scope": "Matched C10/v13 CODE link pair from the same accepted resumed FSM; not a cold full-source CODE benchmark",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "sameFsmSha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d",
+      "report": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-accepted-report.json",
+        "bytes": 18863,
+        "sha256": "f66a3f29cf088decf8a6600925f32ddad5b2aee98661261dcef5de3bcf71afb2"
+      },
+      "baseline": {
+        "run": "compile-crYwRj",
+        "elapsedMs": 638219,
+        "compileElapsedMs": 636735,
+        "providerCallCount": 2,
+        "linkedFactorySha256": "363748f18c9be475b4e467540c2e4c589ff444655dc32caac1b097fde65560db"
+      },
+      "preferMaterializer": {
+        "run": "compile-aMUkFr",
+        "elapsedMs": 206865,
+        "compileElapsedMs": 205227,
+        "providerCallCount": 1,
+        "linkedFactorySha256": "c9bd3ffd760dc1ac9f849e548653d2d9db910eab84bc7105dec2cc6e5e7dbb46"
+      },
+      "runtimeAcceptance": {
+        "baselinePassed": 18,
+        "preferPassed": 18,
+        "totalPerArm": 18
+      },
+      "stageAndOptions": "strict, import, eight generated tests, metadata, options, and runtime acceptance passed for both arms; final accepted report records one paired sample for each arm and no runtime provider calls.",
+      "acceptedSpeedRatio": {
+        "scope": "phase-chain link only from accepted FSM; no cold full CODE timing",
+        "sampleSize": "one baseline link sample and one prefer-materializer link sample",
+        "baselineTotalMs": 638219,
+        "preferTotalMs": 206865,
+        "totalReductionPercent": 67.58714485153216,
+        "baselineCompileMs": 636735,
+        "preferCompileMs": 205227,
+        "compileReductionPercent": 67.76885203420575
+      },
+      "fullWorkflowAccepted": true,
+      "notes": [
+        "The accepted ratio applies only to matched link work from the accepted FSM; no cold full CODE latency is claimed.",
+        "The private preference is retained only after the corresponding upstream helper preference is committed/adopted."
+      ],
+      "protectedProof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-accepted-protected-proof.json",
+        "bytes": 342605,
+        "sha256": "b09ddca9293d3056f1bff568f6619eda66bf1bc140092912ae4734f29d4e8c51"
+      },
+      "rawRatios": {
+        "compile": {
+          "baselineMs": 636735,
+          "preferMs": 205227,
+          "preferOverBaseline": 0.3223114796579425,
+          "reductionPercent": 67.76885203420575
+        },
+        "total": {
+          "baselineMs": 638219,
+          "preferMs": 206865,
+          "preferOverBaseline": 0.32412855148467845,
+          "reductionPercent": 67.58714485153216
+        }
+      },
+      "sharedIdentities": {
+        "profile": {
+          "path": "/private/tmp/slc-c10-v13-code-runtime-profile/corrected-profile/profile.mjs",
+          "bytes": 3078,
+          "sha256": "6b1ebb4deb239406c5b1591f3f57df051b6957b9c195e12a73fcf7fbe3e97549"
+        },
+        "config": {
+          "path": "/private/tmp/slc-c10-v13-code-runtime-profile/acceptance-config.from-stage.mjs",
+          "bytes": 8595,
+          "sha256": "5d69c506dfdb6056bb3f23b9086cf609216bfba716b635200ab75ebd298ef7b7"
+        },
+        "runner": {
+          "path": "/private/tmp/slc-c10-v13-code-runtime-profile/run-18-from-stage.mjs",
+          "bytes": 1938,
+          "sha256": "5a0cef06d4d3382cf8f41d9a57ca70c8edfd2429c25817428c36f1f37cbf2e68"
+        },
+        "stageScript": {
+          "path": "/private/tmp/slc-c10-v13-stage-link.mjs",
+          "bytes": 15799,
+          "sha256": "d563d9ffd35460a43c08951f80294d135dd62ee223aaace25a28c26a2205cfff"
+        },
+        "sourceAndFsmChecks": {
+          "originalSourceSame": true,
+          "acceptedFsmSame": true,
+          "candidateFsmSame": true,
+          "sourceFsm2E2YFNSame": true,
+          "gearsSame": true
+        },
+        "source": {
+          "path": "/private/tmp/slc-code-dev-acceptance-design/code.md",
+          "bytes": 5687,
+          "sha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5"
+        },
+        "acceptedFsm2E2YFN": {
+          "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts",
+          "bytes": 33116,
+          "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d"
+        },
+        "acceptedGears": {
+          "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.gears.md",
+          "bytes": 8788,
+          "sha256": "56f5310b37bae6f40cc132cdccd1cf7ffa5cef4ef22eff7801d25e8d779252ef"
+        },
+        "compilerRuntimeShaSame": true,
+        "verificationHarnessShaSame": true
+      },
+      "pipelineClosures": {
+        "baseline": {
+          "/private/tmp/playbook-13.2-common-v13-baseline/playbook": {
+            "fileCount": 13,
+            "sha256": "7bde5cab387a340c5d9f69ab2e056c79de7edf6ae97fc7e1858df98192e0654c",
+            "status": "complete"
+          }
+        },
+        "preferMaterializer": {
+          "/private/tmp/playbook-13.2-common-v13-prefer-materializer/playbook": {
+            "fileCount": 13,
+            "sha256": "34a36a1b3593603041f57267996867aeee61b8bf0032eca747f1a8967923135a",
+            "status": "complete"
+          }
+        },
+        "note": "13-file pipeline closure summaries are retained, but accepted evidence relies on wrapper proof input inventories of 11921 baseline and 11922 candidate entries rechecked after runtime."
+      },
+      "repoEvidencePath": "docs/performance/code-link-pair-2026-09-14.json",
+      "acceptanceScope": "resumed original-source-to-entry chain with independent runtime acceptance",
+      "coldFullBenchmarkAccepted": false
+    }
+  ],
+  "preparedInputs": {
+    "c6": {
+      "status": "prepared-only",
+      "compilerRoot": "/private/tmp/slc-c6-compiler-ukczlhl3",
+      "evidenceRoot": "/private/tmp/slc-c6-compiler-ukczlhl3-evidence",
+      "productionSourceCommit": "f44d4c5d751a2b4fbc21b279b5c3cc4a3cf82e2c",
+      "excludes": "uncommitted IR054 harness edits",
+      "cohort": {
+        "path": "/private/tmp/slc-c6-compiler-ukczlhl3-evidence/cohort.json",
+        "bytes": 5382,
+        "sha256": "9d10a74a780e14f0b430a3529b92348d55687f689c255b48c708867b96504a32"
+      },
+      "parentComparison": {
+        "path": "/private/tmp/slc-c6-compiler-ukczlhl3-evidence/parent-comparison.json",
+        "bytes": 5444,
+        "sha256": "db712557269603e62cb814545223bc8d86d11758f16a8a7819d0f7f5b5024060"
+      },
+      "productionSourceTreeSha256": "cfc3f482ed5673eb871a7fa71c942281c2b23b0b2efde83d6e578564c94a1164",
+      "productionScriptsTreeSha256": "ebb314cd43846f628d89719500d83e6f955734fbd602776407a78f66cfc9e304",
+      "changedDistFiles": [
+        "dist/runner.d.ts.map",
+        "dist/runner.js",
+        "dist/runner.js.map",
+        "dist/verify.d.ts",
+        "dist/verify.d.ts.map",
+        "dist/verify.js",
+        "dist/verify.js.map"
+      ],
+      "archivedScriptsCopiedFromCommit": [
+        "scripts/benchmark-runtime.mjs",
+        "scripts/test-acceptance.mjs",
+        "scripts/test-package.mjs",
+        "scripts/verify-artifacts.mjs",
+        "scripts/verify-ci-workflow.mjs",
+        "scripts/verify-playbook-definitions.mjs",
+        "scripts/verify-release-workflow.mjs",
+        "scripts/workflow-acceptance/README.md",
+        "scripts/workflow-acceptance/code.mjs",
+        "scripts/workflow-acceptance/common.mjs",
+        "scripts/workflow-acceptance/dev.mjs",
+        "scripts/workflow-acceptance/maintained-dev.mjs",
+        "scripts/workflow-acceptance/maintained.mjs",
+        "scripts/workflow-acceptance/probe.test.mjs"
+      ],
+      "unchangedInputs": {
+        "dependencies": true,
+        "pipelines": true,
+        "pins": true,
+        "packageManifest": true,
+        "lockfile": true
+      },
+      "wrapperReadiness": {
+        "path": "/private/tmp/slc-c6-wrapper-readiness/evidence.json",
+        "bytes": 3921,
+        "sha256": "5f13f83d359706f1bbd15b9e004fc65bbb2e308e4fe592892354116622da5ba2"
+      },
+      "wrappers": {
+        "full": {
+          "path": "/private/tmp/slc-c6-complex-full-run.mjs",
+          "bytes": 3960,
+          "sha256": "8ef679b354c68ed417c776b9fa41bf1ca433932a8f526b02ee91d86154108629"
+        },
+        "minimal": {
+          "path": "/private/tmp/slc-c6-minimal-run.mjs",
+          "bytes": 3977,
+          "sha256": "d6d317c808c367a270654f713c21e00602121e20d8856d70443fd63807703fcd"
+        }
+      }
+    },
+    "v8": {
+      "status": "prepared-only",
+      "pipelineGeneration": "v8",
+      "corrections": "Definition-only corrections for IR087 child busy handling and IR088 canonical call/onDone wording; no scaffold selected.",
+      "baselinePipeline": "/private/tmp/playbook-13.2-common-v8-baseline",
+      "fullPipeline": "/private/tmp/playbook-13.2-common-v8-full",
+      "readiness": {
+        "path": "/private/tmp/playbook-13.2-common-v8-readiness/evidence.json",
+        "bytes": 11485,
+        "sha256": "7a9e79aa28611d2ab2dd95377c06158db84e20443d3d5c2c2f634ea4f2509f85"
+      },
+      "baselineProof": {
+        "path": "/private/tmp/playbook-13.2-common-v8-baseline/experiment-proof.json",
+        "bytes": 42719,
+        "sha256": "0d6f0ffb8c7f101e053bc72d1b2aa655cc6cef224fe9e7722e95faafe9b977ca"
+      },
+      "fullProof": {
+        "path": "/private/tmp/playbook-13.2-common-v8-full/experiment-proof.json",
+        "bytes": 42715,
+        "sha256": "c86d23c1d2b5f472e205219eacadf7ca117f19413f6282642df6382ac089af59"
+      },
+      "selectionReadiness": "closed input checks recorded in readiness evidence; no measured result claimed"
+    },
+    "c7": {
+      "status": "prepared-only; CODE v2 wrapper launch in progress when recorded; no new measured result yet",
+      "compilerRoot": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "evidenceRoot": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence",
+      "productionSourceCommit": "c7419edcf1f609bc9bcb9074b9414586f9d7be03",
+      "parentCohort": "/private/tmp/slc-c6-compiler-ukczlhl3",
+      "privateRuntimePatchNotice": "@sublang/playbook remains version 13.2.0 in package and lock metadata, but two installed runtime source files are private patched bytes from upstream IR090; do not describe this as an unmodified published install.",
+      "cohort": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/cohort.json",
+        "bytes": 8952,
+        "sha256": "519aca78c24093b75eb525cb45e5e820d98b077cc0ee5809cf20b5ef2ef4ced2"
+      },
+      "parentComparison": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/parent-comparison.json",
+        "bytes": 7142,
+        "sha256": "4455c3621e6a0d9b4fe4fcb62eba285fec1265b1d1b84969a2db9ef96f7080fb"
+      },
+      "preparation": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/preparation.json",
+        "bytes": 2811,
+        "sha256": "b1712b3ff75cd257d87c25926cdd1fab6cdf8145b9aee5526e0172164bcc5c06"
+      },
+      "wrapperV2Adjudication": {
+        "path": "/private/tmp/slc-c7-wrapper-v2-adjudication.json",
+        "bytes": 8271,
+        "sha256": "fe8a175267748cdcdad3234c27d97c34aff7d226696a565e09fefd6167d7b3c8"
+      },
+      "wrapperV2ReadinessHistorical": {
+        "path": "/private/tmp/slc-c7-wrapper-v2-readiness.json",
+        "bytes": 5541,
+        "sha256": "c1eba4eb988035d9a37fb28dc5753bc6327401026d8e2a14a3911d5c6597150f"
+      },
+      "wrapperPreProviderFailureLog": {
+        "path": "/private/tmp/slc-c7-v8-code-full.log",
+        "bytes": 1008,
+        "sha256": "dae36f83f4e4c95a65bba1579843f55d6772f1f40c62024513d121f626ad042a"
+      },
+      "productionSourceTreeSha256": "fe589890bcc4900464d6ceebfe7c70556f4136e03b9c02271f52f639a17154b9",
+      "productionScriptsTreeSha256": "1f542eab5fee97a9fd65d361a5f8dd690a96cb654e9bcf85771b41ab5349f90a",
+      "productionSourcePatchSha256": "f49764c1e1212a26885e66de3ba0ece65c513516ca32d9bd2097e1ca7c486d90",
+      "sourceFilesChangedSinceParent": [
+        "scripts/workflow-acceptance/README.md",
+        "scripts/workflow-acceptance/code.mjs",
+        "scripts/workflow-acceptance/maintained.mjs",
+        "src/verify.ts"
+      ],
+      "sourceDiffStatSinceParent": " scripts/workflow-acceptance/README.md      |  3 ++\n scripts/workflow-acceptance/code.mjs       | 41 +++++++++++++++++++++-----\n scripts/workflow-acceptance/maintained.mjs |  1 +\n src/verify.ts                              | 47 +++++++++++++++++++++++++-----\n 4 files changed, 77 insertions(+), 15 deletions(-)\n",
+      "changedCompilerFiles": [
+        "dist/verify.d.ts.map",
+        "dist/verify.js",
+        "dist/verify.js.map",
+        "pipelines/playbook/slc.pins.json",
+        "scripts/workflow-acceptance/README.md",
+        "scripts/workflow-acceptance/code.mjs",
+        "scripts/workflow-acceptance/maintained.mjs"
+      ],
+      "changedDependencyFiles": [
+        "node_modules/@sublang/playbook/src/xstate-playbook-runtime.js",
+        "node_modules/@sublang/playbook/src/xstate-playbook-runtime.ts"
+      ],
+      "runtimePatch": {
+        "upstreamRepo": "/private/tmp/playbook-complex-performance",
+        "upstreamCommit": "4b51a7edfd2670f6a4cb4f23285a897ae836e612",
+        "upstreamParent": "3db1d9d707ca6a34ce79c83924fd6bc72809934b",
+        "subject": "fix(runtime): retain question outcome origin",
+        "commitChangedFiles": [
+          "specs/intents/090-pending-question-outcome-origin.md",
+          "specs/packages/playbook-runtime.md",
+          "src/pending-question-origin.test.ts",
+          "src/xstate-playbook-runtime.js",
+          "src/xstate-playbook-runtime.ts"
+        ],
+        "overlaidRuntimeFiles": [
+          "src/xstate-playbook-runtime.js",
+          "src/xstate-playbook-runtime.ts"
+        ],
+        "overlayPatchSha256": "91a1059e34ec59495d0f435a4200602512b891bb651376f2145434e40d3e92a9",
+        "files": [
+          {
+            "packagePath": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.ts",
+            "upstreamPath": "src/xstate-playbook-runtime.ts",
+            "originalSha256": "c24b37ab859c5d2bdfe01b9aa8e5973f32ef5f7c87f6b9fd05349337c36a1ee9",
+            "patchedSha256": "7c856c0f45608464f764c3a229c8e55ad1937f5171f5d48947909e5544220d48",
+            "bytes": 336684
+          },
+          {
+            "packagePath": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.js",
+            "upstreamPath": "src/xstate-playbook-runtime.js",
+            "originalSha256": "e3137c9b7be363c410d143e1e85524bbaf3626fb7eb0b9b0f8c11e7c1c859b5b",
+            "patchedSha256": "de4480b705833fa764e4724b25a4932f72616adda74e55934aa29bd39cbc79f5",
+            "bytes": 320456
+          }
+        ],
+        "verifiedAgainstOriginalPackage": true,
+        "allowedOverlayDeltas": [
+          "runtime question-origin retention in xstate-playbook-runtime.ts/.js only"
+        ]
+      },
+      "unchangedInventories": {
+        "pipelinesExceptPins": true,
+        "packageManifestAndLock": true,
+        "dependenciesExceptPrivateRuntimePatch": true
+      },
+      "pinGeneration": {
+        "method": "node evidence/regenerate-private-pins.mjs using built dist/pin-generate.js and dist/pin-currency.js",
+        "afterArtifactVerification": true,
+        "log": {
+          "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/generate-pins.log",
+          "bytes": 130,
+          "sha256": "f9104e24581d8cc7dca533f00ba3fa09b8a25aded27d8b58a819ec3de6cc2bb4"
+        },
+        "generator": {
+          "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/regenerate-private-pins.mjs",
+          "bytes": 3392,
+          "sha256": "28ebb7a5f0972198339b69715fec0c6fd20656099a3d2ae485a634e489c9c38c"
+        },
+        "pins": {
+          "path": "/private/tmp/slc-c7-compiler-y4iln8vx/pipelines/playbook/slc.pins.json",
+          "bytes": 7646,
+          "sha256": "df0f75a45ac9f723d562e2bb0c3f25a03cdaea3d634692cfa5f4c13744511779"
+        },
+        "privatePlaybookProvenance": "@sublang/playbook@13.2.0 private overlay 4b51a7edfd2670f6a4cb4f23285a897ae836e612 (IR090 xstate-playbook-runtime.ts/js)"
+      },
+      "pins": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx/pipelines/playbook/slc.pins.json",
+        "bytes": 7646,
+        "sha256": "df0f75a45ac9f723d562e2bb0c3f25a03cdaea3d634692cfa5f4c13744511779"
+      },
+      "compilerInventory": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/compiler-inventory.json",
+        "bytes": 31701,
+        "sha256": "fb5ebe51a7b7aeb98f224a7fd7840ea532d2e5674a9813baf65ebb1a0b193f77"
+      },
+      "dependencyInventory": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/dependencies-inventory.json",
+        "bytes": 1842034,
+        "sha256": "996a63f6fc31f84ce8d4b229ec20b14d9ae8609aad30560679bab887a712d5ad"
+      },
+      "dependencyFiles": 11642,
+      "dependencyBytes": 656995360,
+      "selectionProbe": {
+        "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/selection-evidence.json",
+        "bytes": 1433,
+        "sha256": "3dbc2a431fb638538d3d29f9e95f79d71a078fc5be879b0f8f6236d2bddb08a3"
+      },
+      "artifactVerification": {
+        "text2gears": {
+          "exitCode": 0,
+          "log": {
+            "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/verify-text2gears.log",
+            "bytes": 867,
+            "sha256": "0a5445af3b2291b378b686b00be6dd1fa8bb5d53f3825d30bef0c9433d506601"
+          }
+        },
+        "gears2fsm": {
+          "exitCode": 0,
+          "log": {
+            "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/verify-gears2fsm.log",
+            "bytes": 850,
+            "sha256": "3c3c4cef89325e2f3bf646754d042b0270a3101a38e1b02e4797bfea9a8fa86d"
+          }
+        },
+        "link": {
+          "exitCode": 0,
+          "log": {
+            "path": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence/verify-link.log",
+            "bytes": 821,
+            "sha256": "a759c65a8fd321216f989ad115902ad8991e9fb06c1b2aa14c29be7607a5ea33"
+          }
+        }
+      },
+      "wrappers": {
+        "originalBrokenParseHistorical": {
+          "full": {
+            "path": "/private/tmp/slc-c7-complex-full-run.mjs",
+            "bytes": 5314,
+            "sha256": "96da3588a956634310fbfb5ece8bf69b714bb65fb5f36e031123ece584bd4556"
+          },
+          "minimal": {
+            "path": "/private/tmp/slc-c7-minimal-run.mjs",
+            "bytes": 5311,
+            "sha256": "2acdc81c10d60bf407aaa482047bd0f9d675401bd042223242b7ebb066ef97bf"
+          },
+          "link": {
+            "path": "/private/tmp/slc-c7-link-run.mjs",
+            "bytes": 5305,
+            "sha256": "e5101e880f6b93dbac212ebc350aae19086f173671bed31f22aa1428ce728b0b"
+          }
+        },
+        "v2": {
+          "full": {
+            "path": "/private/tmp/slc-c7-complex-full-run-v2.mjs",
+            "bytes": 5315,
+            "sha256": "49f27ca07d66dfd421738e9817d5f7ecb2eb27ef817ac3cdd74cbec7b9ba0fab"
+          },
+          "minimal": {
+            "path": "/private/tmp/slc-c7-minimal-run-v2.mjs",
+            "bytes": 5312,
+            "sha256": "44a77bc0ea30cf7a2c6ce7a97f3bbd24a3fc1fd94d42a41e2262dea0f2fd32d0"
+          },
+          "link": {
+            "path": "/private/tmp/slc-c7-link-run-v2.mjs",
+            "bytes": 5306,
+            "sha256": "dba11421489d406948e64e226f03545f5ee41d48b8ac515a8119be9e83e70346"
+          }
+        }
+      },
+      "wrapperApiFacts": {
+        "full": "mode full; output /private/tmp/slc-c7-complex-full-evidence; timeoutSeconds 1200; optimize defaults from absent/--no-optimize fifth arg; no configured runtimeCheck",
+        "minimal": "mode minimal; output /private/tmp/slc-c7-minimal-evidence; timeoutSeconds 600; optimize defaults from absent/--no-optimize fifth arg; runtimeCheck minimal",
+        "link": "mode link; output /private/tmp/slc-c7-link-evidence; timeoutSeconds 600; requires link target as fifth argument; rejects a sixth argument; passes linkTarget only, with no optimize or runtimeCheck option",
+        "shared": "all wrappers protect pipeline tree, source, C7 compiler inventory, and C7 dependency inventory before and after; link also protects the link target; all import benchmarkCompile from the C7 compiler root and use real default adapter with observational executor wrappers"
+      },
+      "notes": "Private C7 preparation overlays exactly two @sublang/playbook runtime source files from upstream IR090 while package and lock metadata remain 13.2.0; this record adds no accepted runtime, full CODE, full DEV, or timing result."
+    },
+    "v9": {
+      "status": "prepared-only",
+      "pipelineGeneration": "v9",
+      "corrections": "Definition-only IR091 source-state preservation guidance added to the common FSM producer relative to v8; no scaffold selected and no provider acceptance claimed.",
+      "baselinePipeline": "/private/tmp/playbook-13.2-common-v9-baseline",
+      "fullPipeline": "/private/tmp/playbook-13.2-common-v9-full",
+      "readiness": {
+        "path": "/private/tmp/playbook-13.2-common-v9-readiness/readiness.json",
+        "bytes": 4355,
+        "sha256": "bfe705884ef3c2c821c5e848b1040c65d6faad2fe8e8ac266c54665bc68ca616"
+      },
+      "baselineProof": {
+        "path": "/private/tmp/playbook-13.2-common-v9-baseline/experiment-proof.json",
+        "bytes": 43313,
+        "sha256": "a7cec2eb8efc8d4bc3a3def53060eade59fd92e43a904a9ddebffb6bf8abe1dc"
+      },
+      "fullProof": {
+        "path": "/private/tmp/playbook-13.2-common-v9-full/experiment-proof.json",
+        "bytes": 43309,
+        "sha256": "e9f9ad9603a9866c18b320a06078a20a3680bc106df56eaa1b8389da27edfab5"
+      },
+      "commonProducerSha256": "d6ce9eb0d1c012956a5df8691d66fd8fda0e5a827edd12eba288827af07e2ad0",
+      "inverseToV8ProducerSha256": "4e840accb47c1924be6e63a483f928a592d36edb07c57be82dbecff59b022ce9",
+      "armDifference": {
+        "changedFiles": ["experiment-proof.json", "playbook/link.md"],
+        "verdict": "only playbook/link.md differs between pipeline arms; experiment-proof.json differs by mode/output metadata"
+      },
+      "v8ToV9DefinitionDelta": {
+        "baseline": [
+          {
+            "path": "playbook/gears2fsm.md",
+            "v8Sha256": "4e840accb47c1924be6e63a483f928a592d36edb07c57be82dbecff59b022ce9",
+            "v9Sha256": "d6ce9eb0d1c012956a5df8691d66fd8fda0e5a827edd12eba288827af07e2ad0"
+          }
+        ],
+        "full": [
+          {
+            "path": "playbook/gears2fsm.md",
+            "v8Sha256": "4e840accb47c1924be6e63a483f928a592d36edb07c57be82dbecff59b022ce9",
+            "v9Sha256": "d6ce9eb0d1c012956a5df8691d66fd8fda0e5a827edd12eba288827af07e2ad0"
+          }
+        ],
+        "verdict": "only playbook/gears2fsm.md changes among checked pipeline definition bytes"
+      },
+      "focusedValidation": {
+        "command": "PLAYBOOK_EXPERIMENT_COMPILER=/private/tmp/slc-c7-compiler-y4iln8vx ./node_modules/.bin/vitest run src/link-experiment-13.2.test.ts --reporter=verbose",
+        "passedTests": 11,
+        "providerCalls": false
+      },
+      "compilerRoot": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "c7EvidenceRoot": "/private/tmp/slc-c7-compiler-y4iln8vx-evidence",
+      "c7PrivateRuntimePatchNotice": "@sublang/playbook remains version 13.2.0 in package and lock metadata, but two installed runtime source files are private patched bytes from upstream IR090; do not describe this as an unmodified published install.",
+      "c7RuntimePatch": {
+        "upstreamRepo": "/private/tmp/playbook-complex-performance",
+        "upstreamCommit": "4b51a7edfd2670f6a4cb4f23285a897ae836e612",
+        "upstreamParent": "3db1d9d707ca6a34ce79c83924fd6bc72809934b",
+        "subject": "fix(runtime): retain question outcome origin",
+        "commitChangedFiles": [
+          "specs/intents/090-pending-question-outcome-origin.md",
+          "specs/packages/playbook-runtime.md",
+          "src/pending-question-origin.test.ts",
+          "src/xstate-playbook-runtime.js",
+          "src/xstate-playbook-runtime.ts"
+        ],
+        "overlaidRuntimeFiles": [
+          "src/xstate-playbook-runtime.js",
+          "src/xstate-playbook-runtime.ts"
+        ],
+        "overlayPatchSha256": "91a1059e34ec59495d0f435a4200602512b891bb651376f2145434e40d3e92a9",
+        "files": [
+          {
+            "packagePath": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.ts",
+            "upstreamPath": "src/xstate-playbook-runtime.ts",
+            "originalSha256": "c24b37ab859c5d2bdfe01b9aa8e5973f32ef5f7c87f6b9fd05349337c36a1ee9",
+            "patchedSha256": "7c856c0f45608464f764c3a229c8e55ad1937f5171f5d48947909e5544220d48",
+            "bytes": 336684
+          },
+          {
+            "packagePath": "node_modules/@sublang/playbook/src/xstate-playbook-runtime.js",
+            "upstreamPath": "src/xstate-playbook-runtime.js",
+            "originalSha256": "e3137c9b7be363c410d143e1e85524bbaf3626fb7eb0b9b0f8c11e7c1c859b5b",
+            "patchedSha256": "de4480b705833fa764e4724b25a4932f72616adda74e55934aa29bd39cbc79f5",
+            "bytes": 320456
+          }
+        ],
+        "verifiedAgainstOriginalPackage": true,
+        "allowedOverlayDeltas": [
+          "runtime question-origin retention in xstate-playbook-runtime.ts/.js only"
+        ]
+      },
+      "selectionEvidenceSha256": "3dbc2a431fb638538d3d29f9e95f79d71a078fc5be879b0f8f6236d2bddb08a3",
+      "notes": "Prepared inputs only. The pipeline definitions keep Playbook 13.2 provenance, while the supplied C7 compiler dependency graph includes the private IR090 runtime overlay recorded in C7 evidence."
+    },
+    "devMaterializerSelection": {
+      "status": "prepared design; baseline failed; candidate compile-43wE00 succeeded with post-measurement validation/runtime controls",
+      "scope": "Matched fixed-FSM linking; no full-compilation speed ratio.",
+      "hypothesis": "A supported materializer removes repeated module composition and quote-handling work while preserving the exact DEV FSM and runtime behavior.",
+      "design": {
+        "path": "/private/tmp/slc-dev-materializer-selection-design.json",
+        "bytes": 1681,
+        "sha256": "f1380dd8eb6db69b35d18a907e54ef4606255844914c0038a4c119d1405691d2"
+      },
+      "baselineRoot": "/private/tmp/playbook-13.2-common-v9-baseline",
+      "candidateRoot": "/private/tmp/playbook-13.2-common-v9-prefer-materializer",
+      "baselineProofSha256": "a7cec2eb8efc8d4bc3a3def53060eade59fd92e43a904a9ddebffb6bf8abe1dc",
+      "candidateProofSha256": "d993464f9484e2c93c268af9af68625d7b28ced2e921c961809a3e9b98d05a1a",
+      "candidateDeltaFromV9Full": ["experiment-proof.json", "playbook/link.md"],
+      "source": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts",
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b"
+      },
+      "compiler": "/private/tmp/slc-c7-compiler-y4iln8vx",
+      "baselineRun": {
+        "run": "compile-GOLgqj",
+        "status": "failure",
+        "compileElapsedMs": 600516,
+        "overallElapsedMs": 600524,
+        "summarySha256": "307a46c506c7b30a97ecbbee99412b5f1e947bbdbf97d714fda243c0ae3952d4",
+        "proofSha256": "61a24d47db29476f961bc93b7f027fa3820d0418de63db17d72bb534831a5ab5",
+        "protectedInputsUnchanged": 11921
+      },
+      "candidateRun": {
+        "run": "compile-43wE00",
+        "session": 7215,
+        "status": "success",
+        "scope": "link-only candidate",
+        "compileElapsedMs": 167175,
+        "overallElapsedMs": 168355,
+        "summarySha256": "b7d27fe043575fc5d06641326c0f68f180a17a972a62aef76629acc9276cca73",
+        "proofSha256": "b80665095601d457a016f5c4d61d03b95855b6a17ce02abe91907f77874f87a0",
+        "actualMaterializerUsed": true,
+        "protectedInputsUnchanged": 11921,
+        "postMeasurementValidationSha256": "ea85e16308c95f455c848b5974a6818d76484b58d197c0497acacb3695b60712",
+        "postMeasurementRuntimeSummarySha256": "21d68b40c77ed84837373c18d5c1aa0f55fe0f2b273d44591428d77f2a9a7690",
+        "resultClaim": true,
+        "excludedFromMeasuredLinkTime": true
+      },
+      "acceptedSpeedRatio": false,
+      "comparisonVerdict": "candidate link succeeded and post-measurement runtime controls passed; no percentage speed-ratio claim because baseline failed"
+    },
+    "c8DevMaterializerSelection": {
+      "status": "baseline/candidate settled; v11 candidate accepted by identity, baseline annotation-contract failure; no accepted ratio",
+      "scope": "Matched fixed-FSM C8 DEV linking; raw timing only because each baseline has a contract failure.",
+      "baselineRoot": "/private/tmp/playbook-13.2-common-v9-baseline",
+      "candidateRoot": "/private/tmp/playbook-13.2-common-v9-prefer-materializer",
+      "source": {
+        "path": "/private/tmp/slc-c7-complex-full-evidence/compile-wm3i4U/work/dev.playbook/dev.fsm.ts",
+        "sha256": "6df23514ff7e954e0f49eda2967757bf6244bde103d8dac2ab1666ec8cb6994b"
+      },
+      "compiler": {
+        "root": "/private/tmp/slc-c8-compiler-ezn78503",
+        "commit": "46a89ced91ea565cab0f41862f39257885219c93",
+        "cohortSha256": "cc1dbd88f3c167e98ad587d466ebf2a57139c05fa7f18b3f351d509fea4babdf",
+        "privateRuntimeOverlay": "inherits private IR090 Playbook runtime overlay"
+      },
+      "baselineRun": {
+        "run": "compile-oQuUMT",
+        "status": "success-with-contract-caveat",
+        "overallElapsedMs": 669465,
+        "summarySha256": "7598d556c43e48f67d9a5e3ee7180e5d8d776c2f3472fdf618c55da5bf029276",
+        "proofSha256": "9ec1f4822df3cd4c70d738bac728eac7f407e726ec7d9ddd82d25b3f11d62adf",
+        "generatedSuiteTestsPassed": 8,
+        "runtimeScenariosPassed": 24,
+        "optionDescriptorControl": "failed-public-validator-accepted-known-non-enumerable",
+        "callCount": 3,
+        "calls": [
+          {
+            "status": "success",
+            "resumed": false,
+            "toolCalls": 26,
+            "elapsedMs": 368718
+          },
+          {
+            "status": "success",
+            "resumed": true,
+            "toolCalls": 6,
+            "elapsedMs": 88447
+          },
+          {
+            "status": "success",
+            "resumed": true,
+            "toolCalls": 11,
+            "elapsedMs": 205277
+          }
+        ]
+      },
+      "candidateRun": {
+        "run": "compile-tKSZCs",
+        "status": "success",
+        "overallElapsedMs": 174185,
+        "summarySha256": "03662735334adb95d6507a6873667edd94c5a910ee345208389680b8f8cb592c",
+        "proofSha256": "06a982377fbdecd7333e963d1579ca432200681b3f365268cbae23cb7b665a0c",
+        "actualMaterializerUsed": true,
+        "generatedSuiteTestsPassed": 8,
+        "runtimeScenariosPassed": 24,
+        "optionDescriptorControl": "passed-public-validator-rejected-known-non-enumerable"
+      },
+      "rawTimingComparisonMs": {
+        "baseline": 669465,
+        "candidate": 174185
+      },
+      "acceptedSpeedRatio": false,
+      "comparisonVerdict": "candidate conforming on generated suites, runtime scenarios, and descriptor control; no accepted speed-ratio claim because baseline contract failed",
+      "v11Pair": {
+        "baselineRun": {
+          "run": "compile-4JLsmu",
+          "status": "annotation-contract-failure",
+          "overallElapsedMs": 843281,
+          "compileElapsedMs": 841791,
+          "callCount": 3,
+          "summarySha256": "6ed333270d967d1e4f77d7ffa5ec4f7762963b0577c548119487a5d02a5216e5",
+          "stageReadinessSha256": "c844ba452a631bd58f8b8a531147b445bd5c8d697d00de6638b592ded6338933",
+          "optionControlsSha256": "5e7ffe0f1016f37a24c9bccc9f3ab21688d995f9f6663c9e02f283d6241c834b"
+        },
+        "candidateRun": {
+          "run": "compile-7694Jg",
+          "status": "success-reuses-tKSZCs-runtime-by-identity",
+          "overallElapsedMs": 152086,
+          "compileElapsedMs": 150533,
+          "callCount": 1,
+          "summarySha256": "feafff46245ff5f3c5b4be23369ae3304e4941d6cf8cf636905f808cbd1bb5e2",
+          "stageReadinessSha256": "a5800ea1f7ea4bb82c7fa6f6a9626b7a7b06a2dad01a4f850db63e2fb184da04",
+          "optionControlSha256": "b572de6d7aa8681878988d58d5c01fee85fbe828ab91ee2819851dad447f0c6e",
+          "equivalenceSha256": "ebfa6ef8d056c735bffb1ccb4c51682e135be06d218690f51954897f50a2f63f",
+          "actualMaterializerUsed": true
+        },
+        "acceptedSpeedRatio": false,
+        "comparisonVerdict": "raw 843281 ms versus 152086 ms only; no accepted ratio because baseline failed annotation contract; candidate runtime acceptance reuses tKSZCs 24/24 by exact byte identity"
+      }
+    },
+    "c10v12": {
+      "status": "frozen; cold full CODE 9tWwI3 compiled but independent startup-option/entry audit failed",
+      "readiness": {
+        "path": "/private/tmp/slc-c10-v12-readiness.json",
+        "bytes": 5597,
+        "sha256": "97598a204e16c014d9cfc420e3f6e058006e4372936abb478d58324dda591a6c"
+      },
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "productionSourceCommit": "092e242d134e8681109ec390a9c9707476a79b36",
+      "pipelineSourceCommit": "15c71cec7a96773528d72a07acb86fe84663856f",
+      "cohort": {
+        "path": "/private/tmp/slc-c10-compiler-axfv25ji-evidence/cohort.json",
+        "bytes": 8995,
+        "sha256": "3656b837c82245277dacaa4eebbc241b887828ccde46e4c51f8896a403f86c1a"
+      },
+      "privateRuntimeNotice": "Inherits the same private IR090 Playbook 13.2 runtime bytes as C9. Package and lock versions do not imply an unmodified published runtime.",
+      "runningProof": "/private/tmp/slc-c10-complex-full-evidence/invocation-u78rYP/proof.json"
+    },
+    "c10v13": {
+      "status": "accepted resumed FSM and matched CODE link pair; not a cold full compile",
+      "plan": {
+        "path": "/private/tmp/slc-c10-v13-resumption-plan.json",
+        "bytes": 4737,
+        "sha256": "691ea5b916daf67883310f9463d7b40e0b6ede0e18e038858830efa6479d1b8f"
+      },
+      "upstreamCommit": "4c2441f988fb1fd9a05e9509c5ceefe9f69e236b",
+      "compilerRoot": "/private/tmp/slc-c10-compiler-axfv25ji",
+      "scope": "Resumption from original accepted GEARS and matched link pair evidence",
+      "resumedFsmSummary": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/summary.json",
+        "bytes": 427798,
+        "sha256": "ab681bbaf0c8a7e14a880e438bf3f42aa1ef8d20bf8b3d657710698d83bbe873"
+      },
+      "entryControl": {
+        "path": "/private/tmp/slc-c10-v13-entry-control.json",
+        "bytes": 528,
+        "sha256": "9e3ab82caa3f0182ace7c5990c4f14dc5d36febfb594a670687e23eecf90ffd5"
+      },
+      "pairReport": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-accepted-report.json",
+        "bytes": 18863,
+        "sha256": "f66a3f29cf088decf8a6600925f32ddad5b2aee98661261dcef5de3bcf71afb2"
+      },
+      "baselineLinkSummary": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-crYwRj/summary.json",
+        "bytes": 28777,
+        "sha256": "fa4984e8de0dedb6e5e8ae8df028a260b2663054d23ce0f56446da2d256efbb8"
+      },
+      "preferMaterializerLinkSummary": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/compile-aMUkFr/summary.json",
+        "bytes": 27591,
+        "sha256": "a554c936b689f517e442ac2f8502d1c70b79ec39aa452984b12d864556608c9d"
+      },
+      "baselineLinkProof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/invocation-qVAsVR/proof.json",
+        "bytes": 2748435,
+        "sha256": "e89faec5d4c7576d93b7ccdedf172e0e1ee4fff770f505997a1f482ce161f9f4"
+      },
+      "preferMaterializerLinkProof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-evidence/invocation-LgUXii/proof.json",
+        "bytes": 2748823,
+        "sha256": "3f952b82f2178b10f80bb69d1919289a7096b382735934d72df3f751d634a6bc"
+      },
+      "acceptedFsm": {
+        "path": "/private/tmp/slc-c10-v13-resumed-fsm-evidence/phase-2E2YFN/work/workflow.playbook/workflow.fsm.ts",
+        "bytes": 33116,
+        "sha256": "1556aa693c13703898e44bc2284c10b547d882fd37ac94454374900f601dac0d"
+      },
+      "v13Baseline": "/private/tmp/playbook-13.2-common-v13-baseline",
+      "v13Full": "/private/tmp/playbook-13.2-common-v13-full",
+      "v13PreferMaterializer": "/private/tmp/playbook-13.2-common-v13-prefer-materializer",
+      "acceptedProtectedProof": {
+        "path": "/private/tmp/slc-c10-v13-code-link-pair-accepted-protected-proof.json",
+        "bytes": 342605,
+        "sha256": "b09ddca9293d3056f1bff568f6619eda66bf1bc140092912ae4734f29d4e8c51"
+      },
+      "acceptedPairReportForRepoCopy": "docs/performance/code-link-pair-2026-09-14.json"
+    }
+  },
+  "initialCohortMetadata": {
+    "compilerCommit": "662d73aaefe4f18564c62c63984bd2b9b3b9aca9",
+    "pipelineGeneration": "v7"
+  },
+  "latestAcceptedCohort": {
+    "compilerCommit": "092e242d134e8681109ec390a9c9707476a79b36",
+    "pipelineGeneration": "v13",
+    "retainedUpstreamCommit": "69ed4ab4d94ed0bd218db9e0d375828a67f57cc0"
+  }
+}

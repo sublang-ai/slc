@@ -17,6 +17,10 @@ import { fileURLToPath } from 'node:url';
 
 import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
 import {
+  formatClarificationReport,
+  type ClarificationReport,
+} from './clarification.js';
+import {
   encodeLocator,
   invalidateBuildHistory,
   loadBuildHistory,
@@ -38,8 +42,10 @@ import {
   type MechanicalReview,
   type PhaseExecutor,
   formatFailureReport,
+  phaseProtectedPaths,
   pathsAlias,
   runPhase,
+  watchProtectedPaths,
 } from './execution.js';
 import { compareUtf8, hashBytes, isHash, type Hash } from './hash.js';
 import { type Invocation, parseInvocation } from './invocation.js';
@@ -83,16 +89,26 @@ import {
 } from './runtime-contract.js';
 import {
   artifactSchemaForPlaybookProvenance,
+  checkFsmContinuationInputs,
+  checkFsmChildSuspension,
+  checkFsmCoverage,
+  checkGearsActorContract,
+  checkGearsFsmConformance,
+  checkGearsResultContract,
   checkLinkedModuleContract,
   emitFsmCoverageTest,
+  FsmCoverageDeadlineError,
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
+  findConcurrentRoleSets,
+  inspectGearsRoleContract,
   findMachineConfig,
   loadFsmModule,
   loadLinkedModuleForVerification,
   playbookProvenanceForLinkTarget,
   resolveArtifactSchemaForVerification,
+  type MachineConfigLike,
 } from './verify.js';
 import {
   VERIFIER_SUPPORT_MODULE,
@@ -100,6 +116,8 @@ import {
   verifierSupportFiles,
 } from './verify-support.js';
 import { checkSourceGearsContract } from './verify-source.js';
+import { checkFsmTypeScript } from './verify-typescript.js';
+import { checkEntryOptions, ENTRY_OPTIONS_CONTRACT } from './entry-options.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
 export interface CompiledSelection {
@@ -142,8 +160,9 @@ export interface SlcResult {
   outputs: string[];
   /** Diagnostics: agent summaries on success, or the failure report. */
   diagnostics: string[];
-  /** Present when incremental selection invoked no phase executor. */
-  outcome?: 'up-to-date';
+  /** Distinguishes unchanged success and actionable source questions. */
+  outcome?: 'up-to-date' | 'clarification-required';
+  clarification?: ClarificationReport;
 }
 
 /**
@@ -162,6 +181,25 @@ export async function runSlc(
     return failure(messageOf(error));
   }
 
+  const finish = (result: SlcResult): SlcResult => {
+    if (result.clarification === undefined) return result;
+    const clarification: ClarificationReport = {
+      ...result.clarification,
+      sources: (invocation.kind === 'link'
+        ? invocation.objects
+        : [invocation.source]
+      ).map((path) => resolve(runCwd(deps), path)),
+    };
+    return {
+      ...result,
+      clarification,
+      diagnostics: [
+        ...result.diagnostics,
+        formatClarificationReport(clarification),
+      ],
+    };
+  };
+
   try {
     switch (invocation.kind) {
       case 'full':
@@ -169,23 +207,25 @@ export async function runSlc(
         // (self-hosting-13): a bare full run becomes a full-link against the
         // installed @sublang/playbook runtime contract module (DR-014).
         if (invocation.pipeline === 'playbook') {
-          return await runFullLink(
-            {
-              ...invocation,
-              kind: 'full-link',
-              linkTarget: defaultPlaybookLinkTarget(),
-              options: [],
-            },
-            deps,
+          return finish(
+            await runFullLink(
+              {
+                ...invocation,
+                kind: 'full-link',
+                linkTarget: defaultPlaybookLinkTarget(),
+                options: [],
+              },
+              deps,
+            ),
           );
         }
-        return await runFull(invocation, deps);
+        return finish(await runFull(invocation, deps));
       case 'phase':
-        return await runSinglePhase(invocation, deps);
+        return finish(await runSinglePhase(invocation, deps));
       case 'link':
-        return await runDirectLink(invocation, deps);
+        return finish(await runDirectLink(invocation, deps));
       case 'full-link':
-        return await runFullLink(invocation, deps);
+        return finish(await runFullLink(invocation, deps));
     }
   } catch (error) {
     return failure(messageOf(error));
@@ -227,6 +267,7 @@ async function runFull(
     optimize: !invocation.noOptimize,
     normalize: invocation.normalize || raw,
     sourceFidelity: invocation.pipeline !== RESERVED_SLC_PIPELINE,
+    signal: deps.signal,
   });
   const verification = {
     pipeline: invocation.pipeline,
@@ -301,7 +342,15 @@ async function runSinglePhase(
     const target =
       (invocation.output === null ? null : resolve(cwd, invocation.output)) ??
       join(artDir, `${basename}.${phase.target.format}.opt${phase.target.ext}`);
-    const step = compileStep(pipeline, phase, source, target, sourceFidelity);
+    const step = compileStep(
+      pipeline,
+      phase,
+      source,
+      target,
+      sourceFidelity,
+      undefined,
+      deps.signal,
+    );
     return executeSteps([step], pipeline, deps);
   }
 
@@ -322,6 +371,8 @@ async function runSinglePhase(
     source,
     artifact.path,
     sourceFidelity,
+    undefined,
+    deps.signal,
   );
   return executeSteps([step], pipeline, deps);
 }
@@ -355,6 +406,7 @@ async function runDirectLink(
         linkTarget: resolve(cwd, invocation.linkTarget),
         options: invocation.options,
         linked,
+        signal: deps.signal,
       }),
     ],
     pipeline,
@@ -394,6 +446,8 @@ async function runFullLink(
     optimize: !invocation.noOptimize,
     normalize,
     sourceFidelity: invocation.pipeline !== RESERVED_SLC_PIPELINE,
+    signal: deps.signal,
+    linkTarget: resolve(cwd, invocation.linkTarget),
   });
 
   const linked = linkedArtifactPath({
@@ -403,17 +457,6 @@ async function runFullLink(
     linked: link.target,
     output: invocation.output === null ? null : resolve(cwd, invocation.output),
   });
-  const steps = [
-    ...compileSteps,
-    linkStep({
-      link,
-      definitionPath: pipeline.linkFile as string,
-      objects: [plan[plan.length - 1].path],
-      linkTarget: resolve(cwd, invocation.linkTarget),
-      options: invocation.options,
-      linked,
-    }),
-  ];
   const gearsPlan = plan.find(
     (artifact) => artifact.phase.target.format === 'gears',
   );
@@ -426,6 +469,22 @@ async function runFullLink(
   const entryAliasesSource =
     entryCandidate !== null && (await pathsAlias(entryCandidate, source));
   const entryPath = entryAliasesSource ? null : entryCandidate;
+  const steps = [
+    ...compileSteps,
+    linkStep({
+      link,
+      definitionPath: pipeline.linkFile as string,
+      objects: [plan[plan.length - 1].path],
+      linkTarget: resolve(cwd, invocation.linkTarget),
+      options: invocation.options,
+      linked,
+      signal: deps.signal,
+      ...(entryPath !== null && gearsPlan !== undefined
+        ? { entryGearsPath: gearsPlan.path }
+        : {}),
+    }),
+  ];
+
   const verification = {
     pipeline: invocation.pipeline,
     plan,
@@ -731,8 +790,16 @@ interface PhaseStep {
   /** Pipeline pin key; absent for the host-owned normalization step. */
   pinKey?: string;
   targetExt: string;
-  /** Present for a gated text-to-GEARS step (DR-029, phase-execution-51). */
-  sourceFidelity?: true;
+  /** Host-owned contract for a newly executed entry-bearing link. */
+  outputContract?: () => Promise<string | undefined>;
+  /** Composed existing checks over a compile phase's live target. */
+  compileFidelity?: MechanicalReview;
+  /** Existing GEARS source findings must precede consumer construction. */
+  gearsSourceContract?: MechanicalReview;
+  /** Strict FSM input checks run before constructing a protected-input consumer. */
+  fsmSourceTypecheck?: MechanicalReview;
+  /** Canonical continuation inputs must be valid before consumer construction. */
+  fsmSourceContinuation?: MechanicalReview;
   /** Present for a gated `playbook` link step (DR-030, phase-execution-53). */
   linkFidelity?: MechanicalReview;
 }
@@ -833,6 +900,9 @@ function buildCompileSteps(opts: {
   normalize: boolean;
   /** False inside the reserved `slc` meta-pipeline, which has its own gate (DR-029). */
   sourceFidelity: boolean;
+  /** Concrete generated-artifact target, never a compiler phase pin. */
+  linkTarget?: string;
+  signal?: AbortSignal;
 }): PhaseStep[] {
   const { pipeline, plan, artDir, basename } = opts;
   const steps: PhaseStep[] = [];
@@ -844,6 +914,10 @@ function buildCompileSteps(opts: {
       artDir,
       `${basename}.${entry.source.format}${entry.source.ext}`,
     );
+    const gearsContract =
+      entry.source.format === 'gears'
+        ? () => gearsContractFindings(normalized)
+        : undefined;
     steps.push({
       request: {
         kind: 'compile',
@@ -851,9 +925,15 @@ function buildCompileSteps(opts: {
         source: previous,
         target: normalized,
         references: [phaseDefinition(pipeline, entry.name)],
+        ...(gearsContract === undefined
+          ? {}
+          : { mechanicalReview: gearsContract }),
       },
       phase: 'normalize',
       targetExt: entry.source.ext,
+      ...(gearsContract === undefined
+        ? {}
+        : { compileFidelity: gearsContract }),
     });
     previous = normalized;
   }
@@ -873,6 +953,8 @@ function buildCompileSteps(opts: {
           previous,
           artifact.path,
           opts.sourceFidelity,
+          opts.linkTarget,
+          opts.signal,
         ),
       );
       previous = artifact.path;
@@ -883,7 +965,15 @@ function buildCompileSteps(opts: {
       `${basename}.${phase.target.format}.raw${phase.target.ext}`,
     );
     steps.push(
-      compileStep(pipeline, phase, previous, raw, opts.sourceFidelity),
+      compileStep(
+        pipeline,
+        phase,
+        previous,
+        raw,
+        opts.sourceFidelity,
+        opts.linkTarget,
+        opts.signal,
+      ),
     );
     previous = raw;
     passes.forEach((pass, index) => {
@@ -895,7 +985,15 @@ function buildCompileSteps(opts: {
               `${basename}.${phase.target.format}.opt${index + 1}${phase.target.ext}`,
             );
       steps.push(
-        compileStep(pipeline, pass, previous, target, opts.sourceFidelity),
+        compileStep(
+          pipeline,
+          pass,
+          previous,
+          target,
+          opts.sourceFidelity,
+          opts.linkTarget,
+          opts.signal,
+        ),
       );
       previous = target;
     });
@@ -909,6 +1007,8 @@ function compileStep(
   source: string,
   target: string,
   sourceFidelity: boolean,
+  linkTarget?: string,
+  signal?: AbortSignal,
 ): PhaseStep {
   // Only a text-to-GEARS phase conserves authored Source fragments, and the
   // reserved meta-pipeline compiles definitions under its own fidelity gate
@@ -917,21 +1017,68 @@ function compileStep(
     sourceFidelity &&
     phase.source.format === 'text' &&
     phase.target.format === 'gears';
+  const fsmConformance =
+    phase.source.format === 'gears' && phase.target.format === 'fsm'
+      ? async () => {
+          if (phase.target.ext === '.ts') {
+            const findings = await checkFsmTypeScript(target, signal);
+            if (findings.length > 0) return findings;
+          }
+          return fsmConformanceFindings(source, target, linkTarget, signal);
+        }
+      : undefined;
+  const checks: MechanicalReview[] = [
+    ...(gated ? [() => sourceFidelityFindings(source, target)] : []),
+    ...(phase.target.format === 'gears'
+      ? [() => gearsContractFindings(target)]
+      : []),
+    ...(fsmConformance === undefined ? [] : [fsmConformance]),
+  ];
+  const mechanicalReview =
+    checks.length === 0
+      ? undefined
+      : async () => (await Promise.all(checks.map((check) => check()))).flat();
   return {
     request: {
       kind: 'compile',
       definitionPath: phaseDefinition(pipeline, phase.name),
       source,
       target,
-      ...(gated
-        ? { mechanicalReview: () => sourceFidelityFindings(source, target) }
-        : {}),
+      ...(mechanicalReview === undefined ? {} : { mechanicalReview }),
     },
     phase: phase.name,
     pinKey: phase.name,
     targetExt: phase.target.ext,
-    ...(gated ? { sourceFidelity: true as const } : {}),
+    ...(mechanicalReview === undefined
+      ? {}
+      : { compileFidelity: mechanicalReview }),
+    ...(phase.source.format === 'gears'
+      ? { gearsSourceContract: () => gearsContractFindings(source) }
+      : {}),
+    ...(phase.source.format === 'fsm' && phase.source.ext === '.ts'
+      ? { fsmSourceTypecheck: () => checkFsmTypeScript(source, signal) }
+      : {}),
+    ...(phase.source.format === 'fsm'
+      ? {
+          fsmSourceContinuation: () =>
+            fsmContinuationFindings(source, linkTarget, signal),
+        }
+      : {}),
   };
+}
+
+/** Parser-only findings belong to the phase that can still edit the GEARS. */
+async function gearsContractFindings(path: string): Promise<readonly string[]> {
+  try {
+    const gears = await readFile(path, 'utf8');
+    return [
+      ...checkGearsResultContract(gears),
+      ...checkGearsActorContract(gears),
+    ];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    return [`GEARS contract could not be checked: ${messageOf(error)}`];
+  }
 }
 
 /**
@@ -964,6 +1111,98 @@ async function sourceFidelityFindings(
   }
 }
 
+/** Reuses the emitted GEARS-to-FSM suite before accepting its input (DR-033). */
+async function fsmConformanceFindings(
+  source: string,
+  target: string,
+  linkTarget?: string,
+  signal?: AbortSignal,
+): Promise<readonly string[]> {
+  signal?.throwIfAborted();
+  try {
+    await stat(target);
+  } catch (error) {
+    // Absence belongs to the generic target check; all other failures are
+    // actionable findings rather than permission to skip the gate.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    return [`FSM conformance could not be checked: ${messageOf(error)}`];
+  }
+  try {
+    const [gears, fsm] = await Promise.all([
+      readFile(source, 'utf8'),
+      loadFsmModule(target),
+    ]);
+    const config = findMachineConfig(fsm);
+    const schema = await fsmSchema(config, linkTarget);
+    const findings = [
+      ...schema.findings,
+      ...checkGearsFsmConformance(gears, config, {
+        concurrentRoleSets: findConcurrentRoleSets(fsm),
+        ...(schema.artifactSchema === undefined
+          ? {}
+          : { artifactSchema: schema.artifactSchema }),
+      }),
+      ...(schema.artifactSchema === undefined || schema.findings.length > 0
+        ? []
+        : checkFsmContinuationInputs(config, schema.artifactSchema)),
+    ];
+    signal?.throwIfAborted();
+    return findings.length > 0
+      ? findings
+      : await checkFsmCoverage(fsm, {
+          sourceText: await readFile(target, 'utf8'),
+          signal,
+        });
+  } catch (error) {
+    signal?.throwIfAborted();
+    if (error instanceof FsmCoverageDeadlineError) throw error;
+    return [`FSM conformance could not be checked: ${messageOf(error)}`];
+  }
+}
+
+async function fsmSchema(config: MachineConfigLike, linkTarget?: string) {
+  const provenance =
+    linkTarget === undefined
+      ? undefined
+      : await playbookProvenanceForLinkTarget(linkTarget);
+  const runtimeDeclaration =
+    linkTarget === undefined ||
+    artifactSchemaForPlaybookProvenance(provenance) !== undefined
+      ? undefined
+      : await linkTargetRuntimeDeclaration(linkTarget);
+  return resolveArtifactSchemaForVerification({
+    requireContinuationSchema: false,
+    config,
+    ...(provenance === undefined ? {} : { provenance }),
+    ...(runtimeDeclaration === undefined ? {} : { runtimeDeclaration }),
+  });
+}
+
+async function fsmContinuationFindings(
+  source: string,
+  linkTarget?: string,
+  signal?: AbortSignal,
+): Promise<readonly string[]> {
+  signal?.throwIfAborted();
+  const fsm = await loadFsmModule(source);
+  const config = findMachineConfig(fsm);
+  const schema = await fsmSchema(config, linkTarget);
+  signal?.throwIfAborted();
+  const findings = [
+    ...schema.findings,
+    ...checkFsmChildSuspension(config),
+    ...(schema.artifactSchema === undefined || schema.findings.length > 0
+      ? []
+      : checkFsmContinuationInputs(config, schema.artifactSchema)),
+  ];
+  return findings.length > 0
+    ? findings
+    : await checkFsmCoverage(fsm, {
+        sourceText: await readFile(source, 'utf8'),
+        signal,
+      });
+}
+
 /**
  * Builds one link step, gated by DR-030 when the link emits Playbook's
  * `playbook` module over exactly the one FSM object the checks read
@@ -977,14 +1216,29 @@ function linkStep(opts: {
   linkTarget: string;
   options: readonly LinkOptionPair[];
   linked: string;
+  signal?: AbortSignal;
+  entryGearsPath?: string;
 }): PhaseStep {
   const { link } = opts;
   const fsmObjects = opts.objects.filter((object) =>
     object.endsWith(`.${link.source.format}${link.source.ext}`),
   );
+  const entryRequired = async (): Promise<boolean> =>
+    opts.entryGearsPath !== undefined &&
+    inspectGearsRoleContract(await readFile(opts.entryGearsPath, 'utf8'))
+      .generation === 'schema-3';
   const gated =
     link.target.format === PLAYBOOK_LINKED_FORMAT && fsmObjects.length === 1
-      ? () => linkFidelityFindings(opts.linked, fsmObjects[0])
+      ? async () => [
+          ...(await linkFidelityFindings(opts.linked, fsmObjects[0])),
+          ...((await entryRequired())
+            ? await checkEntryOptions({
+                linkedPath: opts.linked,
+                fsmPath: fsmObjects[0],
+                signal: opts.signal,
+              })
+            : []),
+        ]
       : undefined;
   return {
     request: {
@@ -996,10 +1250,34 @@ function linkStep(opts: {
       linked: opts.linked,
       ...(gated === undefined ? {} : { mechanicalReview: gated }),
     },
+    ...(gated !== undefined && opts.entryGearsPath !== undefined
+      ? {
+          outputContract: async () =>
+            (await entryRequired()) ? ENTRY_OPTIONS_CONTRACT : undefined,
+        }
+      : {}),
     phase: 'link',
     pinKey: 'link',
     targetExt: link.target.ext,
     ...(gated === undefined ? {} : { linkFidelity: gated }),
+    ...(gated !== undefined &&
+    link.source.format === 'fsm' &&
+    link.source.ext === '.ts'
+      ? {
+          fsmSourceTypecheck: () =>
+            checkFsmTypeScript(fsmObjects[0], opts.signal),
+        }
+      : {}),
+    ...(gated !== undefined && link.source.format === 'fsm'
+      ? {
+          fsmSourceContinuation: () =>
+            fsmContinuationFindings(
+              fsmObjects[0],
+              opts.linkTarget,
+              opts.signal,
+            ),
+        }
+      : {}),
   };
 }
 
@@ -1234,6 +1512,77 @@ async function executeSteps(
         elapsedMs: Date.now() - startedAt,
       });
 
+    let request: ExecuteRequest =
+      mode.mode === 'update' && step.request.kind === 'compile'
+        ? {
+            ...step.request,
+            update: { priorInput: mode.priorInput, diff: mode.diff },
+          }
+        : step.request;
+    if (request.kind === 'link' && step.outputContract !== undefined) {
+      const outputContract = await step.outputContract();
+      if (outputContract !== undefined)
+        request = { ...request, outputContract };
+    }
+
+    // The consumer cannot repair its protected source. Reject these existing
+    // parser findings before selecting or constructing any execution strategy.
+    if (step.gearsSourceContract !== undefined) {
+      const findings = await step.gearsSourceContract();
+      if (findings.length > 0 && step.request.kind === 'compile') {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons: [
+              `invalid GEARS source: ${step.request.source}`,
+              ...findings,
+            ],
+          }),
+        );
+        return stopped(index);
+      }
+    }
+
+    for (const [check, name] of [
+      [step.fsmSourceTypecheck, 'TypeScript'],
+      [step.fsmSourceContinuation, 'continuation'],
+    ] as const) {
+      if (check === undefined) continue;
+      let reasons: string[] = [];
+      let checkProtectedPaths: (() => Promise<string[]>) | undefined;
+      try {
+        if (name === 'continuation') {
+          checkProtectedPaths = await watchProtectedPaths(
+            phaseProtectedPaths(request, {
+              definitions,
+              protectedInputs: [...immutableInputs, ...stepDeclared.paths],
+            }),
+          );
+        }
+        const findings = await check();
+        if (findings.length > 0) reasons = ['invalid FSM source', ...findings];
+      } catch (error) {
+        reasons = [`FSM ${name} check could not run: ${messageOf(error)}`];
+      }
+      // Module imports can execute code even when the later probe fails or
+      // throws. Their mutations outrank every checker outcome, before selection.
+      const changes = await checkProtectedPaths?.();
+      if (changes !== undefined && changes.length > 0) reasons = changes;
+      if (reasons.length > 0) {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons,
+          }),
+        );
+        return stopped(index);
+      }
+    }
+
     // Selecting a compiled executor can throw rather than return a verdict —
     // notably a pinned link target whose installed engine declares no
     // supported contract, which the host factory rejects (phase-execution-30).
@@ -1265,21 +1614,15 @@ async function executeSteps(
         text: `updating ${step.phase} → ${target}`,
       });
     }
-    const request: ExecuteRequest =
-      mode.mode === 'update' && step.request.kind === 'compile'
-        ? {
-            ...step.request,
-            update: { priorInput: mode.priorInput, diff: mode.diff },
-          }
-        : step.request;
-
     const result = await runPhase({
       request,
       phase: step.phase,
       targetExt: step.targetExt,
       executor: selection.executor,
       definitions,
-      protectedInputs: stepDeclared.paths,
+      // Original invocation inputs remain immutable even when a later phase
+      // reads an intermediate and asks the author to clarify that original.
+      protectedInputs: [...immutableInputs, ...stepDeclared.paths],
       aliasInputs: [
         ...immutableInputs,
         ...declaredInputs,
@@ -1294,19 +1637,45 @@ async function executeSteps(
     });
     if (!result.ok) {
       fail();
+      if (result.clarification !== undefined) {
+        return {
+          ok: false,
+          outputs,
+          diagnostics,
+          outcome: 'clarification-required',
+          clarification: {
+            schema: 'sublang.slc.clarification.v1',
+            phase: step.phase,
+            target,
+            sources: [],
+            questions: result.clarification,
+          },
+        };
+      }
       diagnostics.push(formatFailureReport(result.report));
       return stopped(index);
     }
     diagnostics.push(...result.diagnostics);
-    // The DR-029 gate on the accepted result: a reviewed loop already relayed
-    // its findings to the Coder for repair, so a finding surviving to here is
-    // an unreviewed — or unrepaired — Source-fidelity break and fails the phase
-    // closed (phase-execution-51).
-    if (step.sourceFidelity === true && step.request.kind === 'compile') {
-      const findings = await sourceFidelityFindings(
-        step.request.source,
-        target,
-      );
+    // Recheck even custom executors that do not consume mechanicalReview.
+    // runPhase has already enforced the unchanged generic protection checks.
+    if (step.compileFidelity !== undefined) {
+      let findings: readonly string[];
+      let checkProtectedPaths: (() => Promise<string[]>) | undefined;
+      try {
+        checkProtectedPaths = await watchProtectedPaths(
+          phaseProtectedPaths(request, {
+            definitions,
+            protectedInputs: [...immutableInputs, ...stepDeclared.paths],
+          }),
+        );
+        findings = await step.compileFidelity();
+      } catch (error) {
+        findings = [`mechanical review could not run: ${messageOf(error)}`];
+      }
+      // Coverage executes artifact guards/actions after generic acceptance.
+      // Their protected-input mutations outrank success, findings and errors.
+      const changes = await checkProtectedPaths?.();
+      if (changes !== undefined && changes.length > 0) findings = changes;
       if (findings.length > 0) {
         fail();
         diagnostics.push(

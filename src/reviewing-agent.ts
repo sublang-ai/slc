@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 /**
- * Optional two-agent review orchestration for transformation calls (DR-022).
+ * Bounded mechanical repair with optional independent review (DR-022, DR-033).
  *
  * The decorator leaves the first Coder call byte-for-byte unchanged. Calls
  * carrying an explicit `allowedTools` property are control/routing calls and
- * bypass review. A successful transformation is reviewed in an independent,
- * read-only agent session; material findings return to the Coder for disposition
+ * bypass review. With a Reviewer, a successful transformation is reviewed in
+ * an independent, read-only agent session; material findings return to the Coder for disposition
  * and repair until the Reviewer reports no unsettled findings or the bounded
  * review limit is reached. Only the latest Coder result crosses the decorated
  * transport boundary.
@@ -16,10 +16,12 @@
  * findings are mechanical Reviewer findings (DR-029, phase-execution-51): the
  * round relays them to the Coder in place of its Reviewer call and spends one of
  * the permitted Reviewer calls, so the loop's bound is unchanged and no agent
- * judges an artifact a machine can already reject.
+ * judges an artifact a machine can already reject. Without a Reviewer, clean
+ * mechanical checks return immediately and findings use the same bounded loop.
  */
 
 import { messageOf } from './errors.js';
+import { hasClarificationMarker } from './clarification.js';
 import type {
   AgentClient,
   AgentRunRequest,
@@ -33,8 +35,8 @@ const DEFAULT_REVIEW_RETRY_DELAY_MS = 15_000;
 export interface ReviewingAgentOptions {
   /** The transformation-performing client whose result remains authoritative. */
   coder: AgentClient;
-  /** Constructs a fresh Reviewer client for each performing call. */
-  reviewer: () => AgentClient;
+  /** Optionally constructs a fresh Reviewer after mechanical checks pass. */
+  reviewer?: () => AgentClient;
   /** Optional Reviewer model; omitted to use that adapter's default. */
   reviewerModel?: string;
   /** Pause before the single retry of an errored Reviewer call; tests pass 0. */
@@ -66,20 +68,15 @@ export function createReviewingAgent(
       let coderResult = await options.coder.run(request);
       if (!isReviewable(coderResult)) return coderResult;
 
-      let reviewer: AgentClient;
-      try {
-        reviewer = options.reviewer();
-      } catch (error) {
-        return failClosed(
-          coderResult,
-          `Reviewer could not start: ${messageOf(error)}`,
-        );
-      }
+      let reviewer: AgentClient | undefined;
       let reviewerResume: string | false | undefined = false;
       const transcript: string[] = [];
       let reviewerCalls = 0;
 
       for (;;) {
+        if (request.signal?.aborted) {
+          return failClosed(coderResult, 'compilation review aborted');
+        }
         // The deterministic gate decides this round before any Reviewer sees
         // the artifact: its findings replace that Reviewer call and spend its
         // slot (phase-execution-51).
@@ -96,6 +93,9 @@ export function createReviewingAgent(
           );
         }
 
+        if (request.signal?.aborted) {
+          return failClosed(coderResult, 'compilation review aborted');
+        }
         let findings: string;
         let findingCount: number;
         if (mechanical.length > 0) {
@@ -103,6 +103,17 @@ export function createReviewingAgent(
           findings = formatMechanicalFindings(mechanical);
           findingCount = mechanical.length;
         } else {
+          if (options.reviewer === undefined) return coderResult;
+          if (reviewer === undefined) {
+            try {
+              reviewer = options.reviewer();
+            } catch (error) {
+              return failClosed(
+                coderResult,
+                `Reviewer could not start: ${messageOf(error)}`,
+              );
+            }
+          }
           const reviewerRequest: AgentRunRequest = {
             prompt: buildReviewerPrompt({
               originalPrompt: request.prompt,
@@ -128,6 +139,9 @@ export function createReviewingAgent(
               await pause(
                 options.reviewRetryDelayMs ?? DEFAULT_REVIEW_RETRY_DELAY_MS,
               );
+              if (request.signal?.aborted) {
+                return failClosed(coderResult, 'compilation review aborted');
+              }
               review = await reviewer.run(reviewerRequest);
             }
           } catch (error) {
@@ -159,10 +173,15 @@ export function createReviewingAgent(
         if (reviewerCalls === MAX_REVIEWER_CALLS) {
           return failClosed(
             coderResult,
-            `Reviewer reached the third and final review call; unresolved Reviewer findings:\n${findings}`,
+            options.reviewer === undefined
+              ? `Mechanical review reached the third and final checking round; unresolved mechanical findings:\n${findings}`
+              : `Reviewer reached the third and final review call; unresolved Reviewer findings:\n${findings}`,
           );
         }
 
+        if (request.signal?.aborted) {
+          return failClosed(coderResult, 'compilation review aborted');
+        }
         const priorTranscript = [...transcript];
         transcript.push(`Reviewer verdict:\n${findings}`);
         const coderResume = coderResult.resumeToken;
@@ -227,7 +246,11 @@ async function pause(ms: number): Promise<void> {
 }
 
 function isReviewable(result: AgentRunResult): boolean {
-  return result.status === 'success' && !/^\s*BLOCKED\b/im.test(result.text);
+  return (
+    result.status === 'success' &&
+    !/^\s*BLOCKED\b/im.test(result.text) &&
+    !hasClarificationMarker(result.text)
+  );
 }
 
 function failClosed(result: AgentRunResult, reason: string): AgentRunResult {
@@ -383,8 +406,7 @@ function parseCorrectionEnvelope(
 }
 
 type CorrectionSource =
-  | { kind: 'source'; source: string }
-  | { kind: 'malformed'; reason: string };
+  { kind: 'source'; source: string } | { kind: 'malformed'; reason: string };
 
 /**
  * Isolates the envelope: the last complete top-level JSON object in the reply,

@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted
+Accepted; the default stall timeout amended by [DR-043](043-stall-watchdog-default-window.md).
 
 ## Context
 

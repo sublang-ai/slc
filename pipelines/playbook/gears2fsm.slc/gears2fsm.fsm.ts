@@ -225,12 +225,11 @@ export const machine = setup({
       }
       return { request: event.request };
     }),
-    clearBossReplyContext: assign(
-      ({ context }): Partial<PlaybookContext> =>
-        context.pendingBossQuestion === undefined &&
-        context.bossReply === undefined
-          ? {}
-          : { pendingBossQuestion: undefined, bossReply: undefined },
+    clearBossReplyContext: assign(({ context }): Partial<PlaybookContext> =>
+      context.pendingBossQuestion === undefined &&
+      context.bossReply === undefined
+        ? {}
+        : { pendingBossQuestion: undefined, bossReply: undefined },
     ),
     setPendingBossQuestion: assign(
       (
@@ -253,33 +252,26 @@ export const machine = setup({
         };
       },
     ),
-    acceptBossReply: assign(
-      ({ event }): Partial<PlaybookContext> =>
-        event.type === 'BOSS_REPLY' ? { bossReply: event.answer } : {},
+    acceptBossReply: assign(({ event }): Partial<PlaybookContext> =>
+      event.type === 'BOSS_REPLY' ? { bossReply: event.answer } : {},
     ),
-    rememberCaptainError: assign(
-      ({ event }): Partial<PlaybookContext> => ({
-        lastError: normalizedErrorOf(event),
-      }),
-    ),
-    rememberMalformedCaptainOutput: assign(
-      (): Partial<PlaybookContext> => ({
-        lastError: {
-          name: 'MalformedCaptainOutput',
-          message:
-            'Captain output did not satisfy the declared result contract of GEARS2FSM-1.',
-        },
-      }),
-    ),
-    rememberMalformedBossReply: assign(
-      (): Partial<PlaybookContext> => ({
-        lastError: {
-          name: 'MalformedBossReply',
-          message:
-            'BOSS_REPLY carried an empty answer or named no pending question.',
-        },
-      }),
-    ),
+    rememberCaptainError: assign(({ event }): Partial<PlaybookContext> => ({
+      lastError: normalizedErrorOf(event),
+    })),
+    rememberMalformedCaptainOutput: assign((): Partial<PlaybookContext> => ({
+      lastError: {
+        name: 'MalformedCaptainOutput',
+        message:
+          'Captain output did not satisfy the declared result contract of GEARS2FSM-1.',
+      },
+    })),
+    rememberMalformedBossReply: assign((): Partial<PlaybookContext> => ({
+      lastError: {
+        name: 'MalformedBossReply',
+        message:
+          'BOSS_REPLY carried an empty answer or named no pending question.',
+      },
+    })),
   },
 }).createMachine({
   id: 'gears2fsm',

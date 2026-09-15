@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "direct-gears-clarification-v1",
+  "providerVisible": false,
+  "family": {
+    "id": "approved-terminal-conflict",
+    "origin": "Synthetic direct-GEARS workflow authored for this experiment; not a maintained a000 workflow.",
+    "semanticDefectCount": 1,
+    "textualEditCount": 1,
+    "edits": [
+      {
+        "oldText": "Captain reported the approved review; the run ends with terminal kind `success`.",
+        "newText": "Captain reported the approved review; the run ends with terminal kind `failure`.",
+        "baseRange": {
+          "startLine": 70,
+          "endLine": 70,
+          "startByte": 1959,
+          "endByteExclusive": 2039,
+          "excerpt": "Captain reported the approved review; the run ends with terminal kind `success`."
+        },
+        "mutantRange": {
+          "startLine": 70,
+          "endLine": 70,
+          "startByte": 1959,
+          "endByteExclusive": 2039,
+          "excerpt": "Captain reported the approved review; the run ends with terminal kind `failure`."
+        }
+      }
+    ],
+    "restoredByteIdentical": true
+  },
+  "cases": [
+    {
+      "id": "gears-001",
+      "member": "clean",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Carry the per-turn Boss request and accepted draftText/reviewNote as typed runtime strings; do not demand concrete values at compile time.",
+          "Preserve Drafter then Reviewer, one mutually exclusive approved/rejected report, and every source prompt/result.",
+          "An approved review terminates success and a rejected review terminates failure. No repository mutation."
+        ]
+      }
+    },
+    {
+      "id": "gears-002",
+      "member": "mutant",
+      "expected": {
+        "outcome": "clarification-required",
+        "kind": "contradiction",
+        "semanticChoice": "Should an approved review end this run with success or failure?",
+        "reason": "The intent and ROUTE-3 success-report obligation require the approved run to succeed, while the same item's done result requires terminal failure. No precedence, exception, or separate failure trigger resolves the same outcome.",
+        "sourceEvidence": [
+          "An approved review means that this run succeeds; a rejected review means that this run fails.",
+          "When ROUTE-2 returns `approved`, Captain shall report this run's successful completion:",
+          "Captain reported the approved review; the run ends with terminal kind `failure`."
+        ],
+        "insufficientQuestions": [
+          "What request, draft or review note will be supplied?",
+          "Which concrete models fill Drafter and Reviewer?"
+        ],
+        "mustNotResolveBy": [
+          "Silently changing the done result to success.",
+          "Silently changing the success-report obligation and global meaning to failure.",
+          "Reporting both terminal outcomes or running the rejected branch after approval."
+        ],
+        "positiveFidelity": [
+          "Carry the per-turn Boss request and accepted draftText/reviewNote as typed runtime strings; do not demand concrete values at compile time.",
+          "Preserve Drafter then Reviewer, one mutually exclusive approved/rejected report, and every source prompt/result.",
+          "An approved review terminates success and a rejected review terminates failure. No repository mutation."
+        ],
+        "sourceRanges": [
+          {
+            "startLine": 14,
+            "endLine": 14,
+            "startByte": 293,
+            "endByteExclusive": 386,
+            "excerpt": "An approved review means that this run succeeds; a rejected review means that this run fails."
+          },
+          {
+            "startLine": 61,
+            "endLine": 61,
+            "startByte": 1716,
+            "endByteExclusive": 1803,
+            "excerpt": "When ROUTE-2 returns `approved`, Captain shall report this run's successful completion:"
+          },
+          {
+            "startLine": 70,
+            "endLine": 70,
+            "startByte": 1959,
+            "endByteExclusive": 2039,
+            "excerpt": "Captain reported the approved review; the run ends with terminal kind `failure`."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gears-003",
+      "member": "restored",
+      "identicalToCaseId": "gears-001",
+      "restoresCaseId": "gears-002",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Carry the per-turn Boss request and accepted draftText/reviewNote as typed runtime strings; do not demand concrete values at compile time.",
+          "Preserve Drafter then Reviewer, one mutually exclusive approved/rejected report, and every source prompt/result.",
+          "An approved review terminates success and a rejected review terminates failure. No repository mutation."
+        ]
+      }
+    }
+  ]
+}

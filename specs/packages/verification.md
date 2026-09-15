@@ -23,17 +23,34 @@ When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc 
 
 | Case | Required conformance |
 | --- | --- |
-| Every node in a structured machine | Carry a non-empty explicit state id and matching `meta.playbook.stateId`. |
+| The machine root | Omit an own `meta.playbook` namespace, regardless of its value: public playbook metadata belongs only to state nodes declared under `states`; the root's XState `id`, description, and other metadata namespaces remain outside this restriction ([DR-036](../decisions/036-machine-root-public-identity.md)). |
+| Every state node declared under `states` in a structured machine | Carry a non-empty explicit state id and matching `meta.playbook.stateId`. |
 | Direct-Captain leaf | Invoke `captain` and carry that same id plus the item's prompt body verbatim without `player` or `role` binding. |
 | Schema-3 delegated-role leaf | Invoke `player`, carry `meta.playbook.role` and `invoke.input.role` equal to the source role's canonical lowercase local id, omit `invoke.input.player`, and preserve the role locally without encoding a concrete player or alias. |
 | Schema-3 `Roles` declaration | Derive each local role id by lowercasing its source name, require it to match `[a-z][a-z0-9_-]*`, reject the reserved id `captain`, and reject removed aliases, repeated declarations, or distinct names that collide after derivation. |
 | Immutable schema-1 delegated-player leaf | Invoke `player` and carry its source-declared player through the historical `invoke.input.player` contract without being relabelled as schema 3. |
-| Literal nested-playbook leaf | Invoke `playbook` and carry the same id, literal target, and child-input body verbatim. |
+| Literal nested-playbook leaf | Invoke `playbook`, carry the same id and literal target, and preserve the child-input template through the composed-text check [[verification-39](#verification-39)]. |
 | Dynamic nested-playbook leaf | Invoke `playbook`, carry the same id, preserve the GEARS target-field name and sole child-text placeholder as literal `playbookIdContext` and `textContext` metadata, and evaluate `playbookId` and `text` to independent sentinel values supplied through those exact named context fields without source-text inspection. |
+| Nested-playbook invocation | Pass the child-call busy-tag check [[verification-45](#verification-45)]. |
+| GEARS actor clause | Pass the canonical actor-clause check [[verification-47](#verification-47)]. |
 | Schema-3 parallel group | Represent each simultaneously active region by its canonical role id, require those region ids to be pairwise distinct, and appear exactly once in the FSM's `concurrentRoleSets` export in source group and region order. |
 | Schema-3 artifact with no parallel group | Export `concurrentRoleSets` as the exact empty array. |
 | Schema-3 root final state, once any root final state of the artifact declares a terminal kind | Carry `meta.playbook.terminal` equal to exactly `success` or `failure`, so a caller reads the reached outcome's published meaning from the machine; a final inside a parallel region stages the join and declares no kind, and an artifact retained from before the kind was compiled declares none at all and is exempt. |
 | Schema-1 artifact whose FSM module independently exports `concurrentRoleSets` | Preserve schema-1 classification because the export is not artifact-schema evidence [[verification-21](#verification-21)]. |
+
+#### verification-39
+
+When checking a literal nested-playbook input [[verification-1](#verification-1)], the conformance check shall verify the complete GEARS child-text template through the invocation's observable composition under this case matrix, without assuming that a placeholder's spelling names a context field or inspecting function source ([DR-041](../decisions/041-composed-child-input-fidelity.md)):
+
+| Case | Required outcome |
+| --- | --- |
+| Explicit quoted relay | Require an observed runtime substitution for each token occupying a complete unescaped `> <token>` or `> Label: <token>` child-template line, with a nonempty label ending in a colon and the existing angle-bracket token grammar; strip only the line separator when recognizing the form, exclude inline-code and escaped tokens, and apply the same mapping to every occurrence of a required token ([DR-050](../decisions/050-required-child-relay-substitution.md)). |
+| Static text from an object-valued input or function | Retain exact whole-text equality, including order, whitespace, and absence of added prefix or suffix, while rejecting any unresolved explicit quoted relay; other domain metavariables and angle-bracket text remain literal. |
+| Runtime substitution | Preserve resolved non-string context shapes and probe observed string or absent scalar reads with distinct values; admit only complete literal template segments separated by unchanged non-required tokens or exact unencoded probe values, with every repeated token using the same observed substitution. |
+| Observed mapping | Infer correspondence only from the complete template match, then require the same correspondence with distinct literal values containing placeholder-looking text and replacement metacharacters, using multiline values for complete standalone or labelled quoted relay slots and single-line values for inline slots; every continuation line of a relayed multiline value retains its quote marker. |
+| Empty standalone quoted relay | Omit exactly a complete `> <placeholder>` line and its separator when its observed value is empty, preserving the rest of the template. |
+| Unprovable composition | Report a composition finding for missing or inconsistent correspondence, unsupported value shapes, input evaluation failure, more than 128 observed scalar reads, or reads not stabilizing within four passes rather than inventing startup defaults, guessing field names, or accepting drift. |
+| Matching without `sourceItem` | Retain one-to-one literal-target/template matching in declaration order after explicit source-item and exact-signature matches. |
 
 #### verification-3
 
@@ -57,7 +74,7 @@ When a compilation-correctness check selects the artifact schema used by generat
 | A linked callable factory has an own `compat` property. | Supply a schema-3 signal only for an enumerable, non-writable, non-configurable data property whose value is a frozen exact own-data `{ artifactSchema: 3, runtimeAbi: 1 }` record; otherwise report malformed compatibility. |
 | One or more provenance, actor-generation, or exact factory-compatibility signals exist and every present signal is valid. | Select a schema only when all supplied signals agree, and report disagreement otherwise. |
 | No provenance, actor-generation, or compatibility signal exists and the linked callable factory has no own `compat`. | Select the immutable historical schema-1 continuation shape. |
-| A direct-Captain continuation has neither reviewed provenance, a generation-specific actor binding or controller, nor a linked callable factory. | Leave it unclassified and report the missing schema rather than guessing. |
+| A direct-Captain continuation has neither reviewed provenance, a generation-specific actor binding or controller, nor a linked callable factory. | Leave it unclassified; report the missing schema when checking continuation composition, while pre-link conformance requires no continuation-generation decision and retains all other schema findings. |
 | No schema signal exists and no direct-Captain continuation requires a generation-specific probe. | Leave the artifact unclassified without reporting a schema finding. |
 
 #### verification-22
@@ -74,6 +91,24 @@ When a Captain result omits the ordinary Boss-reply key and differs from the clo
 
 Where a direct-Captain or delegated-player GEARS item declares a canonical `Results:` block, when checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc command shall parse its ordered single-line ``- `<guardName>`: <nonblank description>`` entries separately from the blockquoted acting prompt and report a finding unless the FSM state's ordered `result` entries equal them exactly after removing only compiler-owned `needsBossReply`; it shall also report a misplaced or malformed label, malformed or duplicate entries, an empty declared block, source-owned `needsBossReply`, or result metadata on a nested-playbook call item, while allowing immutable pre-decision GEARS artifacts to omit the block, and `<guardName>` shall match `[A-Za-z_$][A-Za-z0-9_$]*` ([DR-012](../decisions/012-playbook-routing-control-separation.md)).
 
+#### verification-29
+
+When checking GEARS result syntax independently of an FSM, the slc command shall return exactly its parser's item-prefixed result-contract findings for ordinary and nested-call metadata [[verification-13](#verification-13)], output-field guidance [[verification-51](#verification-51)], and script metadata [[verification-15](#verification-15)], as a pure function of that GEARS text without adding role, schema, item-presence, or natural-language checks; a result block extends to the next item or section heading, so nonblank non-entry text inside it remains malformed while prose outside it and an ordinary item without a Results label remain accepted ([DR-035](../decisions/035-gears-contract-at-producer.md)).
+
+#### verification-51
+
+When parsing a GEARS result description, the result-contract parser shall report each complete backticked span encountered at positive ASCII-parenthesis depth after the first literal `Output shall include`, counting parentheses only outside complete backticked spans and never below zero, with an item- and guard-specific diagnostic explaining that output-clause backticks declare fields and that guidance belongs in plain text or inside a field annotation, while preserving the description and field extraction unchanged ([DR-051](../decisions/051-output-field-guidance-boundary.md)).
+
+### FSM boundary checks
+
+#### verification-35
+
+Where an FSM has a resolved artifact schema [[verification-21](#verification-21)], when checking its continuation inputs, the slc command shall reuse the prompt-contract probe's scalar and state-keyed question and reply sentinels [[verification-5](#verification-5)] to require every non-controller acting state with a callable `invoke.input` mapper and a declared `needsBossReply` result to carry both through that mapper, preserving resolved initial context shapes, omitting composer checks, and exempting controller machines [[verification-20](#verification-20)] ([DR-040](../decisions/040-early-continuation-input-contract.md)).
+
+#### verification-33
+
+When checking a TypeScript FSM, the slc command shall type-check its unchanged root as standalone ESM with SLC's installed TypeScript, preserving original filenames and import resolution while retaining imported files' actual module formats, under ES2022 NodeNext strict checking with unused-local, unused-parameter, implicit-override, switch-fallthrough, isolated-module, case-consistency, verbatim-module and erasable-syntax checks, allowing native `.ts` imports under `noEmit`, skipping installed declaration checks, and selecting only SLC's installed Node ambient types, without project compiler configuration, source execution, emitted files, or unrelated test inputs, returning deterministic file/line/code diagnostics and failing closed on checker failure, with cancellation checked before local checking and after yielding pending cancellation events ([DR-039](../decisions/039-strict-fsm-boundary.md)).
+
 ### Test generation
 
 #### verification-2
@@ -82,7 +117,7 @@ When the slc command handles a compiled `playbook` artifact relative to the cano
 
 | Case | Verification-test outcome |
 | --- | --- |
-| The artifact's `gears` and `fsm` are produced at their canonical `<basename>.playbook/` locations. | Emit a test beside them, in `<basename>.playbook/`, that runs the GEARS↔FSM conformance check [[verification-1](#verification-1)] over the artifact's `gears` file and the machine its `fsm` module exports, so each build re-checks faithfulness. Every emitted TypeScript verification test imports sibling TypeScript FSM and linked-runtime artifacts through NodeNext `.js` module specifiers; where a generated test also reads an artifact as source text, it keeps a separate physical `.ts` filename for that file operation rather than reading the `.js` specifier. |
+| The artifact's `gears` and `fsm` are produced at their canonical `<basename>.playbook/` locations. | Emit a test beside them, in `<basename>.playbook/`, that runs the GEARS↔FSM conformance check [[verification-1](#verification-1)] over the artifact's `gears` file and the machine its `fsm` module exports, so each build re-checks faithfulness. Every emitted TypeScript verification test passes strict NodeNext type checking with unused-local and unused-parameter checks, including empty or populated pinned data and schema findings, and imports sibling TypeScript FSM and linked-runtime artifacts through NodeNext `.js` module specifiers; where a generated test also reads an artifact as source text, it keeps a separate physical `.ts` filename for that file operation rather than reading the `.js` specifier. |
 | `-o` relocates the `fsm` out of the canonical directory. | Emit no verification test. |
 
 #### verification-4
@@ -91,7 +126,7 @@ When a compiled `playbook` artifact's `gears` and `fsm` are produced at their ca
 
 | FSM module | Introspection-test outcome |
 | --- | --- |
-| The produced `fsm` can be imported for derivation. | Derive the machine's structural topology from the produced `fsm` — recursively including executable actor bindings and result keys, config paths, explicit and public metadata ids, compound or parallel type, tags, parent joins, every `onDone`/`onError`/local-event transition arm, quiescent and root event surfaces, and the `BOSS_INTERRUPT` jumpable set — and emit a test beside the artifacts that fails when the machine no longer matches that pinned topology while omitting the structured extension for an unchanged flat machine. |
+| The produced `fsm` can be imported for derivation. | Derive the machine's structural topology from the produced `fsm` — recursively including executable actor bindings and result keys, config paths, explicit and public metadata ids, compound or parallel type, root and nested initial child targets normalized from string or object form, tags, parent joins, every `onDone`/`onError`/local-event transition arm, quiescent and root event surfaces, and the `BOSS_INTERRUPT` jumpable set — and emit a test beside the artifacts that fails when the machine no longer matches that pinned topology while omitting the structured extension for an unchanged flat machine. |
 | The produced `fsm` cannot be imported for derivation. | Report a diagnostic and emit no introspection test while leaving the run outcome unchanged. |
 
 #### verification-5
@@ -100,10 +135,33 @@ When a compiled `playbook` artifact's `gears` and `fsm` are produced at their ca
 
 | Case | Prompt-contract verification outcome |
 | --- | --- |
-| The canonical `gears` and `fsm` artifacts are available. | Derive each direct-Captain and delegated-player state's prompt contract from the artifacts, driving every `invoke.input` from the machine's resolved initial context so a typed context field keeps its initial shape — its traced context reads, its sentinel-traced input wiring, and its prompt's placeholder tokens — and emit a test beside the artifacts that fails when the contract no longer matches. |
-| A linked `<basename>.playbook.ts` beside the artifacts exposes its Captain and player prompt composers. | Additionally fail the emitted test when the matching composer stops substituting a placeholder it substituted at build time, stops preserving the complete prompt body — including authored quoted-context lines — verbatim as one contiguous ordered block, leaks the Boss-reply adjudicator contract into an acting-agent prompt, introduces a player or role binding or resume instruction into a direct-Captain prompt, resolves a schema-3 player-facing identity from a concrete player or alias, or from a role no state of the artifact declares, instead of the invocation-scoped prompt-identity lookup of a declared canonical local role — one role's prompt may name any other declared role's identity, so only an undeclared role is drift —, exposes such a concrete binding in composed text, composes continuation blocks on an ordinary turn, or composes a continuation turn without the exact preamble and labelled Q&A blocks before the body, while recognizing either a raw string sentinel or that same sentinel encoded as deterministic JSON for a typed structured value. Select the continuation generation through [[verification-21](#verification-21)]; synthesize each probed turn's input from the machine's resolved initial context, overlaying one string sentinel per traced context read whose initial value is absent or itself a string and per placeholder-derived input field the prompt relays, so a typed context field keeps its initial shape and every relayed placeholder still evidences substitution, and where no initial context resolves degrade to the context sentinels alone, reported as a diagnostic and not a finding; probe schema-1 composers without occupying their historical placeholder-fields argument and carry the historical continuation `player`; probe schema-3 role identity with a callable lookup that exposes no placeholder-field properties and carry the schema-3 continuation `asker`; and pass the same question and reply through both scalar `pendingBossQuestion` / `bossReply` context and state-keyed `pendingBossQuestions[stateId]` / `bossReplies[stateId]` context so flat and parallel branch input mappers are verified. |
+| The canonical `gears` and `fsm` artifacts are available. | Derive each direct-Captain and delegated-player state's prompt contract from the artifacts, driving every `invoke.input` from the machine's resolved initial context so a typed context field keeps its initial shape — its traced context reads, its sentinel-traced input wiring, and its prompt's placeholder tokens — and emit a test beside the artifacts that fails when the contract no longer matches, preserving empty and populated contract rows and schema findings in readonly constants that pass strict type checking [[verification-2](#verification-2)]. |
+| A linked `<basename>.playbook.ts` beside the artifacts exposes its Captain and player prompt composers. | Additionally fail the emitted test when the matching composer stops substituting a placeholder it substituted at build time, stops preserving the complete prompt body — including authored quoted-context lines — verbatim as one contiguous ordered block, leaks the Boss-reply adjudicator contract into an acting-agent prompt, introduces a player or role binding or resume instruction into a direct-Captain prompt, resolves a schema-3 player-facing identity from a concrete player or alias, or from a role no state of the artifact declares, instead of the invocation-scoped prompt-identity lookup of a declared canonical local role — one role's prompt may name any other declared role's identity, so only an undeclared role is drift —, exposes such a concrete binding in composed text, composes continuation blocks on an ordinary turn, or composes a continuation turn outside the exact continuation profiles below, while recognizing either a raw string sentinel or that same sentinel encoded as deterministic JSON for a typed structured value. Select the continuation generation through [[verification-21](#verification-21)]; synthesize each probed turn's input from the machine's resolved initial context, overlaying one string sentinel per traced context read whose initial value is absent or itself a string and per placeholder-derived input field the prompt relays, so a typed context field keeps its initial shape and every relayed placeholder still evidences substitution, and where no initial context resolves degrade to the context sentinels alone, reported as a diagnostic and not a finding; probe schema-1 composers without occupying their historical placeholder-fields argument and carry the historical continuation `player`; probe schema-3 role identity with a callable lookup that exposes no placeholder-field properties and carry the schema-3 continuation `asker`; probe schema-3 players with the third `resuming` argument absent, false, and true, allowing the compact profile only for true while retaining full-profile compatibility for composers that ignore it; call direct-Captain composers with input alone and require a full profile; and pass the same question and reply through both scalar `pendingBossQuestion` / `bossReply` context and state-keyed `pendingBossQuestions[stateId]` / `bossReplies[stateId]` context so flat and parallel branch input mappers are verified. |
 | A linked module exposes no matching composer. | Degrade to the artifact-only test with a diagnostic. |
 | Emission-time derivation imports a NodeNext TypeScript linked module before its sibling FSM has been built. | Resolve the linked module's required runtime-safe `./<basename>.fsm.js` edge against the sibling `<basename>.fsm.ts` only in an ephemeral verification copy, preserve the linked source and its `.js` specifier unchanged, and still emit the matching composition checks. |
+
+Continuation profiles use exactly two line feeds between the preamble, each labelled block, and the unchanged body, with one line feed between a label and its verbatim value:
+
+| Profile | Exact preamble | Ordered blocks before the body | Admitted use |
+| --- | --- | --- | --- |
+| Historical full | `You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.` | `Boss question:` and question, then `Boss reply:` and reply | Schema-1; schema-3 full-profile compatibility |
+| Current full | `Continue the same task using Boss’s reply below.` | `Your previous question:` and question, then `Boss reply:` and reply | Schema-3 Captain and fresh or resumed player |
+| Current compact | `Continue the same task using Boss’s reply below.` | `Boss reply:` and reply | Schema-3 player with explicit `resuming: true` only |
+
+An ordinary turn admits none of these framework blocks outside its authored body.
+
+
+#### verification-41
+
+When checking player or Captain prompt composition, the verifier shall extend each established ordinary and continuation body match with bounded literal-string probes through the same composer and turn mode, applying this matrix without changing captured contract rows or inferring new input fields ([DR-042](../decisions/042-literal-prompt-relay-fidelity.md)):
+
+| Case | Required outcome |
+| --- | --- |
+| Observed raw-string substitution | Group equal non-contract input string values evidenced uniformly as raw substitutions by the whole-template match, excluding unchanged literal tokens, identity-lookup sentinel values, and an entire group if any occurrence uses JSON encoding, change aliases together, and require exact single-pass substitution of distinct values containing replacement metacharacters and original placeholder-looking text. |
+| Complete standalone or labelled quoted relay | Additionally probe LF/CRLF multiline values when every occurrence of the observed value occupies a complete quoted relay slot, preserving the original text, separators, and continuation quote markers. |
+| Inline identifier, deterministic JSON slot, or typed value | Keep inline substitutions single-line and retain existing JSON and non-string checks without inventing multiline domain values or changing structured input shapes [[verification-5](#verification-5)]. |
+| Runtime identity, contract metadata, and surrounding framework | Preserve the original identity lookup and metadata, existing continuation profile, and body prefix/suffix while reconstructing expected replacements once from the original template. |
+| Rendering drift or probe failure | Emit one finding per state and literal or quoted-relay violation across turn modes, through both the ordinary link gate and emitted prompt suite, and for rendered mismatches include the zero-based first differing UTF-16 code-unit offset plus JSON-escaped expected and actual excerpts capped at 24 UTF-16 code units each, using `<end>` when a side has no character at that offset, so LF/CRLF separator and quote-marker drift is auditable without logging the full prompt [[verification-27](#verification-27)]. |
 
 #### verification-6
 
@@ -114,9 +172,12 @@ When a compiled `playbook` artifact's `gears` and `fsm` are produced at their ca
 | Declared transition reachability | Fail when a declared transition is unreachable: every non-controller direct-Captain or delegated-player result key fires a transition out of its nested working leaf — `needsBossReply` suspending in the correct scalar or `playbook.parked` branch-local wait, an unknown branch question id leaving that wait unchanged, a nonblank reply resuming only the addressed question when multiple parallel questions are pending, and a blank reply not resuming the acting agent — every schema-3 controller decision result [[verification-20](#verification-20)] selects exactly one evaluated action arm distinct from every other controller result, enters that arm's declared target, and returns to the session hub or reaches its declared shutdown final without inventing a Boss-reply wait, every nested-playbook invocation drives successful scripted child output — the output a completed child resolves with when it declares no terminal kind or a `success` one — through each satisfiable declared `onDone` arm and scripted child rejection through its `onError` target, rejection covering both an aborted or errored child result and a completed child whose `ok` result carries a `failure` terminal record, including a dynamic call after its target and text context have been populated, every parallel-parent `onDone` arm is exercised through bounded branch-result combinations or reported explicitly as unsupported, every other `onError` arm reaches its target, every nested `BOSS_INTERRUPT` target is enterable through public `meta.playbook.stateId` or actor input state id rather than a private config path, guard-free root entry events transition, and every guarded `onDone` arm is satisfiable under bounded probing seeded from public metadata ids, actor input ids, config ids, and artifact identifier literals. Also fail when the machine declares no final state, no `BOSS_INTERRUPT` root event, a non-controller machine declares no scalar or branch-local Boss-reply wait, a controller machine declares such a wait or contains a delegated-player, nested-playbook, or parallel working surface, a parallel group repeats one canonical role id across simultaneously active regions, or a recoverable `failed` state lacks tag `playbook.parked`, except that a one-key controller near-miss suppresses only its specified ordinary machine-surface findings [[verification-22](#verification-22)]. |
 | Immutable artifact predating the atomic Playbook 1.0 reference refresh | Exempt a legacy flat `failed` state that carries no `meta.playbook` identity from the parked-tag check; require any metadata-bearing recoverable failure to use the current tagged contract. |
 | An invocation input or transition-scoped actor start throws synchronously during bounded driving. | Return a state-specific coverage finding and attach an error observer to every settle probe so XState does not report the same failure outside the checker boundary. |
-| Nested invocation or intentionally non-root-jumpable parallel branch leaves | Evaluate a nested invocation only after entering it with the machine's initialized or transition-produced context, rather than preflighting the input with an artificial empty context; for the parallel leaves, enter their public parallel parent and drive the distinct delegated-player actors in place. |
-| A typed `BOSS_INTERRUPT` arm requires additional Boss-supplied payload fields. | Synthesize only missing top-level fields under bounded guard probing while preserving the real event type and public target id. |
-| Bounded generated-test execution | Set a timeout derived from the checker's bounded settle, parallel-combination, and guard-probe budgets rather than relying on the test runner's default timeout; include the fields named by their result descriptions in structured Captain outputs; match dynamic call ids to a seeded enabled-playbook catalog exactly; and enter a dynamic call through the Captain transition that populates its context before driving child success or failure. |
+| Nested invocation, ordinary acting state without root preemption, or intentionally non-root-jumpable parallel branch leaves | Select literal and dynamic child checks and ordinary acting results independently of root preemption, enter through actual initial/public routes and replay finite predecessor actor or child outcomes, preserving distinct reached contexts while probing each ordered arm with context assignment disabled; cap each target-arm or declared-result search at 64 replay attempts and eight invocation steps without repeating an invocation except one canonical question/wait/nonblank-reply revisit per replay, report exhausted or unsupported paths explicitly, and require actual completion to reach the target; verify blank-reply rejection for the ordinary question result; for parallel leaves, retain public-parent entry and distinct delegated actors ([DR-045](../decisions/045-static-child-coverage-entry.md), [DR-046](../decisions/046-bounded-child-chain-coverage.md)). |
+| Initial configuration or an entry/predecessor arm targets a compound or parallel state | Follow the child selected by either string or object-form `initial` at the root and every compound level, and every parallel region, when selecting invocation paths and accounting for entry-event timeouts; preserve actual initial-transition actions and reached context during replay, recognize active ancestors when observing the declared target, and do not substitute an inactive invocation for an initially active parallel-branch leaf. |
+| Repeated candidate evaluation within a guard probe | Snapshot fixed seed-object descriptors within that probe only, create fresh candidate objects retaining prototypes, accessors, symbol keys and property attributes, check an entered target before exploring successors, stop target probing at its first satisfying candidate, and charge a fresh replay after a failed target check to the same attempt limit ([DR-046](../decisions/046-bounded-child-chain-coverage.md)). |
+| A typed `BOSS_INTERRUPT` arm requires additional Boss-supplied payload fields. | Synthesize only missing top-level fields under bounded guard probing while preserving the real event type and public target id, with each supplied top-level payload's values and own-property descriptors present in both candidate evaluation and read tracing ([DR-034](../decisions/034-faithful-transition-coverage.md)). |
+| Bounded generated-test execution | Set a timeout derived from the checker's bounded settle, parallel-combination, and guard-probe budgets rather than relying on the test runner's default timeout, capped at 300,000 milliseconds with any smaller derived bound retained; include every child-arm and selected non-preemptive acting-result search, public-entry candidate, replay, question/reply wait and target-arm candidate in the conservative scheduling allowance; treat deadline exhaustion as failed or unverified coverage, not an unsatisfiable-arm or Source-clarification finding; include the fields named by their result descriptions in structured Captain outputs; match dynamic call ids to a seeded enabled-playbook catalog exactly; and enter a dynamic call through the Captain transition that populates its context before driving child success or failure. |
+| Ordered result acceptance | Count an unguarded fallback for a declared result only when every preceding guard rejects that valid output under bounded probing; preserve controller action-arm distinctness and report missing, shadowed, unresolved, or unsatisfiable transitions rather than inferring intended routing from result names or prose ([DR-034](../decisions/034-faithful-transition-coverage.md)). |
 | A `BOSS_INTERRUPT` arm has valid context preconditions that the machine's initial input alone cannot represent. | Bounded-probe missing and existing context fields plus missing Boss-supplied event fields, restore an XState persisted initial snapshot with satisfying context and no stale children, and drive the authored ordered transition using matching artifact identifiers and catalog, call, final-response, or accumulated-state sentinels; report an unsatisfiable guard or a transition that does not enter its target rather than accepting direct guard evaluation as coverage. |
 
 #### verification-12
@@ -175,8 +236,8 @@ When the slc command checks a GEARS package's fidelity to the Source it was comp
 | Rule | Reported violation |
 | --- | --- |
 | Every authored fragment's lines appear contiguously and in order inside at least one item's prompt. | That fragment, named by its Source line, was dropped or changed. |
-| The authored fragments one item carries appear in that item's prompt in Source order. | That item's authored prompt fragments are out of Source order. |
-| Where the Source authors at least one fragment, every non-empty prompt line of every item is an authored fragment line or a bare quoted relay placeholder `> <token>`. | That item's prompt line is not an authored fragment. |
+| Complete nonoverlapping authored fragment occurrences in an item have an order-preserving Source attribution; an occurrence contained in a larger fully matched fragment belongs to that larger fragment, and identical source fragments are alternative attributions of one occurrence. | That item's authored prompt fragments are out of Source order. |
+| Where the Source authors at least one fragment, every non-empty prompt line of every item is an authored fragment line or a bare quoted relay placeholder `> <token>`. | That item's prompt line is not an authored fragment; for an otherwise unaccepted exact standalone `<token>` line, the finding explains that GEARS needs `> > <token>` to retain `> <token>` as prompt content. |
 | Every result field's name matches the ASCII identifier pattern `[A-Za-z_$][A-Za-z0-9_$]*` a guard name matches [[verification-13](#verification-13)]. | That item's named result declares that non-identifier output property. |
 | No result field is owned verbatim in one item and left judge-authored in another. | That field mixes verbatim and judge-authored ownership. |
 | Wherever an item's prompt line reads a relayed field's placeholder, that line carries a literal `>` quote marker. | That item's relayed field lacks a literal quote marker. |
@@ -205,13 +266,31 @@ When checking GEARS↔FSM conformance, the slc command shall recognize as the op
 
 #### verification-16
 
-When checking FSM transition coverage, the slc command shall drive `script` actor states like other work states — resolving each declared exit-status guard — so an optimized artifact's transitions are covered as strictly as an unoptimized one's ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+When checking FSM transition coverage, the slc command shall drive `script` actor states like other work states [[verification-6](#verification-6)] with exactly `guard` and `exitStatus` — the first declared guard with zero and the second with representative nonzero statuses from one bounded candidate set shared by result acceptance and arm auditing, capped per arm with its own constants preceding general artifact candidates — require at least one satisfying representative for each result and drive a directly accepting candidate from the accepted union, without inventing payload fields or using malformed bare outputs to satisfy a guarded script arm, so optimized transitions receive faithful reachability coverage without claiming exhaustive safety for every possible exit status ([DR-013](../decisions/013-normalize-and-pass-phases.md), [DR-034](../decisions/034-faithful-transition-coverage.md)).
 
 ### Emitted-module load integrity
 
 #### verification-18
 
 When the slc command emits a `.ts` or `.js` module as a linked target after full or direct linking [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)] and generic post-link settlement [[pipeline-40](pipeline.md#pipeline-40)], or as a `playbook` entry module [[self-hosting-15](self-hosting.md#self-hosting-15)], it shall verify that every relative import specifier in the emitted module resolves exactly from the module's own location and shall fail the run with a diagnostic naming the module and each unresolvable specifier ([DR-023](../decisions/023-host-settled-link-object-imports.md)); a compile whose output cannot load is a failed compile, not a success with a latent runtime error, as exposed by the [[release-17](release.md#release-17)] acceptance gate when an interpreted link emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.
+
+### Child-call tags
+
+#### verification-45
+
+When checking an FSM's child-call suspension contract, the verifier shall report each nested-playbook invocation whose state, an ancestor state, or the machine root carries `playbook.busy`, identifying the invocation and the offending tag locations while excluding sibling states from inheritance and accepting either string or array tag declarations ([DR-047](../decisions/047-child-call-quiescence.md)).
+
+### GEARS actor clauses
+
+#### verification-47
+
+When checking a GEARS actor contract, the verifier shall scan item-scoped unquoted clause lines for the exact near-miss family `Captain shall (first|then|next|finally) call playbook` with word boundaries, report each finding with the item id and canonical `Captain shall call playbook ...:` repair, and ignore blockquotes, `Results:` descriptions, canonical nested-playbook clauses, and other Captain actor clauses ([DR-048](../decisions/048-canonical-actor-diagnostic.md)).
+
+### Cooperative coverage lifetime
+
+#### verification-49
+
+When transition coverage executes [[verification-6](#verification-6)], the checker shall own an isolated per-call cooperative lifetime that observes an optional cancellation signal and a monotonic deadline no longer than its derived timeout or a caller's smaller positive finite bound, yields pending cancellation between bounded work blocks, interrupts settle waits, checks between guard candidates without swallowing interruption as a predicate failure, releases its actors, timers and subscriptions on every exit, and reports deadline exhaustion as incomplete coverage rather than an unsatisfiable transition or Source clarification, without claiming preemption of synchronous artifact code ([DR-049](../decisions/049-early-transition-coverage.md)).
 
 ## Verification
 
@@ -235,6 +314,7 @@ Where a reserved pipeline's faked agents produce a conformant `gears` and `fsm` 
 | Case | Required outcome |
 | --- | --- |
 | A full run succeeds with the pair at its canonical locations. | Emit artifact-local checker support [[verification-12](#verification-12)] plus the conformance [[verification-2](#verification-2)], introspection [[verification-4](#verification-4)], prompt-contract [[verification-5](#verification-5)], and coverage [[verification-6](#verification-6)] tests beside the artifacts and list them among the outputs. |
+| Root and nested initial transitions use string or object form. | Pin the same target for equivalent forms and detect changed root or nested targets, agreeing with real XState entry [[verification-4](#verification-4)]. |
 | Generated tests address sibling TypeScript artifacts or read the FSM source. | Import sibling TypeScript artifacts through NodeNext `.js` specifiers while the coverage test reads the physical `.fsm.ts` source [[verification-2](#verification-2)]. |
 | A linked TypeScript module imports its sibling FSM through the NodeNext-required `.js` specifier and exposes `composeCaptainPrompt`. | Run that composer check through an ephemeral TypeScript edge without changing the linked source and emit the direct-Captain composition checks [[verification-5](#verification-5)]. |
 | A full-link run's concrete reviewed Playbook target selects a different schema from the compiled FSM phase's pin, its target is a later release whose installed engine declares `RUNTIME_ABI` `1` with artifact schema `3`, or a bare run retains a sibling linked factory. | Reconcile the concrete target when present — through its recorded provenance or its engine's declaration — the produced FSM, and the linked factory once, and bake the same schema decision and findings into the generated conformance and prompt tests, never the compiler phase's provenance [[verification-21](#verification-21)]. |
@@ -262,6 +342,10 @@ Where synthetic artifacts contain distinct direct-Captain and delegated-role lea
 
 ### Result-metadata acceptance
 
+#### verification-52
+
+When the integration suite sends result descriptions containing parenthetical guidance through the real compiler, it shall verify producer repair before downstream execution and protected-source rejection before executor selection for nested backticked spans, while accepting plain guidance, parentheses inside a complete field annotation, subsequent top-level declarations, and backticked prose before the output clause, preserving the Source, guards, descriptions, and runtime extraction of accepted fields [[verification-51](#verification-51)] [[verification-29](#verification-29)].
+
 #### verification-14
 
 Where synthetic GEARS may contain a canonical `Results:` block after an acting blockquote, when its FSM state and the conformance check process that block, the check shall produce the applicable outcome:
@@ -282,13 +366,17 @@ Where synthetic definitions and GEARS exercise a preserved section beside unrela
 
 #### verification-26
 
-Where the maintained reference Sources `@sublang/playbook` installs are paired with their compiled GEARS packages, and one such pair is mutated, when the Source-fidelity check runs over each pair, it shall report no finding for every unmutated pair and for a plain-prose Source that authors no fragment, and shall name the matching drift for an invented item whose prompt lines the Source never authored, a dropped fragment, two fragments swapped inside one item, a relay placeholder read without its `>` marker, a result declaring a quoted kebab-case output property, and a field declared verbatim in one item and judge-authored in another [[verification-25](#verification-25)].
+Where maintained and fixture Sources are paired with their GEARS packages, when the Source-fidelity check runs over each pair, it shall accept every unmutated maintained pair, plain prose without authored fragments, authored raw-token lines, shared lines contained in larger matched fragments, and repeated identical fragments with an order-preserving attribution, while naming drift from an invented item, a dropped fragment, genuinely reversed nonoverlapping fragments including later repeated occurrences, an unquoted relay with the two-layer GEARS example for an additional standalone token, a non-identifier result property, or mixed result-field ownership [[verification-25](#verification-25)].
 
 ### Link-fidelity acceptance
 
 #### verification-28
 
-Where a linked module sits beside its FSM, when the link-fidelity check runs over each case, it shall report no finding for every installed maintained bundle whose composers honor the link contract or for a composer that names a declared peer role's identity, name the mismatch for a composer that resolves its player-facing identity from a role the artifact declares nowhere, name the import diagnostic for a module that cannot be imported, and report no finding for an absent module, an unimportable FSM, or a module exposing no composer for an actor the machine invokes [[verification-27](#verification-27)].
+Where a linked module sits beside its FSM, when the link-fidelity check runs over each case, it shall report no finding for every installed maintained bundle whose composers honor the link contract or for a composer that names a declared peer role's identity, name the mismatch for a composer that resolves its player-facing identity from a role the artifact declares nowhere, name the import diagnostic for a module that cannot be imported, reject a private helper exposed with a Boolean second argument in place of the canonical identity lookup while accepting the actual runtime composer exposed in an isolated copy, and report no finding for an absent module, an unimportable FSM, or a module exposing no composer for an actor the machine invokes [[verification-27](#verification-27)].
+
+#### verification-30
+
+When fixture GEARS enters the real producer or consumer boundary, the integration suite shall verify that standalone result syntax reports the same item-prefixed findings as conformance for malformed, duplicate, empty, misplaced, compiler-owned, nested-call, and script metadata, accepts ordinary omitted Results and roleless work, and distinguishes malformed trailing result text from prose after a section boundary [[verification-29](#verification-29)].
 
 ### Script acceptance
 
@@ -299,6 +387,10 @@ When a GEARS package and FSM contain script behavior, the conformance and covera
 | Case | Required outcome |
 | --- | --- |
 | A script item is realized by a matching `script` actor state. | Pass conformance [[verification-15](#verification-15)] and coverage [[verification-16](#verification-16)]. |
+| Script success and failure outputs route through an explicit success arm and a selected failure fallback, including guards that inspect the required exit status. | Accept the runtime-valid transitions [[verification-16](#verification-16)] and the ordered fallback [[verification-6](#verification-6)]. |
+| A script failure outcome is reachable through an arm accepting a nonzero candidate other than one. | Accept that outcome and drive its satisfying candidate through the real machine [[verification-16](#verification-16)]. |
+| A script declares more status-specific failure arms than the per-arm candidate budget. | Preserve coverage of each reachable arm by prioritizing its own status constant [[verification-16](#verification-16)]. |
+| A script arm accepts only an impossible guard/status pair or invented payload, a declared outcome has no accepting arm, or a preceding arm shadows another guarded arm. | Report the unreachable transition without satisfying it through malformed script outputs [[verification-16](#verification-16)], [[verification-6](#verification-6)]. |
 | The command drifts, a guard is renamed or reordered, `needsBossReply` is added, or the item is realized by a Captain or player state. | Report the conformance drift [[verification-15](#verification-15)]. |
 
 ### Load-integrity acceptance
@@ -311,6 +403,100 @@ Where a link phase writes a linked module, when the run completes after post-lin
 | --- | --- |
 | A relative import remains unresolved. | Exit non-zero with a diagnostic naming the module and the unresolvable specifier [[verification-18](#verification-18)]. |
 | Every relative import is already in its settled form and resolves exactly beside the module. | Complete successfully without changing those imports [[verification-18](#verification-18)]. |
+
+### Strict generated-test acceptance
+
+#### verification-31
+
+Where fixture artifacts yield empty or populated prompt contracts, introspection pins, substitution maps, and schema findings, when their real generated suites are checked with the installed TypeScript compiler in an isolated NodeNext destination using artifact-local checker support, the integration suite shall verify strict type-check success without unused symbols [[verification-2](#verification-2)], [[verification-5](#verification-5)], runtime acceptance of consistent empty evidence, and retained assertion failure for populated schema findings [[verification-21](#verification-21)].
+
+### Machine-root identity acceptance
+
+#### verification-32
+
+Where real XState fixtures exercise machine-root and ordinary state identities, when conformance and the GEARS-to-FSM boundary run, the integration suite shall verify these identity cases [[verification-1](#verification-1)]:
+
+| Fixture | Required evidence |
+| --- | --- |
+| A public identity on the machine root beside an ordinary active state's identity | The normalized snapshot exposes both identities, conformance names the prohibited root declaration, and the boundary rejects before any link call without rewriting its source or generated FSM. |
+| An empty or null own `meta.playbook` namespace on the machine root | The installed runtime rejects snapshot metadata, and conformance rejects the namespace before linking with unchanged source and FSM bytes. |
+| The same fixture with only the root's public-identity metadata removed | The snapshot exposes the ordinary state's identity, conformance accepts it, and the root's XState id, description, and unrelated metadata remain intact. |
+| Existing flat, structured, and historical state-node identities | Conformance preserves their acceptance without relabelling them or extending the root restriction to ordinary nodes. |
+
+### Strict FSM boundary acceptance
+
+#### verification-34
+
+Where real TypeScript fixtures use standalone ESM roots, relative imports, project compiler and ambient declarations, and compiler configuration, when the integration suite checks them, the suite shall verify SLC-owned compiler and Node ambient authority, ignored project compiler configuration, preserved original filenames and imported module formats, strict diagnostics for invalid types, unchanged source and dependency bytes, cancellation, and distinct checker failure [[verification-33](#verification-33)].
+
+### Continuation input acceptance
+
+#### verification-36
+
+Where real FSM input mappers use scalar, keyed, typed nested, historical-player, or direct-Captain continuation contexts, when the integration suite runs continuation verification, the suite shall verify acceptance of canonical question and reply wiring, rejection of omitted or privately nested-only wiring, preservation of unrelated typed context, and controller exemption [[verification-35](#verification-35)], with the linked composition probe reporting the same input defect [[verification-5](#verification-5)].
+
+### Fixed coverage-event acceptance
+
+#### verification-37
+
+Where a real XState fixture reads supplied event type and target id through own-property descriptors, when transition coverage runs, the integration suite shall verify that the fixed event reaches its declared interrupt branch and is accepted by bounded probing, while a guard demanding another event type remains unreachable without changing the supplied type [[verification-6](#verification-6)].
+
+### Continuation profile compatibility acceptance
+
+#### verification-38
+
+Where current installed composers and historical full-format composers process actual FSM continuation inputs, when the prompt-contract suite runs, the suite shall verify full question/reply/body preservation for fresh players and direct Captain, compact reply/body acceptance only for explicitly resumed schema-3 players, compatibility with older composers ignoring the resume argument, and rejection of missing or reordered blocks, compact fresh turns, changed bodies, and continuation framework text on ordinary turns [[verification-5](#verification-5)].
+
+### Composed child-input acceptance
+
+#### verification-40
+
+Where real XState literal-child fixtures contain static object-valued or function-composed inputs, when ordinary producer-to-consumer chains and emitted conformance suites execute the fixtures, the integration suite shall accept literal static text and domain metavariables outside explicit quoted relay notation, exact templates with unrelated context-field names, repeated values, preserved non-string context, multiline literal quoting, and empty standalone relays, while rejecting unresolved required relays in static or partially composed inputs, static deletion or invention, inconsistent repeated-token mappings, recursive substitution, JSON-encoded string relays, unquoted continuation lines, and unprovable input shapes [[verification-39](#verification-39)], retaining dynamic-call metadata checks [[verification-1](#verification-1)].
+
+### Literal prompt-relay acceptance
+
+#### verification-42
+
+Where real composers process FSM-derived string inputs, when the integration suite executes link checking, same-Coder repair, and emitted prompt tests, it shall accept installed literal and quoted composers with their supported full or compact continuation profiles, preserve typed structures, aliases and role lookup, and reject replacement expansion, recursive substitution, missing multiline quote markers, or static drift while retaining the original failed artifact bytes [[verification-41](#verification-41)].
+
+### Reached child-context acceptance
+
+#### verification-43
+
+Where a real XState child invocation requires context from a preceding actor and is not a public interrupt target, when the coverage integration suite runs, it shall accept distinct predecessor results selecting different child-success arms and authored or control error paths, while retaining findings for dead predecessors, unsatisfiable or shadowed child arms and actual input failures, without direct child-state jumps or context patches [[verification-6](#verification-6)].
+
+### Non-preemptive path acceptance
+
+#### verification-44
+
+Where real XState fixtures contain non-preemptive actor and child paths, when the coverage integration suite runs, it shall verify the bounded path matrix [[verification-6](#verification-6)]:
+
+| Fixture | Required evidence |
+| --- | --- |
+| Planner routes through branch, decision, coding and pull-request children with context assigned only by preceding transitions | Accept every declared actor result and child arm, including a discussion outcome reached only after an actual question/wait/reply revisit. |
+| Initial configuration, public event, or predecessor outcome enters nested compound or parallel parents | Accept string and object initial forms at the root and nested levels through real XState execution, including context established by initial-transition actions, retaining findings for inactive non-initial descendants and preserving the same entry-event timeout allowance. |
+| Dead decision, repeated-child dependency, or blank reply that resumes an actor | Retain an unreachable, unsupported repeated-path, or blank-reply finding. |
+| Runnable paths exceeding eight invocations or 64 replay attempts | Report the specific exhausted limit without treating the finite search as proof of semantic impossibility. |
+| Actor output seeds with accessors, non-enumerable or immutable data properties, symbol keys and a null prototype | Agree with actual XState guard execution while preserving the original seed descriptors and fresh candidate isolation. |
+| Emitted maintained DEV coverage test and a shorter bounded fixture | Execute the emitted test with the derived timeout capped at 300,000 milliseconds, and preserve the shorter fixture's smaller derived bound. |
+
+### Child-call quiescence
+
+#### verification-46
+
+Where real XState fixtures include child invocations with leaf, ancestor, root and sibling busy tags, when the integration suite runs, it shall verify that the child-call findings agree with actual tag inheritance and shared-runtime quiescence under a pending child, preserving valid suspended children and independently busy siblings [[verification-45](#verification-45)].
+
+### GEARS actor contract acceptance
+
+#### verification-48
+
+Where GEARS fixtures include malformed nested-call sequencing, canonical actor clauses, quoted text, and result prose, when the integration suite runs, it shall verify that the actor-contract check catches the actual malformed DEV-5 shape, all four literal and dynamic near-miss words, produced-GEARS findings before downstream work, supplied-GEARS findings before consumer execution, and same-Coder repair to the canonical clause without changing the Source, while accepting canonical nested calls, ordinary direct-Captain clauses, blockquoted literals, and control-result prose [[verification-47](#verification-47)], and that GEARS↔FSM conformance includes those actor-clause findings [[verification-1](#verification-1)].
+
+### Coverage lifetime acceptance
+
+#### verification-50
+
+Where real XState fixtures expose actor lifetimes and bounded work, when the coverage integration suite supplies cancellation or a shortened deadline, the suite shall verify no actor work for an already canceled call, cleanup after active cancellation and finite synchronous deadline exhaustion, isolation between concurrent canceled and successful checks, clean subsequent checks, and unchanged findings without interruption [[verification-49](#verification-49)].
 
 ## References
 

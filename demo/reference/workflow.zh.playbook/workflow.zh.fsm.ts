@@ -65,8 +65,7 @@ export interface SerializedError {
 }
 
 export type BossQuestionAsker =
-  | { kind: 'captain' }
-  | { kind: 'role'; roleId: RoleId };
+  { kind: 'captain' } | { kind: 'role'; roleId: RoleId };
 
 export interface PendingBossQuestion {
   questionId: ResumableStateId;
@@ -116,8 +115,7 @@ export interface ScriptInput {
 }
 
 export type ScriptOutput =
-  | { guard: 'ok'; exitStatus: number }
-  | { guard: 'failed'; exitStatus: number };
+  { guard: 'ok'; exitStatus: number } | { guard: 'failed'; exitStatus: number };
 
 /* -- 机器输入、上下文与事件 ----------------------------------------------- */
 

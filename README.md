@@ -83,7 +83,7 @@ it itself, and a global SDK is invisible to a project's nested
 ## Quick start
 
 Write a prose workflow as a `.md` or `.txt` file —
-[`demo/workflow.txt`](demo/workflow.txt) is a complete one-paragraph
+[`demo/workflow.txt`](demo/workflow.txt) is a one-paragraph
 example — and compile it from any directory:
 
 ```bash
@@ -99,15 +99,27 @@ tests — and `my-workflow.ts` is the runnable entry. Run it:
 playbook run ./my-workflow.ts "<your task>"
 ```
 
-Compilation drives your configured coding agent, so **expect it to take
-a while**: measured compiles of a five-line workflow have run from tens
-of minutes to more than two hours, with the first intermediate typically
-landing within about five minutes. Meanwhile `slc` reports each phase,
+Compilation runs your configured coding agent at each phase. Elapsed time
+depends on the workflow, model, effort and required corrections; the
+[performance report](docs/compilation-performance.md) records measured
+settings, failures and validation separately. The [reproduction guide](docs/compilation-reproduction.md)
+recreates the locally measured 3:17 minimal compilation with explicit compiler,
+definition and model versions. `slc` reports each phase,
 each artifact with its elapsed time, and a heartbeat at least every 30
-seconds on stderr; an agent call that goes silent for `stallTimeout`
-seconds fails that phase instead of hanging. Success prints the artifact
-paths and exits 0; a failure prints diagnostics naming the failing phase
-and exits non-zero.
+seconds on stderr. An agent call that goes silent for `stallTimeout`
+seconds fails that phase. Success prints the artifact paths and exits 0;
+a failure prints diagnostics naming the failing phase and exits non-zero.
+
+If a phase discovers missing, contradictory, or materially ambiguous behavior,
+`slc` stops with actionable questions and exits **2**. The report names the
+original source to edit, the phase, and the artifact being compiled. Edit that
+source and run the same command again. Questions can arise during normalization,
+compilation, or linking; `slc` never reads interactive answers or saves a pending
+session. Any draft from the stopped phase stays unaccepted and no successful
+build history is published. Standard error also includes one
+`SLC_CLARIFICATION: {…}` line containing schema
+`sublang.slc.clarification.v1`, `phase`, `target`, `sources`, and `questions` for
+tools consuming the diagnostics.
 
 Intermediates are first-class: edit one, re-run a single phase
 (`slc playbook.gears2fsm …`), and it lands in the same place.
@@ -152,7 +164,7 @@ reviewerAgent: codex # optional; enables reviewed compilation
 reviewerModel: gpt-5.3-codex # optional reviewer model
 reviewerEffort: xhigh # optional reviewer reasoning effort
 reviewerFastMode: true # optional reviewer fast mode
-stallTimeout: 600 # seconds of agent silence before a stalled call fails
+stallTimeout: 2400 # seconds of agent silence before a stalled call fails
 pipelinePath: # search roots for <pipeline> references; defaults to the cwd
   - ./pipelines
 ```
@@ -163,17 +175,28 @@ refuses the run before any agent call. Discovery order, `--config`, and
 validation rules live in the [CLI spec](specs/packages/cli.md);
 `slc --help` prints the summary.
 
+Mechanical checks run by default at GEARS-producing phases, the GEARS-to-FSM
+boundary, and Playbook linking. A failing check returns its findings to the
+same Coder for at most two repairs; a clean unreviewed transformation uses
+one agent call. Malformed supplied GEARS stops before its consumer runs,
+and an invalid FSM stops before linking. Unresolved findings
+fail the phase, and source questions still stop for clarification
+([DR-033](specs/decisions/033-early-conformance-and-mechanical-repair.md),
+[DR-035](specs/decisions/035-gears-contract-at-producer.md)).
+
 ### Reviewed compilation (two agents)
 
 Set `reviewerAgent` to compile with two independent agents. Your `agent`
-selection is the Coder that writes each artifact; the Reviewer then
-inspects that work read-only and reports only material correctness or
+selection is the Coder that writes each artifact; once mechanical checks
+pass, the Reviewer inspects that work read-only and reports only material correctness or
 spec defects, and the Coder answers every finding with evidence and a
-minimal fix. Up to three review rounds — if the third still reports
+minimal fix. Mechanical and independent review share three rounds — if the
+third still reports
 findings, the phase fails closed and names them rather than shipping a
 questionable artifact.
 
-It costs at least one extra agent call per transformation that runs.
+An independent review adds an agent call for each mechanically valid
+transformation it inspects.
 Reuse performs no transformation and so makes no calls; Update,
 Ordinary, and `--rebuild` use the loop automatically
 ([DR-022](specs/decisions/022-two-agent-reviewed-compilation.md)).
@@ -226,6 +249,12 @@ npm run build
 npm test
 npm run lint
 ```
+
+The repository build explicitly uses the native TypeScript 7 compiler.
+SLC retains TypeScript 6 as a runtime dependency for its programmatic AST,
+emission, and strict artifact checks; TypeScript 7 has no stable compiler
+API yet. The explicit build path avoids relying on which `tsc` executable
+npm links.
 
 A checkout's own [`slc.config.yaml`](slc.config.yaml) routes the
 `playbook` pipeline to the bundled copy under `pipelines/`, so repo

@@ -25,6 +25,7 @@
 import ts from 'typescript';
 
 import type { ExecutorResult } from './execution.js';
+import { clarificationContract } from './clarification.js';
 
 /**
  * What a compiled phase is asked to produce: a compile target or a linked
@@ -43,10 +44,7 @@ export type PhaseInput =
     };
 
 /** A compiled phase's terminal outcome, with diagnostics drained for every status (DR-005). */
-export interface PhaseResult {
-  status: 'ok' | 'blocked' | 'error';
-  diagnostics: string[];
-}
+export type PhaseResult = ExecutorResult;
 
 /**
  * Maps a compiled phase's {@link PhaseResult} onto the DR-003 execution-boundary
@@ -60,7 +58,7 @@ export interface PhaseResult {
  * every status.
  */
 export function mapPhaseResult(result: PhaseResult): ExecutorResult {
-  return { status: result.status, diagnostics: result.diagnostics };
+  return { ...result };
 }
 
 const PLAYBOOK_FACTORY = 'createPlaybookRuntime';
@@ -419,6 +417,8 @@ export function composeWorkspaceContract(input: PhaseInput): string {
     '- not commit or otherwise touch version control;',
     '- produce a complete artifact, not a sketch or placeholder;',
     '- verify the produced artifact before finishing, then reply with a concise summary of what you produced and any ambiguity you resolved.',
+    '',
+    clarificationContract(),
   ].join('\n');
 }
 

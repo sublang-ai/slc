@@ -50,6 +50,7 @@ import { messageOf } from './errors.js';
 import type { LegacyPlaybookPorts } from './playbook-contract.js';
 
 import {
+  definitionReferenceContext,
   updateContextLines,
   type ExecuteRequest,
   type ExecutorResult,
@@ -57,6 +58,7 @@ import {
   type PhaseExecutor,
 } from './execution.js';
 import type { AgentClient } from './interpreter.js';
+import { clarificationContract, decodeClarification } from './clarification.js';
 import {
   composeWorkspaceContract,
   mapPhaseResult,
@@ -283,6 +285,12 @@ export function createCompiledExecutor(opts: {
       // authored terminal that produced no output still carries the reason
       // that call gave — exactly as a failed review does (phase-execution-24).
       let latestPerformingText: string | undefined;
+      let sourceQuestion: ExecutorResult | undefined;
+      const refuseAfterQuestion = (): void => {
+        if (sourceQuestion !== undefined) {
+          throw new SourceClarificationStop();
+        }
+      };
       const recordPerforming = (result: {
         status: string;
         finalText?: string;
@@ -291,6 +299,17 @@ export function createCompiledExecutor(opts: {
         const text = result.finalText;
         if (text !== undefined && text.trim().length > 0) {
           latestPerformingText = text;
+          const decoded = decodeClarification(text);
+          if (decoded.kind === 'invalid') {
+            sourceQuestion = { status: 'error', diagnostics: [decoded.reason] };
+          } else if (decoded.kind === 'clarification') {
+            sourceQuestion = {
+              status: 'clarification',
+              diagnostics: [],
+              questions: decoded.questions,
+            };
+          }
+          refuseAfterQuestion();
         }
       };
       const input = phaseInput(request, opts.runRoot);
@@ -325,6 +344,17 @@ export function createCompiledExecutor(opts: {
         // transported prompt carries the request's absolute paths and
         // write-scope rules (phase-execution-34).
         captainWorkspace: composeWorkspaceContract(input),
+        definitionContext: [
+          definitionReferenceContext(
+            resolve(opts.runRoot, request.definitionPath),
+          ),
+          request.kind === 'link' ? request.outputContract : undefined,
+        ]
+          .filter((part) => part !== undefined)
+          .join('\n\n'),
+        playerClarification: clarificationContract(),
+        beforeAgentCall: refuseAfterQuestion,
+        onPerformingResult: recordPerforming,
         // The compiled artifact knows nothing about incremental updates, so
         // the host appends the update context to performing prompts
         // (DR-021, incremental-compilation-16).
@@ -348,31 +378,13 @@ export function createCompiledExecutor(opts: {
       // Hand the runtime only Playbook's ports — never the host-only
       // drainDiagnostics, nor a file capability (DR-005, phase-execution-23).
       const ports: CompatiblePlaybookPorts = {
-        callPlayer: async (playerId, prompt, signal, options) => {
-          const result = await adapter.callPlayer(
-            playerId,
-            prompt,
-            signal,
-            options,
-          );
-          recordPerforming(result);
-          return result;
-        },
-        callCaptain: async (prompt, signal, options) => {
-          const result = await adapter.callCaptain(prompt, signal, options);
-          // Only a transformation-performing call does the phase's work; a
-          // routing-only Captain carries an explicitly empty allowlist and
-          // decides rather than performs (phase-execution-31).
-          if (
-            Object.getOwnPropertyDescriptor(options, 'allowedTools') ===
-            undefined
-          ) {
-            recordPerforming(result);
-          }
-          return result;
-        },
+        callPlayer: adapter.callPlayer,
+        callCaptain: adapter.callCaptain,
         callJudge: adapter.callJudge,
-        callPlaybook: adapter.callPlaybook,
+        callPlaybook: (request, signal) => {
+          refuseAfterQuestion();
+          return adapter.callPlaybook(request, signal);
+        },
         emitStatus: adapter.emitStatus,
         emitTelemetry: async (event) => {
           const state = fsmTransitionTarget(event);
@@ -396,6 +408,7 @@ export function createCompiledExecutor(opts: {
         runtimeContract,
         definition,
         () => latestPerformingText,
+        () => sourceQuestion,
       );
       const result = mapVoidContractFailedState(
         driven,
@@ -404,7 +417,7 @@ export function createCompiledExecutor(opts: {
       );
       const mapped = mapPhaseResult(result);
       return {
-        status: mapped.status,
+        ...mapped,
         diagnostics: [...mapped.diagnostics, ...adapter.drainDiagnostics()],
       };
     },
@@ -434,7 +447,12 @@ function mapVoidContractFailedState(
   lastFsmState: string | undefined,
   voidContract: boolean,
 ): PhaseResult {
-  if (!voidContract || result.status === 'error' || lastFsmState !== 'failed') {
+  if (
+    !voidContract ||
+    result.status === 'error' ||
+    result.status === 'clarification' ||
+    lastFsmState !== 'failed'
+  ) {
     return result;
   }
   return {
@@ -458,6 +476,7 @@ async function drivePhase(
   runtimeContract: RuntimeContractProfile,
   definition: string | undefined,
   latestPerformingText: () => string | undefined,
+  sourceQuestion: () => ExecutorResult | undefined,
 ): Promise<PhaseResult> {
   let runtime: CompatiblePlaybookRuntime;
   try {
@@ -482,6 +501,15 @@ async function drivePhase(
     runResult = await callRuntimeTurn(runtime, seedPhaseTurn(input), signal);
   } catch (error) {
     const disposal = await disposeRuntime(runtime);
+    const question = sourceQuestion();
+    if (
+      error instanceof SourceClarificationStop &&
+      question !== undefined &&
+      disposal === undefined &&
+      !signal.aborted
+    ) {
+      return question;
+    }
     return {
       status: 'error',
       diagnostics: [
@@ -508,6 +536,8 @@ async function drivePhase(
       diagnostics: ['compiled run aborted'],
     };
   }
+  const question = sourceQuestion();
+  if (question !== undefined) return question;
   const after = await outputState(outputPath);
   const produced = outputWasProduced(before, after);
   return mapRuntimeOutcome(
@@ -516,6 +546,13 @@ async function drivePhase(
     runtimeContract,
     latestPerformingText(),
   );
+}
+
+/** Identifies this host's deliberate stop without hiding unrelated runtime errors. */
+class SourceClarificationStop extends Error {
+  constructor() {
+    super('compiled phase stopped for source clarification');
+  }
 }
 
 async function disposeRuntime(

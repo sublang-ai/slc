@@ -11,6 +11,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -30,6 +31,10 @@ import {
 } from '../src/pins.js';
 import { runSlc, type CompiledSelection, type SlcDeps } from '../src/runner.js';
 
+import { pipelineOutput } from './pipeline-output-fixture.js';
+
+const repository = dirname(dirname(fileURLToPath(import.meta.url)));
+
 const formats = (sf: string, se: string, tf: string, te: string): string =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${sf} | ${se} |\n| target | ${tf} | ${te} |\n`;
 
@@ -46,7 +51,7 @@ function spyExecutor(
       calls.push(request);
       const target =
         request.kind === 'compile' ? request.target : request.linked;
-      await writeFile(target, `${label} output\n`);
+      await writeFile(target, pipelineOutput(target, `${label} output`));
       return { status: 'ok', diagnostics: [`${label} ran`] };
     },
   };
@@ -66,6 +71,11 @@ describe('compiled selection and pin-input safety (phase-execution-28, phase-exe
     const srcDir = join(root, 'work');
     await mkdir(pipelineDir);
     await mkdir(srcDir);
+    await symlink(
+      join(repository, 'node_modules'),
+      join(srcDir, 'node_modules'),
+      'dir',
+    );
     await writeFile(
       join(pipelineDir, 'text2gears.md'),
       formats('text', '.md', 'gears', '.md'),
@@ -360,7 +370,7 @@ describe('compiled selection and pin-input safety (phase-execution-28, phase-exe
         await symlink(join(pipelineDir, 'missing-bundle'), bundleDir);
       }
       const gearsSource = join(dirname(source), 'onboarding.gears.md');
-      await writeFile(gearsSource, 'gears input\n');
+      await writeFile(gearsSource, pipelineOutput(gearsSource));
 
       const result = await runSlc(['playbook.gears2fsm', gearsSource], deps());
 

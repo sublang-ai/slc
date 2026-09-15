@@ -18,14 +18,22 @@ import { promisify } from 'node:util';
 
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { createActor, createMachine } from 'xstate';
 
-import { defaultComposePlayerPrompt } from '../node_modules/@sublang/playbook/src/xstate-playbook-runtime.js';
+import { normalizePlaybookSnapshot } from '@sublang/playbook/xstate-runtime';
+import {
+  defaultComposeCaptainPrompt,
+  defaultComposePlayerPrompt,
+} from '../node_modules/@sublang/playbook/src/xstate-playbook-runtime.js';
+import { runSlc } from '../src/runner.js';
+import { emitVerifierSupport } from '../src/verify-support.js';
 
 import {
   CONTROLLER_ACTION_GUARDS,
   CONTINUATION_PREAMBLE,
   artifactSchemaForPlaybookProvenance,
   capturePromptContract,
+  checkFsmContinuationInputs,
   checkGearsFsmConformance,
   checkPromptComposition,
   deriveSubstitutions,
@@ -670,11 +678,9 @@ const schema3PlayerInput =
   ) =>
   ({ context }: { context: Record<string, unknown> }) => {
     const keyedQuestions = context.pendingBossQuestions as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     const keyedReplies = context.bossReplies as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     return {
       stateId,
       role,
@@ -1402,6 +1408,112 @@ describe('findMachineConfig', () => {
 });
 
 describe('checkGearsFsmConformance', () => {
+  it.each([{}, null, { stateId: 'minimal' }])(
+    'rejects the machine-root playbook namespace %j before linking (verification-32)',
+    async (rootPlaybook) => {
+      const config = {
+        id: 'minimal',
+        description: 'Wait for work.',
+        meta: {
+          documentation: { title: 'Minimal workflow' },
+          playbook: rootPlaybook,
+        },
+        initial: 'ready',
+        states: {
+          ready: {
+            id: 'ready',
+            meta: { playbook: { stateId: 'ready' } },
+            tags: ['playbook.parked'],
+          },
+        },
+      };
+      const snapshot = createActor(createMachine(config)).getSnapshot();
+      if (rootPlaybook !== null && 'stateId' in rootPlaybook) {
+        expect(normalizePlaybookSnapshot(snapshot).activeStateIds).toEqual([
+          'minimal',
+          'ready',
+        ]);
+        expect(normalizePlaybookSnapshot(snapshot).stateId).toBeUndefined();
+      } else {
+        expect(() => normalizePlaybookSnapshot(snapshot)).toThrow(
+          /minimal\.meta\.playbook/,
+        );
+      }
+      const finding =
+        'FSM machine root declares meta.playbook; public playbook metadata belongs only to state nodes under states';
+      expect(checkGearsFsmConformance('# Wait\n', config)).toEqual([finding]);
+      const corrected = {
+        ...config,
+        meta: { documentation: config.meta.documentation },
+      };
+      const correctedMachine = createMachine(corrected);
+      expect(
+        normalizePlaybookSnapshot(createActor(correctedMachine).getSnapshot()),
+      ).toMatchObject({ activeStateIds: ['ready'], stateId: 'ready' });
+      expect(correctedMachine.config).toMatchObject({
+        id: config.id,
+        description: config.description,
+        meta: { documentation: config.meta.documentation },
+        states: config.states,
+      });
+      expect(checkGearsFsmConformance('# Wait\n', corrected)).toEqual([]);
+
+      const root = await mkdtemp(join(tmpdir(), 'slc-root-identity-'));
+      try {
+        const pipeline = join(root, 'pipeline');
+        await mkdir(pipeline);
+        await symlink(
+          join(repoRoot, 'node_modules'),
+          join(root, 'node_modules'),
+        );
+        const formats = (source: string, target: string, extension: string) =>
+          `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${source} | ${extension} |\n| target | ${target} | .ts |\n`;
+        await writeFile(
+          join(pipeline, 'gears2fsm.md'),
+          formats('gears', 'fsm', '.md'),
+        );
+        await writeFile(
+          join(pipeline, 'link.md'),
+          formats('fsm', 'playbook', '.ts'),
+        );
+        const source = join(root, 'case.gears.md');
+        const linkTarget = join(root, 'engine.ts');
+        await writeFile(source, '# Wait\n');
+        await writeFile(linkTarget, 'export const engine = true;\n');
+        const generated = `import { createMachine } from 'xstate';\nexport const machine = createMachine(${JSON.stringify(config)});\n`;
+        let compileCalls = 0;
+        let linkCalls = 0;
+        let artifact = '';
+        const result = await runSlc(['flow', source, '--link', linkTarget], {
+          cwd: root,
+          resolver: () => [pipeline],
+          executor: {
+            async run(request) {
+              if (request.kind === 'link') {
+                linkCalls++;
+                throw new Error('root identity must fail before linking');
+              }
+              compileCalls++;
+              artifact = request.target;
+              await writeFile(artifact, generated);
+              return { status: 'ok' };
+            },
+          },
+        });
+        expect(result.ok).toBe(false);
+        expect(result.diagnostics.join('\n')).toContain(finding);
+        expect({ compileCalls, linkCalls }).toEqual({
+          compileCalls: 1,
+          linkCalls: 0,
+        });
+        expect(await readFile(source, 'utf8')).toBe('# Wait\n');
+        expect(await readFile(artifact, 'utf8')).toBe(generated);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('reports no findings when the FSM matches the GEARS source', () => {
     expect(checkGearsFsmConformance(gears, conformantConfig())).toEqual([]);
   });
@@ -1995,7 +2107,7 @@ describe('checkGearsFsmConformance', () => {
     );
     expect(findings).toMatch(/FSM playbook "security-review"/);
     expect(findings).toMatch(
-      /FSM playbook text is not the GEARS prompt verbatim/,
+      /FSM playbook text does not preserve the complete GEARS child-input template/,
     );
   });
 
@@ -2231,7 +2343,7 @@ const referenceFsm = async (): Promise<unknown> =>
 // model DR-009's verification contract and exercise the generator against the
 // reference artifacts. The installed @sublang/playbook ships them.
 describe('conformance against the reference artifacts', () => {
-  it('finds nothing on the reference code.gears.md + code.fsm', async () => {
+  it('preserves composed CODE text while retaining its missing schema declaration', async () => {
     const referenceGears = readFileSync(
       join(referenceDir, 'code.gears.md'),
       'utf8',
@@ -2256,9 +2368,9 @@ describe('conformance against the reference artifacts', () => {
     // Playbook 10.0.0's shipped reference does not satisfy its own gears2fsm
     // definition, which requires that "the artifact shall export
     // `concurrentRoleSets` as a deeply readonly array"; `code.fsm.ts` declares
-    // role `coder` yet exports no such array, and the two nested `review` calls
-    // do not carry their GEARS prompt verbatim. The conformance checker is
-    // correct to report all three, and every artifact this repository compiles
+    // role `coder` yet exports no such array. Its nested review inputs are
+    // correctly composed at invocation time and pass the observed-template
+    // probe. The missing declaration remains a finding; every artifact here
     // exports `concurrentRoleSets` and passes cleanly. Pinning the exact
     // findings keeps the checker honest about upstream while making any change
     // in either the checker or a later Playbook release visible here.
@@ -2267,11 +2379,7 @@ describe('conformance against the reference artifacts', () => {
         artifactSchema: 3,
         concurrentRoleSets: findConcurrentRoleSets(fsm),
       }),
-    ).toEqual([
-      'schema-3 FSM exports no valid concurrentRoleSets array',
-      'CODE-2: FSM playbook text is not the GEARS prompt verbatim',
-      'CODE-4: FSM playbook text is not the GEARS prompt verbatim',
-    ]);
+    ).toEqual(['schema-3 FSM exports no valid concurrentRoleSets array']);
   });
 });
 
@@ -2336,6 +2444,39 @@ const introspectableConfig = (): MachineConfigLike => ({
 });
 
 describe('pinIntrospection (verification-4)', () => {
+  it('pins both initial-transition forms and detects root and nested target drift', () => {
+    const config = (
+      objectInitial: boolean,
+      nestedTarget = 'first',
+      rootTarget = 'group',
+    ) => ({
+      initial: objectInitial ? { target: rootTarget } : rootTarget,
+      states: {
+        group: {
+          initial: objectInitial ? { target: nestedTarget } : nestedTarget,
+          states: { first: {}, second: {} },
+        },
+        done: { type: 'final' as const },
+      },
+    });
+    const machine = createMachine(config(true));
+    const actor = createActor(machine).start();
+    try {
+      expect(actor.getSnapshot().value).toEqual({ group: 'first' });
+      const pins = pinIntrospection(machine.config);
+      expect(pins.initial).toBe('group');
+      expect(
+        pins.structured?.states.find((state) => state.path === 'group')
+          ?.initial,
+      ).toBe('first');
+      expect(pins).toEqual(pinIntrospection(config(false)));
+      expect(pins).not.toEqual(pinIntrospection(config(true, 'second')));
+      expect(pins).not.toEqual(pinIntrospection(config(true, 'first', 'done')));
+    } finally {
+      actor.stop();
+    }
+  });
+
   it('pins captain bindings, transition arms, event surfaces, and the jumpable set', () => {
     const pins = pinIntrospection(introspectableConfig());
     expect(pins.initial).toBe('ready');
@@ -2616,7 +2757,7 @@ const goodCompose = (raw: unknown): string => {
   }
   let body = input.prompt;
   if (input.audience !== undefined) {
-    body = body.replaceAll('<audience>', input.audience);
+    body = body.replaceAll('<audience>', () => input.audience!);
   }
   blocks.push(body);
   return blocks.join('\n\n');
@@ -2640,13 +2781,9 @@ const composeSchema3Prompt = (
       `Boss reply:\n${input.bossReply}`,
     );
   }
-  let body = input.prompt;
-  if (input.topic !== undefined) {
-    body = body.replaceAll('<topic>', input.topic);
-  }
-  if (body.includes('<coder-llm>')) {
-    body = body.replaceAll('<coder-llm>', promptIdentity('coder'));
-  }
+  const body = input.prompt.replace(/<topic>|<coder-llm>/g, (token) =>
+    token === '<topic>' ? (input.topic ?? token) : promptIdentity('coder'),
+  );
   blocks.push(body);
   return blocks.join('\n\n');
 };
@@ -2841,9 +2978,11 @@ describe('checkPromptComposition (verification-5)', () => {
       promptIdentity: (roleId: string) => string,
     ): string => {
       const input = raw as { prompt: string; topic?: string };
-      return input.prompt
-        .replaceAll('<topic>', input.topic ?? '<topic>')
-        .replaceAll('<coder-llm>', promptIdentity('auditor'));
+      return input.prompt.replace(/<topic>|<coder-llm>/g, (token) =>
+        token === '<topic>'
+          ? (input.topic ?? token)
+          : promptIdentity('auditor'),
+      );
     };
     expect(
       checkPromptComposition({
@@ -2867,9 +3006,11 @@ describe('checkPromptComposition (verification-5)', () => {
         pendingBossQuestion?: { question: string };
         bossReply?: string;
       };
-      const body = input.prompt
-        .replaceAll('<topic>', input.topic ?? '<topic>')
-        .replaceAll('<coder-llm>', promptIdentity('reviewer'));
+      const body = input.prompt.replace(/<topic>|<coder-llm>/g, (token) =>
+        token === '<topic>'
+          ? (input.topic ?? token)
+          : promptIdentity('reviewer'),
+      );
       return input.pendingBossQuestion && input.bossReply
         ? [
             CONTINUATION_PREAMBLE,
@@ -2944,8 +3085,11 @@ describe('checkPromptComposition (verification-5)', () => {
             ),
         )
         .join('\n')
-        .replaceAll('<discussion-context>', input.discussionContext)
-        .replaceAll('<topic>', input.topic ?? '<topic>');
+        .replace(/<discussion-context>|<topic>/g, (token) =>
+          token === '<topic>'
+            ? (input.topic ?? token)
+            : input.discussionContext.replace(/\n/g, '\n> '),
+        );
       return input.pendingBossQuestion && input.bossReply
         ? [
             CONTINUATION_PREAMBLE,
@@ -3002,7 +3146,10 @@ describe('checkPromptComposition (verification-5)', () => {
         pendingBossQuestion?: { question: string };
         bossReply?: string;
       };
-      const body = input.prompt.replaceAll('<topic>', input.topic ?? '<topic>');
+      const body = input.prompt.replaceAll(
+        '<topic>',
+        () => input.topic ?? '<topic>',
+      );
       return input.pendingBossQuestion && input.bossReply
         ? [
             CONTINUATION_PREAMBLE,
@@ -3341,6 +3488,290 @@ describe('checkPromptComposition (verification-5)', () => {
     ).toMatch(/requires artifactSchema 1 or 3/);
   });
 
+  const currentPreamble = 'Continue the same task using Boss’s reply below.';
+  const currentQuestion = 'Your previous question:';
+  const currentPlayerCompose = (
+    input: unknown,
+    _identity: (roleId: string) => string,
+    resuming?: boolean,
+  ): string =>
+    defaultComposePlayerPrompt(
+      input as Parameters<typeof defaultComposePlayerPrompt>[0],
+      {},
+      resuming,
+    );
+
+  it('checks the installed player composer in absent, explicit fresh, and resumed modes', () => {
+    const calls: { arity: number; resuming: unknown; text: string }[] = [];
+    const compose = (
+      ...args: Parameters<typeof currentPlayerCompose>
+    ): string => {
+      const text = currentPlayerCompose(...args);
+      if ((args[0] as ComposerInput).pendingBossQuestion !== undefined) {
+        calls.push({ arity: args.length, resuming: args[2], text });
+      }
+      return text;
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }),
+    ).toEqual([]);
+    for (const arity of [2, 3])
+      expect(calls.some((call) => call.arity === arity)).toBe(true);
+    expect(new Set(calls.map((call) => call.resuming))).toEqual(
+      new Set([undefined, false, true]),
+    );
+    for (const call of calls) {
+      expect(call.text.startsWith(`${currentPreamble}\n\n`)).toBe(true);
+      expect(call.text.includes(`${currentQuestion}\n«question»`)).toBe(
+        call.resuming !== true,
+      );
+      expect(call.text).toContain('Boss reply:\n«bossReply»');
+    }
+  });
+
+  it('accepts legacy full composers that ignore the optional player resume flag', () => {
+    const modes: (boolean | undefined)[] = [];
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose: (input, identity, resuming) => {
+          if ((input as ComposerInput).pendingBossQuestion)
+            modes.push(resuming);
+          return composeSchema3Prompt(input, identity);
+        },
+        actor: 'player',
+      }),
+    ).toEqual([]);
+    expect(new Set(modes)).toEqual(new Set([undefined, false, true]));
+    expect(
+      checkPromptComposition({
+        config: contractConfig(),
+        compose: goodCompose,
+        artifactSchema: 1,
+      }),
+    ).toEqual([]);
+    expect(
+      checkPromptComposition({
+        config: contractConfig(),
+        compose: currentPlayerCompose,
+        artifactSchema: 1,
+      }).join('\n'),
+    ).toMatch(/exact preamble/);
+  });
+
+  it('keeps the installed Captain composer full and invokes it with only the input', () => {
+    const calls: { arity: number; text: string }[] = [];
+    const config: MachineConfigLike = {
+      states: {
+        route: directCaptainContract('ROUTE-1', ['Route this intent.']),
+      },
+    };
+    const compose = (...args: unknown[]): string => {
+      const input = args[0] as Parameters<
+        typeof defaultComposeCaptainPrompt
+      >[0];
+      const text = defaultComposeCaptainPrompt(input);
+      if (input.pendingBossQuestion) calls.push({ arity: args.length, text });
+      return text;
+    };
+    expect(
+      checkPromptComposition({
+        config,
+        compose,
+        actor: 'captain',
+        artifactSchema: 3,
+      }),
+    ).toEqual([]);
+    expect(calls).toEqual([
+      {
+        arity: 1,
+        text: `${currentPreamble}\n\n${currentQuestion}\n«question»\n\nBoss reply:\n«bossReply»\n\nRoute this intent.`,
+      },
+    ]);
+    expect(
+      checkPromptComposition({
+        config,
+        compose: (input, identity) =>
+          currentPlayerCompose(input, identity, true),
+        actor: 'captain',
+        artifactSchema: 3,
+      }).join('\n'),
+    ).toMatch(/lacks the "Your previous question:" block/);
+  });
+
+  it.each([undefined, false] as const)(
+    'rejects a player wrapper that sends a compact prompt in fresh mode %s',
+    (badMode) => {
+      const compose = (
+        input: unknown,
+        identity: (role: string) => string,
+        resuming?: boolean,
+      ): string =>
+        currentPlayerCompose(
+          input,
+          identity,
+          resuming === badMode ? true : resuming,
+        );
+      const findings = checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }).join('\n');
+      expect(findings).toMatch(/lacks the "Your previous question:" block/);
+      expect(findings).toMatch(/exact ordered Boss question\/reply blocks/);
+    },
+  );
+
+  it.each([
+    [
+      'question text',
+      (text: string) => text.replace('«question»', 'a paraphrased question'),
+    ],
+    [
+      'reply text',
+      (text: string) => text.replace('«bossReply»', 'a paraphrased reply'),
+    ],
+    [
+      'question label',
+      (text: string) => text.replace(currentQuestion, 'Boss question:'),
+    ],
+    [
+      'block order',
+      (text: string) =>
+        text.replace(
+          `${currentQuestion}\n«question»\n\nBoss reply:\n«bossReply»`,
+          `Boss reply:\n«bossReply»\n\n${currentQuestion}\n«question»`,
+        ),
+    ],
+    [
+      'block adjacency',
+      (text: string) =>
+        text.replace(
+          `${currentQuestion}\n`,
+          `${currentQuestion}\nextra line\n`,
+        ),
+    ],
+    [
+      'domain body',
+      (text: string) =>
+        text.replace('> Preserve this quoted context.', 'Altered task.'),
+    ],
+  ] as const)(
+    'rejects current fresh continuation drift in %s',
+    (_label, mutate) => {
+      const compose = (
+        input: unknown,
+        identity: (role: string) => string,
+        resuming?: boolean,
+      ): string => {
+        const text = currentPlayerCompose(input, identity, resuming);
+        // Mutate only the continuation, retaining the ordinary substitution probe.
+        return (input as ComposerInput).pendingBossQuestion &&
+          resuming === false
+          ? mutate(text)
+          : text;
+      };
+      expect(
+        checkPromptComposition({
+          config: schema3Config(),
+          compose,
+          actor: 'player',
+        }),
+      ).not.toEqual([]);
+    },
+  );
+
+  it('rejects resumed reply drift without requiring the intentionally omitted question', () => {
+    const compose = (
+      input: unknown,
+      identity: (role: string) => string,
+      resuming?: boolean,
+    ): string => {
+      const text = currentPlayerCompose(input, identity, resuming);
+      return resuming === true
+        ? text.replace('«bossReply»', 'wrong reply')
+        : text;
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }).join('\n'),
+    ).toMatch(/Boss reply:/);
+  });
+
+  it('rejects a resumed wrapper that moves the question after the reply', () => {
+    const compose = (
+      input: unknown,
+      identity: (role: string) => string,
+      resuming?: boolean,
+    ): string => {
+      const text = currentPlayerCompose(input, identity, resuming);
+      return resuming === true && (input as ComposerInput).pendingBossQuestion
+        ? text.replace(
+            'Boss reply:\n«bossReply»\n\n',
+            `Boss reply:\n«bossReply»\n\n${currentQuestion}\n«question»\n\n`,
+          )
+        : text;
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }).join('\n'),
+    ).toMatch(/compact continuation adds the Boss question/);
+  });
+
+  it('rejects a wrapper that invents continuation blocks only on resumed ordinary turns', () => {
+    const compose = (
+      input: unknown,
+      identity: (role: string) => string,
+      resuming?: boolean,
+    ): string => {
+      const text = currentPlayerCompose(input, identity, resuming);
+      return resuming === true && !(input as ComposerInput).pendingBossQuestion
+        ? `${currentPreamble}\n\n${text}`
+        : text;
+    };
+    expect(
+      checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      }).join('\n'),
+    ).toMatch(/continuation blocks appear on an ordinary turn/);
+  });
+
+  it.each([currentPreamble, currentQuestion])(
+    'rejects newly added current continuation marker %s on ordinary turns',
+    (marker) => {
+      const compose = (
+        input: unknown,
+        identity: (role: string) => string,
+        resuming?: boolean,
+      ): string =>
+        `${marker}\n\n${currentPlayerCompose(input, identity, resuming)}`;
+      const findings = checkPromptComposition({
+        config: schema3Config(),
+        compose,
+        actor: 'player',
+      });
+      expect(
+        findings.filter(
+          (finding) =>
+            finding ===
+            'coderWork: continuation blocks appear on an ordinary turn',
+        ),
+      ).toHaveLength(1);
+    },
+  );
+
   it('flags continuation blocks on an ordinary turn', () => {
     const compose = (raw: unknown): string =>
       `${CONTINUATION_PREAMBLE}\n\n${goodCompose(raw)}`;
@@ -3575,7 +4006,7 @@ describe('emitPromptContractTest (verification-5)', () => {
           '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
           '  }',
           '  let body: string = input.prompt;',
-          "  if (input.audience !== undefined) body = body.replaceAll('<audience>', input.audience);",
+          "  if (input.audience !== undefined) body = body.replaceAll('<audience>', () => input.audience!);",
           '  blocks.push(body);',
           "  return blocks.join('\\n\\n');",
           '};',
@@ -3620,7 +4051,7 @@ describe('emitPromptContractTest (verification-5)', () => {
         '  if (input.pendingBossQuestion && input.bossReply) {',
         '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
         '  }',
-        "  blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+        "  blocks.push(input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
         "  return blocks.join('\\n\\n');",
         '};',
         'export const _internal = { composeCaptainPrompt: compose };',
@@ -3662,8 +4093,8 @@ describe('emitPromptContractTest (verification-5)', () => {
       await writeFile(
         linkedPath,
         linkedSource.replace(
-          "blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
-          "blocks.push('mutated ' + input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+          "blocks.push(input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
+          "blocks.push('mutated ' + input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
         ),
       );
       const rerun = await emitPromptContractTest({
@@ -3699,7 +4130,7 @@ describe('emitPromptContractTest (verification-5)', () => {
           "    if (input.pendingBossQuestion.player !== 'Captain' || 'asker' in input.pendingBossQuestion) throw new Error('wrong schema');",
           '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
           '  }',
-          "  blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+          "  blocks.push(input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
           "  return blocks.join('\\n\\n');",
           '};',
           'export const _internal = { composeCaptainPrompt: compose };',
@@ -3738,7 +4169,7 @@ describe('emitPromptContractTest (verification-5)', () => {
         "    if (input.pendingBossQuestion.asker?.kind !== 'captain' || 'player' in input.pendingBossQuestion) throw new Error('wrong schema');",
         '    blocks.push(CONTINUATION, `Boss question:\\n${input.pendingBossQuestion.question}`, `Boss reply:\\n${input.bossReply}`);',
         '  }',
-        "  blocks.push(input.prompt.replaceAll('<boss-intent>', input.bossIntent));",
+        "  blocks.push(input.prompt.replaceAll('<boss-intent>', () => input.bossIntent));",
         "  return blocks.join('\\n\\n');",
         '};',
         'function createPlaybookRuntime() { return {}; }',
@@ -3808,6 +4239,142 @@ describe('emitPromptContractTest (verification-5)', () => {
 });
 
 describe('generateGearsFsmConformanceTest', () => {
+  it('strictly type-checks real generated suites with empty and populated pinned evidence', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-strict-generated-tests-'));
+    try {
+      await writeFile(join(root, 'package.json'), '{"type":"module"}\n');
+      await symlink(
+        join(repoRoot, 'node_modules'),
+        join(root, 'node_modules'),
+        'dir',
+      );
+      await emitVerifierSupport(root);
+      const fixtureConfigs: Record<string, MachineConfigLike> = {
+        empty: {
+          states: { ready: { id: 'ready', tags: ['playbook.parked'] } },
+        },
+        populated: {
+          states: {
+            work: {
+              invoke: {
+                src: 'captain',
+                input: {
+                  stateId: 'work',
+                  sourceItem: 'X-1',
+                  prompt: 'Do the task.',
+                  result: { done: 'Completed.' },
+                },
+              },
+            },
+          },
+        },
+      };
+      const files: string[] = [];
+      const finding = 'fixture schema evidence conflicts';
+      for (const [basename, config] of Object.entries(fixtureConfigs)) {
+        await writeFile(
+          join(root, `${basename}.fsm.ts`),
+          `export const machine = { config: ${JSON.stringify(config)} };\n`,
+        );
+        await writeFile(join(root, `${basename}.gears.md`), '');
+        await writeFile(
+          join(root, `${basename}.playbook.ts`),
+          'export const _internal = { composeCaptainPrompt: (input: unknown) => JSON.stringify(input) };\n',
+        );
+        const opts = {
+          basename,
+          fsmModule: `./${basename}.fsm.js`,
+          verifyModule: './.slc-verify/verify.js',
+          schemaFindings: basename === 'empty' ? [] : [finding],
+        };
+        const suites = {
+          'gears-fsm': generateGearsFsmConformanceTest({
+            ...opts,
+            gearsFile: `./${basename}.gears.md`,
+          }),
+          'fsm.introspect': generateFsmIntrospectionTest({
+            ...opts,
+            pins: pinIntrospection(config),
+          }),
+          'prompt-contract': generatePromptContractTest({
+            ...opts,
+            rows: capturePromptContract(config),
+            composer: {
+              playbookModule: `./${basename}.playbook.js`,
+              captain: basename === 'empty' ? {} : { work: [] },
+            },
+          }),
+        };
+        for (const [suffix, contents] of Object.entries(suites)) {
+          const path = join(root, `${basename}.${suffix}.test.ts`);
+          await writeFile(path, contents);
+          files.push(path);
+        }
+      }
+      await expect(
+        execFileAsync(
+          process.execPath,
+          [
+            join(repoRoot, 'node_modules/typescript/lib/tsc.js'),
+            '--ignoreConfig',
+            '--noEmit',
+            '--strict',
+            '--noUnusedLocals',
+            '--noUnusedParameters',
+            '--verbatimModuleSyntax',
+            '--erasableSyntaxOnly',
+            '--target',
+            'ES2022',
+            '--module',
+            'NodeNext',
+            '--moduleResolution',
+            'NodeNext',
+            '--types',
+            'node',
+            '--skipLibCheck',
+            ...files,
+          ],
+          { cwd: root },
+        ),
+      ).resolves.toMatchObject({ stdout: '', stderr: '' });
+      const vitest = join(repoRoot, 'node_modules/vitest/vitest.mjs');
+      const config = join(root, 'vitest.config.mjs');
+      await writeFile(
+        config,
+        "export default { test: { include: ['*.test.ts'] } };\n",
+      );
+      await expect(
+        execFileAsync(
+          process.execPath,
+          [vitest, 'run', '--root', root, '--config', config, 'empty.'],
+          { cwd: root },
+        ),
+      ).resolves.toBeDefined();
+      await expect(
+        execFileAsync(
+          process.execPath,
+          [
+            vitest,
+            'run',
+            '--root',
+            root,
+            '--config',
+            config,
+            'populated.',
+            '--testNamePattern',
+            'uses consistent artifact-schema evidence',
+          ],
+          { cwd: root },
+        ),
+      ).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining(finding),
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 20_000);
+
   it('emits a test wiring the artifact fsm, gears file, and checker', () => {
     const emitted = generateGearsFsmConformanceTest({
       basename: 'code',
@@ -3918,4 +4485,758 @@ describe('emitGearsFsmConformanceTest', () => {
       await rm(artifactDir, { recursive: true, force: true });
     }
   });
+});
+
+describe('canonical continuation input boundary', () => {
+  it.each([
+    ['role', 3],
+    ['captain', 3],
+    ['player', 1],
+  ] as const)(
+    'preserves scalar and keyed %s generation inputs',
+    (actor, schema) => {
+      for (const wiring of ['scalar', 'keyed', 'nested'] as const) {
+        const machine = createMachine({
+          context: { nested: { values: [7] }, continuation: {} },
+          initial: 'work',
+          states: {
+            work: {
+              invoke: {
+                src: actor === 'captain' ? 'captain' : 'player',
+                input: ({ context }: { context: Record<string, unknown> }) => {
+                  expect(
+                    (context.nested as { values: number[] }).values,
+                  ).toEqual([7]);
+                  const questions = context.pendingBossQuestions as
+                    Record<string, unknown> | undefined;
+                  const replies = context.bossReplies as
+                    Record<string, unknown> | undefined;
+                  const continued = context.continuation as {
+                    pendingBossQuestion?: unknown;
+                    bossReply?: unknown;
+                  };
+                  return {
+                    stateId: 'work',
+                    sourceItem: 'TASK-1',
+                    ...(actor === 'role'
+                      ? { role: 'agent' }
+                      : actor === 'player'
+                        ? { player: 'Coder' }
+                        : {}),
+                    prompt: 'Carry out the task.',
+                    result: {
+                      done: 'Done.',
+                      needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+                    },
+                    pendingBossQuestion:
+                      wiring === 'scalar'
+                        ? context.pendingBossQuestion
+                        : wiring === 'keyed'
+                          ? questions?.work
+                          : continued.pendingBossQuestion,
+                    bossReply:
+                      wiring === 'scalar'
+                        ? context.bossReply
+                        : wiring === 'keyed'
+                          ? replies?.work
+                          : continued.bossReply,
+                  };
+                },
+              },
+            },
+          },
+        });
+        const findings = checkFsmContinuationInputs(
+          machine.config as MachineConfigLike,
+          schema,
+        );
+        const composition = checkPromptComposition({
+          config: machine.config as MachineConfigLike,
+          artifactSchema: schema,
+          compose:
+            schema === 1 ? goodCompose : (defaultComposePlayerPrompt as never),
+        });
+        if (wiring === 'nested') {
+          expect(findings).toEqual([
+            'work: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn',
+          ]);
+          expect(composition).toContain(findings[0]);
+        } else {
+          expect(findings).toEqual([]);
+          expect(composition).toEqual([]);
+        }
+      }
+    },
+  );
+
+  it('retains the controller exemption without synthesizing a continuation', () => {
+    expect(checkFsmContinuationInputs(controllerConfig(), 3)).toEqual([]);
+  });
+});
+
+describe('composed literal child-input fidelity', () => {
+  const template = [
+    'Preserve this sentence.',
+    '> Request: <request>',
+    '> Again: <request>',
+    '> <optional>',
+    '> Evidence: <evidence>',
+    'Review revision <revision> in this scope.',
+    'Finish exactly.',
+  ].join('\n');
+  const gears = `### NESTED-1\n\nCaptain shall call playbook \`review\`:\n${template
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n')}\n`;
+  const render = (context: Record<string, unknown>, fault = ''): string => {
+    const values: Record<string, string> = {
+      '<request>':
+        typeof context.unrelatedFirst === 'string'
+          ? context.unrelatedFirst
+          : '',
+      '<optional>':
+        typeof context.unrelatedOptional === 'string'
+          ? context.unrelatedOptional
+          : '',
+      '<evidence>':
+        typeof context.unrelatedLast === 'string' ? context.unrelatedLast : '',
+      '<revision>':
+        typeof context.unrelatedRevision === 'string'
+          ? context.unrelatedRevision
+          : '',
+    };
+    expect(context.typed).toEqual({ nested: [7], enabled: false });
+    let text = template
+      .split(/(?<=\n)/)
+      .filter(
+        (line) => line !== '> <optional>\n' || values['<optional>'] !== '',
+      )
+      .join('');
+    text = text.replace(/<[^>]+>/g, (token, offset: number) => {
+      let value = values[token] ?? token;
+      if (fault === 'repeated' && text.slice(0, offset).endsWith('Again: '))
+        value = values['<evidence>'];
+      if (fault === 'json') value = JSON.stringify(value);
+      return fault === 'unquoted' ? value : value.replace(/\n/g, '\n> ');
+    });
+    if (fault === 'delete')
+      text = text.replace('Preserve this sentence.\n', '');
+    if (fault === 'invent') text += '\nAn invented instruction.';
+    if (fault === 'recursive')
+      text = text.replaceAll('<evidence>', values['<evidence>']);
+    if (fault === 'empty' && values['<optional>'] === '')
+      text = text.replace('> Evidence:', '> \n> Evidence:');
+    return text;
+  };
+  const config = (fault = '', sourceItem = true): MachineConfigLike =>
+    createMachine({
+      context: {
+        typed: { nested: [7], enabled: false },
+        unrelatedFirst: '',
+        unrelatedOptional: '',
+        unrelatedLast: '',
+        unrelatedRevision: '',
+      },
+      initial: 'ready',
+      states: {
+        ready: { id: 'ready', meta: { playbook: { stateId: 'ready' } } },
+        call: {
+          id: 'call',
+          meta: { playbook: { stateId: 'call' } },
+          tags: 'playbook.suspended',
+          invoke: {
+            src: 'playbook',
+            input: ({ context }: { context: Record<string, unknown> }) => ({
+              stateId: 'call',
+              ...(sourceItem ? { sourceItem: 'NESTED-1' } : {}),
+              playbookId: 'review',
+              text: render(context, fault),
+            }),
+          },
+        },
+      },
+    }).config;
+
+  it.each([true, false])(
+    'accepts observable mapping without field-name assumptions (sourceItem %s)',
+    (sourceItem) => {
+      const machine = config('', sourceItem);
+      expect(checkGearsFsmConformance(gears, machine)).toEqual([]);
+      expect(machine.context).toEqual({
+        typed: { nested: [7], enabled: false },
+        unrelatedFirst: '',
+        unrelatedOptional: '',
+        unrelatedLast: '',
+        unrelatedRevision: '',
+      });
+    },
+  );
+
+  it.each([
+    'delete',
+    'invent',
+    'repeated',
+    'recursive',
+    'unquoted',
+    'empty',
+    'json',
+  ])('rejects %s composition drift', (fault) => {
+    const findings = checkGearsFsmConformance(gears, config(fault));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatch(/^NESTED-1: FSM playbook text /);
+  });
+
+  it.each([false, true])(
+    'checks exact static object-valued child input without relay placeholders (changed %s)',
+    (changed) => {
+      const fixedText =
+        'Review the already-rendered child request.\nFinish exactly.';
+      const fixedGears =
+        `### NESTED-1\n\nCaptain shall call playbook ` +
+        '`review`' +
+        `:\n${fixedText
+          .split('\n')
+          .map((line) => `> ${line}`)
+          .join('\n')}\n`;
+      const machine = createMachine({
+        initial: 'call',
+        states: {
+          call: {
+            id: 'call',
+            meta: { playbook: { stateId: 'call' } },
+            tags: 'playbook.suspended',
+            invoke: {
+              src: 'playbook',
+              input: {
+                stateId: 'call',
+                sourceItem: 'NESTED-1',
+                playbookId: 'review',
+                text: fixedText + (changed ? '\nAn invented instruction.' : ''),
+              },
+            },
+          },
+        },
+      });
+      expect(checkGearsFsmConformance(fixedGears, machine.config)).toEqual(
+        changed
+          ? [
+              'NESTED-1: FSM playbook text does not preserve the complete GEARS child-input template',
+            ]
+          : [],
+      );
+    },
+  );
+
+  it.each([
+    [
+      'object-valued input',
+      {
+        stateId: 'call',
+        sourceItem: 'NESTED-1',
+        playbookId: 'review',
+        text: template,
+      },
+    ],
+    [
+      'constant function input',
+      () => ({
+        stateId: 'call',
+        sourceItem: 'NESTED-1',
+        playbookId: 'review',
+        text: template,
+      }),
+    ],
+    [
+      'partial substitution',
+      ({ context }: { context: Record<string, unknown> }) => ({
+        stateId: 'call',
+        sourceItem: 'NESTED-1',
+        playbookId: 'review',
+        text: template.replaceAll(
+          '<request>',
+          typeof context.unrelatedFirst === 'string'
+            ? context.unrelatedFirst
+            : '',
+        ),
+      }),
+    ],
+  ])('rejects unresolved relay placeholders in %s', (_name, input) => {
+    const machine = createMachine({
+      context: { unrelatedFirst: '' },
+      initial: 'call',
+      states: {
+        call: {
+          id: 'call',
+          meta: { playbook: { stateId: 'call' } },
+          tags: 'playbook.suspended',
+          invoke: { src: 'playbook', input },
+        },
+      },
+    });
+
+    const findings = checkGearsFsmConformance(gears, machine.config);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatch(/^NESTED-1: FSM playbook text /);
+  });
+
+  it('accepts inline code placeholders and ordinary angle text as literal static text', () => {
+    const fixedText = [
+      'Use `<model>` as literal inline code.',
+      String.raw`Label: \<escaped>`,
+      String.raw`\<standalone>`,
+      'Keep ordinary angle text <not-a-slot> in prose.',
+      'Finish exactly.',
+    ].join('\n');
+    const fixedGears =
+      `### NESTED-1\n\nCaptain shall call playbook ` +
+      '`review`' +
+      `:\n${fixedText
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n')}\n`;
+    const machine = createMachine({
+      initial: 'call',
+      states: {
+        call: {
+          id: 'call',
+          meta: { playbook: { stateId: 'call' } },
+          tags: 'playbook.suspended',
+          invoke: {
+            src: 'playbook',
+            input: {
+              stateId: 'call',
+              sourceItem: 'NESTED-1',
+              playbookId: 'review',
+              text: fixedText,
+            },
+          },
+        },
+      },
+    });
+
+    expect(checkGearsFsmConformance(fixedGears, machine.config)).toEqual([]);
+  });
+
+  it('rejects an unprovable structured read without replacing its initialized shape', () => {
+    const machine = config();
+    machine.states!.call.invoke = {
+      src: 'playbook',
+      input: ({ context }) => ({
+        stateId: 'call',
+        sourceItem: 'NESTED-1',
+        playbookId: 'review',
+        text: String((context.typed as { nested: number[] }).nested[0]),
+      }),
+    };
+    expect(checkGearsFsmConformance(gears, machine).join('\n')).toMatch(
+      /complete GEARS child-input template/,
+    );
+    expect(machine.context).toMatchObject({
+      typed: { nested: [7], enabled: false },
+    });
+  });
+
+  const sourceModule = (
+    fault = '',
+  ): string => `import { createMachine } from 'xstate';
+const template = ${JSON.stringify(template)};
+function render(context: { unrelatedFirst: string; unrelatedOptional: string; unrelatedLast: string; unrelatedRevision: string }): string {
+  const values: Record<string, string> = { '<request>': context.unrelatedFirst, '<optional>': context.unrelatedOptional, '<evidence>': context.unrelatedLast, '<revision>': context.unrelatedRevision };
+  const text = template.split(/(?<=\\n)/).filter(line => line !== '> <optional>\\n' || values['<optional>'] !== '').join('');
+  return text.replace(/<[^>]+>/g, token => (values[token] ?? token).replace(/\\n/g, '\\n> '))${fault === 'invent' ? " + '\\nAn invented instruction.'" : ''};
+}
+export const machine = createMachine({
+  context: { unrelatedFirst: '', unrelatedOptional: '', unrelatedLast: '', unrelatedRevision: '' }, initial: 'ready',
+  states: {
+    ready: { id: 'ready', meta: { playbook: { stateId: 'ready' } }, on: { BOSS_REQUEST: 'call' } },
+    call: { id: 'call', meta: { playbook: { stateId: 'call' } }, tags: 'playbook.suspended',
+      invoke: { src: 'playbook', input: ({ context }) => ({ stateId: 'call', sourceItem: 'NESTED-1', playbookId: 'review', text: render(context) }), onDone: 'done', onError: 'failed' }
+    },
+    done: { id: 'done', type: 'final', meta: { playbook: { stateId: 'done' } } },
+    failed: { id: 'failed', tags: 'playbook.parked', meta: { playbook: { stateId: 'failed' } },
+      on: { BOSS_REPLY: { guard: ({ event }) => 'answer' in event && typeof event.answer === 'string' && event.answer.trim().length > 0, target: 'call' } }
+    }
+  }
+});\n`;
+
+  it('enforces composed fidelity at the real producer and consumer boundaries', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-child-text-boundary-'));
+    try {
+      await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
+      await writeFile(join(root, 'package.json'), '{"type":"module"}');
+      const pipeline = join(root, 'pipeline');
+      await mkdir(pipeline);
+      const formats = (from: string, to: string, extension: string) =>
+        `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${from} | ${extension} |\n| target | ${to} | .ts |\n`;
+      await writeFile(
+        join(pipeline, 'gears2fsm.md'),
+        formats('gears', 'fsm', '.md'),
+      );
+      await writeFile(
+        join(pipeline, 'link.md'),
+        formats('fsm', 'playbook', '.ts'),
+      );
+      const source = join(root, 'case.gears.md');
+      await writeFile(source, gears);
+      const target = join(root, 'runtime.ts');
+      await writeFile(target, 'export const runtime = true;\n');
+      for (const fault of ['', 'invent']) {
+        const generated = sourceModule(fault);
+        const result = await runSlc(['flow.gears2fsm', source], {
+          cwd: root,
+          resolver: () => [pipeline],
+          executor: {
+            async run(request) {
+              await writeFile(request.target, generated);
+              return { status: 'ok' };
+            },
+          },
+        });
+        expect(result.ok, result.diagnostics.join('\n')).toBe(fault === '');
+        const fsm = join(root, 'case.fsm.ts');
+        await writeFile(fsm, generated);
+        let calls = 0;
+        const consumer = await runSlc(['flow', source, '--link', target], {
+          cwd: root,
+          resolver: () => [pipeline],
+          executor: {
+            async run(request) {
+              if (request.kind !== 'link') {
+                await writeFile(request.target, generated);
+                return { status: 'ok', diagnostics: [] };
+              }
+              calls++;
+              return {
+                status: 'blocked',
+                diagnostics: ['consumer reached after producer checks'],
+              };
+            },
+          },
+        });
+        expect(calls, consumer.diagnostics.join('\n')).toBe(
+          fault === '' ? 1 : 0,
+        );
+        if (fault)
+          expect(consumer.diagnostics.join('\n')).toContain(
+            'complete GEARS child-input template',
+          );
+        expect(await readFile(source, 'utf8')).toBe(gears);
+        expect(await readFile(fsm, 'utf8')).toBe(generated);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('executes an emitted conformance suite against faithful and drifted child composers', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-child-text-suite-'));
+    try {
+      await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
+      await writeFile(join(root, 'package.json'), '{"type":"module"}');
+      await writeFile(join(root, 'case.gears.md'), gears);
+      await writeFile(join(root, 'case.fsm.ts'), sourceModule());
+      const suite = generateGearsFsmConformanceTest({
+        basename: 'case',
+        fsmModule: './case.fsm.js',
+        gearsFile: './case.gears.md',
+        verifyModule: join(repoRoot, 'src/verify.ts'),
+      });
+      await writeFile(join(root, 'case.gears-fsm.test.ts'), suite);
+      const config = join(root, 'vitest.config.mjs');
+      await writeFile(
+        config,
+        `export default ${JSON.stringify({ cacheDir: join(root, '.vite'), test: { cache: false, include: ['case.gears-fsm.test.ts'] } })};\n`,
+      );
+      const args = [
+        join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+        'run',
+        '--root',
+        root,
+        '--config',
+        config,
+      ];
+      await execFileAsync(process.execPath, args, { cwd: root });
+      await writeFile(join(root, 'case.fsm.ts'), sourceModule('invent'));
+      await expect(
+        execFileAsync(process.execPath, args, { cwd: root }),
+      ).rejects.toMatchObject({ code: 1 });
+      expect(await readFile(join(root, 'case.gears-fsm.test.ts'), 'utf8')).toBe(
+        suite,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+});
+
+describe('literal prompt relays (verification-41, verification-42)', () => {
+  const prompt =
+    'Keep this instruction.\n> Message: <message>\n> <message>\nUse <identifier> as <identity>.';
+  const config = (
+    actor: 'player' | 'captain' = 'player',
+    identityCollision = false,
+  ): MachineConfigLike =>
+    findMachineConfig({
+      machine: createMachine({
+        context: {
+          sourceText: '',
+          code: '',
+          options: { enabled: true, list: [1, 2] },
+        },
+        initial: 'work',
+        states: {
+          work: {
+            meta: {
+              playbook: {
+                stateId: 'work',
+                ...(actor === 'player' ? { role: 'writer' } : {}),
+              },
+            },
+            invoke: {
+              src: actor,
+              input: ({ context }: { context: Record<string, unknown> }) => ({
+                stateId: 'work',
+                sourceItem: 'RELAY-1',
+                ...(actor === 'player' ? { role: 'writer' } : {}),
+                prompt,
+                result: {
+                  done: 'Finished.',
+                  needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+                },
+                payload: identityCollision
+                  ? '«promptIdentity:writer»'
+                  : context.sourceText,
+                alias: identityCollision
+                  ? '«promptIdentity:writer»'
+                  : context.sourceText,
+                identifier: context.code,
+                options: context.options,
+                unrelatedLiteral: '<identity>',
+                ...(context.pendingBossQuestion && context.bossReply
+                  ? {
+                      pendingBossQuestion: context.pendingBossQuestion,
+                      bossReply: context.bossReply,
+                    }
+                  : {}),
+              }),
+            },
+          },
+        },
+      }),
+    });
+  type Input = Parameters<typeof defaultComposePlayerPrompt>[0] & {
+    payload: string;
+    alias: string;
+    identifier: string;
+    options: { enabled: boolean; list: number[] };
+  };
+  const composer =
+    (fault = '', actor: 'player' | 'captain' = 'player', legacy = false) =>
+    (
+      raw: unknown,
+      identity: (role: string) => string,
+      resuming?: boolean,
+    ): string => {
+      const input = raw as Input;
+      expect(input.options).toEqual({ enabled: true, list: [1, 2] });
+      expect(input.alias).toBe(input.payload);
+      expect(input.identifier).not.toContain('\n');
+      const values: Record<string, string> = {
+        '<message>': input.payload,
+        '<identifier>': input.identifier,
+        '<identity>': actor === 'player' ? identity('writer') : '<identity>',
+      };
+      let body = input.prompt.replace(
+        /<message>|<identifier>|<identity>/g,
+        (token) => {
+          const value = values[token];
+          return token === '<message>' && fault !== 'unquoted'
+            ? value.replace(/\n/g, '\n> ')
+            : value;
+        },
+      );
+      if (fault === 'recursive')
+        body = body.replaceAll('<identity>', values['<identity>']);
+      if (fault === 'replacement-string')
+        body = input.prompt
+          .replaceAll('<message>', input.payload)
+          .replaceAll('<identifier>', () => input.identifier)
+          .replaceAll('<identity>', () => values['<identity>']);
+      if (fault === 'static')
+        body = body.replace('Keep this instruction.', 'Invented instruction.');
+      if (fault === 'crlf-normalized') body = body.replace(/\r\n/g, '\n');
+      if (legacy) return goodCompose({ ...input, prompt: body });
+      // The installed continuation composer supplies the actual current
+      // full/compact player prefix, while direct Captain always remains full.
+      return actor === 'player'
+        ? defaultComposePlayerPrompt({ ...input, prompt: '' }, {}, resuming) +
+            body
+        : defaultComposeCaptainPrompt({ ...input, prompt: '' }) + body;
+    };
+
+  it.each([
+    ['player', false],
+    ['player', true],
+    ['captain', false],
+  ] as const)(
+    'preserves literal aliases, typed input and %s continuation (legacy=%s)',
+    (actor, legacy) => {
+      expect(
+        checkPromptComposition({
+          config: config(actor),
+          compose: composer('', actor, legacy),
+          actor,
+          artifactSchema: 3,
+        }),
+      ).toEqual([]);
+    },
+  );
+
+  it('does not infer substitution from an unrelated input equal to a preserved token', () => {
+    expect(
+      checkPromptComposition({
+        config: config('captain'),
+        compose: composer('', 'captain'),
+        actor: 'captain',
+        artifactSchema: 3,
+      }),
+    ).toEqual([]);
+  });
+
+  it('does not infer dataflow from a data value identical to a role-identity sentinel', () => {
+    expect(
+      checkPromptComposition({
+        config: config('player', true),
+        compose: composer(),
+        actor: 'player',
+      }),
+    ).toEqual([]);
+  });
+
+  it.each([
+    'unquoted',
+    'recursive',
+    'replacement-string',
+    'static',
+    'crlf-normalized',
+  ])('rejects %s rendering through the actual FSM input mapper', (fault) => {
+    const modes: (boolean | undefined)[] = [];
+    const baseComposer = composer(fault);
+    const findings = checkPromptComposition({
+      config: config(),
+      compose: (...args) => {
+        modes.push(args[2]);
+        return baseComposer(...args);
+      },
+      actor: 'player',
+    });
+    expect(findings.join('\n')).toMatch(
+      fault === 'static'
+        ? /does not preserve the body line/
+        : /literal-relay|quoted-relay/,
+    );
+    if (fault === 'unquoted') expect(findings).toHaveLength(1);
+    if (fault === 'crlf-normalized') {
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toContain(
+        'work: prompt composition does not preserve multiline quoted-relay text',
+      );
+      expect(new Set(modes)).toEqual(new Set([undefined, false, true]));
+      expect(findings[0]).toContain('UTF-16 offset');
+      expect(findings[0]).toContain('LF/CRLF separators/quote markers');
+      expect(findings[0]).toContain('expected "\\r\\n> third-0');
+      expect(findings[0]).toContain('actual "\\n> third-0');
+    }
+  });
+});
+
+describe('emitted literal prompt-relay suite (verification-42)', () => {
+  it('keeps the gate and real emitted suite aligned for faithful and drifting links', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-literal-relay-suite-'));
+    try {
+      await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'));
+      await writeFile(join(root, 'package.json'), '{"type":"module"}');
+      await writeFile(
+        join(root, 'vitest.config.mjs'),
+        `export default { cacheDir: ${JSON.stringify(join(root, '.vite'))}, test: { cache: false } };\n`,
+      );
+      const fsm = `export const machine = { config: { states: { draft: {
+        invoke: { src: 'player', input: ({ context }: { context: Record<string, unknown> }) => ({
+          player: 'Writer', stateId: 'draft', sourceItem: 'X-1',
+          prompt: 'Keep this sentence.\\n> Request: <audience>', audience: context.audience,
+          result: { done: 'Finished.', needsBossReply: ${JSON.stringify(NEEDS_BOSS_REPLY_TEXT)} },
+          ...(context.pendingBossQuestion && context.bossReply ? { pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply } : {}),
+        }) }
+      } } } };\n`;
+      const cases = [
+        {
+          basename: 'good',
+          expression: "input.audience.replace(/\\n/g, '\\n> ')",
+          ok: true,
+          diagnostic: /4 passed/,
+        },
+        {
+          basename: 'unquoted',
+          expression: 'input.audience',
+          ok: false,
+          diagnostic: /multiline quoted-relay/,
+        },
+        {
+          basename: 'crlf-normalized',
+          expression:
+            "input.audience.replace(/\\r\\n/g, '\\n').replace(/\\n/g, '\\n> ')",
+          ok: false,
+          diagnostic: /\\\\r\\\\n> third-0.*\\\\n> third-0/s,
+        },
+      ] as const;
+      for (const { basename, expression, ok, diagnostic } of cases) {
+        const fsmPath = join(root, `${basename}.fsm.ts`);
+        const linkedPath = join(root, `${basename}.playbook.ts`);
+        const linked = `const compose = (input: { prompt: string; audience: string; pendingBossQuestion?: { question: string }; bossReply?: string }): string => {
+          const body = input.prompt.replaceAll('<audience>', () => ${expression});
+          return input.pendingBossQuestion && input.bossReply
+            ? [${JSON.stringify(CONTINUATION_PREAMBLE)}, 'Boss question:\\n' + input.pendingBossQuestion.question, 'Boss reply:\\n' + input.bossReply, body].join('\\n\\n') : body;
+        };
+        export const _internal = { composePlayerPrompt: compose };\n`;
+        await writeFile(fsmPath, fsm);
+        await writeFile(linkedPath, linked);
+        await emitVerifierSupport(root);
+        const emitted = await emitPromptContractTest({
+          artifactDir: root,
+          basename,
+          verifyModule: './.slc-verify/verify.js',
+        });
+        expect(
+          emitted.diagnostics.some((line) =>
+            line.includes('multiline quoted-relay'),
+          ),
+        ).toBe(!ok);
+        const result = await execFileAsync(
+          process.execPath,
+          [
+            join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+            'run',
+            '--root',
+            root,
+            '--config',
+            join(root, 'vitest.config.mjs'),
+            `${basename}.prompt-contract.test.ts`,
+          ],
+          { cwd: root, timeout: 15_000 },
+        ).then(
+          ({ stdout, stderr }) => ({ ok: true, output: stdout + stderr }),
+          (error: { stdout?: string; stderr?: string }) => ({
+            ok: false,
+            output: `${error.stdout ?? ''}${error.stderr ?? ''}`,
+          }),
+        );
+        expect(result.ok, result.output).toBe(ok);
+        expect(result.output).toMatch(diagnostic);
+        expect(await readFile(fsmPath, 'utf8')).toBe(fsm);
+        expect(await readFile(linkedPath, 'utf8')).toBe(linked);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 40_000);
 });

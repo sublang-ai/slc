@@ -100,6 +100,7 @@ describe('buildPhasePrompt (phase-execution-11, phase-execution-14, phase-execut
         linkTarget: '/o/runner.ts',
         options: [{ name: 'seed', value: '42' }],
         linked: '/o/app.run.ts',
+        outputContract: 'Public option validator required by entry.',
       },
       definition: '## Link Targets',
     });
@@ -107,6 +108,7 @@ describe('buildPhasePrompt (phase-execution-11, phase-execution-14, phase-execut
     expect(prompt).toContain('link target module: /o/runner.ts');
     expect(prompt).toContain('options: seed=42');
     expect(prompt).toContain('write only /o/app.run.ts');
+    expect(prompt).toContain('Public option validator required by entry.');
   });
 });
 

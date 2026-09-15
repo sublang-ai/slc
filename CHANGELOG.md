@@ -11,6 +11,93 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-15
+
+### Added
+
+- **Compilation reports unresolved source questions.** Any phase can stop
+  with structured questions explaining missing, contradictory, or ambiguous
+  behavior. The CLI prints the original source to edit and a machine-readable
+  report on stderr, exits `2`, and accepts no interactive answers or pending
+  session state. Edit the source and repeat the same command; staged output
+  remains unaccepted until compilation succeeds
+  ([DR-032](specs/decisions/032-noninteractive-source-clarification.md)).
+
+- **FSM conformance is checked before linking.** Existing GEARS-to-FSM
+  checks reject prompt drift, malformed modules, and conflicting schema
+  evidence before downstream compilation spends time on invalid input
+  ([DR-033](specs/decisions/033-early-conformance-and-mechanical-repair.md)).
+
+- **Malformed GEARS is checked at its producer.** Existing Results syntax
+  findings reach the phase that can repair the output, including optimization
+  and normalization. Invalid supplied GEARS fails before its consumer runs
+  ([DR-035](specs/decisions/035-gears-contract-at-producer.md)).
+
+- **FSM validation includes strict TypeScript and transition coverage before
+  linking.** Invalid types, incompatible actor contracts, busy child-call
+  states, and unsupported or unreachable transitions reach the producing
+  phase's repair loop before downstream work begins. Coverage remains bounded;
+  eventless-only entry paths are explicitly unsupported.
+
+- **Reproducible compilation and workflow measurements.** Opt-in benchmark
+  tools, clarification corpora, and CODE/REVIEW/DEV acceptance probes record
+  exact inputs, runtime results, and the limits of each measured claim.
+
+### Changed
+
+- **Adopts Playbook 13.2.0, Cligent 0.27.0, and Spex 3.0.0.** Vendored
+  definitions and pins match the published dependency set. Development builds
+  use native TypeScript 7 while the public compiler API dependency stays on
+  TypeScript 6.
+
+- **Generated entries delegate option validation to the linked artifact.**
+  The host preserves the artifact's configured options and live capabilities,
+  and definitions resolve references relative to their original location.
+
+- **The stall watchdog now waits 40 minutes by default.** A single
+  `gears2fsm` or `link` call at high reasoning effort routinely runs far
+  longer than ten minutes without emitting one adapter event, so the old
+  600-second default was killing healthy compiles: four phases of one
+  playbook delivery died at the bound, and two consecutive live compiles
+  of a two-role playbook failed in `gears2fsm` before a third succeeded
+  unchanged at a larger budget. The built-in default becomes 2400
+  seconds. Nothing else moves — a hung call still fails loudly naming
+  its phase, target, and inactivity duration — so set `stallTimeout` or
+  `SLC_STALL_TIMEOUT` to tighten the bound, and `0` still disables it
+  ([DR-043](specs/decisions/043-stall-watchdog-default-window.md)).
+
+- **Mechanical findings can be repaired by the same Coder by default.**
+  Source, FSM, and link checks allow at most two correction calls without
+  requiring an independent Reviewer. Clean unreviewed work still uses one
+  call. Optional independent review starts only after mechanical checks
+  pass and shares the existing three-round bound; clarification and
+  protected-input checks remain in effect.
+
+### Fixed
+
+- **Coverage accepts reachable script fallbacks.** Ordered transitions are
+  checked with the script runtime's actual guard and exit-status outputs;
+  impossible outputs cannot make an unreachable transition pass
+  ([DR-034](specs/decisions/034-faithful-transition-coverage.md)).
+
+- **Coverage preserves reached context and event inputs.** Probes handle
+  object-form initial transitions, parallel completion, bounded child chains,
+  and static child entry while keeping unsupported paths visible.
+
+- **Prompt checks preserve literal relays and repeated fragments.** Source
+  attribution handles contained and overlapping fragments, child relays must
+  substitute their payloads, and malformed nested output fields produce
+  actionable diagnostics.
+
+- **CRLF artifacts receive the same fidelity checks as LF artifacts.**
+  Source, GEARS, and compiled-execution parsing no longer drop quoted prompts
+  or reject preserved content because of line endings.
+
+- **Failure recovery commands preserve their arguments and pass targets.**
+  Resume lines quote shell operands, retain link options, and accept staged
+  pass inputs with an explicit output path. Canonical format names such as
+  `raw` and `opt1` keep their existing meaning.
+
 ## [0.9.0] - 2026-09-04
 
 ### Added
@@ -75,8 +162,8 @@ and this project adheres to
   reviewed compile accepted a linked module after three hours whose
   synthesis state composed its prompt under the wrong role identity. The
   host now runs those same checks on the live linked module beside its
-  FSM before any Reviewer call: the module imports and its factory
-  constructs, and every player-invoking state's prompt composer yields
+  FSM before any Reviewer call: the module imports, its artifact schema
+  reconciles, and every player-invoking state's prompt composer yields
   the authored prompt on an ordinary turn with each placeholder
   substituted per the link contract. Findings are relayed to the Coder
   under the same mechanical protocol
@@ -502,7 +589,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/sublang-ai/slc/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/sublang-ai/slc/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/sublang-ai/slc/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/sublang-ai/slc/compare/v0.6.0...v0.7.0

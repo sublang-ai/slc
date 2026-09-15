@@ -1,0 +1,36 @@
+{
+  "schema": "sublang.slc.c10.retained-reproduction.v1",
+  "providerCalls": 0,
+  "root": "/private/tmp/slc-c10-v13-reproduction-work.Zc5RCn",
+  "compilerCommit": "092e242d134e8681109ec390a9c9707476a79b36",
+  "upstreamCommit": "69ed4ab4d94ed0bd218db9e0d375828a67f57cc0",
+  "commands": [
+    {
+      "flag": "--version",
+      "status": 0,
+      "stdoutSha256": "3866daf4e04c398ca3874fd9f79984be3c37877ffa75e8395fdae2cf48319746"
+    },
+    {
+      "flag": "--help",
+      "status": 0,
+      "stdoutSha256": "896e64b761c2e11237c1322025dbd566d4eff5c827f98cc13665275795724e7c"
+    }
+  ],
+  "selection": {
+    "agent": "claude-code",
+    "model": "claude-opus-5",
+    "effort": "low",
+    "fastMode": false
+  },
+  "pipelineRoot": "/private/tmp/slc-c10-v13-reproduction-work.Zc5RCn/playbook-13.2-common-v13-full/playbook",
+  "pipelineKeys": ["dir", "phases", "passes", "linkFile"],
+  "runtime": "/private/tmp/slc-c10-v13-reproduction-work.Zc5RCn/slc/node_modules/@sublang/playbook/src/runtime.js",
+  "sourceHashes": {
+    "code": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+    "dev": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c"
+  },
+  "distChecked": 178,
+  "distUnchanged": true,
+  "scriptSha256": "fbdce042593e292821e3fa2b9491ca3c90c1d7f4d5b9c723e213ca2846594f2c",
+  "fullLinkSha256": "680b0d2af76bf629c7f7c7417d27aa08205a5cde2ba2eb924389a2df0435642e"
+}

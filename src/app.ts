@@ -154,8 +154,8 @@ export interface RunConfig {
   stallTimeoutMs: number;
 }
 
-/** Default agent-stall watchdog window in seconds (DR-019, cli-34). */
-export const DEFAULT_STALL_TIMEOUT_SECONDS = 600;
+/** Default agent-stall watchdog window in seconds (DR-019, DR-043, cli-34). */
+export const DEFAULT_STALL_TIMEOUT_SECONDS = 2400;
 
 /**
  * Merges the environment over config-file values per key (DR-006, cli-20): for
@@ -236,6 +236,8 @@ export function usageText(): string {
     'an entry source with a foreign extension is normalized first, and the',
     'playbook pipeline links against the installed @sublang/playbook runtime',
     'when --link is omitted, also emitting the runnable <basename>.ts entry.',
+    'Unresolved source behavior exits 2 with questions on stderr; edit the',
+    'original source and run the same command again. No interactive answers.',
     '',
     'Options:',
     '  -o <path>                 final output path override',
@@ -268,7 +270,7 @@ export function usageText(): string {
     '  SLC_REVIEWER_FAST_MODE optional adapter-scoped reviewer fast mode: true | false',
     '  SLC_PIPELINE_PATH  search roots for <pipeline> references (default: cwd)',
     '  SLC_STALL_TIMEOUT  seconds of agent inactivity before a stalled call',
-    '                     fails the run (default: 600; 0 disables)',
+    '                     fails the run (default: 2400; 0 disables)',
     '',
   ].join('\n');
 }
@@ -370,7 +372,7 @@ export async function run(
   }
   if (result.diagnostics.length > 0)
     stderr(`${result.diagnostics.join('\n')}\n`);
-  return 1;
+  return result.outcome === 'clarification-required' ? 2 : 1;
 }
 
 /**

@@ -1,0 +1,692 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "source-clarification-v1",
+  "status": "reviewed-before-live-experiments",
+  "baselineRevision": "a000e37815024acc8051855adda72fcedbbfcedb",
+  "phase": "playbook.text2gears",
+  "providerExposure": {
+    "copyOnly": "The selected case source bytes into a separate fresh run workspace as workflow.md.",
+    "excluded": "Never copy this manifest, proposal, patches, build script, member labels, expected outcomes or oracle evidence into a provider workspace.",
+    "oracleAuthoringDirectory": ".",
+    "singlePhaseOnly": "Phase completion is not full compilation or runtime acceptance."
+  },
+  "families": [
+    {
+      "id": "code",
+      "origin": {
+        "revision": "a000e37815024acc8051855adda72fcedbbfcedb",
+        "path": "reference/sdlc/code.md"
+      },
+      "caseIds": ["case-001", "case-002", "case-003"],
+      "baseSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "baseBytes": 5687,
+      "semanticDefectCount": 1,
+      "textualEditCount": 1,
+      "edits": [
+        {
+          "oldText": "After each `code`-owned commit, Captain shall call the `review` playbook and wait until it passes with no unsettled findings.",
+          "newText": "After each `code`-owned commit, Captain shall call the `review` playbook and wait until it passes with no unsettled findings.\nAfter each `code`-owned commit, Captain shall not call the `review` playbook.",
+          "baseRange": {
+            "startLine": 16,
+            "endLine": 16,
+            "startByte": 624,
+            "endByteExclusive": 749,
+            "excerpt": "After each `code`-owned commit, Captain shall call the `review` playbook and wait until it passes with no unsettled findings."
+          },
+          "mutantRange": {
+            "startLine": 16,
+            "endLine": 17,
+            "startByte": 624,
+            "endByteExclusive": 827,
+            "excerpt": "After each `code`-owned commit, Captain shall call the `review` playbook and wait until it passes with no unsettled findings.\nAfter each `code`-owned commit, Captain shall not call the `review` playbook."
+          }
+        }
+      ],
+      "restoredByteIdentical": true
+    },
+    {
+      "id": "decide",
+      "origin": {
+        "revision": "a000e37815024acc8051855adda72fcedbbfcedb",
+        "path": "reference/sdlc/decide.md"
+      },
+      "caseIds": ["case-004", "case-005", "case-006"],
+      "baseSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
+      "baseBytes": 3504,
+      "semanticDefectCount": 1,
+      "textualEditCount": 1,
+      "edits": [
+        {
+          "oldText": "Captain shall not wait for either proposal before requesting the other.",
+          "newText": "Captain shall wait for Coder's completed proposal before requesting Reviewer's proposal.",
+          "baseRange": {
+            "startLine": 15,
+            "endLine": 15,
+            "startByte": 434,
+            "endByteExclusive": 505,
+            "excerpt": "Captain shall not wait for either proposal before requesting the other."
+          },
+          "mutantRange": {
+            "startLine": 15,
+            "endLine": 15,
+            "startByte": 434,
+            "endByteExclusive": 522,
+            "excerpt": "Captain shall wait for Coder's completed proposal before requesting Reviewer's proposal."
+          }
+        }
+      ],
+      "restoredByteIdentical": true
+    },
+    {
+      "id": "review",
+      "origin": {
+        "revision": "a000e37815024acc8051855adda72fcedbbfcedb",
+        "path": "reference/sdlc/review.md"
+      },
+      "caseIds": ["case-007", "case-008", "case-009"],
+      "baseSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "baseBytes": 6097,
+      "semanticDefectCount": 1,
+      "textualEditCount": 1,
+      "edits": [
+        {
+          "oldText": "`review` then returns the exact repository revision at which the review scope was evaluated and the fact that no unsettled findings remain within that scope.",
+          "newText": "`review` then returns the exact repository revision at which the review scope was evaluated and the fact that no unsettled findings remain within that scope.\nWhen Reviewer affirmatively reports that the requested review is complete and no unsettled findings remain, `review` shall not return to its caller and Captain shall start another review round.",
+          "baseRange": {
+            "startLine": 116,
+            "endLine": 116,
+            "startByte": 5939,
+            "endByteExclusive": 6096,
+            "excerpt": "`review` then returns the exact repository revision at which the review scope was evaluated and the fact that no unsettled findings remain within that scope."
+          },
+          "mutantRange": {
+            "startLine": 116,
+            "endLine": 117,
+            "startByte": 5939,
+            "endByteExclusive": 6290,
+            "excerpt": "`review` then returns the exact repository revision at which the review scope was evaluated and the fact that no unsettled findings remain within that scope.\nWhen Reviewer affirmatively reports that the requested review is complete and no unsettled findings remain, `review` shall not return to its caller and Captain shall start another review round."
+          }
+        }
+      ],
+      "restoredByteIdentical": true
+    },
+    {
+      "id": "dev",
+      "origin": {
+        "revision": "a000e37815024acc8051855adda72fcedbbfcedb",
+        "path": "reference/sdlc/dev.md"
+      },
+      "caseIds": ["case-010", "case-011", "case-012"],
+      "baseSha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+      "baseBytes": 5959,
+      "semanticDefectCount": 1,
+      "textualEditCount": 2,
+      "edits": [
+        {
+          "oldText": "- If implementation can proceed under the existing decisions, choose `code`.",
+          "newText": "- If the request is documentation-only, choose `documentation only`.\n- If implementation can proceed under the existing decisions, choose `code`.",
+          "baseRange": {
+            "startLine": 28,
+            "endLine": 28,
+            "startByte": 1347,
+            "endByteExclusive": 1423,
+            "excerpt": "- If implementation can proceed under the existing decisions, choose `code`."
+          },
+          "mutantRange": {
+            "startLine": 28,
+            "endLine": 29,
+            "startByte": 1347,
+            "endByteExclusive": 1492,
+            "excerpt": "- If the request is documentation-only, choose `documentation only`.\n- If implementation can proceed under the existing decisions, choose `code`."
+          }
+        },
+        {
+          "oldText": "The planning result has six semantic outcomes: needs Boss reply, discussion complete, code, decide then code, code via pull request, and decide then code via pull request.",
+          "newText": "The planning result has seven semantic outcomes: needs Boss reply, discussion complete, code, decide then code, code via pull request, decide then code via pull request, and documentation only.",
+          "baseRange": {
+            "startLine": 37,
+            "endLine": 37,
+            "startByte": 2170,
+            "endByteExclusive": 2341,
+            "excerpt": "The planning result has six semantic outcomes: needs Boss reply, discussion complete, code, decide then code, code via pull request, and decide then code via pull request."
+          },
+          "mutantRange": {
+            "startLine": 38,
+            "endLine": 38,
+            "startByte": 2239,
+            "endByteExclusive": 2432,
+            "excerpt": "The planning result has seven semantic outcomes: needs Boss reply, discussion complete, code, decide then code, code via pull request, decide then code via pull request, and documentation only."
+          }
+        }
+      ],
+      "restoredByteIdentical": true
+    },
+    {
+      "id": "support-triage",
+      "origin": {
+        "kind": "new-synthetic-source",
+        "author": "corpus author",
+        "scope": "Local routing decision only"
+      },
+      "caseIds": ["case-013", "case-014", "case-015"],
+      "baseSha256": "5d409209adeec4f682682db20c831985b112b8532b74b9dd14c3ca870327be07",
+      "baseBytes": 2088,
+      "semanticDefectCount": 1,
+      "textualEditCount": 1,
+      "edits": [
+        {
+          "oldText": "When Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `incident-queue`.",
+          "newText": "When Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `incident-queue`.\nWhen Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `standard-queue`.",
+          "baseRange": {
+            "startLine": 21,
+            "endLine": 21,
+            "startByte": 1604,
+            "endByteExclusive": 1726,
+            "excerpt": "When Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `incident-queue`."
+          },
+          "mutantRange": {
+            "startLine": 21,
+            "endLine": 22,
+            "startByte": 1604,
+            "endByteExclusive": 1849,
+            "excerpt": "When Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `incident-queue`.\nWhen Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `standard-queue`."
+          }
+        }
+      ],
+      "restoredByteIdentical": true
+    }
+  ],
+  "cases": [
+    {
+      "id": "case-001",
+      "family": "code",
+      "member": "clean",
+      "sourcePath": "sources/case-001/source.md",
+      "sourceRelativePath": "source-bank/case-001/source.md",
+      "sourceSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "sourceBytes": 5687,
+      "phase": "playbook.text2gears",
+      "baseSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Preserve all four first-phase outcomes: direct implementation, new IR, more tasks and final task.",
+          "Preserve a runtime Boss question for an ambiguous existing IR; do not ask the source author to identify a concrete caller IR at compile time.",
+          "Every CODE-owned commit invokes REVIEW, whose canonical success requires exact evaluated revision and no unsettled findings, before continuation or completion.",
+          "Preserve authored child-result failure versus transport-failure behavior and exact commit identity authority."
+        ]
+      }
+    },
+    {
+      "id": "case-002",
+      "family": "code",
+      "member": "mutant",
+      "sourcePath": "sources/case-002/source.md",
+      "sourceRelativePath": "source-bank/case-002/source.md",
+      "sourceSha256": "af23d5f74fbd386d2303d1ac76c25cec76c488dfb7f9c035a72975687e42c39a",
+      "sourceBytes": 5765,
+      "phase": "playbook.text2gears",
+      "baseSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "expected": {
+        "outcome": "clarification-required",
+        "positiveFidelity": [
+          "Preserve all four first-phase outcomes: direct implementation, new IR, more tasks and final task.",
+          "Preserve a runtime Boss question for an ambiguous existing IR; do not ask the source author to identify a concrete caller IR at compile time.",
+          "Every CODE-owned commit invokes REVIEW, whose canonical success requires exact evaluated revision and no unsettled findings, before continuation or completion.",
+          "Preserve authored child-result failure versus transport-failure behavior and exact commit identity authority."
+        ],
+        "kind": "contradiction",
+        "semanticChoice": "Must or must not call REVIEW after each CODE-owned commit?",
+        "reason": "The two adjacent universal clauses apply to every identical after-commit condition and require and prohibit the same nested call. Neither contains an exception, precedence or supersession rule. The later end-of-every-phase REVIEW clause reinforces the positive obligation but cannot satisfy the prohibition.",
+        "sourceEvidence": [
+          "After each `code`-owned commit, Captain shall call the `review` playbook and wait until it passes with no unsettled findings.",
+          "After each `code`-owned commit, Captain shall not call the `review` playbook."
+        ],
+        "insufficientQuestions": [
+          "Which concrete IR should be continued?",
+          "Which Coder model or commit ID will be used?"
+        ],
+        "mustNotResolveBy": [
+          "Treating the prohibition as a first-phase exception: it is universal.",
+          "Silently assigning precedence to the later sentence.",
+          "Calling REVIEW before the commit, which does not satisfy the explicit after-commit obligation."
+        ],
+        "sourceRanges": [
+          {
+            "startLine": 16,
+            "endLine": 16,
+            "startByte": 624,
+            "endByteExclusive": 749,
+            "excerpt": "After each `code`-owned commit, Captain shall call the `review` playbook and wait until it passes with no unsettled findings."
+          },
+          {
+            "startLine": 17,
+            "endLine": 17,
+            "startByte": 750,
+            "endByteExclusive": 827,
+            "excerpt": "After each `code`-owned commit, Captain shall not call the `review` playbook."
+          }
+        ]
+      },
+      "mutationId": "code-one-defect"
+    },
+    {
+      "id": "case-003",
+      "family": "code",
+      "member": "restored",
+      "sourcePath": "sources/case-003/source.md",
+      "sourceRelativePath": "source-bank/case-003/source.md",
+      "sourceSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "sourceBytes": 5687,
+      "phase": "playbook.text2gears",
+      "baseSha256": "42987d1a13ee38e0f555c32dec6bb0d32c31153c5d855e56f8fc7ea97333ade5",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Preserve all four first-phase outcomes: direct implementation, new IR, more tasks and final task.",
+          "Preserve a runtime Boss question for an ambiguous existing IR; do not ask the source author to identify a concrete caller IR at compile time.",
+          "Every CODE-owned commit invokes REVIEW, whose canonical success requires exact evaluated revision and no unsettled findings, before continuation or completion.",
+          "Preserve authored child-result failure versus transport-failure behavior and exact commit identity authority."
+        ]
+      },
+      "restoresCaseId": "case-002",
+      "identicalToCaseId": "case-001"
+    },
+    {
+      "id": "case-004",
+      "family": "decide",
+      "member": "clean",
+      "sourcePath": "sources/case-004/source.md",
+      "sourceRelativePath": "source-bank/case-004/source.md",
+      "sourceSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
+      "sourceBytes": 3504,
+      "phase": "playbook.text2gears",
+      "baseSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Coder and Reviewer propose concurrently and independently; neither sees the other proposal before both complete.",
+          "Coder synthesizes and creates one design commit, then nested REVIEW must establish canonical success before completion.",
+          "Retain caller topic, runtime concrete identities, outcome evidence and authored failure handling without requiring their values during compilation."
+        ]
+      }
+    },
+    {
+      "id": "case-005",
+      "family": "decide",
+      "member": "mutant",
+      "sourcePath": "sources/case-005/source.md",
+      "sourceRelativePath": "source-bank/case-005/source.md",
+      "sourceSha256": "9d02810984c1f935e0cf2bf78273efc63037915670e850565874aa8785e3fd0d",
+      "sourceBytes": 3521,
+      "phase": "playbook.text2gears",
+      "baseSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
+      "expected": {
+        "outcome": "clarification-required",
+        "positiveFidelity": [
+          "Coder and Reviewer propose concurrently and independently; neither sees the other proposal before both complete.",
+          "Coder synthesizes and creates one design commit, then nested REVIEW must establish canonical success before completion.",
+          "Retain caller topic, runtime concrete identities, outcome evidence and authored failure handling without requiring their values during compilation."
+        ],
+        "kind": "contradiction",
+        "semanticChoice": "Should proposal requests run concurrently, or should Reviewer start only after Coder has completed?",
+        "reason": "The unchanged opening rule requires both role proposals concurrently. The replacement explicitly waits for completed Coder work before even requesting Reviewer, precluding overlapping proposal execution. The information-isolation and whole-pair restart clauses do not authorize serializing the pair or override either dispatch obligation.",
+        "sourceEvidence": [
+          "When the caller gives a topic, Captain shall relay the complete topic in quotes (`>`) to Coder and Reviewer concurrently and independently.",
+          "Captain shall wait for Coder's completed proposal before requesting Reviewer's proposal."
+        ],
+        "insufficientQuestions": [
+          "Who is the Approver?",
+          "What topic or concrete Coder/Reviewer models will be used?"
+        ],
+        "mustNotResolveBy": [
+          "Treating independent proposals as sufficient despite the explicit concurrency requirement.",
+          "Equating dispatch after completed Coder work with concurrent dispatch."
+        ],
+        "sourceRanges": [
+          {
+            "startLine": 14,
+            "endLine": 14,
+            "startByte": 294,
+            "endByteExclusive": 433,
+            "excerpt": "When the caller gives a topic, Captain shall relay the complete topic in quotes (`>`) to Coder and Reviewer concurrently and independently."
+          },
+          {
+            "startLine": 15,
+            "endLine": 15,
+            "startByte": 434,
+            "endByteExclusive": 522,
+            "excerpt": "Captain shall wait for Coder's completed proposal before requesting Reviewer's proposal."
+          }
+        ]
+      },
+      "mutationId": "decide-one-defect"
+    },
+    {
+      "id": "case-006",
+      "family": "decide",
+      "member": "restored",
+      "sourcePath": "sources/case-006/source.md",
+      "sourceRelativePath": "source-bank/case-006/source.md",
+      "sourceSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
+      "sourceBytes": 3504,
+      "phase": "playbook.text2gears",
+      "baseSha256": "229a6b77889558c20ef1a26a55d2073fea5ca00601ac62e61a08c88c394459cc",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Coder and Reviewer propose concurrently and independently; neither sees the other proposal before both complete.",
+          "Coder synthesizes and creates one design commit, then nested REVIEW must establish canonical success before completion.",
+          "Retain caller topic, runtime concrete identities, outcome evidence and authored failure handling without requiring their values during compilation."
+        ]
+      },
+      "restoresCaseId": "case-005",
+      "identicalToCaseId": "case-004"
+    },
+    {
+      "id": "case-007",
+      "family": "review",
+      "member": "clean",
+      "sourcePath": "sources/case-007/source.md",
+      "sourceRelativePath": "source-bank/case-007/source.md",
+      "sourceSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "sourceBytes": 6097,
+      "phase": "playbook.text2gears",
+      "baseSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Review rounds retain the cumulative caller scope and exact repository revision.",
+          "Findings route to Coder acceptance/fix or reasoned rejection, then return to Reviewer.",
+          "Complete only on an affirmative completed review with no unsettled findings, returning exact evaluated revision.",
+          "Concrete caller scope, commits, findings and player model identities remain declared runtime inputs."
+        ]
+      }
+    },
+    {
+      "id": "case-008",
+      "family": "review",
+      "member": "mutant",
+      "sourcePath": "sources/case-008/source.md",
+      "sourceRelativePath": "source-bank/case-008/source.md",
+      "sourceSha256": "b8179e3e7ff663a59faa4af8f53e2d31e07568385c9eb3ce80eeb9e411bec439",
+      "sourceBytes": 6291,
+      "phase": "playbook.text2gears",
+      "baseSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "expected": {
+        "outcome": "clarification-required",
+        "positiveFidelity": [
+          "Review rounds retain the cumulative caller scope and exact repository revision.",
+          "Findings route to Coder acceptance/fix or reasoned rejection, then return to Reviewer.",
+          "Complete only on an affirmative completed review with no unsettled findings, returning exact evaluated revision.",
+          "Concrete caller scope, commits, findings and player model identities remain declared runtime inputs."
+        ],
+        "kind": "contradiction",
+        "semanticChoice": "After an affirmative completed review with no unsettled findings, must REVIEW return its result or start another round without returning?",
+        "reason": "The existing until clause establishes the exact clean-review condition as the end of the loop and the following then clause requires the canonical return. The added clause uses that same full condition and explicitly prohibits returning while requiring another round. It is not a missing implicit default, a progress report, or a rule for remaining findings. No cap, exception or precedence text reconciles both obligations.",
+        "sourceEvidence": [
+          "Rounds continue until Reviewer affirmatively reports that the requested review is complete and no unsettled findings remain.",
+          "`review` then returns the exact repository revision at which the review scope was evaluated and the fact that no unsettled findings remain within that scope.",
+          "When Reviewer affirmatively reports that the requested review is complete and no unsettled findings remain, `review` shall not return to its caller and Captain shall start another review round."
+        ],
+        "insufficientQuestions": [
+          "Should a progress update count as a complete review?",
+          "What exact commit or findings will the caller provide?"
+        ],
+        "mustNotResolveBy": [
+          "Inferring another round only when findings remain: the added rule explicitly requires none remaining.",
+          "Running one extra round and returning: every clean result reactivates the same non-return rule.",
+          "Dropping the explicit return or continuation clause without source-author choice."
+        ],
+        "sourceRanges": [
+          {
+            "startLine": 114,
+            "endLine": 114,
+            "startByte": 5723,
+            "endByteExclusive": 5847,
+            "excerpt": "Rounds continue until Reviewer affirmatively reports that the requested review is complete and no unsettled findings remain."
+          },
+          {
+            "startLine": 116,
+            "endLine": 116,
+            "startByte": 5939,
+            "endByteExclusive": 6096,
+            "excerpt": "`review` then returns the exact repository revision at which the review scope was evaluated and the fact that no unsettled findings remain within that scope."
+          },
+          {
+            "startLine": 117,
+            "endLine": 117,
+            "startByte": 6097,
+            "endByteExclusive": 6290,
+            "excerpt": "When Reviewer affirmatively reports that the requested review is complete and no unsettled findings remain, `review` shall not return to its caller and Captain shall start another review round."
+          }
+        ]
+      },
+      "mutationId": "review-one-defect"
+    },
+    {
+      "id": "case-009",
+      "family": "review",
+      "member": "restored",
+      "sourcePath": "sources/case-009/source.md",
+      "sourceRelativePath": "source-bank/case-009/source.md",
+      "sourceSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "sourceBytes": 6097,
+      "phase": "playbook.text2gears",
+      "baseSha256": "373e9bedf8b75dd031b5f80fdc6aaa5fc95ec56a94f68960ba24faeaaf0c32c6",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Review rounds retain the cumulative caller scope and exact repository revision.",
+          "Findings route to Coder acceptance/fix or reasoned rejection, then return to Reviewer.",
+          "Complete only on an affirmative completed review with no unsettled findings, returning exact evaluated revision.",
+          "Concrete caller scope, commits, findings and player model identities remain declared runtime inputs."
+        ]
+      },
+      "restoresCaseId": "case-008",
+      "identicalToCaseId": "case-007"
+    },
+    {
+      "id": "case-010",
+      "family": "dev",
+      "member": "clean",
+      "sourcePath": "sources/case-010/source.md",
+      "sourceRelativePath": "source-bank/case-010/source.md",
+      "sourceSha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+      "sourceBytes": 5959,
+      "phase": "playbook.text2gears",
+      "baseSha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Preserve all six planning outcomes and canonical child-result gates, including both BRANCH/PR routes.",
+          "Preserve the runtime Analyst discussion/Boss-question branch and same-Analyst reply continuation.",
+          "DEV routes accepted outcomes directly without another session-Captain routing decision or duplicate review of DECIDE design scope.",
+          "Runtime request, discussion, child identities and concrete model bindings need no compile-time values."
+        ]
+      }
+    },
+    {
+      "id": "case-011",
+      "family": "dev",
+      "member": "mutant",
+      "sourcePath": "sources/case-011/source.md",
+      "sourceRelativePath": "source-bank/case-011/source.md",
+      "sourceSha256": "4542d86a72335eb62dd54491dd907b20ec59da1b87aefd184d22690412e6ec95",
+      "sourceBytes": 6050,
+      "phase": "playbook.text2gears",
+      "baseSha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+      "expected": {
+        "outcome": "clarification-required",
+        "positiveFidelity": [
+          "Preserve all six planning outcomes and canonical child-result gates, including both BRANCH/PR routes.",
+          "Preserve the runtime Analyst discussion/Boss-question branch and same-Analyst reply continuation.",
+          "DEV routes accepted outcomes directly without another session-Captain routing decision or duplicate review of DECIDE design scope.",
+          "Runtime request, discussion, child identities and concrete model bindings need no compile-time values."
+        ],
+        "kind": "missing-behavior",
+        "semanticChoice": "What action and completion behavior should the reachable documentation-only planning outcome perform?",
+        "reason": "The new criterion requires the seventh outcome for documentation-only requests and the outcome list declares it. The source still only specifies actions for the original six outcomes. No clause selects a child, performs documentation work or defines terminal behavior for this new outcome. The label and general successful-final-child rule cannot select an unassigned route.",
+        "sourceEvidence": [
+          "- If the request is documentation-only, choose `documentation only`.",
+          "The planning result has seven semantic outcomes: needs Boss reply, discussion complete, code, decide then code, code via pull request, decide then code via pull request, and documentation only."
+        ],
+        "insufficientQuestions": [
+          "Which documentation files are in a future caller request?",
+          "Should a non-documentation code path run?"
+        ],
+        "mustNotResolveBy": [
+          "Mapping the new label to CODE because CODE could edit documents.",
+          "Mapping it to discussion complete despite that outcome requiring prior Boss discussion.",
+          "Treating the seventh declared outcome as unreachable or omitting it."
+        ],
+        "sourceRanges": [
+          {
+            "startLine": 28,
+            "endLine": 28,
+            "startByte": 1347,
+            "endByteExclusive": 1415,
+            "excerpt": "- If the request is documentation-only, choose `documentation only`."
+          },
+          {
+            "startLine": 38,
+            "endLine": 38,
+            "startByte": 2239,
+            "endByteExclusive": 2432,
+            "excerpt": "The planning result has seven semantic outcomes: needs Boss reply, discussion complete, code, decide then code, code via pull request, decide then code via pull request, and documentation only."
+          }
+        ]
+      },
+      "mutationId": "dev-one-defect"
+    },
+    {
+      "id": "case-012",
+      "family": "dev",
+      "member": "restored",
+      "sourcePath": "sources/case-012/source.md",
+      "sourceRelativePath": "source-bank/case-012/source.md",
+      "sourceSha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+      "sourceBytes": 5959,
+      "phase": "playbook.text2gears",
+      "baseSha256": "608c8c8ce07b50fc1ef27e8d112937ebd13206b99f6fb7e9498e44d15d124a2c",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "Preserve all six planning outcomes and canonical child-result gates, including both BRANCH/PR routes.",
+          "Preserve the runtime Analyst discussion/Boss-question branch and same-Analyst reply continuation.",
+          "DEV routes accepted outcomes directly without another session-Captain routing decision or duplicate review of DECIDE design scope.",
+          "Runtime request, discussion, child identities and concrete model bindings need no compile-time values."
+        ]
+      },
+      "restoresCaseId": "case-011",
+      "identicalToCaseId": "case-010"
+    },
+    {
+      "id": "case-013",
+      "family": "support-triage",
+      "member": "clean",
+      "sourcePath": "sources/case-013/source.md",
+      "sourceRelativePath": "source-bank/case-013/source.md",
+      "sourceSha256": "5d409209adeec4f682682db20c831985b112b8532b74b9dd14c3ca870327be07",
+      "sourceBytes": 2088,
+      "phase": "playbook.text2gears",
+      "baseSha256": "95f42a95fa9249f3619215f607afbfc64ce26e69fe000080dc2f65dcf1790394",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "A missing service asks Boss during execution and preserves the original ticket and all replies across repeated questions.",
+          "Retired service takes rejected; otherwise unavailable/no-workaround takes urgent; other identified-service tickets take ordinary.",
+          "Urgent routes to incident-queue, ordinary to standard-queue, rejected to none with a reason; return one result and preserve the original ticket."
+        ]
+      }
+    },
+    {
+      "id": "case-014",
+      "family": "support-triage",
+      "member": "mutant",
+      "sourcePath": "sources/case-014/source.md",
+      "sourceRelativePath": "source-bank/case-014/source.md",
+      "sourceSha256": "7b34e4191d25e5ffe409ed7b8e56a65e8e723b5eef54275dc16f38d45d4ee684",
+      "sourceBytes": 2211,
+      "phase": "playbook.text2gears",
+      "baseSha256": "95f42a95fa9249f3619215f607afbfc64ce26e69fe000080dc2f65dcf1790394",
+      "expected": {
+        "outcome": "clarification-required",
+        "positiveFidelity": [
+          "A missing service asks Boss during execution and preserves the original ticket and all replies across repeated questions.",
+          "Retired service takes rejected; otherwise unavailable/no-workaround takes urgent; other identified-service tickets take ordinary.",
+          "Urgent routes to incident-queue, ordinary to standard-queue, rejected to none with a reason; return one result and preserve the original ticket."
+        ],
+        "kind": "contradiction",
+        "semanticChoice": "For the same urgent ticket outcome, should the one destination be incident-queue or standard-queue?",
+        "reason": "A completed triage returns one result with one destination string. Both adjacent rules apply to the identical urgent classification and require distinct destination values. The ordinary route does not make the second urgent clause an ordinary case; no priority or override resolves the conflict.",
+        "sourceEvidence": [
+          "A completed triage returns exactly one result containing the full original ticket, its classification, and one destination string.",
+          "When Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `incident-queue`.",
+          "When Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `standard-queue`."
+        ],
+        "insufficientQuestions": [
+          "Which service is affected in a future ticket?"
+        ],
+        "mustNotResolveBy": [
+          "Returning both destinations or two results.",
+          "Treating the second urgent condition as ordinary.",
+          "Silently preferring either repeated rule."
+        ],
+        "sourceRanges": [
+          {
+            "startLine": 20,
+            "endLine": 20,
+            "startByte": 1473,
+            "endByteExclusive": 1603,
+            "excerpt": "A completed triage returns exactly one result containing the full original ticket, its classification, and one destination string."
+          },
+          {
+            "startLine": 21,
+            "endLine": 21,
+            "startByte": 1604,
+            "endByteExclusive": 1726,
+            "excerpt": "When Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `incident-queue`."
+          },
+          {
+            "startLine": 22,
+            "endLine": 22,
+            "startByte": 1727,
+            "endByteExclusive": 1849,
+            "excerpt": "When Specialist classifies the ticket as urgent, the workflow shall finish successfully with destination `standard-queue`."
+          }
+        ]
+      },
+      "mutationId": "support-triage-one-defect"
+    },
+    {
+      "id": "case-015",
+      "family": "support-triage",
+      "member": "restored",
+      "sourcePath": "sources/case-015/source.md",
+      "sourceRelativePath": "source-bank/case-015/source.md",
+      "sourceSha256": "5d409209adeec4f682682db20c831985b112b8532b74b9dd14c3ca870327be07",
+      "sourceBytes": 2088,
+      "phase": "playbook.text2gears",
+      "baseSha256": "95f42a95fa9249f3619215f607afbfc64ce26e69fe000080dc2f65dcf1790394",
+      "expected": {
+        "outcome": "ok",
+        "positiveFidelity": [
+          "A missing service asks Boss during execution and preserves the original ticket and all replies across repeated questions.",
+          "Retired service takes rejected; otherwise unavailable/no-workaround takes urgent; other identified-service tickets take ordinary.",
+          "Urgent routes to incident-queue, ordinary to standard-queue, rejected to none with a reason; return one result and preserve the original ticket."
+        ]
+      },
+      "restoresCaseId": "case-014",
+      "identicalToCaseId": "case-013"
+    }
+  ],
+  "scoring": {
+    "mutant": "Require valid nonempty clarification whose question/reason/evidence identifies the intended unresolved choice; no literal-string matching. Independent semantic review judges equivalent wording.",
+    "positive": "Require ordinary successful phase completion without marker, protected-source preservation, applicable phase checks, and preserved positiveFidelity. Malformed artifact or deleted runtime questions is not a pass.",
+    "separate": "Provider/auth/timeout/mechanical execution failure, unsupported acceptance and inconclusive semantic judgment remain separate from false positives/negatives.",
+    "rerun": "Restore only original workflow.md bytes and repeat the identical command in that workspace; separately record a fresh restored-source run. No answers or generated-artifact edits."
+  },
+  "reviewedBy": "GPT-6 (root), independently of fixture author",
+  "reviewedAt": "2026-09-13T03:16:48.883146+00:00"
+}

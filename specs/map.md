@@ -54,14 +54,37 @@ meta.md       The spec of specs
 | [DR-026](decisions/026-slc-owned-pin-input-declarations.md) | 026-slc-owned-pin-input-declarations.md | SLC-owned sidecar semantic-input closures and boundary-contained installed-package definition pins, with inline compatibility and no asset cutover |
 | [DR-027](decisions/027-complete-playbook-10-activation.md) | 027-complete-playbook-10-activation.md | Playbook 10 activation completed: [DR-024](decisions/024-playbook-10-schema-3-adoption.md)'s set is current, definitions verify byte-identically with sidecar pin inputs, demo references regenerate until checker-clean, and Playbook 11 stays unadopted |
 | [DR-028](decisions/028-contract-based-adoption-without-recompilation.md) | 028-contract-based-adoption-without-recompilation.md | Profile selection by the engine's declared ABI and schema, bundle and demo retention by verified equivalence, run-time definition relay, the published host-capabilities facade, and routine decision-free adoption |
-| [DR-029](decisions/029-source-fidelity-gate.md) | 029-source-fidelity-gate.md | Deterministic Source-fidelity gate at the text2gears seam: authored fragments conserved verbatim and in order, no invented prompt line, findings relayed in place of a Reviewer call or failing an unreviewed phase closed |
-| [DR-030](decisions/030-link-fidelity-gate.md) | 030-link-fidelity-gate.md | Deterministic link-fidelity gate before review: the emitted prompt-contract suite's own checks run on the live linked module, relayed as a correction round or failing an unreviewed link closed |
+| [DR-029](decisions/029-source-fidelity-gate.md) | 029-source-fidelity-gate.md | Deterministic Source-fidelity gate at the text2gears seam: authored fragments conserved verbatim and in order, no invented prompt line, findings relayed in place of a Reviewer call with bounded same-Coder repair under DR-033 |
+| [DR-030](decisions/030-link-fidelity-gate.md) | 030-link-fidelity-gate.md | Deterministic link-fidelity gate before review: the emitted prompt-contract suite's own checks run on the live linked module, relayed as a correction round with bounded same-Coder repair under DR-033 |
+| [DR-031](decisions/031-measured-compilation-performance.md) | 031-measured-compilation-performance.md | Opt-in bounded cold-compilation measurements, per-call accounting, separate artifact validation, and evidence requirements for performance experiments |
+| [DR-032](decisions/032-noninteractive-source-clarification.md) | 032-noninteractive-source-clarification.md | Stateless structured questions for unresolved source behavior at any phase; edit the source and repeat the command |
+| [DR-033](decisions/033-early-conformance-and-mechanical-repair.md) | 033-early-conformance-and-mechanical-repair.md | Existing FSM conformance before linking and bounded same-Coder mechanical repairs with optional lazy independent review |
+| [DR-034](decisions/034-faithful-transition-coverage.md) | 034-faithful-transition-coverage.md | Ordered fallback reachability and script probes matching the runtime's guard and exit-status contract |
+| [DR-035](decisions/035-gears-contract-at-producer.md) | 035-gears-contract-at-producer.md | Existing GEARS result-contract findings at every producer and before consumer execution |
+| [DR-036](decisions/036-machine-root-public-identity.md) | 036-machine-root-public-identity.md | Public state identities belong under `states`, with extra machine-root identity rejected before linking |
+| [DR-037](decisions/037-definition-reference-origin.md) | 037-definition-reference-origin.md | Definition locations supplied to performing calls for direct resolution of cited relative inputs |
+| [DR-038](decisions/038-quoted-task-runtime-acceptance.md) | 038-quoted-task-runtime-acceptance.md | Exact literal or quoted task text in runtime benchmark acceptance, with separate retrospective validation |
+| [DR-039](decisions/039-strict-fsm-boundary.md) | 039-strict-fsm-boundary.md | Strict standalone FSM type checking at the producer and before protected-input consumers |
+| [DR-040](decisions/040-early-continuation-input-contract.md) | 040-early-continuation-input-contract.md | Existing canonical Boss-continuation input probe at the FSM producer and before protected-input consumers |
+| [DR-041](decisions/041-composed-child-input-fidelity.md) | 041-composed-child-input-fidelity.md | Whole-template verification of composed literal child input with observed placeholder dataflow |
+| [DR-042](decisions/042-literal-prompt-relay-fidelity.md) | 042-literal-prompt-relay-fidelity.md | Literal single-pass and multiline quoted prompt-relay verification |
+| [DR-043](decisions/043-stall-watchdog-default-window.md) | 043-stall-watchdog-default-window.md | The agent-stall watchdog's default window becomes 2400 seconds, amending [DR-019](decisions/019-compile-progress-stall-watchdog.md); the watchdog's other rules stand |
+| [DR-044](decisions/044-artifact-owned-entry-options.md) | 044-artifact-owned-entry-options.md | Artifact-owned entry options with explicit new-output validation and legacy compatibility |
+| [DR-045](decisions/045-static-child-coverage-entry.md) | 045-static-child-coverage-entry.md | Bounded child coverage through actual predecessor transitions and reached context |
+| [DR-046](decisions/046-bounded-child-chain-coverage.md) | 046-bounded-child-chain-coverage.md | Bounded child-path replay for non-preemptive workflows and chained children |
+| [DR-047](decisions/047-child-call-quiescence.md) | 047-child-call-quiescence.md | Reject inherited busy tags that prevent nested-child suspension |
+| [DR-048](decisions/048-canonical-actor-diagnostic.md) | 048-canonical-actor-diagnostic.md | Canonical nested-playbook actor-clause diagnostics at the GEARS boundary |
+| [DR-049](decisions/049-early-transition-coverage.md) | 049-early-transition-coverage.md | Exact transition coverage before FSM acceptance and consumption, with cooperative cancellation and protected-input precedence |
+| [DR-050](decisions/050-required-child-relay-substitution.md) | 050-required-child-relay-substitution.md | Observable substitution for explicit child-input relay slots, preserving ordinary literal text and inserted payloads |
+| [DR-051](decisions/051-output-field-guidance-boundary.md) | 051-output-field-guidance-boundary.md | Reject parenthesized backticked output declarations at the GEARS producer while preserving runtime field extraction |
 
 ## Packages
 
 | File | Summary |
 | --- | --- |
+| [clarification.md](packages/clarification.md) | Generic noninteractive source questions, executor stopping, structured diagnostics, and original-source reruns |
 | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
+| [compilation-measurement.md](packages/compilation-measurement.md) | Opt-in cold-compilation and fixed-FSM link benchmarks, explicit settings, phase and agent-call measurements, cancellation, private local evidence, and artifact validation |
 | [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
 | [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, exact multi-profile runtime contracts, routine locked Playbook adoption, demo acceptance, and package publication checks |
 | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
@@ -73,3 +96,4 @@ meta.md       The spec of specs
 | [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |
 | [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, routine adoption retaining bundles by verified equivalence, and system acceptance |
 | [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, runtime, compiled-execution, Source-fidelity, and link-fidelity checks; portable generated tests; and emitted-module load integrity |
+| [workflow-acceptance.md](packages/workflow-acceptance.md) | Opt-in maintained CODE and DEV runtime acceptance harness with scripted children, question-profile ledger oracles, protected hashes, and nested Git receipts |
