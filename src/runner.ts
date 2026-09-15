@@ -282,6 +282,7 @@ async function runSinglePhase(
     sourceFormat: phase.source.format,
     ext: phase.source.ext,
     entry: pipeline.phases[0] === phase,
+    staged: phase.pass,
   });
   if (raw) {
     // A named phase cannot normalize (pipeline-37), so a raw entry source has no
@@ -1158,6 +1159,7 @@ async function executeSteps(
               state.pipelineName,
               steps[failedIndex],
               state.accepted[state.accepted.length - 1].target,
+              pipeline.passes,
             )}`,
           ],
   });
@@ -1436,6 +1438,7 @@ function resumeCommand(
   pipelineName: string,
   next: PhaseStep,
   lastTarget: string,
+  passes: readonly Phase[],
 ): string {
   const operands =
     next.request.kind === 'link'
@@ -1450,7 +1453,16 @@ function resumeCommand(
             `${option.name}=${option.value}`,
           ]),
         ]
-      : [`${pipelineName}.${next.phase}`, lastTarget];
+      : [
+          `${pipelineName}.${next.phase}`,
+          lastTarget,
+          // A standalone pass otherwise writes the `.opt` sibling (pipeline-33);
+          // name the target the stopped run was writing so the resumed pass
+          // lands where its downstream phases read.
+          ...(passes.some((pass) => pass.name === next.phase)
+            ? ['-o', stepTarget(next)]
+            : []),
+        ];
   return ['slc', ...operands.map(shellOperand)].join(' ');
 }
 

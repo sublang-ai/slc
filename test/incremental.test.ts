@@ -778,6 +778,48 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
     );
   });
 
+  it('resumes a failed pass into the target it was writing (incremental-compilation-6)', async () => {
+    await writeFile(
+      join(pipelineDir, 'tidy.md'),
+      phase('middle', '.md', 'middle', '.md'),
+    );
+    const write = async (request: ExecuteRequest, body: string) => {
+      const target =
+        request.kind === 'compile' ? request.target : request.linked;
+      await writeFile(target, target.endsWith('.final.md') ? 'final\n' : body);
+      return { status: 'ok', diagnostics: [] } as ExecutorResult;
+    };
+    await runSlc(
+      ['flow', source],
+      deps(fake([], (request) => write(request, 'middle\n'))),
+    );
+
+    // The pass must actually run, so its input has to differ from the build
+    // history's; an identical `.raw` would be reused instead.
+    await writeFile(source, 'source two\n');
+    const failing = fake([], async (request) =>
+      request.kind === 'compile' && request.definitionPath.endsWith('tidy.md')
+        ? { status: 'error', diagnostics: ['fixture pass failure'] }
+        : write(request, 'middle two\n'),
+    );
+
+    const result = await runSlc(['flow', source], deps(failing));
+
+    expect(result.ok).toBe(false);
+    // The scheduler hands the pass a `.raw` stage and expects the format's
+    // canonical artifact back (pipeline-32), so the resume line must name both.
+    const resume = `resume from the last accepted target with: slc flow.tidy ${join(artDir, 'case.middle.raw.md')} -o ${join(artDir, 'case.middle.md')}`;
+    expect(result.diagnostics).toContain(resume);
+
+    // The reported line has to be an invocation slc accepts, not just a hint.
+    const replayed = await runSlc(
+      resume.slice(resume.indexOf('slc ') + 'slc '.length).split(' '),
+      deps(fake([], (request) => write(request, 'middle three\n'))),
+    );
+
+    expect(replayed).toMatchObject({ ok: true, diagnostics: [] });
+  });
+
   it('resumes with quoted operands and the original link options (incremental-compilation-6)', async () => {
     const spacedTarget = join(workDir, 'runtime dir', 'runtime.ts');
     await mkdir(join(workDir, 'runtime dir'), { recursive: true });

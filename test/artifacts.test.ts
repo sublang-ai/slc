@@ -25,6 +25,35 @@ const phase = (
 });
 
 describe('parseSource (pipeline-6)', () => {
+  // A scheduled pass reads the stage its predecessor wrote (pipeline-32), and a
+  // standalone pass writes the unnumbered stage (pipeline-33); refusing those
+  // names left a stopped pass with no invocation that could resume it.
+  it.each(['case.middle.raw.md', 'case.middle.opt1.md', 'case.middle.opt.md'])(
+    'recovers the basename from the staged pass source %s',
+    (name) => {
+      expect(
+        parseSource({
+          path: `work/case.flow/${name}`,
+          sourceFormat: 'middle',
+          ext: '.md',
+          entry: false,
+          staged: true,
+        }),
+      ).toEqual({ basename: 'case', raw: false });
+    },
+  );
+
+  it('refuses a staged name for a phase that is not a pass', () => {
+    expect(() =>
+      parseSource({
+        path: 'work/case.flow/case.middle.raw.md',
+        sourceFormat: 'middle',
+        ext: '.md',
+        entry: false,
+      }),
+    ).toThrow(/must be named "<basename>\.middle\.md"/);
+  });
+
   it('accepts the plain entry form', () => {
     expect(
       parseSource({

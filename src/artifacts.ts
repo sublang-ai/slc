@@ -15,6 +15,11 @@ import { basename as pathBasename, extname, join } from 'node:path';
 
 import type { Phase } from './phase.js';
 
+// The stages a scheduled pass chain writes between the producing phase and the
+// format's canonical artifact (pipeline-32), plus the unnumbered stage a
+// standalone pass writes (pipeline-33).
+const PASS_STAGE = /\.(?:raw|opt\d*)$/;
+
 /** Machine-readable reason a source path was refused. */
 export type SourceErrorCode = 'invalid-source-name';
 
@@ -47,7 +52,9 @@ export interface ParsedSource {
  * The non-entry form requires `<basename>.<source-format>.<ext>`; the entry form
  * also accepts the plain `<basename>.<ext>`, and an entry source with any other
  * extension is a raw input whose `<basename>` is the name minus its actual
- * extension (DR-014).
+ * extension (DR-014). A pass reads the staged artifact its scheduled
+ * predecessor wrote, so `staged` additionally accepts the `.raw` and `.opt<k>`
+ * stages pipeline-32 and pipeline-33 name.
  *
  * @throws {SourceError} when the name matches no applicable form.
  */
@@ -56,8 +63,10 @@ export function parseSource(opts: {
   sourceFormat: string;
   ext: string;
   entry: boolean;
+  /** True for a pass phase, whose source may carry a scheduled stage suffix. */
+  staged?: boolean;
 }): ParsedSource {
-  const { path, sourceFormat, ext, entry } = opts;
+  const { path, sourceFormat, ext, entry, staged } = opts;
   const name = pathBasename(path);
 
   if (!name.endsWith(ext)) {
@@ -79,7 +88,8 @@ export function parseSource(opts: {
     );
   }
 
-  const stem = name.slice(0, name.length - ext.length);
+  const full = name.slice(0, name.length - ext.length);
+  const stem = staged === true ? full.replace(PASS_STAGE, '') : full;
   const qualifier = `.${sourceFormat}`;
   let basename: string;
   if (stem.endsWith(qualifier)) {
@@ -89,7 +99,9 @@ export function parseSource(opts: {
   } else {
     throw new SourceError(
       'invalid-source-name',
-      `source "${name}" must be named "<basename>.${sourceFormat}${ext}"`,
+      staged === true
+        ? `source "${name}" must be named "<basename>.${sourceFormat}[.raw|.opt<k>]${ext}"`
+        : `source "${name}" must be named "<basename>.${sourceFormat}${ext}"`,
     );
   }
 
