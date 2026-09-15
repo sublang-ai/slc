@@ -43,6 +43,32 @@ describe('parseSource (pipeline-6)', () => {
     },
   );
 
+  // `raw` and `opt<k>` are ordinary format names too, so stripping a stage
+  // before recognizing the format would consume the format itself.
+  it.each([
+    ['raw', 'case.raw.md', 'case'],
+    ['opt', 'case.opt.md', 'case'],
+    ['opt1', 'case.opt1.md', 'case'],
+    ['raw', 'case.raw.raw.md', 'case.raw'],
+    ['opt1', 'case.opt1.opt1.md', 'case.opt1'],
+  ])(
+    'keeps the canonical reading of %s source %s for a pass',
+    (sourceFormat, name, basename) => {
+      const opts = {
+        path: `work/case.flow/${name}`,
+        sourceFormat,
+        ext: '.md',
+        entry: false,
+      };
+      expect(parseSource({ ...opts, staged: true })).toEqual({
+        basename,
+        raw: false,
+      });
+      // A pass must read a name exactly as every other phase already does.
+      expect(parseSource({ ...opts, staged: true })).toEqual(parseSource(opts));
+    },
+  );
+
   it('refuses a staged name for a phase that is not a pass', () => {
     expect(() =>
       parseSource({

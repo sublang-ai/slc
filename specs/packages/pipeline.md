@@ -58,7 +58,7 @@ While inferring phase order, the slc command shall exclude pass phases from chai
 
 #### pipeline-6
 
-When given a non-entry source path, the slc command shall accept it only if it matches `<basename>.<source-format>.<ext>` — or, for a pass phase, that name carrying one scheduled `.raw` or `.opt<k>` stage [[pipeline-32](#pipeline-32)], [[pipeline-33](#pipeline-33)] — and shall refuse any other name; when given an entry source path, the slc command shall accept `<basename>[.<source-format>].<ext>` as before and shall treat a name with any other extension as a raw input whose `<basename>` is the name minus its actual extension ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
+When given a non-entry source path, the slc command shall accept it only if it matches `<basename>.<source-format>.<ext>` — or, for a pass phase, that name followed by one scheduled `.raw` or `.opt<k>` stage [[pipeline-32](#pipeline-32)], [[pipeline-33](#pipeline-33)], recognizing the stage only after the declared source format so a format bearing a stage's own name keeps the canonical reading — and shall refuse any other name; when given an entry source path, the slc command shall accept `<basename>[.<source-format>].<ext>` as before and shall treat a name with any other extension as a raw input whose `<basename>` is the name minus its actual extension ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md)).
 
 #### pipeline-7
 

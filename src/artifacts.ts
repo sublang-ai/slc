@@ -88,12 +88,19 @@ export function parseSource(opts: {
     );
   }
 
-  const full = name.slice(0, name.length - ext.length);
-  const stem = staged === true ? full.replace(PASS_STAGE, '') : full;
+  const stem = name.slice(0, name.length - ext.length);
   const qualifier = `.${sourceFormat}`;
+  // A stage is recognized only after the declared format, never instead of it:
+  // a format named `raw` or `opt<k>` owns its own qualifier, so the canonical
+  // reading wins wherever both would match (pipeline-6).
+  const stage = staged === true ? PASS_STAGE.exec(stem) : null;
+  const stagedStem =
+    stage === null ? undefined : stem.slice(0, stem.length - stage[0].length);
   let basename: string;
   if (stem.endsWith(qualifier)) {
     basename = stem.slice(0, stem.length - qualifier.length);
+  } else if (stagedStem?.endsWith(qualifier) === true) {
+    basename = stagedStem.slice(0, stagedStem.length - qualifier.length);
   } else if (entry) {
     basename = stem;
   } else {
