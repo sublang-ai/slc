@@ -10,7 +10,7 @@
 // not inside the definitions.
 
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -46,8 +46,15 @@ if (installedPlaybook.version !== expectedPlaybookVersion) {
 }
 
 let failed = false;
-for (const name of definitions) {
-  const filename = `${name}.md`;
+const publishedInputs = readJson(
+  join(playbookRoot, 'slc', 'slc.pin-inputs.json'),
+);
+const localInputs = readJson(join(pipelineDir, 'slc.pin-inputs.json'));
+const files = new Set([
+  ...definitions.map((name) => `${name}.md`),
+  ...Object.values(publishedInputs.closures).flat(),
+]);
+for (const filename of files) {
   const upstream = readFileSync(join(playbookRoot, 'slc', filename), 'utf8');
   const vendored = readFileSync(join(pipelineDir, filename), 'utf8');
   if (vendored === upstream) {
@@ -59,6 +66,20 @@ for (const name of definitions) {
     console.error(
       `${filename}: differs from installed @sublang/playbook@${expectedPlaybookVersion}${firstDifference(upstream, vendored)}`,
     );
+  }
+}
+
+for (const [phase, inputs] of Object.entries(publishedInputs.closures)) {
+  const local = new Set(
+    (localInputs.closures[phase] ?? []).map((input) =>
+      resolve(pipelineDir, input),
+    ),
+  );
+  for (const input of inputs) {
+    if (!local.has(resolve(pipelineDir, input))) {
+      failed = true;
+      console.error(`${phase}: missing vendored semantic input ${input}`);
+    }
   }
 }
 

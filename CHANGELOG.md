@@ -45,8 +45,10 @@ and this project adheres to
 
 ### Changed
 
-- **Adopts Playbook 13.2.0, Cligent 0.27.0, and Spex 3.0.0.** Vendored
-  definitions and pins match the published dependency set. Development builds
+- **Adopts Playbook 14.0.0, Cligent 0.27.0, and Spex 3.0.0.** Vendored
+  definitions, their workflow catalog and link helper, and pins match the
+  published dependency set. Supported links use Playbook's deterministic
+  materializer with the existing semantic checks. Development builds
   use native TypeScript 7 while the public compiler API dependency stays on
   TypeScript 6.
 

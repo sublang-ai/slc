@@ -6,7 +6,16 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', '.scratch/**'] },
+  {
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      '.scratch/**',
+      // Immutable published asset, checked byte-for-byte by verify:definitions.
+      'pipelines/playbook/materialize-link.mjs',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

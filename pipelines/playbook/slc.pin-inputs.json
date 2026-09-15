@@ -7,26 +7,32 @@
       "../../package-lock.json"
     ],
     "gears2fsm": [
-      "../../node_modules/@sublang/playbook/slc/text2gears.md",
-      "../../node_modules/@sublang/playbook/slc/link.md",
+      "text2gears.md",
+      "link.md",
+      "workflow-contracts.json",
       "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
       "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
       "../../package-lock.json"
     ],
     "link": [
-      "../../node_modules/@sublang/playbook/slc/text2gears.md",
-      "../../node_modules/@sublang/playbook/slc/gears2fsm.md",
+      "text2gears.md",
+      "gears2fsm.md",
+      "optimize.md",
+      "materialize-link.mjs",
+      "workflow-contracts.json",
       "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
       "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
       "../../package-lock.json"
     ],
     "optimize": [
-      "../../node_modules/@sublang/playbook/slc/text2gears.md",
-      "../../node_modules/@sublang/playbook/slc/gears2fsm.md",
-      "../../node_modules/@sublang/playbook/slc/link.md",
+      "text2gears.md",
+      "gears2fsm.md",
+      "link.md",
       "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
       "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
-      "../../package-lock.json"
+      "../../package-lock.json",
+      "materialize-link.mjs",
+      "workflow-contracts.json"
     ]
   }
 }

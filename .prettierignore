@@ -3,5 +3,9 @@ node_modules
 coverage
 package-lock.json
 
+# Immutable compiler assets copied from the published Playbook release.
+pipelines/playbook/materialize-link.mjs
+pipelines/playbook/workflow-contracts.json
+
 # Markdown is hand-authored (specs follow their own conventions, e.g. meta-25).
 *.md

@@ -31,8 +31,11 @@ The pass shall rewrite an item only when **all** of the following hold:
 - The item's behavior is mechanical: a fixed shell command performs it
   completely, with no judgment, no natural-language generation, and no
   reading of conversational context.
-- The command is static: it needs no `<placeholder>` and no runtime value
-  beyond the working directory the runtime executes in.
+- The command is static apart from naming its target: it needs no runtime
+  value beyond the working directory the runtime executes in, except a
+  `<placeholder>` the source already established for a target the command
+  cannot otherwise identify, which binds as a shell literal
+  ([text2gears "Script behaviors"](text2gears.md#script-behaviors-optimizer-introduced)).
 - No other item's condition or prompt consumes prose this item's acting agent
   would have produced; the item's effect is entirely on the environment
   (files, repository state, directories) plus a success/failure signal.
@@ -41,9 +44,42 @@ The pass shall rewrite an item only when **all** of the following hold:
   than success/failure, or whose outcomes require extracted output fields,
   is ineligible.
 
-The canonical example is environment setup, such as ensuring the working
-directory is a version-control repository before committing to it:
-`git rev-parse --is-inside-work-tree 2>/dev/null || git init`.
+The command shall preserve the exact environmental predicate and effect of
+the source behavior, including its location and scope; a weaker success
+condition or an operation on a different resource is not an optimization.
+
+For example, these repository requirements have different predicates.
+When the source only requires being inside a Git working tree, an ancestor
+repository may satisfy it:
+
+Captain shall run:
+
+> test "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true || git init
+
+Results:
+
+- `ok`: The command exits zero.
+- `failed`: The command exits nonzero.
+
+When the source requires the current directory to be the root of its own Git
+repository and says to initialize there if `.git` is absent, membership in an
+ancestor repository does not satisfy it:
+
+Captain shall run:
+
+> if [ ! -e .git ]; then git init || exit; fi
+> test "$(git rev-parse --show-toplevel 2>/dev/null)" = "$(pwd -P)"
+
+Results:
+
+- `ok`: The command exits zero.
+- `failed`: The command exits nonzero.
+
+The `.git` existence check accepts a linked worktree's `.git` file as well as
+a repository's `.git` directory; the final check verifies the required root.
+Neither example authorizes adding repository setup where the source does not
+require it, and the linker shall not have to repair a weakened optimized
+behavior later.
 
 Judgment stays conservative: when eligibility is uncertain, the pass shall
 leave the item unchanged rather than guess.
@@ -60,7 +96,11 @@ For each eligible item, the pass shall:
   stays in this exact English form even when the surrounding item text is
   in another language.
 - Replace the blockquoted prompt with the exact POSIX shell script that
-  performs the behavior, static text only.
+  performs the behavior: static text, apart from the eligible target
+  `<placeholder>`, written as a single-quoted shell word
+  ([text2gears "Script behaviors"](text2gears.md#script-behaviors-optimizer-introduced)),
+  retaining a `>` blockquote on every script line; a fenced code block is not
+  a GEARS acting body.
 - Emit exactly two `Results:` bullets per
   [text2gears "Script behaviors"](text2gears.md#script-behaviors-optimizer-introduced):
   first the zero-exit guard, then the nonzero-exit guard. When the original

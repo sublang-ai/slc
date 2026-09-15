@@ -1,7 +1,15 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# Dependency adoption checkpoint — 2026-09-12
+# Dependency adoption
+
+## Release adoption — 2026-09-15
+
+SLC 0.10.0 adopts the published Playbook 14.0.0 package. Its engine still declares ABI 1 and artifact schema 3, and all three compiled-execution sections are unchanged from the retained bundles. The four definitions, their published workflow catalog and link materializer, and their semantic-input closures move together; the adoption gate verifies both byte identity and closure membership. Pins record the new exact dependency set. No new runtime profile or agent rebuild is required under [DR-028](../specs/decisions/028-contract-based-adoption-without-recompilation.md).
+
+SLC retains its direct Cligent 0.27.0 dependency; Playbook's declared `^0.26.0` requirement resolves separately in the lock. The adoption spec now describes those independently resolved requirements. Playbook 14 also publishes the DEV composer export correction and compiler/runtime improvements that were still upstream work at the checkpoint below. The historical performance measurements remain evidence for their recorded dependency graphs.
+
+## Dependency adoption checkpoint — 2026-09-12
 
 The working repository selects current published dependencies for the next experiments. **The dependency adoption passes release validation.** The isolated experiment cohort is frozen separately before provider measurements. The [version record](performance/dependency-baseline-2026-09-12.json) captures every top-level manifest range, locked and installed version, manifest/lock hashes, and private audit identities. This is a dependency checkpoint, not a new compilation-speed result ([IR-040](../specs/intents/040-current-dependency-baseline.md)).
 

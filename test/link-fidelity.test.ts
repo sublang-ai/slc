@@ -150,7 +150,7 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
   // The maintained bundles ship both their TypeScript sources and the built
   // JavaScript beside them; Node refuses to strip types under node_modules, so
   // the checks address the built pair.
-  it.each(['code', 'review', 'decide'])(
+  it.each(['code', 'review', 'decide', 'dev'])(
     'reports no finding for the maintained %s bundle',
     async (name) => {
       const dir = join(sdlc, `${name}.playbook`);
@@ -162,43 +162,6 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
       ).toEqual([]);
     },
   );
-
-  it('reports published DEV’s helper-export defect and accepts its actual runtime composer', async () => {
-    const published = join(sdlc, 'dev.playbook');
-    const linkedPath = join(published, 'dev.playbook.js');
-    const fsmPath = join(published, 'dev.fsm.js');
-    // Playbook 13.2 exposes a private (input, resuming) helper through _internal,
-    // although its runtimeSpec correctly uses (input, identity, resuming).
-    // Keep the raw finding until the upstream export correction is published;
-    // do not teach the production checker to guess a function's signature.
-    expect(await checkLinkedModuleContract({ linkedPath, fsmPath })).toEqual([
-      'planAnalysis: a continuation turn lacks the "Your previous question:" block',
-      'planAnalysis: a continuation turn does not preserve the exact ordered Boss question/reply blocks',
-    ]);
-
-    const dir = await mkdtemp(join(tmpdir(), 'slc-dev-runtime-composer-'));
-    try {
-      const source = await readFile(linkedPath, 'utf8');
-      await writeFile(join(dir, 'package.json'), '{"type":"module"}\n');
-      await symlink(join(repoRoot, 'node_modules'), join(dir, 'node_modules'));
-      await writeFile(join(dir, 'dev.fsm.js'), await readFile(fsmPath));
-      // Expose the actual function object passed to the real runtime factory.
-      // This private instrumentation changes no runtime implementation or source.
-      await writeFile(
-        join(dir, 'dev.playbook.js'),
-        `${source}\n_internal.composePlayerPrompt = runtimeSpec.composePlayerPrompt;\n`,
-      );
-      expect(
-        await checkLinkedModuleContract({
-          linkedPath: join(dir, 'dev.playbook.js'),
-          fsmPath: join(dir, 'dev.fsm.js'),
-        }),
-      ).toEqual([]);
-      expect(await readFile(linkedPath, 'utf8')).toBe(source);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
 
   it('reports no finding for this repository’s own compiled meta bundles', async () => {
     for (const name of ['text2gears', 'gears2fsm', 'link']) {
