@@ -778,6 +778,43 @@ describe('success-only incremental runner (incremental-compilation-18..25, incre
     );
   });
 
+  it('resumes with quoted operands and the original link options (incremental-compilation-6)', async () => {
+    const spacedTarget = join(workDir, 'runtime dir', 'runtime.ts');
+    await mkdir(join(workDir, 'runtime dir'), { recursive: true });
+    await writeFile(join(pipelineDir, 'link.md'), linkPhase);
+    await writeFile(spacedTarget, 'runtime one\n');
+    const failing = fake([], async (request) => {
+      if (request.kind === 'link') {
+        return { status: 'error', diagnostics: ['fixture link failure'] };
+      }
+      await writeFile(
+        request.target,
+        request.target.endsWith('.middle.md') ? 'middle\n' : 'final\n',
+      );
+      return { status: 'ok', diagnostics: [] };
+    });
+
+    const result = await runSlc(
+      [
+        'flow',
+        source,
+        '--link',
+        spacedTarget,
+        '--link-option',
+        'policy=strict',
+      ],
+      deps(failing),
+    );
+
+    expect(result.ok).toBe(false);
+    // The reported line must be the invocation it claims to resume: an
+    // unquoted space would split one operand into two, and a dropped option
+    // would link under a different policy (pipeline-12, pipeline-14).
+    expect(result.diagnostics).toContain(
+      `resume from the last accepted target with: slc flow.link ${join(artDir, 'case.final.md')} '${spacedTarget}' --link-option policy=strict`,
+    );
+  });
+
   it('makes --rebuild ordinary and publishes a new complete build', async () => {
     await runSlc(['flow', source], deps(fake([])));
     const calls: ExecuteRequest[] = [];

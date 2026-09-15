@@ -386,7 +386,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
     }
     current = null;
   };
-  for (const line of gears.split('\n')) {
+  for (const line of gears.split(/\r?\n/)) {
     const heading = ITEM_HEADING.exec(line);
     if (heading !== null) {
       flush();

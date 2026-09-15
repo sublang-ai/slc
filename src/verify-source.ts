@@ -16,6 +16,10 @@
  * wording, and result descriptions remain the Reviewer's concern.
  */
 
+// JavaScript's `.` excludes `\r` and `$` anchors only at end of input, so a
+// `\r` left on a split line defeats every anchored pattern below. Split on the
+// full CRLF or LF boundary once, here, rather than tolerating `\r` in each.
+const LINE_BOUNDARY = /\r?\n/;
 const ITEM_HEADING = /^###\s+(\S+)\s*$/;
 const MARKDOWN_FENCE = /^```markdown\s*$/i;
 const FENCE_END = /^```\s*$/;
@@ -103,7 +107,7 @@ function introducesQuotedRelay(
  * @throws {Error} when an instruction fence is never closed.
  */
 export function sourcePromptFragments(sourceText: string): SourceFragment[] {
-  const lines = sourceText.split('\n');
+  const lines = sourceText.split(LINE_BOUNDARY);
   const fragments: SourceFragment[] = [];
   for (let index = 0; index < lines.length; index++) {
     if (MARKDOWN_FENCE.test(lines[index])) {
@@ -180,7 +184,7 @@ function actingPlayer(acting: string): string | undefined {
 
 /** Parses the minimal GEARS item surface the Source-fidelity rules read. */
 export function parseGearsContract(gearsText: string): GearsItem[] {
-  const lines = gearsText.split('\n');
+  const lines = gearsText.split(LINE_BOUNDARY);
   const starts: Array<{ index: number; id: string }> = [];
   for (let index = 0; index < lines.length; index++) {
     const heading = ITEM_HEADING.exec(lines[index]);

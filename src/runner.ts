@@ -1437,9 +1437,33 @@ function resumeCommand(
   next: PhaseStep,
   lastTarget: string,
 ): string {
-  return next.request.kind === 'link'
-    ? `slc ${pipelineName}.link ${lastTarget} ${next.request.linkTarget}`
-    : `slc ${pipelineName}.${next.phase} ${lastTarget}`;
+  const operands =
+    next.request.kind === 'link'
+      ? [
+          `${pipelineName}.link`,
+          lastTarget,
+          next.request.linkTarget,
+          // The link phase's opaque options are part of the invocation
+          // (pipeline-14); dropping them would resume a different link.
+          ...next.request.options.flatMap((option) => [
+            '--link-option',
+            `${option.name}=${option.value}`,
+          ]),
+        ]
+      : [`${pipelineName}.${next.phase}`, lastTarget];
+  return ['slc', ...operands.map(shellOperand)].join(' ');
+}
+
+// An operand the shell would not read back verbatim — a path with a space, say
+// — must be quoted, or the reported line is a different invocation than the one
+// it resumes (pipeline-9, pipeline-12).
+const VERBATIM_OPERAND = /^[A-Za-z0-9_@%+=:,./-]+$/;
+
+/** One resume operand, POSIX-quoted only where the shell would reinterpret it. */
+function shellOperand(value: string): string {
+  return VERBATIM_OPERAND.test(value)
+    ? value
+    : `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 function stepTarget(step: PhaseStep): string {

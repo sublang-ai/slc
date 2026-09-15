@@ -914,6 +914,12 @@ const structuredConfig = (): MachineConfigLike => ({
 });
 
 describe('parseGearsItems', () => {
+  it('reads a CRLF package exactly as its LF form', () => {
+    expect(parseGearsItems(gears.replaceAll('\n', '\r\n'))).toEqual(
+      parseGearsItems(gears),
+    );
+  });
+
   it('parses each item id, player, and verbatim prompt body', () => {
     expect(parseGearsItems(gears)).toEqual([
       {

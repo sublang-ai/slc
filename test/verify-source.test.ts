@@ -63,6 +63,30 @@ const fragmentRange = (
 };
 
 describe('Source-fidelity conservation check (verification-25, verification-26)', () => {
+  // A `\r` left on a split line defeats `/^>\s?(.*)$/` outright, which emptied
+  // the fragment set and silently accepted an invented prompt (verification-25).
+  it.each(['code', 'review', 'decide', 'dev'])(
+    'reads the CRLF %s pair exactly as its LF form',
+    (name) => {
+      const { source, gears } = maintained(name);
+      const crlf = (text: string) => text.replaceAll('\n', '\r\n');
+      const invented = (text: string) =>
+        text.replace(/^> .*$/mu, '> An invented prompt line.');
+      expect(sourcePromptFragments(crlf(source))).toEqual(
+        sourcePromptFragments(source),
+      );
+      expect(checkSourceGearsContract(crlf(source), crlf(gears))).toEqual(
+        checkSourceGearsContract(source, gears),
+      );
+      expect(
+        checkSourceGearsContract(crlf(source), crlf(invented(gears))),
+      ).toEqual(checkSourceGearsContract(source, invented(gears)));
+      expect(
+        checkSourceGearsContract(crlf(source), crlf(invented(gears))),
+      ).not.toEqual([]);
+    },
+  );
+
   it.each(['code', 'review', 'decide', 'dev'])(
     'reports no finding for the maintained %s pair',
     (name) => {

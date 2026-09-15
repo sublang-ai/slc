@@ -68,7 +68,7 @@ export interface CompiledExecutionContract {
 export function parseCompiledExecutionContract(
   definition: string,
 ): CompiledExecutionContract | undefined {
-  const lines = definition.split('\n');
+  const lines = definition.split(/\r?\n/);
   const headings = lines
     .map((line, index) => (SECTION_HEADING.test(line) ? index : -1))
     .filter((index) => index >= 0);

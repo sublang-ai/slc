@@ -124,6 +124,14 @@ describe('unescapeMarkdown (verification-23)', () => {
 });
 
 describe('parseCompiledExecutionContract (verification-23)', () => {
+  it('reads a CRLF definition exactly as its LF equivalent', () => {
+    const crlf = definitionWithSection.replaceAll('\n', '\r\n');
+    expect(parseCompiledExecutionContract(crlf)).toEqual(
+      parseCompiledExecutionContract(definitionWithSection),
+    );
+    expect(parseCompiledExecutionContract(crlf)?.findings).toEqual([]);
+  });
+
   it('parses the exact section form the shipped definitions carry', () => {
     expect(parseCompiledExecutionContract(shippedDefinition)).toEqual({
       prompt: shippedPrompt,
