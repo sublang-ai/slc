@@ -264,6 +264,8 @@ byte-identical to the committed index.
 
 ## Contributing
 
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 We welcome contributions of all kinds.
 
 - 🌟 Star our repo if you find slc useful.
