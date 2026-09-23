@@ -271,6 +271,113 @@ When a fabricated condition holds, Captain shall prompt Coder:
     ]);
   });
 
+  // Playbook's prefix pass moves an item's standalone relay blocks after its
+  // instructions and lists the item under `## Prefixed prompts`; the checker
+  // accepts exactly that layout for a listed item (verification-25).
+  describe('prefixed items', () => {
+    const SECTION = '## Prefixed prompts';
+    const listed = (gears: string, ...ids: readonly string[]): string =>
+      `${gears.replace(/\n+$/, '\n')}\n${SECTION}\n\n${ids.map((id) => `- ${id}: relays → tail`).join('\n')}\n`;
+
+    /** The maintained code pair with CODE-1's leading relay block moved to its tail. */
+    const prefixedCode = (): { source: string; gears: string } => {
+      const { source, gears } = maintained('code');
+      const lines = gears.split('\n');
+      const relay = sourcePromptFragments(source).find(
+        (fragment) => fragment.kind === 'relay',
+      );
+      if (relay === undefined) throw new Error('the pair authors no relay');
+      const block = fragmentRange(lines, relay.lines);
+      // CODE-1: relay block, blank quoted line, then the instruction lines.
+      expect(lines[block.end]).toBe('>');
+      let end = block.end + 1;
+      while (/^>/.test(lines[end])) end++;
+      const moved = [
+        ...lines.slice(0, block.start),
+        ...lines.slice(block.end + 1, end),
+        '>',
+        ...lines.slice(block.start, block.end),
+        ...lines.slice(end),
+      ].join('\n');
+      return { source, gears: listed(moved, 'CODE-1') };
+    };
+
+    it('accepts a listed maintained item whose relays now trail its instructions', () => {
+      const { source, gears } = prefixedCode();
+      expect(checkSourceGearsContract(source, gears)).toEqual([]);
+      const crlf = (text: string): string => text.replaceAll('\n', '\r\n');
+      expect(checkSourceGearsContract(crlf(source), crlf(gears))).toEqual([]);
+    });
+
+    it('holds the same layout to Source order when the item is not listed', () => {
+      const { source, gears } = prefixedCode();
+      const unlisted = gears.slice(0, gears.indexOf(`\n${SECTION}`) + 1);
+      expect(checkSourceGearsContract(source, unlisted)).toEqual([
+        'CODE-1: authored prompt fragments are out of Source order',
+      ]);
+    });
+
+    it('names a listing that is a no-op, absent, malformed, or still relay-first', () => {
+      const { source, gears } = maintained('code');
+      expect(checkSourceGearsContract(source, listed(gears, 'CODE-2'))).toEqual(
+        ['CODE-2: listed as prefixed but its prompt is in Source order'],
+      );
+      expect(
+        checkSourceGearsContract(
+          source,
+          `${listed(gears, 'CODE-9')}- CODE-1 moved\n`,
+        ),
+      ).toEqual([
+        'Prefixed prompts: malformed entry: "- CODE-1 moved"',
+        'Prefixed prompts: CODE-9 is not an item',
+      ]);
+      expect(checkSourceGearsContract(source, listed(gears, 'CODE-1'))).toEqual(
+        ['CODE-1: listed as prefixed but a relay precedes an instruction'],
+      );
+    });
+
+    it('accepts a blank-separated quoted block moved out of a fenced instruction and keeps an adjacent one', () => {
+      const source = [
+        'Captain shall give Coder the following instruction:',
+        '',
+        '```markdown',
+        '> Request: <caller-input>',
+        '',
+        'Read the request and act on it.',
+        'Quote it back like this:',
+        '> Request: <caller-input>',
+        '```',
+        '',
+      ].join('\n');
+      const prefixed = gearsPrompt([
+        'Read the request and act on it.',
+        'Quote it back like this:',
+        '> Request: <caller-input>',
+        '',
+        '> Request: <caller-input>',
+      ]);
+      expect(
+        checkSourceGearsContract(source, listed(prefixed, 'FLOW-1')),
+      ).toEqual([]);
+      expect(checkSourceGearsContract(source, prefixed)).toEqual([
+        'source instruction fragment at line 3 was dropped or changed',
+      ]);
+      const stillEmbedded = gearsPrompt([
+        'Read the request and act on it.',
+        '> Request: <caller-input>',
+        'Quote it back like this:',
+        '',
+        '> Request: <caller-input>',
+      ]);
+      expect(
+        checkSourceGearsContract(source, listed(stillEmbedded, 'FLOW-1')),
+      ).toEqual([
+        'source instruction fragment at line 3 was dropped or changed',
+        'FLOW-1: listed as prefixed but its prompt is in Source order',
+      ]);
+    });
+  });
+
   it('names a relayed field read without its literal quote marker', () => {
     const { source, gears } = maintained('code');
     const relay = sourcePromptFragments(source).find(
