@@ -3,6 +3,12 @@
 
 # Dependency adoption
 
+## Release adoption — 2026-09-24
+
+SLC adopts the published Playbook 15.1.0 package. Its engine still declares ABI 1 and artifact schema 3, and all three compiled-execution sections are unchanged from the retained bundles; `link.md` changes only the TypeScript interface excerpts that describe the failure-cause and control-standing contract Playbook 14.1 added. The vendored set gains the `prefix` pass definition and its `prefix-prompts.mjs` tool, which the published sidecar declares as the pass's local input; the SLC-owned sidecar declares the pass's flattened closure the way it declares `optimize`'s, the definition gate verifies all five definitions and every published closure member, and regenerated pins record the new exact dependency set. No new runtime profile or agent rebuild is required under [DR-028](../specs/decisions/028-contract-based-adoption-without-recompilation.md).
+
+SLC keeps its direct Cligent 0.27.0 dependency; Playbook's declared `^0.26.0` requirement resolves separately in the lock. Playbook 15.0 names its shared configuration directory `config/`, so the demo checker seeds its scratch host configuration there rather than at the former location the host would relocate. The maintained reference bundles Playbook ships are unchanged until their next recompile, so the installed workflows carry no prefixed prompt yet, and the Source-fidelity check over them exercises no `## Prefixed prompts` section.
+
 ## Release adoption — 2026-09-15
 
 SLC 0.10.0 adopts the published Playbook 14.0.0 package. Its engine still declares ABI 1 and artifact schema 3, and all three compiled-execution sections are unchanged from the retained bundles. The four definitions, their published workflow catalog and link materializer, and their semantic-input closures move together; the adoption gate verifies both byte identity and closure membership. Pins record the new exact dependency set. No new runtime profile or agent rebuild is required under [DR-028](../specs/decisions/028-contract-based-adoption-without-recompilation.md).

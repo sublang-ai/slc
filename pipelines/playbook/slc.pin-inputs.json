@@ -33,6 +33,18 @@
       "../../package-lock.json",
       "materialize-link.mjs",
       "workflow-contracts.json"
+    ],
+    "prefix": [
+      "text2gears.md",
+      "optimize.md",
+      "gears2fsm.md",
+      "link.md",
+      "prefix-prompts.mjs",
+      "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
+      "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
+      "../../package-lock.json",
+      "materialize-link.mjs",
+      "workflow-contracts.json"
     ]
   }
 }

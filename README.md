@@ -124,7 +124,7 @@ tools consuming the diagnostics.
 Intermediates are first-class: edit one, re-run a single phase
 (`slc playbook.gears2fsm …`), and it lands in the same place.
 `slc --help` shows all invocation forms and flags, including
-`--no-optimize` to skip the optimization pass.
+`--no-optimize` to skip the optimization passes.
 
 ### Incremental recompiles
 

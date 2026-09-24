@@ -281,7 +281,7 @@ try {
     XDG_STATE_HOME: join(hostScratch, 'state-home'),
     XDG_CONFIG_HOME: join(hostScratch, 'config-home'),
   };
-  const configPath = join(homes.SPEX_HOME, 'playbook', 'playbook.config.yaml');
+  const configPath = join(homes.SPEX_HOME, 'config', 'playbook.config.yaml');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(
     configPath,

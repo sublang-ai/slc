@@ -11,6 +11,20 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Adopts Playbook 15.1.0.** The vendored definition set gains the `prefix`
+  pass and its `prefix-prompts.mjs` tool, so a default compile runs
+  `text2gears`, `optimize`, `prefix`, then `gears2fsm`: each compiled prompt
+  opens with its static instructions and ends with the values relayed for
+  that run, giving a provider's prompt cache a shared prefix, and
+  `--no-optimize` skips both passes. The SLC-owned sidecar declares the
+  pass's closure, the definition gate verifies all five definitions, and
+  pins record the new dependency set. The engine still declares ABI 1 and
+  schema 3 and no compiled-execution section changed, so all three bundles
+  are retained
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
 ## [0.10.0] - 2026-09-15
 
 ### Added
