@@ -11,6 +11,10 @@
  * mechanically decidable, so it is decided here rather than left to a Reviewer's
  * judgment (phase-execution-51).
  *
+ * An item Playbook's prefix pass lists under `## Prefixed prompts` carries its
+ * relayed values after its instructions; for it the order rule accepts exactly
+ * that layout, mirroring Playbook's checker rule for rule (DR-052).
+ *
  * Every function is pure over the two texts: no filesystem, no definition, no
  * installed engine, and no prior artifact. Semantic item partitioning, condition
  * wording, and result descriptions remain the Reviewer's concern.
@@ -40,6 +44,9 @@ const FIELD_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const PREFIXED_SECTION = /^##\s+Prefixed prompts\s*$/;
 const PREFIXED_BULLET = /^-\s+([^\s:]+):\s+relays → tail\s*$/;
 const RELAY_LINE = /^>/;
+// A listed item's alternative tilings are kept as the fragment texts they
+// carry; an item admitting more than this many is reported, never guessed.
+const TILING_LIMIT = 4096;
 const ENGLISH_PLAYER = '[A-Z][A-Za-z0-9_-]*';
 
 /** What a Source fragment contributes to the items compiled from it. */
@@ -61,15 +68,38 @@ export interface SourceFragment {
 }
 
 /**
- * The block a prefix pass moves or keeps: a quoted relay fragment whole, or one
- * blank-separated paragraph of an instruction or prompt fragment, a paragraph
- * of only quoted lines being a relay unit and any other an instruction unit.
+ * The block a prefix pass moves or keeps: a quoted relay fragment whole; in an
+ * instruction or prompt fragment, each blank-separated paragraph of only quoted
+ * lines a relay unit, and the lines between relay units, without their bounding
+ * blank lines, one instruction unit keeping its interior blank lines.
  */
 interface PromptUnit {
   kind: 'instruction' | 'relay';
   /** Source position for ordering: the fragment's start plus the line offset. */
   start: number;
   lines: string[];
+}
+
+/** One reachable position while whole fragments tile a prefixed item's prompt. */
+interface TilingState {
+  /** Static prompt lines consumed so far. */
+  line: number;
+  /** Trailing prompt lines consumed so far. */
+  tail: number;
+  /** Whether some relay unit reached the tail. */
+  moved: boolean;
+  /** Whether an instruction unit followed a relay unit that reached the tail. */
+  rewrite: boolean;
+  /** Whether the unit matched last reached the tail. */
+  lastMoved: boolean;
+  /** Every multiset of fragment texts some path here carries, as sorted ids. */
+  lists: Set<string>;
+}
+
+/** A prefixed item's findings and the fragment-text multisets that tile it. */
+interface PrefixedItemVerdict {
+  findings: string[];
+  tilings: number[][];
 }
 
 /** One required result field and its ownership annotation. */
@@ -274,7 +304,10 @@ function fragmentIndices(
   return indices;
 }
 
-/** The items a `## Prefixed prompts` section lists, with malformed-entry findings. */
+/**
+ * The items every `## Prefixed prompts` section lists, with a finding for each
+ * malformed entry and for each section after the first.
+ */
 export function prefixedItems(gearsText: string): {
   ids: string[];
   findings: string[];
@@ -282,20 +315,25 @@ export function prefixedItems(gearsText: string): {
   const ids: string[] = [];
   const findings: string[] = [];
   const lines = gearsText.split(LINE_BOUNDARY);
-  const start = lines.findIndex((line) => PREFIXED_SECTION.test(line));
-  if (start === -1) return { ids, findings };
-  for (let index = start + 1; index < lines.length; index++) {
-    const line = lines[index];
-    if (/^#{1,3}\s/.test(line)) break;
-    if (line.trim() === '') continue;
-    const bullet = PREFIXED_BULLET.exec(line);
-    if (bullet === null) {
-      findings.push(
-        `Prefixed prompts: malformed entry: ${JSON.stringify(line)}`,
-      );
-      continue;
+  let sections = 0;
+  for (let start = 0; start < lines.length; start++) {
+    if (!PREFIXED_SECTION.test(lines[start])) continue;
+    if (++sections > 1) {
+      findings.push(`Prefixed prompts: duplicate section at line ${start + 1}`);
     }
-    ids.push(bullet[1]);
+    for (let index = start + 1; index < lines.length; index++) {
+      const line = lines[index];
+      if (/^#{1,3}\s/.test(line)) break;
+      if (line.trim() === '') continue;
+      const bullet = PREFIXED_BULLET.exec(line);
+      if (bullet === null) {
+        findings.push(
+          `Prefixed prompts: malformed entry: ${JSON.stringify(line)}`,
+        );
+        continue;
+      }
+      ids.push(bullet[1]);
+    }
   }
   return { ids, findings };
 }
@@ -306,115 +344,302 @@ function fragmentUnits(fragment: SourceFragment): PromptUnit[] {
     return [{ kind: 'relay', start: fragment.start, lines: fragment.lines }];
   }
   const units: PromptUnit[] = [];
-  let paragraph: string[] = [];
-  let at = 0;
+  let from = -1;
+  let to = -1;
   const flush = (): void => {
-    if (paragraph.length === 0) return;
+    if (from === -1) return;
     units.push({
-      kind: paragraph.every((line) => RELAY_LINE.test(line))
-        ? 'relay'
-        : 'instruction',
-      start: fragment.start + at,
-      lines: paragraph,
+      kind: 'instruction',
+      start: fragment.start + from,
+      lines: fragment.lines.slice(from, to),
     });
-    paragraph = [];
+    from = -1;
   };
-  fragment.lines.forEach((line, index) => {
-    if (line === '') {
+  for (let index = 0; index < fragment.lines.length;) {
+    let end = index;
+    while (end < fragment.lines.length && fragment.lines[end] !== '') end++;
+    const paragraph = fragment.lines.slice(index, end);
+    if (
+      paragraph.length > 0 &&
+      paragraph.every((line) => RELAY_LINE.test(line))
+    ) {
       flush();
-      return;
+      units.push({
+        kind: 'relay',
+        start: fragment.start + index,
+        lines: paragraph,
+      });
+    } else if (paragraph.length > 0) {
+      if (from === -1) from = index;
+      to = end;
     }
-    if (paragraph.length === 0) at = index;
-    paragraph.push(line);
-  });
+    index = end + 1;
+  }
   flush();
   return units;
 }
 
-/** Whether matched units keep ascending Source positions. */
-function unitsInSourceOrder(entries: readonly { unit: PromptUnit }[]): boolean {
-  return entries.every(
-    (entry, index) =>
-      index === 0 || entries[index - 1].unit.start <= entry.unit.start,
+/** Whether two line arrays are equal. */
+function sameLines(left: readonly string[], right: readonly string[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((line, index) => line === right[index])
   );
 }
 
 /**
- * The order findings for an item the prefix pass lists as rewritten: its
- * instruction units keep Source order, its relay units keep Source order, every
- * relay unit and bare relay line follows the last instruction unit, and the
- * listing is not a no-op.
+ * The verdict for an item the prefix pass lists as rewritten. Its prompt must
+ * be tiled by whole fragments taken in Source order: their instruction units in
+ * the region before the trailing relay blocks and their relay units among the
+ * trailing blocks, or in place where the raw layout kept a relay beside
+ * instruction text, each unit occurrence used once, with blank lines and bare
+ * quoted placeholder lines free among the trailing blocks. Before a unit stand
+ * exactly the one blank line the pass leaves where a moved relay unit stood,
+ * exactly the authored blank lines between it and a unit of its fragment that
+ * kept its place, or the boundary Source composed before a fragment. Every
+ * tiling is kept as the multiset of fragment texts it carries: a rewrite is
+ * recognized whenever one tiling shows a relay that moved past an instruction,
+ * and the multisets are returned for conservation.
  */
 function prefixedItemFindings(
   item: GearsItem,
-  units: readonly PromptUnit[],
-): string[] {
-  const findings: string[] = [];
-  const instructions = units
-    .filter((unit) => unit.kind === 'instruction')
-    .flatMap((unit) => {
-      const [index] = fragmentIndices(item.prompt, unit.lines);
-      return index === undefined
-        ? []
-        : [{ unit, index, end: index + unit.lines.length }];
+  fragments: readonly SourceFragment[],
+  textIds: readonly number[],
+): PrefixedItemVerdict {
+  const { prompt } = item;
+  // The relay blocks the pass moves: blank-bounded runs of quoted lines.
+  const inBlock = prompt.map(() => false);
+  for (let start = 0; start < prompt.length; start++) {
+    let end = start;
+    while (end < prompt.length && RELAY_LINE.test(prompt[end])) end++;
+    if (
+      end > start &&
+      (start === 0 || prompt[start - 1] === '') &&
+      (end === prompt.length || prompt[end] === '')
+    ) {
+      inBlock.fill(true, start, end);
+    }
+    start = Math.max(start, end);
+  }
+  let lastStatic = -1;
+  prompt.forEach((line, index) => {
+    if (line !== '' && !inBlock[index]) lastStatic = index;
+  });
+  if (inBlock.some((inside, index) => inside && index < lastStatic)) {
+    return {
+      findings: [
+        `${item.id}: listed as prefixed but a relay precedes an instruction`,
+      ],
+      tilings: [],
+    };
+  }
+  const statics = prompt.slice(0, lastStatic + 1);
+  const tail = prompt.slice(lastStatic + 1);
+  const free = (line: string): boolean =>
+    line === '' || RELAY_PLACEHOLDER_LINE.test(line);
+  // The static line after `unit` matched at the cursor across exactly `gap`
+  // blank lines, or across any number where Source composed the boundary.
+  const staticMatch = (
+    line: number,
+    unit: PromptUnit,
+    gap: number | null,
+  ): number => {
+    let at = line;
+    if (line > 0) {
+      if (gap === null) {
+        while (at < statics.length && statics[at] === '') at++;
+      } else {
+        for (let count = 0; count < gap; count++, at++) {
+          if (statics[at] !== '') return -1;
+        }
+      }
+    }
+    return sameLines(statics.slice(at, at + unit.lines.length), unit.lines)
+      ? at + unit.lines.length
+      : -1;
+  };
+  // The tail line after `unit` matched at or after the cursor, past free lines.
+  const tailMatch = (at: number, unit: PromptUnit): number => {
+    for (let index = at; index + unit.lines.length <= tail.length; index++) {
+      if (sameLines(tail.slice(index, index + unit.lines.length), unit.lines)) {
+        return index + unit.lines.length;
+      }
+      if (!free(tail[index])) return -1;
+    }
+    return -1;
+  };
+  // Each reachable position — static line, tail line, whether a relay unit
+  // reached the tail, whether an instruction unit followed one, whether the
+  // last unit moved — with every multiset of fragment texts some path to it
+  // carries, as sorted text ids.
+  const keyOf = (state: TilingState): string =>
+    `${state.line} ${state.tail} ${Number(state.moved)} ${Number(state.rewrite)} ${Number(state.lastMoved)}`;
+  let overflow = false;
+  const merge = (
+    states: Map<string, TilingState>,
+    state: TilingState,
+  ): void => {
+    const existing = states.get(keyOf(state));
+    if (existing === undefined) {
+      states.set(keyOf(state), state);
+      return;
+    }
+    for (const list of state.lists) {
+      if (existing.lists.size >= TILING_LIMIT && !existing.lists.has(list)) {
+        overflow = true;
+        break;
+      }
+      existing.lists.add(list);
+    }
+  };
+  const withText = (list: string, id: number): string =>
+    (list === '' ? [id] : [...list.split(',').map(Number), id])
+      .sort((left, right) => left - right)
+      .join(',');
+  let reached = new Map<string, TilingState>();
+  merge(reached, {
+    line: 0,
+    tail: 0,
+    moved: false,
+    rewrite: false,
+    lastMoved: false,
+    lists: new Set(['']),
+  });
+  fragments.forEach((fragment, index) => {
+    const units = fragmentUnits(fragment);
+    const next = new Map<string, TilingState>();
+    for (const state of reached.values()) {
+      merge(next, { ...state, lists: new Set(state.lists) });
+    }
+    let frontier = [...reached.values()];
+    units.forEach((unit, position) => {
+      const previous = units[position - 1];
+      const advanced: TilingState[] = [];
+      for (const state of frontier) {
+        // The blank lines before this unit: the pass's one after a moved unit,
+        // the authored count after a unit of this fragment that stayed, and
+        // Source's own composition before a fragment's first unit.
+        const gap = state.lastMoved
+          ? 1
+          : position === 0
+            ? null
+            : unit.start - (previous.start + previous.lines.length);
+        const line = staticMatch(state.line, unit, gap);
+        if (unit.kind === 'instruction') {
+          if (line >= 0) {
+            advanced.push({
+              ...state,
+              line,
+              lastMoved: false,
+              rewrite: state.rewrite || state.moved,
+            });
+          }
+          continue;
+        }
+        const end = tailMatch(state.tail, unit);
+        if (end >= 0) {
+          advanced.push({ ...state, tail: end, moved: true, lastMoved: true });
+        }
+        if (line >= 0) advanced.push({ ...state, line, lastMoved: false });
+      }
+      frontier = advanced;
     });
-  // A unit contained in a larger matched instruction unit is that unit's content.
-  const independent = instructions
-    .filter(
-      (entry) =>
-        !instructions.some(
-          (other) =>
-            other !== entry &&
-            other.unit.lines.length > entry.unit.lines.length &&
-            other.index <= entry.index &&
-            entry.end <= other.end,
-        ),
-    )
-    .sort((left, right) => left.index - right.index);
-  const insideInstruction = (index: number, length: number): boolean =>
-    independent.some(
-      (entry) => entry.index <= index && index + length <= entry.end,
-    );
-  // A relay moved to the tail is its last free occurrence; an earlier copy
-  // inside an instruction unit belongs to that instruction.
-  const relays = units
-    .filter((unit) => unit.kind === 'relay')
-    .flatMap((unit) => {
-      const index = fragmentIndices(item.prompt, unit.lines)
-        .filter((candidate) => !insideInstruction(candidate, unit.lines.length))
-        .at(-1);
-      return index === undefined ? [] : [{ unit, index }];
-    })
-    .sort((left, right) => left.index - right.index);
-  if (!unitsInSourceOrder(independent) || !unitsInSourceOrder(relays)) {
+    for (const state of frontier) {
+      const lists = new Set(
+        [...state.lists].map((list) => withText(list, textIds[index])),
+      );
+      merge(next, { ...state, lists });
+    }
+    reached = next;
+  });
+  const findings: string[] = [];
+  if (overflow) {
     findings.push(
-      `${item.id}: authored prompt fragments are out of Source order`,
+      `${item.id}: prompt admits more tilings than the checker verifies`,
     );
   }
-  const staticEnd = Math.max(0, ...independent.map((entry) => entry.end));
-  const trailing =
-    relays.every((entry) => entry.index >= staticEnd) &&
-    item.prompt.every(
-      (line, index) =>
-        index >= staticEnd ||
-        !RELAY_LINE.test(line) ||
-        insideInstruction(index, 1),
-    );
-  if (!trailing) {
-    findings.push(
-      `${item.id}: listed as prefixed but a relay precedes an instruction`,
-    );
-  }
-  const lastInstructionStart = Math.max(
-    -1,
-    ...independent.map((entry) => entry.unit.start),
+  const ends = [...reached.values()].filter(
+    (state) =>
+      state.line === statics.length && tail.slice(state.tail).every(free),
   );
-  if (relays.every((entry) => entry.unit.start > lastInstructionStart)) {
+  if (ends.length === 0) {
+    return {
+      findings: [
+        ...findings,
+        `${item.id}: authored prompt fragments are out of Source order`,
+      ],
+      tilings: [],
+    };
+  }
+  // A listing is a no-op only when no tiling shows a relay that moved past an
+  // instruction and the tail holds no bare relay line, whose Source position
+  // the prose leaves open.
+  const noOp =
+    !ends.some((state) => state.rewrite) &&
+    !tail.some((line) => RELAY_PLACEHOLDER_LINE.test(line));
+  if (noOp) {
     findings.push(
       `${item.id}: listed as prefixed but its prompt is in Source order`,
     );
   }
-  return findings;
+  return {
+    findings,
+    tilings: [...new Set(ends.flatMap((state) => [...state.lists]))].map(
+      (list) => (list === '' ? [] : list.split(',').map(Number)),
+    ),
+  };
+}
+
+/** Non-overlapping contiguous occurrences of `needle` in `haystack`. */
+function countFragment(
+  haystack: readonly string[],
+  needle: readonly string[],
+): number {
+  let count = 0;
+  if (needle.length === 0) return count;
+  outer: for (let index = 0; index + needle.length <= haystack.length;) {
+    for (let offset = 0; offset < needle.length; offset++) {
+      if (haystack[index + offset] !== needle[offset]) {
+        index++;
+        continue outer;
+      }
+    }
+    count++;
+    index += needle.length;
+  }
+  return count;
+}
+
+/**
+ * The deficit left by the best choice of one tiling per listed item: for each
+ * fragment text, how many authored fragments no chosen tiling supplies. The
+ * search is exact, memoized over the deficit still to cover.
+ */
+function residualDeficit(
+  deficit: readonly number[],
+  choices: readonly (readonly (readonly number[])[])[],
+): number[] {
+  const total = (vector: readonly number[]): number =>
+    vector.reduce((sum, value) => sum + value, 0);
+  const memo = new Map<string, number[]>();
+  const search = (depth: number, vector: number[]): number[] => {
+    if (depth === choices.length || total(vector) === 0) return vector;
+    const key = `${depth}|${vector.join(',')}`;
+    const seen = memo.get(key);
+    if (seen !== undefined) return seen;
+    let best = vector;
+    for (const alternative of choices[depth]) {
+      const result = search(
+        depth + 1,
+        vector.map((value, id) => Math.max(0, value - alternative[id])),
+      );
+      if (total(result) < total(best)) best = result;
+      if (total(best) === 0) break;
+    }
+    memo.set(key, best);
+    return best;
+  };
+  return search(0, [...deficit]);
 }
 
 /** Whether complete, nonoverlapping matches admit an ordered attribution. */
@@ -494,7 +719,44 @@ export function checkSourceGearsContract(
     }
   }
   const prefixedIds = new Set(prefixed.ids);
-  const units = fragments.flatMap(fragmentUnits);
+  // A fragment's text id is the index of the first fragment authored with it.
+  const texts = fragments.map((fragment) => JSON.stringify(fragment.lines));
+  const textIds = texts.map((text) => texts.indexOf(text));
+  const ids = [...new Set(textIds)];
+  const listed = new Map(
+    items
+      .filter((item) => prefixedIds.has(item.id))
+      .map((item) => [item.id, prefixedItemFindings(item, fragments, textIds)]),
+  );
+  // An unlisted item carries a fragment contiguously, as does a listed item
+  // that admits no tiling and is already reported; a listed item that tiles
+  // carries the fragments of one tiling of its prompt, chosen so that the
+  // listed items together supply each authored text as many times as Source
+  // authors it beyond what the other items carry — one occurrence never stands
+  // for two authored fragments (DR-052).
+  const contiguousCarriers = items.filter(
+    (item) =>
+      !prefixedIds.has(item.id) || listed.get(item.id)?.tilings.length === 0,
+  );
+  const deficit = ids.map((id) =>
+    Math.max(
+      0,
+      textIds.filter((textId) => textId === id).length -
+        contiguousCarriers.reduce(
+          (sum, item) => sum + countFragment(item.prompt, fragments[id].lines),
+          0,
+        ),
+    ),
+  );
+  const choices = [...listed.values()]
+    .map((verdict) => verdict.tilings)
+    .filter((tilings) => tilings.length > 0)
+    .map((tilings) =>
+      tilings.map((tiling) =>
+        ids.map((id) => tiling.filter((textId) => textId === id).length),
+      ),
+    );
+  const residual = residualDeficit(deficit, choices);
   const relayedFields = new Set(
     fragments
       .filter((fragment) => fragment.kind === 'relay')
@@ -512,27 +774,24 @@ export function checkSourceGearsContract(
     ),
   );
 
-  for (const fragment of fragments) {
-    // A prefixed item keeps each of a fragment's units contiguous rather than
-    // the whole fragment, since the pass moved its relay units to the tail.
-    const present = items.some(
-      (item) =>
-        fragmentIndices(item.prompt, fragment.lines).length > 0 ||
-        (prefixedIds.has(item.id) &&
-          fragmentUnits(fragment).every(
-            (unit) => fragmentIndices(item.prompt, unit.lines).length > 0,
-          )),
+  ids.forEach((id, position) => {
+    const missing = residual[position];
+    if (missing === 0) return;
+    const indexes = textIds.flatMap((textId, index) =>
+      textId === id ? [index] : [],
     );
-    if (!present) {
+    for (const index of indexes.slice(-missing)) {
+      const fragment = fragments[index];
       findings.push(
         `source ${fragment.kind} fragment at line ${fragment.start + 1} was dropped or changed`,
       );
     }
-  }
+  });
 
   for (const item of items) {
-    if (prefixedIds.has(item.id)) {
-      findings.push(...prefixedItemFindings(item, units));
+    const verdict = listed.get(item.id);
+    if (verdict !== undefined) {
+      findings.push(...verdict.findings);
     } else if (!fragmentsAreInSourceOrder(item.prompt, fragments)) {
       findings.push(
         `${item.id}: authored prompt fragments are out of Source order`,
