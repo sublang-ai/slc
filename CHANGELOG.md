@@ -25,6 +25,11 @@ and this project adheres to
   are retained
   ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
 
+- **Tests against Claude Agent SDK 0.3.282.** The locked development SDK
+  moves to the first release whose bundled Claude Code (2.1.282) serves
+  Opus 5.5, so a compile that selects `claude-opus-5-5` is no longer refused
+  by the provider as too old; pins record the new lockfile.
+
 ## [0.10.0] - 2026-09-15
 
 ### Added
