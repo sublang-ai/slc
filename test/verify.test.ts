@@ -2911,6 +2911,80 @@ describe('checkPromptComposition (verification-5)', () => {
     });
   });
 
+  it('drives a keyed Boss-question machine with its empty records on an ordinary turn', () => {
+    // gears2fsm's keyed form types `pendingBossQuestions` and `bossReplies` as
+    // required records, so a faithful input indexes its own entry without a
+    // guard; the ordinary-turn probe must hand it the initial empty records.
+    const keyedInput =
+      (stateId: string, role: string, sourceItem: string, prompt: string) =>
+      ({ context }: { context: Record<string, unknown> }) => {
+        const questions = context.pendingBossQuestions as Record<
+          string,
+          unknown
+        >;
+        const replies = context.bossReplies as Record<string, unknown>;
+        const pendingBossQuestion = questions[stateId];
+        const bossReply = replies[stateId];
+        return {
+          stateId,
+          role,
+          sourceItem,
+          prompt,
+          result: {
+            done: 'The player finished.',
+            needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+          },
+          topic: context.topic,
+          ...(pendingBossQuestion === undefined ? {} : { pendingBossQuestion }),
+          ...(bossReply === undefined ? {} : { bossReply }),
+        };
+      };
+    const region = (name: string, stateId: string, role: string, item: string) => ({
+      ...schema3Identity(name),
+      initial: 'working',
+      states: {
+        working: {
+          ...schema3Identity(stateId, role),
+          tags: 'playbook.busy',
+          invoke: {
+            src: 'player',
+            input: keyedInput(stateId, role, item, 'Draft <topic>.'),
+            onDone: { target: 'complete' },
+          },
+        },
+        complete: { ...schema3Identity(`${stateId}Complete`), type: 'final' },
+      },
+    });
+    const config: MachineConfigLike = {
+      context: { topic: '', pendingBossQuestions: {}, bossReplies: {} },
+      initial: 'proposals',
+      states: {
+        proposals: {
+          ...schema3Identity('proposals'),
+          type: 'parallel',
+          onDone: { target: 'done' },
+          states: {
+            coderRegion: region('coderRegion', 'coderWork', 'coder', 'KEYED-1'),
+            reviewerRegion: region(
+              'reviewerRegion',
+              'reviewerWork',
+              'reviewer',
+              'KEYED-2',
+            ),
+          },
+        },
+        done: { ...schema3Identity('done'), type: 'final' },
+      },
+    };
+    expect(
+      checkPromptComposition({
+        config,
+        compose: composeSchema3Prompt,
+        actor: 'player',
+      }),
+    ).toEqual([]);
+  });
+
   it('accepts the installed default composer without requiring a role-identity call', () => {
     const config: MachineConfigLike = {
       states: {

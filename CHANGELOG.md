@@ -13,6 +13,15 @@ and this project adheres to
 
 ### Fixed
 
+- **The link-fidelity gate drives a parallel machine's ordinary turn with its
+  empty question records.** gears2fsm's keyed form types
+  `pendingBossQuestions` and `bossReplies` as required records that a state's
+  input indexes for its own entry; the ordinary-turn probe deleted them from
+  the machine's initial context, so every player state of a freshly compiled
+  DECIDE was reported as throwing and the link failed closed after three
+  mechanical rounds. The probe now holds each Boss-reply field at its initial
+  shape — the scalar fields absent, the keyed records empty
+  ([DR-030](specs/decisions/030-link-fidelity-gate.md)).
 - **The Source-fidelity gate no longer rejects a relayed value the Source
   compares inside a command.** `pr.md` relays the pull request in quotes to
   `code` and then compares it as a single-quoted shell word in the two
