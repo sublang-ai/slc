@@ -1472,13 +1472,19 @@ export const CONTROLLER_ACTION_GUARDS = [
   'runtime',
 ] as const;
 
-/** Whether a result map has the exact Playbook 10 controller domain union. */
+const CONTROLLER_DOMAINS: readonly (readonly string[])[] = [
+  CONTROLLER_ACTION_GUARDS,
+  [...CONTROLLER_ACTION_GUARDS, 'recover'],
+];
+
+/** Exact legacy or recovery-capable controller domain. */
 export function isControllerDecisionResult(result: unknown): boolean {
   if (!isStringMap(result)) return false;
   const keys = Object.keys(result).filter((key) => key !== NEEDS_BOSS_REPLY);
-  return (
-    keys.length === CONTROLLER_ACTION_GUARDS.length &&
-    CONTROLLER_ACTION_GUARDS.every((guard) => Object.hasOwn(result, guard))
+  return CONTROLLER_DOMAINS.some(
+    (domain) =>
+      keys.length === domain.length &&
+      domain.every((guard) => Object.hasOwn(result, guard)),
   );
 }
 
@@ -1488,9 +1494,13 @@ export function controllerDecisionNearMiss(
 ): { missing: string[]; extra: string[] } | undefined {
   if (!isStringMap(result)) return undefined;
   const actual = Object.keys(result).filter((key) => key !== NEEDS_BOSS_REPLY);
-  const expected = new Set<string>(CONTROLLER_ACTION_GUARDS);
+  if (isControllerDecisionResult(result)) return undefined;
   const present = new Set(actual);
-  const missing = CONTROLLER_ACTION_GUARDS.filter((key) => !present.has(key));
+  const domain = present.has('recover')
+    ? CONTROLLER_DOMAINS[1]!
+    : CONTROLLER_ACTION_GUARDS;
+  const expected = new Set<string>(domain);
+  const missing = domain.filter((key) => !present.has(key));
   const extra = actual.filter((key) => !expected.has(key));
   return missing.length + extra.length === 1 ? { missing, extra } : undefined;
 }

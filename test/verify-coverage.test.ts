@@ -1321,6 +1321,7 @@ const controllerMachine = (
   deadReportingResult = false,
   extraDecisionResult = false,
   opts: {
+    recovery?: boolean;
     repeatedDecisionPath?: boolean;
     wrongEarlierArm?: boolean;
     cyclicNoExit?: boolean;
@@ -1332,8 +1333,11 @@ const controllerMachine = (
     contextualSharedArm?: boolean;
   } = {},
 ) => {
+  const actions = opts.recovery
+    ? ([...controllerActions, 'recover'] as const)
+    : controllerActions;
   const actionGuard =
-    (action: (typeof controllerActions)[number]) =>
+    (action: (typeof actions)[number]) =>
     ({ context, event }: any) => {
       const output = event.output;
       if (
@@ -1385,7 +1389,7 @@ const controllerMachine = (
       );
     };
   const guards = Object.fromEntries(
-    controllerActions.map((action) => [action, actionGuard(action)]),
+    actions.map((action) => [action, actionGuard(action)]),
   );
   const invalidStates =
     opts.unsupportedSurfaces === true
@@ -1500,6 +1504,7 @@ const controllerMachine = (
                 'Switch work. Output shall include `playbookId: <catalog id>` and `input: <request>`.',
               dismiss: 'Dismiss the active work.',
               deliver: 'Deliver the current turn.',
+              ...(opts.recovery ? { recover: 'Prepare and continue.' } : {}),
               ...(opts.missingDecisionResult === true
                 ? {}
                 : {
@@ -1511,7 +1516,7 @@ const controllerMachine = (
                 : {}),
             },
           }),
-          onDone: controllerActions.map((action) => {
+          onDone: actions.map((action) => {
             const guard =
               opts.guardForm === 'inline'
                 ? actionGuard(action)
@@ -1939,6 +1944,14 @@ describe('checkFsmCoverage (verification-6)', () => {
       );
     },
   );
+
+  it('covers a recovery-capable controller without a workflow wait', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, { recovery: true }),
+      }),
+    ).toEqual([]);
+  });
 
   it('rejects a controller result selected by an earlier action arm', async () => {
     expect(

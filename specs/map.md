@@ -78,6 +78,7 @@ meta.md       The spec of specs
 | [DR-050](decisions/050-required-child-relay-substitution.md) | 050-required-child-relay-substitution.md | Observable substitution for explicit child-input relay slots, preserving ordinary literal text and inserted payloads |
 | [DR-051](decisions/051-output-field-guidance-boundary.md) | 051-output-field-guidance-boundary.md | Reject parenthesized backticked output declarations at the GEARS producer while preserving runtime field extraction |
 | [DR-052](decisions/052-prefixed-prompt-acceptance.md) | 052-prefixed-prompt-acceptance.md | The Source-fidelity check accepts a pass-provenanced prefix-first prompt layout — whole fragments tiling the prompt in Source order with relayed values trailing, conserved by text count — for items a `## Prefixed prompts` section lists, mirroring Playbook's checker |
+| [DR-053](decisions/053-recovery-controller-discrimination.md) | 053-recovery-controller-discrimination.md | Accept exactly the legacy and recovery-capable controller domains |
 
 ## Packages
 

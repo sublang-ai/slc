@@ -1143,8 +1143,22 @@ describe('controller machine discrimination', () => {
     CONTROLLER_ACTION_GUARDS.map((guard) => [guard, `${guard} action`]),
   );
 
-  it('recognizes only the exact Playbook 10 decision-result guard set', () => {
+  it('recognizes the exact controller domains with optional recovery', () => {
     expect(isControllerDecisionResult(result)).toBe(true);
+    expect(
+      isControllerDecisionResult({
+        ...result,
+        recover: 'prepare and continue',
+      }),
+    ).toBe(true);
+    expect(
+      isControllerDecisionResult({
+        ...result,
+        recover: 'prepare',
+        unexpected: 'extra',
+      }),
+    ).toBe(false);
+    expect(isControllerDecisionResult({ ...result, recover: 1 })).toBe(false);
     expect(
       isControllerDecisionResult({
         ...result,
