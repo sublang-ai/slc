@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted; unreviewed-finding disposition amended by [DR-033](033-early-conformance-and-mechanical-repair.md).
+Accepted; unreviewed-finding disposition amended by [DR-033](033-early-conformance-and-mechanical-repair.md); contiguous-appearance and in-item order rules both relaxed for the prefix-first layout by [DR-052](052-prefixed-prompt-acceptance.md).
 
 ## Context
 

@@ -52,6 +52,19 @@ and this project adheres to
   Opus 5.5, so a compile that selects `claude-opus-5-5` is no longer refused
   by the provider as too old; pins record the new lockfile.
 
+- **The Source-fidelity check reads a prefixed prompt from the prompt
+  itself.** It no longer needs the prefix pass's `## Prefixed prompts` list,
+  which Playbook drops because each compiled prompt already shows how it is
+  composed. Any item other than a script item now passes in Source order or
+  in the prefix-first layout the pass produces, with every authored fragment
+  still conserved by text count across the package; a section a 15.1-era
+  bundle carries is ignored, and the `text2gears` gate accepts a raw
+  prefix-first output, which leaves the pass nothing to move. A dropped,
+  invented, or reordered fragment is still named, including a relay moved
+  before an instruction and a reordered script, while a duplicated fragment
+  is named only where no layout carries it
+  ([DR-052](specs/decisions/052-prefixed-prompt-acceptance.md)).
+
 ## [0.10.0] - 2026-09-15
 
 ### Added
