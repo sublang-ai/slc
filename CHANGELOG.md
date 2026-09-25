@@ -11,6 +11,19 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Source-fidelity gate no longer rejects a relayed value the Source
+  compares inside a command.** `pr.md` relays the pull request in quotes to
+  `code` and then compares it as a single-quoted shell word in the two
+  commands it authors; the gate demanded a literal quote marker on those
+  command lines too, so an exact compile of `pr.md` failed closed at
+  `text2gears`, and the copy of the check also flagged the maintained PR
+  bundle's script items, which Playbook's own checker exempts. A line the
+  Source authored now keeps the Source's form and a script item is exempt,
+  as in Playbook's checker
+  ([DR-029](specs/decisions/029-source-fidelity-gate.md)).
+
 ### Changed
 
 - **Adopts Playbook 15.1.0.** The vendored definition set gains the `prefix`

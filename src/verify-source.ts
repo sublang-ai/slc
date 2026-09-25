@@ -122,6 +122,8 @@ export interface GearsItem {
   ordinal: number;
   /** True when the item's acting sentence delegates to a prompted or relayed player. */
   delegated: boolean;
+  /** True when the item is the optimizer's `Captain shall run:` script form. */
+  script: boolean;
   /** The delegated player's name, when the acting sentence names one. */
   player?: string;
   /** The item's contiguous acting prompt lines, escapes resolved. */
@@ -254,6 +256,9 @@ export function parseGearsContract(gearsText: string): GearsItem[] {
     }
     const acting = section.slice(0, Math.max(firstQuote, 0)).join(' ');
     const delegated = /\bCaptain shall (?:prompt\b|relay\b)/.test(acting);
+    // text2gears.md "Script behaviors": fixed machine syntax in every Source
+    // language, so the clause is matched in this exact English form.
+    const script = /\bCaptain shall run:/.test(acting);
     const player = actingPlayer(acting);
     const results: GearsResult[] = [];
     for (const line of section.slice(Math.max(cursor, 0))) {
@@ -269,6 +274,7 @@ export function parseGearsContract(gearsText: string): GearsItem[] {
       id: start.id,
       ordinal,
       delegated,
+      script,
       ...(player === undefined ? {} : { player }),
       prompt,
       results,
@@ -853,7 +859,15 @@ export function checkSourceGearsContract(
 
   const reported = new Set<string>();
   for (const item of items) {
+    // A script blockquote is shell text no agent reads, so a placeholder
+    // there binds the command to its target rather than relaying player text
+    // into a prompt; the literal quote marker does not apply to it.
+    if (item.script) continue;
     for (const line of item.prompt) {
+      // A line the Source authored keeps the Source's own form — a command
+      // that compares the value as a single-quoted shell word, for instance —
+      // so the marker is owed only by a line the compiler composed.
+      if (authoredLines.has(line)) continue;
       for (const match of line.matchAll(PLACEHOLDER)) {
         const field = placeholderField(match[1]);
         if (!relayedFields.has(field)) continue;

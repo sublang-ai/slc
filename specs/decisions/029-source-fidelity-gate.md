@@ -23,7 +23,7 @@ Not every Source authors fragments: the demo Sources are plain prose, leaving pr
   - where the Source authors at least one fragment, every non-empty prompt line of every item is an authored line or a bare quoted relay placeholder `> <name>`;
   - every output property a result description names matches the ASCII identifier pattern a guard name matches, since downstream artifacts and calling playbooks consume those properties by name;
   - a result field is not declared verbatim-owned in one item and judge-authored in another;
-  - a placeholder that the Source relays in quotes carries a literal quote marker wherever an item's prompt reads it.
+  - a placeholder that the Source relays in quotes carries a literal quote marker wherever a prompt line the compiler composed reads it; a line the Source itself authored — a command comparing the value as a single-quoted shell word, for instance — keeps the Source's form, and a script item's shell text, read by no agent, is exempt.
 - Findings are mechanical Reviewer findings: under a reviewed loop they are relayed to the Coder as a numbered findings list in place of the Reviewer call for that round and count as one of the permitted Reviewer calls, so the loop's bound is unchanged; a result with no mechanical finding proceeds to the Reviewer as before.
 - Without a reviewed loop, mechanical findings fail the phase closed with the findings as its diagnostic.
 - The check is a pure function of the Source text and the GEARS text, exported for standalone artifact review, and it never consults the definition, the installed engine, or any prior artifact.
