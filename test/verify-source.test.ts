@@ -601,6 +601,56 @@ When a fabricated condition holds, Captain shall prompt Coder:
         ]);
       });
 
+      it('rejects a relay block kept before the last instruction while another trails', () => {
+        const source = [
+          ...FLOW_HEAD,
+          'When step 1 starts, Captain shall relay the request in quotes (`>`):',
+          '',
+          '> Request: <caller-input>',
+          '',
+          'and then give Coder this instruction:',
+          '',
+          '```markdown',
+          'Do X.',
+          '```',
+          '',
+          'then relay the context in quotes (`>`):',
+          '',
+          '> Context: <context>',
+          '',
+          'and give Coder this one:',
+          '',
+          '```markdown',
+          'Do Y.',
+          '```',
+          '',
+        ].join('\n');
+        const gears = oneItem([REQUEST, '', 'Do X.', '', CONTEXT, '', 'Do Y.']);
+        expect(checkSourceGearsContract(source, gears)).toEqual([]);
+        // The pass moves both standalone relay blocks after the last instruction.
+        expect(
+          checkSourceGearsContract(
+            source,
+            prefixed(gears, {
+              'FLOW-1': ['Do X.', '', 'Do Y.', '', REQUEST, '', CONTEXT],
+            }),
+          ),
+        ).toEqual([]);
+        // Fragments in Source order would tile a prompt that trails only the
+        // request and keeps the context in place, but a standalone relay block
+        // before an instruction line is not the pass's layout.
+        expect(
+          checkSourceGearsContract(
+            source,
+            prefixed(gears, {
+              'FLOW-1': ['Do X.', '', CONTEXT, '', 'Do Y.', '', REQUEST],
+            }),
+          ),
+        ).toEqual([
+          'FLOW-1: authored prompt fragments are out of Source order',
+        ]);
+      });
+
       it('holds a script item to Source order', () => {
         // Shell text the pass never moves: its `>`-leading line truncates the
         // report the next line appends to, so the order is the behavior.
