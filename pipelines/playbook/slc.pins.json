@@ -8,7 +8,7 @@
     "text2gears": {
       "definition": {
         "path": "text2gears.md",
-        "hash": "sha256:7efdd1aa1aee873836e74f45d4307d1427f21d8bfe1b1fca41f460d94e8d1444"
+        "hash": "sha256:69dbf3381a02a244664b00b7c2e9607c1b2963c846d789ee363de70eaf20e6c2"
       },
       "artifact": {
         "path": "text2gears.slc/text2gears.playbook.ts",
@@ -30,6 +30,10 @@
         {
           "path": "../../package-lock.json",
           "hash": "sha256:b33a4616f1c9fdfbe4308f5d16a1289390ca59a636e5fcd68ed91376c73c2cfd"
+        },
+        {
+          "path": "workflow-contracts.json",
+          "hash": "sha256:ca77b5db4847cab45bf3342030316467b660285c923303919da77ede269ac58d"
         }
       ],
       "externalInputs": [],
@@ -62,7 +66,7 @@
     "gears2fsm": {
       "definition": {
         "path": "gears2fsm.md",
-        "hash": "sha256:6576b5a09fce5264ba2df766d481faa70dd64bc30357a0a5d51491cfc2e242b5"
+        "hash": "sha256:1e6758ac1a47ef8e57f0081eff1340d61872256fae4efdcb14c30aaa2135dadc"
       },
       "artifact": {
         "path": "gears2fsm.slc/gears2fsm.playbook.ts",
@@ -87,11 +91,11 @@
         },
         {
           "path": "link.md",
-          "hash": "sha256:139aaa9b245ea6421ba998573bec3c5e21f605d24710fe56fc73e23017a8e4d2"
+          "hash": "sha256:6fb6f7fc5eaafe51447db518d84d6bc0e5c3698650117822c04c67e174d8924a"
         },
         {
           "path": "text2gears.md",
-          "hash": "sha256:7efdd1aa1aee873836e74f45d4307d1427f21d8bfe1b1fca41f460d94e8d1444"
+          "hash": "sha256:69dbf3381a02a244664b00b7c2e9607c1b2963c846d789ee363de70eaf20e6c2"
         },
         {
           "path": "workflow-contracts.json",
@@ -128,7 +132,7 @@
     "link": {
       "definition": {
         "path": "link.md",
-        "hash": "sha256:139aaa9b245ea6421ba998573bec3c5e21f605d24710fe56fc73e23017a8e4d2"
+        "hash": "sha256:6fb6f7fc5eaafe51447db518d84d6bc0e5c3698650117822c04c67e174d8924a"
       },
       "artifact": {
         "path": "link.slc/link.playbook.ts",
@@ -153,19 +157,19 @@
         },
         {
           "path": "gears2fsm.md",
-          "hash": "sha256:6576b5a09fce5264ba2df766d481faa70dd64bc30357a0a5d51491cfc2e242b5"
+          "hash": "sha256:1e6758ac1a47ef8e57f0081eff1340d61872256fae4efdcb14c30aaa2135dadc"
         },
         {
           "path": "materialize-link.mjs",
-          "hash": "sha256:5024778548509370d899f3709829fd7609d67bc4fe5d72b2c76d5d0ab26f59eb"
+          "hash": "sha256:60d4254c37d64454da9160fbb0d8f63911ca73a78fe927be94ee2073646c12d1"
         },
         {
           "path": "optimize.md",
-          "hash": "sha256:5870ddfeecc496a3d8eea7b5e6b0718153c028f4cad84688b786f6e61e4d0c6c"
+          "hash": "sha256:3dba7ea6d2922a696f774ff52b51c12065e7891de9968a9f6f06f171010d51ed"
         },
         {
           "path": "text2gears.md",
-          "hash": "sha256:7efdd1aa1aee873836e74f45d4307d1427f21d8bfe1b1fca41f460d94e8d1444"
+          "hash": "sha256:69dbf3381a02a244664b00b7c2e9607c1b2963c846d789ee363de70eaf20e6c2"
         },
         {
           "path": "workflow-contracts.json",

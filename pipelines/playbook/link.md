@@ -38,15 +38,20 @@ The link compiler shall not modify the FSM artifact and shall not re-derive Capt
 
 ## Optional deterministic materialization
 
-For an ordinary flat workflow using only `player` and `script` actors,
-the supported prompt profile below, shared remaining strategies, and primitive configured options, the linker may
+For an ordinary workflow using only `player` and `script` actors — flat, or
+with root parallel groups of the [Parallel groups](gears2fsm.md#parallel-groups)
+shape — the supported prompt profile below, shared remaining strategies, and primitive configured options, the linker may
 use the adjacent `materialize-link.mjs` tool to emit the thin module.
 The complete definition below remains binding; the tool replaces repetitive
 module generation, not semantic analysis or emitted conformance verification.
 Read the actual FSM and supply every erased or authored contract exactly.
 Do not use `flat-defaults` or `flat-quoted-relays` when another custom composer, classifier, required-field
 extractor, session-derived input mapping, controller strategy, nested call,
-parallel state, or compound state is needed.
+or compound state other than such a parallel group is needed.
+Despite their names, every profile accepts those parallel groups: the tool
+takes each region working leaf's role and label under its stable state id
+like any other player state, declares nothing further, and leaves the
+compiled shape to the factory preflight, which rejects any other form.
 
 Invoke the tool with the actual definition directory, source FSM, and declared
 target; supply a JSON descriptor on standard input:
@@ -101,6 +106,12 @@ session-derived input values are outside this profile; do not widen their
 contracts to an unconstrained primitive.
 The tool adds optional string `cwd` for script-bearing machines; it does not
 put `cwd` in FSM input unless the descriptor explicitly maps it.
+When the linked module is part of a package that compiles and ships
+JavaScript siblings, supply the optional `fsmSpecifier` — the `.js` sibling
+the build emits for the source FSM, such as `./code.fsm.js`, in the same
+directory and with the same basename — so the emitted import satisfies the
+NodeNext rule under Output; omit it for a source-only host, where the tool
+derives the specifier from the `--fsm` path.
 An explicit `entryEvent: null` selects the shared classifier only where this
 definition permits no deterministic entry; it does not relax entry rules.
 `bossEvents` retains the exact additional erased event fields, source ownership,
@@ -125,8 +136,9 @@ correct the identified problem before treating linking as successful.
 
 ### Experimental labelled-string and nested-call profile
 
-`flat-labelled-relays` is an unmeasured candidate for flat single-region
-machines with delegated players, scripts, and nested `playbook` calls. It
+`flat-labelled-relays` is an unmeasured candidate for machines with flat
+root states or root parallel groups of that shape, whose delegated players,
+scripts, and nested `playbook` calls it supports. It
 requires the installed shared `composePlayerContinuation` API. It leaves
 nested input composition, child targets, result guards, recovery, and terminal
 semantics in the unchanged FSM; the shared factory provides the nested bridge.
@@ -154,8 +166,8 @@ source tokens. Undeclared empty relay lines retain their authored text.
 The emitted verification composer has the same identity and optional third
 resume arguments as the runtime; the shared helper owns fresh/resumed Q&A.
 Structured rendering, custom classifiers/extractors/controllers, direct
-Captain actors, compound/parallel topology, and constrained/nonprimitive
-options remain unsupported. Source-derived metadata and all existing
+Captain actors, compound topology other than such a parallel group, and
+constrained/nonprimitive options remain unsupported. Source-derived metadata and all existing
 conformance checks remain mandatory. This profile changes no runtime bridge,
 workflow semantics, or measured performance claim.
 
@@ -1239,7 +1251,7 @@ undeclared extra key, so hidden adjudication cannot replace, paraphrase, or
 decorate prose Boss already saw.
 For an artifact-schema-3 governed delegated-player call, the shared engine
 shall instead use one semantic reconciler for both the default linked runtime
-and any bespoke linked runtime that adopts schema `3`.
+and any linked machinery of an artifact's own that adopts schema `3`.
 That reconciler shall retain the validated player's exact non-empty
 `finalText` as opaque presentation evidence, let the hidden adjudicator read
 it only as semantic evidence, and require the adjudicator's detached
@@ -1257,8 +1269,8 @@ authored placeholder or guidance, with every presentation-, effect-, or
 runtime-owned field named as runtime-supplied to omit — so the judge is never asked for a
 field it does not own; the artifact's description text stays unchanged.
 The shared engine shall export that rendering as `renderGovernedOutcomeContract`
-on `@sublang/playbook/xstate-runtime`, and a bespoke linked runtime shall
-render its judge prompt through it rather than restate the contract.
+on `@sublang/playbook/xstate-runtime`, and linked machinery of an artifact's
+own shall render its judge prompt through it rather than restate the contract.
 The reconciler shall construct the complete actor output rather than accept a
 cross-authority object from the judge: every presentation-owned payload field
 shall receive the canonical `finalText.trim()` value; every effect-owned
@@ -1960,9 +1972,11 @@ A linked runtime may implement the optional adoption capability of
 initialization path distinct from `init` and same-engagement `restore`.
 Adoption may bind a retained generation to a fresh valid `PlaybookSession`
 identity. Every runtime the shared `createXStatePlaybookRuntime` factory
-constructs implements `adopt`, regardless of whether the artifact supplies
-retained-generation classification metadata; a bespoke runtime may omit it,
-and hosts feature-detect the capability by member presence.
+constructs for a flat machine implements `adopt`, regardless of whether the
+artifact supplies retained-generation classification metadata; one it
+constructs for a machine that declares a parallel state omits it, as linked
+machinery of an artifact's own may, and hosts feature-detect the capability
+by member presence.
 
 Before actor construction or any player-session-store, port, trace, status,
 or telemetry effect, `adopt` shall validate and detach the target session, the
@@ -2053,9 +2067,9 @@ and detached from that declaration. Absence means the runtime contributes no
 retained generation; presence supplies only terminal classification metadata
 and does not itself supply the adoption operation.
 Every runtime the shared `createXStatePlaybookRuntime` factory constructs from
-a supplied `unfinishedFinalStateIds` spec member shall expose the marker; a
-bespoke runtime opts into classification only by implementing the public member
-itself.
+a supplied `unfinishedFinalStateIds` spec member shall expose the marker;
+linked machinery of an artifact's own opts into classification only by
+implementing the public member itself.
 
 ## Control surface (optional)
 
@@ -2387,14 +2401,19 @@ Every linked artifact shall emit an `unfinishedFinalStateIds` set beside its res
 The set shall contain exactly the stable ids of root `type: 'final'` states whose terminal outcomes leave the procedure unfinished, and shall be explicitly empty when no terminal outcome does.
 The linker shall not infer the set from a state description, opaque output, or procedure prose.
 The linker shall reject a declared id that does not name a root final state, and the shared factory shall independently reject it at construction before runtime effects.
-For a factory-backed artifact the set is a `spec` member; a bespoke artifact shall retain equivalent linked metadata, and the artifact declaration is not itself the public runtime retention marker or an adoption capability.
-For an FSM that declares no `type: 'parallel'` state — necessarily flat
-under [gears2fsm.md](gears2fsm.md)'s one-state-per-item mapping — it shall
+For a factory-backed artifact the set is a `spec` member; linked machinery of an artifact's own shall retain equivalent linked metadata, and the artifact declaration is not itself the public runtime retention marker or an adoption capability.
+For every FSM [gears2fsm.md](gears2fsm.md) produces — flat under its
+one-state-per-item mapping, or carrying root parallel groups of its
+[Parallel groups](gears2fsm.md#parallel-groups) shape — the linker shall
 emit the thin shared-factory module defined below.
-For an FSM that declares a parallel state, it shall emit bespoke linked
-machinery satisfying this document's runtime contract and shall not invoke
-`createXStatePlaybookRuntime`, whose supported domain is flat single-region
-FSMs under [DR-019](../specs/decisions/019-shared-linked-runtime-factory.md).
+The shared factory interprets such a parallel group through its parallel
+profile under [DR-067](../specs/decisions/067-parallel-proposals-through-the-shared-factory.md), deriving the regions, their leaves, and the
+cohort of working leaves from the FSM and its exported `concurrentRoleSets`,
+so the emitted module declares nothing further for it; bespoke linked
+machinery is no longer the prescribed output for any such FSM.
+Linked machinery of an artifact's own that satisfies this document's runtime
+contract remains a valid implementation for an artifact outside this package
+and declares the `bespoke` registry profile below, so hosts keep accepting it.
 The FSM-interpreter machinery — actor wiring, boundary tracing, Boss-event
 mapping, adjudication, script execution, nested-playbook bridging, session
 lifecycle, abort handling, and the optional parked-session snapshot and
@@ -2510,8 +2529,9 @@ The thin emitted module:
   error.
   `NO_ACTION` and `BOSS_REPLY` are runtime-owned event types the factory
   supplies itself — `NO_ACTION` as exactly `{ type: 'NO_ACTION' }`, and
-  `BOSS_REPLY` as an optional judge-selected `questionId` plus the exact-text
-  `answer` the runtime attaches. `bossEvents` shall carry no entry for either
+  `BOSS_REPLY` as a judge-selected `questionId` — optional while one question
+  is pending and required, from the pending ids, while several are — plus the
+  exact-text `answer` the runtime attaches. `bossEvents` shall carry no entry for either
   type; supplying one is a construction error, so a linker that judges a
   runtime-owned arm to have lost payload detail under erasure shall report
   that gap rather than emit the entry.
@@ -2553,8 +2573,11 @@ The thin emitted module:
   host-construction boundary's setup diagnostic.
 - Exposes, under an `_internal` export, the pure helpers verification
   needs — at least the prompt composers its own machine uses, which may
-  re-export the shared defaults when the spec does not override composition —
-  so compilation-correctness tests can exercise composition without a host.
+  re-export the shared defaults when the spec does not override composition,
+  and the `VERBATIM_PAYLOAD_FIELDS` and `UNFINISHED_FINAL_STATE_IDS` sets the
+  spec declares, which the linked-ownership check reads back — so
+  compilation-correctness tests can exercise composition and ownership
+  without a host.
   A playbook that calls players exposes `composePlayerPrompt`; a playbook
   whose states make direct-Captain calls exposes `composeCaptainPrompt`. A
   controller playbook that calls no players exposes no player composer:

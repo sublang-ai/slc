@@ -116,7 +116,10 @@ shell script are language-independent.
 
 The pass shall append one `## Optimizations` section at the end of the target
 listing every rewritten item, one bullet per item:
-`- <ITEM-ID>: <original behavior kind> → script`.
+`- <ITEM-ID>: captain → script`, where `captain` is the fixed token for the
+direct-Captain behavior kind the pass rewrites — the only kind eligible — so
+the section reads the same in every target and a consumer can match it
+exactly.
 When no item is eligible, the target shall be the source content unchanged,
 with no `## Optimizations` section.
 
