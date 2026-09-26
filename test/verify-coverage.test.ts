@@ -17,7 +17,14 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
-import { assign, createActor, fromCallback, fromPromise, setup } from 'xstate';
+import {
+  assign,
+  createActor,
+  createMachine,
+  fromCallback,
+  fromPromise,
+  setup,
+} from 'xstate';
 
 import {
   checkFsmCoverage,
@@ -1331,7 +1338,10 @@ const controllerMachine = (
     guardForm?: 'inline' | 'parameterized';
     staleTargetLatch?: 'prior' | 'self';
     contextualSharedArm?: boolean;
-    invalidOutputFallback?: 'failed' | 'reporting';
+    invalidOutputFallback?: 'failed' | 'reporting' | 'hub';
+    guardedHubError?: boolean;
+    hubError?: boolean;
+    failureError?: 'guarded' | 'nonfinal';
   } = {},
 ) => {
   const actions = opts.recovery
@@ -1547,7 +1557,17 @@ const controllerMachine = (
               ? [{ target: `#${opts.invalidOutputFallback}` }]
               : []),
           ],
-          onError: { target: '#failed' },
+          onError:
+            opts.failureError === 'guarded'
+              ? { guard: () => true, target: '#failed' }
+              : opts.failureError === 'nonfinal'
+                ? [{ target: '#failed' }, { guard: () => true, target: '#hub' }]
+                : opts.guardedHubError
+                  ? [
+                      { guard: () => false, target: '#hub' },
+                      { target: '#failed' },
+                    ]
+                  : { target: opts.hubError ? '#hub' : '#failed' },
         },
       },
       ...((opts.repeatedDecisionPath === true ||
@@ -2024,6 +2044,68 @@ describe('checkFsmCoverage (verification-6)', () => {
       expect.stringMatching(/selects 2 accepting action arms/),
     );
   });
+
+  it.each(['guardedHubError', 'hubError'] as const)(
+    'counts a fallback into an action target with %s',
+    async (errorKind) => {
+      const findings = await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, {
+          recovery: true,
+          invalidOutputFallback: 'hub',
+          [errorKind]: true,
+        }),
+      });
+      expect(findings).toContainEqual(
+        expect.stringMatching(/selects 2 accepting action arms/),
+      );
+    },
+  );
+
+  it.each(['guarded', 'nonfinal'] as const)(
+    'does not exempt a fallback shared only with a %s error arm',
+    async (failureError) => {
+      const findings = await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, {
+          recovery: true,
+          invalidOutputFallback: 'failed',
+          failureError,
+        }),
+      });
+      expect(findings).toContainEqual(
+        expect.stringMatching(/selects 2 accepting action arms/),
+      );
+    },
+  );
+
+  it.each(['invoke', 'states', 'always'] as const)(
+    'does not exempt a fallback with %s',
+    async (member) => {
+      const base = controllerMachine(false, false, false, {
+        recovery: true,
+        invalidOutputFallback: 'failed',
+      });
+      const failed = {
+        ...base.config.states!.failed,
+        [member]:
+          member === 'states'
+            ? {}
+            : member === 'always'
+              ? { target: '#hub' }
+              : { src: 'unexpected' },
+      };
+      const machine = createMachine(
+        {
+          ...base.config,
+          states: { ...base.config.states, failed },
+        } as typeof base.config,
+        base.implementations,
+      );
+      const findings = await checkFsmCoverage({ machine });
+      expect(findings).toContainEqual(
+        expect.stringMatching(/selects 2 accepting action arms/),
+      );
+    },
+  );
 
   it('requires a compound-root controller path to return to its leaf hub', async () => {
     expect(

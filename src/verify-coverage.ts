@@ -3978,8 +3978,20 @@ async function runFsmCoverage(
           targetRef.state.invoke === undefined &&
           targetRef.state.states === undefined &&
           !Object.hasOwn(targetRef.state, 'always') &&
+          !rawDoneArms
+            .slice(0, index)
+            .some(
+              (otherArm) =>
+                stateRefForTarget(
+                  refs,
+                  rawArmTarget(otherArm) ?? '',
+                  captain.ref,
+                ) === targetRef,
+            ) &&
           transitionArms(captain.invocation.onError).some(
-            (errorArm) =>
+            (errorArm, errorIndex, errorArms) =>
+              errorIndex === errorArms.length - 1 &&
+              armGuard(errorArm) === undefined &&
               stateRefForTarget(
                 refs,
                 rawArmTarget(errorArm) ?? '',
