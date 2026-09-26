@@ -2052,6 +2052,23 @@ describe('checkFsmCoverage (verification-6)', () => {
     },
   );
 
+  it.each([false, true])(
+    'names the recovery domain for a malformed controller (extra=%s)',
+    async (extra) => {
+      const findings = await checkFsmCoverage({
+        machine: controllerMachine(false, false, extra, {
+          recovery: true,
+          missingDecisionResult: !extra,
+        }),
+      });
+      expect(findings).toContainEqual(
+        expect.stringMatching(
+          /controller decision contract near-miss .*requires exactly .*runtime, recover$/,
+        ),
+      );
+    },
+  );
+
   it('drives nested playbook success and failure through its public state id', async () => {
     expect(
       await checkFsmCoverage({

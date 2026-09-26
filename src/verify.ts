@@ -1488,10 +1488,12 @@ export function isControllerDecisionResult(result: unknown): boolean {
   );
 }
 
-/** A single missing or extra key against Playbook 10's controller domain. */
+/** A single missing or extra key against the matching controller domain. */
 export function controllerDecisionNearMiss(
   result: unknown,
-): { missing: string[]; extra: string[] } | undefined {
+):
+  | { missing: string[]; extra: string[]; domain: readonly string[] }
+  | undefined {
   if (!isStringMap(result)) return undefined;
   const actual = Object.keys(result).filter((key) => key !== NEEDS_BOSS_REPLY);
   if (isControllerDecisionResult(result)) return undefined;
@@ -1502,7 +1504,9 @@ export function controllerDecisionNearMiss(
   const expected = new Set<string>(domain);
   const missing = domain.filter((key) => !present.has(key));
   const extra = actual.filter((key) => !expected.has(key));
-  return missing.length + extra.length === 1 ? { missing, extra } : undefined;
+  return missing.length + extra.length === 1
+    ? { missing, extra, domain }
+    : undefined;
 }
 
 /** Whether a machine contains Playbook 10's grounded controller decision state. */
@@ -1658,7 +1662,7 @@ export function checkGearsFsmConformance(
         ? `missing ${JSON.stringify(nearMiss.missing[0])}`
         : `extra ${JSON.stringify(nearMiss.extra[0])}`;
     findings.push(
-      `FSM state ${state.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
+      `FSM state ${state.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${nearMiss.domain.join(', ')}`,
     );
   }
 

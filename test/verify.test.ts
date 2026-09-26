@@ -1649,11 +1649,13 @@ describe('checkGearsFsmConformance', () => {
   });
 
   it.each([
-    ['missing', false],
-    ['extra', true],
+    ['missing', false, false],
+    ['extra', true, false],
+    ['missing with recovery', false, true],
+    ['extra with recovery', true, true],
   ] as const)(
     'reports a controller decision %s-key near-miss without requiring the ordinary wait key',
-    (_label, extra) => {
+    (_label, extra, recovery) => {
       const config = controllerConfig();
       const decision = config.states!.decide as {
         invoke: { input: () => Record<string, unknown> };
@@ -1662,6 +1664,7 @@ describe('checkGearsFsmConformance', () => {
       const result = {
         ...(input.result as Record<string, string>),
         ...(extra ? { other: 'Invented action.' } : {}),
+        ...(recovery ? { recover: 'Prepare and continue.' } : {}),
       };
       if (!extra) delete result.runtime;
       decision.invoke.input = () => ({ ...input, result });
@@ -1674,6 +1677,13 @@ describe('checkGearsFsmConformance', () => {
           `controller decision contract near-miss (${extra ? 'extra "other"' : 'missing "runtime"'})`,
         ),
       );
+      expect(
+        findings
+          .find((finding) =>
+            finding.includes('controller decision contract near-miss'),
+          )
+          ?.endsWith('runtime, recover'),
+      ).toBe(recovery);
       expect(findings).not.toContainEqual(
         expect.stringContaining('declares no needsBossReply result'),
       );

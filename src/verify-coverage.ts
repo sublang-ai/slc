@@ -31,7 +31,6 @@ import { createActor, fromPromise } from 'xstate';
 import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
-  CONTROLLER_ACTION_GUARDS,
   INTERRUPT_EVENT,
   NEEDS_BOSS_REPLY,
   VERIFY_MODULE,
@@ -3711,7 +3710,7 @@ async function runFsmCoverage(
         ? `missing ${JSON.stringify(nearMiss.missing[0])}`
         : `extra ${JSON.stringify(nearMiss.extra[0])}`;
     findings.push(
-      `state ${captain.binding.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
+      `state ${captain.binding.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${nearMiss.domain.join(', ')}`,
     );
   }
   for (const ref of parallelRefs) {
