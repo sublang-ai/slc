@@ -1677,13 +1677,17 @@ describe('checkGearsFsmConformance', () => {
           `controller decision contract near-miss (${extra ? 'extra "other"' : 'missing "runtime"'})`,
         ),
       );
+      expect(findings).toContainEqual(
+        expect.stringContaining(
+          'requires exactly respond, resume, start, switch, dismiss, deliver, runtime' +
+            (recovery ? ', recover' : ''),
+        ),
+      );
       expect(
-        findings
-          .find((finding) =>
-            finding.includes('controller decision contract near-miss'),
-          )
-          ?.endsWith('runtime, recover'),
-      ).toBe(recovery);
+        findings.find((finding) =>
+          finding.includes('controller decision contract near-miss'),
+        ),
+      ).toMatch(recovery ? /runtime, recover$/ : /deliver, runtime$/);
       expect(findings).not.toContainEqual(
         expect.stringContaining('declares no needsBossReply result'),
       );

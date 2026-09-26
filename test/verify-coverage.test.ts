@@ -2049,6 +2049,11 @@ describe('checkFsmCoverage (verification-6)', () => {
         'machine declares no root BOSS_INTERRUPT event',
       );
       expect(findings).toContainEqual(expect.stringContaining(nearMiss));
+      expect(findings).toContainEqual(
+        expect.stringMatching(
+          /requires exactly respond, resume, start, switch, dismiss, deliver, runtime$/,
+        ),
+      );
     },
   );
 
@@ -2061,6 +2066,12 @@ describe('checkFsmCoverage (verification-6)', () => {
           missingDecisionResult: !extra,
         }),
       });
+      expect(findings).not.toContain(
+        'machine declares no awaitBossReply state or branch-local Boss-reply wait state',
+      );
+      expect(findings).not.toContain(
+        'machine declares no root BOSS_INTERRUPT event',
+      );
       expect(findings).toContainEqual(
         expect.stringMatching(
           /controller decision contract near-miss .*requires exactly .*runtime, recover$/,
