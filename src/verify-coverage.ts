@@ -3966,6 +3966,29 @@ async function runFsmCoverage(
         ) {
           continue;
         }
+        // A controller's final defensive fallback rejects malformed actor
+        // output. It is not a second business action for a valid result.
+        const targetRef = stateRefForTarget(refs, target, captain.ref);
+        if (
+          isControllerDecisionResult(state.result) &&
+          rawGuard === undefined &&
+          index === rawDoneArms.length - 1 &&
+          targetRef !== undefined &&
+          tagsOf(targetRef.state).includes('playbook.parked') &&
+          targetRef.state.invoke === undefined &&
+          targetRef.state.states === undefined &&
+          !Object.hasOwn(targetRef.state, 'always') &&
+          transitionArms(captain.invocation.onError).some(
+            (errorArm) =>
+              stateRefForTarget(
+                refs,
+                rawArmTarget(errorArm) ?? '',
+                captain.ref,
+              ) === targetRef,
+          )
+        ) {
+          continue;
+        }
         const guard = orderedArmPredicate(machine, rawDoneArms, index);
         if (guard === undefined) continue;
         if (isController) {

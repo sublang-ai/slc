@@ -1331,6 +1331,7 @@ const controllerMachine = (
     guardForm?: 'inline' | 'parameterized';
     staleTargetLatch?: 'prior' | 'self';
     contextualSharedArm?: boolean;
+    invalidOutputFallback?: 'failed' | 'reporting';
   } = {},
 ) => {
   const actions = opts.recovery
@@ -1516,31 +1517,36 @@ const controllerMachine = (
                 : {}),
             },
           }),
-          onDone: actions.map((action) => {
-            const guard =
-              opts.guardForm === 'inline'
-                ? actionGuard(action)
-                : opts.guardForm === 'parameterized'
-                  ? { type: 'controllerAction', params: { action } }
-                  : action;
-            return {
-              target:
-                opts.cyclicNoExit === true ||
-                (opts.repeatedDecisionPath === true && action === 'start')
-                  ? '#launching'
-                  : action === 'respond'
-                    ? '#hub'
-                    : '#reporting',
-              guard,
-              ...(opts.staleTargetLatch !== undefined && action === 'start'
-                ? {
-                    actions: assign({
-                      allowDeclaredTarget: () => false,
-                    }),
-                  }
-                : {}),
-            };
-          }),
+          onDone: [
+            ...actions.map((action) => {
+              const guard =
+                opts.guardForm === 'inline'
+                  ? actionGuard(action)
+                  : opts.guardForm === 'parameterized'
+                    ? { type: 'controllerAction', params: { action } }
+                    : action;
+              return {
+                target:
+                  opts.cyclicNoExit === true ||
+                  (opts.repeatedDecisionPath === true && action === 'start')
+                    ? '#launching'
+                    : action === 'respond'
+                      ? '#hub'
+                      : '#reporting',
+                guard,
+                ...(opts.staleTargetLatch !== undefined && action === 'start'
+                  ? {
+                      actions: assign({
+                        allowDeclaredTarget: () => false,
+                      }),
+                    }
+                  : {}),
+              };
+            }),
+            ...(opts.invalidOutputFallback
+              ? [{ target: `#${opts.invalidOutputFallback}` }]
+              : []),
+          ],
           onError: { target: '#failed' },
         },
       },
@@ -1998,6 +2004,26 @@ describe('checkFsmCoverage (verification-6)', () => {
       'state deciding: controller result "respond" reached neither the session hub nor a shutdown final',
     );
   }, 2_000);
+
+  it('excludes a defensive failure fallback but still rejects a second action route', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, {
+          recovery: true,
+          invalidOutputFallback: 'failed',
+        }),
+      }),
+    ).toEqual([]);
+    const findings = await checkFsmCoverage({
+      machine: controllerMachine(false, false, false, {
+        recovery: true,
+        invalidOutputFallback: 'reporting',
+      }),
+    });
+    expect(findings).toContainEqual(
+      expect.stringMatching(/selects 2 accepting action arms/),
+    );
+  });
 
   it('requires a compound-root controller path to return to its leaf hub', async () => {
     expect(
