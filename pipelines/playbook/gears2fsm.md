@@ -704,6 +704,12 @@ root-machine action
 `{ type: 'playbook.acceptedOutcome', params: { source: '<stateId>', target: '<target stateId>', acceptedOutcome: '<guard>' } }`,
 with the setup's `actions` declaring `'playbook.acceptedOutcome'` as a no-op
 that types those three string params.
+`target` names the state the next public snapshot shows for the arm: the arm's
+own target, or the parallel parent's `onDone` target where the arm's target is a
+region's final leaf that completes that parent, because the machine leaves that
+leaf before the snapshot; an arm that completes the join only when every
+sibling region is already final therefore splits into two arms guarded on that
+condition, each naming the state it reaches.
 The linked runtime retains the marker until the next public snapshot confirms
 `source` in the prior snapshot and `target` in the new one, and only then
 publishes the outcome's accepted trace and `→ <acceptedOutcome>` status; an arm
