@@ -157,13 +157,37 @@ Keep each declaration outside plain-text parentheses; explanatory symbols in
 parenthetical guidance use plain text, never separate backticks, because those
 backticks would declare extra required fields. Guidance may instead occur
 inside a field's complete annotation, including any parentheses there.
-For example, use `` `codeCommit` (new code-owned commit) `` or
-`` `codeCommit: <new code-owned commit>` ``, without backticks around code.
+For example, use `` `latestCommit` (new code-owned commit) `` or
+`` `latestCommit: <commit identity>` ``, without backticks around code.
+The commit a call itself creates is always declared as `latestCommit`, the
+canonical effect-owned property every linked runtime fills from the
+repository receipt and every terminal output projects from.
 An output property name shall match the same ASCII identifier pattern as a
 guard name: a kebab-case Source placeholder such as `<coder-output>` names the
 property `coderOutput` through the canonical kebab-token-to-camel-field mapping
 of [link](link.md), never a quoted kebab-case key, because downstream artifacts
 and calling playbooks consume these properties by name.
+A result shall declare an output property only where a consumer requires it:
+a later item's `<placeholder>`, the workflow's terminal return, or the
+workflow's declared public interface below.
+A detail the acting agent reports only within its final text — a reason, a
+summary, a list — travels in the result's verbatim final-text property and is
+not a separate judge-authored property.
+
+Where the selected pipeline supplies the
+[workflow contracts](workflow-contracts.json) catalog and the Source's basename
+is one of its `literalTargetBindings`, the compiled workflow is held to that
+builtin's declared output interface, because callers compiled against the
+catalog address it by that id: a result property whose value that interface
+returns shall take the interface's property name — `branch`, `issueSummary`,
+and `coderOutput` for `branch`; `evaluatedRevision` for the revision a clean
+review round evaluated — whether the value is semantic, presentation, or
+effect-owned, while the commit a call itself creates keeps the canonical
+`latestCommit` for the FSM to project into the interface's field.
+A Source placeholder that names such a value otherwise is an inconsistency
+between the Source and the catalog: leave the Target unwritten and report it
+as an incompatible compiler input rather than rename or invent.
+A Source outside those ids is named from its own words as above.
 
 A produced value consumed later shall have a declared producer: where any
 later item's blockquote reads a value through a `<placeholder>`, the item
@@ -172,13 +196,36 @@ whose relevant description names the produced output property, using the
 placeholder's exact identifier — this is what lets the FSM thread the value
 through typed context.
 A single-outcome producer then declares exactly one bullet naming the
-property; this consumed-output case is the sole one in which a
-single-outcome behavior carries a `Results:` label.
+property; this consumed-output case and the qualified-outcome case below are
+the two in which a single-outcome behavior carries a `Results:` label.
+The commit a call itself creates is the one exception to naming the property
+after the placeholder: its producer declares `latestCommit: <commit identity>`
+whatever placeholder a later prompt reads it through — `<code-commit>` or
+`<decide-commit>`, for instance — because the linked runtime fills that
+property from the repository receipt rather than from the player, and
+[gears2fsm](gears2fsm.md#context-and-prompts) binds the Source's placeholder
+to the retained commit.
+A placeholder the Source defines as a labelled section of another relayed
+value, naming the label that opens the section and the labels that end it —
+`<original-intent>` as the `Original intent:` section of the caller's request,
+which runs to the `Review scope:` line or to the end of the request, for
+instance — is derived, not produced: text2gears shall keep that defining
+sentence verbatim in the package introduction, or in the item's prose where the
+Source states it there, name the placeholder as the Source does, and declare no
+result property for it, because no player produces the value and
+[gears2fsm](gears2fsm.md#context-and-prompts) derives it from the relayed text.
 
 Where a later prompt relays a delegated player's whole final response as quoted context, the producer shall declare that property in the exact annotated form `` `<field>: <verbatim final text>` ``.
 The annotation makes the field runtime-owned: the adjudicator selects the result guard, while the linked runtime carries the player's canonical final text into that field instead of asking a judge to reproduce it.
 A distinct typed field extracted from that response remains judge-authored even when a later prompt quotes its exact value; quoting a field does not turn it into the player's whole final response.
 One property name shall not be annotated as verbatim in one result contract and judge-authored in another; text2gears shall choose distinct properties or report that the Source cannot be represented by the current contract.
+
+A Source statement that qualifies an outcome's evidence — what affirmatively
+supports it, what supports no outcome, such as "a progress report, status
+update, or promise of a later result supports no review outcome" — shall be
+carried in that outcome's result description, the only text the adjudicator
+reads when it selects the guard; left in the item's prose, it reaches no
+judge.
 
 Result metadata is compiler control data, not part of the acting agent's
 prompt.
@@ -194,12 +241,16 @@ Where Source restricts an initial Captain to routing, text2gears shall preserve
 only the authored question and delegation outcomes and shall not infer a
 direct-answer or terminal result merely because Captain is the acting agent.
 
-A single-outcome behavior whose output no later item consumes carries no
-`Results:` label; downstream,
+A single-outcome behavior whose output no later item consumes and whose
+outcome Source leaves unqualified carries no `Results:` label; downstream,
 [gears2fsm](gears2fsm.md#setup) gives its state the default single-outcome
 contract, so text2gears shall not invent a one-bullet `Results:` block for it.
 When a later item does consume its output, the produced-value rule above
-applies instead.
+applies instead; when Source qualifies the one outcome's evidence — what
+affirmatively supports it, what supports no outcome — the behavior carries
+exactly one `Results:` bullet naming that outcome and carrying the
+qualification, with an output property only where a consumer requires one,
+because the adjudicator reads the qualification nowhere else.
 
 When Source requires a terminal return to the caller, preserve every returned value or fact and its return condition as an explicit workflow output obligation in GEARS.
 Merely naming a value in a completion predicate or an acting result does not state that the workflow returns it.
@@ -215,10 +266,16 @@ when the answer changes its complete runtime prompt. It shall not emit a
 second item solely for "Boss answers," "after the question," or clearing the
 consumed question/reply. The FSM and linker own the same-leaf suspension,
 continuation blocks, and consumed-context cleanup.
-When such an authored result asks Boss and waits, its `Results:` description
-shall declare `question: <verbatim final text>` as an output property; the
-result name or prose saying that a question is asked is not the field
-declaration.
+Outside the decide-call-observe routing contract, an authored Boss question
+is the framework-owned `needsBossReply` outcome that
+[gears2fsm](gears2fsm.md#boss-reply-suspension) adds to every Captain- or
+player-invoking state: text2gears shall keep the question's conditions in the
+prompt and its continuation in the item's prose and shall declare no result
+for it, because a second guard for the same wait would give the adjudicator
+two equivalent outcomes.
+Only the routing contract's own `question` and `followUpQuestion` results
+declare the question, as `question: <verbatim final text>`; there, the result
+name or prose saying that a question is asked is not the field declaration.
 
 This rule is an exception to splitting by accumulated prompt content below.
 Split only when Source requires a genuinely different acting behavior after
@@ -394,6 +451,9 @@ Markdown escaping is Source syntax, not content: extraction shall resolve escape
 ### Split by content discriminator
 
 Partition items by every variable that determines prompt content — including accumulated state when the trigger alone doesn't.
+
+Conversely, do not split by trigger alone: where two or more triggers lead to one behavior with the same acting clause, prompt, and result contract — a nested call Source says a later path makes "with the same input as" an earlier path's, for instance — text2gears shall emit one item whose condition joins the triggers and shall keep each path's continuation as that item's prose.
+An item per trigger duplicates an identical prompt and multiplies the FSM's states without a content difference.
 
 ### Prune dead disjuncts
 

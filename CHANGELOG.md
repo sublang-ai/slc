@@ -11,9 +11,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-26
+
 ### Changed
 
-- **Adopts Playbook 15.1.0.** The vendored definition set gains the `prefix`
+- **Adopts Playbook 16.0.0.** The vendored definition set gains the `prefix`
   pass and its `prefix-prompts.mjs` tool, so a default compile runs
   `text2gears`, `optimize`, `prefix`, then `gears2fsm`: each compiled prompt
   opens with its static instructions and ends with the values relayed for
@@ -24,6 +26,53 @@ and this project adheres to
   schema 3 and no compiled-execution section changed, so all three bundles
   are retained
   ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
+- **Compiler definitions match the recompiled Playbook workflows.** The
+  definition set binds shared calls to the published workflow catalog,
+  records accepted outcomes at the next visible state (including parallel
+  joins), and links supported parallel groups through the shared engine.
+  Definitions and their local tools move together, so newly compiled
+  workflows follow the same contracts as the published reference bundles.
+
+- **Tests against Claude Agent SDK 0.3.282.** The locked development SDK
+  moves to the first release whose bundled Claude Code (2.1.282) serves
+  Opus 5.5, so a compile that selects `claude-opus-5-5` is no longer refused
+  by the provider as too old; pins record the new lockfile.
+
+- **The Source-fidelity check reads a prefixed prompt from the prompt
+  itself.** It no longer needs the prefix pass's `## Prefixed prompts` list,
+  which Playbook drops because each compiled prompt already shows how it is
+  composed. Any item other than a script item now passes in Source order or
+  in the prefix-first layout the pass produces, with every authored fragment
+  still conserved by text count across the package; a section a 15.1-era
+  bundle carries is ignored, and the `text2gears` gate accepts a raw
+  prefix-first output, which leaves the pass nothing to move. A dropped,
+  invented, or reordered fragment is still named, including a relay moved
+  before an instruction and a reordered script, while a duplicated fragment
+  is named only where no layout carries it
+  ([DR-052](specs/decisions/052-prefixed-prompt-acceptance.md)).
+
+### Fixed
+
+- **The link-fidelity gate drives a parallel machine's ordinary turn with its
+  empty question records.** gears2fsm's keyed form types
+  `pendingBossQuestions` and `bossReplies` as required records that a state's
+  input indexes for its own entry; the ordinary-turn probe deleted them from
+  the machine's initial context, so every player state of a freshly compiled
+  DECIDE was reported as throwing and the link failed closed after three
+  mechanical rounds. The probe now holds each Boss-reply field at its initial
+  shape — the scalar fields absent, the keyed records empty
+  ([DR-030](specs/decisions/030-link-fidelity-gate.md)).
+- **The Source-fidelity gate no longer rejects a relayed value the Source
+  compares inside a command.** `pr.md` relays the pull request in quotes to
+  `code` and then compares it as a single-quoted shell word in the two
+  commands it authors; the gate demanded a literal quote marker on those
+  command lines too, so an exact compile of `pr.md` failed closed at
+  `text2gears`, and the copy of the check also flagged the maintained PR
+  bundle's script items, which Playbook's own checker exempts. A line the
+  Source authored now keeps the Source's form and a script item is exempt,
+  as in Playbook's checker
+  ([DR-029](specs/decisions/029-source-fidelity-gate.md)).
 
 ## [0.10.0] - 2026-09-15
 
@@ -610,7 +659,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/sublang-ai/slc/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/sublang-ai/slc/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/sublang-ai/slc/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/sublang-ai/slc/compare/v0.7.0...v0.8.0

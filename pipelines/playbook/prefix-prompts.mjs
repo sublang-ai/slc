@@ -4,10 +4,10 @@
 
 // Deterministic realization of the prompt-prefix pass (slc/prefix.md): every
 // standalone relay block of an eligible item moves after its last instruction
-// line, byte-for-byte, and one `## Prefixed prompts` section at the end lists
-// the items this and every earlier application rewrote. `--keep <ITEM-ID>`
-// excludes an item the pass judged ineligible; the tool never modifies the
-// source.
+// line, byte-for-byte, and nothing records the rewrite beside the prompts; a
+// `## Prefixed prompts` section an earlier version of the pass appended is
+// removed. `--keep <ITEM-ID>` excludes an item the pass judged ineligible; the
+// tool never modifies the source.
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -16,10 +16,7 @@ import { fileURLToPath } from 'node:url';
 const HEADING = /^#{1,3}\s/;
 const ITEM_HEADING = /^###\s+([^\s]+)\s*$/;
 const PROMPT_LINE = /^>\s?(.*)$/;
-const SECTION = '## Prefixed prompts';
-const SECTION_HEADING = /^##\s+Prefixed prompts\s*$/;
-const LISTED = /^-\s+([^\s:]+):\s+relays → tail\s*$/;
-const bullet = (id) => `- ${id}: relays → tail`;
+const LEGACY_SECTION = /^##\s+Prefixed prompts\s*$/;
 
 /** Classify one prompt line by its content inside the outer blockquote marker. */
 function classify(line) {
@@ -97,9 +94,9 @@ function prefixBlockquote(quote) {
 }
 
 /**
- * Rewrite every eligible item of a GEARS package not named by `keep`.
- * Returns the rewritten text with its provenance section, or the source text
- * unchanged when no item was eligible, plus the rewritten item ids.
+ * Rewrite every eligible item of a GEARS package not named by `keep` and
+ * remove any legacy `## Prefixed prompts` section. Returns the target text —
+ * the source text itself when neither applies — and the rewritten item ids.
  */
 export function prefixPrompts(text, { keep = [] } = {}) {
   // Keep the source's own line-ending convention so untouched lines stay bytes.
@@ -130,24 +127,25 @@ export function prefixPrompts(text, { keep = [] } = {}) {
     cursor = quoteEnd;
     rewritten.push(start.id);
   }
-  if (rewritten.length === 0) return { text, rewritten };
   out.push(...lines.slice(cursor));
-  // One provenance section follows every other section, ending in one newline;
-  // it replaces every section an earlier application appended and lists, in
-  // item order, each item this or that application rewrote.
-  const listed = new Set(rewritten);
+  // A legacy section runs to the next heading; at the end of the file it
+  // takes the blank lines before it too, so the file ends as it did before
+  // the section was appended.
+  let removed = false;
   for (let index = out.length - 1; index >= 0; index--) {
-    if (!SECTION_HEADING.test(out[index])) continue;
+    if (!LEGACY_SECTION.test(out[index])) continue;
+    let start = index;
     let end = index + 1;
-    for (; end < out.length && !HEADING.test(out[end]); end++) {
-      const entry = LISTED.exec(out[end]);
-      if (entry !== null) listed.add(entry[1]);
+    while (end < out.length && !HEADING.test(out[end])) end++;
+    if (end === out.length) {
+      while (start > 0 && out[start - 1] === '') start--;
+      out.splice(start, end - start, '');
+    } else {
+      out.splice(start, end - start);
     }
-    out.splice(index, end - index);
+    removed = true;
   }
-  while (out.length > 0 && out[out.length - 1] === '') out.pop();
-  const ids = starts.map((start) => start.id).filter((id) => listed.has(id));
-  out.push('', SECTION, '', ...ids.map(bullet), '');
+  if (rewritten.length === 0 && !removed) return { text, rewritten };
   return { text: out.join(newline), rewritten };
 }
 
@@ -172,12 +170,15 @@ async function main(argv) {
       'usage: prefix-prompts.mjs --source <gears.md> --target <gears.md> [--keep <ITEM-ID>]...',
     );
   }
-  const { text, rewritten } = prefixPrompts(await readFile(resolve(source), 'utf8'), { keep });
+  const input = await readFile(resolve(source), 'utf8');
+  const { text, rewritten } = prefixPrompts(input, { keep });
   await writeFile(resolve(target), text);
   process.stdout.write(
-    rewritten.length === 0
-      ? 'no eligible item; target equals source\n'
-      : `${rewritten.join('\n')}\n`,
+    rewritten.length > 0
+      ? `${rewritten.join('\n')}\n`
+      : text === input
+        ? 'no eligible item; target equals source\n'
+        : 'no eligible item; legacy ## Prefixed prompts section removed\n',
   );
 }
 

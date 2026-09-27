@@ -2,6 +2,7 @@
   "schema": "sublang.slc.pin-inputs.v1",
   "closures": {
     "text2gears": [
+      "workflow-contracts.json",
       "../../node_modules/@sublang/spex/scaffold/specs/meta.md",
       "../../node_modules/@sublang/spex/scaffold/i18n/zh/specs/meta.md",
       "../../package-lock.json"

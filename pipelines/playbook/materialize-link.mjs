@@ -7,7 +7,7 @@
 import { createRequire } from 'node:module';
 import { lstat, open, realpath, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { dirname, extname, relative, resolve } from 'node:path';
+import { basename, dirname, extname, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // Compile-time source only; emitted modules depend only on the shared engine.
@@ -78,6 +78,10 @@ const DESCRIPTOR_KEYS = [
   'transitionEventFields', 'verbatimPayloadFields', 'resumableStateIds',
   'unfinishedFinalStateIds', 'controlContextFields',
 ];
+// Optional: the runtime specifier of the FSM's emitted JavaScript sibling, for
+// a module inside a package that compiles and ships `.js` beside its sources.
+const OPTIONAL_KEYS = ['fsmSpecifier'];
+const JS_SPECIFIER = /^\.\.?\/.+\.js$/;
 const LABELLED_KEYS = ['playerInputExport', 'omitEmptyRelayLines', 'identityPlaceholders'];
 const TOKEN = /^(#|[A-Za-z_$][A-Za-z0-9_$-]*)$/;
 const CONTRACT_TYPES = [
@@ -126,7 +130,10 @@ function validateDescriptor(value, engine) {
   const descriptor = engine.snapshotJsonValue(value, 'link descriptor');
   const labelled = descriptor?.profile === 'flat-labelled-relays';
   const keys = labelled ? [...DESCRIPTOR_KEYS, ...LABELLED_KEYS] : DESCRIPTOR_KEYS;
-  record(descriptor, 'descriptor', keys, keys);
+  record(descriptor, 'descriptor', [...keys, ...OPTIONAL_KEYS], keys);
+  if (descriptor.fsmSpecifier !== undefined && (typeof descriptor.fsmSpecifier !== 'string' || !JS_SPECIFIER.test(descriptor.fsmSpecifier))) {
+    throw new TypeError('fsmSpecifier must be a relative runtime specifier ending in .js');
+  }
   if (descriptor.schema !== SCHEMA) throw new TypeError(`descriptor.schema must equal ${SCHEMA}`);
   if (!['flat-defaults', 'flat-quoted-relays', 'flat-labelled-relays'].includes(descriptor.profile)) throw new UnsupportedLinkProfile('profile requires ordinary normative linking');
   if (labelled) {
@@ -228,27 +235,46 @@ function validateDescriptor(value, engine) {
 function inspectMachine(machine, engine, labelled = false) {
   const config = machine?.config;
   if (!config || typeof config !== 'object' || !config.states) throw new TypeError('FSM export must be an XState machine');
-  if (config.type === 'parallel' || config.invoke) throw new UnsupportedLinkProfile('root parallel states or invocations require ordinary linking');
+  if (config.type === 'parallel' || config.invoke) throw new UnsupportedLinkProfile('a parallel machine root or root invocation requires ordinary linking');
   const descriptions = engine.stateDescriptionsFromMachine(machine);
   const roleStates = Object.create(null);
   let hasScript = false;
-  for (const [key, state] of Object.entries(config.states)) {
+  const children = (value) => value && typeof value === 'object' ? Object.entries(value) : [];
+  const inspectState = (key, state) => {
     if (RESERVED_KEYS.has(key)) throw new UnsupportedLinkProfile(`state ${key} requires ordinary linking`);
     if (!state || typeof state !== 'object') throw new TypeError(`state ${key} must be an object`);
-    if (state.states || (state.type !== undefined && !['atomic', 'final'].includes(state.type))) {
-      throw new UnsupportedLinkProfile(`state ${key} is outside the flat single-region profile`);
-    }
     const invokes = Array.isArray(state.invoke) ? state.invoke : state.invoke ? [state.invoke] : [];
     if (invokes.length > 1) throw new UnsupportedLinkProfile(`state ${key} has multiple actors`);
     for (const invoke of invokes) {
       if (!(labelled ? ['player', 'script', 'playbook'] : ['player', 'script']).includes(invoke.src)) throw new UnsupportedLinkProfile(`state ${key} actor ${String(invoke.src)} requires ordinary linking`);
       if (invoke.src === 'script') hasScript = true;
       else if (invoke.src === 'player') {
-        const role = nonempty(state.meta?.playbook?.role, `state ${key} role`);
-        const label = nonempty(descriptions.get(key), `state ${key} description`);
-        roleStates[key] = { role, label };
+        // The engine keys a player state by its stable playbook id, which a
+        // parallel region's leaf carries distinct from its local key.
+        const stateId = typeof state.meta?.playbook?.stateId === 'string' ? state.meta.playbook.stateId
+          : typeof state.id === 'string' ? state.id : key;
+        if (RESERVED_KEYS.has(stateId)) throw new UnsupportedLinkProfile(`state ${stateId} requires ordinary linking`);
+        const role = nonempty(state.meta?.playbook?.role, `state ${stateId} role`);
+        const label = nonempty(descriptions.get(stateId), `state ${stateId} description`);
+        roleStates[stateId] = { role, label };
       }
     }
+  };
+  for (const [key, state] of Object.entries(config.states)) {
+    if (RESERVED_KEYS.has(key)) throw new UnsupportedLinkProfile(`state ${key} requires ordinary linking`);
+    if (!state || typeof state !== 'object') throw new TypeError(`state ${key} must be an object`);
+    if (state.type === 'parallel') {
+      // DR-067: walk a root parallel state's region leaves; the engine's
+      // construction preflight below owns validation of the compiled shape.
+      for (const [, region] of children(state.states)) {
+        for (const [leafKey, leaf] of children(region?.states)) inspectState(leafKey, leaf);
+      }
+      continue;
+    }
+    if (state.states || (state.type !== undefined && !['atomic', 'final'].includes(state.type))) {
+      throw new UnsupportedLinkProfile(`state ${key} is outside the flat single-region profile`);
+    }
+    inspectState(key, state);
   }
   return { roleStates, hasScript };
 }
@@ -355,6 +381,7 @@ const OPTION_SCHEMA = ${json(options)} as const;
 const INPUT_MAPPING = ${json(descriptor.inputMapping)} as const;
 const RESUMABLE_STATE_IDS: ReadonlySet<string> = new Set(${json(descriptor.resumableStateIds)});
 const UNFINISHED_FINAL_STATE_IDS: ReadonlySet<string> = new Set(${json(descriptor.unfinishedFinalStateIds)});
+const VERBATIM_PAYLOAD_FIELDS: ReadonlySet<string> = new Set(${json(descriptor.verbatimPayloadFields)});
 export function validateOptions(value: unknown): PlaybookRuntimeOptions {
   const captured = snapshotJsonValue(value === undefined ? {} : value, ${JSON.stringify(`${descriptor.label} runtime options`)});
   if (captured === null || typeof captured !== 'object' || Array.isArray(captured)) {
@@ -380,7 +407,7 @@ ${quotedPlayer || labelledPlayer ? '  composePlayerPrompt,\n' : ''}  ...${json(d
     Object.entries(INPUT_MAPPING).filter(([, key]) => options[key as keyof PlaybookRuntimeOptions] !== undefined)
       .map(([field, key]) => [field, options[key as keyof PlaybookRuntimeOptions]]),
   ),
-  verbatimPayloadFields: new Set<string>(${json(descriptor.verbatimPayloadFields)}),
+  verbatimPayloadFields: VERBATIM_PAYLOAD_FIELDS,
   resumableStateIds: RESUMABLE_STATE_IDS,
   unfinishedFinalStateIds: UNFINISHED_FINAL_STATE_IDS,
 } satisfies XStatePlaybookRuntimeSpecV3<PlaybookRuntimeOptions>;
@@ -389,6 +416,7 @@ export const _internal = {
   ${quotedPlayer || labelledPlayer ? 'composePlayerPrompt,\n  ' : hasPlayer ? `composePlayerPrompt: (input: PlaybookPlayerInput, _identity?: unknown${hasContinuationMode ? ', resuming = false' : ''}) =>
     defaultComposePlayerPrompt(input, ${json(descriptor.placeholderFields)}${hasContinuationMode ? ', resuming' : ''}),\n  ` : ''}RESUMABLE_STATE_IDS,
   UNFINISHED_FINAL_STATE_IDS,
+  VERBATIM_PAYLOAD_FIELDS,
 };
 const createPlaybookRuntime: XStatePlaybookRuntimeFactory<
   XStatePlaybookRuntimeConstruction<PlaybookRuntimeOptions, PlaybookHostCapabilities>, 3
@@ -428,9 +456,19 @@ export async function runMaterializer(argv, input) {
   // Validate the export name before selecting it from the imported module.
   validateDescriptor(descriptor, engine);
   const module = await import(pathToFileURL(source).href);
-  const specifier = relative(dirname(out), fsm).replaceAll('\\', '/');
+  const derived = relative(dirname(out), fsm).replaceAll('\\', '/');
+  let specifier = derived.startsWith('.') ? derived : `./${derived}`;
+  if (descriptor.fsmSpecifier !== undefined) {
+    // The declared `.js` sibling must be the build output of exactly this FSM:
+    // same directory and same basename, differing only in the extension.
+    const declared = resolve(dirname(out), descriptor.fsmSpecifier);
+    if (dirname(declared) !== dirname(fsm) || basename(declared, '.js') !== basename(fsm, extname(fsm))) {
+      throw new TypeError('fsmSpecifier must name the .js sibling of the --fsm file');
+    }
+    specifier = descriptor.fsmSpecifier;
+  }
   const code = materializeLink({ machine: module[descriptor.machineExport], descriptor,
-    fsmSpecifier: specifier.startsWith('.') ? specifier : `./${specifier}`, engine });
+    fsmSpecifier: specifier, engine });
   const temporary = `${out}.${randomUUID()}.tmp`;
   try {
     const file = await open(temporary, 'wx', 0o644);

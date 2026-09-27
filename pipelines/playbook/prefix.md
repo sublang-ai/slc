@@ -79,8 +79,8 @@ rewrite, merge, split, or drop any line.
 Source prose that places a relay after an instruction, or an instruction at
 the end of the prompt, tells [text2gears](text2gears.md) how to compose the
 prompt faithfully; it does not make the item ineligible.
-This pass overrides that composition order by design, records the override in
-its provenance section, and `--no-optimize` restores it.
+This pass overrides that composition order by design, and `--no-optimize`
+restores it.
 
 ## Rewriting
 
@@ -98,7 +98,8 @@ For each eligible item, the pass shall rewrite only the blockquote:
 - Keep the item's ID, heading, condition, acting clause, `Results:`, and any
   other metadata unchanged.
 - Preserve every other item and every non-item section byte-for-byte,
-  including an `## Optimizations` section the optimize pass appended.
+  including an `## Optimizations` section the optimize pass appended, except
+  a legacy `## Prefixed prompts` section (see [Provenance](#provenance)).
 
 Because no line changes, the target stays in the Source language and every
 authored fragment remains intact; only the order of relay blocks relative to
@@ -142,22 +143,24 @@ Results:
 
 ## Provenance
 
-The target shall end with one `## Prefixed prompts` section — after an
-`## Optimizations` section when one is present — listing every rewritten
-item, one bullet per item in item order: `- <ITEM-ID>: relays → tail`.
-A section an earlier application left in the source is replaced, and the
-items it listed stay listed.
-When no item is eligible, the target shall be the source content unchanged;
-a package the pass never rewrote carries no `## Prefixed prompts` section.
+The pass shall record nothing beside the rewritten prompts, whose layout
+shows the rewrite.
+A `## Prefixed prompts` section an earlier version of this pass appended shall
+be removed — up to the next heading, and at the end of the file with the blank
+lines before it; when no item is eligible and no such section is present, the
+target shall be the source content unchanged.
+Re-running the pass is a no-op by layout: an item whose relays already trail
+is not eligible.
 
-The section is what lets a Source-to-GEARS fidelity checker accept the new
-order: for a listed item it requires each instruction and relay block of the
-fragments the item carries intact, blank lines inside a block included, and
-used exactly once, the instruction blocks in Source order, the relay blocks in
-Source order, and every relay after the last instruction, a relay Source joined
-directly to an instruction staying beside it with its authored boundary, a bare
-relay the prose authored free to trail, and one occurrence standing for one
-authored fragment; for any other item it requires Source order throughout.
+A Source-to-GEARS fidelity checker therefore reads the layout from each prompt:
+it accepts an item either in Source order throughout or in the prefix-first
+layout, which requires each instruction and relay block of the fragments the
+item carries intact, blank lines inside a block included, and used exactly
+once, the instruction blocks in Source order, the relay blocks in Source order,
+and every relay after the last instruction, a relay Source joined directly to
+an instruction staying beside it with its authored boundary, a bare relay the
+prose authored free to trail, and one occurrence standing for one authored
+fragment.
 
 ## Deterministic rewriting
 
@@ -168,9 +171,8 @@ node "<definition-directory>/prefix-prompts.mjs" --source "<source.gears.md>" --
 ```
 
 It reads the source, rewrites every item eligible by the mechanical rules
-above, writes the one provenance section and the target, and prints the
-rewritten item IDs — or reports that no item was eligible and the target
-equals the source.
+above, removes a legacy `## Prefixed prompts` section, writes the target, and
+prints the rewritten item IDs — or reports that no item was eligible.
 `--keep` excludes an item the tool would otherwise rewrite.
 
 The pass shall use the tool rather than rewrite by hand:
@@ -179,8 +181,9 @@ The pass shall use the tool rather than rewrite by hand:
    instruction line, whether an instruction depends on a relay standing before
    it; that judgment is the pass's only non-mechanical step.
 2. Run the tool with `--keep` for each item so excluded.
-3. Read the target and confirm that every listed item's instructions and
-   relays are intact and that nothing else changed.
+3. Read the target and confirm that every rewritten item's instructions and
+   relays are intact and that nothing changed beyond the rewritten items and
+   the removal of a legacy `## Prefixed prompts` section.
 
 The tool writes only the declared target and never modifies the source.
 
