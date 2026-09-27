@@ -3,6 +3,14 @@
 
 # Dependency adoption
 
+## Release adoption — 2026-09-26
+
+SLC 0.11.0 adopts the published Playbook 16.0.0 package. Its engine still declares ABI 1 and artifact schema 3, and all three compiled-execution sections are unchanged from the retained bundles. The five vendored definitions and every published local input are synchronized byte-identically, including the workflow catalog, link materializer, and prefix tool. The definitions bind shared calls to the catalog, identify accepted outcomes at their next public snapshot (including parallel joins), and link supported parallel groups through the shared engine. The SLC-owned sidecar includes the catalog in the text2gears closure, and regenerated pins record the published dependency and lockfile. No new runtime profile or agent rebuild is required under [DR-028](../specs/decisions/028-contract-based-adoption-without-recompilation.md); all three retained meta-phase bundles and both demo references pass their generated and independent checks against the installed engine.
+
+SLC retains direct Cligent 0.27.0 and Spex 3.0.0 dependencies. The locked Claude Agent SDK is 0.3.282. The default pipeline applies `optimize` and `prefix` before `gears2fsm`; `--no-optimize` skips both passes. The Source-fidelity check accepts each prompt's Source-order or prefix-first layout without depending on a separate prefixed-prompt section ([DR-052](../specs/decisions/052-prefixed-prompt-acceptance.md)).
+
+The release validation passes 1,517 tests with two skips, immutable definitions, release metadata, reproducible pins, both demos, and the 181-file installed-package smoke. The installed candidate also passes cold compilation, exact unchanged reuse, incremental Update/Reuse, and a real-agent run with a successful durable terminal and a verified committed repair on Opus 5.5. Scratch-only signing overrides accommodate the local global signing setting; registry and model interruptions were resumed without repeating completed gates or rebuilding the unchanged candidate.
+
 ## Release adoption — 2026-09-24
 
 SLC adopts the published Playbook 15.1.0 package. Its engine still declares ABI 1 and artifact schema 3, and all three compiled-execution sections are unchanged from the retained bundles; `link.md` changes only the TypeScript interface excerpts that describe the failure-cause and control-standing contract Playbook 14.1 added. The vendored set gains the `prefix` pass definition and its `prefix-prompts.mjs` tool, which the published sidecar declares as the pass's local input; the SLC-owned sidecar declares the pass's flattened closure the way it declares `optimize`'s, the definition gate verifies all five definitions and every published closure member, and regenerated pins record the new exact dependency set. No new runtime profile or agent rebuild is required under [DR-028](../specs/decisions/028-contract-based-adoption-without-recompilation.md).

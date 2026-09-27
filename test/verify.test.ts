@@ -2343,12 +2343,12 @@ const referenceFsm = async (): Promise<unknown> =>
 // model DR-009's verification contract and exercise the generator against the
 // reference artifacts. The installed @sublang/playbook ships them.
 describe('conformance against the reference artifacts', () => {
-  it('preserves composed CODE text while retaining its missing schema declaration', async () => {
+  it('accepts the composed CODE text and its schema declarations', async () => {
     const referenceGears = readFileSync(
       join(referenceDir, 'code.gears.md'),
       'utf8',
     );
-    // Playbook 10's reference is a schema-3 `Roles` workflow: two delegated
+    // The published reference is a schema-3 `Roles` workflow: two delegated
     // Coder phases (CODE-1, CODE-3) each followed by a literal nested `review`
     // call (CODE-2, CODE-4).
     const items = parseGearsItems(referenceGears);
@@ -2365,21 +2365,15 @@ describe('conformance against the reference artifacts', () => {
       findings: [],
     });
     const fsm = await referenceFsm();
-    // Playbook 10.0.0's shipped reference does not satisfy its own gears2fsm
-    // definition, which requires that "the artifact shall export
-    // `concurrentRoleSets` as a deeply readonly array"; `code.fsm.ts` declares
-    // role `coder` yet exports no such array. Its nested review inputs are
-    // correctly composed at invocation time and pass the observed-template
-    // probe. The missing declaration remains a finding; every artifact here
-    // exports `concurrentRoleSets` and passes cleanly. Pinning the exact
-    // findings keeps the checker honest about upstream while making any change
-    // in either the checker or a later Playbook release visible here.
+    // Playbook 16's recompiled reference exports the required empty
+    // concurrency declaration and preserves its composed nested-call inputs.
+    expect(findConcurrentRoleSets(fsm)).toEqual([]);
     expect(
       checkGearsFsmConformance(referenceGears, findMachineConfig(fsm), {
         artifactSchema: 3,
         concurrentRoleSets: findConcurrentRoleSets(fsm),
       }),
-    ).toEqual(['schema-3 FSM exports no valid concurrentRoleSets array']);
+    ).toEqual([]);
   });
 });
 
@@ -2554,8 +2548,8 @@ describe('pinIntrospection (verification-4)', () => {
       'CODE-3',
     ]);
     expect(pins.captain.map((state) => state.state)).toEqual([
-      'runFirstPhase',
-      'runIrTask',
+      'firstPhase',
+      'irTaskPhase',
     ]);
     // Schema-3 delegation binds the canonical local role, never a player.
     for (const state of pins.captain) {
@@ -2571,26 +2565,34 @@ describe('pinIntrospection (verification-4)', () => {
       })),
     ).toEqual([
       {
-        state: 'reviewFirstCommit',
+        state: 'reviewNewIntentPhase',
         playbookId: 'review',
         sourceItem: 'CODE-2',
       },
-      { state: 'reviewIrTask', playbookId: 'review', sourceItem: 'CODE-4' },
+      {
+        state: 'reviewIrTaskPhase',
+        playbookId: 'review',
+        sourceItem: 'CODE-4',
+      },
     ]);
-    // Playbook 10's `code` reference exposes no root interrupt surface; the
-    // jumpable set belongs to the separate controller `captain` playbook.
-    expect(pins.rootOn).toEqual({});
-    expect(pins.interruptTargets).toEqual([]);
+    // Both delegated phases expose guarded root interrupt targets.
+    expect(pins.rootOn).toEqual({
+      BOSS_INTERRUPT: [
+        { index: 0, target: 'firstPhase', guarded: true },
+        { index: 1, target: 'irTaskPhase', guarded: true },
+      ],
+    });
+    expect(pins.interruptTargets).toEqual(['firstPhase', 'irTaskPhase']);
     expect(pins.quiescent.map((state) => state.state)).toEqual([
       'ready',
       'awaitBossReply',
       'failed',
-      'reportedReviewFailure',
+      'reviewFailed',
       'done',
     ]);
     expect(
       pins.quiescent.filter(({ final }) => final).map(({ state }) => state),
-    ).toEqual(['reportedReviewFailure', 'done']);
+    ).toEqual(['reviewFailed', 'done']);
     // Every acting state declares Boss-reply suspension and error wiring.
     for (const state of pins.captain) {
       expect(state.resultKeys).toContain('needsBossReply');
@@ -2939,7 +2941,12 @@ describe('checkPromptComposition (verification-5)', () => {
           ...(bossReply === undefined ? {} : { bossReply }),
         };
       };
-    const region = (name: string, stateId: string, role: string, item: string) => ({
+    const region = (
+      name: string,
+      stateId: string,
+      role: string,
+      item: string,
+    ) => ({
       ...schema3Identity(name),
       initial: 'working',
       states: {
@@ -3960,12 +3967,12 @@ describe('checkPromptComposition (verification-5)', () => {
       })),
     ).toEqual([
       {
-        state: 'runFirstPhase',
+        state: 'firstPhase',
         sourceItem: 'CODE-1',
         player: '',
         role: 'coder',
       },
-      { state: 'runIrTask', sourceItem: 'CODE-3', player: '', role: 'coder' },
+      { state: 'irTaskPhase', sourceItem: 'CODE-3', player: '', role: 'coder' },
     ]);
     expect(
       checkPromptComposition({
@@ -3977,19 +3984,19 @@ describe('checkPromptComposition (verification-5)', () => {
       config,
       playbook._internal.composePlayerPrompt,
     );
-    // The installed reference (Playbook 12) substitutes the relayed caller
+    // The published reference substitutes the relayed caller
     // input and run results on every phase, the IR number on the IR-task
     // phase, and the Coder model on both commits.
-    expect(substituted.runFirstPhase).toEqual([
+    expect(substituted.firstPhase).toEqual([
+      '<coder-llm>',
       '<caller-input>',
       '<run-results>',
-      '<coder-llm>',
     ]);
-    expect(substituted.runIrTask).toEqual([
+    expect(substituted.irTaskPhase).toEqual([
+      '<coder-llm>',
       '<caller-input>',
       '<ir-number>',
       '<run-results>',
-      '<coder-llm>',
     ]);
   });
 });

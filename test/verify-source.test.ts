@@ -241,6 +241,7 @@ When a fabricated condition holds, Captain shall prompt Coder:
 
     expect(checkSourceGearsContract(source, dropped)).toEqual([
       `source instruction fragment at line ${fragment.start + 1} was dropped or changed`,
+      'CODE-1: authored prompt fragments are out of Source order',
     ]);
   });
 
@@ -282,27 +283,19 @@ When a fabricated condition holds, Captain shall prompt Coder:
     ): string =>
       `${gears.replace(/\n+$/, '\n')}\n## Prefixed prompts\n\n${entries.join('\n')}\n`;
 
-    /** The maintained code pair with CODE-1's leading relay block moved to its tail. */
+    /** The published CODE pair already carries prefix-first prompts. */
     const prefixedCode = (): { source: string; gears: string } => {
-      const { source, gears } = maintained('code');
-      const lines = gears.split('\n');
-      const relay = sourcePromptFragments(source).find(
+      const pair = maintained('code');
+      const lines = pair.gears.split('\n');
+      const relay = sourcePromptFragments(pair.source).find(
         (fragment) => fragment.kind === 'relay',
       );
       if (relay === undefined) throw new Error('the pair authors no relay');
       const block = fragmentRange(lines, relay.lines);
-      // CODE-1: relay block, blank quoted line, then the instruction lines.
-      expect(lines[block.end]).toBe('>');
-      let end = block.end + 1;
-      while (/^>/.test(lines[end])) end++;
-      const moved = [
-        ...lines.slice(0, block.start),
-        ...lines.slice(block.end + 1, end),
-        '>',
-        ...lines.slice(block.start, block.end),
-        ...lines.slice(end),
-      ].join('\n');
-      return { source, gears: moved };
+      // CODE-1's relay follows its instructions and ends the quoted prompt.
+      expect(lines[block.start - 1]).toBe('>');
+      expect(lines[block.end]).toBe('');
+      return pair;
     };
 
     it('accepts a maintained item whose relays now trail its instructions, with no listing', () => {
