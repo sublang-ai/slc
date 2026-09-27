@@ -6,6 +6,7 @@
 ## Status
 
 Accepted.
+Amends [DR-034](034-faithful-transition-coverage.md) for ordered result acceptance.
 Amends [DR-024](024-playbook-10-schema-3-adoption.md) by admitting the recovery-capable controller alongside the legacy seven-action domain.
 
 ## Context
