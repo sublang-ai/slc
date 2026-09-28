@@ -141,9 +141,11 @@ generic Captain forms, wire `<boss-intent>` from `bossIntent`,
 `remainingPlan`, and `<completed-call-results>` from
 `completedCallResults`. Other non-identity placeholders shall retain the
 semantic typed field established by Source (for example `<#>` from
-`irNumber`). Leaving an ordinary runtime-value placeholder literal, replacing
-it with an empty default because its field was omitted, or making the linker
-recover it from untyped context is malformed.
+`irNumber`); a created-commit or labelled-section placeholder binds as
+[Context and prompts](#context-and-prompts) states. Leaving an ordinary
+runtime-value placeholder literal, replacing it with an empty default because
+its field was omitted, or making the linker recover it from untyped context is
+malformed.
 The corresponding `invoke.input` object shall include that field beside `prompt`; storing it only in machine context does not satisfy the actor-input contract.
 When Source declares a placeholder as the current identity of a local acting
 role, preserve the placeholder literal in the FSM prompt and do not add any
@@ -610,6 +612,37 @@ or remove remaining entries as evidence arrives, but it cannot grow or retain
 the same-length plan indefinitely; the initial finite array therefore bounds
 the number of sequential child calls without an arbitrary runtime call limit.
 
+A placeholder that reads the commit an earlier call created — `<code-commit>`,
+`<decide-commit>` — binds to a typed context field named by its canonical
+mapping, assigned from that call's accepted `latestCommit`, the effect-owned
+property the runtime fills from the repository receipt
+([text2gears](text2gears.md#result-contracts)); the actor input carries the
+field beside the prompt like any other relayed value.
+A placeholder the GEARS defines as a labelled section of another relayed
+text binds to a typed context field named by its canonical mapping. The
+definition names the label that opens the section and the labels that end it —
+`<original-intent>` as the `Original intent:` section of the caller's request,
+which runs to the `Review scope:` line or to the end of the request. The
+machine derives the field deterministically in the entry action or transition
+that stores the text and again in every action that replaces it, such as a
+fresh entry directive or an interrupt that restarts with new text:
+
+- the text as read is the text itself, except that where every non-blank line
+  begins with `>`, each line is read without that marker and one optional space
+  after it, the literal quote layer a quoted relay adds;
+- the section is the lines of the text as read from the first line that
+  begins with the opening label, the label removed, through the line before the
+  first later line that begins with an ending label, or through the last line,
+  with the result trimmed; a line that merely looks labelled, such as `Note:`
+  or `Constraints:`, stays in the section;
+- where no line begins with the opening label, or the section is empty once
+  trimmed — its label directly followed by an ending label or by the end of
+  the text — the field is the whole text as read, trimmed, so the request is
+  never lost.
+
+The derived field is ordinary context that actor inputs relay, never a player
+or judge output.
+
 Prompts shall pass only the **specific extracted fields** the player needs.
 The compiler shall not dump `JSON.stringify(lastResult)` or any opaque blob: it leaks internal `guard` strings, wastes tokens, and confuses the LLM.
 
@@ -662,6 +695,26 @@ Where a Source outcome's availability condition is deterministically knowable fr
 The compiler shall update or reset those source-owned facts only at their actual Source lifecycle boundaries, and shall not attempt to mechanically decide semantic judgments that Source leaves to the acting agent.
 Transitions shall be self-driving when source items define the next obligation.
 Routing to an idle hub is for recovery, unrecoverable Boss input, or one-shot entry events — not the happy path.
+
+Where an artifact-schema-3 delegated-player state's outcomes are governed by the
+linked runtime ([link.md "Captain adjudication"](link.md#captain-adjudication)),
+every accepted `onDone` arm — each arm that routes a declared outcome, not the
+malformed-output fallback — shall carry, first among its actions, the
+root-machine action
+`{ type: 'playbook.acceptedOutcome', params: { source: '<stateId>', target: '<target stateId>', acceptedOutcome: '<guard>' } }`,
+with the setup's `actions` declaring `'playbook.acceptedOutcome'` as a no-op
+that types those three string params.
+`target` names the state the next public snapshot shows for the arm: the arm's
+own target, or the parallel parent's `onDone` target where the arm's target is a
+region's final leaf that completes that parent, because the machine leaves that
+leaf before the snapshot; an arm that completes the join only when every
+sibling region is already final therefore splits into two arms guarded on that
+condition, each naming the state it reaches.
+The linked runtime retains the marker until the next public snapshot confirms
+`source` in the prior snapshot and `target` in the new one, and only then
+publishes the outcome's accepted trace and `→ <acceptedOutcome>` status; an arm
+without the marker accepts its outcome silently, and the host counts none of the
+work it saved.
 
 ### Auto-advance on approval
 
@@ -811,6 +864,12 @@ Where several questions are pending, the classifier prompt and event shall
 require `questionId` and shall reject an omitted or unknown id without moving
 the FSM.
 
+Every exit from a Captain- or player-invoking state other than into its own
+Boss-reply wait — an accepted outcome, the malformed-output fallback, an actor
+error — and every non-reply exit from a wait shall clear that state's pending
+question and reply context, so a call that fails after resuming leaves no
+stale question for the next turn's classifier to offer.
+
 The scalar `awaitBossReply` state and every local branch wait are quiescent for
 the runtime drive boundary.
 They shall allow a fresh root entry event or interrupt to abandon the relevant
@@ -882,6 +941,16 @@ Where Source declares a JSON-safe terminal result, the setup types shall
 declare that output and the root machine shall derive it from typed context
 through XState's machine `output` function. A final-state transition alone does
 not satisfy a declared output contract.
+Where the selected pipeline supplies the
+[workflow contracts](workflow-contracts.json) catalog and the compiled Source's
+basename is one of its `literalTargetBindings`, the declared terminal output
+shall be exactly that builtin's public interface — its variants, `status`
+constants, property names, and requiredness — derived from typed context,
+because callers compiled against the catalog consume it by those names; an
+authored outcome the interface cannot express is an inconsistency between the
+Source and the catalog, reported as an incompatible compiler input under
+[Nested playbook calls](#nested-playbook-calls) rather than expressed by an
+invented or renamed outcome.
 Fields that Source requires in every terminal output shall be required in the
 TypeScript output type. In particular, a declared `{ response }` result shall
 compile as `{ response: string }`, not `{ response?: string }`; reaching the
