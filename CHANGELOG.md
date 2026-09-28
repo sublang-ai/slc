@@ -34,6 +34,11 @@ and this project adheres to
   bundles Claude Code 2.1.283). Both stay `devDependencies`; pins record
   the new lockfile.
 
+- **The starter configuration names current models.** The commented
+  examples in the first-run `config.yaml`, the README's configuration
+  example, and the demo's role-setup example now name `claude-opus-5-5` for
+  Claude Code and `gpt-6-sol` for Codex.
+
 ## [0.12.0] - 2026-09-27
 
 ### Added

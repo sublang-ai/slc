@@ -157,11 +157,11 @@ either, per key.
 ```yaml
 # slc.config.yaml
 agent: claude-code # claude-code | codex | gemini | opencode
-model: claude-opus-4-8 # optional; omit to use the agent CLI's default
+model: claude-opus-5-5 # optional; omit to use the agent CLI's default
 effort: high # optional adapter-scoped reasoning effort
 fastMode: true # optional adapter-scoped fast mode; false is a literal request
 reviewerAgent: codex # optional; enables reviewed compilation
-reviewerModel: gpt-5.3-codex # optional reviewer model
+reviewerModel: gpt-6-sol # optional reviewer model
 reviewerEffort: xhigh # optional reviewer reasoning effort
 reviewerFastMode: true # optional reviewer fast mode
 stallTimeout: 2400 # seconds of agent silence before a stalled call fails

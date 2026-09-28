@@ -17,14 +17,14 @@ Compile and verify against Playbook 17's engine and definitions through the rout
 - [x] Vendored definitions and published local inputs byte-identical to 17.0.0.
 - [x] Engine contract and compiled-execution sections compared; retained bundles, demo references, and regenerated pins verified.
 - [x] Development agent SDKs at Claude Agent SDK 0.3.283 and Codex SDK 0.158.0.
-- [ ] Seeded configuration and user-facing examples naming `claude-opus-5-5` and `gpt-6-sol`.
+- [x] Seeded configuration and user-facing examples naming `claude-opus-5-5` and `gpt-6-sol`.
 - [ ] Final set: Playbook ^17.1.0 and Cligent ^0.28.0 with regenerated pins, a re-run verification chain, and the opt-in local acceptance gate on that candidate.
 
 ## Tasks
 
 1. [x] Raise Playbook to 17.0.0, re-synchronize the definitions, regenerate pins, and record the changelog and adoption evidence.
 2. [x] Move the development SDKs to their current releases and regenerate pins.
-3. [ ] Name the latest model of each line in the seeded configuration and examples.
+3. [x] Name the latest model of each line in the seeded configuration and examples.
 4. [ ] After Cligent 0.28.0 and Playbook 17.1.0 publish, raise both dependencies, re-synchronize, regenerate pins, re-run the verification chain, and finalize the changelog entry.
 
 ## Verification
@@ -50,3 +50,8 @@ Playbook 17.0.0 needs no decision record under DR-028:
 | Lock | Only the two SDKs and their platform and CLI packages moved; Cligent reports both SDK versions. |
 | Tests | 1,535 passed, 2 skipped. |
 | Pins | Regenerated current; only the lockfile identity changed. |
+
+| Run (task 3) | Result |
+| --- | --- |
+| Scope | The starter template, the README configuration example, and both demo guides' role-setup examples; no spec item names a model, and recorded measurements and reproduction commands keep the models their runs used. |
+| Tests | 1,535 passed, 2 skipped. |
