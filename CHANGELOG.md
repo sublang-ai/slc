@@ -28,6 +28,12 @@ and this project adheres to
   instead of a nested second copy
   ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
 
+- **Tests against Claude Agent SDK 0.3.283 and Codex SDK 0.158.0.** The
+  locked development SDKs move to the current releases, so a compile run
+  from this repository drives the current agent CLIs (the Agent SDK
+  bundles Claude Code 2.1.283). Both stay `devDependencies`; pins record
+  the new lockfile.
+
 ## [0.12.0] - 2026-09-27
 
 ### Added
