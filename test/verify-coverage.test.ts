@@ -23,6 +23,7 @@ import {
   createMachine,
   fromCallback,
   fromPromise,
+  raise,
   setup,
 } from 'xstate';
 
@@ -2077,35 +2078,70 @@ describe('checkFsmCoverage (verification-6)', () => {
     },
   );
 
-  it.each(['invoke', 'states', 'always'] as const)(
-    'does not exempt a fallback with %s',
-    async (member) => {
-      const base = controllerMachine(false, false, false, {
-        recovery: true,
-        invalidOutputFallback: 'failed',
-      });
-      const failed = {
-        ...base.config.states!.failed,
-        [member]:
-          member === 'states'
-            ? {}
-            : member === 'always'
-              ? { target: '#hub' }
-              : { src: 'unexpected' },
-      };
-      const machine = createMachine(
-        {
-          ...base.config,
-          states: { ...base.config.states, failed },
-        } as typeof base.config,
-        base.implementations,
-      );
-      const findings = await checkFsmCoverage({ machine });
-      expect(findings).toContainEqual(
-        expect.stringMatching(/selects 2 accepting action arms/),
-      );
-    },
-  );
+  it.each([
+    'invoke',
+    'states',
+    'always',
+    'after',
+    'entry',
+    'exit',
+    'named-entry',
+  ] as const)('does not exempt a fallback with %s', async (member) => {
+    const base = controllerMachine(false, false, false, {
+      recovery: true,
+      invalidOutputFallback: 'failed',
+    });
+    const escape = { on: { ESCAPE: '#reporting' } };
+    const extra: Record<string, unknown> =
+      member === 'states'
+        ? { states: {} }
+        : member === 'always'
+          ? { always: { target: '#hub' } }
+          : member === 'invoke'
+            ? { invoke: { src: 'unexpected' } }
+            : member === 'after'
+              ? { after: { 0: { target: '#reporting' } } }
+              : member === 'named-entry'
+                ? { entry: 'escape', ...escape }
+                : { [member]: raise({ type: 'ESCAPE' }), ...escape };
+    const failed = { ...base.config.states!.failed, ...extra };
+    const machine = createMachine(
+      {
+        ...base.config,
+        states: { ...base.config.states, failed },
+      } as typeof base.config,
+      {
+        ...base.implementations,
+        actions: {
+          ...base.implementations.actions,
+          escape: raise({ type: 'ESCAPE' }),
+        },
+      } as typeof base.implementations,
+    );
+    const findings = await checkFsmCoverage({ machine });
+    expect(findings).toContainEqual(
+      expect.stringMatching(/selects 2 accepting action arms/),
+    );
+  });
+
+  it('keeps the exemption for a fallback leaf whose entry only assigns', async () => {
+    const base = controllerMachine(false, false, false, {
+      recovery: true,
+      invalidOutputFallback: 'failed',
+    });
+    const failed = {
+      ...base.config.states!.failed,
+      entry: assign({ lastError: () => undefined }),
+    };
+    const machine = createMachine(
+      {
+        ...base.config,
+        states: { ...base.config.states, failed },
+      } as typeof base.config,
+      base.implementations,
+    );
+    expect(await checkFsmCoverage({ machine })).toEqual([]);
+  });
 
   it('requires a compound-root controller path to return to its leaf hub', async () => {
     expect(

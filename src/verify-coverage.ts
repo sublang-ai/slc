@@ -127,8 +127,11 @@ function stopCoverageActors(
 interface MachineLike {
   config: MachineConfigLike & { id?: string };
   provide(implementations: { actors: Record<string, unknown> }): MachineLike;
-  /** XState exposes `setup()`-registered guards here. */
-  implementations?: { guards?: Record<string, unknown> };
+  /** XState exposes `setup()`-registered guards and actions here. */
+  implementations?: {
+    guards?: Record<string, unknown>;
+    actions?: Record<string, unknown>;
+  };
   /** XState's resolved state nodes expose the actual invocation actor ids. */
   root?: ResolvedStateNodeLike;
 }
@@ -151,6 +154,9 @@ interface StateNodeLike {
   invoke?: InvokeLike | readonly InvokeLike[];
   onDone?: unknown;
   on?: Record<string, unknown>;
+  after?: unknown;
+  entry?: unknown;
+  exit?: unknown;
 }
 
 interface ResolvedStateNodeLike {
@@ -748,6 +754,42 @@ function dynamicPlaybookFields(
 function tagsOf(state: StateNodeLike): readonly string[] {
   if (typeof state.tags === 'string') return [state.tags];
   return Array.isArray(state.tags) ? state.tags : [];
+}
+
+/** XState's built-in actions that send the machine an event by themselves. */
+const EVENT_RAISING_ACTION_TYPES: ReadonlySet<string> = new Set([
+  'xstate.raise',
+  'xstate.sendTo',
+  'xstate.enqueueActions',
+]);
+
+/**
+ * Whether an `entry` or `exit` action list can move the machine without an
+ * external event: a built-in raise, send, or enqueue, written inline or behind
+ * a `setup()`-registered name. An action that only assigns keeps a parked leaf
+ * inert (DR-053).
+ */
+function raisesEvent(machine: MachineLike, actions: unknown): boolean {
+  const typeOf = (action: unknown): string | undefined => {
+    if (typeof action === 'string') return action;
+    if (
+      (typeof action === 'object' && action !== null) ||
+      typeof action === 'function'
+    ) {
+      const type = (action as { type?: unknown }).type;
+      return typeof type === 'string' ? type : undefined;
+    }
+    return undefined;
+  };
+  const list: readonly unknown[] =
+    actions === undefined ? [] : Array.isArray(actions) ? actions : [actions];
+  return list.some((action) => {
+    const type = typeOf(action);
+    if (type === undefined) return false;
+    if (EVENT_RAISING_ACTION_TYPES.has(type)) return true;
+    const named = typeOf(machine.implementations?.actions?.[type]);
+    return named !== undefined && EVENT_RAISING_ACTION_TYPES.has(named);
+  });
 }
 
 function stateRefForTarget(
@@ -3967,7 +4009,8 @@ async function runFsmCoverage(
           continue;
         }
         // A controller's final defensive fallback rejects malformed actor
-        // output. It is not a second business action for a valid result.
+        // output. It is not a second business action for a valid result,
+        // provided the parked leaf it enters cannot leave by itself.
         const targetRef = stateRefForTarget(refs, target, captain.ref);
         if (
           isControllerDecisionResult(state.result) &&
@@ -3978,6 +4021,9 @@ async function runFsmCoverage(
           targetRef.state.invoke === undefined &&
           targetRef.state.states === undefined &&
           !Object.hasOwn(targetRef.state, 'always') &&
+          !Object.hasOwn(targetRef.state, 'after') &&
+          !raisesEvent(machine, targetRef.state.entry) &&
+          !raisesEvent(machine, targetRef.state.exit) &&
           !rawDoneArms
             .slice(0, index)
             .some(

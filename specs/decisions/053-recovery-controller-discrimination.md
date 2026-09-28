@@ -18,7 +18,7 @@ The exact seven-action controller discriminator would classify that Captain as a
 
 Recognize exactly two structural controller domains: the existing seven actions, and those same actions plus `recover`.
 Use this shared discriminator for conformance, prompt and coverage checks, retaining near-miss diagnostics and rejection of arbitrary extensions.
-For result acceptance, ignore only a final unguarded fallback into the same parked leaf used by the final unguarded error arm, with no invocation, child states or automatic transition, and never a target of an earlier result arm; it reports invalid output rather than selecting a second action.
+For result acceptance, ignore only a final unguarded fallback into the same parked leaf used by the final unguarded error arm, with no invocation, child states, `always` or `after` transition, or entry or exit action that raises, sends, or enqueues an event, and never a target of an earlier result arm; it reports invalid output rather than selecting a second action.
 An unguarded arm entering another action path remains a duplicate acceptance finding.
 This is verifier compatibility; it neither changes the runtime ABI nor adopts unpublished playbook pipeline assets.
 
