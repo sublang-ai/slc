@@ -11,6 +11,23 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Adopts Playbook 17.0.0.** The vendored `gears2fsm` definition's
+  controller contract admits the Captain's payload-free `recover` action
+  where a Source declares recovery preparation, which the compilation checks
+  already accept, and `link.md` drops the `entryEvent.contextField`
+  declaration, since the engine now retries a failed step from its saved
+  checkpoint, and has every governed judge prompt state the
+  `{ blocked: … }` answer for a result no declared outcome matches. Both
+  reach compiled runs through the run-time definition relay. The engine
+  still declares ABI 1 and schema 3 and no compiled-execution section
+  changed, so all three bundles and both demo references are retained and
+  pins record the new dependency set. Playbook 17 requires Cligent 0.27,
+  the release SLC already depends on, so an install resolves one Cligent
+  instead of a nested second copy
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
 ## [0.12.0] - 2026-09-27
 
 ### Added
