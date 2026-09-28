@@ -3,6 +3,12 @@
 
 # Dependency adoption
 
+## Release adoption — 2026-09-28
+
+SLC 0.13.0 adopts the published Playbook 17.0.0 package. Its engine still declares ABI 1 and artifact schema 3, and all three compiled-execution sections are unchanged from the retained bundles. The five vendored definitions and every published local input are synchronized byte-identically. `gears2fsm.md` admits `recover` as the eighth guard of a controller Source that declares recovery preparation, and `link.md` replaces the `entryEvent.contextField` failure-retry replay with the shared runtime's invocation checkpoints, adds the optional `recordStep` port and `recoveryCheckpoint` snapshot member, and lets a governed judge answer `{ blocked }` when no declared outcome matches. Regenerated pins record the published dependency and lockfile. No new runtime profile or agent rebuild is required under [DR-028](../specs/decisions/028-contract-based-adoption-without-recompilation.md).
+
+SLC retains direct Cligent 0.27.0 and Spex 3.0.0 dependencies; Playbook 17 declares `^0.27.0` too, so the lock resolves one Cligent. The locked Claude Agent SDK is 0.3.282.
+
 ## Release adoption — 2026-09-26
 
 SLC 0.11.0 adopts the published Playbook 16.0.0 package. Its engine still declares ABI 1 and artifact schema 3, and all three compiled-execution sections are unchanged from the retained bundles. The five vendored definitions and every published local input are synchronized byte-identically, including the workflow catalog, link materializer, and prefix tool. The definitions bind shared calls to the catalog, identify accepted outcomes at their next public snapshot (including parallel joins), and link supported parallel groups through the shared engine. The SLC-owned sidecar includes the catalog in the text2gears closure, and regenerated pins record the published dependency and lockfile. No new runtime profile or agent rebuild is required under [DR-028](../specs/decisions/028-contract-based-adoption-without-recompilation.md); all three retained meta-phase bundles and both demo references pass their generated and independent checks against the installed engine.

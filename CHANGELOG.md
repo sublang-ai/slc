@@ -11,6 +11,22 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-28
+
+### Changed
+
+- **Adopts Playbook 17.0.0.** The vendored definition set follows Playbook's
+  durable recovery: `gears2fsm.md` admits `recover` as the eighth guard of a
+  controller Source that declares recovery preparation, and `link.md` drops
+  the `entryEvent.contextField` replay in favor of the shared runtime's
+  invocation checkpoints, adds the optional `recordStep` port and
+  `recoveryCheckpoint` snapshot member, and lets a governed judge answer
+  `{ blocked }` for a result no declared outcome matches. The engine still
+  declares ABI 1 and schema 3 and no compiled-execution section changed, so
+  all three bundles are retained; pins record the new dependency set, and the
+  installed package now resolves one Cligent 0.27 for both packages
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
 ## [0.12.0] - 2026-09-27
 
 ### Added
@@ -684,7 +700,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/sublang-ai/slc/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/sublang-ai/slc/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/sublang-ai/slc/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/sublang-ai/slc/compare/v0.9.0...v0.10.0
