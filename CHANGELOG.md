@@ -11,6 +11,31 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-27
+
+### Added
+
+- **Compilation-correctness checks accept a recovery-capable Captain.** The
+  controller discriminator recognizes exactly two action domains — the seven
+  Captain actions `respond`, `resume`, `start`, `switch`, `dismiss`, `deliver`,
+  and `runtime`, or those seven plus a payload-free `recover` — so a Captain
+  compiled with Playbook's recovery preparation is verified as a controller
+  instead of being reported as an ordinary workflow missing its Boss-reply
+  wait, and a near-miss diagnostic names the complete domain it was matched
+  against ([DR-053](specs/decisions/053-recovery-controller-discrimination.md)).
+
+### Changed
+
+- **Ordered result acceptance exempts a controller's defensive fallback.** A
+  decision's final unguarded arm into the parked failure leaf that its final
+  unguarded error arm also targets rejects malformed output rather than
+  selecting a second action, so coverage no longer reports it as two accepting
+  action arms — provided that leaf cannot leave by itself: an unguarded arm
+  into any action path, a guarded or nonfinal error arm, or a failure leaf
+  carrying an invocation, child states, an `always` or `after` transition, or
+  an entry or exit action that raises, sends, or enqueues an event still
+  counts ([DR-053](specs/decisions/053-recovery-controller-discrimination.md)).
+
 ## [0.11.0] - 2026-09-26
 
 ### Changed
@@ -659,7 +684,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/sublang-ai/slc/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/sublang-ai/slc/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/sublang-ai/slc/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/sublang-ai/slc/compare/v0.8.0...v0.9.0

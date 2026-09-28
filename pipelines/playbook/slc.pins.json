@@ -29,7 +29,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:7bc4f4e34715627e0668dc2f1f52f2ee78ba0081fd991cd1b7914abbdff699bf"
+          "hash": "sha256:912e2b00423a0d85c3358fbb694d7534d3caecaaaffce6d2cb2e4188246a7f63"
         },
         {
           "path": "workflow-contracts.json",
@@ -87,7 +87,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:7bc4f4e34715627e0668dc2f1f52f2ee78ba0081fd991cd1b7914abbdff699bf"
+          "hash": "sha256:912e2b00423a0d85c3358fbb694d7534d3caecaaaffce6d2cb2e4188246a7f63"
         },
         {
           "path": "link.md",
@@ -153,7 +153,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:7bc4f4e34715627e0668dc2f1f52f2ee78ba0081fd991cd1b7914abbdff699bf"
+          "hash": "sha256:912e2b00423a0d85c3358fbb694d7534d3caecaaaffce6d2cb2e4188246a7f63"
         },
         {
           "path": "gears2fsm.md",
