@@ -1143,8 +1143,22 @@ describe('controller machine discrimination', () => {
     CONTROLLER_ACTION_GUARDS.map((guard) => [guard, `${guard} action`]),
   );
 
-  it('recognizes only the exact Playbook 10 decision-result guard set', () => {
+  it('recognizes the exact controller domains with optional recovery', () => {
     expect(isControllerDecisionResult(result)).toBe(true);
+    expect(
+      isControllerDecisionResult({
+        ...result,
+        recover: 'prepare and continue',
+      }),
+    ).toBe(true);
+    expect(
+      isControllerDecisionResult({
+        ...result,
+        recover: 'prepare',
+        unexpected: 'extra',
+      }),
+    ).toBe(false);
+    expect(isControllerDecisionResult({ ...result, recover: 1 })).toBe(false);
     expect(
       isControllerDecisionResult({
         ...result,
@@ -1635,11 +1649,13 @@ describe('checkGearsFsmConformance', () => {
   });
 
   it.each([
-    ['missing', false],
-    ['extra', true],
+    ['missing', false, false],
+    ['extra', true, false],
+    ['missing with recovery', false, true],
+    ['extra with recovery', true, true],
   ] as const)(
     'reports a controller decision %s-key near-miss without requiring the ordinary wait key',
-    (_label, extra) => {
+    (_label, extra, recovery) => {
       const config = controllerConfig();
       const decision = config.states!.decide as {
         invoke: { input: () => Record<string, unknown> };
@@ -1648,6 +1664,7 @@ describe('checkGearsFsmConformance', () => {
       const result = {
         ...(input.result as Record<string, string>),
         ...(extra ? { other: 'Invented action.' } : {}),
+        ...(recovery ? { recover: 'Prepare and continue.' } : {}),
       };
       if (!extra) delete result.runtime;
       decision.invoke.input = () => ({ ...input, result });
@@ -1660,6 +1677,17 @@ describe('checkGearsFsmConformance', () => {
           `controller decision contract near-miss (${extra ? 'extra "other"' : 'missing "runtime"'})`,
         ),
       );
+      expect(findings).toContainEqual(
+        expect.stringContaining(
+          'requires exactly respond, resume, start, switch, dismiss, deliver, runtime' +
+            (recovery ? ', recover' : ''),
+        ),
+      );
+      expect(
+        findings.find((finding) =>
+          finding.includes('controller decision contract near-miss'),
+        ),
+      ).toMatch(recovery ? /runtime, recover$/ : /deliver, runtime$/);
       expect(findings).not.toContainEqual(
         expect.stringContaining('declares no needsBossReply result'),
       );

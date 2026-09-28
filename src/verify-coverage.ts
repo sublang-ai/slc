@@ -31,7 +31,6 @@ import { createActor, fromPromise } from 'xstate';
 import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
-  CONTROLLER_ACTION_GUARDS,
   INTERRUPT_EVENT,
   NEEDS_BOSS_REPLY,
   VERIFY_MODULE,
@@ -3711,7 +3710,7 @@ async function runFsmCoverage(
         ? `missing ${JSON.stringify(nearMiss.missing[0])}`
         : `extra ${JSON.stringify(nearMiss.extra[0])}`;
     findings.push(
-      `state ${captain.binding.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
+      `state ${captain.binding.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${nearMiss.domain.join(', ')}`,
     );
   }
   for (const ref of parallelRefs) {
@@ -3964,6 +3963,41 @@ async function runFsmCoverage(
           target === null ||
           (rawGuard !== undefined &&
             resolveGuard(machine, rawGuard) === undefined)
+        ) {
+          continue;
+        }
+        // A controller's final defensive fallback rejects malformed actor
+        // output. It is not a second business action for a valid result.
+        const targetRef = stateRefForTarget(refs, target, captain.ref);
+        if (
+          isControllerDecisionResult(state.result) &&
+          rawGuard === undefined &&
+          index === rawDoneArms.length - 1 &&
+          targetRef !== undefined &&
+          tagsOf(targetRef.state).includes('playbook.parked') &&
+          targetRef.state.invoke === undefined &&
+          targetRef.state.states === undefined &&
+          !Object.hasOwn(targetRef.state, 'always') &&
+          !rawDoneArms
+            .slice(0, index)
+            .some(
+              (otherArm) =>
+                stateRefForTarget(
+                  refs,
+                  rawArmTarget(otherArm) ?? '',
+                  captain.ref,
+                ) === targetRef,
+            ) &&
+          transitionArms(captain.invocation.onError).some(
+            (errorArm, errorIndex, errorArms) =>
+              errorIndex === errorArms.length - 1 &&
+              armGuard(errorArm) === undefined &&
+              stateRefForTarget(
+                refs,
+                rawArmTarget(errorArm) ?? '',
+                captain.ref,
+              ) === targetRef,
+          )
         ) {
           continue;
         }

@@ -17,7 +17,14 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
-import { assign, createActor, fromCallback, fromPromise, setup } from 'xstate';
+import {
+  assign,
+  createActor,
+  createMachine,
+  fromCallback,
+  fromPromise,
+  setup,
+} from 'xstate';
 
 import {
   checkFsmCoverage,
@@ -1321,6 +1328,7 @@ const controllerMachine = (
   deadReportingResult = false,
   extraDecisionResult = false,
   opts: {
+    recovery?: boolean;
     repeatedDecisionPath?: boolean;
     wrongEarlierArm?: boolean;
     cyclicNoExit?: boolean;
@@ -1330,10 +1338,17 @@ const controllerMachine = (
     guardForm?: 'inline' | 'parameterized';
     staleTargetLatch?: 'prior' | 'self';
     contextualSharedArm?: boolean;
+    invalidOutputFallback?: 'failed' | 'reporting' | 'hub';
+    guardedHubError?: boolean;
+    hubError?: boolean;
+    failureError?: 'guarded' | 'nonfinal';
   } = {},
 ) => {
+  const actions = opts.recovery
+    ? ([...controllerActions, 'recover'] as const)
+    : controllerActions;
   const actionGuard =
-    (action: (typeof controllerActions)[number]) =>
+    (action: (typeof actions)[number]) =>
     ({ context, event }: any) => {
       const output = event.output;
       if (
@@ -1385,7 +1400,7 @@ const controllerMachine = (
       );
     };
   const guards = Object.fromEntries(
-    controllerActions.map((action) => [action, actionGuard(action)]),
+    actions.map((action) => [action, actionGuard(action)]),
   );
   const invalidStates =
     opts.unsupportedSurfaces === true
@@ -1500,6 +1515,7 @@ const controllerMachine = (
                 'Switch work. Output shall include `playbookId: <catalog id>` and `input: <request>`.',
               dismiss: 'Dismiss the active work.',
               deliver: 'Deliver the current turn.',
+              ...(opts.recovery ? { recover: 'Prepare and continue.' } : {}),
               ...(opts.missingDecisionResult === true
                 ? {}
                 : {
@@ -1511,32 +1527,47 @@ const controllerMachine = (
                 : {}),
             },
           }),
-          onDone: controllerActions.map((action) => {
-            const guard =
-              opts.guardForm === 'inline'
-                ? actionGuard(action)
-                : opts.guardForm === 'parameterized'
-                  ? { type: 'controllerAction', params: { action } }
-                  : action;
-            return {
-              target:
-                opts.cyclicNoExit === true ||
-                (opts.repeatedDecisionPath === true && action === 'start')
-                  ? '#launching'
-                  : action === 'respond'
-                    ? '#hub'
-                    : '#reporting',
-              guard,
-              ...(opts.staleTargetLatch !== undefined && action === 'start'
-                ? {
-                    actions: assign({
-                      allowDeclaredTarget: () => false,
-                    }),
-                  }
-                : {}),
-            };
-          }),
-          onError: { target: '#failed' },
+          onDone: [
+            ...actions.map((action) => {
+              const guard =
+                opts.guardForm === 'inline'
+                  ? actionGuard(action)
+                  : opts.guardForm === 'parameterized'
+                    ? { type: 'controllerAction', params: { action } }
+                    : action;
+              return {
+                target:
+                  opts.cyclicNoExit === true ||
+                  (opts.repeatedDecisionPath === true && action === 'start')
+                    ? '#launching'
+                    : action === 'respond'
+                      ? '#hub'
+                      : '#reporting',
+                guard,
+                ...(opts.staleTargetLatch !== undefined && action === 'start'
+                  ? {
+                      actions: assign({
+                        allowDeclaredTarget: () => false,
+                      }),
+                    }
+                  : {}),
+              };
+            }),
+            ...(opts.invalidOutputFallback
+              ? [{ target: `#${opts.invalidOutputFallback}` }]
+              : []),
+          ],
+          onError:
+            opts.failureError === 'guarded'
+              ? { guard: () => true, target: '#failed' }
+              : opts.failureError === 'nonfinal'
+                ? [{ target: '#failed' }, { guard: () => true, target: '#hub' }]
+                : opts.guardedHubError
+                  ? [
+                      { guard: () => false, target: '#hub' },
+                      { target: '#failed' },
+                    ]
+                  : { target: opts.hubError ? '#hub' : '#failed' },
         },
       },
       ...((opts.repeatedDecisionPath === true ||
@@ -1940,6 +1971,14 @@ describe('checkFsmCoverage (verification-6)', () => {
     },
   );
 
+  it('covers a recovery-capable controller without a workflow wait', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, { recovery: true }),
+      }),
+    ).toEqual([]);
+  });
+
   it('rejects a controller result selected by an earlier action arm', async () => {
     expect(
       await checkFsmCoverage({
@@ -1985,6 +2024,88 @@ describe('checkFsmCoverage (verification-6)', () => {
       'state deciding: controller result "respond" reached neither the session hub nor a shutdown final',
     );
   }, 2_000);
+
+  it('excludes a defensive failure fallback but still rejects a second action route', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, {
+          recovery: true,
+          invalidOutputFallback: 'failed',
+        }),
+      }),
+    ).toEqual([]);
+    const findings = await checkFsmCoverage({
+      machine: controllerMachine(false, false, false, {
+        recovery: true,
+        invalidOutputFallback: 'reporting',
+      }),
+    });
+    expect(findings).toContainEqual(
+      expect.stringMatching(/selects 2 accepting action arms/),
+    );
+  });
+
+  it.each(['guardedHubError', 'hubError'] as const)(
+    'counts a fallback into an action target with %s',
+    async (errorKind) => {
+      const findings = await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, {
+          recovery: true,
+          invalidOutputFallback: 'hub',
+          [errorKind]: true,
+        }),
+      });
+      expect(findings).toContainEqual(
+        expect.stringMatching(/selects 2 accepting action arms/),
+      );
+    },
+  );
+
+  it.each(['guarded', 'nonfinal'] as const)(
+    'does not exempt a fallback shared only with a %s error arm',
+    async (failureError) => {
+      const findings = await checkFsmCoverage({
+        machine: controllerMachine(false, false, false, {
+          recovery: true,
+          invalidOutputFallback: 'failed',
+          failureError,
+        }),
+      });
+      expect(findings).toContainEqual(
+        expect.stringMatching(/selects 2 accepting action arms/),
+      );
+    },
+  );
+
+  it.each(['invoke', 'states', 'always'] as const)(
+    'does not exempt a fallback with %s',
+    async (member) => {
+      const base = controllerMachine(false, false, false, {
+        recovery: true,
+        invalidOutputFallback: 'failed',
+      });
+      const failed = {
+        ...base.config.states!.failed,
+        [member]:
+          member === 'states'
+            ? {}
+            : member === 'always'
+              ? { target: '#hub' }
+              : { src: 'unexpected' },
+      };
+      const machine = createMachine(
+        {
+          ...base.config,
+          states: { ...base.config.states, failed },
+        } as typeof base.config,
+        base.implementations,
+      );
+      const findings = await checkFsmCoverage({ machine });
+      expect(findings).toContainEqual(
+        expect.stringMatching(/selects 2 accepting action arms/),
+      );
+    },
+  );
 
   it('requires a compound-root controller path to return to its leaf hub', async () => {
     expect(
@@ -2036,6 +2157,34 @@ describe('checkFsmCoverage (verification-6)', () => {
         'machine declares no root BOSS_INTERRUPT event',
       );
       expect(findings).toContainEqual(expect.stringContaining(nearMiss));
+      expect(findings).toContainEqual(
+        expect.stringMatching(
+          /requires exactly respond, resume, start, switch, dismiss, deliver, runtime$/,
+        ),
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'names the recovery domain for a malformed controller (extra=%s)',
+    async (extra) => {
+      const findings = await checkFsmCoverage({
+        machine: controllerMachine(false, false, extra, {
+          recovery: true,
+          missingDecisionResult: !extra,
+        }),
+      });
+      expect(findings).not.toContain(
+        'machine declares no awaitBossReply state or branch-local Boss-reply wait state',
+      );
+      expect(findings).not.toContain(
+        'machine declares no root BOSS_INTERRUPT event',
+      );
+      expect(findings).toContainEqual(
+        expect.stringMatching(
+          /controller decision contract near-miss .*requires exactly .*runtime, recover$/,
+        ),
+      );
     },
   );
 
