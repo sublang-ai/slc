@@ -13,7 +13,7 @@ and this project adheres to
 
 ### Changed
 
-- **Adopts Playbook 17.0.0.** The vendored `gears2fsm` definition's
+- **Adopts Playbook 17.1.0 and Cligent 0.28.0.** The vendored `gears2fsm` definition's
   controller contract admits the Captain's payload-free `recover` action
   where a Source declares recovery preparation, which the compilation checks
   already accept, and `link.md` drops the `entryEvent.contextField`
@@ -23,21 +23,26 @@ and this project adheres to
   reach compiled runs through the run-time definition relay. The engine
   still declares ABI 1 and schema 3 and no compiled-execution section
   changed, so all three bundles and both demo references are retained and
-  pins record the new dependency set. Playbook 17 requires Cligent 0.27,
-  the release SLC already depends on, so an install resolves one Cligent
-  instead of a nested second copy
+  pins record the new dependency set. Playbook 17.1 changes no definition
+  and requires Cligent 0.28, whose runtime floors serve the latest models,
+  so SLC's own Cligent dependency moves to `^0.28.0` as well and an install
+  still resolves one Cligent and one engine instead of a nested second copy
   ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
 
-- **Tests against Claude Agent SDK 0.3.283 and Codex SDK 0.158.0.** The
-  locked development SDKs move to the current releases, so a compile run
-  from this repository drives the current agent CLIs (the Agent SDK
-  bundles Claude Code 2.1.283). Both stay `devDependencies`; pins record
+- **Tests against Claude Agent SDK 0.3.284 and Codex SDK 0.159.0.** The
+  locked development SDKs move to the releases Cligent 0.28 tests, so a
+  compile run from this repository drives the current agent CLIs (the Agent
+  SDK bundles Claude Code 2.1.284). Both stay `devDependencies`; pins record
   the new lockfile.
 
 - **The starter configuration names current models.** The commented
   examples in the first-run `config.yaml`, the README's configuration
   example, and the demo's role-setup example now name `claude-opus-5-5` for
   Claude Code and `gpt-6-sol` for Codex.
+
+- **The demo installs current releases.** Its consumer project declared
+  `@sublang/playbook` `^12.2.0` and `@sublang/slc` `^0.7.0`; it now declares
+  `^17.1.0` and `^0.13.0`, the versions the demo's instructions run.
 
 ## [0.12.0] - 2026-09-27
 
