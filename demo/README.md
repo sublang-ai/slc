@@ -144,8 +144,8 @@ Every role defaults to `claude` — the coder and reviewer players, and
 the Captain, the hidden orchestrator that routes turns and adjudicates
 results. To choose an agent, model, or effort per role, add flags in the
 form `<adapter>[:<model>][@<effort>]`, for example: `--player
-coder=claude:claude-sonnet-5 --player reviewer=codex:gpt-5.6-terra
---captain claude:claude-sonnet-5@high`. The entry names each role by its
+coder=claude:claude-opus-5-5 --player reviewer=codex:gpt-6-sol
+--captain claude:claude-opus-5-5@high`. The entry names each role by its
 canonical lowercase id, the same id the compiled machine delegates to.
 
 The workflow operates on the **current directory**, and its scripted

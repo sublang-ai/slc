@@ -243,15 +243,16 @@ teardown event. The completion rule of
 output clause binds only where Source declares a terminal result, which a
 controller Source does not.
 The controller decision state's direct-Captain result contract discriminates
-the closed action set of DR-029 as extended by DR-038. Its guard discriminants
+the closed action set of DR-029 as extended by DR-038 and DR-069. Its guard discriminants
 are a stable compiler contract, not names the compiler may invent — `respond`, `resume`,
-`start`, `switch`, `dismiss`, `deliver`, and `runtime` — with each guard's
+`start`, `switch`, `dismiss`, `deliver`, and `runtime`, plus `recover` when Source declares recovery preparation — with each guard's
 required payload fields:
 
 - `respond` requires `text`;
 - `resume` requires `playbookId` and carries no `input`;
 - `start` and `switch` each require `playbookId` and `input`;
 - `runtime` requires `actionId`;
+- `recover`, when declared, requires no payload and selects host-owned preparation followed by runtime-validated continuation;
 - `dismiss` and `deliver` require none — a `deliver` result in particular
   carries no text payload: the host is authoritative for the delivered text,
   so the contract declares no field for it.
@@ -779,8 +780,7 @@ current event, not solely from the context that action will populate.
 For an omitted event value, use an existing context seed only where Source
 permits it; do not manufacture a required constructor value to satisfy a
 context-only entry guard. The linked runtime sends the entry event normally;
-its `entryEvent.contextField` declaration supports failure retry and does not
-copy fresh text into context before the guard.
+entry metadata does not copy fresh text into context before the guard.
 An entry event's copy action shall not clear per-run parameters the event omits: an absent optional field falls back to the existing (input-seeded) context value.
 The two surfaces shall not be collapsed. `BOSS_INTERRUPT` always carries its
 target id and may additionally carry typed Boss-supplied fields such as an
@@ -803,7 +803,7 @@ Boss-reply suspension, because its hub already receives every Boss turn and a
 clarifying question to Boss is a `respond` selection over the closed action
 set. The rule below is therefore universal over workflow states and silent
 about that class; in particular, adding `needsBossReply` to the controller
-decision state would add an eighth outcome to a closed seven-action contract
+decision state would add an unauthorized outcome to its closed controller contract
 whose guard discriminants [Setup](#setup) fixes, and is nonconformant.
 There is no source-level opt-in annotation and no `needsBossReply` result metadata in GEARS output.
 The FSM compiler shall preserve the GEARS blockquote as the state's domain `prompt` body and shall not inject any Boss-question instruction into `invoke.input.prompt`.
