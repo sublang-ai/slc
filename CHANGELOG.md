@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-29
+
 ### Changed
 
 - **Adopts Playbook 17.1.0 and Cligent 0.28.0.** The vendored `gears2fsm` definition's
@@ -717,7 +719,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/sublang-ai/slc/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/sublang-ai/slc/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/sublang-ai/slc/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/sublang-ai/slc/compare/v0.9.0...v0.10.0

@@ -63,3 +63,4 @@ Playbook 17.0.0 needs no decision record under DR-028:
 | Tests | 1,535 passed, 2 skipped. |
 | Release checks | `npm run release:check` passes from the committed tree: formatting, lint, build, tests, definitions, the release workflow, artifacts, pins, both demos, and the package. |
 | Pins | Regenerated current; only the lockfile identity, the link-target identities, and their provenance, now `@sublang/playbook@17.1.0`, changed. |
+| Local acceptance | The opt-in gate passed on this candidate with `claude-code` compiling: a cold compile (350 s) whose entry loads, an unchanged repeat reusing every phase with no agent call, an incremental update after a manual refinement, and a run through the installed Playbook 17.1.0 host whose Captain and player, both Claude, fixed the sample in two commits. |
