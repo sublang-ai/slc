@@ -1472,27 +1472,41 @@ export const CONTROLLER_ACTION_GUARDS = [
   'runtime',
 ] as const;
 
-/** Whether a result map has the exact Playbook 10 controller domain union. */
+const CONTROLLER_DOMAINS: readonly (readonly string[])[] = [
+  CONTROLLER_ACTION_GUARDS,
+  [...CONTROLLER_ACTION_GUARDS, 'recover'],
+];
+
+/** Exact legacy or recovery-capable controller domain. */
 export function isControllerDecisionResult(result: unknown): boolean {
   if (!isStringMap(result)) return false;
   const keys = Object.keys(result).filter((key) => key !== NEEDS_BOSS_REPLY);
-  return (
-    keys.length === CONTROLLER_ACTION_GUARDS.length &&
-    CONTROLLER_ACTION_GUARDS.every((guard) => Object.hasOwn(result, guard))
+  return CONTROLLER_DOMAINS.some(
+    (domain) =>
+      keys.length === domain.length &&
+      domain.every((guard) => Object.hasOwn(result, guard)),
   );
 }
 
-/** A single missing or extra key against Playbook 10's controller domain. */
+/** A single missing or extra key against the matching controller domain. */
 export function controllerDecisionNearMiss(
   result: unknown,
-): { missing: string[]; extra: string[] } | undefined {
+):
+  | { missing: string[]; extra: string[]; domain: readonly string[] }
+  | undefined {
   if (!isStringMap(result)) return undefined;
   const actual = Object.keys(result).filter((key) => key !== NEEDS_BOSS_REPLY);
-  const expected = new Set<string>(CONTROLLER_ACTION_GUARDS);
+  if (isControllerDecisionResult(result)) return undefined;
   const present = new Set(actual);
-  const missing = CONTROLLER_ACTION_GUARDS.filter((key) => !present.has(key));
+  const domain = present.has('recover')
+    ? CONTROLLER_DOMAINS[1]!
+    : CONTROLLER_ACTION_GUARDS;
+  const expected = new Set<string>(domain);
+  const missing = domain.filter((key) => !present.has(key));
   const extra = actual.filter((key) => !expected.has(key));
-  return missing.length + extra.length === 1 ? { missing, extra } : undefined;
+  return missing.length + extra.length === 1
+    ? { missing, extra, domain }
+    : undefined;
 }
 
 /** Whether a machine contains Playbook 10's grounded controller decision state. */
@@ -1648,7 +1662,7 @@ export function checkGearsFsmConformance(
         ? `missing ${JSON.stringify(nearMiss.missing[0])}`
         : `extra ${JSON.stringify(nearMiss.extra[0])}`;
     findings.push(
-      `FSM state ${state.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
+      `FSM state ${state.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${nearMiss.domain.join(', ')}`,
     );
   }
 
@@ -2327,19 +2341,34 @@ function sentinelContext(reads: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(reads.map((field) => [field, sentinelFor(field)]));
 }
 
-// The gears2fsm-normative Boss-reply context fields: present only on a
-// continuation turn, so an ordinary-turn probe must leave them unset.
+// The gears2fsm-normative Boss-reply context fields: filled only on a
+// continuation turn. An ordinary turn holds each at its initial shape — the
+// scalar form absent, the keyed form of a parallel machine an empty record —
+// so a state's input can index its own entry without meeting a shape the
+// machine's context type never admits (verification-5).
 const BOSS_CONTEXT_FIELDS = [
   'pendingBossQuestion',
   'bossReply',
   'pendingBossQuestions',
   'bossReplies',
 ];
+const KEYED_BOSS_CONTEXT_FIELDS = ['pendingBossQuestions', 'bossReplies'];
+
+function isKeyedBossRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function ordinaryContext(reads: readonly string[]): Record<string, unknown> {
-  return sentinelContext(
-    reads.filter((field) => !BOSS_CONTEXT_FIELDS.includes(field)),
-  );
+  return {
+    ...sentinelContext(
+      reads.filter((field) => !BOSS_CONTEXT_FIELDS.includes(field)),
+    ),
+    ...Object.fromEntries(
+      reads
+        .filter((field) => KEYED_BOSS_CONTEXT_FIELDS.includes(field))
+        .map((field) => [field, {}]),
+    ),
+  };
 }
 
 /**
@@ -2383,8 +2412,9 @@ function initialMachineContext(
 /**
  * The context an ordinary-turn probe drives an `invoke.input` thunk with: the
  * machine's initial context, overlaid with one string sentinel per traced read
- * whose initial value is absent or itself a string, and never a Boss-reply
- * field (verification-5).
+ * whose initial value is absent or itself a string, with every Boss-reply
+ * field at its initial shape — absent, or an empty keyed record
+ * (verification-5).
  */
 function ordinaryTurnContext(
   reads: readonly string[],
@@ -2397,7 +2427,10 @@ function ordinaryTurnContext(
   }
   const context: Record<string, unknown> = { ...initial };
   if (!includeBossFields) {
-    for (const field of BOSS_CONTEXT_FIELDS) delete context[field];
+    for (const field of BOSS_CONTEXT_FIELDS) {
+      if (isKeyedBossRecord(context[field])) context[field] = {};
+      else delete context[field];
+    }
   }
   for (const field of reads) {
     if (!includeBossFields && BOSS_CONTEXT_FIELDS.includes(field)) continue;

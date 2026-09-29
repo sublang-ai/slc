@@ -5,6 +5,8 @@
 
 ## Status
 
+Controller discrimination amended by [DR-053](053-recovery-controller-discrimination.md) to accept the legacy and recovery-capable domains.
+
 Accepted; activation completed under [DR-027](027-complete-playbook-10-activation.md).
 
 ## Context

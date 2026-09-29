@@ -637,7 +637,7 @@ describe('playbook pipeline shares Playbook definitions (self-hosting-6, self-ho
 });
 
 // `slc playbook code.md` compiles a domain workflow through the playbook pipeline
-// (text2gears -> optimize -> gears2fsm) and, with no `--link`, defaults the
+// (text2gears -> optimize -> prefix -> gears2fsm) and, with no `--link`, defaults the
 // link target to the installed `@sublang/playbook` runtime and emits the entry
 // module, each artifact at its canonical location under the invocation cwd
 // (compiler-1, compiler-2, self-hosting-8, self-hosting-13, self-hosting-16; DR-014). The
@@ -678,10 +678,12 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
   it('runs the bare playbook invocation as a full-link against the default runtime target (self-hosting-13)', async () => {
     const result = await runSlc(['playbook', source], deps());
     expect(result.ok, result.diagnostics.join('\n')).toBe(true);
-    // The discovered optimize pass runs by default: the producing phase writes
-    // the `.raw` intermediate and the pass the canonical gears (DR-014,
+    // The discovered optimize and prefix passes run by default: the producing
+    // phase writes the `.raw` intermediate, the first pass the `.opt1`
+    // intermediate, and the last pass the canonical gears (DR-014,
     // pipeline-35).
     expect(await exists(join(artDir, 'code.gears.raw.md'))).toBe(true);
+    expect(await exists(join(artDir, 'code.gears.opt1.md'))).toBe(true);
     expect(await exists(join(artDir, 'code.gears.md'))).toBe(true);
     expect(await exists(join(artDir, 'code.fsm.ts'))).toBe(true);
     // No `--link`: the run continues into the link phase against the installed
@@ -858,7 +860,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     });
 
     expect(retry.ok).toBe(true);
-    expect(retryPrompts).toHaveLength(4);
+    expect(retryPrompts).toHaveLength(5);
     expect(
       retryPrompts.every((prompt) => !prompt.includes('Incremental update')),
     ).toBe(true);

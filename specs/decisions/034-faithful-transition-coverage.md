@@ -6,6 +6,7 @@
 ## Status
 
 Accepted.
+Amended by [DR-053](053-recovery-controller-discrimination.md): a defensive parked fallback does not accept a second controller action.
 
 ## Context
 

@@ -14,6 +14,7 @@ export default tseslint.config(
       '.scratch/**',
       // Immutable published asset, checked byte-for-byte by verify:definitions.
       'pipelines/playbook/materialize-link.mjs',
+      'pipelines/playbook/prefix-prompts.mjs',
     ],
   },
   js.configs.recommended,

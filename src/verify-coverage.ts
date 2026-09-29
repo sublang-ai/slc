@@ -31,7 +31,6 @@ import { createActor, fromPromise } from 'xstate';
 import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
-  CONTROLLER_ACTION_GUARDS,
   INTERRUPT_EVENT,
   NEEDS_BOSS_REPLY,
   VERIFY_MODULE,
@@ -128,8 +127,11 @@ function stopCoverageActors(
 interface MachineLike {
   config: MachineConfigLike & { id?: string };
   provide(implementations: { actors: Record<string, unknown> }): MachineLike;
-  /** XState exposes `setup()`-registered guards here. */
-  implementations?: { guards?: Record<string, unknown> };
+  /** XState exposes `setup()`-registered guards and actions here. */
+  implementations?: {
+    guards?: Record<string, unknown>;
+    actions?: Record<string, unknown>;
+  };
   /** XState's resolved state nodes expose the actual invocation actor ids. */
   root?: ResolvedStateNodeLike;
 }
@@ -152,6 +154,9 @@ interface StateNodeLike {
   invoke?: InvokeLike | readonly InvokeLike[];
   onDone?: unknown;
   on?: Record<string, unknown>;
+  after?: unknown;
+  entry?: unknown;
+  exit?: unknown;
 }
 
 interface ResolvedStateNodeLike {
@@ -749,6 +754,42 @@ function dynamicPlaybookFields(
 function tagsOf(state: StateNodeLike): readonly string[] {
   if (typeof state.tags === 'string') return [state.tags];
   return Array.isArray(state.tags) ? state.tags : [];
+}
+
+/** XState's built-in actions that send the machine an event by themselves. */
+const EVENT_RAISING_ACTION_TYPES: ReadonlySet<string> = new Set([
+  'xstate.raise',
+  'xstate.sendTo',
+  'xstate.enqueueActions',
+]);
+
+/**
+ * Whether an `entry` or `exit` action list can move the machine without an
+ * external event: a built-in raise, send, or enqueue, written inline or behind
+ * a `setup()`-registered name. An action that only assigns keeps a parked leaf
+ * inert (DR-053).
+ */
+function raisesEvent(machine: MachineLike, actions: unknown): boolean {
+  const typeOf = (action: unknown): string | undefined => {
+    if (typeof action === 'string') return action;
+    if (
+      (typeof action === 'object' && action !== null) ||
+      typeof action === 'function'
+    ) {
+      const type = (action as { type?: unknown }).type;
+      return typeof type === 'string' ? type : undefined;
+    }
+    return undefined;
+  };
+  const list: readonly unknown[] =
+    actions === undefined ? [] : Array.isArray(actions) ? actions : [actions];
+  return list.some((action) => {
+    const type = typeOf(action);
+    if (type === undefined) return false;
+    if (EVENT_RAISING_ACTION_TYPES.has(type)) return true;
+    const named = typeOf(machine.implementations?.actions?.[type]);
+    return named !== undefined && EVENT_RAISING_ACTION_TYPES.has(named);
+  });
 }
 
 function stateRefForTarget(
@@ -3711,7 +3752,7 @@ async function runFsmCoverage(
         ? `missing ${JSON.stringify(nearMiss.missing[0])}`
         : `extra ${JSON.stringify(nearMiss.extra[0])}`;
     findings.push(
-      `state ${captain.binding.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${CONTROLLER_ACTION_GUARDS.join(', ')}`,
+      `state ${captain.binding.stateId}: controller decision contract near-miss (${detail}); the controller domain requires exactly ${nearMiss.domain.join(', ')}`,
     );
   }
   for (const ref of parallelRefs) {
@@ -3964,6 +4005,45 @@ async function runFsmCoverage(
           target === null ||
           (rawGuard !== undefined &&
             resolveGuard(machine, rawGuard) === undefined)
+        ) {
+          continue;
+        }
+        // A controller's final defensive fallback rejects malformed actor
+        // output. It is not a second business action for a valid result,
+        // provided the parked leaf it enters cannot leave by itself.
+        const targetRef = stateRefForTarget(refs, target, captain.ref);
+        if (
+          isControllerDecisionResult(state.result) &&
+          rawGuard === undefined &&
+          index === rawDoneArms.length - 1 &&
+          targetRef !== undefined &&
+          tagsOf(targetRef.state).includes('playbook.parked') &&
+          targetRef.state.invoke === undefined &&
+          targetRef.state.states === undefined &&
+          !Object.hasOwn(targetRef.state, 'always') &&
+          !Object.hasOwn(targetRef.state, 'after') &&
+          !raisesEvent(machine, targetRef.state.entry) &&
+          !raisesEvent(machine, targetRef.state.exit) &&
+          !rawDoneArms
+            .slice(0, index)
+            .some(
+              (otherArm) =>
+                stateRefForTarget(
+                  refs,
+                  rawArmTarget(otherArm) ?? '',
+                  captain.ref,
+                ) === targetRef,
+            ) &&
+          transitionArms(captain.invocation.onError).some(
+            (errorArm, errorIndex, errorArms) =>
+              errorIndex === errorArms.length - 1 &&
+              armGuard(errorArm) === undefined &&
+              stateRefForTarget(
+                refs,
+                rawArmTarget(errorArm) ?? '',
+                captain.ref,
+              ) === targetRef,
+          )
         ) {
           continue;
         }

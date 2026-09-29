@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const pipelineDir = join(repoRoot, 'pipelines', 'playbook');
-const definitions = ['text2gears', 'gears2fsm', 'link', 'optimize'];
+const definitions = ['text2gears', 'gears2fsm', 'link', 'optimize', 'prefix'];
 
 const rootPackage = readJson(join(repoRoot, 'package.json'));
 const lock = readJson(join(repoRoot, 'package-lock.json'));

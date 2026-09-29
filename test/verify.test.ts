@@ -1143,8 +1143,22 @@ describe('controller machine discrimination', () => {
     CONTROLLER_ACTION_GUARDS.map((guard) => [guard, `${guard} action`]),
   );
 
-  it('recognizes only the exact Playbook 10 decision-result guard set', () => {
+  it('recognizes the exact controller domains with optional recovery', () => {
     expect(isControllerDecisionResult(result)).toBe(true);
+    expect(
+      isControllerDecisionResult({
+        ...result,
+        recover: 'prepare and continue',
+      }),
+    ).toBe(true);
+    expect(
+      isControllerDecisionResult({
+        ...result,
+        recover: 'prepare',
+        unexpected: 'extra',
+      }),
+    ).toBe(false);
+    expect(isControllerDecisionResult({ ...result, recover: 1 })).toBe(false);
     expect(
       isControllerDecisionResult({
         ...result,
@@ -1635,11 +1649,13 @@ describe('checkGearsFsmConformance', () => {
   });
 
   it.each([
-    ['missing', false],
-    ['extra', true],
+    ['missing', false, false],
+    ['extra', true, false],
+    ['missing with recovery', false, true],
+    ['extra with recovery', true, true],
   ] as const)(
     'reports a controller decision %s-key near-miss without requiring the ordinary wait key',
-    (_label, extra) => {
+    (_label, extra, recovery) => {
       const config = controllerConfig();
       const decision = config.states!.decide as {
         invoke: { input: () => Record<string, unknown> };
@@ -1648,6 +1664,7 @@ describe('checkGearsFsmConformance', () => {
       const result = {
         ...(input.result as Record<string, string>),
         ...(extra ? { other: 'Invented action.' } : {}),
+        ...(recovery ? { recover: 'Prepare and continue.' } : {}),
       };
       if (!extra) delete result.runtime;
       decision.invoke.input = () => ({ ...input, result });
@@ -1660,6 +1677,17 @@ describe('checkGearsFsmConformance', () => {
           `controller decision contract near-miss (${extra ? 'extra "other"' : 'missing "runtime"'})`,
         ),
       );
+      expect(findings).toContainEqual(
+        expect.stringContaining(
+          'requires exactly respond, resume, start, switch, dismiss, deliver, runtime' +
+            (recovery ? ', recover' : ''),
+        ),
+      );
+      expect(
+        findings.find((finding) =>
+          finding.includes('controller decision contract near-miss'),
+        ),
+      ).toMatch(recovery ? /runtime, recover$/ : /deliver, runtime$/);
       expect(findings).not.toContainEqual(
         expect.stringContaining('declares no needsBossReply result'),
       );
@@ -2343,12 +2371,12 @@ const referenceFsm = async (): Promise<unknown> =>
 // model DR-009's verification contract and exercise the generator against the
 // reference artifacts. The installed @sublang/playbook ships them.
 describe('conformance against the reference artifacts', () => {
-  it('preserves composed CODE text while retaining its missing schema declaration', async () => {
+  it('accepts the composed CODE text and its schema declarations', async () => {
     const referenceGears = readFileSync(
       join(referenceDir, 'code.gears.md'),
       'utf8',
     );
-    // Playbook 10's reference is a schema-3 `Roles` workflow: two delegated
+    // The published reference is a schema-3 `Roles` workflow: two delegated
     // Coder phases (CODE-1, CODE-3) each followed by a literal nested `review`
     // call (CODE-2, CODE-4).
     const items = parseGearsItems(referenceGears);
@@ -2365,21 +2393,15 @@ describe('conformance against the reference artifacts', () => {
       findings: [],
     });
     const fsm = await referenceFsm();
-    // Playbook 10.0.0's shipped reference does not satisfy its own gears2fsm
-    // definition, which requires that "the artifact shall export
-    // `concurrentRoleSets` as a deeply readonly array"; `code.fsm.ts` declares
-    // role `coder` yet exports no such array. Its nested review inputs are
-    // correctly composed at invocation time and pass the observed-template
-    // probe. The missing declaration remains a finding; every artifact here
-    // exports `concurrentRoleSets` and passes cleanly. Pinning the exact
-    // findings keeps the checker honest about upstream while making any change
-    // in either the checker or a later Playbook release visible here.
+    // Playbook 16's recompiled reference exports the required empty
+    // concurrency declaration and preserves its composed nested-call inputs.
+    expect(findConcurrentRoleSets(fsm)).toEqual([]);
     expect(
       checkGearsFsmConformance(referenceGears, findMachineConfig(fsm), {
         artifactSchema: 3,
         concurrentRoleSets: findConcurrentRoleSets(fsm),
       }),
-    ).toEqual(['schema-3 FSM exports no valid concurrentRoleSets array']);
+    ).toEqual([]);
   });
 });
 
@@ -2554,8 +2576,8 @@ describe('pinIntrospection (verification-4)', () => {
       'CODE-3',
     ]);
     expect(pins.captain.map((state) => state.state)).toEqual([
-      'runFirstPhase',
-      'runIrTask',
+      'firstPhase',
+      'irTaskPhase',
     ]);
     // Schema-3 delegation binds the canonical local role, never a player.
     for (const state of pins.captain) {
@@ -2571,26 +2593,34 @@ describe('pinIntrospection (verification-4)', () => {
       })),
     ).toEqual([
       {
-        state: 'reviewFirstCommit',
+        state: 'reviewNewIntentPhase',
         playbookId: 'review',
         sourceItem: 'CODE-2',
       },
-      { state: 'reviewIrTask', playbookId: 'review', sourceItem: 'CODE-4' },
+      {
+        state: 'reviewIrTaskPhase',
+        playbookId: 'review',
+        sourceItem: 'CODE-4',
+      },
     ]);
-    // Playbook 10's `code` reference exposes no root interrupt surface; the
-    // jumpable set belongs to the separate controller `captain` playbook.
-    expect(pins.rootOn).toEqual({});
-    expect(pins.interruptTargets).toEqual([]);
+    // Both delegated phases expose guarded root interrupt targets.
+    expect(pins.rootOn).toEqual({
+      BOSS_INTERRUPT: [
+        { index: 0, target: 'firstPhase', guarded: true },
+        { index: 1, target: 'irTaskPhase', guarded: true },
+      ],
+    });
+    expect(pins.interruptTargets).toEqual(['firstPhase', 'irTaskPhase']);
     expect(pins.quiescent.map((state) => state.state)).toEqual([
       'ready',
       'awaitBossReply',
       'failed',
-      'reportedReviewFailure',
+      'reviewFailed',
       'done',
     ]);
     expect(
       pins.quiescent.filter(({ final }) => final).map(({ state }) => state),
-    ).toEqual(['reportedReviewFailure', 'done']);
+    ).toEqual(['reviewFailed', 'done']);
     // Every acting state declares Boss-reply suspension and error wiring.
     for (const state of pins.captain) {
       expect(state.resultKeys).toContain('needsBossReply');
@@ -2909,6 +2939,85 @@ describe('checkPromptComposition (verification-5)', () => {
       coderWork: ['<topic>', '<coder-llm>'],
       reviewerWork: ['<topic>'],
     });
+  });
+
+  it('drives a keyed Boss-question machine with its empty records on an ordinary turn', () => {
+    // gears2fsm's keyed form types `pendingBossQuestions` and `bossReplies` as
+    // required records, so a faithful input indexes its own entry without a
+    // guard; the ordinary-turn probe must hand it the initial empty records.
+    const keyedInput =
+      (stateId: string, role: string, sourceItem: string, prompt: string) =>
+      ({ context }: { context: Record<string, unknown> }) => {
+        const questions = context.pendingBossQuestions as Record<
+          string,
+          unknown
+        >;
+        const replies = context.bossReplies as Record<string, unknown>;
+        const pendingBossQuestion = questions[stateId];
+        const bossReply = replies[stateId];
+        return {
+          stateId,
+          role,
+          sourceItem,
+          prompt,
+          result: {
+            done: 'The player finished.',
+            needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+          },
+          topic: context.topic,
+          ...(pendingBossQuestion === undefined ? {} : { pendingBossQuestion }),
+          ...(bossReply === undefined ? {} : { bossReply }),
+        };
+      };
+    const region = (
+      name: string,
+      stateId: string,
+      role: string,
+      item: string,
+    ) => ({
+      ...schema3Identity(name),
+      initial: 'working',
+      states: {
+        working: {
+          ...schema3Identity(stateId, role),
+          tags: 'playbook.busy',
+          invoke: {
+            src: 'player',
+            input: keyedInput(stateId, role, item, 'Draft <topic>.'),
+            onDone: { target: 'complete' },
+          },
+        },
+        complete: { ...schema3Identity(`${stateId}Complete`), type: 'final' },
+      },
+    });
+    const config: MachineConfigLike = {
+      context: { topic: '', pendingBossQuestions: {}, bossReplies: {} },
+      initial: 'proposals',
+      states: {
+        proposals: {
+          ...schema3Identity('proposals'),
+          type: 'parallel',
+          onDone: { target: 'done' },
+          states: {
+            coderRegion: region('coderRegion', 'coderWork', 'coder', 'KEYED-1'),
+            reviewerRegion: region(
+              'reviewerRegion',
+              'reviewerWork',
+              'reviewer',
+              'KEYED-2',
+            ),
+          },
+        },
+        done: { ...schema3Identity('done'), type: 'final' },
+      },
+    };
+    expect(
+      checkPromptComposition({
+        config,
+        compose: composeSchema3Prompt,
+        actor: 'player',
+      }),
+    ).toEqual([]);
   });
 
   it('accepts the installed default composer without requiring a role-identity call', () => {
@@ -3886,12 +3995,12 @@ describe('checkPromptComposition (verification-5)', () => {
       })),
     ).toEqual([
       {
-        state: 'runFirstPhase',
+        state: 'firstPhase',
         sourceItem: 'CODE-1',
         player: '',
         role: 'coder',
       },
-      { state: 'runIrTask', sourceItem: 'CODE-3', player: '', role: 'coder' },
+      { state: 'irTaskPhase', sourceItem: 'CODE-3', player: '', role: 'coder' },
     ]);
     expect(
       checkPromptComposition({
@@ -3903,19 +4012,19 @@ describe('checkPromptComposition (verification-5)', () => {
       config,
       playbook._internal.composePlayerPrompt,
     );
-    // The installed reference (Playbook 12) substitutes the relayed caller
+    // The published reference substitutes the relayed caller
     // input and run results on every phase, the IR number on the IR-task
     // phase, and the Coder model on both commits.
-    expect(substituted.runFirstPhase).toEqual([
+    expect(substituted.firstPhase).toEqual([
+      '<coder-llm>',
       '<caller-input>',
       '<run-results>',
-      '<coder-llm>',
     ]);
-    expect(substituted.runIrTask).toEqual([
+    expect(substituted.irTaskPhase).toEqual([
+      '<coder-llm>',
       '<caller-input>',
       '<ir-number>',
       '<run-results>',
-      '<coder-llm>',
     ]);
   });
 });

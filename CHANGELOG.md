@@ -11,6 +11,129 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-29
+
+### Changed
+
+- **Adopts Playbook 17.1.0 and Cligent 0.28.0.** The vendored `gears2fsm` definition's
+  controller contract admits the Captain's payload-free `recover` action
+  where a Source declares recovery preparation, which the compilation checks
+  already accept, and `link.md` drops the `entryEvent.contextField`
+  declaration, since the engine now retries a failed step from its saved
+  checkpoint, and has every governed judge prompt state the
+  `{ blocked: … }` answer for a result no declared outcome matches. Both
+  reach compiled runs through the run-time definition relay. The engine
+  still declares ABI 1 and schema 3 and no compiled-execution section
+  changed, so all three bundles and both demo references are retained and
+  pins record the new dependency set. Playbook 17.1 changes no definition
+  and requires Cligent 0.28, whose runtime floors serve the latest models,
+  so SLC's own Cligent dependency moves to `^0.28.0` as well and an install
+  still resolves one Cligent and one engine instead of a nested second copy
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
+- **Tests against Claude Agent SDK 0.3.284 and Codex SDK 0.159.0.** The
+  locked development SDKs move to the releases Cligent 0.28 tests, so a
+  compile run from this repository drives the current agent CLIs (the Agent
+  SDK bundles Claude Code 2.1.284). Both stay `devDependencies`; pins record
+  the new lockfile.
+
+- **The starter configuration names current models.** The commented
+  examples in the first-run `config.yaml`, the README's configuration
+  example, and the demo's role-setup example now name `claude-opus-5-5` for
+  Claude Code and `gpt-6-sol` for Codex.
+
+- **The demo installs current releases.** Its consumer project declared
+  `@sublang/playbook` `^12.2.0` and `@sublang/slc` `^0.7.0`; it now declares
+  `^17.1.0` and `^0.13.0`, the versions the demo's instructions run.
+
+## [0.12.0] - 2026-09-27
+
+### Added
+
+- **Compilation-correctness checks accept a recovery-capable Captain.** The
+  controller discriminator recognizes exactly two action domains — the seven
+  Captain actions `respond`, `resume`, `start`, `switch`, `dismiss`, `deliver`,
+  and `runtime`, or those seven plus a payload-free `recover` — so a Captain
+  compiled with Playbook's recovery preparation is verified as a controller
+  instead of being reported as an ordinary workflow missing its Boss-reply
+  wait, and a near-miss diagnostic names the complete domain it was matched
+  against ([DR-053](specs/decisions/053-recovery-controller-discrimination.md)).
+
+### Changed
+
+- **Ordered result acceptance exempts a controller's defensive fallback.** A
+  decision's final unguarded arm into the parked failure leaf that its final
+  unguarded error arm also targets rejects malformed output rather than
+  selecting a second action, so coverage no longer reports it as two accepting
+  action arms — provided that leaf cannot leave by itself: an unguarded arm
+  into any action path, a guarded or nonfinal error arm, or a failure leaf
+  carrying an invocation, child states, an `always` or `after` transition, or
+  an entry or exit action that raises, sends, or enqueues an event still
+  counts ([DR-053](specs/decisions/053-recovery-controller-discrimination.md)).
+
+## [0.11.0] - 2026-09-26
+
+### Changed
+
+- **Adopts Playbook 16.0.0.** The vendored definition set gains the `prefix`
+  pass and its `prefix-prompts.mjs` tool, so a default compile runs
+  `text2gears`, `optimize`, `prefix`, then `gears2fsm`: each compiled prompt
+  opens with its static instructions and ends with the values relayed for
+  that run, giving a provider's prompt cache a shared prefix, and
+  `--no-optimize` skips both passes. The SLC-owned sidecar declares the
+  pass's closure, the definition gate verifies all five definitions, and
+  pins record the new dependency set. The engine still declares ABI 1 and
+  schema 3 and no compiled-execution section changed, so all three bundles
+  are retained
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
+- **Compiler definitions match the recompiled Playbook workflows.** The
+  definition set binds shared calls to the published workflow catalog,
+  records accepted outcomes at the next visible state (including parallel
+  joins), and links supported parallel groups through the shared engine.
+  Definitions and their local tools move together, so newly compiled
+  workflows follow the same contracts as the published reference bundles.
+
+- **Tests against Claude Agent SDK 0.3.282.** The locked development SDK
+  moves to the first release whose bundled Claude Code (2.1.282) serves
+  Opus 5.5, so a compile that selects `claude-opus-5-5` is no longer refused
+  by the provider as too old; pins record the new lockfile.
+
+- **The Source-fidelity check reads a prefixed prompt from the prompt
+  itself.** It no longer needs the prefix pass's `## Prefixed prompts` list,
+  which Playbook drops because each compiled prompt already shows how it is
+  composed. Any item other than a script item now passes in Source order or
+  in the prefix-first layout the pass produces, with every authored fragment
+  still conserved by text count across the package; a section a 15.1-era
+  bundle carries is ignored, and the `text2gears` gate accepts a raw
+  prefix-first output, which leaves the pass nothing to move. A dropped,
+  invented, or reordered fragment is still named, including a relay moved
+  before an instruction and a reordered script, while a duplicated fragment
+  is named only where no layout carries it
+  ([DR-052](specs/decisions/052-prefixed-prompt-acceptance.md)).
+
+### Fixed
+
+- **The link-fidelity gate drives a parallel machine's ordinary turn with its
+  empty question records.** gears2fsm's keyed form types
+  `pendingBossQuestions` and `bossReplies` as required records that a state's
+  input indexes for its own entry; the ordinary-turn probe deleted them from
+  the machine's initial context, so every player state of a freshly compiled
+  DECIDE was reported as throwing and the link failed closed after three
+  mechanical rounds. The probe now holds each Boss-reply field at its initial
+  shape — the scalar fields absent, the keyed records empty
+  ([DR-030](specs/decisions/030-link-fidelity-gate.md)).
+- **The Source-fidelity gate no longer rejects a relayed value the Source
+  compares inside a command.** `pr.md` relays the pull request in quotes to
+  `code` and then compares it as a single-quoted shell word in the two
+  commands it authors; the gate demanded a literal quote marker on those
+  command lines too, so an exact compile of `pr.md` failed closed at
+  `text2gears`, and the copy of the check also flagged the maintained PR
+  bundle's script items, which Playbook's own checker exempts. A line the
+  Source authored now keeps the Source's form and a script item is exempt,
+  as in Playbook's checker
+  ([DR-029](specs/decisions/029-source-fidelity-gate.md)).
+
 ## [0.10.0] - 2026-09-15
 
 ### Added
@@ -596,7 +719,10 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/sublang-ai/slc/compare/v0.12.0...v0.13.0
+[0.12.0]: https://github.com/sublang-ai/slc/compare/v0.11.0...v0.12.0
+[0.11.0]: https://github.com/sublang-ai/slc/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/sublang-ai/slc/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/sublang-ai/slc/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/sublang-ai/slc/compare/v0.7.0...v0.8.0
