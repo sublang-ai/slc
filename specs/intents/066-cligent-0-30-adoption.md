@@ -5,7 +5,7 @@
 
 ## Status
 
-In progress; Playbook 17.3.0 and Cligent 0.30.0 are adopted and verified, and no release is prepared.
+Completed (2026-10-01): SLC declares Playbook ^17.3.0 and Cligent ^0.30.0 with regenerated pins, passes the release checks and the opt-in local acceptance gate on the candidate, and ships as 0.15.0.
 
 ## Intent
 
@@ -17,12 +17,12 @@ Depend on Cligent `^0.30.0` and Playbook `^17.3.0` through the routine adoption 
 - [x] The build confirmed against Cligent 0.30's defaulted subagent-effort type parameter, with no source change.
 - [x] Vendored definitions confirmed byte-identical to 17.3.0; retained bundles, demo references, and regenerated pins verified.
 - [x] The demo's consumer project declaring Playbook `^17.3.0` and the next SLC release.
-- [ ] A release declaring the new dependency set.
+- [x] A release declaring the new dependency set.
 
 ## Tasks
 
 1. [x] Raise both dependencies, regenerate pins, and record the changelog and adoption evidence.
-2. [ ] Prepare and publish the release.
+2. [x] Prepare and publish the release.
 
 ## Verification
 
@@ -42,3 +42,8 @@ Playbook 17.3.0 needs no decision record under DR-028:
 | Tests | 1,535 passed, 2 skipped. |
 | Release checks | `npm run release:check` passes: formatting, lint, build, tests, definitions, the release workflow, artifacts, pins, both demos, and the package. |
 | Pins | Regenerated current; only the lockfile identity, the link-target identities, and their provenance, now `@sublang/playbook@17.3.0`, changed. |
+
+| Release candidate | Verification |
+| --- | --- |
+| Release checks | `npm run release:check` passed on the prepared 0.15.0 tree: formatting, lint, build, 1,535 tests with 2 skips, definitions, the release workflow, artifact reviews, current pins, the demo in both languages, and the package smoke; the pull request's CI passed. |
+| Local acceptance | The opt-in gate passed on the candidate with `claude-code` compiling: a cold compile of 1,443 s (normalize 1 m 26 s, text2gears 2 m 42 s, optimize 2 m 36 s, prefix 39 s, gears2fsm 10 m 37 s, link 6 m 03 s) whose entry loads, an unchanged repeat reusing every phase with no agent call, an incremental update after a manual refinement re-emitting `gears2fsm` in 2 m 04 s with downstream reuse retained, and a run with real agents that exited zero in 54 s, its two commits landed on the preserved baseline. |
