@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-01
+
 ### Changed
 
 - **Adopts Playbook 17.2.0 and Cligent 0.29.0.** Playbook 17.2 changes no
@@ -741,7 +743,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/sublang-ai/slc/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/sublang-ai/slc/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/sublang-ai/slc/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/sublang-ai/slc/compare/v0.10.0...v0.11.0
