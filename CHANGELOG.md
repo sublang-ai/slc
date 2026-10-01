@@ -11,6 +11,30 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-01
+
+### Changed
+
+- **Adopts Playbook 17.2.0 and Cligent 0.29.0.** Playbook 17.2 changes no
+  vendored definition or sidecar and requires Cligent 0.29, whose Claude
+  adapter serves the host-level subagent model, a setting the compiler's own
+  agent does not use. SLC's own Cligent dependency moves to `^0.29.0` with
+  it, so an install still resolves one Cligent and one engine instead of a
+  nested second copy. The engine still declares ABI 1 and schema 3, so all
+  three bundles and both demo references are retained and pins record the
+  new dependency set
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+
+- **The adapter factory admits Cligent 0.29's adapter typing.** Cligent 0.29
+  types each adapter by its subagent-model support as a third `AgentAdapter`
+  type argument, so the factory's widest adapter shape now names `string`
+  there and every built-in adapter stays assignable. Nothing changes at run
+  time.
+
+- **The demo installs the coming releases.** Its consumer project declares
+  `@sublang/playbook` `^17.2.0` and `@sublang/slc` `^0.14.0`, so it resolves
+  one Cligent with the compiler.
+
 ## [0.13.0] - 2026-09-29
 
 ### Changed
@@ -719,7 +743,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/sublang-ai/slc/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/sublang-ai/slc/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/sublang-ai/slc/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/sublang-ai/slc/compare/v0.10.0...v0.11.0
