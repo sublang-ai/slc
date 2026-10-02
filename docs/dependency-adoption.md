@@ -42,8 +42,27 @@ check passes. It uses Node 24.19.0 and the fresh consumer's published Playbook
 Claude SDK is 0.3.287; the repository's existing development SDK locks remain
 unchanged. Evidence is retained at `/private/tmp/slc-0151-evidence-r6rmunwr`,
 including the original fixture failure and the complete successful live log.
-The live consumer is retained as `slc-acceptance-C7Xkkr`; publication and public
-consumer verification follow the release workflow.
+The live consumer is retained as `slc-acceptance-C7Xkkr`.
+
+[SLC 0.15.1](https://github.com/sublang-ai/slc/releases/tag/v0.15.1) is published
+from `82846aa22c11e48efdc24c39bbdea32e31f25791`, following
+[PR #34](https://github.com/sublang-ai/slc/pull/34), successful
+[main CI](https://github.com/sublang-ai/slc/actions/runs/37023297714), and
+[trusted publication](https://github.com/sublang-ai/slc/actions/runs/37023854614).
+The Linux release gate passes 1,536 tests with one existing skip and the
+181-file package smoke. npm initially returned 404 while processing the
+accepted publication; the first failed availability check is preserved, and
+the fresh consumer began only after the exact version became available.
+
+The public tarball is byte-identical to the accepted candidate, with SHA-256
+`e8155e0ef174a6ea154b53d3c5d08617a9ba62a18eed7b9cf8b66ef6f6d3fc92`.
+A separate empty-cache registry install resolves one Cligent 0.33.1 and one
+Playbook 17.4.0 with their independently verified integrity values. Its CLI,
+both public exports, engine contract and Inspect catalog pass without provider
+calls. The successful npm signature audit returns the exact installed SLC
+package's verified attestation bundles; their archive digest, source, tag and
+publisher attempt match the release. The complete receipt is retained at
+`/private/tmp/slc-0151-evidence-r6rmunwr/public-proof/runs/public-Ob6O24/receipt.json`.
 
 ## Release adoption — 2026-10-01
 
