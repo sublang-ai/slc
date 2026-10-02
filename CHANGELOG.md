@@ -11,6 +11,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-02
+
+### Changed
+
+- **Adopt Playbook 17.4.0 and Cligent 0.33.1.** Align the compiler's direct
+  dependencies with the host releases for attachments, browser tools, media
+  output, and live tool approvals. Playbook's shared workflow catalog adds
+  Inspect. These remain runtime and host capabilities; the compiler adds no
+  media transport, approval interface, or workflow syntax.
+- **Update the demo's consumer requirements** to Playbook `^17.4.0` and
+  SLC `^0.15.1`.
+
 ## [0.15.0] - 2026-10-01
 
 ### Changed
@@ -761,7 +773,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/sublang-ai/slc/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/sublang-ai/slc/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/sublang-ai/slc/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/sublang-ai/slc/compare/v0.12.0...v0.13.0
