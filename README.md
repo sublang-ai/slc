@@ -35,7 +35,7 @@ through it. Why compile prose instead of prompting with it:
 The flagship pipeline is `playbook` (the name of both the pipeline and
 the sibling [playbook](https://github.com/sublang-ai/playbook) project
 that executes its output): prose → GEARS spec items → XState machine →
-a linked module the `playbook` CLI runs.
+a registry entry the `playbook` CLI runs through Captain.
 
 ## See it run
 
@@ -56,7 +56,7 @@ slc --version
 
 Requirements:
 
-- A POSIX platform — macOS or Linux; on Windows, use WSL (or Git Bash).
+- A POSIX platform — macOS or Linux.
   Compiled script steps execute through `sh`.
 - Node.js >= 23.6 (compiled artifacts are imported as native TypeScript).
 - One supported coding-agent CLI, installed and authenticated:
@@ -93,11 +93,48 @@ slc playbook my-workflow.md
 Artifacts land in your working directory: `my-workflow.playbook/` holds
 the intermediates — `my-workflow.gears.md`, the XState machine
 `my-workflow.fsm.ts`, the linked runtime module, and its verification
-tests — and `my-workflow.ts` is the runnable entry. Run it:
+tests — and `my-workflow.ts` is the registry entry. Enable it in
+`${SPEX_HOME:-$HOME/.spex}/config/playbook.config.yaml`, binding every role
+listed in its `requiredRoleIds` to a stable player. The following example
+assumes the source declares one `worker` role:
+
+```yaml
+captain:
+  adapter: claude
+  model: claude-opus-5-5
+  effort: high
+  permissions:
+    mode: auto
+
+players:
+  my.worker:
+    adapter: claude
+    model: claude-opus-5-5
+    effort: high
+    permissions:
+      mode: auto
+
+playbooks:
+  my-workflow:
+    from: /absolute/path/to/my-workflow.ts
+    roles:
+      worker: my.worker
+```
+
+Merge these entries into an existing config, or use the complete example
+for a new one, then confirm the entry and run its command:
 
 ```bash
-playbook run ./my-workflow.ts "<your task>"
+playbook --list
+playbook run "/my-workflow <your task>"
 ```
+
+An entry with different roles needs matching bindings. Relative `from` paths
+resolve against the config file, so an absolute path is clearest. The
+[English](demo/README.md) and [Chinese](demo/README.zh.md) demos include a ready
+configuration for both precompiled entries. Playbook's
+[configuration guide](https://github.com/sublang-ai/playbook/blob/main/docs/configuration.md#external-playbooks)
+explains reusable players, role overrides, and project config fragments.
 
 Compilation runs your configured coding agent at each phase. Elapsed time
 depends on the workflow, model, effort and required corrections; the
@@ -161,7 +198,7 @@ model: claude-opus-5-5 # optional; omit to use the agent CLI's default
 effort: high # optional adapter-scoped reasoning effort
 fastMode: true # optional adapter-scoped fast mode; false is a literal request
 reviewerAgent: codex # optional; enables reviewed compilation
-reviewerModel: gpt-6-sol # optional reviewer model
+reviewerModel: gpt-6.1-sol # optional reviewer model
 reviewerEffort: xhigh # optional reviewer reasoning effort
 reviewerFastMode: true # optional reviewer fast mode
 stallTimeout: 2400 # seconds of agent silence before a stalled call fails

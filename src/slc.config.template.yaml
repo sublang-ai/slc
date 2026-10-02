@@ -10,7 +10,7 @@ agent: claude-code
 # fastMode: true
 # Optional independent review/fix loop; disabled until reviewerAgent is set.
 # reviewerAgent: codex
-# reviewerModel: gpt-6-sol
+# reviewerModel: gpt-6.1-sol
 # reviewerEffort: xhigh
 # reviewerFastMode: true
 # Seconds of agent inactivity before a stalled call fails the run (DR-019);

@@ -1,120 +1,122 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# 演示：从一段文本描述到可靠的双 agent 代码评审循环
+# 演示：从自然语言到双智能体代码评审循环
 
 *[English](README.md)*
 
-一段自然的文本描述被编译成确定性的状态机工作流，该工作流驱动两个 agent——一个编码者、一个审查者——在真实的 Git 仓库上完成提交／评审／争论的循环，直到评审不再提出任何问题。
+[中文规程](workflow.zh.txt)与[英文规程](workflow.txt)描述同一个有界的编码与评审循环。
+编译后的工作流驱动编码者和审查者提交、评审和修复代码，直到评审通过或达到规程规定的上限。
 
-## 快速开始
+## 先运行预编译工作流
 
-前置条件：macOS 或 Linux（Windows 请使用 WSL 或 Git Bash——工作流的脚本化步骤经由 `sh` 执行）、Node.js ≥ 23.6、`git`，以及已安装并登录的 [Claude Code CLI](https://www.anthropic.com/claude-code)（`claude` 命令可用）。也可以按角色改用其他 agent 或模型，参见[角色设置](#角色设置)。
-
-本目录是一个自包含的 npm 项目。在 `demo/` 下先安装，再运行：
+需要macOS或Linux、Node.js ≥ 23.6、`git`，以及已安装并登录的[Claude Code CLI](https://www.anthropic.com/claude-code)。
+在`demo/`目录安装依赖，并准备全新的临时副本。
+下面的Git身份仅用于演示；若需在提交中记录自己的身份，可改为自己的姓名和邮箱：
 
 ```sh
 npm install
+demo_source="$PWD"
+demo_work=$(mktemp -d)
+cp sample.c workflow.txt workflow.zh.txt package.json playbook.config.yaml "$demo_work/"
+cp -R reference "$demo_work/reference"
+ln -s "$demo_source/node_modules" "$demo_work/node_modules"
+cd "$demo_work"
+printf 'node_modules/\n.spex/\n' > .gitignore
+git init --quiet
+git config user.name 'Demo Participant'
+git config user.email 'demo@example.invalid'
+git add .
+git -c commit.gpgsign=false commit -m 'chore: Record demo baseline'
+mkdir -p .spex/config
+cp playbook.config.yaml .spex/config/playbook.config.yaml
+export SPEX_HOME="$PWD/.spex"
+npx playbook --list
 ```
 
-```sh
-npx slc playbook workflow.zh.txt
-```
+后续命令都在临时副本中执行，初始提交保存原始示例与工作流制品，不使用现有工作目录的修改。
+
+列表应包含`/workflow`和`/workflow.zh`。
+随附的[配置模板](playbook.config.yaml)启用两个参考入口，将各自声明的角色绑定到两个稳定的player，并为这些player与Captain明确指定Claude Opus 5.5及`high`力度。
+入口的相对路径基于`.spex/config/playbook.config.yaml`解析。
+明确指定`SPEX_HOME`将本演示的配置与会话保存在`.spex/`中。
+
+把[sample.c](sample.c)的真实缺陷交给中文工作流：
 
 ```sh
-npx playbook run ./workflow.zh.ts \
-  "sample.c 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它。"
-```
-
-```sh
+npx playbook run "/workflow.zh sample.c里的median函数有bug：结果依赖元素顺序，偶数长度数组也算错。请修复它。"
 git log --oneline
 ```
 
-每一步做什么：
+此步骤会调用真实智能体。
+工作流先确保当前目录本身是Git仓库的根目录，必要时初始化仓库；随后编码者修改并提交，审查者检查提交，双方按源规程限定的轮数处理问题：评审循环最多两次，争论最多两轮。
+提交落在你运行命令的目录里。
 
-1. **`npm install`** 安装 `@sublang/slc`（编译器）与 `@sublang/playbook`（提供 `playbook` 命令，以及生成文件从 `./node_modules` 导入的运行时引擎）。必须先于各条 `npx` 命令执行——若什么都没装，`npx` 会提示从 npm 仓库下载名为 `slc`、`playbook` 的**无关同名包**。
-2. **`npx slc playbook workflow.zh.txt`** 把这一段描述编译成可运行的 playbook。编译会调用你配置的 agent，**耗时取决于所用 agent 与工作流规模：这段五行工作流的实测编译从数十分钟到两小时以上不等**；编译过程会在 stderr 上逐阶段报告进度，`./workflow.zh.ts` 出现即编译成功。想跳过等待？[`reference/`](reference/) 内附带预编译制品，直接运行 `npx playbook run ./reference/workflow.zh.ts "<task>"`（任务文本同下一步）——但请注意运行本身同样是真实的 agent 工作（见下一条）。
-3. **`npx playbook run …`** 把带 bug 的 [`sample.c`](sample.c) 交给两个 agent。它们在此处新建的 Git 仓库里提交、评审、争论；每一轮都是真实的 agent 工作，通常需要约一小时——基于预编译制品的一次运行实测约 51 分钟，具体取决于 agent、模型与任务。当某轮评审不再有问题时，运行以 `0` 退出。
-4. **`git log`** 查看循环产出：经过评审的提交（`git show` 显示最终修复）。
+先安装再使用`npx`：没有这些依赖时，`npx slc`与`npx playbook`可能提示安装无关的同名包。
+[本演示的manifest](package.json)声明了带作用域的编译器、Playbook引擎，以及Claude和Codex SDK。
 
-## 详细说明
-
-### 输入
-
-[`workflow.zh.txt`](workflow.zh.txt)——以上命令所编译的中文源文本；[`workflow.txt`](workflow.txt) 是同一段落的英文表述，由[英文版 README](README.md) 的流程编译：
-
-> 开始工作前，确保当前目录本身是一个 Git 仓库的根目录；若此处没有 `.git`，就在此处初始化一个 Git 仓库。
-> 用两个agent来完成输入的任务，一个agent按任务要求对当前目录的代码进行修改并提交Git，另一个agent对提交的commit进行review并提出合理问题，交回给第一个agent做判断。
-> 它可以接受或拒绝但要讲清楚原因，两个agent争论直至达成一致（争论不超过2轮，即至多到总计第3次判断后不再争论），由第一个agent负责按结论修改代码，再次提交。
-> 依此循环，直到review没有任何问题后结束。循环次数不超过2次。
-
-留意这段话**未明确**的部分：没有给两个 agent 命名，也没有交代一轮争论中如何交互。编译器将在状态机中把这两点明确下来；文中明确的仓库根目录设置会成为脚本状态，两处明确的上界（争论至多 2 轮、循环至多 2 次）则会成为状态机里的循环计数器。
-
-### 编译
+## 编译自己的版本
 
 ```sh
 npx slc playbook workflow.zh.txt
 ```
 
-`slc` 会先将输入文本按 playbook 要求规范化，最终链接到已安装的 `@sublang/playbook` 运行时，并默认执行减少 LLM 调用的编译优化。
-编译所用的 agent 由 `~/.config/slc/config.yaml` 指定（首次运行会自动生成，默认为 Claude Code）。
-编译耗时取决于 agent 与工作流规模：首个中间产物实测约 4 分钟落盘、下一个再约 1 分钟，而整条流水线实测从数十分钟到两小时以上不等——耗时主要集中在后段阶段。
-`slc` 会逐阶段打印进度、每个制品的落盘耗时，以及工作进行中的心跳，因此正在推进还是已经卡死一望便知。
+编译使用`~/.config/slc/config.yaml`中的Coder设置；当前目录的`slc.config.yaml`优先。
+比较结果时明确指定模型和力度，例如：
 
-制品输出在当前目录下，包括：`./workflow.zh.playbook/`（编译中间产物）与 `./workflow.zh.ts`（可运行的入口）。
-我们提供参考制品供预览或对比校验：中文流程位于 [`reference/workflow.zh.playbook/`](reference/workflow.zh.playbook/)，英文流程位于 [`reference/workflow.playbook/`](reference/workflow.playbook/)。
-你也可以跳过实际编译，直接阅读这些参考制品。
+```yaml
+agent: codex
+model: gpt-6.1-sol
+effort: xhigh
+```
 
-| 中间制品 | 说明 |
+编译器规范化自然语言，生成GEARS规约与XState状态机，执行默认优化，再链接运行时模块。
+stdout列出制品路径，stderr报告各阶段的进度与心跳。
+耗时取决于规程和模型，[性能报告](../docs/compilation-performance.md)保留实测设置和结论的适用范围。
+若源规程存在必须澄清的行为，编译以`2`退出，并列出源文件与问题；修改源文件，再运行同一命令。
+
+新入口是`./workflow.zh.ts`，中间制品与测试在`./workflow.zh.playbook/`中。
+若要运行新编译版本，把`.spex/config/playbook.config.yaml`中中文工作流的`from`由`../../reference/workflow.zh.ts`改为`../../workflow.zh.ts`，再重复上面的列表检查与运行命令。
+英文参考入口仍然可用；编译`workflow.txt`会相应生成`workflow.ts`。
+
+| 制品 | 用途 |
 | --- | --- |
-| `workflow.zh.text.md` | 规范化后的源文本：声明 player `编码者` 与 `审查者`，把原文整理为编号步骤。 |
-| `workflow.zh.gears.raw.md` | 由源文本生成的 GEARS 规约条目（优化前）。 |
-| `workflow.zh.gears.md` | 优化后的 GEARS 规约条目：Git 检查被改写为无需 LLM 的固定 shell 命令。 |
-| `workflow.zh.fsm.ts` | 由 GEARS 条目生成的 XState 状态机。 |
-| `workflow.zh.playbook.ts` | 链接后的运行时模块：驱动状态机并调用各 agent。 |
-| `workflow.zh.*.test.ts` | 随制品产出的验证测试，确保编译输出符合源规约。 |
+| `workflow.zh.text.md` | 声明角色与顺序步骤的规范化源文本。 |
+| `workflow.zh.gears.raw.md` | 优化前的GEARS规约。 |
+| `workflow.zh.gears.md` | 优化后的规约，包含固定的Git初始化脚本。 |
+| `workflow.zh.fsm.ts` | 确定性的状态机。 |
+| `workflow.zh.playbook.ts` | 链接后的运行时模块。 |
+| `workflow.zh.*.test.ts` | 将制品与规约绑定的验证测试。 |
+| `workflow.zh.ts` | 需要在Playbook配置中启用的注册入口。 |
 
-### 使用
+## 角色与跨组复用
 
-[`sample.c`](sample.c) 是一个带真实 bug 的极小 C 文件：其 `median()` 结果依赖元素顺序，对偶数长度数组也算错。在本目录下，把它交给两个 agent 处理：
+schema-3入口先在配置中启用，再通过斜杠命令调用，不作为位置参数传给`playbook run`。
+中文入口声明`编码者`和`审查者`，英文入口声明`coder`和`reviewer`。
+配置模板将两个语言版本都绑定到`demo.coder`和`demo.reviewer`。
+使用不同player ID可隔离会话，也可以明确共享同一ID以复用上下文。
 
-```sh
-npx playbook run ./workflow.zh.ts \
-  "sample.c 里的 median 函数有 bug：结果依赖元素顺序，偶数长度数组也算错。请修复它。"
+若要让审查者使用Codex，替换对应player配置：
+
+```yaml
+players:
+  demo.reviewer:
+    adapter: codex
+    model: gpt-6.1-sol
+    effort: xhigh
+    permissions:
+      mode: auto
+      writablePaths: ['.git']
 ```
 
-（跳过了编译？直接运行参考入口：`npx playbook run ./reference/workflow.zh.ts "<task>"`）
+Codex CLI也需要登录。
+智能体设置写入配置；旧的`--player`和`--captain`运行参数已移除。
+更多覆盖方式与角色绑定规则见Playbook的[配置指南](https://github.com/sublang-ai/playbook/blob/main/docs/configuration.md)。
 
-### 角色设置
+在其他项目中复用时，把入口与对应的`.playbook/`目录一起复制过去，在配置中启用新的绝对入口路径，绑定`requiredRoleIds`中的全部角色，再从新项目根目录调用斜杠命令。
+宿主会按需把运行时引擎链接到外部制品旁边。
+项目若声明了`@sublang/playbook`，则必须在项目内安装它；自动链接不会掩盖缺失的已声明依赖。
+相应SDK需安装在宿主Cligent能解析到的位置。
 
-每个角色都默认使用 `claude`——包括编码者、审查者两个 player，以及 Captain（隐藏的编排者，负责轮次路由与结果裁决）。想按角色指定 agent、模型或推理力度，可加形如 `<adapter>[:<model>][@<effort>]` 的参数，例如：`--player 编码者=claude:claude-opus-5-5 --player 审查者=codex:gpt-6-sol --captain claude:claude-opus-5-5@high`。（入口以规范小写角色 id 命名每个角色，与编译后状态机委派的 id 一致；英文参考入口的 player 名为 `coder` 与 `reviewer`。）
-
-工作流作用于**当前目录**，其脚本化的第一步会检查该目录是否为 Git 仓库的**根目录**。本目录不是，于是这一步首先执行 `git init`，随后：
-
-- 编码者做出修改并提交；
-- 审查者评审该 commit 并提出问题；编码者接受或反驳，并说明理由；两者往复，不超过原文设定的上界；
-- 当某轮评审不再有问题时，状态机到达终态，运行以 `0` 退出。
-
-```sh
-git log --oneline   # 经过评审的那些提交
-git show            # 对 sample.c 的修复
-```
-
-如果想重新运行，可从 slc 仓库根目录（`demo/` 的上一级）还原 `demo/`：
-
-```sh
-rm -rf demo/.git demo/workflow.zh.playbook demo/workflow.zh.ts
-git checkout -- demo/
-```
-
-（已安装的 `demo/node_modules` 可以保留。）
-
-真正投入使用时，在你自己项目的**根目录**下运行 `playbook run` 命令，指定 playbook 路径，换成你自己的任务——在那里脚本步骤会发现 `.git` 并跳过初始化。把入口（`workflow.zh.ts`）**连同**它的 `workflow.zh.playbook/` 目录一并复制过去，这两者不可分开。若采用全局安装（playbook 3.1 及以上），引擎本身无需再做什么——`playbook run` 首次在那里运行时会把引擎链接到制品旁边——但 playbook 10 不再附带任何智能体 SDK，因此你所用阵容的 SDK 必须与该全局安装并存。若那个项目的 `package.json` 声明了 `@sublang/playbook`，则应在该项目内安装（`npm install --save-dev @sublang/playbook@10`），并连同这些 SDK 一起安装，正如本演示自身的 manifest 所声明：已声明的依赖具有权威性，此时自动链接会拒绝执行，而不会掩盖缺失的安装；而全局安装的 SDK 对项目内嵌套的 cligent 不可见。本演示正是因此采用项目内安装——它位于 slc 仓库之内，而该仓库的 manifest 声明了这个引擎。
-两个 agent 的提交会落在你运行命令的那个目录所在的仓库里。
-
-## 这个演示说明了什么
-
-- **自然语言就是源代码。** 输入的自然语言从未被编辑；规范化做的是把它隐含的结构显式化。
-- **确定性的编排。** 这个循环——谁行动、何时停止——是编译出来的状态机，而不是 prompt 的即兴发挥；只有每个状态**内部**的工作才用到 LLM。
-- **编译期优化。** 一个无需判断的步骤变成了编译期可验证的 shell 命令：更省、更快，且不会产生幻觉。
-- **验证与产物一同交付。** 编译器同时生成用来验证自身输出符合源规约的测试。
+规程源文本是可复用的内容：修改规程、编译新版本，检查生成的规约与测试，再分享入口和制品目录。
+稳定player的绑定由使用规程的团队配置。
