@@ -6,10 +6,11 @@
  *
  * A text-to-GEARS compile must conserve every prompt fragment its Source
  * authors: fenced instruction blocks and blockquotes reach the GEARS items
- * verbatim and in Source order, and — once a Source authors any fragment — a
- * GEARS prompt line the Source never authored is an invention. That is
- * mechanically decidable, so it is decided here rather than left to a Reviewer's
- * judgment (phase-execution-51).
+ * verbatim and in Source order. An item carrying a complete authored fragment
+ * may add no foreign prompt line; fragment-free items retain the compiler's
+ * judgment over narrative-derived wording (DR-055). Conservation is mechanically
+ * decidable, so it is decided here rather than left to a Reviewer's judgment
+ * (phase-execution-51).
  *
  * An item other than a script item may instead carry the prefix-first layout
  * Playbook's prefix pass produces — its relayed values after its instructions —
@@ -615,9 +616,9 @@ function fragmentsAreInSourceOrder(
  * The conservation findings at the Source→GEARS seam (verification-25).
  *
  * Returns one finding per violated rule, in rule order, and the empty array when
- * the GEARS conserves its Source. A Source authoring no fragment leaves the
- * invented-prompt-line rule inapplicable: plain prose deliberately leaves prompt
- * wording to the compiler's judgment.
+ * the GEARS conserves its Source. A fragment-free item leaves the foreign-line
+ * rule inapplicable: narrative deliberately leaves prompt wording to the
+ * compiler and semantic review, including an invented whole item (DR-055).
  *
  * @throws {Error} when the Source's instruction fence is never closed.
  */
@@ -723,9 +724,13 @@ export function checkSourceGearsContract(
       );
     }
 
-    // A Source that authors no fragment leaves prompt wording to the compiler
-    // (DR-029), so the invented-line rule applies only once one exists.
+    // Plain prose retains its existing exemption from additional raw-token
+    // diagnostics. In a mixed Source these diagnostics still cover every item,
+    // independently of whether it carries an authored fragment (DR-055).
     if (fragments.length === 0) continue;
+    const carriesFragment = verdict.carriages.some((carriage) =>
+      carriage.some((count) => count > 0),
+    );
     for (const line of item.prompt) {
       if (line === '' || authoredLines.has(line)) continue;
       if (RELAY_PLACEHOLDER_LINE.test(line)) continue;
@@ -735,6 +740,7 @@ export function checkSourceGearsContract(
         );
         continue;
       }
+      if (!carriesFragment) continue;
       findings.push(
         `${item.id}: prompt line is not an authored fragment: ${JSON.stringify(line)}`,
       );

@@ -80,6 +80,7 @@ meta.md       The spec of specs
 | [DR-052](decisions/052-prefixed-prompt-acceptance.md) | 052-prefixed-prompt-acceptance.md | The Source-fidelity check accepts, for any non-script item, Source order or the prefix-first layout read from the prompt itself — whole fragments tiling the prompt in Source order with relayed values trailing, conserved by text count — ignoring any legacy `## Prefixed prompts` section, mirroring Playbook's checker |
 | [DR-053](decisions/053-recovery-controller-discrimination.md) | 053-recovery-controller-discrimination.md | Amend DR-024 for recovery-capable controller domains and DR-034 for ordered result acceptance |
 | [DR-054](decisions/054-deterministic-bundle-completion.md) | 054-deterministic-bundle-completion.md | Check explicitly selected retained Playbook artifacts and emit derived outputs without agents or history authority |
+| [DR-055](decisions/055-mixed-source-prompt-fidelity.md) | 055-mixed-source-prompt-fidelity.md | Scope foreign-line rejection to items carrying complete authored fragments while retaining global conservation and quote checks |
 
 ## Packages
 

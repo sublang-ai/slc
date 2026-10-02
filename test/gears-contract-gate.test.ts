@@ -357,7 +357,7 @@ describe('GEARS result-contract producer and consumer boundaries (DR-035)', () =
     );
     expect(result.ok).toBe(false);
     expect(result.diagnostics.join('\n')).toContain(
-      'prompt line is not an authored fragment',
+      'source instruction fragment at line 3 was dropped or changed',
     );
     expect(result.diagnostics.join('\n')).toContain(FINDING);
   });

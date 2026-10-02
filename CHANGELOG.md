@@ -11,6 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Sources can combine narrative-derived instructions with complete literal
+  prompts. Items carrying literals still reject foreign lines, and every
+  authored fragment remains conserved; fragment-free items require semantic
+  review.
+
 ## [0.16.0] - 2026-10-02
 
 ### Added
