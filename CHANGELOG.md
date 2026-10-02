@@ -11,6 +11,10 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- `slc playbook <entry-form-source> --complete` checks a retained canonical bundle and emits its registry entry and verification files without agents, configuration seeding, or build history.
+
 ## [0.15.2] - 2026-10-02
 
 ### Fixed

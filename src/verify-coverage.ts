@@ -4665,6 +4665,7 @@ export async function emitFsmCoverageTest(opts: {
   artifactDir: string;
   basename: string;
   verifyModule?: string;
+  write?: (path: string, content: string) => Promise<void>;
 }): Promise<{ path: string; diagnostics: string[] }> {
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const module = await loadFsmModule(fsmPath);
@@ -4677,9 +4678,10 @@ export async function emitFsmCoverageTest(opts: {
     fsmSourceFile: `./${opts.basename}.fsm.ts`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
   });
-  await mkdir(opts.artifactDir, { recursive: true });
+  if (opts.write === undefined)
+    await mkdir(opts.artifactDir, { recursive: true });
   const path = join(opts.artifactDir, `${opts.basename}.fsm.coverage.test.ts`);
-  await writeFile(path, content);
+  await (opts.write ?? writeFile)(path, content);
   return {
     path,
     diagnostics: findings.map((finding) => `fsm coverage: ${finding}`),

@@ -15,6 +15,9 @@ import { basename as pathBasename, extname, join } from 'node:path';
 
 import type { Phase } from './phase.js';
 
+/** Optional content sink for preparing concrete derived files before writing. */
+export type ArtifactWriter = (path: string, content: string) => Promise<void>;
+
 // The stages a scheduled pass chain writes between the producing phase and the
 // format's canonical artifact (pipeline-32), plus the unnumbered stage a
 // standalone pass writes (pipeline-33).

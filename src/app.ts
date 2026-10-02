@@ -30,6 +30,7 @@ import {
   type FileConfig,
 } from './config-file.js';
 import { createProgressReporter, type ProgressSink } from './progress.js';
+import { parseInvocation } from './invocation.js';
 import {
   createPipelineResolver,
   pipelineSearchRoots,
@@ -145,6 +146,32 @@ export async function buildSlcDeps(
   return { resolver, executor, compiled, cwd, signal, progress };
 }
 
+/** Resolver-only dependencies: no agent selection, construction, or seeding. */
+async function buildCompletionDeps({
+  env,
+  cwd,
+  signal,
+  configPath,
+  progress,
+}: Parameters<DepsBuilder>[0]): Promise<SlcDeps> {
+  const file = await loadConfigFile({ cwd, configPath, env, seed: false });
+  const pipelinePath =
+    nonBlank(env.SLC_PIPELINE_PATH) ?? file.config.pipelinePath;
+  return {
+    resolver: withReservedPipelines(
+      createPipelineResolver(pipelineSearchRoots(pipelinePath, cwd)),
+    ),
+    executor: {
+      run: async () => {
+        throw new Error('completion cannot execute a compiler phase');
+      },
+    },
+    cwd,
+    signal,
+    progress,
+  };
+}
+
 /** The cligent-invocation selection after merging environment over file (DR-006). */
 export interface RunConfig {
   selection: AgentSelection;
@@ -231,6 +258,7 @@ export function usageText(): string {
     '  slc <pipeline>[.<phase>] <source> [-o <target>]',
     '  slc <pipeline> <source> [--normalize] [--no-optimize] [--link <target>] [--link-option name=value]...',
     '  slc <pipeline>.link <object>... <target> [-o <linked>] [--link-option name=value]...',
+    '  slc playbook <entry-form-source> --complete [--link <retained-target>]',
     '',
     'Artifacts land in the working directory (<cwd>/<basename>.<pipeline>/);',
     'an entry source with a foreign extension is normalized first, and the',
@@ -247,6 +275,8 @@ export function usageText(): string {
     "  -O, --optimize            run the pipeline's pass phases (the default)",
     '  --no-optimize             run the chain without pass phases',
     '  --rebuild                 recompile every phase, ignoring recorded build history',
+    '  --complete                check a retained canonical playbook bundle and emit',
+    '                            verification files and its entry; no agents or history',
     '  --config <path>           load configuration from <path> (disables discovery)',
     '  -v, --version             print version and exit',
     '  -h, --help                print this help and exit',
@@ -302,6 +332,15 @@ function extractConfigFlag(argv: readonly string[]): {
   return { configPath, rest };
 }
 
+/** Recognizes the mode flag without treating an ordinary option value as it. */
+function requestsCompletion(argv: readonly string[]): boolean {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--complete') return true;
+    if (['-o', '--link', '--link-option'].includes(argv[i])) i++;
+  }
+  return false;
+}
+
 /**
  * Runs the `slc` command line and returns a process exit code (`cli` package).
  * Never rejects: configuration refusals and run failures are reported and
@@ -338,7 +377,13 @@ export async function run(
     // grammar (parseInvocation) rejects unknown options (cli-20).
     const extracted = extractConfigFlag(argv);
     rest = extracted.rest;
-    deps = await (options.buildDeps ?? buildSlcDeps)({
+    // Only the explicit no-agent mode needs grammar validation before config
+    // work. Ordinary invocations retain first-run seeding even when incomplete.
+    const completing =
+      requestsCompletion(rest) && parseInvocation(rest).kind === 'complete';
+    const build =
+      options.buildDeps ?? (completing ? buildCompletionDeps : buildSlcDeps);
+    deps = await build({
       env,
       cwd,
       signal,

@@ -83,6 +83,8 @@ export interface LoadConfigFileOptions {
   env?: Record<string, string | undefined>;
   /** Called with the created path when a discovery miss seeds the user config (DR-015, cli-30). */
   onSeed?: (path: string) => void;
+  /** Completion reads discovery without first-run agent configuration writes. */
+  seed?: boolean;
 }
 
 /** Machine-readable reason a config file was rejected (cli-21). */
@@ -150,6 +152,8 @@ function resolveConfigPath(
   if (existsSync(homeConfig)) {
     return homeConfig;
   }
+
+  if (options.seed === false) return undefined;
 
   // First run: neither discovered file exists, so seed the user config from
   // the bundled starter and load it (DR-015, cli-30).

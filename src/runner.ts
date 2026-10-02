@@ -11,11 +11,16 @@
  * tests supply fakes. See specs/packages/pipeline.md and specs/packages/phase-execution.md.
  */
 
-import { mkdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { artifactDir, planArtifacts, parseSource } from './artifacts.js';
+import {
+  artifactDir,
+  planArtifacts,
+  parseSource,
+  type ArtifactWriter,
+} from './artifacts.js';
 import {
   formatClarificationReport,
   type ClarificationReport,
@@ -31,6 +36,7 @@ import {
 } from './build-history.js';
 import { emitEntryModule } from './entry-module.js';
 import {
+  javascriptLinkObjectImports,
   reconcileLinkObjectImportSpecifiers,
   unresolvableRelativeImports,
 } from './emitted-imports.js';
@@ -117,7 +123,11 @@ import {
 } from './verify-support.js';
 import { checkSourceGearsContract } from './verify-source.js';
 import { checkFsmTypeScript } from './verify-typescript.js';
-import { checkEntryOptions, ENTRY_OPTIONS_CONTRACT } from './entry-options.js';
+import {
+  checkEntryOptions,
+  ENTRY_OPTIONS_CONTRACT,
+  linkedOptionsValidator,
+} from './entry-options.js';
 
 /** A current pinned phase and the record that selected its compiled artifact. */
 export interface CompiledSelection {
@@ -202,6 +212,8 @@ export async function runSlc(
 
   try {
     switch (invocation.kind) {
+      case 'complete':
+        return finish(await runCompletion(invocation, deps));
       case 'full':
         // The reserved playbook pipeline supplies a default link target
         // (self-hosting-13): a bare full run becomes a full-link against the
@@ -556,6 +568,256 @@ function runCwd(deps: SlcDeps): string {
   return resolve(deps.cwd ?? process.cwd());
 }
 
+/** Checks an explicitly selected current bundle, without executing phases/history. */
+async function runCompletion(
+  invocation: Extract<Invocation, { kind: 'complete' }>,
+  deps: SlcDeps,
+): Promise<SlcResult> {
+  const cwd = runCwd(deps);
+  const pipeline = await loadPipeline(
+    await resolvePipeline(invocation.pipeline, deps.resolver),
+  );
+  const link = await requireLink(pipeline, invocation.pipeline);
+  const entry = pipeline.phases[0];
+  const source = resolve(cwd, invocation.source);
+  const { basename, raw } = parseSource({
+    path: source,
+    sourceFormat: entry.source.format,
+    ext: entry.source.ext,
+    entry: true,
+  });
+  if (raw)
+    return failure(
+      'completion requires an entry-form Source; explicitly normalize or compile raw input first',
+    );
+  const artDir = artifactDir(cwd, basename, invocation.pipeline);
+  const plan = planArtifacts({ phases: pipeline.phases, basename, artDir });
+  const gears = plan.find(
+    (artifact) => artifact.phase.target.format === 'gears',
+  );
+  const fsm = plan.find((artifact) => artifact.phase.target.format === 'fsm');
+  if (
+    entry.source.format !== 'text' ||
+    entry.source.ext !== '.md' ||
+    gears?.phase.target.ext !== '.md' ||
+    fsm?.phase.target.ext !== '.ts' ||
+    link.source.format !== 'fsm' ||
+    link.source.ext !== '.ts' ||
+    link.target.format !== 'playbook' ||
+    link.target.ext !== '.ts'
+  )
+    return failure(
+      'completion requires the text/GEARS/TypeScript-FSM/Playbook canonical pipeline formats',
+    );
+  const linked = join(artDir, `${basename}.playbook.ts`);
+  const entryPath = join(cwd, `${basename}.ts`);
+  const linkTarget =
+    invocation.linkTarget === null
+      ? defaultPlaybookLinkTarget()
+      : resolve(cwd, invocation.linkTarget);
+  const selected = [source, gears.path, fsm.path, linked, linkTarget];
+  for (const path of selected) {
+    try {
+      if (!(await stat(path)).isFile()) throw new Error('not a regular file');
+      await readFile(path);
+    } catch (error) {
+      return failure(
+        `completion requires readable file ${path}: ${messageOf(error)}`,
+      );
+    }
+  }
+  const pinInputs = new Set([
+    join(pipeline.dir, PINS_FILE),
+    join(pipeline.dir, PIN_INPUTS_FILE),
+  ]);
+  const pinFile = (await loadPinFile(pipeline.dir)).file;
+  if (pinFile !== undefined) {
+    await evaluatePinFile(pipeline.dir, pinFile, {
+      observePath: (path) => pinInputs.add(resolve(path)),
+    });
+  }
+  const definitions = chainDefinitions(pipeline);
+  const declared = await declaredInputPaths(
+    pipeline,
+    pinFile,
+    [...pipeline.phases, ...pipeline.passes]
+      .map((phase) => ({
+        path: phaseDefinition(pipeline, phase.name),
+        phase: phase.name,
+      }))
+      .concat([{ path: pipeline.linkFile as string, phase: 'link' }]),
+  );
+  const verification = {
+    pipeline: invocation.pipeline,
+    plan,
+    artDir,
+    basename,
+    linkTarget,
+  };
+  const targets = [
+    ...verificationHostTargets(verification),
+    { path: entryPath },
+  ];
+  const protectedInputs = [
+    ...new Set([
+      ...selected,
+      ...definitions,
+      ...declared.paths,
+      ...pinInputs,
+      join(artDir, '.slc'),
+      ...targets.flatMap((target) => target.protectedInputs ?? []),
+    ]),
+  ];
+  // Reuse ordinary definition/pin validation and physical output guards. There
+  // are deliberately no steps and no incremental context to execute or publish.
+  return executeSteps([], pipeline, deps, {
+    hostTargets: targets.map((target) => ({
+      ...target,
+      required: true,
+      protectedInputs,
+    })),
+    complete: async (_result, guardTarget) => {
+      const unchanged = await watchProtectedPaths(protectedInputs);
+      const pending = new Map<string, string>();
+      const prepare: ArtifactWriter = async (path, content) => {
+        if (pending.has(path))
+          throw new Error(`duplicate completion output: ${path}`);
+        pending.set(path, content);
+      };
+      let findings: readonly string[];
+      let prepared: SlcResult | undefined;
+      try {
+        deps.signal?.throwIfAborted();
+        const jsEdges = await javascriptLinkObjectImports(linked, fsm.path);
+        findings = jsEdges.map(
+          (specifier) =>
+            `completion cannot verify JavaScript FSM import ${specifier} against checked ${fsm.path}; review and correct the retained linked import to select the TypeScript FSM, then rerun --complete`,
+        );
+        if (findings.length === 0)
+          findings = [
+            ...(await sourceFidelityFindings(source, gears.path)),
+            ...(await gearsContractFindings(gears.path)),
+            ...inspectGearsRoleContract(await readFile(gears.path, 'utf8'))
+              .findings,
+            ...(await checkFsmTypeScript(fsm.path, deps.signal)),
+          ];
+        if (findings.length === 0)
+          findings = await fsmConformanceFindings(
+            gears.path,
+            fsm.path,
+            linkTarget,
+            deps.signal,
+          );
+        if (findings.length === 0) {
+          const config = findMachineConfig(await loadFsmModule(fsm.path));
+          findings = [
+            ...checkFsmChildSuspension(config),
+            ...(await linkFidelityFindings(linked, fsm.path)),
+          ];
+        }
+        if (findings.length === 0) {
+          const module = (await loadLinkedModuleForVerification({
+            linkedPath: linked,
+            fsmPath: fsm.path,
+          })) as { default?: unknown };
+          if (typeof module.default !== 'function')
+            findings = [
+              'linked module has no callable default runtime factory',
+            ];
+          else if (
+            inspectGearsRoleContract(await readFile(gears.path, 'utf8'))
+              .generation === 'schema-3' &&
+            (await linkedOptionsValidator({
+              linkedPath: linked,
+              fsmPath: fsm.path,
+            })) !== undefined
+          ) {
+            findings = await checkEntryOptions({
+              linkedPath: linked,
+              fsmPath: fsm.path,
+              signal: deps.signal,
+            });
+          }
+        }
+        if (findings.length === 0) {
+          const missing = await unresolvableRelativeImports(linked);
+          if (missing.length > 0)
+            findings = [
+              `linked module has unresolvable relative imports: ${missing.join(', ')}`,
+            ];
+        }
+        if (findings.length === 0) {
+          prepared = await emitVerification(
+            { ok: true, outputs: [], diagnostics: [] },
+            verification,
+            guardTarget,
+            prepare,
+          );
+          await emitEntryModule({
+            cwd,
+            basename,
+            pipeline: invocation.pipeline,
+            gearsPath: gears.path,
+            textPath: source,
+            artifactDir: artDir,
+            write: prepare,
+          });
+          const missing = targets.filter((target) => !pending.has(target.path));
+          findings = [
+            ...prepared.diagnostics,
+            ...missing.map(
+              (target) =>
+                `required completion output was not prepared: ${target.path}`,
+            ),
+          ];
+        }
+      } catch (error) {
+        findings = [`completion checks could not finish: ${messageOf(error)}`];
+      }
+      const changes = await unchanged();
+      if (changes.length > 0) findings = changes;
+      if (findings.length > 0)
+        return failure(
+          formatFailureReport({
+            phase: 'complete',
+            target: entryPath,
+            reasons: [...findings],
+          }),
+        );
+      if (prepared === undefined)
+        throw new Error('completion preparation missing');
+      for (const target of targets) await guardTarget(target.path);
+      deps.signal?.throwIfAborted();
+      const outputs: string[] = [];
+      try {
+        for (const path of [...prepared.outputs, entryPath]) {
+          deps.signal?.throwIfAborted();
+          await guardTarget(path);
+          await mkdir(dirname(path), { recursive: true });
+          await writeFile(path, pending.get(path) as string);
+          outputs.push(path);
+        }
+      } catch (error) {
+        return {
+          ok: false,
+          outputs,
+          diagnostics: [
+            `completion output write failed: ${messageOf(error)}`,
+            ...outputs.map((path) => `completion already wrote ${path}`),
+          ],
+        };
+      }
+      return {
+        ok: true,
+        outputs,
+        diagnostics: [
+          'checked retained current bundle; no phases executed or build history published',
+        ],
+      };
+    },
+  });
+}
+
 /**
  * After a reserved-pipeline full run produces a `gears` intermediate and an `fsm`
  * object at their canonical `<basename>.playbook/` locations, emits the
@@ -574,6 +836,7 @@ async function emitVerification(
   result: SlcResult,
   ctx: VerificationContext,
   guardTarget?: CompletionTargetGuard,
+  write?: ArtifactWriter,
 ): Promise<SlcResult> {
   if (!result.ok) return result;
   const hostTargets = verificationHostTargets(ctx);
@@ -607,7 +870,7 @@ async function emitVerification(
       await guardTarget(target.target);
     }
   }
-  outputs.push(...(await emitVerifierSupport(ctx.artDir)));
+  outputs.push(...(await emitVerifierSupport(ctx.artDir, write)));
   if (guardTarget !== undefined) {
     await guardTarget(join(ctx.artDir, `${ctx.basename}.gears-fsm.test.ts`));
   }
@@ -618,6 +881,7 @@ async function emitVerification(
       verifyModule: VERIFIER_SUPPORT_MODULE,
       ...(artifactSchema === undefined ? {} : { artifactSchema }),
       schemaFindings: schemaResolution.findings,
+      write,
     }),
   );
   try {
@@ -631,6 +895,7 @@ async function emitVerification(
         artifactDir: ctx.artDir,
         basename: ctx.basename,
         verifyModule: VERIFIER_SUPPORT_MODULE,
+        write,
       }),
     );
   } catch (error) {
@@ -650,6 +915,7 @@ async function emitVerification(
       verifyModule: VERIFIER_SUPPORT_MODULE,
       ...(artifactSchema === undefined ? {} : { artifactSchema }),
       ...evidence,
+      write,
     });
     outputs.push(promptContract.path);
     diagnostics.push(
@@ -672,6 +938,7 @@ async function emitVerification(
       artifactDir: ctx.artDir,
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
+      write,
     });
     outputs.push(coverage.path);
     diagnostics.push(
@@ -741,7 +1008,7 @@ interface VerificationContext {
   }[];
   artDir: string;
   basename: string;
-  /** Concrete full-link target whose owning package is this artifact's provenance. */
+  /** Declared engine target used as schema evidence, not artifact-origin proof. */
   linkTarget?: string;
 }
 

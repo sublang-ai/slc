@@ -19,7 +19,7 @@ When the user runs `slc` with `--version` or `-v`, the slc executable shall prin
 
 ### cli-2
 
-When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--rebuild`, the `--config` option, and the configuration it reads — including the Coder and optional Reviewer config keys and environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md), [DR-006](../decisions/006-slc-configuration-sources.md), [DR-021](../decisions/021-incremental-compilation.md), [[cli-6](#cli-6)], [[cli-7](#cli-7)], [[cli-40](#cli-40)]).
+When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--complete` for retained-bundle emission without agents or history [[completion-1](completion.md#completion-1)], [[completion-2](completion.md#completion-2)], [[completion-5](completion.md#completion-5)], `--rebuild`, the `--config` option, and the configuration it reads — including the Coder and optional Reviewer config keys and environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md), [DR-006](../decisions/006-slc-configuration-sources.md), [DR-021](../decisions/021-incremental-compilation.md), [[cli-6](#cli-6)], [[cli-7](#cli-7)], [[cli-40](#cli-40)]).
 
 ### cli-3
 
@@ -47,15 +47,15 @@ Where the stall timeout — a non-blank `SLC_STALL_TIMEOUT` environment variable
 
 ### cli-22
 
-Where a config file is present — `slc.config.yaml` in the working directory, `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`, or a file named by `--config <path>` — when the user runs a documented invocation form, the slc executable shall take its agent, model, and pipeline search path from that file except where a matching, non-blank environment variable overrides it, so a run is configurable without environment variables ([DR-006](../decisions/006-slc-configuration-sources.md)).
+Where a config file is present — `slc.config.yaml` in the working directory, `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`, or a file named by `--config <path>` — when the user runs a documented invocation form, the slc executable shall take its pipeline search path and, outside completion-only mode [[completion-2](completion.md#completion-2)], its agent and model from that file except where a matching, non-blank environment variable overrides it, so a run is configurable without environment variables ([DR-006](../decisions/006-slc-configuration-sources.md)).
 
 ### cli-39
 
-Where `reviewerAgent` or `SLC_REVIEWER_AGENT` selects a supported independent Reviewer, when the user runs a documented invocation form, the slc executable shall enable reviewed compilation using the independently resolved optional Reviewer model, effort, and fast mode; whereas Reviewer model, effort, or fast mode without a Reviewer agent shall refuse the run clearly, and absent Reviewer configuration shall leave execution unreviewed ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-006](../decisions/006-slc-configuration-sources.md)).
+Where the invocation is not completion-only [[completion-2](completion.md#completion-2)] and `reviewerAgent` or `SLC_REVIEWER_AGENT` selects a supported independent Reviewer, when the user runs a documented invocation form, the slc executable shall enable reviewed compilation using the independently resolved optional Reviewer model, effort, and fast mode; whereas Reviewer model, effort, or fast mode without a Reviewer agent shall refuse the run clearly, and absent Reviewer configuration shall leave execution unreviewed ([DR-022](../decisions/022-two-agent-reviewed-compilation.md), [DR-006](../decisions/006-slc-configuration-sources.md)).
 
 ### cli-29
 
-Where no config file exists in the working directory or the user config location and `--config` is not given, when the user runs a documented invocation form, the slc executable shall seed `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` with the bundled starter defaults — `agent: claude-code` active, Coder model/effort/fast mode and Reviewer agent/model/effort/fast mode as commented examples so agent defaults apply and reviewed compilation remains disabled — name the created file on stderr, and carry out the run with those defaults, so a first run needs no prior setup ([DR-015](../decisions/015-first-run-config-seeding.md)).
+Where the invocation is not completion-only [[completion-2](completion.md#completion-2)] and no config file exists in the working directory or the user config location and `--config` is not given, when the user runs a documented invocation form, the slc executable shall seed `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` with the bundled starter defaults — `agent: claude-code` active, Coder model/effort/fast mode and Reviewer agent/model/effort/fast mode as commented examples so agent defaults apply and reviewed compilation remains disabled — name the created file on stderr, and carry out the run with those defaults, so a first run needs no prior setup ([DR-015](../decisions/015-first-run-config-seeding.md)).
 
 ## Internal Behavior
 
@@ -77,11 +77,11 @@ When the slc executable builds run dependencies, the executable shall load confi
 
 ### cli-21
 
-Where `--config <path>` names a file that does not exist, or a loaded config file is malformed, declares an unknown key, or holds a wrong-typed value, the executable shall refuse the run with a diagnostic and execute no phase, while a discovery miss instead seeds the user config file [[cli-30](#cli-30)] and proceeds from it ([DR-006](../decisions/006-slc-configuration-sources.md), [DR-015](../decisions/015-first-run-config-seeding.md), [[cli-4](#cli-4)]).
+Where `--config <path>` names a file that does not exist, or a loaded config file is malformed, declares an unknown key, or holds a wrong-typed value, the executable shall refuse the run with a diagnostic and execute no phase, while a discovery miss outside completion-only mode [[completion-2](completion.md#completion-2)] instead seeds the user config file [[cli-30](#cli-30)] and proceeds from it ([DR-006](../decisions/006-slc-configuration-sources.md), [DR-015](../decisions/015-first-run-config-seeding.md), [[cli-4](#cli-4)]).
 
 ### cli-30
 
-When discovery finds neither the working-directory `slc.config.yaml` nor the user config file, the executable shall create `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from the starter template bundled with the host — `agent: claude-code` set, Coder `model`, `effort`, and `fastMode` plus `reviewerAgent`, `reviewerModel`, `reviewerEffort`, and `reviewerFastMode` as commented examples so reviewed compilation is disabled — report the created path on stderr, load the seeded file, and shall not seed when `--config` is given or when either discovered file exists ([DR-015](../decisions/015-first-run-config-seeding.md)).
+Where the invocation is not completion-only [[completion-2](completion.md#completion-2)], when discovery finds neither the working-directory `slc.config.yaml` nor the user config file, the executable shall create `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from the starter template bundled with the host — `agent: claude-code` set, Coder `model`, `effort`, and `fastMode` plus `reviewerAgent`, `reviewerModel`, `reviewerEffort`, and `reviewerFastMode` as commented examples so reviewed compilation is disabled — report the created path on stderr, load the seeded file, and shall not seed when `--config` is given or when either discovered file exists ([DR-015](../decisions/015-first-run-config-seeding.md)).
 
 ### cli-8
 

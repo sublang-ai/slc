@@ -61,7 +61,7 @@ Where the reserved `slc` pipeline links an `fsm` `.ts` object, the slc command s
 
 #### self-hosting-15
 
-Where a full-link run of the `playbook` pipeline has produced its linked artifact, when the slc command settles deterministic outputs, the command shall apply the entry-module outcome for the applicable case, selecting the emitted generation from the gears role declaration alone — a `Roles` source emits the schema-3 entry and a historical `Players` source retains the schema-1 entry — without inspecting link-target provenance or factory compatibility ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [DR-017](../decisions/017-playbook-2-0-thin-runtime-adoption.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md)):
+Where a full-link run of the `playbook` pipeline has produced its linked artifact or a completion-only invocation has checked its retained bundle [[completion-3](completion.md#completion-3)], when the slc command settles deterministic outputs, the command shall apply the entry-module outcome for the applicable case, selecting the emitted generation from the gears role declaration alone — a `Roles` source emits the schema-3 entry and a historical `Players` source retains the schema-1 entry — without inspecting link-target provenance or factory compatibility ([DR-014](../decisions/014-cwd-output-invocation-defaults-entry-emission.md), [DR-017](../decisions/017-playbook-2-0-thin-runtime-adoption.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), [DR-054](../decisions/054-deterministic-bundle-completion.md)):
 
 | Case | Entry-module outcome |
 | --- | --- |

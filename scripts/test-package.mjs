@@ -4,9 +4,11 @@
 import { execFileSync } from 'node:child_process';
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -18,7 +20,7 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const manifest = JSON.parse(
   readFileSync(join(repoRoot, 'package.json'), 'utf8'),
 );
-const scratch = mkdtempSync(join(tmpdir(), 'slc-package-'));
+const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'slc-package-')));
 
 try {
   const cache = join(scratch, 'npm-cache');
@@ -116,16 +118,37 @@ try {
   }
 
   cpSync(
-    join(repoRoot, 'demo', 'reference', 'workflow.ts'),
-    join(consumer, 'workflow.ts'),
-  );
-  cpSync(
     join(repoRoot, 'demo', 'reference', 'workflow.playbook'),
     join(consumer, 'workflow.playbook'),
     { recursive: true },
   );
+  // Completion is an installed, credential-free public path: derive a fresh
+  // entry from retained inputs, rather than copying the reference entry.
+  const configHome = join(scratch, 'completion-config');
+  const completed = execFileSync(
+    bin,
+    ['playbook', 'workflow.playbook/workflow.text.md', '--complete'],
+    {
+      cwd: consumer,
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH,
+        HOME: join(scratch, 'completion-home'),
+        XDG_CONFIG_HOME: configHome,
+        SLC_AGENT: 'unused-unsupported-agent',
+      },
+    },
+  );
+  if (
+    !completed.trim().split('\n').includes(join(consumer, 'workflow.ts')) ||
+    existsSync(join(configHome, 'slc', 'config.yaml'))
+  ) {
+    throw new Error(
+      'installed completion did not emit its entry without seeding configuration',
+    );
+  }
   // Exercise the quiescent schema-3 consumer lifecycle from the installed
-  // project (release-18): import the committed reference entry through its
+  // project (release-18): import the freshly emitted entry through its
   // artifact-local dependencies, construct its runtime once with validated
   // configured options and exact live host capabilities, initialize one
   // causal-root session, and dispose it. No compiled Boss turn runs here —

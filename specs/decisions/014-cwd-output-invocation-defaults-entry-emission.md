@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted
+Accepted; completion-only emission eligibility amended by [DR-054](054-deterministic-bundle-completion.md).
 
 ## Context
 
