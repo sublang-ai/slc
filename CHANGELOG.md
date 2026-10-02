@@ -11,6 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- The quick start and English/Chinese demos activate schema-3 registry
+  entries with explicit role bindings before invoking their slash commands.
+  A supplied demo configuration keeps both language entries and their
+  explicitly selected agents in an isolated local home.
+
 ## [0.15.1] - 2026-10-02
 
 ### Changed

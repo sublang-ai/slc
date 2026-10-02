@@ -76,6 +76,10 @@ When the package is packed for publication, the tarball shall include the built 
 
 Where a compiled thin artifact imports `@sublang/playbook/xstate-runtime` and its FSM imports `xstate` from the artifact's destination, the documentation shall provide an installation that resolves those imports from the artifact's own location — either by placing `@sublang/slc` and `@sublang/playbook` in the target project, or by relying on a host that provisions its own engine beside the artifact (`@sublang/playbook` 3.1 and later) — and shall state that a project-local install is authoritative wherever it resolves and that a project manifest declaring `@sublang/playbook` requires its own install because provisioning refuses to shadow a declared dependency.
 
+#### release-23
+
+Where SLC emits a schema-3 registry entry, the README and English and Chinese demo instructions shall show its activation through an explicit Playbook registry configuration and role bindings, followed by its effective slash command [[self-hosting-14](self-hosting.md#self-hosting-14)], with a supplied demo configuration that enables both retained reference entries and pins its agent models and effort explicitly.
+
 #### release-12
 
 When publication validation is configured, the project shall apply the corresponding release-gate outcome:
@@ -179,6 +183,12 @@ Where the publishable tarball is installed into an empty consumer project, when 
 #### release-22
 
 Where the source suite places the role-bearing schema-3 registry fixture and its linked factory in a scratch Git repository with one clean baseline, when schema-3 consumer acceptance runs, the acceptance shall require the exact roles, concurrency, option validation, and one exact live-capability construction, initialize and dispose one causal-root runtime without a Boss turn, observe no call-port, repository-operation, or ledger-write use, require detached empty-ledger snapshots, and leave repository history and status unchanged [[release-21](#release-21)].
+
+### Demo onboarding acceptance
+
+#### release-24
+
+Where the supplied demo configuration is copied into an isolated demo home with a clean sample baseline, when demo onboarding acceptance invokes the installed Playbook host's list command, the host shall load and list both English and Chinese reference entries with their exact declared role bindings and explicit model and effort selections, without any agent call or baseline change [[release-23](#release-23)].
 
 ## References
 

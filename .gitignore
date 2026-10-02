@@ -154,3 +154,6 @@ vite.config.ts.timestamp-*
 
 # slc build history published beside compiled artifacts (DR-021)
 .slc/
+
+# Isolated demo configuration and durable sessions.
+demo/.spex/

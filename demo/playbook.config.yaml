@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
+
+# Copy this template to demo/.spex/config/playbook.config.yaml, then set
+# SPEX_HOME to demo/.spex. All paths are relative to that primary config.
+# To run a fresh compile, change its `from` to ../../workflow.ts or ../../workflow.zh.ts.
+sessions: ../sessions
+captain:
+  adapter: claude
+  model: claude-opus-5-5
+  effort: high
+  subagentModel: inherit
+  subagentEffort: high
+  permissions:
+    mode: auto
+
+players:
+  demo.coder:
+    adapter: claude
+    model: claude-opus-5-5
+    effort: high
+    subagentModel: inherit
+    subagentEffort: high
+    permissions:
+      mode: auto
+
+  demo.reviewer:
+    adapter: claude
+    model: claude-opus-5-5
+    effort: high
+    subagentModel: inherit
+    subagentEffort: high
+    permissions:
+      mode: auto
+
+playbooks:
+  workflow:
+    from: ../../reference/workflow.ts
+    roles:
+      coder: demo.coder
+      reviewer: demo.reviewer
+
+  workflow.zh:
+    from: ../../reference/workflow.zh.ts
+    roles:
+      编码者: demo.coder
+      审查者: demo.reviewer
