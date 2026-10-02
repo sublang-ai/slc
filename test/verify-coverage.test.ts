@@ -1858,6 +1858,68 @@ describe('checkFsmCoverage (verification-6)', () => {
     },
   );
 
+  it.each(
+    ['Output shall include', '输出应包含'].flatMap((clause) =>
+      ['single-line', 'multiline'].map((layout) => ({ clause, layout })),
+    ),
+  )(
+    'uses only declared fields under $clause ($layout)',
+    async ({ clause, layout }) => {
+      const declaration =
+        layout === 'multiline'
+          ? '\n`verificationReport: <verbatim\nfinal text>`.\nCompleted response.'
+          : ' `verificationReport: <verbatim final text>`.';
+      const result = {
+        ok: `The completed response answers the question; remainingPlan, nextPlaybookId, and nextPlaybookInput are outcome prose. ${clause}${declaration}`,
+      };
+      const onDone = [
+        {
+          target: '#done',
+          guard: ({ event }: any) => {
+            const output = event.output;
+            return (
+              Reflect.ownKeys(output).length === 2 &&
+              output.guard === 'ok' &&
+              typeof Object.getOwnPropertyDescriptor(
+                output,
+                'verificationReport',
+              )?.value === 'string'
+            );
+          },
+        },
+        needsBossReplyArm(),
+      ];
+      expect(
+        await checkFsmCoverage({ machine: goodMachine({ result, onDone }) }),
+      ).toEqual([]);
+
+      const missingResult = {
+        ok: `The completed response answers the question. ${clause}`,
+      };
+      const missing = goodMachine({ result: missingResult, onDone });
+      expect(await checkFsmCoverage({ machine: missing })).toContain(
+        'state work: result "ok" has no reachable accepting transition',
+      );
+
+      const missingLegacyField = goodMachine({
+        result: missingResult,
+        onDone: [
+          {
+            target: '#done',
+            guard: ({ event }: any) =>
+              Reflect.ownKeys(event.output).length === 2 &&
+              event.output.guard === 'ok' &&
+              typeof event.output.response === 'string',
+          },
+          needsBossReplyArm(),
+        ],
+      });
+      expect(await checkFsmCoverage({ machine: missingLegacyField })).toContain(
+        'state work: result "ok" has no reachable accepting transition',
+      );
+    },
+  );
+
   it.each([
     'valid',
     'dead predecessor',
