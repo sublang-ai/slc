@@ -40,7 +40,8 @@ function validateOptions(value: unknown): RuntimeOptions {
 const entry = {
   id: 'workflow.zh',
   command: 'workflow.zh',
-  intent: 'Roles:',
+  intent:
+    '1. 开始工作前，确保当前目录本身是一个 Git 仓库的根目录；若此处没有 `.git`，就在此处初始化一个 Git 仓库。',
   artifactSchema: 3,
   runtimeProfile: Object.freeze({
     kind: 'shared-factory',

@@ -123,7 +123,7 @@ function deriveIntent(text: string): string | undefined {
     if (
       trimmed.startsWith('#') ||
       trimmed.startsWith('-') ||
-      /^Players:\s*$/.test(trimmed)
+      /^(?:Roles|Players):\s*$/.test(trimmed)
     ) {
       continue;
     }

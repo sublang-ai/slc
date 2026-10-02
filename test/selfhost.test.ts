@@ -1299,7 +1299,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
 
   /** Emits an entry module for one gears declaration in a scratch directory. */
   const withEmittedEntry = async (
-    files: { gears: string; linked?: string },
+    files: { gears: string; linked?: string; text?: string },
     assertion: (entryPath: string, module: string) => Promise<void> | void,
   ): Promise<void> => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-entry-'));
@@ -1312,7 +1312,10 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         );
       }
       await writeFile(join(dir, 'flow.gears.md'), files.gears);
-      await writeFile(join(dir, 'flow.text.md'), '# Flow\n\nLead line.\n');
+      await writeFile(
+        join(dir, 'flow.text.md'),
+        files.text ?? '# Flow\n\nLead line.\n',
+      );
       const entryPath = await emitEntryModule({
         cwd: dir,
         basename: 'flow',
@@ -1325,6 +1328,39 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       await rm(dir, { recursive: true, force: true });
     }
   };
+
+  it.each([
+    {
+      text: '# Skill Catalog\n\nRoles:\n- Planner\n\nPlan the skill catalog.\n',
+      intent: 'Skill Catalog — Plan the skill catalog.',
+    },
+    {
+      text: 'Roles:\n- 规划者\n\n规划内部规约索引。\n',
+      intent: '规划内部规约索引。',
+    },
+    { text: '# Skill Catalog\n\nRoles:\n- Planner\n', intent: 'Skill Catalog' },
+    { text: 'Roles:\n- Planner\n', intent: 'flow' },
+    {
+      text: '# Legacy\n\nPlayers:\n- Writer\n\nWrite the proposal.\n',
+      intent: 'Legacy — Write the proposal.',
+    },
+  ])(
+    'emits prose intent after structural role declarations: $intent (self-hosting-16)',
+    async ({ text, intent }) => {
+      await withEmittedEntry(
+        {
+          text,
+          gears: 'Roles:\n- Planner\n',
+          linked: SCHEMA_3_DIRECT_CAPTAIN_PLAYBOOK_MODULE,
+        },
+        async (entryPath, module) => {
+          expect(module).toContain(`intent: '${intent}'`);
+          const entry = (await import(entryPath)).default as { intent: string };
+          expect(entry.intent).toBe(intent);
+        },
+      );
+    },
+  );
 
   it('derives requiredRoleIds from the gears Players block, excluding alias declarations (self-hosting-16)', async () => {
     await withEmittedEntry(
