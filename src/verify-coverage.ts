@@ -444,8 +444,8 @@ function initializedCoverageContext(
 
 /** The `Output shall include` clause a result description declares. */
 const OUTPUT_CLAUSE = /Output shall include\s+(.+)$/;
-/** Every backticked `field:` property named inside that clause. */
-const REQUIRED_FIELD = /`([A-Za-z_$][A-Za-z0-9_$]*):/g;
+/** Every plain or annotated backticked identifier field inside that clause. */
+const REQUIRED_FIELD = /`([A-Za-z_$][A-Za-z0-9_$]*)(?::[^`]*)?`/g;
 
 /** Structured fields named by the generic Captain result contracts. */
 const STRUCTURED_RESULT_FIELD =
@@ -841,6 +841,7 @@ type Snapshot = {
 };
 
 interface DrivenActor {
+  readonly coverageTransitions: readonly TransitionObservation[];
   readonly coverageErrors: readonly {
     eventType: string;
     error: unknown;
@@ -858,6 +859,9 @@ interface DrivenActor {
 interface TransitionObservation {
   sourceId?: string;
   targetIds: readonly string[];
+  event?: Record<string, unknown>;
+  root: boolean;
+  armIndex?: number;
 }
 
 /** A scripted invocation resolves an output, rejects, or hangs (`null`). */
@@ -907,6 +911,7 @@ function makeActor(
 ): DrivenActor {
   coverageCheckpoint();
   const coverageErrors: { eventType: string; error: unknown }[] = [];
+  const coverageTransitions: TransitionObservation[] = [];
   const workActor = fromPromise(
     async ({
       input,
@@ -977,7 +982,22 @@ function makeActor(
               }
               const source = (transition as { source?: unknown }).source;
               const target = (transition as { target?: unknown }).target;
-              observeTransition?.({
+              const event = (inspection as { event?: unknown }).event;
+              const arms = (
+                source as { transitions?: Map<string, unknown[]> } | undefined
+              )?.transitions?.get(
+                typeof event === 'object' && event !== null
+                  ? String((event as { type?: unknown }).type)
+                  : '',
+              );
+              const observed: TransitionObservation = {
+                root: source === provided.root,
+                ...(typeof event === 'object' && event !== null
+                  ? { event: event as Record<string, unknown> }
+                  : {}),
+                ...(arms === undefined
+                  ? {}
+                  : { armIndex: arms.indexOf(transition) }),
                 ...(typeof source === 'object' &&
                 source !== null &&
                 typeof (source as { id?: unknown }).id === 'string'
@@ -992,7 +1012,9 @@ function makeActor(
                         : [],
                     )
                   : [],
-              });
+              };
+              coverageTransitions.push(observed);
+              observeTransition?.(observed);
             }
           }
           const event = (inspection as { event?: unknown }).event;
@@ -1013,6 +1035,9 @@ function makeActor(
   );
   Object.defineProperty(actor, 'coverageErrors', {
     value: coverageErrors,
+  });
+  Object.defineProperty(actor, 'coverageTransitions', {
+    value: coverageTransitions,
   });
   actor.subscribe({ error: () => {} });
   actor.start();
@@ -3545,13 +3570,51 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
           transitionArms(playbook.invocation.onError).length,
         0,
       );
+  if (!controller) {
+    for (const [index, arm] of transitionArms(
+      (config.on ?? {})[INTERRUPT_EVENT],
+    ).entries()) {
+      const targetName = rawArmTarget(arm);
+      const target =
+        targetName === undefined
+          ? undefined
+          : stateRefForTarget(refs, targetName);
+      const captain = captains.find(
+        (candidate) =>
+          target !== undefined && sameStateRef(candidate.ref, target),
+      );
+      if (
+        captain !== undefined &&
+        captain.binding.actor !== 'script' &&
+        !interruptDriveForRef(
+          machine,
+          refs,
+          captain.ref,
+          captainPublicStateId(captain),
+          [],
+          index,
+        ).satisfiable
+      )
+        pathSearches += 1;
+    }
+  }
   for (const captain of captains) {
     const resultKeys = Object.keys(captain.binding.result);
     const guardedDoneArms = transitionArms(captain.invocation.onDone).filter(
       (arm) => armGuard(arm) !== undefined,
     ).length;
     const errorArms = transitionArms(captain.invocation.onError).length;
-    if (!controller && rootInterruptProbes === 0) {
+    if (
+      !controller &&
+      (rootInterruptProbes === 0 ||
+        (captain.binding.actor !== 'script' &&
+          !interruptDriveForRef(
+            machine,
+            refs,
+            captain.ref,
+            captainInterruptTarget(captain),
+          ).satisfiable))
+    ) {
       pathSearches +=
         resultKeys.length +
         (resultKeys.includes(NEEDS_BOSS_REPLY) ? 1 : 0) +
@@ -3895,6 +3958,70 @@ async function runFsmCoverage(
         armIndex,
       );
       if (!drive.satisfiable) {
+        if (
+          !isController &&
+          targetCaptain !== undefined &&
+          targetCaptain.binding.actor !== 'script'
+        ) {
+          const guard = orderedArmPredicate(
+            machine,
+            transitionArms((machine.config.on ?? {})[INTERRUPT_EVENT]),
+            armIndex,
+          );
+          const reached = await searchCoverageEntry(
+            machine,
+            { kind: 'acting', value: targetCaptain },
+            refs,
+            captains,
+            playbooks,
+            sourceCandidates,
+            async (actor) => {
+              try {
+                if (
+                  guard === undefined ||
+                  !guard.run({
+                    context: actor.getSnapshot().context,
+                    event: drive.event,
+                  })
+                )
+                  return false;
+              } catch {
+                coverageCheckpoint();
+                return false;
+              }
+              const before = actor.coverageTransitions.length;
+              actor.send(drive.event);
+              const completed = await settle(actor, atState(target));
+              return (
+                completed &&
+                actor.coverageTransitions
+                  .slice(before)
+                  .some(
+                    (transition) =>
+                      transition.root &&
+                      transition.armIndex === armIndex &&
+                      transition.event === drive.event &&
+                      transition.targetIds.includes(
+                        resolvedStateNode(machine, target)?.id ?? '',
+                      ),
+                  )
+              );
+            },
+          );
+          if (reached.covered) continue;
+          if (reached.inputFailure !== undefined) {
+            findings.push(
+              `${INTERRUPT_EVENT} target ${arm.target}: ${reached.inputFailure}`,
+            );
+            continue;
+          }
+          if (reached.limitation !== undefined) {
+            findings.push(
+              `${INTERRUPT_EVENT} target ${arm.target}: ${reached.limitation}`,
+            );
+            continue;
+          }
+        }
         findings.push(
           `${INTERRUPT_EVENT} target ${arm.target} is unsatisfiable under context/event probing`,
         );
@@ -3966,7 +4093,18 @@ async function runFsmCoverage(
 
   for (const captain of captains) {
     await coverageYield();
-    if (!canJump && !isController) {
+    if (
+      !isController &&
+      (!canJump ||
+        (captain.binding.actor !== 'script' &&
+          !interruptDriveForRef(
+            machine,
+            refs,
+            captain.ref,
+            captainInterruptTarget(captain),
+            sourceCandidates,
+          ).satisfiable))
+    ) {
       findings.push(
         ...(await probeNonPreemptiveActor(
           machine,
