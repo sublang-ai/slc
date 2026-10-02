@@ -11,11 +11,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-02
+
 ### Added
 
 - `slc playbook <entry-form-source> --complete` checks a retained canonical bundle and emits its registry entry and verification files without agents, configuration seeding, or build history.
-
-## [0.15.2] - 2026-10-02
 
 ### Fixed
 
@@ -795,8 +795,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.15.2...HEAD
-[0.15.2]: https://github.com/sublang-ai/slc/compare/v0.15.1...v0.15.2
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/sublang-ai/slc/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/sublang-ai/slc/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/sublang-ai/slc/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/sublang-ai/slc/compare/v0.13.0...v0.14.0

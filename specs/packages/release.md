@@ -146,7 +146,7 @@ Where the project is built, when the release package smoke creates and installs 
 
 #### release-15
 
-Where the publishable tarball is installed into an empty project, when an English thin demo entry is copied outside the repository and imported from that project, the entry shall resolve the shared Playbook engine and XState FSM dependency from the consumer install without relying on this checkout or a global module path [[release-11](#release-11)].
+Where the publishable tarball is installed into an empty project, when the committed English demo bundle is copied outside the repository and its freshly completed entry is imported from that project, the entry shall resolve the shared Playbook engine and XState FSM dependency from the consumer install without relying on this checkout or a global module path [[release-11](#release-11)].
 
 ### Release-workflow acceptance
 
@@ -175,7 +175,7 @@ Where the publishable tarball is installed into an empty consumer project, when 
 
 | Acceptance flow | Required outcome |
 | --- | --- |
-| Automatic release checks | Inside the installed consumer, import the committed English schema-3 reference entry through its artifact-local dependencies [[release-11](#release-11)], and — without driving a compiled Boss turn, because SLC does not substitute for Playbook's governed repository and effect-ledger protocol — construct its runtime once with validated configured options and exact live host capabilities, initialize one causal-root session, and dispose it, retaining consumer-side engine resolution and schema-3 construction, initialization, and disposal coverage as part of the publication gate [[release-12](#release-12)]. |
+| Automatic release checks | Inside the installed consumer, complete the committed canonical English reference bundle through the installed executable without credentials or seeded config [[completion-6](completion.md#completion-6)], import its freshly emitted schema-3 entry through its artifact-local dependencies [[release-11](#release-11)], and — without driving a compiled Boss turn, because SLC does not substitute for Playbook's governed repository and effect-ledger protocol — construct its runtime once with validated configured options and exact live host capabilities, initialize one causal-root session, and dispose it, retaining consumer-side engine resolution and schema-3 construction, initialization, and disposal coverage as part of the publication gate [[release-12](#release-12)]. |
 | Opt-in local gate | Compile a minimal workflow through the installed executable and require a loadable entry; require an unchanged repeat to report exactly `up to date`, preserve the active marker, and leave every recorded phase target equal to its snapshot; unless Update is skipped, require a repeat after a manual GEARS refinement to report both Update and Reuse, preserve and record the refinement in a new build, and leave the updated entry loadable; run the selected schema-3 entry through the installed Playbook host — enabled and role-bound in Playbook configuration with explicit player and Captain bindings and invoked through its effective slash command — to a durably verified successful root terminal with no unresolved effects, whose initial commit preserves the original sample and whose subsequent agent commit passes a compiled median check; and use the committed reference set when Compile is skipped [[release-17](#release-17)], thereby exercising the compiler-change gate required by [[release-13](#release-13)]. |
 
 ### Schema-3 consumer acceptance
