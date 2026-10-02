@@ -107,6 +107,89 @@ describe('text-to-GEARS Source-fidelity gate (phase-execution-51, phase-executio
     expect(result).toMatchObject({ ok: true, outputs: [target] });
   });
 
+  describe.each([
+    {
+      language: 'English',
+      narrative:
+        'After implementation, Coder verifies the committed product without changing files.',
+      derived:
+        'Verify the whole committed product and report the actual result.\nChange no file.',
+      literal:
+        'Release the verified archive locally.\nRecord the exact rollback identity.',
+      extra: 'Publish it to an unrelated service.',
+    },
+    {
+      language: 'Chinese',
+      narrative: '实现完成后，Coder 验证已提交的产品，不修改文件。',
+      derived: '验证完整的已提交产品并报告实际结果。\n不要修改任何文件。',
+      literal: '在本地部署已验证的归档。\n记录准确的回滚标识。',
+      extra: '发布到无关的服务。',
+    },
+  ])(
+    '$language mixed narrative/literal Source (DR-055)',
+    ({ narrative, derived, literal, extra }) => {
+      const mixedSource = `${narrative}\n\nReleaseOwner follows this complete instruction:\n\n\`\`\`markdown\n${literal}\n\`\`\`\n`;
+      const mixedGears = `# case: Fixture\n\n### CASE-1\n\nWhen implementation finishes, Captain shall prompt Coder:\n\n${derived
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join(
+          '\n',
+        )}\n\n### CASE-2\n\nWhen verification succeeds, Captain shall prompt ReleaseOwner:\n\n${literal
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n')}\n`;
+
+      it('accepts narrative-derived instructions beside the unchanged complete literal', async () => {
+        await writeFile(source, mixedSource);
+        let calls = 0;
+        const executor = writing(mixedGears);
+        const result = await runSlc(
+          ['flow', source],
+          deps({
+            async run(request, signal) {
+              calls++;
+              return executor.run(request, signal);
+            },
+          }),
+        );
+
+        expect(result).toMatchObject({ ok: true, outputs: [target] });
+        expect(calls).toBe(1);
+        expect(await readFile(source, 'utf8')).toBe(mixedSource);
+        expect(await readFile(target, 'utf8')).toBe(mixedGears);
+      });
+
+      it('refuses a foreign line added to the item carrying the complete literal', async () => {
+        await writeFile(source, mixedSource);
+        const changed = `${mixedGears}> ${extra}\n`;
+        const result = await runSlc(['flow', source], deps(writing(changed)));
+
+        expect(result.ok).toBe(false);
+        expect(result.diagnostics.join('\n')).toContain(
+          `CASE-2: prompt line is not an authored fragment: ${JSON.stringify(extra)}`,
+        );
+        expect(await readFile(source, 'utf8')).toBe(mixedSource);
+        expect(await readFile(target, 'utf8')).toBe(changed);
+      });
+
+      it('refuses a changed complete literal even when its item becomes fragment-free', async () => {
+        await writeFile(source, mixedSource);
+        const changed = mixedGears.replace(literal.split('\n')[0], extra);
+        const result = await runSlc(['flow', source], deps(writing(changed)));
+
+        expect(result.ok).toBe(false);
+        expect(result.diagnostics.join('\n')).toContain(
+          'source instruction fragment at line 5 was dropped or changed',
+        );
+        expect(result.diagnostics.join('\n')).not.toContain(
+          'prompt line is not an authored fragment',
+        );
+        expect(await readFile(source, 'utf8')).toBe(mixedSource);
+        expect(await readFile(target, 'utf8')).toBe(changed);
+      });
+    },
+  );
+
   it('leaves the reserved slc meta-pipeline ungated', async () => {
     const metaTarget = join(workDir, 'case.slc', 'case.gears.md');
     const result = await runSlc(

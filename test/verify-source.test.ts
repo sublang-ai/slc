@@ -213,7 +213,7 @@ describe('Source-fidelity conservation check (verification-25, verification-26)'
     ).toEqual(['FLOW-1: authored prompt fragments are out of Source order']);
   });
 
-  it('names an invented item whose prompt line the Source never authored', () => {
+  it('leaves an invented fragment-free item to semantic review', () => {
     const { source, gears } = maintained('code');
     const invented = `${gears}
 ### CODE-99
@@ -223,9 +223,9 @@ When a fabricated condition holds, Captain shall prompt Coder:
 > Do whatever seems reasonable.
 `;
 
-    expect(checkSourceGearsContract(source, invented)).toEqual([
-      'CODE-99: prompt line is not an authored fragment: "Do whatever seems reasonable."',
-    ]);
+    // Without interpreting Source prose, the checker cannot distinguish this
+    // item from a legitimate narrative-derived item (DR-055).
+    expect(checkSourceGearsContract(source, invented)).toEqual([]);
   });
 
   it('names a dropped authored fragment by its Source line', () => {
@@ -1191,6 +1191,11 @@ When a fabricated condition holds, Captain shall prompt Coder:
       'PR-4: prompt line is not an authored fragment: "Publish the fix to <pull-request-url>."',
       'PR-4: relayed player field pullRequestUrl lacks a literal quote marker',
     ]);
+
+    const fragmentFree = `${gears('When `code` succeeds, Captain shall run:', command)}\n### PR-99\n\nWhen publication finishes, Captain shall prompt Coder:\n\n> Report the result for <pull-request-url>.\n`;
+    expect(checkSourceGearsContract(source, fragmentFree)).toEqual([
+      'PR-99: relayed player field pullRequestUrl lacks a literal quote marker',
+    ]);
   });
 
   it('explains the two GEARS quote layers for an additional token and delivers the exact quoted value', () => {
@@ -1242,6 +1247,10 @@ When a fabricated condition holds, Captain shall prompt Coder:
       const normalized = token.replace(/\\([<>])/g, '$1');
       expect(checkSourceGearsContract(source, gears)).toEqual([
         `FLOW-1: additional placeholder line "${normalized}" lacks a literal quote marker in the prompt; use "> > ${normalized}" in GEARS to retain "> ${normalized}" as prompt content`,
+      ]);
+      const fragmentFree = `${gearsPrompt(['Inspect the supplied evidence.'])}\n### FLOW-2\n\nWhen inspection finishes, Captain shall act:\n\n> Summarize the outcome.\n> ${token}\n`;
+      expect(checkSourceGearsContract(source, fragmentFree)).toEqual([
+        `FLOW-2: additional placeholder line "${normalized}" lacks a literal quote marker in the prompt; use "> > ${normalized}" in GEARS to retain "> ${normalized}" as prompt content`,
       ]);
       expect(
         checkSourceGearsContract(

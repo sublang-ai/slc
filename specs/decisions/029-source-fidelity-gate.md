@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted; unreviewed-finding disposition amended by [DR-033](033-early-conformance-and-mechanical-repair.md); contiguous-appearance and in-item order rules both relaxed for the prefix-first layout by [DR-052](052-prefixed-prompt-acceptance.md).
+Accepted; unreviewed-finding disposition amended by [DR-033](033-early-conformance-and-mechanical-repair.md); contiguous-appearance and in-item order rules both relaxed for the prefix-first layout by [DR-052](052-prefixed-prompt-acceptance.md); foreign-line scope amended by [DR-055](055-mixed-source-prompt-fidelity.md).
 
 ## Context
 
