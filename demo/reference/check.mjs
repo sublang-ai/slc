@@ -35,11 +35,33 @@ const LANGS = {
     basename: 'workflow',
     players: ['Coder', 'Reviewer'],
     roles: ['coder', 'reviewer'],
+    limitState: 'loopLimitReached',
+    limitGuards: [
+      'done',
+      'findings',
+      'judged',
+      'agreement',
+      'done',
+      'findings',
+      'judged',
+      'agreement',
+      'done',
+    ],
   },
   zh: {
     basename: 'workflow.zh',
     players: ['编码者', '审查者'],
     roles: ['编码者', '审查者'],
+    limitState: 'cycleLimitReached',
+    limitGuards: [
+      'done',
+      'issues',
+      'accept',
+      'done',
+      'issues',
+      'accept',
+      'done',
+    ],
   },
 };
 
@@ -49,7 +71,7 @@ if (profile === undefined) {
   console.error(`usage: node check.mjs [${Object.keys(LANGS).join('|')}]`);
   process.exit(1);
 }
-const { basename, players, roles } = profile;
+const { basename, players, roles, limitState, limitGuards } = profile;
 const bundle = join(here, `${basename}.playbook`);
 const entry = join(here, `${basename}.ts`);
 
@@ -223,6 +245,10 @@ try {
     console.error('  DEBUG outcome:', JSON.stringify(result).slice(0, 400));
   report('entry/runtime smoke reaches terminal', result.outcome === 'terminal');
   report(
+    'clean review publishes successful terminal',
+    result.outcome === 'terminal' && result.terminal?.kind === 'success',
+  );
+  report(
     'entry hands the host its declared role ids',
     JSON.stringify(seenPlayers) === JSON.stringify(roles),
     seenPlayers.join(', '),
@@ -243,6 +269,103 @@ try {
   } catch {
     report('script initializes a nested repository root', false);
   }
+
+  // Exercise the authored failure as well: drive both review loops through
+  // real governed commits instead of injecting a final actor snapshot.
+  const limitedWorkdir = join(smokeRoot, 'limit');
+  await mkdir(limitedWorkdir);
+  const guards = [...limitGuards];
+  let commits = 0;
+  let reviews = 0;
+  const limited = registryEntry.createRuntime(
+    { captainOptions: { cwd: limitedWorkdir } },
+    await createWorktreeHostCapabilities({
+      cwd: limitedWorkdir,
+      playbookId: registryEntry.id,
+      requiredRoleIds: registryEntry.requiredRoleIds,
+      concurrentRoleSets: registryEntry.concurrentRoleSets,
+    }),
+  );
+  const limitedSessionId = randomUUID();
+  await limited.init({
+    sessionId: limitedSessionId,
+    playbookId: basename,
+    rootSessionId: limitedSessionId,
+    depth: 0,
+    ports: {
+      callPlayer: async (role) => {
+        if (guards[0] === 'done') {
+          if (role !== roles[0]) throw new Error('writer role drifted');
+          commits += 1;
+          await writeFile(
+            join(limitedWorkdir, 'change.txt'),
+            `revision ${commits}\n`,
+          );
+          const git = (...args) =>
+            execFileSync('git', args, {
+              cwd: limitedWorkdir,
+              stdio: 'ignore',
+            });
+          git('add', '-A');
+          git(
+            '-c',
+            'user.name=Demo Smoke',
+            '-c',
+            'user.email=smoke@sublang.ai',
+            'commit',
+            '-m',
+            `demo: smoke revision ${commits}`,
+          );
+        } else if (guards[0] === 'findings' || guards[0] === 'issues') {
+          if (role !== roles[1]) throw new Error('reviewer role drifted');
+          reviews += 1;
+        }
+        return { status: 'ok', finalText: 'smoke result' };
+      },
+      callJudge: async () => {
+        const guard = guards.shift();
+        if (guard === undefined) throw new Error('unexpected limit judge call');
+        return JSON.stringify({ guard });
+      },
+      callCaptain: async () => {
+        throw new Error('unexpected limit Captain call');
+      },
+      callPlaybook: async () => {
+        throw new Error('unexpected limit child call');
+      },
+      emitStatus: async () => {},
+      emitTelemetry: async () => {},
+    },
+  });
+  let limitedResult;
+  try {
+    limitedResult = await limited.handleBossInput({
+      text: 'smoke task',
+      signal: new AbortController().signal,
+    });
+  } finally {
+    await limited.dispose();
+  }
+  report(
+    'review loop limit publishes failure terminal',
+    limitedResult.outcome === 'terminal' &&
+      limitedResult.terminal?.kind === 'failure' &&
+      limitedResult.terminal.stateId === limitState,
+    JSON.stringify(limitedResult.terminal),
+  );
+  const git = (...args) =>
+    execFileSync('git', args, {
+      cwd: limitedWorkdir,
+      encoding: 'utf8',
+    }).trim();
+  report(
+    'loop limit retains three commits and exactly two reviews',
+    guards.length === 0 &&
+      commits === 3 &&
+      reviews === 2 &&
+      git('rev-list', '--count', 'HEAD') === '3' &&
+      git('status', '--porcelain') === '',
+  );
 } catch (error) {
   report('entry/runtime smoke', false, String(error));
 } finally {

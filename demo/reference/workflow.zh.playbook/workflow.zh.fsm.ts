@@ -956,6 +956,7 @@ export const workflowMachine = setup({
       meta: {
         playbook: {
           stateId: 'reviewClean',
+          terminal: 'success',
           description: 'review 没有任何问题，流程结束。',
         },
       },
@@ -968,6 +969,7 @@ export const workflowMachine = setup({
       meta: {
         playbook: {
           stateId: 'cycleLimitReached',
+          terminal: 'failure',
           description:
             '循环次数已达 2 次上限，最后一次提交未经 review 确认无问题，流程结束。',
         },

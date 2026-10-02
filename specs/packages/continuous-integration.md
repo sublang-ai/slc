@@ -49,6 +49,15 @@ When a demo reference check runs, it shall drive that language's committed refer
 
 - The validation is the host's deterministic catalog listing of a scratch configuration that enables the entry with every declared role bound to one placeholder player, resolved under scratch Spex-root, session-state, and superseded-configuration homes and with engine provisioning disabled, so the stage spends no model call, needs no adapter SDK, and writes nothing beside the committed artifacts or under the invoking user's home.
 
+#### continuous-integration-7
+
+When a demo reference check drives an English or Chinese committed reference over the actual shared runtime [[continuous-integration-5](#continuous-integration-5)], the checker shall require the Source-authored terminal classification for both completion cases, retaining the real governed repository boundaries:
+
+| Driven case | Required assertion |
+| --- | --- |
+| The review reports no findings | The machine reaches its clean-review final state and publishes a terminal record whose kind is `success`, with every declared role reached and the Boss task delivered. |
+| Both allowed review loops report findings and the Coder commits each agreed revision | The machine reaches its loop-limit final state and publishes a terminal record whose kind is `failure`, with exactly two reviews, the last revision unreviewed, and all three Coder commits preserved in a clean worktree. |
+
 ## Verification
 
 ### Repository workflow acceptance
@@ -63,4 +72,4 @@ Where the repository workflow, dependency lock, reviewed Playbook assets, and pi
 | Reviewed artifacts | Require all twelve generated bundle tests in the full suite, the three independent artifact reviews with each artifact's own schema evidence — its current pin's provenance and the link target's engine declaration —, canonical linked module, actor-applicable composers, compiled-execution fidelity against the recorded definition with a not-applicable report for a sectionless definition, and fail-closed schema, conformance, fidelity, composition, and coverage findings, pin regeneration, and a byte-identical pin-index diff [[continuous-integration-2](#continuous-integration-2)]. |
 | Runtime-contract boundary | Require locked installation with no sibling checkout or unaudited artifact-refresh step, and retain historical runtime-profile behavior, current `composed-v3` behavior, absent- and exact-historical-provenance executor selection, declaration-based `composed-v3` selection, declaration-naming rejection, and delegated structured-semantics fixtures in the full suite [[continuous-integration-3](#continuous-integration-3)]. |
 | Locked Playbook set | Require the manifest, registry lock, definitions gate, generated tests, independent reviews, and every recorded Playbook provenance to form one set for the exact release the lock resolves [[continuous-integration-4](#continuous-integration-4)]. |
-| Release surfaces | Require the English reference checker — including the host registry-validation stage that lists the reference under its own id — installed-package smoke, and trusted-publication workflow audit [[continuous-integration-5](#continuous-integration-5)]. |
+| Release surfaces | Require the English reference checker — including the host registry-validation stage that lists the reference under its own id — installed-package smoke, and trusted-publication workflow audit [[continuous-integration-5](#continuous-integration-5)], with the actual English and Chinese clean-review and loop-limit terminal matrix [[continuous-integration-7](#continuous-integration-7)]. |
