@@ -17,6 +17,9 @@ export default defineConfig({
     },
   },
   test: {
+    // Integration cases run several real compiler and verifier subprocesses;
+    // allow their bounded work to finish on shared or two-core CI hosts.
+    testTimeout: 20_000,
     // Integration workers also launch TypeScript and emitted-test processes.
     // Leave CPU capacity for those children instead of saturating the host.
     maxWorkers: Math.max(
