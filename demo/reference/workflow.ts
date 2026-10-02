@@ -40,7 +40,8 @@ function validateOptions(value: unknown): RuntimeOptions {
 const entry = {
   id: 'workflow',
   command: 'workflow',
-  intent: 'Two-Agent Change-and-Review Workflow — Roles:',
+  intent:
+    'Two-Agent Change-and-Review Workflow — 1. Before work begins, ensure the current directory is the root of its own Git',
   artifactSchema: 3,
   runtimeProfile: Object.freeze({
     kind: 'shared-factory',
