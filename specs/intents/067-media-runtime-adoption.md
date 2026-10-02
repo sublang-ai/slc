@@ -5,7 +5,7 @@
 
 ## Status
 
-Release-ready: SLC 0.15.1 adopts the published Cligent 0.33.1 and Playbook 17.4.0 registry closure; retained-artifact checks, candidate release checks and the single installed live acceptance pass; publication remains pending.
+Completed: SLC 0.15.1 adopts the published Cligent 0.33.1 and Playbook 17.4.0 registry closure; retained-artifact checks, candidate release checks, the single installed live acceptance, trusted publication and fresh public-consumer verification pass.
 
 ## Intent
 
@@ -23,7 +23,7 @@ Adopt Cligent `^0.33.1` and Playbook `^17.4.0` through [DR-028](../decisions/028
 ## Tasks
 
 1. [x] Adopt the published dependency set, synchronize its compiler inputs, regenerate pins, and record verification.
-2. [ ] Prepare the release, complete candidate acceptance and CI, then publish through the existing release workflow.
+2. [x] Prepare the release, complete candidate acceptance and CI, then publish through the existing release workflow.
 
 ## Verification
 
@@ -40,3 +40,5 @@ The installed public Playbook 17.4.0 release confirms that it preserves the five
 Live approval forwarding changes the session-host facade and host implementation, leaving those semantic inputs and every authored or compiled workflow unchanged from the reviewed media implementation.
 SLC supplies no live approval callback and needs no compiler feature for an embedding host to use that separate Playbook capability.
 The installed registry closure passes the retention checks, 1,535 tests with two existing skips, both demo checks, package smoke and one complete installed live acceptance.
+Release [v0.15.1](https://github.com/sublang-ai/slc/releases/tag/v0.15.1) was published from `82846aa22c11e48efdc24c39bbdea32e31f25791` after [PR #34](https://github.com/sublang-ai/slc/pull/34), [exact main CI](https://github.com/sublang-ai/slc/actions/runs/37023297714) and [trusted publication](https://github.com/sublang-ai/slc/actions/runs/37023854614) passed.
+The fresh public consumer verifies all shipped bytes against the accepted candidate, exact dependency resolution, both exports, CLI version and the Inspect catalog; npm's returned verified provenance binds the archive to that source, tag and publisher attempt.
