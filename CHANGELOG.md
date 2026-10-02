@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Transition coverage supplies plain and annotated declared result fields
+  and replays actual prior role outcomes when nested prerequisites prevent
+  direct interrupts from the initial context, preserving dead-route failures.
 - Registry descriptions skip structural `Roles:` declarations, preserving
   the actual source title and lead in English and Chinese entries.
 - The quick start and English/Chinese demos activate schema-3 registry

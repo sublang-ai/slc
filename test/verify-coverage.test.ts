@@ -1828,6 +1828,149 @@ describe('identifierLiterals', () => {
 });
 
 describe('checkFsmCoverage (verification-6)', () => {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  it.each(['`artifactPath` (local path)', '`artifactPath: <local path>`'])(
+    'supplies every declared output field in a closed contract: %s',
+    async (field) => {
+      const machine = goodMachine({
+        result: {
+          ok: `The work is done. Output shall include ${field} and \`latestCommit: <commit identity>\`.`,
+        },
+        onDone: [
+          {
+            target: '#done',
+            guard: ({ event }: any) => {
+              const output = event.output;
+              return (
+                Reflect.ownKeys(output).length === 3 &&
+                output.guard === 'ok' &&
+                typeof Object.getOwnPropertyDescriptor(output, 'artifactPath')
+                  ?.value === 'string' &&
+                typeof Object.getOwnPropertyDescriptor(output, 'latestCommit')
+                  ?.value === 'string'
+              );
+            },
+          },
+          needsBossReplyArm(),
+        ],
+      });
+      expect(await checkFsmCoverage({ machine })).toEqual([]);
+    },
+  );
+
+  it.each([
+    'valid',
+    'dead predecessor',
+    'dead interrupt',
+    'shadowed interrupt',
+  ])(
+    'replays nested role prerequisites while preserving a %s route',
+    async (variant) => {
+      const roles = ['planner', 'builder', 'verifier'];
+      const canEnter = (context: any, index: number) =>
+        index === 0 || context.delivery[roles[index - 1]]?.ready === true;
+      const states: Record<string, any> = {
+        ready: { id: 'ready', on: { GO: { target: 'planner' } } },
+        done: { id: 'done', type: 'final' },
+        failed: {
+          id: 'failed',
+          tags: 'playbook.parked',
+          ...(variant === 'shadowed interrupt'
+            ? { on: { BOSS_INTERRUPT: {} } }
+            : {}),
+        },
+        awaitBossReply: {
+          id: 'awaitBossReply',
+          on: {
+            ...(variant === 'shadowed interrupt' ? { BOSS_INTERRUPT: {} } : {}),
+            BOSS_REPLY: roles.map((role) => ({
+              target: `#${role}`,
+              guard: ({ context, event }: any) =>
+                context.pendingBossQuestion?.resumeStateId === role &&
+                typeof event.answer === 'string' &&
+                event.answer.trim() !== '',
+            })),
+          },
+        },
+      };
+      for (const [index, role] of roles.entries()) {
+        states[role] = {
+          id: role,
+          ...(variant === 'shadowed interrupt' && index > 0
+            ? { on: { BOSS_INTERRUPT: {} } }
+            : {}),
+          invoke: {
+            src: 'player',
+            input: () => ({
+              stateId: role,
+              sourceItem: `CHAIN-${index + 1}`,
+              role,
+              prompt: 'Perform the role work.',
+              result: {
+                ok: 'The role completed. Output shall include `artifactPath` (local report) and `latestCommit: <commit identity>`.',
+                needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+              },
+            }),
+            onDone: [
+              {
+                target: `#${roles[index + 1] ?? 'done'}`,
+                guard: ({ context, event }: any) =>
+                  !(variant === 'dead predecessor' && index === 0) &&
+                  canEnter(context, index) &&
+                  event.output.guard === 'ok' &&
+                  Reflect.ownKeys(event.output).length === 3 &&
+                  typeof event.output.artifactPath === 'string' &&
+                  typeof event.output.latestCommit === 'string',
+                actions: assign(({ context }: any) => ({
+                  delivery: { ...context.delivery, [role]: { ready: true } },
+                })),
+              },
+              needsBossReplyArm(role),
+            ],
+            onError: { target: '#failed' },
+          },
+        };
+      }
+      const machine = setup({
+        actors: {
+          player: fromPromise(async () => {
+            throw new Error('provide role');
+          }),
+        },
+      }).createMachine({
+        id: 'nestedRoleChain',
+        initial: 'ready',
+        context: { delivery: {} },
+        states,
+        on: {
+          BOSS_INTERRUPT: roles.map((role, index) => ({
+            target: `#${role}`,
+            reenter: true,
+            guard: ({ context, event }: any) =>
+              !(variant === 'dead interrupt' && index > 0) &&
+              event.targetId === role &&
+              canEnter(context, index),
+          })),
+        },
+      } as any);
+      const findings = await checkFsmCoverage({ machine });
+      if (variant === 'valid') expect(findings).toEqual([]);
+      else {
+        expect(findings).toContain(
+          'BOSS_INTERRUPT target builder is unsatisfiable under context/event probing',
+        );
+        if (variant === 'dead predecessor')
+          expect(
+            findings.some((finding) =>
+              finding.includes('state builder: result "ok" remains unproved'),
+            ),
+          ).toBe(true);
+      }
+    },
+  );
+
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
   it.each(['BOSS_INTERRUPT', 'WRONG_EVENT'])(
     'preserves descriptor-read fixed event fields against a %s guard',
     async (eventType) => {
