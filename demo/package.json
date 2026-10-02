@@ -6,7 +6,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "*",
     "@openai/codex-sdk": "*",
-    "@sublang/playbook": "^17.3.0",
-    "@sublang/slc": "^0.15.0"
+    "@sublang/playbook": "^17.4.0",
+    "@sublang/slc": "^0.15.1"
   }
 }

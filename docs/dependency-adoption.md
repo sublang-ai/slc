@@ -3,6 +3,48 @@
 
 # Dependency adoption
 
+## Release adoption — 2026-10-02
+
+SLC adopts published Cligent `^0.33.1` and Playbook `^17.4.0` together. The
+registry lock resolves one copy of each runtime, without a sibling checkout or
+development tarball. Cligent's published source is
+`b3ef72e09f2d0e6398908dd4bbba3e353d67cc0f`; Playbook's is
+`0e8c1e397b5fa69f57643eef929730078fc0ee75`. Their registry integrity values match
+the independently verified public release receipts.
+
+The five compiler definitions, published pin-input sidecar, link materializer,
+prefix helper, and public runtime TypeScript retain the installed 17.3.0 bytes.
+The workflow catalog adds only Inspect and its literal target binding; all
+prior workflow contracts remain identical. The engine still declares ABI 1 and
+artifact schema 3. Live approval forwarding changes the session-host facade and
+its callback lifecycle without changing those compiler inputs. SLC installs no
+approval callback in compilation calls and adds no media or approval syntax.
+
+This dependency adoption follows
+[DR-028](../specs/decisions/028-contract-based-adoption-without-recompilation.md).
+The three meta-phase bundles and both demo references retain all 75 files
+unchanged. Their generated verification, independent reviews and installed
+engine checks pass, and all three regenerated pins are reproducibly current
+against the published inputs and exact lock. Validation passes 1,535 tests with
+two existing skips, immutable definitions, release-workflow checks, both demos
+and the 181-file installed-package smoke. The English demo initially exposed
+this host's global SSH signing without a fixture signing key; the remaining
+demo and package stages passed with signing disabled only in the test process.
+Repository signing configuration is unchanged.
+
+The single installed live acceptance passes cold compilation, exact unchanged
+reuse without agent calls, incremental update preserving a manual refinement,
+and the freshly compiled workflow's real edit-and-commit run. Its durable root
+settlement is successful with no unresolved effects; the original sample
+remains in the baseline, an agent commit follows, and the executable median
+check passes. It uses Node 24.19.0 and the fresh consumer's published Playbook
+17.4.0 / Cligent 0.33.1 closure with Claude Opus 5.5 at high effort. The installed
+Claude SDK is 0.3.287; the repository's existing development SDK locks remain
+unchanged. Evidence is retained at `/private/tmp/slc-0151-evidence-r6rmunwr`,
+including the original fixture failure and the complete successful live log.
+The live consumer is retained as `slc-acceptance-C7Xkkr`; publication and public
+consumer verification follow the release workflow.
+
 ## Release adoption — 2026-10-01
 
 SLC adopts Playbook 17.3.0 and Cligent 0.30.0. Playbook 17.3 changes no vendored definition and no published sidecar — it adds the host-level subagent effort, resolves an unset Claude subagent model to the agent's own in its launcher's configuration, and requires Cligent 0.30 — so the engine contract (`RUNTIME_ABI` `1`, a frozen `SUPPORTED_ARTIFACT_SCHEMAS` of `[3]`), the compiled-execution sections, and the vendored set are those of 17.2.0, every bundle and both demo references are retained, and the regenerated pins change only the lockfile identity, the link-target identities, and their provenance. Cligent 0.30 adds `subagentEffort` and the subagent definitions its Claude adapter registers for it, which the compiler's own agent does not set, and SLC reads its own configuration rather than Playbook's launcher blocks, so a compile's queries are unchanged. Cligent 0.30 adds the subagent effort as a fourth `AgentAdapter` type parameter whose default keeps SLC's adapter factory annotation, `AgentAdapter<string, boolean, string>`, assignable, so the build needs no source change. SLC's direct Cligent dependency moves to `^0.30.0` with Playbook's, so the lock resolves one Cligent and one engine. Cligent 0.30 tests the same agent SDKs as 0.29, so the locked development SDKs stay at Claude Agent SDK 0.3.284 and Codex SDK 0.159.0. The validation passes 1,535 tests with two skips, immutable definitions, both demos, artifact reviews, and reproducible pins.
