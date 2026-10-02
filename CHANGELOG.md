@@ -11,9 +11,15 @@ and this project adheres to
 
 ## [Unreleased]
 
-## [0.15.2] - 2026-10-02
+## [0.16.0] - 2026-10-02
+
+### Added
+
+- `slc playbook <entry-form-source> --complete` checks a retained canonical bundle and emits its registry entry and verification files without agents, configuration seeding, or build history.
 
 ### Fixed
+
+- Transition coverage honors explicit English and Chinese output-field clauses without adding fields from outcome prose, while retaining historical Captain descriptions.
 
 - Retained English and Chinese demo machines now publish explicit successful-review and failed-loop-limit terminal kinds, verified through both actual shared-runtime paths, so the live release gate receives the outcome it requires.
 
@@ -789,8 +795,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.15.2...HEAD
-[0.15.2]: https://github.com/sublang-ai/slc/compare/v0.15.1...v0.15.2
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/sublang-ai/slc/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/sublang-ai/slc/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/sublang-ai/slc/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/sublang-ai/slc/compare/v0.13.0...v0.14.0

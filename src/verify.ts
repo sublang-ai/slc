@@ -3657,6 +3657,7 @@ export async function emitGearsFsmConformanceTest(opts: {
   artifactSchema?: 1 | 3;
   /** Emission-time schema evidence that must remain empty for a valid artifact. */
   schemaFindings?: readonly string[];
+  write?: (path: string, content: string) => Promise<void>;
 }): Promise<string> {
   const content = generateGearsFsmConformanceTest({
     basename: opts.basename,
@@ -3670,9 +3671,10 @@ export async function emitGearsFsmConformanceTest(opts: {
       : { artifactSchema: opts.artifactSchema }),
     schemaFindings: opts.schemaFindings,
   });
-  await mkdir(opts.artifactDir, { recursive: true });
+  if (opts.write === undefined)
+    await mkdir(opts.artifactDir, { recursive: true });
   const path = join(opts.artifactDir, `${opts.basename}.gears-fsm.test.ts`);
-  await writeFile(path, content);
+  await (opts.write ?? writeFile)(path, content);
   return path;
 }
 
@@ -4249,10 +4251,11 @@ export async function emitPromptContractTest(opts: {
   verifyModule?: string;
   /** Reviewed schema when the FSM shape alone cannot distinguish generations. */
   artifactSchema?: 1 | 3;
-  /** Actual reviewed full-link target provenance, when the caller has it. */
+  /** Declared engine target provenance, not proof of the artifact's origin. */
   provenance?: unknown;
   /** The full-link target's installed engine declaration, when read (DR-028). */
   runtimeDeclaration?: PlaybookRuntimeDeclaration;
+  write?: (path: string, content: string) => Promise<void>;
 }): Promise<{ path: string; diagnostics: string[] }> {
   const diagnostics: string[] = [];
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
@@ -4320,12 +4323,13 @@ export async function emitPromptContractTest(opts: {
     schemaFindings: contract.schemaFindings,
     composer,
   });
-  await mkdir(opts.artifactDir, { recursive: true });
+  if (opts.write === undefined)
+    await mkdir(opts.artifactDir, { recursive: true });
   const path = join(
     opts.artifactDir,
     `${opts.basename}.prompt-contract.test.ts`,
   );
-  await writeFile(path, content);
+  await (opts.write ?? writeFile)(path, content);
   return { path, diagnostics };
 }
 
@@ -4341,6 +4345,7 @@ export async function emitFsmIntrospectionTest(opts: {
   artifactDir: string;
   basename: string;
   verifyModule?: string;
+  write?: (path: string, content: string) => Promise<void>;
 }): Promise<string> {
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const pins = pinIntrospection(
@@ -4352,12 +4357,13 @@ export async function emitFsmIntrospectionTest(opts: {
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
     pins,
   });
-  await mkdir(opts.artifactDir, { recursive: true });
+  if (opts.write === undefined)
+    await mkdir(opts.artifactDir, { recursive: true });
   const path = join(
     opts.artifactDir,
     `${opts.basename}.fsm.introspect.test.ts`,
   );
-  await writeFile(path, content);
+  await (opts.write ?? writeFile)(path, content);
   return path;
 }
 

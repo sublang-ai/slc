@@ -107,3 +107,26 @@ export async function unresolvableRelativeImports(
   }
   return missing;
 }
+
+/**
+ * JavaScript edges of the selected link object. Completion must refuse these:
+ * its TypeScript probes cannot establish fidelity of separate runtime bytes.
+ * Ordinary link settlement deliberately retains its existing JS preference.
+ */
+export async function javascriptLinkObjectImports(
+  modulePath: string,
+  objectPath: string,
+): Promise<string[]> {
+  const source = await readFile(modulePath, 'utf8');
+  const dir = dirname(modulePath);
+  const objectStem = resolve(objectPath).slice(0, -3);
+  const edges: string[] = [];
+  for (const match of source.matchAll(IMPORT_SPECIFIER)) {
+    const specifier = match[2] ?? match[4] ?? match[6];
+    if (specifier === undefined || !specifier.endsWith('.js')) continue;
+    if (!specifier.startsWith('./') && !specifier.startsWith('../')) continue;
+    if (resolve(dir, specifier.slice(0, -3)) === objectStem)
+      edges.push(specifier);
+  }
+  return edges;
+}

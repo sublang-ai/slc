@@ -23,10 +23,11 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 import { inspectGearsRoleContract, parseGearsItems } from './verify.js';
 import { linkedOptionsValidator } from './entry-options.js';
+import type { ArtifactWriter } from './artifacts.js';
 
 /** Options for {@link emitEntryModule}. */
 export interface EmitEntryModuleOptions {
@@ -40,6 +41,10 @@ export interface EmitEntryModuleOptions {
   gearsPath: string;
   /** The normalized (or entry-form) text source: title and lead line. */
   textPath: string;
+  /** Explicit canonical directory, including invocation from inside a bundle. */
+  artifactDir?: string;
+  /** Completion collects content until every module probe is checked. */
+  write?: ArtifactWriter;
 }
 
 /** Emits the entry module and returns its path. */
@@ -73,27 +78,21 @@ export async function emitEntryModule(
   const hasScript = parseGearsItems(gears).some(
     (item) => item.actor === 'script',
   );
+  const bundle =
+    opts.artifactDir ?? join(opts.cwd, `${opts.basename}.${opts.pipeline}`);
   const delegatedOptions =
     schema3 &&
     (await linkedOptionsValidator({
-      linkedPath: join(
-        opts.cwd,
-        `${opts.basename}.${opts.pipeline}`,
-        `${opts.basename}.playbook.ts`,
-      ),
-      fsmPath: join(
-        opts.cwd,
-        `${opts.basename}.${opts.pipeline}`,
-        `${opts.basename}.fsm.ts`,
-      ),
+      linkedPath: join(bundle, `${opts.basename}.playbook.ts`),
+      fsmPath: join(bundle, `${opts.basename}.fsm.ts`),
     })) !== undefined;
   const intent = deriveIntent(text) ?? opts.basename;
   const path = join(opts.cwd, `${opts.basename}.ts`);
-  await writeFile(
+  await (opts.write ?? writeFile)(
     path,
     renderEntryModule({
       basename: opts.basename,
-      bundleLeaf: `${opts.basename}.${opts.pipeline}`,
+      bundleLeaf: relative(opts.cwd, bundle).split(sep).join('/') || '.',
       roleIds: schema3 ? roleContract.roleIds : roleContract.names,
       hasScript,
       delegatedOptions,
@@ -101,7 +100,6 @@ export async function emitEntryModule(
       schema3,
       concurrentRoleSets: schema3 ? roleContract.concurrentRoleSets : [],
     }),
-    'utf8',
   );
   return path;
 }
@@ -246,7 +244,7 @@ function withRoleBinding<T extends object>(runtime: T): T {
 // playbook to \`playbook run\`. Derived deterministically from the compiled
 ${roleNote}
 
-import createPlaybookRuntime${spec.delegatedOptions ? ', { validateOptions as linkedValidateOptions }' : ''} from './${spec.bundleLeaf}/${spec.basename}.playbook.ts';
+import createPlaybookRuntime${spec.delegatedOptions ? ', { validateOptions as linkedValidateOptions }' : ''} from './${spec.bundleLeaf === '.' ? '' : `${spec.bundleLeaf}/`}${spec.basename}.playbook.ts';
 
 type FactoryInput = NonNullable<Parameters<typeof createPlaybookRuntime>[0]>;
 ${runtimeOptionsAlias}

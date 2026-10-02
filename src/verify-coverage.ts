@@ -443,7 +443,7 @@ function initializedCoverageContext(
 }
 
 /** The `Output shall include` clause a result description declares. */
-const OUTPUT_CLAUSE = /Output shall include\s+(.+)$/;
+const OUTPUT_CLAUSE = /(?:Output shall include|输出应包含)\s*(.*)$/s;
 /** Every plain or annotated backticked identifier field inside that clause. */
 const REQUIRED_FIELD = /`([A-Za-z_$][A-Za-z0-9_$]*)(?::[^`]*)?`/g;
 
@@ -452,14 +452,18 @@ const STRUCTURED_RESULT_FIELD =
   /\b(response|question|remainingPlan|nextPlaybookId|nextPlaybookInput)\b/g;
 
 function requiredFields(description: string): string[] {
-  const clause = OUTPUT_CLAUSE.exec(description)?.[1] ?? '';
+  const clause = OUTPUT_CLAUSE.exec(description)?.[1];
+  // An explicit clause owns the payload schema. Generic Captain words in the
+  // preceding outcome prose must not invent extra fields in a closed record.
+  // Preserve older Captain descriptions that predate explicit output clauses.
   return [
-    ...new Set([
-      ...[...clause.matchAll(REQUIRED_FIELD)].map((match) => match[1]),
-      ...[...description.matchAll(STRUCTURED_RESULT_FIELD)].map(
-        (match) => match[1],
-      ),
-    ]),
+    ...new Set(
+      [
+        ...(clause ?? description).matchAll(
+          clause === undefined ? STRUCTURED_RESULT_FIELD : REQUIRED_FIELD,
+        ),
+      ].map((match) => match[1]),
+    ),
   ];
 }
 
@@ -4661,6 +4665,7 @@ export async function emitFsmCoverageTest(opts: {
   artifactDir: string;
   basename: string;
   verifyModule?: string;
+  write?: (path: string, content: string) => Promise<void>;
 }): Promise<{ path: string; diagnostics: string[] }> {
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const module = await loadFsmModule(fsmPath);
@@ -4673,9 +4678,10 @@ export async function emitFsmCoverageTest(opts: {
     fsmSourceFile: `./${opts.basename}.fsm.ts`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
   });
-  await mkdir(opts.artifactDir, { recursive: true });
+  if (opts.write === undefined)
+    await mkdir(opts.artifactDir, { recursive: true });
   const path = join(opts.artifactDir, `${opts.basename}.fsm.coverage.test.ts`);
-  await writeFile(path, content);
+  await (opts.write ?? writeFile)(path, content);
   return {
     path,
     diagnostics: findings.map((finding) => `fsm coverage: ${finding}`),

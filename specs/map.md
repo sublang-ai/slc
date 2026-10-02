@@ -79,6 +79,7 @@ meta.md       The spec of specs
 | [DR-051](decisions/051-output-field-guidance-boundary.md) | 051-output-field-guidance-boundary.md | Reject parenthesized backticked output declarations at the GEARS producer while preserving runtime field extraction |
 | [DR-052](decisions/052-prefixed-prompt-acceptance.md) | 052-prefixed-prompt-acceptance.md | The Source-fidelity check accepts, for any non-script item, Source order or the prefix-first layout read from the prompt itself — whole fragments tiling the prompt in Source order with relayed values trailing, conserved by text count — ignoring any legacy `## Prefixed prompts` section, mirroring Playbook's checker |
 | [DR-053](decisions/053-recovery-controller-discrimination.md) | 053-recovery-controller-discrimination.md | Amend DR-024 for recovery-capable controller domains and DR-034 for ordered result acceptance |
+| [DR-054](decisions/054-deterministic-bundle-completion.md) | 054-deterministic-bundle-completion.md | Check explicitly selected retained Playbook artifacts and emit derived outputs without agents or history authority |
 
 ## Packages
 
@@ -87,6 +88,7 @@ meta.md       The spec of specs
 | [clarification.md](packages/clarification.md) | Generic noninteractive source questions, executor stopping, structured diagnostics, and original-source reruns |
 | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
 | [compilation-measurement.md](packages/compilation-measurement.md) | Opt-in cold-compilation and fixed-FSM link benchmarks, explicit settings, phase and agent-call measurements, cancellation, private local evidence, and artifact validation |
+| [completion.md](packages/completion.md) | Explicit retained-bundle verification and registry/test emission without phase execution, agent configuration, or build history |
 | [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
 | [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, exact multi-profile runtime contracts, routine locked Playbook adoption, demo acceptance, and package publication checks |
 | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |

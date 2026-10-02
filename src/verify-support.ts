@@ -14,6 +14,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { ArtifactWriter } from './artifacts.js';
 
 export const VERIFIER_SUPPORT_DIR = '.slc-verify';
 export const VERIFIER_SUPPORT_MODULE = `./${VERIFIER_SUPPORT_DIR}/verify.js`;
@@ -65,13 +66,14 @@ function withoutSourceMapReference(content: string): string {
  */
 export async function emitVerifierSupport(
   artifactDir: string,
+  write?: ArtifactWriter,
 ): Promise<string[]> {
   const targetDir = join(artifactDir, VERIFIER_SUPPORT_DIR);
-  await mkdir(targetDir, { recursive: true });
+  if (write === undefined) await mkdir(targetDir, { recursive: true });
   return Promise.all(
     verifierSupportFiles(artifactDir).map(async ({ source, target }) => {
       const content = await readFile(source, 'utf8');
-      await writeFile(target, withoutSourceMapReference(content));
+      await (write ?? writeFile)(target, withoutSourceMapReference(content));
       return target;
     }),
   );

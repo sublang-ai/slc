@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted
+Accepted; completion-only history exclusion clarified by [DR-054](054-deterministic-bundle-completion.md).
 
 ## Context
 

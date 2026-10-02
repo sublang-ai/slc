@@ -160,6 +160,29 @@ tools consuming the diagnostics.
 
 Intermediates are first-class: edit one, re-run a single phase
 (`slc playbook.gears2fsm …`), and it lands in the same place.
+After the necessary named phases and direct link have succeeded, finish a
+retained canonical bundle without another model call:
+
+```sh
+# From the same working directory that contains plan.playbook/:
+slc playbook.gears2fsm ./plan.playbook/plan.gears.md
+slc playbook.link ./plan.playbook/plan.fsm.ts <runtime-target>
+slc playbook ./plan.playbook/plan.text.md --complete --link <runtime-target>
+```
+
+`--complete` checks the explicitly selected entry-form Source and its current
+GEARS, FSM, and linked module, then emits the verification files and `plan.ts`.
+It requires no agent credentials, seeds no config, leaves the authored files
+and build history unchanged, and never falls back to compilation.
+Omit `--link` when the retained bundle targets the installed Playbook runtime.
+Raw input, `-o`, compile flags, and missing or inconsistent artifacts are refused.
+The linked module must import the checked `.fsm.ts` object: a `.fsm.js` object
+edge is refused even when that sibling exists. Review and correct the retained
+import before completing; an unused JavaScript sibling is allowed.
+These are mechanical checks of the selected current bundle; they do not prove
+its earlier compilation or semantic review, or detect every coherently stale
+selection. Review manual Source/artifact amendments before using them.
+Host registration and actual workflow acceptance remain separate steps.
 `slc --help` shows all invocation forms and flags, including
 `--no-optimize` to skip the optimization passes.
 

@@ -20,6 +20,13 @@ export interface LinkOption {
 /** A parsed `slc` invocation, routed to one of the four run forms. */
 export type Invocation =
   | {
+      kind: 'complete';
+      pipeline: 'playbook';
+      source: string;
+      /** Declares the retained bundle's target; completion never links. */
+      linkTarget: string | null;
+    }
+  | {
       kind: 'full';
       pipeline: string;
       source: string;
@@ -98,6 +105,7 @@ export function parseInvocation(argv: readonly string[]): Invocation {
   let noOptimize = false;
   let normalize = false;
   let rebuild = false;
+  let complete = false;
   const options: LinkOption[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -121,6 +129,10 @@ export function parseInvocation(argv: readonly string[]): Invocation {
     } else if (arg === '--rebuild') {
       if (rebuild) throw new CliError('duplicate-option', 'repeated --rebuild');
       rebuild = true;
+    } else if (arg === '--complete') {
+      if (complete)
+        throw new CliError('duplicate-option', 'repeated --complete');
+      complete = true;
     } else if (arg.startsWith('-') && arg !== '-') {
       throw new CliError('unknown-option', `unknown option "${arg}"`);
     } else {
@@ -140,6 +152,26 @@ export function parseInvocation(argv: readonly string[]): Invocation {
     throw new CliError('no-pipeline', `invalid pipeline reference "${head}"`);
   }
   const rest = positionals.slice(1);
+
+  if (complete) {
+    if (
+      pipeline !== 'playbook' ||
+      phase !== null ||
+      output !== null ||
+      optimize ||
+      noOptimize ||
+      normalize ||
+      rebuild ||
+      options.length > 0
+    ) {
+      throw new CliError(
+        'unexpected-flag',
+        '--complete requires the full-form playbook invocation with only a Source and optional --link target',
+      );
+    }
+    requireSingleSource(rest);
+    return { kind: 'complete', pipeline, source: rest[0], linkTarget: link };
+  }
 
   if (optimize && noOptimize) {
     throw new CliError(
