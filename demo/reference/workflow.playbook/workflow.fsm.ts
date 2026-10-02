@@ -936,6 +936,7 @@ export const workflowMachine = setup({
       meta: {
         playbook: {
           stateId: 'reviewedClean',
+          terminal: 'success',
           description:
             'The review raised no findings, so the workflow finished.',
         },
@@ -950,6 +951,7 @@ export const workflowMachine = setup({
       meta: {
         playbook: {
           stateId: 'loopLimitReached',
+          terminal: 'failure',
           description:
             'The workflow stopped at its limit of 2 loops, its last commit unreviewed.',
         },

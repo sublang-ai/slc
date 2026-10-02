@@ -15,6 +15,8 @@ and this project adheres to
 
 ### Fixed
 
+- Retained English and Chinese demo machines now publish explicit successful-review and failed-loop-limit terminal kinds, verified through both actual shared-runtime paths, so the live release gate receives the outcome it requires.
+
 - Transition coverage supplies plain and annotated declared result fields
   and replays actual prior role outcomes when nested prerequisites prevent
   direct interrupts from the initial context, preserving dead-route failures.
