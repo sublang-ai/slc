@@ -250,6 +250,7 @@ export const machine = setup({
       invoke: {
         src: 'player',
         input: ({ context }) => ({
+          stateId: 'work',
           role: 'writer',
           sourceItem: 'FLOW-1',
           prompt: 'Do the work.',
@@ -1026,6 +1027,22 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         "          player: 'Writer',\n",
         '',
       );
+      const selectedCaptainFsm =
+        artifactSchema === 3
+          ? directCaptainFsm
+              .replace(
+                'asker?: { kind: string; roleId: string }',
+                "asker?: { kind: 'captain' } | { kind: 'role'; roleId: string }",
+              )
+              .replace(
+                "          sourceItem: 'FLOW-1',",
+                "          stateId: 'work',\n          sourceItem: 'FLOW-1',",
+              )
+              .replace(
+                "                resumeStateId: 'work',",
+                "                questionId: 'work',\n                asker: { kind: 'captain' },\n                resumeStateId: 'work',",
+              )
+          : directCaptainFsm;
 
       const result = await runSlc(['slc', source, '--link', linkTarget], {
         resolver: withReservedPipelines(() => []),
@@ -1033,7 +1050,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
           agent: writingAgent({
             gears: DIRECT_CAPTAIN_GEARS_ARTIFACT,
             fsm:
-              directCaptainFsm +
+              selectedCaptainFsm +
               (artifactSchema === 3
                 ? '\nexport const concurrentRoleSets = [];\n'
                 : ''),
