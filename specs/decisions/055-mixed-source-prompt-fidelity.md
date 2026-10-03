@@ -5,7 +5,7 @@
 
 ## Status
 
-Accepted
+Accepted. Amends [DR-029](029-source-fidelity-gate.md) in its foreign-line scope.
 
 ## Context
 
