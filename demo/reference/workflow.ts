@@ -41,7 +41,7 @@ const entry = {
   id: 'workflow',
   command: 'workflow',
   intent:
-    'Two-Agent Change-and-Review Workflow — 1. Before work begins, ensure the current directory is the root of its own Git',
+    'Two-Agent Change-and-Review Workflow — 1. Before work begins, ensure the current directory is the root of its own Git repository; if `.git` is absent there, initialize a repository there.',
   artifactSchema: 3,
   runtimeProfile: Object.freeze({
     kind: 'shared-factory',

@@ -3,7 +3,8 @@
 
 /**
  * Deterministic link-object import settlement and load-integrity checks for
- * emitted modules (pipeline-40, verification-18).
+ * emitted modules (pipeline-40, verification-18), and the link-object edge
+ * classification retained-bundle completion requires (completion-3).
  *
  * A linked artifact is code whose relative imports Node resolves with exact
  * specifiers — `./workflow.fsm.js` does not find `workflow.fsm.ts`. An
@@ -17,6 +18,8 @@
 import { existsSync, statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+
+import ts from 'typescript';
 
 const IMPORT_SPECIFIER =
   /\bfrom\s+(['"])([^'"\n]+)\1|\bimport\s*\(\s*(['"])([^'"\n]+)\3\s*\)|\bimport\s+(['"])([^'"\n]+)\5/g;
@@ -108,25 +111,85 @@ export async function unresolvableRelativeImports(
   return missing;
 }
 
+/** A linked module's edges to its selected link object, by runtime form. */
+export interface LinkObjectEdges {
+  /** Relative `.js` specifiers naming the object's stem, in any import form. */
+  javascript: string[];
+  /** Relative `.ts` specifiers of the object that bind a runtime value. */
+  typescript: string[];
+}
+
 /**
- * JavaScript edges of the selected link object. Completion must refuse these:
- * its TypeScript probes cannot establish fidelity of separate runtime bytes.
- * Ordinary link settlement deliberately retains its existing JS preference.
+ * Classifies a linked module's edges to the selected link object for
+ * completion (completion-3). Every JavaScript edge is found by the same textual
+ * scan as settlement, so completion refuses it in any spelling: its TypeScript
+ * probes cannot establish fidelity of separate runtime bytes. A TypeScript edge
+ * counts only when parsed code binds a runtime value from the object: a static
+ * import with a default, namespace, or non-type named binding, or a literal
+ * dynamic import. Type-only, side-effect-only, re-export, and commented forms
+ * do not. Ordinary link settlement deliberately retains its existing JS
+ * preference.
  */
-export async function javascriptLinkObjectImports(
+export async function linkObjectEdges(
   modulePath: string,
   objectPath: string,
-): Promise<string[]> {
+): Promise<LinkObjectEdges> {
   const source = await readFile(modulePath, 'utf8');
   const dir = dirname(modulePath);
   const objectStem = resolve(objectPath).slice(0, -3);
-  const edges: string[] = [];
+  const namesObject = (specifier: string, ext: '.js' | '.ts'): boolean =>
+    (specifier.startsWith('./') || specifier.startsWith('../')) &&
+    specifier.endsWith(ext) &&
+    resolve(dir, specifier.slice(0, -ext.length)) === objectStem;
+
+  const javascript: string[] = [];
   for (const match of source.matchAll(IMPORT_SPECIFIER)) {
     const specifier = match[2] ?? match[4] ?? match[6];
-    if (specifier === undefined || !specifier.endsWith('.js')) continue;
-    if (!specifier.startsWith('./') && !specifier.startsWith('../')) continue;
-    if (resolve(dir, specifier.slice(0, -3)) === objectStem)
-      edges.push(specifier);
+    if (specifier !== undefined && namesObject(specifier, '.js'))
+      javascript.push(specifier);
   }
-  return edges;
+
+  const typescript: string[] = [];
+  const file = ts.createSourceFile(
+    modulePath,
+    source,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.TS,
+  );
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isImportDeclaration(node) &&
+      ts.isStringLiteral(node.moduleSpecifier) &&
+      bindsValue(node.importClause) &&
+      namesObject(node.moduleSpecifier.text, '.ts')
+    ) {
+      typescript.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword
+    ) {
+      const [argument] = node.arguments;
+      if (
+        argument !== undefined &&
+        ts.isStringLiteralLike(argument) &&
+        namesObject(argument.text, '.ts')
+      )
+        typescript.push(argument.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return { javascript, typescript };
+}
+
+/** True when an import clause binds at least one runtime value. */
+function bindsValue(clause: ts.ImportClause | undefined): boolean {
+  if (clause === undefined) return false;
+  if (clause.phaseModifier === ts.SyntaxKind.TypeKeyword) return false;
+  if (clause.name !== undefined) return true;
+  const bindings = clause.namedBindings;
+  if (bindings === undefined) return false;
+  if (ts.isNamespaceImport(bindings)) return true;
+  return bindings.elements.some((element) => !element.isTypeOnly);
 }

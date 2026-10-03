@@ -17,6 +17,13 @@ and this project adheres to
   prompts. Items carrying literals still reject foreign lines, and every
   authored fragment remains conserved; fragment-free items require semantic
   review.
+- `--complete` refuses a linked module without a value import of the checked
+  TypeScript FSM, such as one importing a stale copy, inlining its own
+  machine, or importing the checked FSM only as a type, so the emitted entry
+  cannot load machine bytes completion never verified.
+- Registry `intent` carries the whole first prose paragraph of the
+  normalized source, joining its hard-wrapped lines, instead of a
+  mid-sentence fragment of its first line.
 
 ## [0.16.0] - 2026-10-02
 
