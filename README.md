@@ -176,9 +176,10 @@ It requires no agent credentials, seeds no config, leaves the authored files
 and build history unchanged, and never falls back to compilation.
 Omit `--link` when the retained bundle targets the installed Playbook runtime.
 Raw input, `-o`, compile flags, and missing or inconsistent artifacts are refused.
-The linked module must import the checked `.fsm.ts` object: a `.fsm.js` object
-edge is refused even when that sibling exists. Review and correct the retained
-import before completing; an unused JavaScript sibling is allowed.
+The linked module must value-import the checked `.fsm.ts` object: a `.fsm.js`
+object edge is refused even when that sibling exists, and a type-only import or
+an import of another machine file does not count. Review and correct the
+retained import before completing; an unused JavaScript sibling is allowed.
 These are mechanical checks of the selected current bundle; they do not prove
 its earlier compilation or semantic review, or detect every coherently stale
 selection. Review manual Source/artifact amendments before using them.

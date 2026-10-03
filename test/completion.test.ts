@@ -263,6 +263,63 @@ describe('public retained-bundle completion (completion-6/7)', () => {
     },
   );
 
+  it.each(['ordinary', 'stale TypeScript copy', 'type-only checked import'])(
+    'requires a value import of the checked TypeScript FSM: %s',
+    async (form) => {
+      await fixture();
+      const fsm = join(bundle, `${name}.fsm.ts`);
+      const linked = join(bundle, `${name}.playbook.ts`);
+      const original = await readFile(linked, 'utf8');
+      const checkedImport =
+        "import { workflowMachine } from './workflow.fsm.ts';";
+      expect(original).toContain(checkedImport);
+      // A divergent machine completion never checks: its script guard never
+      // succeeds, so an entry loading it would run unverified machine bytes.
+      const checked = await readFile(fsm, 'utf8');
+      const stale = checked.replace(
+        "scriptSucceeded: ({ event }) => scriptOutputOf(event)?.guard === 'ok'",
+        'scriptSucceeded: () => false',
+      );
+      expect(stale).not.toBe(checked);
+      if (form === 'stale TypeScript copy') {
+        await writeFile(join(bundle, `${name}.fsm.old.ts`), stale);
+        await writeFile(
+          linked,
+          original.replace(
+            checkedImport,
+            "import { workflowMachine } from './workflow.fsm.old.ts';",
+          ),
+        );
+      }
+      if (form === 'type-only checked import') {
+        await writeFile(join(bundle, `${name}.machine.ts`), stale);
+        await writeFile(
+          linked,
+          original.replace(
+            checkedImport,
+            "import type { workflowMachine as checkedMachine } from './workflow.fsm.ts';\nimport { workflowMachine } from './workflow.machine.ts';",
+          ),
+        );
+      }
+      const before = await readFile(linked);
+      const result = await invoke();
+      expect(await readFile(linked)).toEqual(before);
+      if (form === 'ordinary') {
+        expect(result.ok, result.stderr).toBe(true);
+        await access(join(cwd, `${name}.ts`));
+        return;
+      }
+      expect(result.ok, result.stderr).toBe(false);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain(
+        'completion found no value import of the checked',
+      );
+      expect(result.stderr).toContain(`${name}.fsm.ts in linked module`);
+      expect(result.stderr).toContain('review and correct');
+      await noDerivedFiles();
+    },
+  );
+
   it.each([
     'Source',
     'GEARS',

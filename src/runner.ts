@@ -36,7 +36,7 @@ import {
 } from './build-history.js';
 import { emitEntryModule } from './entry-module.js';
 import {
-  javascriptLinkObjectImports,
+  linkObjectEdges,
   reconcileLinkObjectImportSpecifiers,
   unresolvableRelativeImports,
 } from './emitted-imports.js';
@@ -688,11 +688,17 @@ async function runCompletion(
       let prepared: SlcResult | undefined;
       try {
         deps.signal?.throwIfAborted();
-        const jsEdges = await javascriptLinkObjectImports(linked, fsm.path);
-        findings = jsEdges.map(
+        // The emitted entry must load the very FSM bytes checked below: refuse
+        // a JavaScript edge, and require a value import of the TypeScript FSM.
+        const edges = await linkObjectEdges(linked, fsm.path);
+        findings = edges.javascript.map(
           (specifier) =>
             `completion cannot verify JavaScript FSM import ${specifier} against checked ${fsm.path}; review and correct the retained linked import to select the TypeScript FSM, then rerun --complete`,
         );
+        if (findings.length === 0 && edges.typescript.length === 0)
+          findings = [
+            `completion found no value import of the checked ${fsm.path} in linked module ${linked}; review and correct the retained linked import to select the TypeScript FSM, then rerun --complete`,
+          ];
         if (findings.length === 0)
           findings = [
             ...(await sourceFidelityFindings(source, gears.path)),
