@@ -10,15 +10,15 @@
  * default-exporting a Playbook registry entry derived entirely from the
  * compiled bundle — `id`/`command` from the basename, `requiredRoleIds` from
  * the gears `Roles:`/`Players:` declaration, `intent` from the normalized
- * source's title and lead line, the linked artifact's public pure option
- * validator (or the retained legacy allowlist), and `createRuntime` wiring the
- * linked default factory. A current `Roles:` source declares the canonical
- * lowercase local role ids its compiled machine's delegated states name, so
- * the host binds exactly those ids and the session's `callPlayer` port needs
- * no translation (DR-024); a historical `Players:` source keeps its verbatim
- * declared names behind the DR-017 role-binding boundary, which maps the
- * linked runtime's lowercased player ids back to them. Its generation's host
- * consumes the module unchanged (self-hosting-14). See
+ * source's title and first prose paragraph, the linked artifact's public pure
+ * option validator (or the retained legacy allowlist), and `createRuntime`
+ * wiring the linked default factory. A current `Roles:` source declares the
+ * canonical lowercase local role ids its compiled machine's delegated states
+ * name, so the host binds exactly those ids and the session's `callPlayer`
+ * port needs no translation (DR-024); a historical `Players:` source keeps
+ * its verbatim declared names behind the DR-017 role-binding boundary, which
+ * maps the linked runtime's lowercased player ids back to them. Its
+ * generation's host consumes the module unchanged (self-hosting-14). See
  * specs/packages/self-hosting.md.
  */
 
@@ -39,7 +39,7 @@ export interface EmitEntryModuleOptions {
   pipeline: string;
   /** The optimized gears artifact: players and script items. */
   gearsPath: string;
-  /** The normalized (or entry-form) text source: title and lead line. */
+  /** The normalized (or entry-form) text source: title and lead paragraph. */
   textPath: string;
   /** Explicit canonical directory, including invocation from inside a bundle. */
   artifactDir?: string;
@@ -104,12 +104,29 @@ export async function emitEntryModule(
   return path;
 }
 
-/** Title and lead line of the normalized source, joined as the intent. */
+/**
+ * A line that ends a hard-wrapped prose paragraph: a heading, a comment, a new
+ * list item (a marker followed by whitespace, so a wrapped `-1` or `-based`
+ * continues the sentence), or a role-declaration label.
+ */
+const PARAGRAPH_BREAK =
+  /^(?:#|<!--|(?:[-*+]|\d+[.)])\s|(?:Roles|Players):\s*$)/;
+
+/**
+ * Title and first prose paragraph of the normalized source, joined as the
+ * intent. The compiler's normalized text hard-wraps paragraphs, so the lead's
+ * continuation lines are joined with single spaces until the paragraph ends.
+ */
 function deriveIntent(text: string): string | undefined {
   let title: string | undefined;
-  let lead: string | undefined;
+  const lead: string[] = [];
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
+    if (lead.length > 0) {
+      if (trimmed === '' || PARAGRAPH_BREAK.test(trimmed)) break;
+      lead.push(trimmed);
+      continue;
+    }
     if (trimmed === '' || trimmed.startsWith('<!--')) continue;
     if (title === undefined) {
       const heading = /^#\s+(.*)$/.exec(trimmed);
@@ -125,11 +142,12 @@ function deriveIntent(text: string): string | undefined {
     ) {
       continue;
     }
-    lead = trimmed;
-    break;
+    lead.push(trimmed);
   }
-  if (title !== undefined && lead !== undefined) return `${title} — ${lead}`;
-  return title ?? lead;
+  const paragraph = lead.length > 0 ? lead.join(' ') : undefined;
+  if (title !== undefined && paragraph !== undefined)
+    return `${title} — ${paragraph}`;
+  return title ?? paragraph;
 }
 
 function renderEntryModule(spec: {

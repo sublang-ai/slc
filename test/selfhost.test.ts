@@ -1344,6 +1344,15 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       text: '# Legacy\n\nPlayers:\n- Writer\n\nWrite the proposal.\n',
       intent: 'Legacy — Write the proposal.',
     },
+    {
+      text: '# Wrapped\n\nRoles:\n- Planner\n\n1. Count the open items; the tally drops to\n   -1 when none remain, then\n   report it.\n2. Archive the report.\n',
+      intent:
+        'Wrapped — 1. Count the open items; the tally drops to -1 when none remain, then report it.',
+    },
+    {
+      text: 'Roles:\n- Planner\n\nPlan the skill\ncatalog.\n## Steps\n\nList the skills.\n',
+      intent: 'Plan the skill catalog.',
+    },
   ])(
     'emits prose intent after structural role declarations: $intent (self-hosting-16)',
     async ({ text, intent }) => {
