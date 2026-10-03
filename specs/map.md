@@ -81,6 +81,7 @@ meta.md       The spec of specs
 | [DR-053](decisions/053-recovery-controller-discrimination.md) | 053-recovery-controller-discrimination.md | Amend DR-024 for recovery-capable controller domains and DR-034 for ordered result acceptance |
 | [DR-054](decisions/054-deterministic-bundle-completion.md) | 054-deterministic-bundle-completion.md | Check explicitly selected retained Playbook artifacts and emit derived outputs without agents or history authority |
 | [DR-055](decisions/055-mixed-source-prompt-fidelity.md) | 055-mixed-source-prompt-fidelity.md | Scope foreign-line rejection to items carrying complete authored fragments while retaining global conservation and quote checks |
+| [DR-059](decisions/059-topology-bound-boss-questions.md) | 059-topology-bound-boss-questions.md | Select schema-3 continuation storage by root parallel topology and validate actual reached questions |
 
 ## Packages
 

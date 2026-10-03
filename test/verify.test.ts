@@ -724,6 +724,7 @@ const schema3Config = (): MachineConfigLike => ({
                   'SCHEMA3-1',
                   '> Preserve this quoted context.\nDraft <topic> with <coder-llm>.',
                   'Coder produced a draft.',
+                  true,
                 ),
                 onDone: { target: 'complete' },
                 onError: { target: '#failed' },
@@ -3320,7 +3321,7 @@ describe('checkPromptComposition (verification-5)', () => {
     ).toMatch(/continuation blocks appear on an ordinary turn/);
   });
 
-  it('accepts a state-keyed branch continuation mapper', () => {
+  it('rejects a state-keyed continuation mapper on a flat machine', () => {
     const config: MachineConfigLike = {
       states: {
         draft: {
@@ -3369,9 +3370,9 @@ describe('checkPromptComposition (verification-5)', () => {
       },
     };
 
-    expect(checkPromptComposition({ config, compose: goodCompose })).toEqual(
-      [],
-    );
+    expect(
+      checkPromptComposition({ config, compose: goodCompose }).join('\n'),
+    ).toMatch(/does not carry pendingBossQuestion\/bossReply/);
   });
 
   it('recognizes a sentinel rendered as deterministic JSON', () => {
@@ -4602,7 +4603,7 @@ describe('canonical continuation input boundary', () => {
     ['captain', 3],
     ['player', 1],
   ] as const)(
-    'preserves scalar and keyed %s generation inputs',
+    'preserves %s generation continuation wiring and rejects incompatible storage',
     (actor, schema) => {
       for (const wiring of ['scalar', 'keyed', 'nested'] as const) {
         const machine = createMachine({
@@ -4665,7 +4666,7 @@ describe('canonical continuation input boundary', () => {
           compose:
             schema === 1 ? goodCompose : (defaultComposePlayerPrompt as never),
         });
-        if (wiring === 'nested') {
+        if (wiring === 'nested' || (schema === 3 && wiring === 'keyed')) {
           expect(findings).toEqual([
             'work: invoke.input does not carry pendingBossQuestion/bossReply for a continuation turn',
           ]);

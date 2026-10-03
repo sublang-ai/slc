@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
-import { fromPromise, setup } from 'xstate';
+import { assign, fromPromise, setup } from 'xstate';
 
 import {
   RUNTIME_ABI,
@@ -689,11 +689,13 @@ function syntheticSchema3Compilation(roleless = false): CompiledPlaybook {
         },
         invoke: {
           src: roleless ? 'captain' : 'player',
-          input: () => ({
+          input: ({ context }: { context: Record<string, unknown> }) => ({
             stateId: 'work',
             ...(roleless ? {} : { role: 'worker' }),
             sourceItem,
             prompt,
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
             result: {
               done: 'The synthetic work is complete.',
               needsBossReply: schema3NeedsBossReply,
@@ -717,6 +719,18 @@ function syntheticSchema3Compilation(roleless = false): CompiledPlaybook {
               }) =>
                 event.output?.guard === 'needsBossReply' &&
                 typeof event.output.question === 'string') as never,
+              actions: assign({
+                pendingBossQuestion: ({ event }) => ({
+                  questionId: 'work',
+                  resumeStateId: 'work',
+                  sourceItem,
+                  asker: roleless
+                    ? { kind: 'captain' }
+                    : { kind: 'role', roleId: 'worker' },
+                  question: (event as { output: { question: string } }).output
+                    .question,
+                }),
+              }),
             },
           ],
           onError: { target: '#failed' },
@@ -733,6 +747,9 @@ function syntheticSchema3Compilation(roleless = false): CompiledPlaybook {
               guard: (({ event }: { event: { answer?: unknown } }) =>
                 typeof event.answer === 'string' &&
                 event.answer.trim() !== '') as never,
+              actions: assign({
+                bossReply: ({ event }) => (event as { answer: string }).answer,
+              }),
             },
             { target: '#failed' },
           ],

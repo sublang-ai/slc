@@ -551,11 +551,11 @@ describe('opt-in compilation benchmark', () => {
   });
 });
 
-const FIXED_FSM = `import { fromPromise, setup } from 'xstate';
+const FIXED_FSM = `import { assign, fromPromise, setup } from 'xstate';
 export const machine = setup({
   actors: { player: fromPromise(async () => ({ guard: 'done', response: 'fixture response' })) },
 }).createMachine({
-  context: ({ input }: { input?: { audience?: string } }) => ({ audience: input?.audience ?? '', pendingBossQuestion: undefined, bossReply: undefined }),
+  context: ({ input }: { input?: { audience?: string } }): { audience: string; pendingBossQuestion?: unknown; bossReply?: string } => ({ audience: input?.audience ?? '', pendingBossQuestion: undefined, bossReply: undefined }),
   initial: 'write',
   states: {
     write: {
@@ -576,7 +576,7 @@ export const machine = setup({
           },
         }),
         onDone: [
-          { guard: ({ event }: any) => event.output?.guard === 'needsBossReply', target: 'awaitBossReply' },
+          { guard: ({ event }: any) => event.output?.guard === 'needsBossReply', target: 'awaitBossReply', actions: assign(({ event }: any) => ({ pendingBossQuestion: { questionId: 'write', resumeStateId: 'write', sourceItem: 'FIXED-1', asker: { kind: 'role', roleId: 'writer' }, question: event.output.question } })) },
           { guard: ({ event }: any) => event.output?.guard === 'done', target: 'done' },
         ],
         onError: 'failed',
@@ -584,7 +584,7 @@ export const machine = setup({
     },
     awaitBossReply: {
       tags: 'playbook.parked',
-      on: { BOSS_REPLY: { target: 'write', guard: ({ event }: any) => typeof event.answer === 'string' && event.answer.trim().length > 0 } },
+      on: { BOSS_REPLY: { target: 'write', guard: ({ event }: any) => typeof event.answer === 'string' && event.answer.trim().length > 0, actions: assign(({ event }: any) => ({ bossReply: event.answer })) } },
     },
     failed: {
       tags: 'playbook.parked',

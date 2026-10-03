@@ -2607,12 +2607,26 @@ export function deriveSubstitutions(
   return out;
 }
 
+/** The shared runtime selects its keyed profile from direct root children. */
+export function usesKeyedBossQuestionContext(
+  config: MachineConfigLike,
+): boolean {
+  return Object.values(config.states ?? {}).some(
+    (state) =>
+      typeof state === 'object' &&
+      state !== null &&
+      !Array.isArray(state) &&
+      state.type === 'parallel',
+  );
+}
+
 /** The shared input-only portion of the canonical continuation probe. */
 function probeContinuationInput(
   state: CaptainState,
   inputFn: InputMapper,
   initial: Record<string, unknown> | undefined,
   artifactSchema: 1 | 3,
+  keyed: boolean,
 ): { input: unknown; fields: string[]; question: string; reply: string } {
   const question = sentinelFor('question');
   const reply = sentinelFor('bossReply');
@@ -2633,10 +2647,21 @@ function probeContinuationInput(
       inputFn({
         context: {
           ...ordinaryTurnContext(probeContextReads(inputFn, initial), initial),
-          pendingBossQuestion,
-          bossReply: reply,
-          pendingBossQuestions: { [state.stateId]: pendingBossQuestion },
-          bossReplies: { [state.stateId]: reply },
+          ...(artifactSchema === 1
+            ? {
+                pendingBossQuestion,
+                bossReply: reply,
+                pendingBossQuestions: { [state.stateId]: pendingBossQuestion },
+                bossReplies: { [state.stateId]: reply },
+              }
+            : keyed
+              ? {
+                  pendingBossQuestions: {
+                    [state.stateId]: pendingBossQuestion,
+                  },
+                  bossReplies: { [state.stateId]: reply },
+                }
+              : { pendingBossQuestion, bossReply: reply }),
         },
       }),
     ),
@@ -2676,6 +2701,7 @@ export function checkFsmContinuationInputs(
         inputFn,
         initial,
         artifactSchema,
+        usesKeyedBossQuestionContext(config),
       );
       const finding = continuationInputFinding(
         state.stateId,
@@ -2853,6 +2879,7 @@ export function checkPromptComposition(opts: {
           inputFn,
           initial,
           artifactSchema,
+          usesKeyedBossQuestionContext(opts.config),
         );
         input = probed.input;
         promptReads = promptSentinelFields(state, reads, probed.fields, roles);

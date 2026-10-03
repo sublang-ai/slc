@@ -31,14 +31,14 @@ import { assign, fromPromise, setup } from 'xstate';
 export const concurrentRoleSets = [] as const;
 export const machine = setup({
   types: {
-    context: {} as { bossIntent: string; pendingBossQuestion?: { question: string }; bossReply?: string; failure?: string },
+    context: {} as { bossIntent: string; pendingBossQuestion?: { questionId: string; resumeStateId: string; sourceItem: string; asker: { kind: 'role'; roleId: 'agent' }; question: string }; bossReply?: string; failure?: string },
     input: {} as { bossIntent?: string },
     events: {} as { type: 'BOSS_REPLY'; answer: string } | { type: 'NO_ACTION' },
     ${invalid ? 'output: {} as void,' : ''}
   },
   actors: { player: fromPromise(async () => { throw new Error('runner provides player'); }) },
   actions: {
-    rememberQuestion: assign({ pendingBossQuestion: ({ event }) => ({ question: String((event as { output?: { question?: unknown } }).output?.question ?? 'Which output is required?') }) }),
+    rememberQuestion: assign({ pendingBossQuestion: ({ event }) => ({ questionId: 'work', resumeStateId: 'work', sourceItem: 'TASK-1', asker: { kind: 'role' as const, roleId: 'agent' as const }, question: String((event as { output?: { question?: unknown } }).output?.question ?? 'Which output is required?') }) }),
     rememberBossReply: assign({ bossReply: ({ event }) => (event.type === 'BOSS_REPLY' ? event.answer : undefined) }),
     rememberFailure: assign({ failure: ({ event }) => String((event as { error?: unknown }).error ?? 'player failed') }),
   },
