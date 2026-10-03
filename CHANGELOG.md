@@ -13,6 +13,10 @@ and this project adheres to
 
 ### Fixed
 
+- Schema-3 Boss-question admission now selects scalar or keyed storage from
+  actual machine topology and checks reached schema-3 question identity before
+  replying, rejecting flat artifacts whose questions are invisible to runtime.
+
 - Sources can combine narrative-derived instructions with complete literal
   prompts. Items carrying literals still reject foreign lines, and every
   authored fragment remains conserved; fragment-free items require semantic
