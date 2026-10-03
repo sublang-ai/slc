@@ -63,7 +63,7 @@ const playerState = (
             bossReply: context.bossReply,
           }),
           onDone: [
-            { guard: ({ event }: any) => event.output?.guard === 'needsBossReply', target: 'awaitBossReply' },
+            { guard: ({ event }: any) => event.output?.guard === 'needsBossReply', target: 'awaitBossReply', actions: assign(({ event }: any) => ({ pendingBossQuestion: { questionId: '${stateId}', resumeStateId: '${stateId}', sourceItem: '${sourceItem}', asker: { kind: 'role', roleId: '${role}' }, question: event.output.question } })) },
             { guard: ({ event }: any) => event.output?.guard === 'done', target: 'done' },
           ],
           onError: 'failed',
@@ -72,17 +72,17 @@ const playerState = (
 
 const fsmFixture = (
   extraStates = '',
-): string => `import { fromPromise, setup } from 'xstate';
+): string => `import { assign, fromPromise, setup } from 'xstate';
 export const machine = setup({
   actors: { player: fromPromise(async () => ({ guard: 'done', response: 'fixture response' })) },
 }).createMachine({
-  context: ({ input }: { input?: { audience?: string } }) => ({ audience: input?.audience ?? '', pendingBossQuestion: undefined, bossReply: undefined }),
+  context: ({ input }: { input?: { audience?: string } }): { audience: string; pendingBossQuestion?: unknown; bossReply?: string } => ({ audience: input?.audience ?? '', pendingBossQuestion: undefined, bossReply: undefined }),
   initial: 'draft',
   states: {
 ${playerState('draft', 'coder', 'X-1', 'Draft for <audience> as <coder-llm>.')}${extraStates}
     awaitBossReply: {
       tags: 'playbook.parked',
-      on: { BOSS_REPLY: { target: 'draft', guard: ({ event }: any) => typeof event.answer === 'string' && event.answer.trim().length > 0 } },
+      on: { BOSS_REPLY: { target: 'draft', guard: ({ event }: any) => typeof event.answer === 'string' && event.answer.trim().length > 0, actions: assign(({ event }: any) => ({ bossReply: event.answer })) } },
     },
     failed: {
       tags: 'playbook.parked',

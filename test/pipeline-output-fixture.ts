@@ -26,7 +26,13 @@ export const concurrentRoleSets = [] as const;
 export const machine = setup({
   types: {
     context: {} as {
-      pendingBossQuestion?: { question: string };
+      pendingBossQuestion?: {
+        questionId: string;
+        resumeStateId: string;
+        sourceItem: string;
+        asker: { kind: 'role'; roleId: 'player' };
+        question: string;
+      };
       bossReply?: string;
       failure?: string;
     },
@@ -42,6 +48,10 @@ export const machine = setup({
   actions: {
     rememberQuestion: assign({
       pendingBossQuestion: ({ event }) => ({
+        questionId: 'work',
+        resumeStateId: 'work',
+        sourceItem: 'PIPELINE-FIXTURE',
+        asker: { kind: 'role' as const, roleId: 'player' as const },
         question: String(
           (event as { output?: { question?: unknown } }).output?.question ??
             'Which output is required?',
