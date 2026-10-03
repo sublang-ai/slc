@@ -63,7 +63,11 @@ const contextInterruptReady = (context: Record<string, unknown>): boolean =>
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const needsBossReplyArm = (workId = 'work') => ({
+const needsBossReplyArm = (
+  workId = 'work',
+  role?: string,
+  sourceItem = 'X-1',
+) => ({
   target: '#awaitBossReply',
   guard: ({ event }: any) =>
     event.output.guard === 'needsBossReply' &&
@@ -71,8 +75,10 @@ const needsBossReplyArm = (workId = 'work') => ({
   actions: assign({
     pendingBossQuestion: ({ event }: any) => ({
       resumeStateId: workId,
-      sourceItem: 'X-1',
-      player: 'Writer',
+      sourceItem,
+      ...(role === undefined
+        ? { player: 'Writer' }
+        : { questionId: workId, asker: { kind: 'role', roleId: role } }),
       question: event.output.question,
     }),
   } as any),
@@ -975,7 +981,7 @@ const accumulatedChildMachine = (
                 branch: event.output.guard,
               })),
             })),
-            needsBossReplyArm(),
+            needsBossReplyArm('work', 'writer', 'FLOW-1'),
             { target: '#failed' },
           ],
           onError: { target: '#failed' },
@@ -1148,7 +1154,10 @@ const childChainMachine = (
                 typeof event.output.question === 'string',
               actions: assign(({ event }: any) => ({
                 pendingBossQuestion: {
+                  questionId: 'plan',
                   resumeStateId: 'plan',
+                  sourceItem: 'CHAIN-1',
+                  asker: { kind: 'role', roleId: 'planner' },
                   question: event.output.question,
                 },
               })),
@@ -1987,7 +1996,7 @@ describe('checkFsmCoverage (verification-6)', () => {
                   delivery: { ...context.delivery, [role]: { ready: true } },
                 })),
               },
-              needsBossReplyArm(role),
+              needsBossReplyArm(role, role, `CHAIN-${index + 1}`),
             ],
             onError: { target: '#failed' },
           },

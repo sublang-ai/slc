@@ -268,6 +268,7 @@ export const reviewArtifact = async ({
   section('transition coverage');
   const coverage = await checkFsmCoverage(fsm, {
     sourceText: readFileSync(fsmPath, 'utf8'),
+    ...(artifactSchema === undefined ? {} : { artifactSchema }),
   });
   findings.push(...coverage.map((f) => `coverage: ${f}`));
   log(coverage.length === 0 ? 'ok' : coverage.join('\n'));

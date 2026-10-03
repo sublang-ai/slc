@@ -7,6 +7,7 @@
 
 Accepted.
 Extends the existing boundary in [DR-033](033-early-conformance-and-mechanical-repair.md).
+Schema-3 probe storage is amended by [DR-059](059-topology-bound-boss-questions.md); historical schema-1 probes retain both representations.
 
 ## Context
 

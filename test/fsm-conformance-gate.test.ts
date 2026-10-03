@@ -36,7 +36,7 @@ export const machine = setup({
   types: {
     context: {} as {
       bossIntent: string;
-      pendingBossQuestion?: { question: string };
+      pendingBossQuestion?: { questionId: string; resumeStateId: string; sourceItem: string; asker: { kind: 'role'; roleId: string } | { kind: 'captain' }; question: string };
       bossReply?: string;
       continuation?: { pendingBossQuestion?: unknown; bossReply?: string };
       failure?: string;
@@ -51,7 +51,7 @@ export const machine = setup({
     captain: fromPromise(async () => { throw new Error('runner provides captain'); }),
   },
   actions: {
-    rememberQuestion: assign({ pendingBossQuestion: ({ event }) => ({ question: String((event as { output?: { question?: unknown } }).output?.question ?? 'Which output is required?') }) }),
+    rememberQuestion: assign({ pendingBossQuestion: ({ event }) => ({ questionId: 'work', resumeStateId: 'work', sourceItem: 'TASK-1', asker: { kind: 'role' as const, roleId: 'agent' }, question: String((event as { output?: { question?: unknown } }).output?.question ?? 'Which output is required?') }) }),
     rememberBossReply: assign({ bossReply: ({ event }) => (event.type === 'BOSS_REPLY' ? event.answer : undefined) }),
     rememberFailure: assign({ failure: ({ event }) => String((event as { error?: unknown }).error ?? 'player failed') }),
   },
@@ -114,7 +114,11 @@ const directCaptainFsm = (content: string) =>
       "meta: { playbook: { stateId: 'work', role: 'agent' } }",
       "meta: { playbook: { stateId: 'work' } }",
     )
-    .replace("          role: 'agent',\n", '');
+    .replace("          role: 'agent',\n", '')
+    .replace(
+      "asker: { kind: 'role' as const, roleId: 'agent' }",
+      "asker: { kind: 'captain' as const }",
+    );
 
 const definition = (source: string, target: string, ext = '.ts') =>
   `## Formats\n\n| Role | Format | Extension |\n| --- | --- | --- |\n| source | ${source} | ${source === 'gears' ? '.md' : '.ts'} |\n| target | ${target} | ${ext} |\n`;
@@ -172,6 +176,26 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
       await writeFile(request.target, content);
       return { status: 'ok' };
     },
+  });
+
+  it('rejects keyed-only flat continuation before constructing a protected consumer', async () => {
+    const supplied = fsm(false).replace(
+      'pendingBossQuestion: context.pendingBossQuestion, bossReply: context.bossReply,',
+      'pendingBossQuestion: (context as unknown as { pendingBossQuestions?: Record<string, unknown> }).pendingBossQuestions?.work, bossReply: (context as unknown as { bossReplies?: Record<string, string> }).bossReplies?.work,',
+    );
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, supplied);
+    const result = await runSlc(
+      ['flow.fsm2output', target],
+      deps(writing('downstream must not run')),
+    );
+    expect(result.ok).toBe(false);
+    expect(calls).toEqual([]);
+    expect(result.diagnostics.join('\n')).toContain(
+      'invoke.input does not carry pendingBossQuestion/bossReply',
+    );
+    expect(await readFile(target, 'utf8')).toBe(supplied);
+    expect(await readFile(source, 'utf8')).toBe(GEARS);
   });
 
   it.each([fsm(true), 'this is not an importable FSM'])(
