@@ -34,12 +34,15 @@ function questionMachine(
     captain?: boolean;
     historical?: boolean;
     publicEntry?: boolean;
+    defensiveChild?: boolean;
+    parkValidQuestion?: boolean;
   } = {},
 ) {
   const keyed = options.parallel === true;
   const storage = options.storage ?? (keyed ? 'keyed' : 'scalar');
   const wiring = options.wiring ?? (keyed ? 'keyed' : 'scalar');
   const answered: string[] = [];
+  const rejectedQuestions: unknown[] = [];
   const recordFor = (stateId: string, role: string, question: unknown) => ({
     questionId: stateId,
     resumeStateId: stateId,
@@ -129,14 +132,37 @@ function questionMachine(
       }),
       onDone: [
         {
-          target: wait,
-          guard: ({ event }: any) => event.output.guard === 'needsBossReply',
-          actions: remember(stateId, role),
+          target: options.parkValidQuestion ? '#failed' : wait,
+          guard: ({ event }: any) =>
+            event.output.guard === 'needsBossReply' &&
+            (!options.defensiveChild ||
+              typeof event.output.question === 'string'),
+          actions: options.parkValidQuestion
+            ? undefined
+            : remember(stateId, role),
         },
         {
           target: done,
-          guard: ({ event }: any) => event.output.guard === 'done',
+          guard: ({ context, event }: any) =>
+            event.output.guard === 'done' &&
+            (!options.defensiveChild ||
+              (context.pendingBossQuestion?.resumeStateId === stateId &&
+                typeof context.bossReply === 'string' &&
+                context.bossReply.trim() !== '')),
         },
+        ...(options.defensiveChild
+          ? [
+              {
+                target: '#failed',
+                guard: ({ event }: any) =>
+                  event.output.guard === 'needsBossReply' &&
+                  event.output.question === true,
+                actions: ({ event }: any) => {
+                  rejectedQuestions.push(event.output.question);
+                },
+              },
+            ]
+          : []),
       ],
       onError: '#failed',
     },
@@ -176,7 +202,30 @@ function questionMachine(
           },
         }
       : {}),
-    work: work('work', 'writer', '#awaitBossReply', '#done'),
+    work: work(
+      'work',
+      'writer',
+      '#awaitBossReply',
+      options.defensiveChild ? '#child' : '#done',
+    ),
+    ...(options.defensiveChild
+      ? {
+          child: {
+            ...identity('child'),
+            tags: 'playbook.suspended',
+            invoke: {
+              src: 'playbook',
+              input: {
+                stateId: 'child',
+                playbookId: 'review',
+                text: 'Review the actual preceding work.',
+              },
+              onDone: '#done',
+              onError: '#failed',
+            },
+          },
+        }
+      : {}),
     awaitBossReply: waiting('awaitBossReply', 'work', '#work'),
     failed: { ...identity('failed'), tags: 'playbook.parked' },
     done: { ...identity('done'), type: 'final' as const },
@@ -188,6 +237,9 @@ function questionMachine(
       }),
       player: fromPromise(async () => {
         throw new Error('scripted actor required');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('scripted child required');
       }),
     },
   }).createMachine({
@@ -221,7 +273,7 @@ function questionMachine(
         }),
     states,
   } as any);
-  return { machine, answered };
+  return { machine, answered, rejectedQuestions };
 }
 
 describe('topology-bound Boss questions (verification-61)', () => {
@@ -294,6 +346,29 @@ describe('topology-bound Boss questions (verification-61)', () => {
   it('checks the actual predecessor entry route without public preemption', async () => {
     const { machine, answered } = questionMachine({
       storage: 'private',
+      publicEntry: false,
+    });
+    expect(
+      (await checkFsmCoverage({ machine }, { artifactSchema: 3 })).join('\n'),
+    ).toMatch(/no matching canonical scalar/);
+    expect(answered).toEqual([]);
+  });
+
+  it('covers a boolean-question defensive park without treating it as a question prefix', async () => {
+    const { machine, rejectedQuestions } = questionMachine({
+      defensiveChild: true,
+      publicEntry: false,
+    });
+    expect(await checkFsmCoverage({ machine }, { artifactSchema: 3 })).toEqual(
+      [],
+    );
+    expect(rejectedQuestions).toContain(true);
+  });
+
+  it('still rejects a valid question admitted to a failed-looking park without its record', async () => {
+    const { machine, answered } = questionMachine({
+      defensiveChild: true,
+      parkValidQuestion: true,
       publicEntry: false,
     });
     expect(

@@ -20,6 +20,9 @@ Historical schema-1 artifacts retain their complete dependency closures under [D
 For schema 3 selected by the existing authoritative schema decision, select question context by the actual shared-runtime topology: a direct root child with `type: 'parallel'` selects keyed records throughout the machine, including sequential leaves; otherwise select scalar fields.
 Populate only that representation in continuation probes.
 At a reached schema-3 `needsBossReply` wait, require the canonical record to match the actual invocation identity and scripted question before any reply.
+Explore a question/reply prefix only for a scripted `needsBossReply` result whose `question` is a string, retaining the existing untrimmed string semantics.
+Keep malformed result candidates in ordinary defensive-arm coverage; their rejection into a parked failure is not a question wait.
+Continue validating an actual string question even if its target resembles a parked failure.
 Preserve historical schema-1 probes that populate both representations, immutable player identity, controller exemption, exact durable binding, and runtime semantics.
 Do not reject harmless empty fields belonging to the unused representation.
 

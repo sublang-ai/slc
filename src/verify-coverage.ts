@@ -2456,6 +2456,10 @@ async function searchCoverageEntry(
             undefined,
             NEEDS_BOSS_REPLY,
           )) {
+            // A malformed question can legitimately reach a parked failure;
+            // ordinary arm coverage owns it, not a question/reply prefix.
+            if (result instanceof Error || typeof result.question !== 'string')
+              continue;
             nextSteps.push({ node, result, next: node, questionWait: waitRef });
           }
         }
