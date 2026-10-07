@@ -24,6 +24,8 @@ and this project adheres to
 - Registry `intent` carries the whole first prose paragraph of the
   normalized source, joining its hard-wrapped lines, instead of a
   mid-sentence fragment of its first line.
+- Registry `intent` keeps a lead line opening with `#123` or `-1` as prose
+  instead of ending or skipping the paragraph there as a heading or bullet.
 
 ## [0.16.0] - 2026-10-02
 

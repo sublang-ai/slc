@@ -1353,6 +1353,18 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       text: 'Roles:\n- Planner\n\nPlan the skill\ncatalog.\n## Steps\n\nList the skills.\n',
       intent: 'Plan the skill catalog.',
     },
+    {
+      text: '# Release\n\nRoles:\n- Planner\n\nResolve issue\n#123 before release.\n',
+      intent: 'Release — Resolve issue #123 before release.',
+    },
+    {
+      text: '# Release\n\nRoles:\n- Planner\n\n#123 must be resolved\nbefore release.\n',
+      intent: 'Release — #123 must be resolved before release.',
+    },
+    {
+      text: '# Tally\n\nRoles:\n- Planner\n\n-1 is the sentinel\nfor an empty tally.\n',
+      intent: 'Tally — -1 is the sentinel for an empty tally.',
+    },
   ])(
     'emits prose intent after structural role declarations: $intent (self-hosting-16)',
     async ({ text, intent }) => {

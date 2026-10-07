@@ -105,12 +105,17 @@ export async function emitEntryModule(
 }
 
 /**
- * A line that ends a hard-wrapped prose paragraph: a heading, a comment, a new
- * list item (a marker followed by whitespace, so a wrapped `-1` or `-based`
- * continues the sentence), or a role-declaration label.
+ * An ATX heading on a trimmed line (CommonMark 4.2): one to six `#` followed by
+ * whitespace or the line's end, so a `#123` issue reference is prose.
  */
-const PARAGRAPH_BREAK =
-  /^(?:#|<!--|(?:[-*+]|\d+[.)])\s|(?:Roles|Players):\s*$)/;
+const ATX_HEADING = /^#{1,6}(?:\s|$)/;
+
+/**
+ * Besides an ATX heading, a line that ends a hard-wrapped prose paragraph: a
+ * comment, a new list item (a marker followed by whitespace, so a wrapped `-1`
+ * or `-based` continues the sentence), or a role-declaration label.
+ */
+const PARAGRAPH_BREAK = /^(?:<!--|(?:[-*+]|\d+[.)])\s|(?:Roles|Players):\s*$)/;
 
 /**
  * Title and first prose paragraph of the normalized source, joined as the
@@ -123,7 +128,12 @@ function deriveIntent(text: string): string | undefined {
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (lead.length > 0) {
-      if (trimmed === '' || PARAGRAPH_BREAK.test(trimmed)) break;
+      if (
+        trimmed === '' ||
+        ATX_HEADING.test(trimmed) ||
+        PARAGRAPH_BREAK.test(trimmed)
+      )
+        break;
       lead.push(trimmed);
       continue;
     }
@@ -136,8 +146,9 @@ function deriveIntent(text: string): string | undefined {
       }
     }
     if (
-      trimmed.startsWith('#') ||
-      trimmed.startsWith('-') ||
+      ATX_HEADING.test(trimmed) ||
+      // A bullet's `-` is followed by whitespace, so a leading `-1` is prose.
+      /^-(?:\s|$)/.test(trimmed) ||
       /^(?:Roles|Players):\s*$/.test(trimmed)
     ) {
       continue;
