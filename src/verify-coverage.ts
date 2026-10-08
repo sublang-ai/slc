@@ -42,6 +42,8 @@ import {
   isControllerMachine,
   loadFsmModule,
   normalizeArms,
+  resolveArtifactSchemaForVerification,
+  usesKeyedBossQuestionContext,
   type CaptainState,
   type MachineConfigLike,
 } from './verify.js';
@@ -50,6 +52,8 @@ import {
 export const CAPTAIN_ACTOR = 'captain';
 
 interface CoverageRun {
+  artifactSchema?: 1 | 3;
+  questionFindings: Set<string>;
   signal?: AbortSignal;
   deadline: number;
   lastYield: number;
@@ -845,6 +849,7 @@ type Snapshot = {
 };
 
 interface DrivenActor {
+  readonly coverageInputs: ReadonlyMap<string, Record<string, unknown>>;
   readonly coverageTransitions: readonly TransitionObservation[];
   readonly coverageErrors: readonly {
     eventType: string;
@@ -914,6 +919,7 @@ function makeActor(
   observeTransition?: (transition: TransitionObservation) => void,
 ): DrivenActor {
   coverageCheckpoint();
+  const coverageInputs = new Map<string, Record<string, unknown>>();
   const coverageErrors: { eventType: string; error: unknown }[] = [];
   const coverageTransitions: TransitionObservation[] = [];
   const workActor = fromPromise(
@@ -924,6 +930,11 @@ function makeActor(
       input: Record<string, unknown>;
       self: { id: string };
     }) => {
+      coverageInputs.set(self.id, {
+        stateId: input?.stateId,
+        sourceItem: input?.sourceItem,
+        role: input?.role,
+      });
       const output = await script(input ?? {}, self.id);
       if (output === null) return new Promise(() => {});
       if (output instanceof Error) throw output;
@@ -1037,6 +1048,7 @@ function makeActor(
       } as never,
     ) as unknown as DrivenActor,
   );
+  Object.defineProperty(actor, 'coverageInputs', { value: coverageInputs });
   Object.defineProperty(actor, 'coverageErrors', {
     value: coverageErrors,
   });
@@ -2249,11 +2261,19 @@ async function replayCoveragePath(
         completedPrefix = false;
         break;
       }
+      const questioning = (
+        step.node as Extract<CoverageInvocation, { kind: 'acting' }>
+      ).value;
+      if (
+        reachedBossQuestionFinding(machine, questioning, actor, step.result) !==
+        undefined
+      ) {
+        completedPrefix = false;
+        break;
+      }
       actor.send({
         type: BOSS_REPLY_EVENT,
-        questionId: captainPublicStateId(
-          (step.node as Extract<CoverageInvocation, { kind: 'acting' }>).value,
-        ),
+        questionId: captainPublicStateId(questioning),
         answer: 'Proceed as planned.',
       });
     }
@@ -2436,6 +2456,10 @@ async function searchCoverageEntry(
             undefined,
             NEEDS_BOSS_REPLY,
           )) {
+            // A malformed question can legitimately reach a parked failure;
+            // ordinary arm coverage owns it, not a question/reply prefix.
+            if (result instanceof Error || typeof result.question !== 'string')
+              continue;
             nextSteps.push({ node, result, next: node, questionWait: waitRef });
           }
         }
@@ -3174,6 +3198,56 @@ async function probePlaybookOutcome(
   return findings;
 }
 
+/** Inspect the machine-produced question, never an injected context sentinel. */
+function reachedBossQuestionFinding(
+  machine: MachineLike,
+  captain: CaptainRef,
+  actor: DrivenActor,
+  output: Record<string, unknown> | Error,
+): string | undefined {
+  if (coverageRuns.getStore()?.artifactSchema !== 3) return undefined;
+  const input = actor.coverageInputs.get(invocationActorId(machine, captain));
+  const context = actor.getSnapshot().context;
+  const keyed = usesKeyedBossQuestionContext(machine.config);
+  const id = captainPublicStateId(captain);
+  const records = context.pendingBossQuestions;
+  const question = keyed
+    ? typeof records === 'object' && records !== null && !Array.isArray(records)
+      ? (records as Record<string, unknown>)[id]
+      : undefined
+    : context.pendingBossQuestion;
+  const record = question as Record<string, unknown> | undefined;
+  const asker = record?.asker as Record<string, unknown> | undefined;
+  const expectedRole = input?.role;
+  const askerMatches =
+    typeof asker === 'object' &&
+    asker !== null &&
+    !Array.isArray(asker) &&
+    (captain.binding.actor === 'captain'
+      ? asker.kind === 'captain' && Object.keys(asker).length === 1
+      : typeof expectedRole === 'string' &&
+        asker.kind === 'role' &&
+        asker.roleId === expectedRole &&
+        Object.keys(asker).length === 2);
+  const finding =
+    typeof record === 'object' &&
+    record !== null &&
+    input?.stateId === id &&
+    record.questionId === input.stateId &&
+    record.resumeStateId === input.stateId &&
+    typeof input.sourceItem === 'string' &&
+    record.sourceItem === input.sourceItem &&
+    askerMatches &&
+    !(output instanceof Error) &&
+    typeof output.question === 'string' &&
+    record.question === output.question
+      ? undefined
+      : `state ${id}: reached ${NEEDS_BOSS_REPLY} wait has no matching canonical ${keyed ? 'keyed' : 'scalar'} pending Boss question`;
+  if (finding !== undefined)
+    coverageRuns.getStore()?.questionFindings.add(finding);
+  return finding;
+}
+
 /** No preemption is needed to audit ordinary acting outcomes and one reply. */
 async function probeNonPreemptiveActor(
   machine: MachineLike,
@@ -3247,6 +3321,17 @@ async function probeNonPreemptiveActor(
             !tagsOf(target.state).includes('playbook.parked')
           )
             return false;
+          const questionFinding = reachedBossQuestionFinding(
+            machine,
+            captain,
+            actor,
+            outputs[0],
+          );
+          if (questionFinding !== undefined) {
+            if (!findings.includes(questionFinding))
+              findings.push(questionFinding);
+            return false;
+          }
           if (!blankReply && target.stableId !== AWAIT_BOSS_REPLY_STATE) {
             actor.send({
               type: BOSS_REPLY_EVENT,
@@ -3410,6 +3495,14 @@ async function probeParallelQuestions(
     ];
   }
 
+  const questionFindings = plans.flatMap(({ captain, output }) => {
+    const finding = reachedBossQuestionFinding(machine, captain, actor, output);
+    return finding === undefined ? [] : [finding];
+  });
+  if (questionFindings.length > 0) {
+    actor.stop();
+    return questionFindings;
+  }
   const [selected, ...others] = plans;
   actor.send({
     type: BOSS_REPLY_EVENT,
@@ -3734,6 +3827,8 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
 export async function checkFsmCoverage(
   fsmModule: unknown,
   opts: {
+    /** Already resolved generation from the artifact's authoritative evidence. */
+    artifactSchema?: 1 | 3;
     /** The artifact's source text, mined for routing-value candidates. */
     sourceText?: string;
     signal?: AbortSignal;
@@ -3757,6 +3852,7 @@ export async function checkFsmCoverage(
       Math.min(opts.timeoutMs ?? Infinity, MAX_COVERAGE_TEST_TIMEOUT_MS),
     lastYield: started,
     actors: new Set(),
+    questionFindings: new Set(),
   };
   return coverageRuns.run(run, async () => {
     let completed = false;
@@ -3766,10 +3862,22 @@ export async function checkFsmCoverage(
         started + fsmCoverageTestTimeout(fsmModule),
       );
       await coverageYield(true);
-      const findings = await runFsmCoverage(fsmModule, opts.sourceText ?? '');
+      const schema = resolveArtifactSchemaForVerification({
+        config: findMachine(fsmModule).config,
+        requireContinuationSchema: false,
+        ...(opts.artifactSchema === undefined
+          ? {}
+          : { artifactSchema: opts.artifactSchema }),
+      });
+      run.artifactSchema = schema.artifactSchema;
+      const findings = [
+        ...schema.findings,
+        ...(await runFsmCoverage(fsmModule, opts.sourceText ?? '')),
+        ...run.questionFindings,
+      ];
       await coverageYield(true);
       completed = true;
-      return findings;
+      return [...new Set(findings)];
     } finally {
       stopCoverageActors(run.actors, !completed);
     }
@@ -4381,6 +4489,17 @@ async function runFsmCoverage(
           continue;
         }
 
+        const questionFinding = reachedBossQuestionFinding(
+          machine,
+          captain,
+          actor,
+          drivenOutput,
+        );
+        if (questionFinding !== undefined) {
+          findings.push(questionFinding);
+          actor.stop();
+          continue;
+        }
         if (waitRef.stableId !== AWAIT_BOSS_REPLY_STATE) {
           actor.send({
             type: BOSS_REPLY_EVENT,
@@ -4621,6 +4740,7 @@ export function generateFsmCoverageTest(opts: {
   /** Physical TypeScript source path, relative to the generated test. */
   fsmSourceFile: string;
   verifyModule: string;
+  artifactSchema?: 1 | 3;
 }): string {
   const commentBasename = JSON.stringify(opts.basename)
     .replaceAll('\u2028', '\\u2028')
@@ -4647,7 +4767,7 @@ describe(${suiteName}, () => {
       fileURLToPath(new URL(${fsmSourceFile}, import.meta.url)),
       'utf8',
     );
-    expect(await checkFsmCoverage(fsm, { sourceText })).toEqual([]);
+    expect(await checkFsmCoverage(fsm, { sourceText${opts.artifactSchema === undefined ? '' : `, artifactSchema: ${opts.artifactSchema}`} })).toEqual([]);
   }, fsmCoverageTestTimeout(fsm));
 });
 `;
@@ -4665,18 +4785,31 @@ export async function emitFsmCoverageTest(opts: {
   artifactDir: string;
   basename: string;
   verifyModule?: string;
+  artifactSchema?: 1 | 3;
   write?: (path: string, content: string) => Promise<void>;
 }): Promise<{ path: string; diagnostics: string[] }> {
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const module = await loadFsmModule(fsmPath);
+  const schema = resolveArtifactSchemaForVerification({
+    config: findMachine(module).config,
+    requireContinuationSchema: false,
+    ...(opts.artifactSchema === undefined
+      ? {}
+      : { artifactSchema: opts.artifactSchema }),
+  });
+  const artifactSchema = schema.artifactSchema;
   const findings = await checkFsmCoverage(module, {
     sourceText: await readFile(fsmPath, 'utf8'),
+    ...(opts.artifactSchema === undefined
+      ? {}
+      : { artifactSchema: opts.artifactSchema }),
   });
   const content = generateFsmCoverageTest({
     basename: opts.basename,
     fsmModule: `./${opts.basename}.fsm.js`,
     fsmSourceFile: `./${opts.basename}.fsm.ts`,
     verifyModule: opts.verifyModule ?? VERIFY_MODULE,
+    ...(artifactSchema === undefined ? {} : { artifactSchema }),
   });
   if (opts.write === undefined)
     await mkdir(opts.artifactDir, { recursive: true });
