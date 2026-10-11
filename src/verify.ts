@@ -302,7 +302,14 @@ const CAPTAIN_ACTS = /\bCaptain shall\b/;
 const BLOCKQUOTE = /^>\s?(.*)$/;
 const SECTION_HEADING = /^##\s/;
 const RESULTS_LABEL = /^Results:\s*$/;
-const RESULTS_LABEL_NEAR_MISS = /^Results\s*:?[ \t]*$/;
+// A label missing its colon or written with a full-width one, as a non-English
+// input method types it, is malformed rather than prose (DR-057).
+const RESULTS_LABEL_NEAR_MISS = /^Results\s*[:：]?[ \t]*$/;
+// Each malformed-label or malformed-entry finding names the canonical form to
+// write, so a person reading it in any language can act on it (DR-057).
+const RESULTS_LABEL_REPAIR = 'write the label as `Results:`';
+const RESULT_ENTRY_REPAIR =
+  'write each entry as - `<guardName>`: <description>, its guard name an ASCII identifier followed by an ASCII colon';
 const RESULT_BULLET = /^-\s+`([A-Za-z_$][A-Za-z0-9_$]*)`:\s+(\S(?:.*\S)?)\s*$/;
 const PLAYBOOK_CALL_SEQUENCING_NEAR_MISS =
   /\bCaptain shall (first|then|next|finally) call playbook\b/u;
@@ -444,7 +451,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
     }
     if (current.resultsEligible && RESULTS_LABEL_NEAR_MISS.test(line)) {
       current.resultFindings.push(
-        `malformed Results label ${JSON.stringify(line)}`,
+        `malformed Results label ${JSON.stringify(line)}; ${RESULTS_LABEL_REPAIR}`,
       );
       current.resultDeclared = true;
       current.inResults = true;
@@ -455,7 +462,7 @@ export function parseGearsItems(gears: string): GearsItem[] {
       const result = RESULT_BULLET.exec(line);
       if (result === null) {
         current.resultFindings.push(
-          `malformed Results entry ${JSON.stringify(line)}`,
+          `malformed Results entry ${JSON.stringify(line)}; ${RESULT_ENTRY_REPAIR}`,
         );
         continue;
       }

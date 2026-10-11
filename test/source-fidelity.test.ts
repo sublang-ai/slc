@@ -107,6 +107,27 @@ describe('text-to-GEARS Source-fidelity gate (phase-execution-51, phase-executio
     expect(result).toMatchObject({ ok: true, outputs: [target] });
   });
 
+  it('compiles a Chinese Source marking its relays （`>`） without a relay finding (DR-057)', async () => {
+    const fixture = (name: string): Promise<string> =>
+      readFile(new URL(`./fixtures/sources/${name}`, import.meta.url), 'utf8');
+    const gears = await fixture('relay-marker.zh.gears.md');
+    const chinese = await fixture('relay-marker.zh.md');
+    await writeFile(source, chinese);
+
+    const result = await runSlc(['flow', source], deps(writing(gears)));
+    expect(result).toMatchObject({ ok: true, outputs: [target] });
+
+    // The same Source without the marker fails on its relays alone.
+    await writeFile(source, chinese.replaceAll('（`>`）', ''));
+    const unmarked = await runSlc(['flow', source], deps(writing(gears)));
+    expect(unmarked.ok).toBe(false);
+    const report = unmarked.diagnostics.join('\n');
+    expect(report).toContain(
+      'source prompt fragment at line 20 is relayed in quotes in the GEARS, but the prose introducing it lacks the relay marker',
+    );
+    expect(report).not.toContain('not an authored fragment');
+  });
+
   describe.each([
     {
       language: 'English',

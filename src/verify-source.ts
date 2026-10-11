@@ -48,6 +48,10 @@ const RELAY_LINE = /^>/;
 // they carry; an item admitting more than this many is reported, never guessed.
 const TILING_LIMIT = 4096;
 const ENGLISH_PLAYER = '[A-Z][A-Za-z0-9_-]*';
+// The relay marker is a backticked `>` in ASCII or full-width parentheses; the
+// words around it are prose in whatever language the Source is written in
+// (DR-057).
+const RELAY_MARKER = /[(（]\s*`>`\s*[)）]/;
 // A Source `Roles:` label line, its colon ASCII or full-width, and one bullet
 // entry under it (DR-056).
 const ROLES_LABEL = /^Roles[:：]\s*$/;
@@ -64,7 +68,7 @@ const ROLE_RULE = 'roles are single capitalized words of letters and digits';
 export type SourceFragmentKind =
   /** A fenced `markdown` instruction block. */
   | 'instruction'
-  /** A blockquote whose prose relays it in quotes, markers included. */
+  /** A blockquote whose introducing prose carries the relay marker (`>`), markers included. */
   | 'relay'
   /** A plain blockquote. */
   | 'prompt';
@@ -156,7 +160,12 @@ function introducesQuotedRelay(
     if (line.startsWith('#') || line.startsWith('```')) break;
     context.unshift(line);
   }
-  return /\bin quotes\s*\(`>`\)/i.test(context.join(' '));
+  return RELAY_MARKER.test(context.join(' '));
+}
+
+/** A plain fragment's lines as a quoted relay would carry them. */
+function markedRelayLines(lines: readonly string[]): string[] {
+  return lines.map((line) => (line === '' ? '>' : `> ${line}`));
 }
 
 /** Strips one enclosing pair of backticks or quotation marks from an entry. */
@@ -776,6 +785,9 @@ export function checkSourceGearsContract(
       fragment.lines.filter((line) => line !== ''),
     ),
   );
+  // Marked lines of plain fragments reported as relays lacking their marker:
+  // that one finding names the cause, so they are not foreign lines (DR-057).
+  const unmarkedRelayLines = new Set<string>();
 
   ids.forEach((id, position) => {
     const missing = residual[position];
@@ -785,6 +797,18 @@ export function checkSourceGearsContract(
     );
     for (const index of indexes.slice(-missing)) {
       const fragment = fragments[index];
+      const marked =
+        fragment.kind === 'prompt' ? markedRelayLines(fragment.lines) : [];
+      if (
+        marked.length > 0 &&
+        items.some((item) => countFragment(item.prompt, marked) > 0)
+      ) {
+        for (const line of marked) unmarkedRelayLines.add(line);
+        findings.push(
+          `source prompt fragment at line ${fragment.start + 1} is relayed in quotes in the GEARS, but the prose introducing it lacks the relay marker; write (\`>\`) in that prose, e.g. "in quotes (\`>\`)" or "以引用形式（\`>\`）附上"`,
+        );
+        continue;
+      }
       findings.push(
         `source ${fragment.kind} fragment at line ${fragment.start + 1} was dropped or changed`,
       );
@@ -815,6 +839,7 @@ export function checkSourceGearsContract(
     );
     for (const line of item.prompt) {
       if (line === '' || authoredLines.has(line)) continue;
+      if (unmarkedRelayLines.has(line)) continue;
       if (RELAY_PLACEHOLDER_LINE.test(line)) continue;
       if (RAW_PLACEHOLDER_LINE.test(line)) {
         findings.push(

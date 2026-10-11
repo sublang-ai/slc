@@ -1298,3 +1298,43 @@ When a fabricated condition holds, Captain shall prompt Coder:
     ]);
   });
 });
+
+describe('language-neutral relay marker (verification-25, verification-26)', () => {
+  const fixture = (name: string): string =>
+    read(fileURLToPath(new URL(`./fixtures/sources/${name}`, import.meta.url)));
+  const source = fixture('relay-marker.zh.md');
+  const gears = fixture('relay-marker.zh.gears.md');
+  const unmarkedFinding = (line: number): string =>
+    `source prompt fragment at line ${line} is relayed in quotes in the GEARS, but the prose introducing it lacks the relay marker; write (\`>\`) in that prose, e.g. "in quotes (\`>\`)" or "以引用形式（\`>\`）附上"`;
+
+  it('reads a full-width marked relay inside Chinese prose as a quoted relay', () => {
+    expect(sourcePromptFragments(source).map(({ kind }) => kind)).toEqual([
+      'instruction',
+      'relay',
+      'instruction',
+      'relay',
+    ]);
+    expect(checkSourceGearsContract(source, gears)).toEqual([]);
+  });
+
+  it('keeps reading the English phrase, which contains the marker', () => {
+    const english = source.replaceAll('以引用形式（`>`）', 'in quotes (`>`), ');
+    expect(english).not.toBe(source);
+    expect(checkSourceGearsContract(english, gears)).toEqual([]);
+  });
+
+  it('names each relay whose prose lacks the marker once, with no foreign lines', () => {
+    const unmarked = source.replaceAll('（`>`）', '');
+    expect(unmarked).not.toBe(source);
+    expect(sourcePromptFragments(unmarked).map(({ kind }) => kind)).toEqual([
+      'instruction',
+      'prompt',
+      'instruction',
+      'prompt',
+    ]);
+    expect(checkSourceGearsContract(unmarked, gears)).toEqual([
+      unmarkedFinding(20),
+      unmarkedFinding(30),
+    ]);
+  });
+});
