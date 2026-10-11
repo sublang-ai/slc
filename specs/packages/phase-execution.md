@@ -10,7 +10,7 @@ The evolving runtime boundary is settled by [DR-010](../decisions/010-playbook-r
 Playbook 10's roleless schema-3 host boundary is current: its contract follows [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), activated by [DR-027](../decisions/027-complete-playbook-10-activation.md).
 Under [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md), that schema-3 generation is selected by the installed engine's declared contract rather than by an exact release, and compiled execution relays the definition text at run time.
 Direct Captain control-call isolation is extended by [DR-012](../decisions/012-playbook-routing-control-separation.md).
-A text-to-GEARS phase additionally passes the deterministic Source-fidelity gate of [DR-029](../decisions/029-source-fidelity-gate.md) before any Reviewer judges its output, and a `playbook` link phase the link-fidelity gate of [DR-030](../decisions/030-link-fidelity-gate.md).
+A text-to-GEARS phase additionally refuses a Source whose role names break the rule of [DR-056](../decisions/056-source-role-names.md) before any agent runs, passes the deterministic Source-fidelity gate of [DR-029](../decisions/029-source-fidelity-gate.md) before any Reviewer judges its output, and a `playbook` link phase the link-fidelity gate of [DR-030](../decisions/030-link-fidelity-gate.md).
 Generic pipeline mechanics are specified in the `pipeline` package.
 Verification uses integration and system acceptance over the execution boundary, interpreted and compiled execution, and pin-driven selection, exercising the `slc` command with faked agent transports and fixture compiled artifacts.
 Essential project-specific references are `slc`, this project's compiler CLI, and Cligent (`@sublang/cligent` [[1]]), the SDK through which `slc` reaches coding agents.
@@ -174,6 +174,12 @@ Where a compile phase produces the declared `gears` format, including normalizat
 
 Where a compile phase consuming the declared `gears` format is selected for execution, when its existing source has GEARS result-contract findings [[verification-29](verification.md#verification-29)] or actor-contract findings [[verification-47](verification.md#verification-47)], the slc command shall fail before selecting its execution strategy or invoking its executor, report the source path and findings with the failed phase and target [[phase-execution-9](#phase-execution-9)], and preserve that protected source [[phase-execution-3](#phase-execution-3)] without consumer repair calls or a source-clarification outcome ([DR-035](../decisions/035-gears-contract-at-producer.md)).
 
+### Source role-name boundary
+
+#### phase-execution-69
+
+Where a compile phase transforms a `text` source into a `gears` target outside the reserved `slc` meta-pipeline [[self-hosting-2](self-hosting.md#self-hosting-2)], when that phase, or the input normalization preceding it as the pipeline's entry phase, is selected for execution, the slc command shall check the role names of the Source that step reads [[verification-54](verification.md#verification-54)] and, on any finding, fail before selecting its execution strategy or invoking any executor, reporting the Source path and every finding with the failed phase and target [[phase-execution-9](#phase-execution-9)], so no agent call and no later phase runs ([DR-056](../decisions/056-source-role-names.md)).
+
 ### Compiled execution
 
 #### phase-execution-23
@@ -294,7 +300,7 @@ Where a normalization fixture supplies the entry-phase definition as a read-only
 
 #### phase-execution-52
 
-Where a fixture `text2gears` phase compiles a Source authoring one fragment and its executor writes a live target, when the phase runs, a target that drops the fragment shall reach the Coder of a reviewed interpreted loop and of a reviewed compiled performing Captain call alike as a numbered `FINDINGS:` correction without any Reviewer call, a conservant correction shall then reach the Reviewer and succeed on `NO_FINDINGS`, findings still present when the third permitted call comes due shall fail closed carrying them, a run without a configured correction transport whose target has findings shall fail that phase with the findings as its diagnostic, and neither a conservant target nor the same phase run under the reserved `slc` meta-pipeline shall report a finding [[phase-execution-51](#phase-execution-51)].
+Where a fixture `text2gears` phase compiles a Source authoring one fragment and its executor writes a live target, when the phase runs, a target that drops the fragment shall reach the Coder of a reviewed interpreted loop and of a reviewed compiled performing Captain call alike as a numbered `FINDINGS:` correction without any Reviewer call, a conservant correction shall then reach the Reviewer and succeed on `NO_FINDINGS`, findings still present when the third permitted call comes due shall fail closed carrying them, a run without a configured correction transport whose target has findings shall fail that phase with the findings as its diagnostic, and neither a conservant target — one compiled from a Chinese Source that marks its relays `` （`>`） `` among them — nor the same phase run under the reserved `slc` meta-pipeline shall report a finding [[phase-execution-51](#phase-execution-51)].
 
 #### phase-execution-54
 
@@ -361,6 +367,12 @@ Where fixture FSMs use canonical or privately nested-only Boss-continuation inpu
 #### phase-execution-68
 
 Where real XState fixtures expose reachable, shadowed or unsupported transitions, when the integration suite compiles or consumes them, the suite shall verify exact coverage findings before downstream execution, bounded same-Coder repair, clean one-call production and the custom-executor recheck [[phase-execution-55](#phase-execution-55)], supplied-FSM refusal before consumer construction with protected-input changes taking precedence over clean, finding and interrupted outcomes [[phase-execution-66](#phase-execution-66)], and cancellation or deadline failure without a Source clarification or an extra repair budget [[phase-execution-56](#phase-execution-56)].
+
+### Source role-name boundary acceptance
+
+#### phase-execution-70
+
+Where the two-word-role fixture is the Source of a `text`-to-`gears` pipeline, when the slc command compiles it as an entry-form Source and, through normalization, as a raw Source, the suite shall verify that each run fails at its first step naming the Source path and the role-name finding, invokes no executor, and writes no target, while the same run with the role written as one word reaches the executor [[phase-execution-69](#phase-execution-69)].
 
 ## References
 
