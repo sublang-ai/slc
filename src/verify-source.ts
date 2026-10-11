@@ -17,6 +17,9 @@
  * read from the prompt itself, mirroring Playbook's checker rule for rule
  * (DR-052).
  *
+ * A Source's `Roles:` entries are checked on their own before any agent runs:
+ * each must be one capitalized word (DR-056, verification-54).
+ *
  * Every function is pure over the two texts: no filesystem, no definition, no
  * installed engine, and no prior artifact. Semantic item partitioning, condition
  * wording, and result descriptions remain the Reviewer's concern.
@@ -45,12 +48,27 @@ const RELAY_LINE = /^>/;
 // they carry; an item admitting more than this many is reported, never guessed.
 const TILING_LIMIT = 4096;
 const ENGLISH_PLAYER = '[A-Z][A-Za-z0-9_-]*';
+// The relay marker is a backticked `>` in ASCII or full-width parentheses; the
+// words around it are prose in whatever language the Source is written in
+// (DR-057).
+const RELAY_MARKER = /[(（]\s*`>`\s*[)）]/;
+// A Source `Roles:` label line, its colon ASCII or full-width, and one bullet
+// entry under it (DR-056).
+const ROLES_LABEL = /^Roles[:：]\s*$/;
+const ROLES_ENTRY = /^[-*+]\s+(.*)$/;
+const CODE_FENCE = /^(?:```|~~~)/;
+// One capitalized word: an uppercase or titlecase letter, or a letter of a
+// script without case such as `编码者`, then letters, marks, and digits.
+const ROLE_NAME = /^[\p{Lu}\p{Lt}\p{Lo}][\p{L}\p{M}\p{Nd}]*$/u;
+const ROLE_WORD = /^[\p{L}\p{M}\p{Nd}]+$/u;
+const ROLE_WORD_SEPARATOR = /[\s_-]+/u;
+const ROLE_RULE = 'roles are single capitalized words of letters and digits';
 
 /** What a Source fragment contributes to the items compiled from it. */
 export type SourceFragmentKind =
   /** A fenced `markdown` instruction block. */
   | 'instruction'
-  /** A blockquote whose prose relays it in quotes, markers included. */
+  /** A blockquote whose introducing prose carries the relay marker (`>`), markers included. */
   | 'relay'
   /** A plain blockquote. */
   | 'prompt';
@@ -142,7 +160,80 @@ function introducesQuotedRelay(
     if (line.startsWith('#') || line.startsWith('```')) break;
     context.unshift(line);
   }
-  return /\bin quotes\s*\(`>`\)/i.test(context.join(' '));
+  return RELAY_MARKER.test(context.join(' '));
+}
+
+/** A plain fragment's lines as a quoted relay would carry them. */
+function markedRelayLines(lines: readonly string[]): string[] {
+  return lines.map((line) => (line === '' ? '>' : `> ${line}`));
+}
+
+/** Strips one enclosing pair of backticks or quotation marks from an entry. */
+function roleEntryName(entry: string): string {
+  const quoted = /^(?:`([^`]*)`|"([^"]*)"|“([^”]*)”)$/u.exec(entry);
+  return (quoted?.[1] ?? quoted?.[2] ?? quoted?.[3] ?? entry).trim();
+}
+
+/** The entry's words joined into one capitalized word, when they are words. */
+function joinedRoleName(name: string): string | undefined {
+  const words = name.split(ROLE_WORD_SEPARATOR).filter((word) => word !== '');
+  if (words.length === 0 || !words.every((word) => ROLE_WORD.test(word))) {
+    return undefined;
+  }
+  const joined = words
+    .map((word) => {
+      const [first, ...rest] = [...word];
+      return `${first.toUpperCase()}${rest.join('')}`;
+    })
+    .join('');
+  return ROLE_NAME.test(joined) ? joined : undefined;
+}
+
+/**
+ * The role-name findings of one free-form Source (DR-056, verification-54):
+ * every bullet entry under a `Roles:` label line that is not one capitalized
+ * word, named with its Source line, the rule, and the word to write. Fenced
+ * code is not read.
+ */
+export function checkSourceRoles(sourceText: string): string[] {
+  const lines = sourceText.split(LINE_BOUNDARY);
+  const findings: string[] = [];
+  let inRoles = false;
+  let fence: string | undefined;
+  for (const [index, raw] of lines.entries()) {
+    const line = raw.trim();
+    if (fence !== undefined) {
+      if (line.startsWith(fence)) fence = undefined;
+      continue;
+    }
+    if (CODE_FENCE.test(line)) {
+      fence = line.slice(0, 3);
+      inRoles = false;
+      continue;
+    }
+    if (ROLES_LABEL.test(line)) {
+      inRoles = true;
+      continue;
+    }
+    if (!inRoles || line === '') continue;
+    const entry = ROLES_ENTRY.exec(line);
+    if (entry === null) {
+      inRoles = false;
+      continue;
+    }
+    const written = entry[1].trim();
+    const name = roleEntryName(written);
+    if (ROLE_NAME.test(name)) continue;
+    const joined = joinedRoleName(name);
+    findings.push(
+      `Roles entry ${JSON.stringify(written)} at line ${index + 1} is not one capitalized word: ${ROLE_RULE}; ${
+        joined === undefined
+          ? 'write the role as one such word, e.g. `RiskOfficer`'
+          : `write \`${joined}\``
+      }`,
+    );
+  }
+  return findings;
 }
 
 /**
@@ -694,6 +785,9 @@ export function checkSourceGearsContract(
       fragment.lines.filter((line) => line !== ''),
     ),
   );
+  // Marked lines of plain fragments reported as relays lacking their marker:
+  // that one finding names the cause, so they are not foreign lines (DR-057).
+  const unmarkedRelayLines = new Set<string>();
 
   ids.forEach((id, position) => {
     const missing = residual[position];
@@ -703,6 +797,18 @@ export function checkSourceGearsContract(
     );
     for (const index of indexes.slice(-missing)) {
       const fragment = fragments[index];
+      const marked =
+        fragment.kind === 'prompt' ? markedRelayLines(fragment.lines) : [];
+      if (
+        marked.length > 0 &&
+        items.some((item) => countFragment(item.prompt, marked) > 0)
+      ) {
+        for (const line of marked) unmarkedRelayLines.add(line);
+        findings.push(
+          `source prompt fragment at line ${fragment.start + 1} is relayed in quotes in the GEARS, but the prose introducing it lacks the relay marker; write (\`>\`) in that prose, e.g. "in quotes (\`>\`)" or "以引用形式（\`>\`）附上"`,
+        );
+        continue;
+      }
       findings.push(
         `source ${fragment.kind} fragment at line ${fragment.start + 1} was dropped or changed`,
       );
@@ -733,6 +839,7 @@ export function checkSourceGearsContract(
     );
     for (const line of item.prompt) {
       if (line === '' || authoredLines.has(line)) continue;
+      if (unmarkedRelayLines.has(line)) continue;
       if (RELAY_PLACEHOLDER_LINE.test(line)) continue;
       if (RAW_PLACEHOLDER_LINE.test(line)) {
         findings.push(

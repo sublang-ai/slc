@@ -1968,6 +1968,32 @@ describe('checkGearsFsmConformance', () => {
     );
   });
 
+  it.each([
+    [
+      'a full-width-colon label',
+      resultGears.replace('\nResults:\n', '\nResults：\n'),
+      'malformed Results label "Results："; write the label as `Results:`',
+    ],
+    [
+      'a non-identifier guard name',
+      resultGears.replace('- `question`: ', '- `问题`: '),
+      'malformed Results entry "- `问题`: Captain needs one material routing answer from Boss."; write each entry as - `<guardName>`: <description>, its guard name an ASCII identifier followed by an ASCII colon',
+    ],
+    [
+      'a full-width colon after the guard',
+      resultGears.replace('- `question`: ', '- `question`：'),
+      'malformed Results entry "- `question`：Captain needs one material routing answer from Boss."; write each entry as - `<guardName>`: <description>, its guard name an ASCII identifier followed by an ASCII colon',
+    ],
+  ])(
+    'names the canonical Results form to write for %s (DR-057)',
+    (_label, source, finding) => {
+      expect(source).not.toBe(resultGears);
+      expect(checkGearsFsmConformance(source, resultConfig())).toContain(
+        `GEARS item ROUTE-1: ${finding}`,
+      );
+    },
+  );
+
   it('rejects Results metadata on a nested-playbook call item', () => {
     const source = `${dynamicGears}\nResults:\n- \`done\`: Child finished.\n`;
     expect(

@@ -26,6 +26,19 @@ and this project adheres to
   mid-sentence fragment of its first line.
 - Registry `intent` keeps a lead line opening with `#123` or `-1` as prose
   instead of ending or skipping the paragraph there as a heading or bullet.
+- A `Roles:` entry that is not one capitalized word, such as "Business
+  Analyst", is refused before any agent runs, with the entry, the rule, and
+  the word to write (`BusinessAnalyst`), instead of failing at the machine
+  phase after reading "Business" as the role.
+- A quoted relay is marked by the parenthesized backticked `>` in any
+  language — `` (`>`) `` or `` （`>`） `` — so a Chinese Source writing
+  "以引用形式（`>`）附上" passes the Source-fidelity gate without the English
+  phrase "in quotes". A blockquote compiled as a relay whose prose lacks the
+  marker is named once with the marker to write, instead of as a dropped
+  fragment plus a foreign line per relayed line.
+- Malformed `Results` label and entry findings name the canonical form to
+  write, and `Results：` with a full-width colon is reported as malformed
+  instead of silently dropping the item's results.
 
 ## [0.16.0] - 2026-10-02
 

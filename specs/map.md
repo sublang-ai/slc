@@ -81,6 +81,8 @@ meta.md       The spec of specs
 | [DR-053](decisions/053-recovery-controller-discrimination.md) | 053-recovery-controller-discrimination.md | Amend DR-024 for recovery-capable controller domains and DR-034 for ordered result acceptance |
 | [DR-054](decisions/054-deterministic-bundle-completion.md) | 054-deterministic-bundle-completion.md | Check explicitly selected retained Playbook artifacts and emit derived outputs without agents or history authority |
 | [DR-055](decisions/055-mixed-source-prompt-fidelity.md) | 055-mixed-source-prompt-fidelity.md | Scope foreign-line rejection to items carrying complete authored fragments while retaining global conservation and quote checks |
+| [DR-056](decisions/056-source-role-names.md) | 056-source-role-names.md | Source `Roles:` entries are single capitalized words, refused with the entry, rule and fix before any agent runs |
+| [DR-057](decisions/057-language-neutral-relay-marker.md) | 057-language-neutral-relay-marker.md | The parenthesized backticked `>` marks a quoted relay in any language, amending [DR-029](decisions/029-source-fidelity-gate.md); marker findings name what to write |
 
 ## Packages
 
@@ -95,10 +97,10 @@ meta.md       The spec of specs
 | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
 | [incremental-compilation.md](packages/incremental-compilation.md) | Complete build history, sidecar-aware input identity, reuse/update/ordinary selection, update context, success-only publication, rebuilds, exclusions, and fixture acceptance |
 | [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
-| [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, the text-to-GEARS Source-fidelity and `playbook` link-fidelity gates, compiled runtime profiles selected by the declared engine contract, run-time definition relay, pin selection, status streaming, and the agent-stall watchdog |
+| [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, the text-to-GEARS Source role-name boundary and Source-fidelity gate, the `playbook` link-fidelity gate, compiled runtime profiles selected by the declared engine contract, run-time definition relay, pin selection, status streaming, and the agent-stall watchdog |
 | [pinning.md](packages/pinning.md) | Closure derivation, pin-currency validation, and generation: SLC-owned declarations, context-selected path boundaries, boundary-contained definitions, currency verdicts, the compiled-execution fidelity gate, and fixture acceptance |
 | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, link-object import settlement, pass and normalization scheduling, and system acceptance |
 | [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |
 | [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, routine adoption retaining bundles by verified equivalence, and system acceptance |
-| [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, runtime, compiled-execution, Source-fidelity, and link-fidelity checks; portable generated tests; and emitted-module load integrity |
+| [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, runtime, compiled-execution, Source-fidelity, Source role-name, and link-fidelity checks; portable generated tests; and emitted-module load integrity |
 | [workflow-acceptance.md](packages/workflow-acceptance.md) | Opt-in maintained CODE and DEV runtime acceptance harness with scripted children, question-profile ledger oracles, protected hashes, and nested Git receipts |
