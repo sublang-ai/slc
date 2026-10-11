@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-10-11
+
 ### Fixed
 
 - Sources can combine narrative-derived instructions with complete literal
@@ -824,7 +826,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/sublang-ai/slc/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/sublang-ai/slc/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/sublang-ai/slc/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/sublang-ai/slc/compare/v0.14.0...v0.15.0
