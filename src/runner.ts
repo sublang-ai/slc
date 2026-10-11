@@ -121,7 +121,7 @@ import {
   emitVerifierSupport,
   verifierSupportFiles,
 } from './verify-support.js';
-import { checkSourceGearsContract } from './verify-source.js';
+import { checkSourceGearsContract, checkSourceRoles } from './verify-source.js';
 import { checkFsmTypeScript } from './verify-typescript.js';
 import {
   checkEntryOptions,
@@ -1069,6 +1069,8 @@ interface PhaseStep {
   compileFidelity?: MechanicalReview;
   /** Existing GEARS source findings must precede consumer construction. */
   gearsSourceContract?: MechanicalReview;
+  /** A text-to-GEARS Source's role names must be valid before any agent runs. */
+  sourceRoles?: MechanicalReview;
   /** Strict FSM input checks run before constructing a protected-input consumer. */
   fsmSourceTypecheck?: MechanicalReview;
   /** Canonical continuation inputs must be valid before consumer construction. */
@@ -1191,6 +1193,15 @@ function buildCompileSteps(opts: {
       entry.source.format === 'gears'
         ? () => gearsContractFindings(normalized)
         : undefined;
+    // The raw input is the first text that may declare the entry phase's
+    // roles, so a malformed one stops the run before normalization (DR-056).
+    const rawSource = previous;
+    const sourceRoles =
+      opts.sourceFidelity &&
+      entry.source.format === 'text' &&
+      entry.target.format === 'gears'
+        ? () => sourceRoleFindings(rawSource)
+        : undefined;
     steps.push({
       request: {
         kind: 'compile',
@@ -1207,6 +1218,7 @@ function buildCompileSteps(opts: {
       ...(gearsContract === undefined
         ? {}
         : { compileFidelity: gearsContract }),
+      ...(sourceRoles === undefined ? {} : { sourceRoles }),
     });
     previous = normalized;
   }
@@ -1328,6 +1340,7 @@ function compileStep(
     ...(phase.source.format === 'gears'
       ? { gearsSourceContract: () => gearsContractFindings(source) }
       : {}),
+    ...(gated ? { sourceRoles: () => sourceRoleFindings(source) } : {}),
     ...(phase.source.format === 'fsm' && phase.source.ext === '.ts'
       ? { fsmSourceTypecheck: () => checkFsmTypeScript(source, signal) }
       : {}),
@@ -1352,6 +1365,21 @@ async function gearsContractFindings(path: string): Promise<readonly string[]> {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     return [`GEARS contract could not be checked: ${messageOf(error)}`];
   }
+}
+
+/**
+ * The DR-056 boundary over the Source a text-to-GEARS phase, or the
+ * normalization ahead of it, reads (phase-execution-69, verification-54). An
+ * unreadable Source is left to the step that reads it.
+ */
+async function sourceRoleFindings(source: string): Promise<readonly string[]> {
+  let sourceText: string;
+  try {
+    sourceText = await readFile(source, 'utf8');
+  } catch {
+    return [];
+  }
+  return checkSourceRoles(sourceText);
 }
 
 /**
@@ -1796,6 +1824,23 @@ async function executeSteps(
       const outputContract = await step.outputContract();
       if (outputContract !== undefined)
         request = { ...request, outputContract };
+    }
+
+    // A malformed Source role is the author's to fix: refuse it before any
+    // execution strategy or agent runs (DR-056, phase-execution-69).
+    if (step.sourceRoles !== undefined && step.request.kind === 'compile') {
+      const findings = await step.sourceRoles();
+      if (findings.length > 0) {
+        fail();
+        diagnostics.push(
+          formatFailureReport({
+            phase: step.phase,
+            target,
+            reasons: [`invalid Source: ${step.request.source}`, ...findings],
+          }),
+        );
+        return stopped(index);
+      }
     }
 
     // The consumer cannot repair its protected source. Reject these existing
