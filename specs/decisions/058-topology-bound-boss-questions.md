@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# DR-059: Topology-bound Boss questions
+# DR-058: Topology-bound Boss questions
 
 ## Status
 

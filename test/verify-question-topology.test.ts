@@ -276,7 +276,7 @@ function questionMachine(
   return { machine, answered, rejectedQuestions };
 }
 
-describe('topology-bound Boss questions (verification-61)', () => {
+describe('topology-bound Boss questions (verification-56)', () => {
   it.each([false, true])(
     'accepts canonical reached questions parallel=%s',
     async (parallel) => {
