@@ -83,6 +83,7 @@ meta.md       The spec of specs
 | [DR-055](decisions/055-mixed-source-prompt-fidelity.md) | 055-mixed-source-prompt-fidelity.md | Scope foreign-line rejection to items carrying complete authored fragments while retaining global conservation and quote checks |
 | [DR-056](decisions/056-source-role-names.md) | 056-source-role-names.md | Source `Roles:` entries are single capitalized words, refused with the entry, rule and fix before any agent runs |
 | [DR-057](decisions/057-language-neutral-relay-marker.md) | 057-language-neutral-relay-marker.md | The parenthesized backticked `>` marks a quoted relay in any language, amending [DR-029](decisions/029-source-fidelity-gate.md); marker findings name what to write |
+| [DR-058](decisions/058-topology-bound-boss-questions.md) | 058-topology-bound-boss-questions.md | Select schema-3 continuation storage by root parallel topology and validate actual reached questions |
 
 ## Packages
 

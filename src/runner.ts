@@ -944,6 +944,7 @@ async function emitVerification(
       artifactDir: ctx.artDir,
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
+      ...(artifactSchema === undefined ? {} : { artifactSchema }),
       write,
     });
     outputs.push(coverage.path);
@@ -1452,6 +1453,9 @@ async function fsmConformanceFindings(
       ? findings
       : await checkFsmCoverage(fsm, {
           sourceText: await readFile(target, 'utf8'),
+          ...(schema.artifactSchema === undefined
+            ? {}
+            : { artifactSchema: schema.artifactSchema }),
           signal,
         });
   } catch (error) {
@@ -1500,6 +1504,9 @@ async function fsmContinuationFindings(
     ? findings
     : await checkFsmCoverage(fsm, {
         sourceText: await readFile(source, 'utf8'),
+        ...(schema.artifactSchema === undefined
+          ? {}
+          : { artifactSchema: schema.artifactSchema }),
         signal,
       });
 }

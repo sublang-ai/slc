@@ -11,6 +11,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Schema-3 Boss-question admission now selects scalar or keyed storage from
+  actual machine topology and checks reached schema-3 question identity before
+  replying, rejecting flat artifacts whose questions are invisible to runtime.
+
 ## [0.16.1] - 2026-10-11
 
 ### Fixed

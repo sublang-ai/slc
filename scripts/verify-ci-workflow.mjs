@@ -421,7 +421,7 @@ try {
   ]);
   assert.deepEqual(observed.coverage, {
     fsm,
-    options: { sourceText: 'synthetic fsm\n' },
+    options: { sourceText: 'synthetic fsm\n', artifactSchema: 3 },
   });
   assert.deepEqual(result, {
     findings: ['schema: synthetic schema disagreement'],
