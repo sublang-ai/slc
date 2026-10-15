@@ -254,7 +254,7 @@ When the slc command checks a GEARS package's fidelity to the Source it was comp
 
 #### verification-54
 
-When the slc command checks a `text` Source's role names, it shall read the bullet entries under each `Roles:` label line of the Source, its colon ASCII or full-width, up to the first nonblank non-bullet line, and report the outcome for each entry as a pure function of the Source text ([DR-056](../decisions/056-source-role-names.md)):
+When the slc command checks a `text` Source's role names, it shall read the bullet entries under each `Roles:` label line of the Source, its colon ASCII or full-width, up to the first nonblank non-bullet line, reading nothing inside a code fence — opened by a run of three or more backticks or tildes and closed only by a run of the same character at least as long on a line of its own — and report the outcome for each entry as a pure function of the Source text ([DR-056](../decisions/056-source-role-names.md)):
 
 | Case | Required outcome |
 | --- | --- |
@@ -391,7 +391,7 @@ Where maintained and fixture Sources are paired with their GEARS packages, when 
 
 #### verification-55
 
-Where fixture Sources declare roles, when the role-name check runs over each, it shall accept single-word English, all-capital, and backticked and bare Chinese role names and a Source without a `Roles:` label, report the two-word-role fixture's "Business Analyst" entry with its Source line, the rule, and `BusinessAnalyst` as the word to write, report a lowercase, a hyphenated, and a full-width-colon-labelled two-word entry each with its joined word, and report a punctuated entry with the rule and no proposed word [[verification-54](#verification-54)].
+Where fixture Sources declare roles, when the role-name check runs over each, it shall accept single-word English, all-capital, and backticked and bare Chinese role names and a Source without a `Roles:` label, report the two-word-role fixture's "Business Analyst" entry with its Source line, the rule, and `BusinessAnalyst` as the word to write, report a lowercase, a hyphenated, and a full-width-colon-labelled two-word entry each with its joined word, report a punctuated entry with the rule and no proposed word, and read no entry inside a four-backtick or four-tilde fence holding a three-character run, inside a fence whose closing run is followed by text, or inside a backtick fence a tilde run does not close, while reading the list that follows the fence [[verification-54](#verification-54)].
 
 ### Link-fidelity acceptance
 

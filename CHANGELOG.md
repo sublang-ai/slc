@@ -13,6 +13,8 @@ and this project adheres to
 
 ### Fixed
 
+- The role-name check reads nothing inside a code fence until a run of its own character at least as long as the opening closes it, so a four-backtick fence holding triple backticks, a longer tilde fence or a closing run followed by text no longer exposes example `Roles:` text to the check ([[verification-54](specs/packages/verification.md#verification-54)]).
+
 - Schema-3 Boss-question admission now selects scalar or keyed storage from
   actual machine topology and checks reached schema-3 question identity before
   replying, rejecting flat artifacts whose questions are invisible to runtime.

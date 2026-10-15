@@ -56,7 +56,8 @@ const RELAY_MARKER = /[(（]\s*`>`\s*[)）]/;
 // entry under it (DR-056).
 const ROLES_LABEL = /^Roles[:：]\s*$/;
 const ROLES_ENTRY = /^[-*+]\s+(.*)$/;
-const CODE_FENCE = /^(?:```|~~~)/;
+/** A fence opening: three or more backticks or tildes (CommonMark), the run kept. */
+const OPEN_FENCE = /^(`{3,}|~{3,})/;
 // One capitalized word: an uppercase or titlecase letter, or a letter of a
 // script without case such as `编码者`, then letters, marks, and digits.
 const ROLE_NAME = /^[\p{Lu}\p{Lt}\p{Lo}][\p{L}\p{M}\p{Nd}]*$/u;
@@ -189,25 +190,45 @@ function joinedRoleName(name: string): string | undefined {
   return ROLE_NAME.test(joined) ? joined : undefined;
 }
 
+/** An open code fence: its character and the length of its opening run. */
+interface OpenFence {
+  readonly char: string;
+  readonly length: number;
+}
+
+/**
+ * Whether a (trimmed) line closes the open fence: a run of its character at
+ * least as long as the opening run and nothing else (CommonMark), so a
+ * shorter run, another character's run, or a run followed by text closes
+ * nothing.
+ */
+function closesFence(line: string, fence: OpenFence): boolean {
+  if (line.length < fence.length) return false;
+  for (const char of line) if (char !== fence.char) return false;
+  return true;
+}
+
 /**
  * The role-name findings of one free-form Source (DR-056, verification-54):
  * every bullet entry under a `Roles:` label line that is not one capitalized
  * word, named with its Source line, the rule, and the word to write. Fenced
- * code is not read.
+ * code is not read: a fence closes only on a run of its own character at
+ * least as long as its opening.
  */
 export function checkSourceRoles(sourceText: string): string[] {
   const lines = sourceText.split(LINE_BOUNDARY);
   const findings: string[] = [];
   let inRoles = false;
-  let fence: string | undefined;
+  let fence: OpenFence | undefined;
   for (const [index, raw] of lines.entries()) {
     const line = raw.trim();
     if (fence !== undefined) {
-      if (line.startsWith(fence)) fence = undefined;
+      if (closesFence(line, fence)) fence = undefined;
       continue;
     }
-    if (CODE_FENCE.test(line)) {
-      fence = line.slice(0, 3);
+    const opened = OPEN_FENCE.exec(line);
+    if (opened !== null) {
+      fence = { char: opened[1][0], length: opened[1].length };
       inRoles = false;
       continue;
     }
