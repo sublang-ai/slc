@@ -97,22 +97,70 @@ describe('Source role names (verification-55)', () => {
     // A four-backtick fence holding a three-backtick line and a Roles
     // list: nothing inside is read, and the list after it is.
     const longer = [
-      '# Flow', '', '````', 'Roles:', '', '- Business Analyst', '```', 'still fenced', '````', '',
-      'Roles:', '', '- Coder', '',
+      '# Flow',
+      '',
+      '````',
+      'Roles:',
+      '',
+      '- Business Analyst',
+      '```',
+      'still fenced',
+      '````',
+      '',
+      'Roles:',
+      '',
+      '- Coder',
+      '',
     ].join('\n');
     expect(checkSourceRoles(longer)).toEqual([]);
     const tildes = [
-      '# Flow', '', '~~~~', 'Roles:', '', '- Business Analyst', '~~~', '~~~~', '', 'Roles:', '', '- Coder', '',
+      '# Flow',
+      '',
+      '~~~~',
+      'Roles:',
+      '',
+      '- Business Analyst',
+      '~~~',
+      '~~~~',
+      '',
+      'Roles:',
+      '',
+      '- Coder',
+      '',
     ].join('\n');
     expect(checkSourceRoles(tildes)).toEqual([]);
     // A run followed by text closes nothing; the other character's run closes nothing.
     const info = [
-      '# Flow', '', '```', 'Roles:', '', '- Business Analyst', '```text', '- Product Owner', '```', '',
-      'Roles:', '', '- Coder', '',
+      '# Flow',
+      '',
+      '```',
+      'Roles:',
+      '',
+      '- Business Analyst',
+      '```text',
+      '- Product Owner',
+      '```',
+      '',
+      'Roles:',
+      '',
+      '- Coder',
+      '',
     ].join('\n');
     expect(checkSourceRoles(info)).toEqual([]);
     const mixed = [
-      '# Flow', '', '```', 'Roles:', '', '- Business Analyst', '~~~', '```', '', 'Roles:', '', '- Product Owner', '',
+      '# Flow',
+      '',
+      '```',
+      'Roles:',
+      '',
+      '- Business Analyst',
+      '~~~',
+      '```',
+      '',
+      'Roles:',
+      '',
+      '- Product Owner',
+      '',
     ].join('\n');
     expect(checkSourceRoles(mixed)).toEqual([
       `Roles entry "Product Owner" at line 12 is not one capitalized word: ${RULE}; write \`ProductOwner\``,
