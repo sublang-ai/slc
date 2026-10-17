@@ -4040,8 +4040,8 @@ describe('checkPromptComposition (verification-5)', () => {
       playbook._internal.composePlayerPrompt,
     );
     // The published reference substitutes the relayed caller
-    // input and run results on every phase, the IR number on the IR-task
-    // phase, and the Coder model on both commits.
+    // input and run results on every phase, the IR number and previous-phase
+    // review on the IR-task phase, and the Coder model on both commits.
     expect(substituted.firstPhase).toEqual([
       '<coder-llm>',
       '<caller-input>',
@@ -4052,6 +4052,7 @@ describe('checkPromptComposition (verification-5)', () => {
       '<caller-input>',
       '<ir-number>',
       '<run-results>',
+      '<previous-phase-review>',
     ]);
   });
 });

@@ -332,6 +332,7 @@ interface PlaybookRepositoryObservation {
   readonly worktree: string;
   readonly gitDir: string;
   readonly head: string;
+  readonly branch?: string;
   readonly projection: Readonly<Record<string, JsonValue>>;
   readonly projectionDigest: string;
 }
@@ -341,6 +342,7 @@ interface PlaybookRepositoryReceipt {
   readonly baseline: PlaybookRepositoryObservation;
   readonly after?: PlaybookRepositoryObservation;
   readonly commitOid?: string;
+  readonly commits?: readonly string[];
 }
 
 type PlaybookRepositoryDisposition =
@@ -520,6 +522,13 @@ interface PlaybookRuntimeSnapshot {
   /** Interrupted invocation, captured before its external call (DR-069). */
   recoveryCheckpoint?: PlaybookRecoveryCheckpoint;
   suspendedCall?: PlaybookSuspendedCall;
+  /** The run's Boss exchanges so far, in order (DR-090). */
+  bossExchanges?: readonly PlaybookBossExchange[];
+}
+
+interface PlaybookBossExchange {
+  readonly question: string;
+  readonly reply: string;
 }
 
 type PlaybookRunResult =
@@ -1083,6 +1092,15 @@ A resumed call omits that question; a fresh call includes it before `Boss reply:
 Both retain the authored task body exactly once, with two newlines between blocks.
 These framework blocks never enter `invoke.input.prompt` or persisted FSM context.
 
+The shared runtime hands a composer the call's input without `pendingBossQuestion` and `bossReply` and builds the continuation itself, so a player of any language reads it as structure (DR-090).
+Before the composer's result it places, in order:
+
+- `Role: <roleId> · Model: <promptIdentity>`, naming the call's local role and its current binding's prompt identity, or `Role: <roleId>` alone without bindings;
+- once the run has heard a Boss reply, the run's Boss exchanges so far, each a `? ⟶` line and the verbatim question, then a `Boss ⟶` line and the verbatim reply, whatever the role and whether or not the Source retains them, leaving out the one exchange the call's own continuation carries;
+- for a call after a Boss reply, the marked verbatim question, only for a fresh conversation, and the marked verbatim reply.
+
+A run begins at the entry event or a finished machine's restart, and its exchanges travel in the runtime snapshot as `bossExchanges`.
+
 The runtime chooses the compact prompt only after selecting a conversation token and carries the complete prompt as optional `PlayerCallOptions.freshPrompt`.
 A host starting fresh after a definite pre-execution token rejection uses `freshPrompt`, when supplied, instead of the compact prompt.
 Without that option, the given prompt remains complete.
@@ -1286,6 +1304,14 @@ runtime-owned payload field; `guard` shall name exactly one outcome declared
 by both the live result map and `outcomeAuthority`; and every semantic-owned
 field shall satisfy the result map's required-field type before any actor
 output is delivered.
+That type is the value shape the compiled FSM's own validator admits for the
+field: the shared engine reads it once at construction by presenting each
+governed outcome's accepting arm with sample values of a closed set of shapes,
+a field whose shape the FSM admits as a string stays a string, a field whose
+shape it does not reveal takes any JSON value for the FSM's own guard to
+decide, and the judge prompt and validation error name every non-string shape
+([DR-089](../specs/decisions/089-judge-replies-take-the-machines-shapes.md),
+[DR-091](../specs/decisions/091-an-unrevealed-shape-is-the-machines-to-judge.md)).
 The judge prompt shall render each governed outcome's description with its
 meaning verbatim and its `Output shall include` clause replaced by that reply
 contract — exactly `guard` plus the semantic-owned fields, each keeping its
@@ -1320,10 +1346,16 @@ physical receipt, or the complete cumulative logical receipt of a deferred
 operation, whose classification is exactly the outcome's declared
 `unchanged` or `one-descendant-commit` disposition; a `one-descendant-commit`
 receipt shall carry exactly the after-HEAD OID used for the arm's effect-owned
-fields, while an `unchanged` receipt's complete validated observation supplies
-its observed HEAD OID for them, and a receipt that cannot prove that observed
-HEAD shall leave the envelope unresolved rather than inject a fabricated
-value.
+fields, and lists every new commit in `commits` where HEAD advanced by more
+than one, while an `unchanged` receipt's complete validated observation
+supplies its observed HEAD OID for them, and a receipt that cannot prove that
+observed HEAD shall leave the envelope unresolved rather than inject a
+fabricated value.
+A `one-descendant-commit` outcome shall also resolve over an `unchanged`
+receipt whose HEAD names a commit when no outcome of that call declares
+`unchanged` and the trimmed `finalText` names that commit as a word, by its
+full OID or an abbreviation of at least seven leading hex digits; its
+effect-owned fields then take that HEAD OID.
 A `deferred` candidate shall be admissible only for its already-validated
 effect-authorized `needsBossReply` outcome and only from a complete after
 observation whose HEAD equals the logical operation's original baseline HEAD
@@ -1373,10 +1405,16 @@ player or judge call.
 The adjudicator shall use the same document-order tolerant JSON recovery as
 the Boss classifier. Unlike invalid classification, a reply from which no
 object can be recovered, an undeclared guard, or a missing required field is a
-control-plane error for nongoverned delegated-player and direct-Captain adjudication and
+control-plane error for nongoverned delegated-player adjudication and
 shall throw after the invocation reaches its FSM error path and ordered
 emissions drain; schema-3 governed adjudication follows the bounded
 reconciliation contract above instead.
+Direct-Captain adjudication treats such a reply, or one carrying an undeclared
+field, as a structural error: it makes exactly one corrective adjudication over
+the same visible output that restates the reply and its validation error, and
+a second structural error routes the invocation to its FSM failure state as a
+recoverable `judge-failed` failure rather than a control-plane error
+([DR-089](../specs/decisions/089-judge-replies-take-the-machines-shapes.md)).
 
 Two default adjudication strategies, in selection order:
 
@@ -1389,7 +1427,11 @@ Two default adjudication strategies, in selection order:
   `{ guard, …semanticOwnedPayloadFields }` and explicitly forbids every other
   payload field. The governed form also permits the blocked report above when no outcome matches.
   Both forms exclude the runtime-injected direct-Captain
-  `question` and `response` fields above. The prompt shall identify hidden control work,
+  `question` and `response` fields above. A direct-Captain prompt keeps each
+  description and states under it the exact reply that key takes — `guard`
+  plus the structural fields its `Output shall include` clause names, each with
+  its authored placeholder — naming `question` and `response` as
+  runtime-supplied. The prompt shall identify hidden control work,
   prohibit tool use, file inspection, and external evidence, direct the judge
   to decide only from the supplied actor output and declared outcomes, and
   require exactly one JSON object with no prose. The judge prompt shall not
@@ -1949,6 +1991,9 @@ At a safe capture point it shall return a JSON-safe
   `{ kind: 'captain' }` or `{ kind: 'role', roleId }`, empty when the
   parked state awaits no reply. This list exists so hosts can surface the
   question without parsing status lines or telemetry.
+- `bossExchanges`: omitted when the run has heard no Boss reply; otherwise
+  every `{ question, reply }` exchange of the run so far, in order, which
+  `restore` and adoption take back.
 - `suspendedCall`: omitted when no nested call is pending; otherwise the
   shared nested bridge's complete `callId`, source `stateId`, target
   `playbookId`, exact handed-off `text`, and `childSessionId`, enriched with

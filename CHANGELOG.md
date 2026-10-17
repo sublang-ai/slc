@@ -11,6 +11,14 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-10-16
+
+### Changed
+
+- Align the dependency closure with Cligent 0.34.0 and Playbook 17.10.1,
+  including native skill delivery for Playbook hosts, and refresh the
+  vendored compiler definitions and provenance pins.
+
 ### Fixed
 
 - The role-name check reads nothing inside a code fence until a run of its own character at least as long as the opening closes it, so a four-backtick fence holding triple backticks, a longer tilde fence or a closing run followed by text no longer exposes example `Roles:` text to the check ([[verification-54](specs/packages/verification.md#verification-54)]).
@@ -834,7 +842,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.2...HEAD
+[0.16.2]: https://github.com/sublang-ai/slc/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/sublang-ai/slc/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/sublang-ai/slc/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/sublang-ai/slc/compare/v0.15.0...v0.15.1

@@ -602,6 +602,9 @@ safety beyond the guarded direct transition.
 ## Context and prompts
 
 Context fields used to drive guards or compose prompts shall be **typed and named**.
+Where Source owns array-valued retained discussion whose initial state is no history, initialize that context field to `[]` and reset it to `[]` only at its Source lifecycle boundaries.
+Carry its declared array shape through ordinary and continuation `invoke.input`; do not leave the empty structural history absent so a prompt-contract probe mistakes it for a scalar.
+This empty history is not a default caller intent, prerequisite report, domain evidence, approval, or prior-stage result; those remain unavailable until actually established.
 The compiler shall not branch on untyped properties of `lastResult`; persistent routing decisions belong in typed context fields. (`lastResult` is for inspection only.)
 Where Source declares a finite ordered plan, represent it as a typed readonly
 JSON-safe array and validate that shape on the actor-output transition; an
@@ -835,8 +838,8 @@ Only
 The canonical storage paths are `context.pendingBossQuestion` and `context.bossReply` for the scalar form, or `context.pendingBossQuestions[stateId]` and `context.bossReplies[stateId]` for the keyed form.
 A private wrapper such as `context.continuation` shall not replace these fields directly on machine context.
 
-A machine with at most one active Captain or player task may use the scalar
-form:
+A machine that declares no root parallel group shall use the scalar form;
+keyed storage alone is not visible to the flat shared factory:
 
 - An `awaitBossReply` state with stable `id: 'awaitBossReply'`, tag
   `playbook.parked`, and description
@@ -847,7 +850,9 @@ form:
 - `resumableStates(ids)`, `setPendingBossQuestion`, and
   `clearBossReplyContext` helpers with the existing single-question behavior.
 
-A machine with parallel delegated-player tasks shall use the keyed form:
+A machine that declares a root parallel group shall use the keyed form
+throughout the machine, including any sequential working leaves and their
+root reply wait:
 
 - One local waiting leaf per branch, tagged `playbook.parked`.
 - A `BOSS_REPLY` event carrying `{ questionId: string; answer: string }`.
@@ -884,6 +889,15 @@ pending question and reply selected for that working leaf as singular
 `pendingBossQuestion` and `bossReply` fields, regardless of the scalar or keyed
 context representation, so prompt composition has one stable contract.
 When Source requires earlier discussion or constraints on a later invocation, the compiler shall persist that source-owned history in serializable machine context before replacing or clearing the pending Q/A fields.
+Where that Source-owned value is the complete received Boss reply, retain it
+directly from the current working leaf's canonical reply context at the
+Source-authored accepted-outcome boundary, before clearing that leaf's Q/A.
+Preserve its exact string, including surrounding whitespace, CRLF/LF separators,
+blank lines and trailing separators; do not require a model-produced echo or
+replace it with one. Acceptance remains the acting agent's semantic judgment,
+guarded by the current matching question's state, Source-item and asker binding
+and actual receipt of a nonempty reply. Neither stale question/reply context
+nor a different actor-supplied value establishes that binding or approval.
 The later `invoke.input` shall relay that persisted context on both resumed and fresh calls that Source says need it, preserving Source-owned relevance and format without imposing all-history semantics on sources that do not require it.
 Shared Boss-reply continuation carries only the latest Q/A pair, and a backend continuation token is not durable Source history.
 When both fields are present, the linked runtime shall compose the continuation preamble and labelled Q&A blocks per [link.md "Player prompt composition"](link.md#player-prompt-composition).
