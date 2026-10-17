@@ -11,6 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Literal child-input verification observes scalar values inside initialized
+  records without replacing their shape, so a predecessor's nested request
+  and report fields can establish exact relay composition. Cyclic or excessively
+  deep reads and incomplete multiline quotation remain refused.
+
 ## [0.16.2] - 2026-10-16
 
 ### Changed
