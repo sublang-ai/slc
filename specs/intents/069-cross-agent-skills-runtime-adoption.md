@@ -5,8 +5,8 @@
 
 ## Status
 
-In progress: the registry adoption and composed local deterministic release gate are complete; installed live acceptance, exact release-commit CI and trusted publication remain pending.
-The release tag remains gated on all pending checks.
+Completed: SLC 0.16.2 is published and verified after the composed local deterministic gate, installed live acceptance and exact release-commit CI passed.
+The signed release tag remains at `d44c86964d19d4fbd1cdecd93b37ed4edde8aaf0`; this completion record changes no release payload.
 
 ## Intent
 
@@ -19,12 +19,12 @@ Release the adoption and existing compiler corrections as SLC 0.16.2 under [[rel
 - [x] All five definitions and published sidecar inputs synchronized byte-identically with the installed Playbook release.
 - [x] Three reviewed meta-phase bundles and both demo references retained by verified equivalence, or rebuilt only where the existing retention checks require it.
 - [x] All pins regenerated for the adopted closure, with current demo dependencies, version and changelog.
-- [ ] Clean locked release checks, installed live acceptance, exact main CI and trusted publication completed.
+- [x] Clean locked release checks, installed live acceptance, exact main CI and trusted publication completed.
 
 ## Tasks
 
 1. [x] Adopt the published dependencies, synchronize compiler inputs, verify retained artifacts, and regenerate pins as one set.
-2. [ ] Prepare SLC 0.16.2, complete its existing release and live gates, then publish through the trusted tag workflow.
+2. [x] Prepare SLC 0.16.2, complete its existing release and live gates, then publish through the trusted tag workflow.
 
 ## Verification
 
@@ -56,9 +56,14 @@ Local evidence is composed from disjoint or changed-input checks rather than an 
 | Formatting and lint | Full checks passed, followed by focused checks of the changed test and final formatted metadata; `spex lint` validates this record. |
 | Retained artifacts | All five definitions and three published sidecar inputs match the installed release; its ABI is 1 and schema list is `[3]`; all three artifact reviews, reproducible pin checks and complete English/Chinese demo gates passed. Independent review confirmed unchanged compiled-execution sections and retained bundles. |
 | Release machinery and package | Trusted-publication verification passed; fresh installed-tarball smoke passed for SLC 0.16.2 with 181 payload files. |
-| Live acceptance | Running the stock full gate with compiler `claude-code:claude-opus-5-5@high`, player `claude:claude-opus-5-5@high` and Captain `codex:gpt-6-sol@high`; the final compile, reuse, update and run result is pending. |
+| Live acceptance | The stock full gate passed compile, reuse, update and run with compiler `claude-code:claude-opus-5-5@high`, player `claude:claude-opus-5-5@high` and Captain `codex:gpt-6-sol@high`; the successful terminal had settled effects, the baseline was preserved, the agent committed its fix, and the compiled median driver passed. |
 
 The initial ordinary-suite conformance failure exposed source-owned `needsBossReply` results in Playbook 17.10.0's CODE GEARS; Playbook 17.10.1 removes them while preserving the compiled suspension, and SLC's zero-finding assertion remains unchanged.
 An earlier acceptance attempt stopped after build, pack and install because `SLC_AGENT=claude` is not a supported compiler CLI name; it made no model calls and is not counted as successful acceptance.
 The corrected dependency closure justifies the final stock gate's clean rebuild.
 Fresh consumer caches receive only retained, integrity-verified npm `content-v2` bytes through a temporary launcher restricted to this task's scratch caches; it preserves npm's arguments and environment, copies no indexes or registry metadata, and changes no assertion or consumer dependency resolution.
+
+The preparation commit recorded live acceptance, CI and publication as pending at that time.
+Live acceptance and [exact-main CI 39006010740](https://github.com/sublang-ai/slc/actions/runs/39006010740) then passed before the signed `v0.16.2` tag; [Release 39006485078](https://github.com/sublang-ai/slc/actions/runs/39006485078) passed all release checks and trusted OIDC publication, producing the [0.16.2 release](https://github.com/sublang-ai/slc/releases/tag/v0.16.2).
+The official npm artifact records that exact release commit, includes provenance, and matches all 181 tested payload entries in bytes, type, mode and link target, with verified integrity `sha512-HiKmt6EqK/KYAoj4vmuKO+OqAwqSmsFDiTKhtrkke/4ICfLhMcs4tiY7Pmkrb9ehLRTP4AdvWxC6zVsqkdg82Q==`.
+A fresh public-registry consumer installed SLC 0.16.2, Playbook 17.10.1 and Cligent 0.34.0, loaded both public SLC exports and reported exactly `slc 0.16.2`.
