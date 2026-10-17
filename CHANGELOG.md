@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-10-17
+
 ### Fixed
 
 - Literal child-input verification observes scalar values inside initialized
@@ -849,7 +851,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.2...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.3...HEAD
+[0.16.3]: https://github.com/sublang-ai/slc/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/sublang-ai/slc/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/sublang-ai/slc/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/sublang-ai/slc/compare/v0.15.1...v0.16.0
