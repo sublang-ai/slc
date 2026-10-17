@@ -3382,6 +3382,59 @@ function boundedJsonSnippet(value: string, offset: number): string {
   return JSON.stringify(value.slice(offset, offset + 24));
 }
 
+/** Literal-child probes keep record containers and observe scalar paths only.
+ * Virtual absent leaves do not add keys to unrelated typed records. */
+function literalScalarContext(
+  base: Record<string, unknown>,
+  values: Record<string, string>,
+  reads?: Set<string>,
+): { context: Record<string, unknown>; failure: () => string | undefined } {
+  let failure: string | undefined;
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' &&
+    value !== null &&
+    (Object.getPrototypeOf(value) === Object.prototype ||
+      Object.getPrototypeOf(value) === null);
+  const wrap = (
+    record: Record<string, unknown>,
+    path: string[],
+    ancestors: Set<object>,
+  ): Record<string, unknown> => {
+    if (path.length > 32 || ancestors.has(record)) {
+      failure ??=
+        path.length > 32
+          ? 'record reads exceed 32 levels'
+          : 'cyclic record reads';
+      return record;
+    }
+    const seen = new Set([...ancestors, record]);
+    const copy = Object.create(Object.getPrototypeOf(record)) as Record<
+      string,
+      unknown
+    >;
+    for (const key of Reflect.ownKeys(record)) {
+      const descriptor = Object.getOwnPropertyDescriptor(record, key)!;
+      // Keep own keys/prototypes, without a __proto__ assignment or a frozen
+      // source descriptor preventing a nested observational proxy.
+      Object.defineProperty(copy, key, { ...descriptor, configurable: true });
+    }
+    return new Proxy(copy, {
+      get(target, property) {
+        const value = Reflect.get(target, property);
+        if (typeof property !== 'string') return value;
+        const nested = [...path, property];
+        // A path is an opaque observation identity, never a placeholder name.
+        const field = JSON.stringify(nested);
+        if (value === undefined || typeof value === 'string') reads?.add(field);
+        if (Object.hasOwn(values, field)) return values[field];
+        return isRecord(value) ? wrap(value, nested, seen) : value;
+      },
+      has: () => true,
+    });
+  };
+  return { context: wrap(base, [], new Set()), failure: () => failure };
+}
+
 /** Verify the FSM-owned composer; child inputs reach the bridge already rendered. */
 function literalPlaybookTextFinding(
   prompt: string,
@@ -3407,37 +3460,41 @@ function literalPlaybookTextFinding(
   }
   const base = initial ?? {};
   const fields = new Set<string>();
-  let context: Record<string, unknown> = { ...base };
+  let values: Record<string, string> = {};
   // Later reads can be behind a string-valued branch. Discover them without
   // overwriting an initialized object, array, boolean, or numeric context field.
   for (let pass = 0; pass < 4; pass++) {
     const before = fields.size;
-    for (const field of probeContextReads(input, context)) {
-      if (base[field] === undefined || typeof base[field] === 'string')
-        fields.add(field);
+    const observed = literalScalarContext(base, values, fields);
+    try {
+      input({ context: observed.context });
+    } catch {
+      /* Keep reads before a throw. */
     }
+    const failure = observed.failure();
+    if (failure !== undefined)
+      return `has unsupported composition (${failure})`;
     if (fields.size > 128)
       return 'has unsupported composition (too many scalar reads)';
-    context = {
-      ...base,
-      ...Object.fromEntries(
-        [...fields].map((field) => [field, sentinelFor(field)]),
-      ),
-    };
+    values = Object.fromEntries(
+      [...fields].map((field) => [field, sentinelFor(field)]),
+    );
     if (fields.size === before) break;
     if (pass === 3)
       return 'has unsupported composition (context reads did not stabilize)';
   }
-  const probe = (values: Record<string, unknown>): string | undefined => {
-    const result = invocationInput(binding.invoke, values);
-    return 'value' in result &&
+  const probe = (values: Record<string, string>): string | undefined => {
+    const candidate = literalScalarContext(base, values);
+    const result = invocationInput(binding.invoke, candidate.context);
+    return candidate.failure() === undefined &&
+      'value' in result &&
       result.value.playbookId === binding.state.playbookId &&
       result.value.stateId === binding.state.stateId &&
       typeof result.value.text === 'string'
       ? result.value.text
       : undefined;
   };
-  const text = probe(context);
+  const text = probe(values);
   if (text === undefined)
     return 'has unsupported composition (input evaluation or literal identity changed)';
   const matched = matchPromptBody(prompt, text, [...fields]);
@@ -3499,7 +3556,7 @@ function literalPlaybookTextFinding(
         : value;
     });
   };
-  const composed = probe({ ...base, ...payloads });
+  const composed = probe(payloads);
   if (composed === undefined || composed !== render(payloads)) {
     return 'does not preserve literal substitutions and quoted continuation lines';
   }
@@ -3514,7 +3571,7 @@ function literalPlaybookTextFinding(
       ...payloads,
       ...Object.fromEntries([...emptyFields].map((field) => [field, ''])),
     };
-    const emptyText = probe({ ...base, ...values });
+    const emptyText = probe(values);
     if (emptyText === undefined || emptyText !== render(values)) {
       return 'does not preserve source-defined empty standalone relay omission';
     }
