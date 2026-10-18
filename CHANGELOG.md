@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Child-output coverage reuses bounded primitive values read from fixed reached
+  context, preserving exact predecessor result identities that are absent from
+  artifact literals. Context stays unchanged and unproved paths remain refused.
 - Child-output coverage discovers required own-field names before guiding their
   values, so exact-key guards do not exhaust the bounded search beneath an early
   wrong discriminant. Concrete ordered guards and actual XState replay still
