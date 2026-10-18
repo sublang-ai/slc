@@ -2383,6 +2383,11 @@ function coverageArmResults(
                 ? input.playbookId
                 : COVERAGE_PLAYBOOK_ID,
             ),
+            nestedAborted(
+              typeof input.playbookId === 'string'
+                ? input.playbookId
+                : COVERAGE_PLAYBOOK_ID,
+            ),
             nestedFailureTerminal(
               typeof input.playbookId === 'string'
                 ? input.playbookId
@@ -2804,6 +2809,19 @@ function nestedFailure(playbookId: string): Error {
         message: 'coverage: forced nested playbook failure',
       },
     },
+  });
+  return error;
+}
+
+/** A public aborted result may omit both child-session and error data. */
+function nestedAborted(playbookId: string): Error {
+  const error = new Error(`Child playbook ${playbookId} aborted`);
+  error.name = 'NestedPlaybookCallError';
+  Object.defineProperty(error, 'result', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: { status: 'aborted', playbookId },
   });
   return error;
 }
@@ -4051,7 +4069,7 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
     ...nodes.map((node) => {
       const done = transitionArms(node.value.invocation.onDone).length;
       const error = transitionArms(node.value.invocation.onError).length;
-      if (node.kind === 'child') return 3 * (done + error);
+      if (node.kind === 'child') return 3 * done + 4 * error;
       const keys = Object.keys(node.value.binding.result);
       const candidates =
         node.value.binding.actor === 'script'

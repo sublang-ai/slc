@@ -14,6 +14,9 @@ and this project adheres to
 ### Fixed
 
 - Retained-bundle completion preserves prompt-probe advisories without treating them as verification failures; actual composition and validation failures still block output.
+- Child-error coverage distinguishes a bare aborted result from an error or
+  failure terminal, preserving target identity, original ordered guards and
+  bounded actual replay without inventing optional session data.
 - Immutable context reads no longer suppress bounded child-output shape
   guidance, while false context preconditions, ordered guards and actual
   target replay retain their existing limits.

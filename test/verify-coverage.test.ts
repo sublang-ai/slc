@@ -16,7 +16,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { normalizeErrorCompact } from '@sublang/playbook/xstate-runtime';
+import {
+  normalizeErrorCompact,
+  validatePlaybookCallResult,
+} from '@sublang/playbook/xstate-runtime';
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -1010,11 +1013,32 @@ const authoredFailureTerminalGuard = ({ event }: any): boolean => {
   );
 };
 
+const authoredAbortedChildGuard = (
+  { event }: any,
+  target = 'child',
+  session?: string,
+): boolean => {
+  if (!(event.error instanceof Error)) return false;
+  try {
+    return (
+      validatePlaybookCallResult(event.error.result, target, session).status ===
+      'aborted'
+    );
+  } catch {
+    return false;
+  }
+};
+
 const nestedMultiArmMachine = (
   opts: {
     deadDoneArm?: boolean;
     deadErrorArm?: boolean;
     authoredFailureTerminalArm?: boolean;
+    authoredAbortArm?: boolean;
+    wrongAbortTarget?: boolean;
+    requireAbortSession?: boolean;
+    shadowedAbortArm?: boolean;
+    onAbortError?: (error: unknown) => void;
   } = {},
 ) =>
   setup({
@@ -1059,13 +1083,36 @@ const nestedMultiArmMachine = (
             { target: '#doneFallback' },
           ],
           onError: [
+            ...(opts.shadowedAbortArm
+              ? [
+                  {
+                    target: '#errorFallback',
+                    guard: authoredAbortedChildGuard,
+                  },
+                ]
+              : []),
             {
               target: '#errorFirst',
               guard:
-                opts.authoredFailureTerminalArm === true
-                  ? authoredFailureTerminalGuard
-                  : ({ event }: any) =>
-                      event.error.name === 'RetryableChildError',
+                opts.authoredAbortArm === true
+                  ? (args: any) =>
+                      authoredAbortedChildGuard(
+                        args,
+                        opts.wrongAbortTarget ? 'other-child' : 'child',
+                        opts.requireAbortSession
+                          ? 'required-child-session'
+                          : undefined,
+                      )
+                  : opts.authoredFailureTerminalArm === true
+                    ? authoredFailureTerminalGuard
+                    : ({ event }: any) =>
+                        event.error.name === 'RetryableChildError',
+              ...(opts.onAbortError === undefined
+                ? {}
+                : {
+                    actions: ({ event }: any) =>
+                      opts.onAbortError?.(event.error),
+                  }),
             },
             {
               target: '#errorSecond',
@@ -3060,6 +3107,48 @@ describe('checkFsmCoverage (verification-6)', () => {
     expect(
       await checkFsmCoverage({ machine: nestedMultiArmMachine() }),
     ).toEqual([]);
+  });
+
+  it('covers the bare public aborted child result through actual rejection', async () => {
+    const errors: unknown[] = [];
+    expect(
+      await checkFsmCoverage({
+        machine: nestedMultiArmMachine({
+          authoredAbortArm: true,
+          onAbortError: (error) => errors.push(error),
+        }),
+      }),
+    ).toEqual([]);
+    expect(errors.length).toBeGreaterThan(0);
+    for (const error of errors) {
+      expect(error).toBeInstanceOf(Error);
+      expect(
+        validatePlaybookCallResult(
+          (error as Error & { result: unknown }).result,
+          'child',
+        ),
+      ).toEqual({ status: 'aborted', playbookId: 'child' });
+    }
+  });
+
+  it.each([
+    { wrongAbortTarget: true },
+    { requireAbortSession: true },
+    { shadowedAbortArm: true },
+  ])('refuses an unproved public child abort for %j', async (controls) => {
+    const arm = controls.shadowedAbortArm ? 1 : 0;
+    expect(
+      (
+        await checkFsmCoverage({
+          machine: nestedMultiArmMachine({
+            authoredAbortArm: true,
+            ...controls,
+          }),
+        })
+      ).some((finding) =>
+        finding.includes(`callChild: nested playbook onError arm ${arm}`),
+      ),
+    ).toBe(true);
   });
 
   it('enters a static child through each real preceding result and probes reached context (verification-43)', async () => {
