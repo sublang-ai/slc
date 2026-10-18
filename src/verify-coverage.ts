@@ -1685,6 +1685,42 @@ function probeGuardAssignment(
   const values = [
     ...new Set([...minedLiterals(guard), ...extraValues, ...GENERIC_VALUES]),
   ];
+  const reachedContext =
+    options.discoverPayloadShape === true && options.assignContext === false
+      ? Object.getOwnPropertyDescriptors(options.initialContext ?? {})
+      : undefined;
+  let reachedValues = 0;
+  const noteContextRead = (field: string): void => {
+    if (reachedContext === undefined || !Object.hasOwn(reachedContext, field))
+      return;
+    const descriptor = reachedContext[field];
+    if (!('value' in descriptor)) return;
+    const value: unknown = descriptor.value;
+    if (
+      reachedValues >= 4 ||
+      !(
+        value === null ||
+        typeof value === 'string' ||
+        typeof value === 'boolean' ||
+        (typeof value === 'number' && Number.isFinite(value))
+      ) ||
+      values.some((candidate) => Object.is(candidate, value))
+    )
+      return;
+    reachedValues++;
+    values.push(value);
+  };
+  function* candidateValues(
+    hasBaseline: boolean,
+    baseline: unknown,
+  ): Generator<unknown> {
+    if (hasBaseline) yield baseline;
+    // A failed candidate can reveal a fixed-context value needed by this same
+    // field. Include new bounded observations before completing its iteration.
+    for (let index = 0; index < values.length; index++) {
+      if (!hasBaseline || values[index] !== baseline) yield values[index];
+    }
+  }
   let probes = 0;
   const discovered = new Map<string, Set<string>>();
 
@@ -1767,6 +1803,7 @@ function probeGuardAssignment(
         },
         getOwnPropertyDescriptor(target, prop) {
           const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+          if (tag === 'c:' && typeof prop === 'string') noteContextRead(prop);
           if (
             options.discoverPayloadShape === true &&
             tag !== 'c:' &&
@@ -1792,6 +1829,7 @@ function probeGuardAssignment(
         },
         get(target, prop) {
           if (typeof prop !== 'string') return undefined;
+          if (tag === 'c:') noteContextRead(prop);
           if (prop in target) {
             const payload = payloads.find((item) => item.tag === tag);
             if (
@@ -1937,11 +1975,7 @@ function probeGuardAssignment(
       const baseline = hasBaseline
         ? (base as Record<string, unknown>)[field]
         : undefined;
-      const candidates = [
-        ...(hasBaseline ? [baseline] : []),
-        ...values.filter((value) => !hasBaseline || value !== baseline),
-      ];
-      for (const value of candidates) {
+      for (const value of candidateValues(hasBaseline, baseline)) {
         coverageCheckpoint();
         if (probes > MAX_PROBES) return undefined;
         const nextDepth = depth + (hasBaseline && value === baseline ? 0 : 1);

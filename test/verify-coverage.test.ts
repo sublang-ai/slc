@@ -1329,6 +1329,121 @@ const childChainMachine = (
   } as any);
 };
 
+/** An actual predecessor supplies a value absent from the artifact literals. */
+const reachedPrimitiveChildMachine = (
+  opts: {
+    value?: 'string' | 'boolean' | 'number';
+    contradictory?: boolean;
+    shadowed?: boolean;
+    nested?: boolean;
+    fifthRead?: boolean;
+  } = {},
+) => {
+  const expected = (context: any) =>
+    opts.nested ? context.expected.revision : context.expected;
+  const accepted = ({ context, event }: any) => {
+    if (
+      opts.fifthRead &&
+      ![context.first, context.second, context.third, context.fourth].every(
+        (value) => typeof value === 'string',
+      )
+    )
+      return false;
+    return (
+      event.output.approved === true &&
+      event.output.revision === expected(context) &&
+      (!opts.contradictory || event.output.revision !== expected(context))
+    );
+  };
+  return setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('provide predecessor');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('provide child');
+      }),
+    },
+  }).createMachine({
+    id: 'reachedPrimitiveChild',
+    context: {},
+    initial: 'ready',
+    states: {
+      ready: { id: 'ready', on: { START: 'prepare' } },
+      prepare: {
+        id: 'prepare',
+        invoke: {
+          src: 'player',
+          input: () => ({
+            stateId: 'prepare',
+            role: 'writer',
+            sourceItem: 'FLOW-1',
+            prompt: 'Prepare a revision.',
+            result: {
+              prepared: 'Output shall include `revision`.',
+              needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            },
+          }),
+          onDone: [
+            {
+              guard: ({ event }: any) => event.output.guard === 'prepared',
+              target: 'child',
+              actions: assign(({ event }: any) => {
+                const primitive =
+                  opts.value === 'boolean'
+                    ? false
+                    : opts.value === 'number'
+                      ? 42
+                      : event.output.revision;
+                return {
+                  expected: opts.nested ? { revision: primitive } : primitive,
+                  first: `${event.output.revision}:first`,
+                  second: `${event.output.revision}:second`,
+                  third: `${event.output.revision}:third`,
+                  fourth: `${event.output.revision}:fourth`,
+                };
+              }),
+            },
+            needsBossReplyArm('prepare', 'writer', 'FLOW-1'),
+            { target: 'failed' },
+          ],
+          onError: 'failed',
+        },
+      },
+      child: {
+        id: 'child',
+        invoke: {
+          src: 'playbook',
+          input: () => ({
+            stateId: 'child',
+            playbookId: 'review',
+            text: 'Review the prepared revision.',
+          }),
+          onDone: [
+            ...(opts.shadowed ? [{ guard: accepted, target: 'done' }] : []),
+            { guard: accepted, target: 'done' },
+            { target: 'failed' },
+          ],
+          onError: 'failed',
+        },
+      },
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        tags: 'playbook.parked',
+        on: {
+          BOSS_REPLY: {
+            guard: ({ event }: any) =>
+              typeof event.answer === 'string' && event.answer.trim() !== '',
+            target: 'prepare',
+          },
+        },
+      },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+      done: { id: 'done', type: 'final' },
+    },
+  } as any);
+};
+
 /** Raw child success validates cardinality before reading named fields. */
 const enumeratedChildOutputMachine = (
   fields: 3 | 4,
@@ -2995,6 +3110,28 @@ describe('checkFsmCoverage (verification-6)', () => {
         ),
       ).not.toEqual([]);
     }
+  });
+
+  it.each(['string', 'boolean', 'number'] as const)(
+    'reuses a predecessor-produced %s through fixed reached context',
+    async (value) => {
+      expect(
+        await checkFsmCoverage({
+          machine: reachedPrimitiveChildMachine({ value }),
+        }),
+      ).toEqual([]);
+    },
+  );
+
+  it.each([
+    { contradictory: true },
+    { shadowed: true },
+    { nested: true },
+    { fifthRead: true },
+  ])('retains bounded reached-value refusal for %j', async (opts) => {
+    expect(
+      await checkFsmCoverage({ machine: reachedPrimitiveChildMachine(opts) }),
+    ).not.toEqual([]);
   });
 
   it('retains dead child approval and blank-reply failures without context patches', async () => {
