@@ -11,6 +11,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Coverage replays discovered target successors before unrelated queued paths,
+  retaining actual ordered transitions and the existing search limits.
+
 ## [0.16.5] - 2026-10-18
 
 ### Fixed
