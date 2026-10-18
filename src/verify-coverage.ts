@@ -25,6 +25,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { isDeepStrictEqual } from 'node:util';
 
 import { createActor, fromPromise } from 'xstate';
 
@@ -43,6 +44,10 @@ import {
   isControllerMachine,
   loadFsmModule,
   normalizeArms,
+  prepareGearsFsmConformance,
+  findConcurrentRoleSets,
+  ReachedLiteralChildChecks,
+  type GearsFsmConformanceOptions,
   resolveArtifactSchemaForVerification,
   usesKeyedBossQuestionContext,
   type CaptainState,
@@ -53,6 +58,7 @@ import {
 export const CAPTAIN_ACTOR = 'captain';
 
 interface CoverageRun {
+  literalChecks?: ReachedLiteralChildChecks;
   artifactSchema?: 1 | 3;
   questionFindings: Set<string>;
   machineInputs: WeakMap<MachineConfigLike, CoverageMachineInput>;
@@ -1465,6 +1471,7 @@ function* entryDrivesForRef(
   target: StateRef,
   extraValues: readonly unknown[] = [],
   initialContext: Record<string, unknown> = initializedCoverageContext(machine),
+  allEntrySurfaces = false,
 ): Generator<InterruptDrive, void> {
   const initialPath = initialActiveRefs(machine.config, refs);
   const surfaces = [
@@ -1564,7 +1571,8 @@ function* entryDrivesForRef(
               }
             }
           }
-          return;
+          // Literal proof may need another authored entry on this same iterator.
+          if (!allEntrySurfaces) return;
         }
       }
     }
@@ -2468,7 +2476,16 @@ function childCoverageDrive(
     targetId,
     candidates,
   );
-  const alternatives = entryDrivesForRef(machine, refs, ref, candidates);
+  const alternatives = entryDrivesForRef(
+    machine,
+    refs,
+    ref,
+    candidates,
+    coverageRuns.getStore()?.literalChecks?.pending()
+      ? initializedMachineContext(machine)
+      : initializedCoverageContext(machine),
+    coverageRuns.getStore()?.literalChecks?.pending() ?? false,
+  );
   // A valid interrupt need not preserve every public entry's reached context.
   if (interrupt.satisfiable) return { drive: interrupt, alternatives };
   const entry = alternatives.next();
@@ -2706,6 +2723,23 @@ async function replayCoveragePath(
     });
   };
   const actor = makeActor(machine, script, script, path.drive?.context);
+  const trustedEntry =
+    path.drive === undefined ||
+    isDeepStrictEqual(path.drive.context, initializedMachineContext(machine));
+  const observe = (current: PendingCoverageInvocation | undefined) => {
+    if (
+      trustedEntry &&
+      current?.node.kind === 'child' &&
+      atState(current.node.value.ref)(actor.getSnapshot())
+    )
+      coverageRuns
+        .getStore()
+        ?.literalChecks?.observe(
+          current.node.value.invocation,
+          actor.getSnapshot().context,
+          current.input,
+        );
+  };
   gate.armed = true;
   if (path.drive !== undefined) actor.send(path.drive.event);
   const wait = () =>
@@ -2729,6 +2763,7 @@ async function replayCoveragePath(
       completedPrefix = false;
       break;
     }
+    observe(current);
     pending = undefined;
     expected = step.next;
     current.complete(step.result);
@@ -2758,6 +2793,7 @@ async function replayCoveragePath(
   }
   await wait();
   const snapshot = actor.getSnapshot();
+  observe(pending);
   const failure = actor.coverageErrors.find(
     ({ eventType }) =>
       eventType ===
@@ -2847,6 +2883,11 @@ async function searchCoverageEntry(
   }
   let attempts = 0;
   let entered = false;
+  let transitionCovered = false;
+  const needsLiteral = () =>
+    target.kind === 'child' &&
+    (coverageRuns.getStore()?.literalChecks?.needs(target.value.invocation) ??
+      false);
   const limitations = new Set<string>();
   let inputFailure: string | undefined;
   while (queue.length > 0 && attempts < MAX_COVERAGE_PATH_ATTEMPTS) {
@@ -2864,7 +2905,8 @@ async function searchCoverageEntry(
         entered = true;
         if (await check(replay.actor, replay.pending)) {
           covered = true;
-          return { covered: true, entered };
+          transitionCovered = true;
+          if (!needsLiteral()) return { covered: true, entered };
         }
         // A target check may have completed its actor. Re-enter the same
         // authored prefix before considering successors, charging that replay
@@ -2983,7 +3025,7 @@ async function searchCoverageEntry(
     } finally {
       replay.actor.stop();
       if (
-        !covered &&
+        (!covered || needsLiteral()) &&
         path.alternatives !== undefined &&
         attempts < MAX_COVERAGE_PATH_ATTEMPTS
       ) {
@@ -3003,7 +3045,7 @@ async function searchCoverageEntry(
       `exhausted ${MAX_COVERAGE_PATH_ATTEMPTS}-attempt path budget`,
     );
   return {
-    covered: false,
+    covered: transitionCovered,
     entered,
     ...(limitations.size === 0
       ? {}
@@ -4418,6 +4460,63 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
 export async function checkFsmCoverage(
   fsmModule: unknown,
   opts: {
+    artifactSchema?: 1 | 3;
+    sourceText?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  } = {},
+): Promise<string[]> {
+  return fsmCoverage(fsmModule, opts);
+}
+
+/** Conformance suites replay only pending literal bindings; coverage stays separate. */
+export async function checkGearsFsmConformanceAsync(
+  gears: string,
+  fsmModule: unknown,
+  options: GearsFsmConformanceOptions & {
+    sourceText?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  } = {},
+): Promise<string[]> {
+  const { findings, literalChecks } = prepareGearsFsmConformance(
+    gears,
+    findMachine(fsmModule).config,
+    { concurrentRoleSets: findConcurrentRoleSets(fsmModule), ...options },
+  );
+  options.signal?.throwIfAborted();
+  return findings.length > 0 || !literalChecks.pending()
+    ? findings
+    : fsmCoverage(fsmModule, options, literalChecks, true);
+}
+
+/** One bounded replay owns transition coverage and reached literal-child proof. */
+export async function checkGearsFsmArtifact(
+  gears: string,
+  fsmModule: unknown,
+  options: GearsFsmConformanceOptions & {
+    sourceText?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  } = {},
+): Promise<string[]> {
+  const { findings, literalChecks } = prepareGearsFsmConformance(
+    gears,
+    findMachine(fsmModule).config,
+    {
+      concurrentRoleSets: findConcurrentRoleSets(fsmModule),
+      ...options,
+    },
+  );
+  options.signal?.throwIfAborted();
+  return findings.length > 0
+    ? findings
+    : fsmCoverage(fsmModule, options, literalChecks);
+}
+
+async function fsmCoverage(
+  fsmModule: unknown,
+  opts: {
     /** Already resolved generation from the artifact's authoritative evidence. */
     artifactSchema?: 1 | 3;
     /** The artifact's source text, mined for routing-value candidates. */
@@ -4426,6 +4525,8 @@ export async function checkFsmCoverage(
     /** A caller may shorten, never extend, the derived cooperative deadline. */
     timeoutMs?: number;
   } = {},
+  literalChecks?: ReachedLiteralChildChecks,
+  literalOnly = false,
 ): Promise<string[]> {
   opts.signal?.throwIfAborted();
   if (
@@ -4437,6 +4538,7 @@ export async function checkFsmCoverage(
     );
   const started = performance.now();
   const run: CoverageRun = {
+    literalChecks,
     signal: opts.signal,
     deadline:
       started +
@@ -4464,8 +4566,15 @@ export async function checkFsmCoverage(
       run.artifactSchema = schema.artifactSchema;
       const findings = [
         ...schema.findings,
-        ...(await runFsmCoverage(fsmModule, opts.sourceText ?? '')),
+        ...(literalOnly
+          ? await reachedLiteralContexts(
+              fsmModule,
+              opts.sourceText ?? '',
+              literalChecks!,
+            )
+          : await runFsmCoverage(fsmModule, opts.sourceText ?? '')),
         ...run.questionFindings,
+        ...(literalChecks?.findings() ?? []),
       ];
       await coverageYield(true);
       completed = true;
@@ -4474,6 +4583,36 @@ export async function checkFsmCoverage(
       stopCoverageActors(run.actors, !completed);
     }
   });
+}
+
+/** A conformance-only suite uses one existing bounded search per pending call. */
+async function reachedLiteralContexts(
+  fsmModule: unknown,
+  sourceText: string,
+  checks: ReachedLiteralChildChecks,
+): Promise<string[]> {
+  const machine = findMachine(fsmModule);
+  const refs = stateRefs(machine.config),
+    captains = captainRefs(machine.config),
+    playbooks = playbookRefs(machine.config);
+  const candidates = [
+    ...identifierLiterals(sourceText),
+    ...numericLiterals(sourceText),
+  ];
+  for (const playbook of playbooks) {
+    if (!checks.needs(playbook.invocation)) continue;
+    await coverageYield();
+    await searchCoverageEntry(
+      machine,
+      { kind: 'child', value: playbook },
+      refs,
+      captains,
+      playbooks,
+      candidates,
+      async () => true,
+    );
+  }
+  return [];
 }
 
 async function runFsmCoverage(

@@ -11,6 +11,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Literal child conformance preserves reached control values while proving
+  optional relays across the existing bounded replay, retaining required
+  mappings, actual nonempty payloads and exact authored separators.
+
 ## [0.16.7] - 2026-10-18
 
 ### Fixed

@@ -244,7 +244,6 @@ try {
 
   const fsm = { synthetic: 'fsm module' };
   const config = { synthetic: 'FSM actor bindings' };
-  const concurrentRoleSets = [['coder', 'reviewer']];
   const composeCaptainPrompt = () => 'captain prompt';
   const composePlayerPrompt = () => 'player prompt';
   const linked = {
@@ -257,6 +256,7 @@ try {
     supportedArtifactSchemas: [3],
   };
   const observed = {
+    artifactCalls: 0,
     composition: [],
     fidelity: [],
   };
@@ -310,13 +310,10 @@ try {
       };
     },
     enumerateCaptainStates: () => actorKinds.map((actor) => ({ actor })),
-    findConcurrentRoleSets: (value) => {
-      observed.concurrentInput = value;
-      return concurrentRoleSets;
-    },
-    checkGearsFsmConformance: (gears, value, options) => {
-      observed.conformance = { gears, config: value, options };
-      return injectedFindings.conformance;
+    checkGearsFsmArtifact: async (gears, value, options) => {
+      observed.artifactCalls++;
+      observed.artifact = { gears, fsm: value, options };
+      return [...injectedFindings.conformance, ...injectedFindings.coverage];
     },
     pinIntrospection: () => ({
       captain: [],
@@ -329,10 +326,6 @@ try {
     checkPromptComposition: (input) => {
       observed.composition.push(input);
       return injectedFindings.composition;
-    },
-    checkFsmCoverage: async (value, options) => {
-      observed.coverage = { fsm: value, options };
-      return injectedFindings.coverage;
     },
   };
   let pinVerdict = { status: 'current' };
@@ -399,11 +392,11 @@ try {
     observed.pinEvaluation.file.pins.unrelated.linkTarget.provenance,
     '@sublang/playbook@4.0.0',
   );
-  assert.equal(observed.concurrentInput, fsm);
-  assert.deepEqual(observed.conformance, {
+  assert.equal(observed.artifactCalls, 1);
+  assert.deepEqual(observed.artifact, {
     gears: 'synthetic gears\n',
-    config,
-    options: { concurrentRoleSets, artifactSchema: 3 },
+    fsm,
+    options: { sourceText: 'synthetic fsm\n', artifactSchema: 3 },
   });
   assert.deepEqual(observed.composition, [
     {
@@ -419,10 +412,6 @@ try {
       artifactSchema: 3,
     },
   ]);
-  assert.deepEqual(observed.coverage, {
-    fsm,
-    options: { sourceText: 'synthetic fsm\n', artifactSchema: 3 },
-  });
   assert.deepEqual(result, {
     findings: ['schema: synthetic schema disagreement'],
     passed: false,
@@ -434,7 +423,8 @@ try {
     ['conformance', 'synthetic conformance drift', 'conformance'],
     ['fidelity', 'synthetic compiled-execution drift', 'fidelity'],
     ['composition', 'synthetic prompt drift', 'composition'],
-    ['coverage', 'synthetic unreachable arm', 'coverage'],
+    // Both finding kinds now pass through the one combined artifact gate.
+    ['coverage', 'synthetic unreachable arm', 'conformance'],
   ]) {
     if (kind === 'composition') actorKinds = ['captain'];
     injectedFindings[kind] = [message];
