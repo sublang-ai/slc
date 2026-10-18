@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Coverage discovers source-defined routing identifiers beyond 32 characters,
+  preserving actual guards, ordered replay and existing search limits.
+
 - Reached child conformance proves bounded canonical structured JSON relays
   without replacing container types or accepting unobserved payload mappings.
 

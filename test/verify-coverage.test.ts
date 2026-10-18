@@ -4361,6 +4361,80 @@ describe('checkFsmCoverage (verification-6)', () => {
     ).toBe(true);
   });
 
+  it.each([32, 33, 38, 64, 256])(
+    'replays helper-bound public routes with %i-character identifiers',
+    async (length) => {
+      const alternate = 'route_' + 'a'.repeat(length - 6);
+      const observed: Array<{
+        id: string;
+        variant: unknown;
+        entryType: unknown;
+      }> = [];
+      const sourceText = [
+        ...Array.from({ length: 96 }, (_, index) =>
+          JSON.stringify('a' + index.toString(16).padStart(63, '0')),
+        ),
+        JSON.stringify('primary'),
+        JSON.stringify(alternate),
+      ].join('\n');
+      expect(
+        await checkFsmCoverage(
+          {
+            machine: childChainMachine({
+              entryVariants: { modes: ['primary', alternate], observed },
+            }),
+          },
+          { sourceText },
+        ),
+      ).toEqual([]);
+      expect(
+        observed.some(
+          (entry) =>
+            entry.id === 'pr' &&
+            entry.variant === alternate &&
+            entry.entryType === 'START',
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each([
+    { rejectAlternate: true },
+    { shadowAlternate: true },
+    { requireProof: true },
+  ])(
+    'retains refusal for helper-bound long public routes: %j',
+    async (limits) => {
+      const alternate = 'independent-context-route-revalidation';
+      const observed: Array<{
+        id: string;
+        variant: unknown;
+        entryType: unknown;
+      }> = [];
+      const findings = await checkFsmCoverage(
+        {
+          machine: childChainMachine({
+            entryVariants: {
+              ...limits,
+              modes: ['primary', alternate],
+              observed,
+            },
+          }),
+        },
+        {
+          sourceText: [
+            JSON.stringify('primary'),
+            JSON.stringify(alternate),
+          ].join('\n'),
+        },
+      );
+      expect(
+        findings.some((finding) => finding.startsWith('state branch:')),
+      ).toBe(true);
+      expect(observed.some((entry) => entry.id === 'branch')).toBe(false);
+    },
+  );
+
   it.each([
     { rejectAlternate: true },
     { shadowAlternate: true },
