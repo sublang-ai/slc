@@ -1895,11 +1895,18 @@ function probeGuardAssignment(
     };
     trace();
     // Exact cardinality may short-circuit before any named property is read.
+    // Fixed-context reads cannot guide values, so they do not suppress padding.
     // Explore only an observed payload enumeration, within the same four-field
     // assignment bound. Context and fixed event fields remain unchanged.
     if (
       options.discoverPayloadShape === true &&
-      (discoverShape || reads.size === 0)
+      (discoverShape ||
+        ![...reads].some(
+          (key) =>
+            !key.startsWith('c:') ||
+            (options.assignContext !== false &&
+              !options.fixedContextFields?.includes(key.slice(2))),
+        ))
     ) {
       for (const payload of payloads) {
         if (!enumerated.has(payload.tag)) continue;
