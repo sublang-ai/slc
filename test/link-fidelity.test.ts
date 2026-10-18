@@ -218,6 +218,65 @@ describe('linked-module contract checks (verification-27, verification-28)', () 
     }
   });
 
+  it('keeps absent relay positions distinct from populated quoted lines', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-link-relay-positions-'));
+    try {
+      await prepareTempProject(dir);
+      const fsmPath = join(dir, 'case.fsm.ts');
+      const linkedPath = join(dir, 'case.playbook.ts');
+      const prompt = 'Header\\n> <audience>\\n> <review-result>\\nEnd';
+      const fsm = FSM_FIXTURE.replace(
+        'pendingBossQuestion?: unknown; bossReply?: string }',
+        'pendingBossQuestion?: unknown; bossReply?: string; reviewResult: null }',
+      )
+        .replace(
+          "audience: input?.audience ?? '',",
+          "audience: input?.audience ?? '', reviewResult: null,",
+        )
+        .replace('Draft for <audience> as <coder-llm>.', prompt)
+        .replace(
+          'audience: context.audience,',
+          'audience: context.audience, ...(context.reviewResult === null ? {} : { reviewResult: context.reviewResult }),',
+        );
+      await writeFile(fsmPath, fsm);
+      await writeFile(linkedPath, QUOTED_RELAY);
+      expect(await checkLinkedModuleContract({ linkedPath, fsmPath })).toEqual(
+        [],
+      );
+
+      // A matching sentinel elsewhere cannot excuse a deleted optional token,
+      // a changed literal line, or a reordered complete body.
+      for (const [name, mutation] of [
+        ['deleted', ".replace('<review-result>', '')"],
+        ['changed', ".replace('Header', 'Changed')"],
+        [
+          'reordered',
+          ".replace(/(> [^\\n]+)\\n(> <review-result>)/, '$2\\n$1')",
+        ],
+      ]) {
+        const mutated = join(dir, `${name}.playbook.ts`);
+        await writeFile(
+          mutated,
+          QUOTED_RELAY.replace(
+            'composePlayerPrompt: compose',
+            `composePlayerPrompt: (...args: Parameters<typeof compose>) => compose(...args)${mutation}`,
+          ),
+        );
+        expect(
+          await checkLinkedModuleContract({ linkedPath: mutated, fsmPath }),
+        ).toEqual(
+          expect.arrayContaining([
+            expect.stringMatching(
+              /does not preserve (?:the prompt body verbatim and in order|the body line)/,
+            ),
+          ]),
+        );
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reports an unimportable module as a finding rather than an error', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-link-contract-load-'));
     try {
