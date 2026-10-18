@@ -24,10 +24,13 @@ Keep source-defined empty standalone relay omission distinct from required start
 Fail closed when this bounded surface cannot establish composition; do not waive source fidelity or infer a child output ABI from this check.
 Dynamic child target/text metadata and player/Captain prompt contracts remain separate existing requirements.
 Context-dependent proof may use the same bounded public-entry and predecessor replay as coverage, preserving reached controls while varying one observed payload. Every explicit relay must acquire a nonempty mapping in a reached case of the same invocation; an omitted standalone line additionally requires its mapped payload to be empty or absent in that particular context. No mapping or omission is inferred from a control-only read or a disappeared line.
+Reached structured payloads may establish the same quoted-relay correspondence through descriptor-only canonical JSON evidence, preserving container types and requiring distinct type-preserving evidence for every existing string leaf.
+Complete canonical rendering and immutable descriptor facts remain required for every reached case; empty or numeric-only containers cannot invent correspondence.
 The behavior is specified in [[verification-39](../packages/verification.md#verification-39)].
 
 ## Consequences
 
 Valid composed child text no longer fails merely because initial context lacks values produced before that child runs.
 The check proves template and observed dataflow fidelity, while source-aware review still determines whether a field represents the correct domain value and whether caller predicates match the child's public result contract.
+The structured inspector and encoder do not invoke input accessors or JSON hooks; the proof does not sandbox authored machine execution or establish purity before a reached observation.
 No runtime, workflow artifact, or provider invocation is changed by this correction.
