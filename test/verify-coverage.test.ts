@@ -223,6 +223,8 @@ const questionResumedMachine = (
     shadowed?: boolean;
     blankResumes?: boolean;
     escapesTarget?: boolean;
+    entryPhase?: boolean;
+    indirectWait?: boolean;
     observed?: Array<{
       guard: string;
       questionId: string;
@@ -244,6 +246,11 @@ const questionResumedMachine = (
       (!opts.contradictory || event.output.guard !== key);
   const ordinary = goodMachine();
   const states = ordinary.config.states as any;
+  const question = needsBossReplyArm(
+    'work',
+    'writer',
+    opts.wrongQuestion ? 'X-other' : 'X-1',
+  );
   const approval = ['approved', 'refused'].map((key) => ({
     guard: accepted(key),
     target: opts.escapesTarget ? '#after' : '#done',
@@ -263,11 +270,16 @@ const questionResumedMachine = (
     },
   }).createMachine({
     ...ordinary.config,
+    context: opts.entryPhase ? { phase: 'ready' } : ordinary.config.context,
     states: {
       ...states,
-      after: { id: 'after', always: '#failed' },
+      after: {
+        id: 'after',
+        always: opts.indirectWait ? '#awaitBossReply' : '#failed',
+      },
       work: {
         ...states.work,
+        ...(opts.entryPhase ? { entry: assign({ phase: 'working' }) } : {}),
         invoke: {
           ...states.work.invoke,
           src: 'player',
@@ -287,11 +299,13 @@ const questionResumedMachine = (
               ? [{ guard: accepted('approved'), target: '#failed' }]
               : []),
             ...approval,
-            needsBossReplyArm(
-              'work',
-              'writer',
-              opts.wrongQuestion ? 'X-other' : 'X-1',
-            ),
+            {
+              ...question,
+              target: opts.indirectWait ? '#after' : question.target,
+              guard: (args: any) =>
+                (!opts.entryPhase || args.context.phase === 'working') &&
+                question.guard(args),
+            },
             { target: '#failed' },
           ],
         },
@@ -3401,6 +3415,54 @@ describe('checkFsmCoverage (verification-6)', () => {
         ),
       ).toBe(true);
   });
+
+  it('uses the reached question arm after entry changes its guards', async () => {
+    const observed: Array<{
+      guard: string;
+      questionId: string;
+      sourceItem: string;
+      reply: string;
+    }> = [];
+    expect(
+      await checkFsmCoverage(
+        { machine: questionResumedMachine({ entryPhase: true, observed }) },
+        { artifactSchema: 3 },
+      ),
+    ).toEqual([]);
+    expect(new Set(observed.map((value) => value.guard))).toEqual(
+      new Set(['approved', 'refused']),
+    );
+  });
+
+  it.each([
+    {
+      options: { indirectWait: true },
+      finding:
+        'did not suspend in awaitBossReply or a branch-local Boss-reply wait state',
+    },
+    {
+      options: { wrongQuestion: true },
+      finding: 'has no matching canonical scalar pending Boss question',
+    },
+    {
+      options: { blankResumes: true },
+      finding: 'a blank BOSS_REPLY answer must not resume the state',
+    },
+  ])(
+    'retains reached-question refusal for $options',
+    async ({ options, finding }) => {
+      expect(
+        (
+          await checkFsmCoverage(
+            {
+              machine: questionResumedMachine({ entryPhase: true, ...options }),
+            },
+            { artifactSchema: 3 },
+          )
+        ).some((value) => value.includes(finding)),
+      ).toBe(true);
+    },
+  );
 
   it.each([
     { wrongQuestion: true },
