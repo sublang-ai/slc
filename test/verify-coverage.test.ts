@@ -1337,23 +1337,29 @@ const enumeratedChildOutputMachine = (
     wrongCount?: boolean;
     shadowed?: boolean;
     jsonDescriptors?: boolean;
+    literalRevision?: boolean;
+    needsFifth?: boolean;
   } = {},
 ) => {
   const namedFields = (value: any) =>
     typeof value.revision === 'string' &&
     value.revision.trim() !== '' &&
+    (!opts.literalRevision || value.revision === 'accepted') &&
     value.approved === true &&
     typeof value.summary === 'string' &&
     value.summary.trim() !== '' &&
-    (fields === 3 || value.accepted === true);
+    (fields === 3 || value.accepted === true) &&
+    (!opts.needsFifth || value.extra === true);
   const count = (value: any) =>
-    Object.keys(value).length === (opts.wrongCount ? fields - 1 : fields) &&
+    Object.keys(value).length ===
+      (opts.wrongCount ? fields - 1 : fields + (opts.needsFifth ? 1 : 0)) &&
     (!opts.jsonDescriptors ||
       [
         'revision',
         'approved',
         'summary',
         ...(fields === 4 ? ['accepted'] : []),
+        ...(opts.needsFifth ? ['extra'] : []),
       ].every((key) => Object.hasOwn(value, key)));
   const jsonRecord = (value: any) =>
     !opts.jsonDescriptors ||
@@ -2953,6 +2959,42 @@ describe('checkFsmCoverage (verification-6)', () => {
     ).toContain(
       'state child: nested playbook onDone arm 1 is unsatisfiable under probing',
     );
+  });
+
+  it('guides hidden values after exact child-field presence within a broad candidate pool', async () => {
+    const sourceText = [
+      ...Array.from({ length: 55 }, (_, index) => `'candidate${index}'`),
+      "'accepted'",
+    ].join('\n');
+    expect(
+      await checkFsmCoverage(
+        {
+          machine: enumeratedChildOutputMachine(4, {
+            jsonDescriptors: true,
+            literalRevision: true,
+          }),
+        },
+        { sourceText },
+      ),
+    ).toEqual([]);
+    for (const refusal of [
+      { wrongCount: true },
+      { shadowed: true },
+      { needsFifth: true },
+    ]) {
+      expect(
+        await checkFsmCoverage(
+          {
+            machine: enumeratedChildOutputMachine(4, {
+              jsonDescriptors: true,
+              literalRevision: true,
+              ...refusal,
+            }),
+          },
+          { sourceText },
+        ),
+      ).not.toEqual([]);
+    }
   });
 
   it('retains dead child approval and blank-reply failures without context patches', async () => {

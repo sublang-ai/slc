@@ -11,6 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Child-output coverage discovers required own-field names before guiding their
+  values, so exact-key guards do not exhaust the bounded search beneath an early
+  wrong discriminant. Concrete ordered guards and actual XState replay still
+  reject contradictory shapes, shadowed arms and outputs beyond four fields.
+
 ## [0.16.3] - 2026-10-17
 
 ### Fixed
