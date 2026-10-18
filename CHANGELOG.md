@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Child-output value guidance satisfies the selected arm before searching for
+  earlier-arm exclusions, preserving ordered acceptance, actual target replay
+  and the existing shared search limits.
 - Coverage can follow successive canonical questions and replies within its
   existing path limits, prioritizing a reached target before unrelated paths
   while retaining honest exhaustion and target-failure diagnostics.

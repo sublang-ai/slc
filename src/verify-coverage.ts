@@ -1745,12 +1745,12 @@ function probeGuardAssignment(
     return event;
   };
 
-  const passes = (assignment: ProbeAssignment): boolean => {
+  const passes = (assignment: ProbeAssignment, predicate = guard): boolean => {
     coverageCheckpoint();
     probes++;
     try {
       return Boolean(
-        guard({ context: assignment.context, event: eventFor(assignment) }),
+        predicate({ context: assignment.context, event: eventFor(assignment) }),
       );
     } catch {
       coverageCheckpoint();
@@ -1768,6 +1768,15 @@ function probeGuardAssignment(
     coverageCheckpoint();
     const reads = new Set<string>();
     const enumerated = new Set<string>();
+    // An earlier arm's fields cannot satisfy a false selected guard. Once that
+    // guard accepts, ordered reads can discover how to exclude the earlier arm.
+    // This concrete guidance check shares the existing acceptance-probe budget.
+    const selectedPending =
+      !discoverShape &&
+      options.discoverPayloadShape === true &&
+      options.payloadShapeGuard !== undefined &&
+      !passes(assignment, options.payloadShapeGuard);
+    if (probes > MAX_PROBES) return [];
     let shapeTag: string | undefined;
     let shapeWidth = 0;
     const noteShapeField = (tag: string, field: string): void => {
@@ -1875,7 +1884,7 @@ function probeGuardAssignment(
             );
           }
         }
-        (discoverShape || shapeTag !== undefined
+        (discoverShape || shapeTag !== undefined || selectedPending
           ? (options.payloadShapeGuard ?? guard)
           : guard)({
           context: recording(
