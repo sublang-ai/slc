@@ -1468,6 +1468,28 @@ export interface GearsFsmConformanceOptions {
   artifactSchema?: 1 | 3;
 }
 
+/** Conservative synchronous check; no reached-context evidence is assumed. */
+export function checkGearsFsmConformance(
+  gears: string,
+  config: MachineConfigLike,
+  options: GearsFsmConformanceOptions = {},
+): string[] {
+  return gearsFsmConformance(gears, config, options);
+}
+
+/** Structural findings plus binding-local work for the shared bounded replay. */
+export function prepareGearsFsmConformance(
+  gears: string,
+  config: MachineConfigLike,
+  options: GearsFsmConformanceOptions = {},
+): { findings: string[]; literalChecks: ReachedLiteralChildChecks } {
+  const literalChecks = new ReachedLiteralChildChecks();
+  return {
+    findings: gearsFsmConformance(gears, config, options, literalChecks),
+    literalChecks,
+  };
+}
+
 /** Exact action guards of Playbook 10's controller decision result. */
 export const CONTROLLER_ACTION_GUARDS = [
   'respond',
@@ -1593,10 +1615,11 @@ export function checkFsmChildSuspension(config: MachineConfigLike): string[] {
  * captain state's `result` map declares the Boss-reply suspension key with its
  * adjudicator contract (verification-1, verification-3; DR-009).
  */
-export function checkGearsFsmConformance(
+function gearsFsmConformance(
   gears: string,
   config: MachineConfigLike,
   options: GearsFsmConformanceOptions = {},
+  reached?: ReachedLiteralChildChecks,
 ): string[] {
   const items = parseGearsItems(gears);
   const roleContract = inspectGearsRoleContract(gears);
@@ -1645,7 +1668,9 @@ export function checkGearsFsmConformance(
         item.prompt,
         binding === undefined
           ? 'has no inspectable invocation'
-          : literalPlaybookTextFinding(item.prompt, binding, initialContext),
+          : reached === undefined
+            ? literalPlaybookTextFinding(item.prompt, binding, initialContext)
+            : reached.check(item, binding, initialContext),
       );
     }
     return checked.get(item.prompt);
@@ -1809,7 +1834,12 @@ export function checkGearsFsmConformance(
         !matchedPlaybookStates.has(candidate) &&
         candidate.playbookIdContext === undefined &&
         candidate.playbookId === item.playbookId &&
-        literalFinding(item, candidate) === undefined,
+        // Unproved pairs cannot establish sourceItem-less one-to-one binding.
+        literalPlaybookTextFinding(
+          item.prompt,
+          playbookBindings.find((binding) => binding.state === candidate)!,
+          initialContext,
+        ) === undefined,
     );
     if (state !== undefined) addPlaybookMatch(item, state);
   }
@@ -3392,6 +3422,8 @@ function literalScalarContext(
   base: Record<string, unknown>,
   values: Record<string, string>,
   reads?: Set<string>,
+  virtualPresence = true,
+  capture?: (record: Record<string, unknown>) => void,
 ): { context: Record<string, unknown>; failure: () => string | undefined } {
   let failure: string | undefined;
   const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -3411,6 +3443,7 @@ function literalScalarContext(
           : 'cyclic record reads';
       return record;
     }
+    capture?.(record);
     const seen = new Set([...ancestors, record]);
     const copy = Object.create(Object.getPrototypeOf(record)) as Record<
       string,
@@ -3433,7 +3466,8 @@ function literalScalarContext(
         if (Object.hasOwn(values, field)) return values[field];
         return isRecord(value) ? wrap(value, nested, seen) : value;
       },
-      has: () => true,
+      has: (target, property) =>
+        virtualPresence || Reflect.has(target, property),
     });
   };
   return { context: wrap(base, [], new Set()), failure: () => failure };
@@ -3444,6 +3478,7 @@ function literalPlaybookTextFinding(
   prompt: string,
   binding: PlaybookBinding,
   initial: Record<string, unknown> | undefined,
+  unproved?: () => void,
 ): string | undefined {
   const input = binding.invoke.input;
   // Only explicit quoted relay notation establishes required runtime slots.
@@ -3454,8 +3489,10 @@ function literalPlaybookTextFinding(
       return token === undefined ? [] : [token];
     }),
   );
-  const unresolvedRelay = (token: string): string =>
-    `leaves quoted child-input relay ${token} unresolved`;
+  const unresolvedRelay = (token: string): string => {
+    if (typeof input === 'function') unproved?.();
+    return `leaves quoted child-input relay ${token} unresolved`;
+  };
   if (typeof input !== 'function') {
     if (binding.state.text !== prompt)
       return 'does not preserve the complete GEARS child-input template';
@@ -3499,10 +3536,13 @@ function literalPlaybookTextFinding(
       : undefined;
   };
   const text = probe(values);
-  if (text === undefined)
+  if (text === undefined) {
+    unproved?.();
     return 'has unsupported composition (input evaluation or literal identity changed)';
+  }
   const matched = matchPromptBody(prompt, text, [...fields]);
   if (matched === null || matched.index !== 0 || matched.end !== text.length) {
+    unproved?.();
     return 'does not preserve the complete GEARS child-input template';
   }
   const tokens = [...prompt.matchAll(PLACEHOLDER)].map((match) => match[0]);
@@ -3540,29 +3580,19 @@ function literalPlaybookTextFinding(
         (multilineFields.has(field) ? `\n\n«${field}:second»` : ''),
     ]),
   );
-  const render = (values: Record<string, string>): string => {
-    // Only the source-defined standalone relay form owns empty-line removal.
-    const template = prompt
-      .split(/(?<=\n)/)
-      .filter((line) => {
-        const token = /^> (<[^\s<>`]{1,60}>)(?:\r?\n)?$/.exec(line)?.[1];
-        const mapped = token === undefined ? undefined : mapping.get(token);
-        return mapped === undefined || values[mapped.field] !== '';
-      })
-      .join('');
-    return template.replace(PLACEHOLDER, (token: string, offset: number) => {
-      const mapped = mapping.get(token);
-      if (mapped === undefined) return token;
-      const value = values[mapped.field];
-      const lineStart = template.lastIndexOf('\n', offset - 1) + 1;
-      return template.startsWith('> ', lineStart)
-        ? value.replace(/\r?\n/g, (separator) => `${separator}> `)
-        : value;
-    });
-  };
+  const fieldMapping = new Map(
+    [...mapping].map(([token, { field }]) => [token, field]),
+  );
+  const render = (values: Record<string, string>): string =>
+    renderLiteralChildTemplate(prompt, fieldMapping, (field) => values[field])!;
   const composed = probe(payloads);
   if (composed === undefined || composed !== render(payloads)) {
-    return 'does not preserve literal substitutions and quoted continuation lines';
+    return (
+      'does not preserve literal substitutions and quoted continuation lines' +
+      (composed === undefined
+        ? ''
+        : ` (${firstDifferenceDiagnostic(render(payloads), composed)})`)
+    );
   }
   const emptyFields = new Set<string>();
   for (const line of prompt.split(/\r?\n/)) {
@@ -3577,10 +3607,476 @@ function literalPlaybookTextFinding(
     };
     const emptyText = probe(values);
     if (emptyText === undefined || emptyText !== render(values)) {
-      return 'does not preserve source-defined empty standalone relay omission';
+      return (
+        'does not preserve source-defined empty standalone relay omission' +
+        (emptyText === undefined
+          ? ''
+          : ` (${firstDifferenceDiagnostic(render(values), emptyText)})`)
+      );
     }
   }
   return undefined;
+}
+
+/** Exact whole-template renderer shared by initial and reached-case proofs. */
+function renderLiteralChildTemplate(
+  prompt: string,
+  mapping: ReadonlyMap<string, string>,
+  valueOf: (field: string) => unknown,
+): string | undefined {
+  if (
+    [...mapping.values()].some((field) => {
+      const value = valueOf(field);
+      return value !== undefined && typeof value !== 'string';
+    })
+  )
+    return undefined;
+  const template = prompt
+    .split(/(?<=\n)/)
+    .filter((line) => {
+      const token = /^> (<[^\s<>`]{1,60}>)(?:\r?\n)?$/.exec(line)?.[1];
+      const field = token === undefined ? undefined : mapping.get(token);
+      return (
+        field === undefined ||
+        (valueOf(field) !== undefined && valueOf(field) !== '')
+      );
+    })
+    .join('');
+  return template.replace(PLACEHOLDER, (token, offset: number) => {
+    const field = mapping.get(token);
+    if (field === undefined) return token;
+    const value = (valueOf(field) ?? '') as string;
+    return template.startsWith('> ', template.lastIndexOf('\n', offset - 1) + 1)
+      ? value.replace(/\r?\n/g, (separator) => `${separator}> `)
+      : value;
+  });
+}
+
+/** A finite provisional match. Omitted lines never constitute mapping evidence. */
+function reachedTemplateMatch(
+  prompt: string,
+  text: string,
+  payloads: readonly string[],
+  fixed: ReadonlyMap<string, string>,
+): Map<string, string> | undefined {
+  type Part =
+    | { literal: string }
+    | { token: string; quoted: boolean }
+    | { optional: Part[] };
+  const parts: Part[] = [];
+  for (const line of prompt.split(/(?<=\n)/)) {
+    const chunk: Part[] = [];
+    let offset = 0;
+    for (const match of line.matchAll(PLACEHOLDER)) {
+      chunk.push({ literal: line.slice(offset, match.index) });
+      chunk.push({ token: match[0], quoted: line.startsWith('> ') });
+      offset = match.index + match[0].length;
+    }
+    chunk.push({ literal: line.slice(offset) });
+    if (/^> <[^\s<>`]{1,60}>(?:\r?\n)?$/.test(line))
+      parts.push({ optional: chunk });
+    else parts.push(...chunk);
+  }
+  let attempts = 0;
+  const walk = (
+    remaining: readonly Part[],
+    offset: number,
+    values: Map<string, string>,
+  ): Map<string, string> | undefined => {
+    if (++attempts > 4096) return undefined;
+    if (remaining.length === 0)
+      return offset === text.length ? values : undefined;
+    const [part, ...rest] = remaining;
+    if ('literal' in part)
+      return text.startsWith(part.literal, offset)
+        ? walk(rest, offset + part.literal.length, values)
+        : undefined;
+    if ('optional' in part)
+      return (
+        walk([...part.optional, ...rest], offset, values) ??
+        walk(rest, offset, values)
+      );
+    const candidates = values.has(part.token)
+      ? [values.get(part.token)!]
+      : fixed.has(part.token)
+        ? [fixed.get(part.token)!]
+        : [part.token, ...payloads];
+    for (const value of new Set(candidates)) {
+      const rendered = part.quoted
+        ? value.replace(/\r?\n/g, (separator) => `${separator}> `)
+        : value;
+      if (text.startsWith(rendered, offset)) {
+        const found = walk(
+          rest,
+          offset + rendered.length,
+          new Map([...values, [part.token, value]]),
+        );
+        if (found !== undefined) return found;
+      }
+    }
+    return undefined;
+  };
+  return walk(parts, 0, new Map());
+}
+
+function literalPathValue(
+  context: Record<string, unknown>,
+  field: string,
+  records?: ReadonlyMap<object, PropertyDescriptorMap>,
+): unknown {
+  let value: unknown = context;
+  for (const key of JSON.parse(field) as string[]) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value))
+      return undefined;
+    const captured = records?.get(value);
+    if (records !== undefined && captured === undefined) return null;
+    const descriptor =
+      captured === undefined
+        ? Object.getOwnPropertyDescriptor(value, key)
+        : Object.hasOwn(captured, key)
+          ? captured[key]
+          : undefined;
+    if (descriptor === undefined) return undefined;
+    if (!('value' in descriptor)) return null; // An accessor is not absent evidence.
+    value = descriptor.value;
+  }
+  return value;
+}
+
+/** Compare observed descriptor facts, without serializing arbitrary context. */
+function literalRecordsUnchanged(
+  records: ReadonlyMap<object, PropertyDescriptorMap>,
+): boolean {
+  return [...records].every(([record, before]) => {
+    const keys = Reflect.ownKeys(record);
+    const oldKeys = Reflect.ownKeys(before);
+    return (
+      keys.length === oldKeys.length &&
+      keys.every((key, index) => {
+        if (key !== oldKeys[index]) return false;
+        const old = Reflect.get(before, key) as PropertyDescriptor;
+        const current = Object.getOwnPropertyDescriptor(record, key)!;
+        return [
+          'configurable',
+          'enumerable',
+          'writable',
+          'get',
+          'set',
+          'value',
+        ].every((field) =>
+          Object.is(Reflect.get(old, field), Reflect.get(current, field)),
+        );
+      })
+    );
+  });
+}
+
+interface ReachedLiteralWork {
+  item: GearsItem;
+  binding: PlaybookBinding;
+  original: string;
+  mapping: Map<string, string>;
+  validated: boolean;
+  cases: {
+    context: Record<string, unknown>;
+    text: string;
+    influences: ReadonlySet<string>;
+    records: ReadonlyMap<object, PropertyDescriptorMap>;
+  }[];
+  failure?: string;
+}
+
+/** Invocation object identity prevents evidence sharing between sibling calls. */
+export class ReachedLiteralChildChecks {
+  private readonly work = new Map<InvokeLike, ReachedLiteralWork>();
+
+  check(
+    item: GearsItem,
+    binding: PlaybookBinding,
+    initial: Record<string, unknown> | undefined,
+  ): string | undefined {
+    let unproved = false;
+    const finding = literalPlaybookTextFinding(
+      item.prompt,
+      binding,
+      initial,
+      () => {
+        unproved = true;
+      },
+    );
+    if (!unproved || finding === undefined) return finding;
+    if (!this.work.has(binding.invoke))
+      this.work.set(binding.invoke, {
+        item,
+        binding,
+        original: finding,
+        mapping: new Map(),
+        validated: false,
+        cases: [],
+      });
+    return undefined;
+  }
+
+  pending(): boolean {
+    return [...this.work.values()].some(
+      (work) => work.failure === undefined && !this.proved(work),
+    );
+  }
+
+  needs(invoke: object): boolean {
+    const work = this.work.get(invoke as InvokeLike);
+    return (
+      work !== undefined && work.failure === undefined && !this.proved(work)
+    );
+  }
+
+  private proved(work: ReachedLiteralWork): boolean {
+    return work.validated;
+  }
+
+  private mapped(work: ReachedLiteralWork): boolean {
+    const required = work.item.prompt
+      .split(/\r?\n/)
+      .flatMap(
+        (line) =>
+          /^> (?:[^<>\r\n]+: )?(<[^\s<>`]{1,60}>)$/.exec(line)?.[1] ?? [],
+      );
+    return (
+      work.cases.length > 0 &&
+      required.every((token) => work.mapping.has(token))
+    );
+  }
+
+  observe(
+    invoke: object,
+    context: Record<string, unknown>,
+    actual: Record<string, unknown>,
+  ): void {
+    const work = this.work.get(invoke as InvokeLike);
+    if (work === undefined || work.failure !== undefined) return;
+    const { binding, item } = work;
+    const fields = new Set<string>();
+    const records = new Map<object, PropertyDescriptorMap>();
+    const observed = literalScalarContext(
+      context,
+      {},
+      fields,
+      false,
+      (record) => {
+        if (!records.has(record))
+          records.set(record, Object.getOwnPropertyDescriptors(record));
+      },
+    );
+    const input = invocationInput(binding.invoke, observed.context);
+    if (observed.failure() !== undefined || fields.size > 128) {
+      work.failure =
+        'has unsupported composition (bounded scalar observation failed)';
+      return;
+    }
+    if (
+      !('value' in input) ||
+      input.value.text !== actual.text ||
+      input.value.stateId !== actual.stateId ||
+      input.value.playbookId !== actual.playbookId ||
+      typeof actual.text !== 'string' ||
+      actual.stateId !== binding.state.stateId ||
+      actual.playbookId !== binding.state.playbookId ||
+      (binding.state.sourceItem !== undefined &&
+        actual.sourceItem !== binding.state.sourceItem)
+    ) {
+      work.failure =
+        'has unsupported composition (reached input or literal identity changed)';
+      return;
+    }
+    const payloads = [...fields].flatMap((field) => {
+      const value = literalPathValue(context, field, records);
+      return value === undefined
+        ? ['']
+        : typeof value === 'string'
+          ? [value]
+          : [];
+    });
+    const influences = new Set<string>();
+    for (const field of fields) {
+      const marker = sentinelFor(field);
+      const candidate = literalScalarContext(
+        context,
+        { [field]: marker },
+        undefined,
+        false,
+      );
+      const result = invocationInput(binding.invoke, candidate.context);
+      if (
+        candidate.failure() !== undefined ||
+        !('value' in result) ||
+        typeof result.value.text !== 'string'
+      )
+        continue;
+      const text = result.value.text;
+      if (text === actual.text || !text.includes(marker)) continue;
+      if (
+        result.value.stateId !== binding.state.stateId ||
+        result.value.playbookId !== binding.state.playbookId ||
+        result.value.sourceItem !== actual.sourceItem
+      ) {
+        work.failure = 'has unsupported composition (literal identity changed)';
+        return;
+      } // A control-only read is not a relay.
+      const fixed = new Map(
+        [...work.mapping].map(([token, mapped]) => [
+          token,
+          mapped === field
+            ? marker
+            : String(literalPathValue(context, mapped, records) ?? ''),
+        ]),
+      );
+      const matched = reachedTemplateMatch(
+        item.prompt,
+        text,
+        [marker, ...payloads],
+        fixed,
+      );
+      if (matched === undefined) {
+        work.failure =
+          'does not preserve the complete GEARS child-input template';
+        return;
+      }
+      for (const [token, value] of matched) {
+        if (value !== marker) continue;
+        const previous = work.mapping.get(token);
+        if (previous === undefined && work.validated) {
+          work.failure = `has an unproved late context substitution for ${token}`;
+          return;
+        }
+        if (previous !== undefined && previous !== field) {
+          work.failure = `uses inconsistent context substitutions for ${token}`;
+          return;
+        }
+        work.mapping.set(token, field);
+        influences.add(field);
+      }
+    }
+    // Do not merge cases by read paths: a later mapping may reveal an unread
+    // nonempty payload in an earlier context. Every actual case is validated.
+    if (work.cases.length >= 64) {
+      work.failure =
+        'has unsupported composition (too many pending reached cases)';
+      return;
+    }
+    work.cases.push({ context, text: actual.text, influences, records });
+    if (!this.mapped(work)) return;
+    for (const reached of work.cases) {
+      if (!literalRecordsUnchanged(reached.records)) {
+        work.failure =
+          'has unsupported composition (observed context changed before proof)';
+        return;
+      }
+      const baseline = invocationInput(
+        binding.invoke,
+        literalScalarContext(reached.context, {}, undefined, false).context,
+      );
+      if (
+        !('value' in baseline) ||
+        baseline.value.text !== reached.text ||
+        baseline.value.stateId !== binding.state.stateId ||
+        baseline.value.playbookId !== binding.state.playbookId ||
+        baseline.value.sourceItem !== actual.sourceItem
+      ) {
+        work.failure =
+          'has unsupported composition (reached input changed before proof)';
+        return;
+      }
+      const render = (values: Record<string, string>): string | undefined =>
+        renderLiteralChildTemplate(item.prompt, work.mapping, (field) =>
+          Object.hasOwn(values, field)
+            ? values[field]
+            : literalPathValue(reached.context, field, reached.records),
+        );
+      const expected = render({});
+      if (expected === undefined || reached.text !== expected) {
+        work.failure =
+          'does not preserve the complete GEARS child-input template' +
+          (expected === undefined
+            ? ''
+            : ` (${firstDifferenceDiagnostic(expected, reached.text)})`);
+        return;
+      }
+      const verifyPayload = (
+        values: Record<string, string>,
+        empty: boolean,
+      ): boolean => {
+        const candidate = literalScalarContext(
+          reached.context,
+          values,
+          undefined,
+          false,
+        );
+        const result = invocationInput(binding.invoke, candidate.context);
+        const expected = render(values);
+        if (
+          candidate.failure() === undefined &&
+          'value' in result &&
+          result.value.stateId === binding.state.stateId &&
+          result.value.playbookId === binding.state.playbookId &&
+          result.value.sourceItem === actual.sourceItem &&
+          result.value.text === expected
+        )
+          return true;
+        const label = empty
+          ? 'does not preserve source-defined empty standalone relay omission'
+          : 'does not preserve literal substitutions and quoted continuation lines';
+        work.failure =
+          label +
+          (expected !== undefined &&
+          'value' in result &&
+          typeof result.value.text === 'string'
+            ? ` (${firstDifferenceDiagnostic(expected, result.value.text)})`
+            : '');
+        return false;
+      };
+      const activeFields = [...new Set(work.mapping.values())].filter((field) =>
+        reached.influences.has(field),
+      );
+      // Perturb one mapped payload only: no other reached control/payload changes.
+      for (const field of activeFields) {
+        const multiline = item.prompt.split(/\r?\n/).some((line) => {
+          const token = /^> [^<>\r\n]*(<[^\s<>`]{1,60}>)$/.exec(line)?.[1];
+          return token !== undefined && work.mapping.get(token) === field;
+        });
+        for (const value of [
+          `«literal» $& $$ $\x60 $' ${[...work.mapping.keys()].join(' ')}${multiline ? '\n\nsecond\r\n\r\nlast' : ''}`,
+          '',
+        ]) {
+          if (!verifyPayload({ [field]: value }, value === '')) return;
+        }
+      }
+      if (!literalRecordsUnchanged(reached.records)) {
+        work.failure =
+          'has unsupported composition (observed context changed during proof)';
+        return;
+      }
+      // Removing several standalone relays must preserve authored separators too.
+      if (
+        !verifyPayload(
+          Object.fromEntries(activeFields.map((field) => [field, ''])),
+          true,
+        )
+      )
+        return;
+    }
+    work.validated = true;
+    work.cases = []; // Descriptor facts have passed; release stopped actor contexts.
+  }
+
+  findings(): string[] {
+    return [...this.work.values()].flatMap((work) =>
+      work.failure !== undefined || !this.proved(work)
+        ? [
+            `${work.item.id}: FSM playbook text ${work.failure ?? work.original}`,
+          ]
+        : [],
+    );
+  }
 }
 
 /** Findings when a composed prompt does not preserve the domain body (verification-5). */
@@ -3688,6 +4184,8 @@ export function generateGearsFsmConformanceTest(opts: {
   fsmModule: string;
   /** Path to the `gears` artifact, relative to the test. */
   gearsFile: string;
+  /** Source text used by the same bounded entry search as coverage. */
+  fsmSourceFile?: string;
   /** Import specifier for this checker, relative to the test. */
   verifyModule: string;
   /** Reviewed schema baked into roleless artifact checks when available. */
@@ -3704,7 +4202,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { checkGearsFsmConformance, findConcurrentRoleSets, findMachineConfig } from ${sourceString(opts.verifyModule)};
+import { checkGearsFsmConformanceAsync, fsmCoverageTestTimeout } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
 
 const SCHEMA_FINDINGS: readonly string[] = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
@@ -3714,14 +4212,14 @@ describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
     expect(SCHEMA_FINDINGS).toEqual([]);
   });
 
-  it('maps every GEARS item to a state with its player and verbatim prompt', () => {
+  it('maps every GEARS item to a state with its player and verbatim prompt', async () => {
     const gears = readFileSync(
       fileURLToPath(new URL(${sourceString(opts.gearsFile)}, import.meta.url)),
       'utf8',
     );
     expect(
-      checkGearsFsmConformance(gears, findMachineConfig(fsm), {
-        concurrentRoleSets: findConcurrentRoleSets(fsm),
+      await checkGearsFsmConformanceAsync(gears, fsm, {
+        sourceText: readFileSync(fileURLToPath(new URL(${sourceString(opts.fsmSourceFile ?? opts.fsmModule.replace(/\.js$/, '.ts'))}, import.meta.url)), 'utf8'),
         ${
           opts.artifactSchema === undefined
             ? ''
@@ -3729,7 +4227,7 @@ describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
         }
       }),
     ).toEqual([]);
-  });
+  }, fsmCoverageTestTimeout(fsm));
 });
 `;
 }

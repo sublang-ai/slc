@@ -42,11 +42,9 @@ export const reviewArtifact = async ({
 }) => {
   const {
     capturePromptContract,
-    checkFsmCoverage,
-    checkGearsFsmConformance,
+    checkGearsFsmArtifact,
     checkPromptComposition,
     enumerateCaptainStates,
-    findConcurrentRoleSets,
     findMachineConfig,
     loadFsmModule,
     loadLinkedModuleForVerification,
@@ -130,9 +128,9 @@ export const reviewArtifact = async ({
     ...schemaResolution.findings.map((finding) => `schema: ${finding}`),
   );
 
-  section('gears↔fsm conformance');
-  const conformance = checkGearsFsmConformance(gears, config, {
-    concurrentRoleSets: findConcurrentRoleSets(fsm),
+  section('gears↔fsm conformance and transition coverage');
+  const conformance = await checkGearsFsmArtifact(gears, fsm, {
+    sourceText: readFileSync(fsmPath, 'utf8'),
     ...(artifactSchema === undefined ? {} : { artifactSchema }),
   });
   findings.push(...conformance.map((f) => `conformance: ${f}`));
@@ -264,14 +262,6 @@ export const reviewArtifact = async ({
     );
     log(message);
   }
-
-  section('transition coverage');
-  const coverage = await checkFsmCoverage(fsm, {
-    sourceText: readFileSync(fsmPath, 'utf8'),
-    ...(artifactSchema === undefined ? {} : { artifactSchema }),
-  });
-  findings.push(...coverage.map((f) => `coverage: ${f}`));
-  log(coverage.length === 0 ? 'ok' : coverage.join('\n'));
 
   section('verdict');
   if (findings.length === 0) {

@@ -99,7 +99,7 @@ import {
   checkFsmChildSuspension,
   checkFsmCoverage,
   checkGearsActorContract,
-  checkGearsFsmConformance,
+  checkGearsFsmArtifact,
   checkGearsResultContract,
   checkLinkedModuleContract,
   emitFsmCoverageTest,
@@ -107,7 +107,6 @@ import {
   emitFsmIntrospectionTest,
   emitGearsFsmConformanceTest,
   emitPromptContractTest,
-  findConcurrentRoleSets,
   inspectGearsRoleContract,
   findMachineConfig,
   loadFsmModule,
@@ -1446,12 +1445,6 @@ async function fsmConformanceFindings(
     const schema = await fsmSchema(config, linkTarget);
     const findings = [
       ...schema.findings,
-      ...checkGearsFsmConformance(gears, config, {
-        concurrentRoleSets: findConcurrentRoleSets(fsm),
-        ...(schema.artifactSchema === undefined
-          ? {}
-          : { artifactSchema: schema.artifactSchema }),
-      }),
       ...(schema.artifactSchema === undefined || schema.findings.length > 0
         ? []
         : checkFsmContinuationInputs(config, schema.artifactSchema)),
@@ -1459,7 +1452,7 @@ async function fsmConformanceFindings(
     signal?.throwIfAborted();
     return findings.length > 0
       ? findings
-      : await checkFsmCoverage(fsm, {
+      : await checkGearsFsmArtifact(gears, fsm, {
           sourceText: await readFile(target, 'utf8'),
           ...(schema.artifactSchema === undefined
             ? {}

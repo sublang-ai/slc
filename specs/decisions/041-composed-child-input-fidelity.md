@@ -23,6 +23,7 @@ Probe complete quoted relay slots with multiline prose and inline slots with sin
 Keep source-defined empty standalone relay omission distinct from required startup configuration.
 Fail closed when this bounded surface cannot establish composition; do not waive source fidelity or infer a child output ABI from this check.
 Dynamic child target/text metadata and player/Captain prompt contracts remain separate existing requirements.
+Context-dependent proof may use the same bounded public-entry and predecessor replay as coverage, preserving reached controls while varying one observed payload. Every explicit relay must acquire a nonempty mapping in a reached case of the same invocation; an omitted standalone line additionally requires its mapped payload to be empty or absent in that particular context. No mapping or omission is inferred from a control-only read or a disappeared line.
 The behavior is specified in [[verification-39](../packages/verification.md#verification-39)].
 
 ## Consequences

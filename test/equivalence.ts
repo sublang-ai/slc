@@ -30,7 +30,6 @@ import {
   AWAIT_BOSS_REPLY_STATE,
   BOSS_REPLY_EVENT,
   artifactSchemaForPlaybookProvenance,
-  checkGearsFsmConformance,
   canonicalRoleId,
   findConcurrentRoleSets,
   findMachineConfig,
@@ -42,7 +41,7 @@ import {
   resolveArtifactSchemaForVerification,
   type MachineConfigLike,
 } from '../src/verify.js';
-import { checkFsmCoverage } from '../src/verify-coverage.js';
+import { checkGearsFsmArtifact } from '../src/verify-coverage.js';
 import {
   isPlaybookRunResult,
   type RuntimeContractProfile,
@@ -1737,14 +1736,11 @@ export async function checkPlaybookIntegrity(
   );
 
   findings.push(
-    ...checkGearsFsmConformance(compiled.gears, config, {
-      concurrentRoleSets: findConcurrentRoleSets(compiled.fsm),
-      artifactSchema: schemaResolution.artifactSchema,
-    }).map((finding) => `${label}: ${finding}`),
-  );
-  findings.push(
     ...(
-      await checkFsmCoverage(compiled.fsm, { sourceText: compiled.fsmSource })
+      await checkGearsFsmArtifact(compiled.gears, compiled.fsm, {
+        artifactSchema: schemaResolution.artifactSchema,
+        sourceText: compiled.fsmSource,
+      })
     ).map((finding) => `${label}: ${finding}`),
   );
 

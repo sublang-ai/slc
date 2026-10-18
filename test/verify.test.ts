@@ -4388,9 +4388,17 @@ describe('generateGearsFsmConformanceTest', () => {
       await emitVerifierSupport(root);
       const fixtureConfigs: Record<string, MachineConfigLike> = {
         empty: {
-          states: { ready: { id: 'ready', tags: ['playbook.parked'] } },
+          initial: 'ready',
+          states: {
+            ready: { id: 'ready', type: 'final' },
+            awaitBossReply: {
+              tags: ['playbook.parked'],
+              on: { BOSS_REPLY: 'ready' },
+            },
+          },
         },
         populated: {
+          initial: 'work',
           states: {
             work: {
               invoke: {
@@ -4411,7 +4419,7 @@ describe('generateGearsFsmConformanceTest', () => {
       for (const [basename, config] of Object.entries(fixtureConfigs)) {
         await writeFile(
           join(root, `${basename}.fsm.ts`),
-          `export const machine = { config: ${JSON.stringify(config)} };\n`,
+          `import { createMachine } from 'xstate'; export const machine = createMachine(${JSON.stringify(config)});\n`,
         );
         await writeFile(join(root, `${basename}.gears.md`), '');
         await writeFile(
@@ -4522,14 +4530,12 @@ describe('generateGearsFsmConformanceTest', () => {
     });
     expect(emitted).toContain('import * as fsm from "./code.fsm.js"');
     expect(emitted).toContain(
-      'import { checkGearsFsmConformance, findConcurrentRoleSets, findMachineConfig } from "@sublang/slc/verify"',
+      'import { checkGearsFsmConformanceAsync, fsmCoverageTestTimeout } from "@sublang/slc/verify"',
     );
     expect(emitted).toContain(
-      'checkGearsFsmConformance(gears, findMachineConfig(fsm), {',
+      'await checkGearsFsmConformanceAsync(gears, fsm, {',
     );
-    expect(emitted).toContain(
-      'concurrentRoleSets: findConcurrentRoleSets(fsm)',
-    );
+    expect(emitted).toContain('fsmCoverageTestTimeout(fsm)');
     expect(emitted).toContain('artifactSchema: 3');
     expect(emitted).toContain('./code.gears.md');
     expect(emitted).toContain('SPDX-License-Identifier');
@@ -4616,7 +4622,7 @@ describe('emitGearsFsmConformanceTest', () => {
       expect(content).toContain('import * as fsm from "./code.fsm.js"');
       expect(content).toContain('./code.gears.md');
       expect(content).toContain(
-        'checkGearsFsmConformance(gears, findMachineConfig(fsm), {',
+        'await checkGearsFsmConformanceAsync(gears, fsm, {',
       );
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
