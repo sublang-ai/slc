@@ -1436,6 +1436,7 @@ const childChainMachine = (
     repeatBranch?: boolean;
     blankResumes?: boolean;
     entryVariants?: {
+      preemptive?: boolean;
       modes?: readonly string[];
       rejectAlternate?: boolean;
       shadowAlternate?: boolean;
@@ -1498,7 +1499,23 @@ const childChainMachine = (
   }).createMachine({
     id: 'childChain',
     initial: 'ready',
-    context: { branches: 0 } as any,
+    context: {
+      branches: 0,
+      ...(opts.entryVariants?.preemptive
+        ? { entryVariant: entryModes[0] }
+        : {}),
+    } as any,
+    ...(opts.entryVariants?.preemptive
+      ? {
+          on: {
+            BOSS_INTERRUPT: {
+              guard: ({ event }: any) => event.targetId === 'plan',
+              target: '#plan',
+              actions: assign(({ event }: any) => ({ entryType: event.type })),
+            },
+          },
+        }
+      : {}),
     states: {
       ready: {
         id: 'ready',
@@ -1683,6 +1700,137 @@ const childChainMachine = (
       done: { id: 'done', type: 'final' },
       childFailed: { id: 'childFailed', type: 'final' },
       failed: { id: 'failed', tags: 'playbook.parked' },
+    },
+  } as any);
+};
+
+/** A valid interrupt and a public entry establish different real routes. */
+const publicAfterInterruptMachine = (
+  opts: {
+    rejectAlternate?: boolean;
+    shadowAlternate?: boolean;
+    requireProof?: boolean;
+  } = {},
+  observed: Array<{ id: string; route: unknown; entryType: unknown }> = [],
+) => {
+  const child = (id: string) => ({
+    id,
+    invoke: {
+      src: 'playbook',
+      input: ({ context }: any) => {
+        if (!['BOSS_INTERRUPT', 'START'].includes(context.entryType))
+          throw new Error('entry actions must execute');
+        observed.push({
+          id,
+          route: context.route,
+          entryType: context.entryType,
+        });
+        return { stateId: id, playbookId: 'review', text: 'Review.' };
+      },
+      onDone: 'done',
+      onError: 'failed',
+    },
+  });
+  return setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('provide player');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('provide child');
+      }),
+    },
+  }).createMachine({
+    id: 'publicAfterInterrupt',
+    initial: 'ready',
+    context: { route: 'interrupt', proof: false } as any,
+    on: {
+      BOSS_INTERRUPT: {
+        guard: ({ event }: any) => event.targetId === 'prepare',
+        target: '#prepare',
+        actions: assign(({ event }: any) => ({ entryType: event.type })),
+      },
+    },
+    states: {
+      ready: {
+        id: 'ready',
+        on: {
+          START: [
+            ...(opts.shadowAlternate
+              ? [
+                  {
+                    guard: ({ event }: any) => event.mode === 'public',
+                    target: 'failed',
+                  },
+                ]
+              : []),
+            {
+              guard: ({ event }: any) =>
+                opts.rejectAlternate !== true &&
+                typeof event.request === 'string' &&
+                event.request !== '' &&
+                event.mode === 'public',
+              target: 'prepare',
+              actions: assign(({ event }: any) => ({
+                route: event.mode,
+                entryType: event.type,
+                proof: opts.requireProof !== true,
+              })),
+            },
+          ],
+        },
+      },
+      prepare: {
+        id: 'prepare',
+        invoke: {
+          src: 'player',
+          input: () => ({
+            stateId: 'prepare',
+            sourceItem: 'ENTRY-1',
+            role: 'writer',
+            prompt: 'Prepare the route.',
+            result: {
+              ready: 'Advance.',
+              needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            },
+          }),
+          onDone: [
+            {
+              guard: ({ context, event }: any) =>
+                context.route === 'interrupt' && event.output.guard === 'ready',
+              target: 'ordinaryChild',
+            },
+            {
+              guard: ({ context, event }: any) =>
+                context.route === 'public' &&
+                context.proof === true &&
+                event.output.guard === 'ready',
+              target: 'alternateChild',
+            },
+            needsBossReplyArm('prepare', 'writer', 'ENTRY-1'),
+            { target: 'failed' },
+          ],
+          onError: 'failed',
+        },
+      },
+      ordinaryChild: child('ordinaryChild'),
+      alternateChild: child('alternateChild'),
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        tags: 'playbook.parked',
+        on: {
+          BOSS_REPLY: {
+            target: 'prepare',
+            guard: ({ context, event }: any) =>
+              context.pendingBossQuestion?.questionId === 'prepare' &&
+              event.questionId === 'prepare' &&
+              typeof event.answer === 'string' &&
+              event.answer.trim() !== '',
+          },
+        },
+      },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+      done: { id: 'done', type: 'final' },
     },
   } as any);
 };
@@ -3655,20 +3803,109 @@ describe('checkFsmCoverage (verification-6)', () => {
     expect(observed.some((entry) => entry.id === 'branch')).toBe(false);
   });
 
-  it('charges public entry alternatives to the existing replay limit', async () => {
-    const modes = Array.from({ length: 96 }, (_, index) => `variant_${index}`);
+  it('retains public routes after a valid interrupt drive', async () => {
+    const observed: Array<{ id: string; route: unknown; entryType: unknown }> =
+      [];
+    expect(
+      await checkFsmCoverage({
+        machine: publicAfterInterruptMachine({}, observed),
+      }),
+    ).toEqual([]);
+    expect(
+      observed.some(
+        (entry) =>
+          entry.id === 'ordinaryChild' &&
+          entry.route === 'interrupt' &&
+          entry.entryType === 'BOSS_INTERRUPT',
+      ),
+    ).toBe(true);
+    expect(
+      observed.some(
+        (entry) =>
+          entry.id === 'alternateChild' &&
+          entry.route === 'public' &&
+          entry.entryType === 'START',
+      ),
+    ).toBe(true);
+  });
+
+  it('reports bounded exhaustion for the complex preemptive entry fixture', async () => {
+    const observed: Array<{
+      id: string;
+      variant: unknown;
+      entryType: unknown;
+    }> = [];
     const findings = await checkFsmCoverage(
-      { machine: childChainMachine({ entryVariants: { modes } }) },
-      { sourceText: modes.map((value) => `'${value}'`).join('\n') },
+      {
+        machine: childChainMachine({
+          entryVariants: { preemptive: true, observed },
+        }),
+      },
+      { sourceText: "'primary'\n'alternate'" },
     );
     expect(
       findings.some(
         (finding) =>
-          finding.startsWith('state branch:') &&
+          finding.startsWith('state pr:') &&
           finding.includes('exhausted 64-attempt path budget'),
       ),
     ).toBe(true);
+    expect(
+      observed.some(
+        (entry) =>
+          entry.id === 'code' &&
+          entry.variant === 'primary' &&
+          entry.entryType === 'BOSS_INTERRUPT',
+      ),
+    ).toBe(true);
+    expect(
+      observed.some(
+        (entry) =>
+          entry.id === 'branch' &&
+          entry.variant === 'alternate' &&
+          entry.entryType === 'START',
+      ),
+    ).toBe(true);
   });
+
+  it.each([
+    { rejectAlternate: true },
+    { shadowAlternate: true },
+    { requireProof: true },
+  ])('retains public-after-interrupt refusal for %j', async (entryVariants) => {
+    const observed: Array<{ id: string; route: unknown; entryType: unknown }> =
+      [];
+    const findings = await checkFsmCoverage({
+      machine: publicAfterInterruptMachine(entryVariants, observed),
+    });
+    expect(
+      findings.some((finding) => finding.startsWith('state alternateChild:')),
+    ).toBe(true);
+    expect(observed.some((entry) => entry.id === 'alternateChild')).toBe(false);
+  });
+
+  it.each([false, true])(
+    'charges public entry alternatives to the existing replay limit (interrupt=%s)',
+    async (preemptive) => {
+      const modes = Array.from(
+        { length: 96 },
+        (_, index) => `variant_${index}`,
+      );
+      const findings = await checkFsmCoverage(
+        {
+          machine: childChainMachine({ entryVariants: { modes, preemptive } }),
+        },
+        { sourceText: modes.map((value) => `'${value}'`).join('\n') },
+      );
+      expect(
+        findings.some(
+          (finding) =>
+            finding.startsWith('state branch:') &&
+            finding.includes('exhausted 64-attempt path budget'),
+        ),
+      ).toBe(true);
+    },
+  );
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
   it.each(

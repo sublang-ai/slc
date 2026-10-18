@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- A valid interrupt plan no longer suppresses lawful public entry routes;
+  coverage retains the interrupt first and reuses bounded lazy alternatives
+  with original guards and actual target replay.
 - Public-entry coverage explores finite values of already assigned event fields,
   preserving the first drive, ordered admission, actual context-producing
   transitions and the existing shared probe and replay limits.
