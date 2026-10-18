@@ -4703,6 +4703,17 @@ async function runFsmCoverage(
         continue;
       }
       const actor = probe.actor;
+      const transitionStart = actor.coverageTransitions.length;
+      const sourceId = resolvedStateNode(machine, captain.ref)?.id;
+      const questionCompletion = () =>
+        actor.coverageTransitions
+          .slice(transitionStart)
+          .find(
+            (transition) =>
+              sourceId !== undefined &&
+              transition.sourceId === sourceId &&
+              transition.event?.type === doneEvent.type,
+          );
       gate.armed = true;
       actor.send(probe.event);
       if (
@@ -4731,7 +4742,11 @@ async function runFsmCoverage(
                 ? (snapshot) =>
                     snapshot.status === 'done' ||
                     (initialRef !== undefined && atState(initialRef)(snapshot))
-                : leftState(captain.ref),
+                : key === NEEDS_BOSS_REPLY
+                  ? (snapshot) =>
+                      questionCompletion() !== undefined &&
+                      leftState(captain.ref)(snapshot)
+                  : leftState(captain.ref),
             );
       if (!transitioned) {
         findings.push(
@@ -4740,14 +4755,25 @@ async function runFsmCoverage(
             : `state ${stateKey}: result "${key}" fired no transition`,
         );
       } else if (key === NEEDS_BOSS_REPLY) {
+        const completion = questionCompletion();
+        const completedArm = completion?.armIndex;
         const waitTarget =
-          rawArmTarget(rawDoneArms[directArm]) ?? onDoneArms[directArm]?.target;
+          completedArm === undefined
+            ? undefined
+            : (rawArmTarget(rawDoneArms[completedArm]) ??
+              onDoneArms[completedArm]?.target);
         const waitRef =
           waitTarget === null || waitTarget === undefined
             ? undefined
             : stateRefForTarget(refs, waitTarget, captain.ref);
+        const waitNodeId =
+          waitRef === undefined
+            ? undefined
+            : resolvedStateNode(machine, waitRef)?.id;
         if (
           waitRef === undefined ||
+          waitNodeId === undefined ||
+          completion?.targetIds.includes(waitNodeId) !== true ||
           (waitRef.stableId !== AWAIT_BOSS_REPLY_STATE &&
             !tagsOf(waitRef.state).includes('playbook.parked')) ||
           !(await settle(actor, atState(waitRef)))

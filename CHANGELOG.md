@@ -14,6 +14,9 @@ and this project adheres to
 ### Fixed
 
 - Retained-bundle completion preserves prompt-probe advisories without treating them as verification failures; actual composition and validation failures still block output.
+- Question-wait coverage follows the acting invocation's actual completion
+  after entry actions and predecessor work, retaining declared-target and
+  canonical question/reply checks.
 - Child-output coverage preserves optional own-field absence while guiding
   values and includes both boolean candidates, retaining the same concrete
   ordered guards, actual replay and bounded search.
