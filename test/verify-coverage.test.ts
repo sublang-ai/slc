@@ -1802,6 +1802,148 @@ const reachedPrimitiveChildMachine = (
   } as any);
 };
 
+/** A complete declared output needs only a few reached-value overrides. */
+const declaredReachedValueMachine = (
+  opts: {
+    overrides?: number;
+    contradictory?: boolean;
+    shadowed?: boolean;
+    falseContext?: boolean;
+    nested?: boolean;
+    accessor?: boolean;
+  } = {},
+  observed: Array<Record<string, unknown>> = [],
+) => {
+  const fields = ['product', 'verified', 'record', 'archive', 'report'];
+  const expected = (context: any) =>
+    opts.nested ? context.expected.value : context.expected;
+  const accepted = ({ context, event }: any) => {
+    const output = event.output;
+    return (
+      context.ready === true &&
+      output.guard === 'delivered' &&
+      Object.keys(output).length === fields.length + 1 &&
+      fields.every(
+        (field) =>
+          Object.hasOwn(output, field) &&
+          typeof output[field] === 'string' &&
+          output[field].length > 0,
+      ) &&
+      fields
+        .slice(0, opts.overrides ?? 1)
+        .every((field) => output[field] === expected(context)) &&
+      (!opts.contradictory || output.product !== expected(context))
+    );
+  };
+  return setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('provide acting result');
+      }),
+    },
+  }).createMachine({
+    id: 'declaredReachedValue',
+    initial: 'ready',
+    context: { ready: false },
+    states: {
+      ready: { id: 'ready', on: { START: 'prepare' } },
+      prepare: {
+        id: 'prepare',
+        invoke: {
+          src: 'player',
+          input: () => ({
+            stateId: 'prepare',
+            sourceItem: 'FLOW-1',
+            role: 'writer',
+            prompt: 'Prepare the revision.',
+            result: {
+              prepared: 'Output shall include `revision`.',
+              needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            },
+          }),
+          onDone: [
+            {
+              guard: ({ event }: any) => event.output.guard === 'prepared',
+              target: 'work',
+              actions: assign(({ event }: any) => ({
+                ready: !opts.falseContext,
+                expected: opts.nested
+                  ? { value: event.output.revision }
+                  : event.output.revision,
+              })),
+            },
+            needsBossReplyArm('prepare', 'writer', 'FLOW-1'),
+            { target: 'failed' },
+          ],
+          onError: 'failed',
+        },
+      },
+      work: {
+        id: 'work',
+        ...(opts.accessor
+          ? {
+              entry: ({ context }: any) => {
+                const actual = context.expected;
+                Object.defineProperty(context, 'expected', {
+                  get: () => actual,
+                  enumerable: true,
+                  configurable: true,
+                });
+              },
+            }
+          : {}),
+        invoke: {
+          src: 'player',
+          input: () => ({
+            stateId: 'work',
+            sourceItem: 'FLOW-2',
+            role: 'writer',
+            prompt: 'Deliver the verified revision.',
+            result: {
+              delivered:
+                'Output shall include `product`, `verified`, `record`, `archive`, and `report`.',
+              needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            },
+          }),
+          onDone: [
+            ...(opts.shadowed ? [{ guard: accepted, target: 'done' }] : []),
+            {
+              guard: accepted,
+              target: 'done',
+              actions: ({ context, event }: any) => {
+                observed.push({
+                  ...event.output,
+                  reachedExpected: context.expected,
+                  reachedReady: context.ready,
+                });
+              },
+            },
+            needsBossReplyArm('work', 'writer', 'FLOW-2'),
+            { target: 'failed' },
+          ],
+          onError: 'failed',
+        },
+      },
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        tags: 'playbook.parked',
+        on: {
+          BOSS_REPLY: ['prepare', 'work'].map((id) => ({
+            guard: ({ context, event }: any) =>
+              context.pendingBossQuestion?.questionId === id &&
+              event.questionId === id &&
+              typeof event.answer === 'string' &&
+              event.answer.trim() !== '',
+            target: id,
+          })),
+        },
+      },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+      done: { id: 'done', type: 'final' },
+    },
+  } as any);
+};
+
 interface ChildFailureOptions {
   expected: boolean;
   optional?: boolean;
@@ -4103,6 +4245,51 @@ describe('checkFsmCoverage (verification-6)', () => {
       expect(observed).toEqual([]);
     },
   );
+
+  it.each([1, 2])(
+    'guides %i declared placeholder values through the real reached target',
+    async (overrides) => {
+      const observed: Array<Record<string, unknown>> = [];
+      expect(
+        await checkFsmCoverage(
+          { machine: declaredReachedValueMachine({ overrides }, observed) },
+          { artifactSchema: 3 },
+        ),
+      ).toEqual([]);
+      expect(observed.length).toBeGreaterThan(0);
+      for (const output of observed) {
+        expect(output.guard).toBe('delivered');
+        expect(output.reachedReady).toBe(true);
+        expect(output.product).toBe(output.reachedExpected);
+        if (overrides === 2)
+          expect(output.verified).toBe(output.reachedExpected);
+        else expect(output.verified).toBe('coverage:verified');
+        expect(output.record).toBe('coverage:record');
+        expect(output.archive).toBe('coverage:archive');
+        expect(output.report).toBe('coverage:report');
+      }
+    },
+  );
+
+  it.each([
+    { contradictory: true },
+    { shadowed: true },
+    { falseContext: true },
+    { nested: true },
+    { accessor: true },
+    { overrides: 5 },
+  ])('retains declared placeholder guidance refusal for %j', async (opts) => {
+    const observed: Array<Record<string, unknown>> = [];
+    expect(
+      (
+        await checkFsmCoverage(
+          { machine: declaredReachedValueMachine(opts, observed) },
+          { artifactSchema: 3 },
+        )
+      ).some((finding) => finding.includes('state work: onDone arm')),
+    ).toBe(true);
+    expect(observed).toEqual([]);
+  });
 
   it.each(['string', 'boolean', 'number'] as const)(
     'reuses a predecessor-produced %s through fixed reached context',

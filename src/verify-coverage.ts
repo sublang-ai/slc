@@ -1715,6 +1715,8 @@ interface ProbeOptions {
   discoverPayloadShape?: boolean;
   /** A selected-arm hint never replaces ordered concrete evaluation. */
   payloadShapeGuard?: (arg: GuardArgs) => unknown;
+  /** Only generic placeholders in a complete declared acting result vary. */
+  declaredResultFields?: readonly string[];
   /** Host-owned context is not a mutable guard-probe input. */
   fixedContextFields?: readonly string[];
 }
@@ -1757,16 +1759,42 @@ function probeGuardAssignment(
     ...new Set([...minedLiterals(guard), ...extraValues, ...GENERIC_VALUES]),
   ];
   const reachedContext =
-    options.discoverPayloadShape === true && options.assignContext === false
+    (options.discoverPayloadShape === true ||
+      options.declaredResultFields !== undefined) &&
+    options.assignContext === false
       ? Object.getOwnPropertyDescriptors(options.initialContext ?? {})
       : undefined;
   let reachedValues = 0;
-  const noteContextRead = (field: string): void => {
+  const declaredValues = new Map<string, string[]>();
+  const declaredDistinct = new Set<string>();
+  const noteContextRead = (field: string, declaredField?: string): void => {
     if (reachedContext === undefined || !Object.hasOwn(reachedContext, field))
       return;
     const descriptor = reachedContext[field];
     if (!('value' in descriptor)) return;
     const value: unknown = descriptor.value;
+    if (options.declaredResultFields !== undefined) {
+      // A declared placeholder already has a string shape. Associate only a
+      // following context read with that output field, rather than varying
+      // unrelated fields or spending the budget on initial preconditions.
+      if (
+        declaredField === undefined ||
+        typeof value !== 'string' ||
+        value === ''
+      )
+        return;
+      if (!declaredDistinct.has(value)) {
+        if (reachedValues >= 4) return;
+        reachedValues++;
+        declaredDistinct.add(value);
+      }
+      const candidates = declaredValues.get(declaredField) ?? [];
+      if (!candidates.includes(value)) {
+        candidates.push(value);
+        declaredValues.set(declaredField, candidates);
+      }
+      return;
+    }
     if (
       reachedValues >= 4 ||
       !(
@@ -1782,10 +1810,20 @@ function probeGuardAssignment(
     values.push(value);
   };
   function* candidateValues(
+    key: string,
     hasBaseline: boolean,
     baseline: unknown,
   ): Generator<unknown> {
     if (hasBaseline) yield baseline;
+    const guided = key.startsWith('o:')
+      ? declaredValues.get(key.slice(2))
+      : undefined;
+    if (guided !== undefined) {
+      for (let index = 0; index < guided.length; index++) {
+        if (guided[index] !== baseline) yield guided[index];
+      }
+      return;
+    }
     // A failed candidate can reveal a fixed-context value needed by this same
     // field. Include new bounded observations before completing its iteration.
     for (let index = 0; index < values.length; index++) {
@@ -1836,6 +1874,12 @@ function probeGuardAssignment(
     coverageCheckpoint();
     const reads = new Set<string>();
     const enumerated = new Set<string>();
+    let declaredField: string | undefined;
+    const contextRead = (field: string): void => {
+      noteContextRead(field, declaredField);
+      if (declaredField !== undefined && declaredValues.has(declaredField))
+        reads.add(`o:${declaredField}`);
+    };
     // An earlier arm's fields cannot satisfy a false selected guard. Once that
     // guard accepts, ordered reads can discover how to exclude the earlier arm.
     // This concrete guidance check shares the existing acceptance-probe budget.
@@ -1883,7 +1927,7 @@ function probeGuardAssignment(
         },
         getOwnPropertyDescriptor(target, prop) {
           const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-          if (tag === 'c:' && typeof prop === 'string') noteContextRead(prop);
+          if (tag === 'c:' && typeof prop === 'string') contextRead(prop);
           if (
             options.discoverPayloadShape === true &&
             tag !== 'c:' &&
@@ -1909,7 +1953,14 @@ function probeGuardAssignment(
         },
         get(target, prop) {
           if (typeof prop !== 'string') return undefined;
-          if (tag === 'c:') noteContextRead(prop);
+          if (tag === 'c:') contextRead(prop);
+          else if (tag === 'o:' && options.declaredResultFields !== undefined) {
+            declaredField =
+              options.declaredResultFields.includes(prop) &&
+              !Object.hasOwn(assigned, prop)
+                ? prop
+                : undefined;
+          }
           if (prop in target) {
             const payload = payloads.find((item) => item.tag === tag);
             if (
@@ -2072,7 +2123,7 @@ function probeGuardAssignment(
       const baseline = hasBaseline
         ? (base as Record<string, unknown>)[field]
         : undefined;
-      for (const value of candidateValues(hasBaseline, baseline)) {
+      for (const value of candidateValues(key, hasBaseline, baseline)) {
         coverageCheckpoint();
         if (probeBudget.probes > MAX_PROBES) return undefined;
         const nextDepth = depth + (hasBaseline && value === baseline ? 0 : 1);
@@ -2546,6 +2597,20 @@ function coverageArmResults(
         initialContext: context,
         assignContext: false,
         discoverPayloadShape: node.kind === 'child' && outcome === 'onDone',
+        ...(node.kind === 'acting' && outcome === 'onDone'
+          ? {
+              declaredResultFields: requiredFields(
+                node.value.binding.result[
+                  String((base as Record<string, unknown>).guard)
+                ] ?? '',
+              ).filter(
+                (field) =>
+                  field !== 'guard' &&
+                  (base as Record<string, unknown>)[field] ===
+                    `coverage:${field}`,
+              ),
+            }
+          : {}),
         ...(shapeGuard === undefined ? {} : { payloadShapeGuard: shapeGuard }),
       },
     );
