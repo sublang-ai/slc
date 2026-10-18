@@ -2358,6 +2358,10 @@ function coverageArmResults(
     node.kind === 'child' && outcome === 'onDone'
       ? resolveGuard(machine, armGuard(arms[armIndex]))?.run
       : undefined;
+  const childValues =
+    node.kind === 'child' && outcome === 'onDone'
+      ? [{ name: 'Error', message: 'coverage: child failure' }]
+      : [];
   const actorId = invocationActorId(machine, node.value);
   const event = {
     type: `xstate.${outcome === 'onDone' ? 'done' : 'error'}.actor.${actorId}`,
@@ -2441,7 +2445,7 @@ function coverageArmResults(
           ...(outcome === 'onError' ? { varyExisting: true } : {}),
         },
       ],
-      [...guard.probeValues, ...GENERIC_VALUES, ...candidates],
+      [...guard.probeValues, ...GENERIC_VALUES, ...candidates, ...childValues],
       {
         initialContext: context,
         assignContext: false,

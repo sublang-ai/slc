@@ -14,6 +14,9 @@ and this project adheres to
 ### Fixed
 
 - Retained-bundle completion preserves prompt-probe advisories without treating them as verification failures; actual composition and validation failures still block output.
+- Raw-child completion coverage includes one compact normalized-error record
+  without adding a dependency to emitted checkers, retaining ordered guard
+  acceptance, actual target replay and existing search limits.
 - Child-output shape hints stay local to the selected guarded arm across
   initial and later padding probes, preserving the original ordered predicate,
   actual target replay and shared search limits.
