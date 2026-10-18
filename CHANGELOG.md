@@ -11,6 +11,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Child coverage guides eligible own-data descriptor values and replays successful
+  children with absent output, preserving actual guards and finite search limits.
+
 ## [0.16.6] - 2026-10-18
 
 ### Fixed

@@ -914,7 +914,7 @@ interface TransitionObservation {
 }
 
 /** A scripted invocation resolves an output, rejects, or hangs (`null`). */
-type ScriptResult = Record<string, unknown> | Error | null;
+type ScriptResult = Record<string, unknown> | Error | undefined | null;
 type CaptainScript = (
   input: Record<string, unknown>,
   actorId: string,
@@ -1873,6 +1873,9 @@ function probeGuardAssignment(
   ): string[] => {
     coverageCheckpoint();
     const reads = new Set<string>();
+    // Enumeration also queries descriptors. Prefer semantic property reads so
+    // those incidental queries cannot starve the existing bounded search.
+    let descriptorRead: string | undefined;
     const enumerated = new Set<string>();
     let declaredField: string | undefined;
     const contextRead = (field: string): void => {
@@ -1949,10 +1952,30 @@ function probeGuardAssignment(
               };
             }
           }
+          if (
+            tag !== 'c:' &&
+            typeof prop === 'string' &&
+            descriptor !== undefined &&
+            'value' in descriptor &&
+            !discoverShape &&
+            shapeTag === undefined
+          ) {
+            const payload = payloads.find((item) => item.tag === tag);
+            if (
+              varyExisting ||
+              payload?.varyExisting === true ||
+              payload?.shapeFields?.includes(prop)
+            )
+              descriptorRead = Object.hasOwn(assigned, prop)
+                ? undefined
+                : `${tag}${prop}`;
+          }
           return descriptor;
         },
         get(target, prop) {
           if (typeof prop !== 'string') return undefined;
+          if (tag !== 'c:' && !discoverShape && shapeTag === undefined)
+            descriptorRead = undefined;
           if (tag === 'c:') contextRead(prop);
           else if (tag === 'o:' && options.declaredResultFields !== undefined) {
             declaredField =
@@ -2045,7 +2068,21 @@ function probeGuardAssignment(
         }
       }
     }
-    return [...reads];
+    // An explicit assignable read is the next useful constraint. Descriptor
+    // queries made by enumeration are fallback guidance only when none remains.
+    return [
+      ...reads,
+      ...([...reads].some(
+        (key) =>
+          !key.startsWith('c:') ||
+          (options.assignContext !== false &&
+            !options.fixedContextFields?.includes(key.slice(2))),
+      )
+        ? []
+        : descriptorRead === undefined
+          ? []
+          : [descriptorRead]),
+    ];
   };
 
   const initial: ProbeAssignment = {
@@ -2510,7 +2547,7 @@ function coverageArmResults(
     type: `xstate.${outcome === 'onDone' ? 'done' : 'error'}.actor.${actorId}`,
     actorId,
   };
-  const bases: Exclude<ScriptResult, null>[] =
+  const bases: (Record<string, unknown> | Error)[] =
     outcome === 'onError'
       ? node.kind === 'child'
         ? [
@@ -2622,6 +2659,17 @@ function coverageArmResults(
       if (firstOnly) return results;
     }
   }
+  // The public successful child envelope may omit output entirely. Probe that
+  // one concrete value without object synthesis or mutable reached context.
+  if (
+    node.kind === 'child' &&
+    outcome === 'onDone' &&
+    probeGuardAssignment(guard.run, { ...event, output: undefined }, [], [], {
+      initialContext: context,
+      assignContext: false,
+    }) !== undefined
+  )
+    results.push(undefined);
   return results;
 }
 
@@ -2892,7 +2940,11 @@ async function searchCoverageEntry(
           )) {
             // A malformed question can legitimately reach a parked failure;
             // ordinary arm coverage owns it, not a question/reply prefix.
-            if (result instanceof Error || typeof result.question !== 'string')
+            if (
+              result === undefined ||
+              result instanceof Error ||
+              typeof result.question !== 'string'
+            )
               continue;
             nextSteps.push({ node, result, next: node, questionWait: waitRef });
           }
@@ -3712,7 +3764,7 @@ function reachedBossQuestionFinding(
   machine: MachineLike,
   captain: CaptainRef,
   actor: DrivenActor,
-  output: Record<string, unknown> | Error,
+  output: Record<string, unknown> | Error | undefined,
 ): string | undefined {
   if (coverageRuns.getStore()?.artifactSchema !== 3) return undefined;
   const input = actor.coverageInputs.get(invocationActorId(machine, captain));
@@ -3747,6 +3799,7 @@ function reachedBossQuestionFinding(
     typeof input.sourceItem === 'string' &&
     record.sourceItem === input.sourceItem &&
     askerMatches &&
+    output !== undefined &&
     !(output instanceof Error) &&
     typeof output.question === 'string' &&
     record.question === output.question
@@ -4302,7 +4355,7 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
     ...nodes.map((node) => {
       const done = transitionArms(node.value.invocation.onDone).length;
       const error = transitionArms(node.value.invocation.onError).length;
-      if (node.kind === 'child') return 3 * done + 4 * error;
+      if (node.kind === 'child') return 4 * done + 4 * error;
       const keys = Object.keys(node.value.binding.result);
       const candidates =
         node.value.binding.actor === 'script'
