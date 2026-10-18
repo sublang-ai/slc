@@ -36,6 +36,7 @@ import {
   VERIFY_MODULE,
   controllerDecisionNearMiss,
   enumerateCaptainStates,
+  enumeratePlaybookStates,
   enumerateScriptStates,
   initialStateTarget,
   isControllerDecisionResult,
@@ -54,6 +55,7 @@ export const CAPTAIN_ACTOR = 'captain';
 interface CoverageRun {
   artifactSchema?: 1 | 3;
   questionFindings: Set<string>;
+  machineInputs: WeakMap<MachineConfigLike, CoverageMachineInput>;
   signal?: AbortSignal;
   deadline: number;
   lastYield: number;
@@ -382,15 +384,53 @@ const COVERAGE_MACHINE_INPUT = {
   enabledPlaybooks: COVERAGE_ENABLED_PLAYBOOKS,
 };
 
+interface CoverageMachineInput {
+  stateId: string;
+  selfPlaybookId: string;
+  bossIntent: string;
+  enabledPlaybooks: readonly { id: string; command: string; intent: string }[];
+}
+
+/** Literal bindings, not arbitrary guard literals, declare extra child ids. */
+function coverageMachineInput(machine: MachineLike): CoverageMachineInput {
+  const cached = coverageRuns.getStore()?.machineInputs.get(machine.config);
+  if (cached !== undefined) return cached;
+  const enabledPlaybooks: CoverageMachineInput['enabledPlaybooks'][number][] = [
+    ...COVERAGE_ENABLED_PLAYBOOKS,
+  ];
+  const ids = new Set<string>(enabledPlaybooks.map((entry) => entry.id));
+  for (const binding of enumeratePlaybookStates(machine.config)) {
+    if (
+      binding.playbookIdContext !== undefined ||
+      binding.textContext !== undefined ||
+      (binding.bindingFindings?.length ?? 0) > 0 ||
+      binding.playbookId === '' ||
+      ids.has(binding.playbookId)
+    ) {
+      continue;
+    }
+    ids.add(binding.playbookId);
+    enabledPlaybooks.push({
+      id: binding.playbookId,
+      command: `/${binding.playbookId}`,
+      intent: 'Exercise a declared literal child transition.',
+    });
+  }
+  const input = { ...COVERAGE_MACHINE_INPUT, enabledPlaybooks };
+  coverageRuns.getStore()?.machineInputs.set(machine.config, input);
+  return input;
+}
+
 /**
  * A valid Captain context for direct guard evaluation. Dynamic call fields use
  * the same id as the catalog entry, preserving exact catalog-membership guards.
  */
 function coverageGuardContext(
   dynamic?: DynamicPlaybookFields,
+  input: CoverageMachineInput = COVERAGE_MACHINE_INPUT,
 ): Record<string, unknown> {
   return {
-    ...COVERAGE_MACHINE_INPUT,
+    ...input,
     remainingPlan: [],
     completedCallResults: [
       {
@@ -422,7 +462,7 @@ function initializedMachineContext(
     actor = trackCoverageActor(
       createActor(
         machine as never,
-        { input: COVERAGE_MACHINE_INPUT } as never,
+        { input: coverageMachineInput(machine) } as never,
       ) as unknown as DrivenActor,
     );
     return actor.getSnapshot().context;
@@ -442,7 +482,7 @@ function initializedCoverageContext(
 ): Record<string, unknown> {
   return {
     ...initializedMachineContext(machine),
-    ...coverageGuardContext(dynamic),
+    ...coverageGuardContext(dynamic, coverageMachineInput(machine)),
   };
 }
 
@@ -891,7 +931,7 @@ function persistedSnapshotWithContext(
   const seed = trackCoverageActor(
     createActor(
       provided as never,
-      { input: COVERAGE_MACHINE_INPUT } as never,
+      { input: coverageMachineInput(provided) } as never,
     ) as unknown as {
       getPersistedSnapshot(): Record<string, unknown>;
       stop(): unknown;
@@ -972,7 +1012,7 @@ function makeActor(
     createActor(
       provided as never,
       {
-        input: COVERAGE_MACHINE_INPUT,
+        input: coverageMachineInput(machine),
         ...(restoredSnapshot === undefined
           ? {}
           : { snapshot: restoredSnapshot }),
@@ -1602,6 +1642,10 @@ interface ProbeOptions {
   assignContext?: boolean;
   /** Interrupt entry may replace initialized accumulated-state sentinels. */
   varyExistingContext?: boolean;
+  /** Raw child results have no declared acting-output field schema. */
+  discoverPayloadShape?: boolean;
+  /** Host-owned context is not a mutable guard-probe input. */
+  fixedContextFields?: readonly string[];
 }
 
 function probeGuardAssignment(
@@ -1680,13 +1724,49 @@ function probeGuardAssignment(
   const readsUnder = (assignment: ProbeAssignment): string[] => {
     coverageCheckpoint();
     const reads = new Set<string>();
+    const enumerated = new Set<string>();
+    let shapeTag: string | undefined;
+    let shapeWidth = 0;
     const recording = (
       base: object,
       assigned: Record<string, unknown>,
       tag: string,
       varyExisting = false,
-    ): unknown =>
-      new Proxy(overlay(base, assigned), {
+    ): unknown => {
+      const target = overlay(base, assigned);
+      if (tag === shapeTag) {
+        // These placeholders only expose reads behind a key-count predicate.
+        // They never enter an assignment or the real guard/replay evaluation.
+        let index = 0;
+        while (Object.keys(target).length < shapeWidth) {
+          const key = `__slc_probe_${index++}`;
+          if (!Object.hasOwn(target, key)) {
+            Object.defineProperty(target, key, {
+              value: null,
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
+          }
+        }
+      }
+      return new Proxy(target, {
+        ownKeys(target) {
+          enumerated.add(tag);
+          return Reflect.ownKeys(target);
+        },
+        getOwnPropertyDescriptor(target, prop) {
+          const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+          if (
+            options.discoverPayloadShape === true &&
+            tag !== 'c:' &&
+            typeof prop === 'string' &&
+            descriptor === undefined
+          ) {
+            reads.add(`${tag}${prop}`);
+          }
+          return descriptor;
+        },
         get(target, prop) {
           if (typeof prop !== 'string') return undefined;
           if (prop in target) {
@@ -1709,37 +1789,54 @@ function probeGuardAssignment(
           return prop in target;
         },
       });
-    try {
-      let event = { ...fixedEvent };
+    };
+    const trace = (): void => {
+      try {
+        let event = { ...fixedEvent };
+        for (const payload of payloads) {
+          if (payload.eventField === undefined) {
+            event = recording(
+              overlay(payload.base, event),
+              assignment.payloads[payload.tag] ?? {},
+              payload.tag,
+            ) as Record<string, unknown>;
+          } else {
+            event[payload.eventField] = recording(
+              payload.base,
+              assignment.payloads[payload.tag] ?? {},
+              payload.tag,
+            );
+          }
+        }
+        guard({
+          context: recording(
+            baseContext,
+            assignment.contextOverrides,
+            'c:',
+            options.varyExistingContext === true,
+          ),
+          event,
+        });
+      } catch {
+        coverageCheckpoint();
+        // Reads observed before the throw still guide the search.
+      } finally {
+        coverageCheckpoint();
+      }
+    };
+    trace();
+    // Exact cardinality may short-circuit before any named property is read.
+    // Explore only an observed payload enumeration, within the same four-field
+    // assignment bound. Context and fixed event fields remain unchanged.
+    if (options.discoverPayloadShape === true && reads.size === 0) {
       for (const payload of payloads) {
-        if (payload.eventField === undefined) {
-          event = recording(
-            overlay(payload.base, event),
-            assignment.payloads[payload.tag] ?? {},
-            payload.tag,
-          ) as Record<string, unknown>;
-        } else {
-          event[payload.eventField] = recording(
-            payload.base,
-            assignment.payloads[payload.tag] ?? {},
-            payload.tag,
-          );
+        if (!enumerated.has(payload.tag)) continue;
+        shapeTag = payload.tag;
+        for (shapeWidth = 1; shapeWidth <= 4; shapeWidth++) {
+          if (++probes > MAX_PROBES) return [...reads];
+          trace();
         }
       }
-      guard({
-        context: recording(
-          baseContext,
-          assignment.contextOverrides,
-          'c:',
-          options.varyExistingContext === true,
-        ),
-        event,
-      });
-    } catch {
-      coverageCheckpoint();
-      // Reads observed before the throw still guide the search.
-    } finally {
-      coverageCheckpoint();
     }
     return [...reads];
   };
@@ -1755,7 +1852,12 @@ function probeGuardAssignment(
     for (const key of readsUnder(assignment)) {
       const tag = key.slice(0, 2);
       const field = key.slice(2);
-      if (tag === 'c:' && options.assignContext === false) continue;
+      if (
+        tag === 'c:' &&
+        (options.assignContext === false ||
+          options.fixedContextFields?.includes(field))
+      )
+        continue;
       const assigned =
         tag === 'c:'
           ? assignment.contextOverrides
@@ -1814,9 +1916,14 @@ function probeGuardSatisfiable(
   fixedEvent: Readonly<Record<string, unknown>>,
   payloads: readonly ProbePayload[],
   extraValues: readonly unknown[],
+  initialContext?: Record<string, unknown>,
 ): boolean {
   return (
-    probeGuardAssignment(guard, fixedEvent, payloads, extraValues) !== undefined
+    probeGuardAssignment(guard, fixedEvent, payloads, extraValues, {
+      initialContext,
+      varyExistingContext: true,
+      fixedContextFields: ['enabledPlaybooks'],
+    }) !== undefined
   );
 }
 
@@ -1860,12 +1967,14 @@ function doneGuardSatisfiable(
   output: Record<string, unknown>,
   extraValues: readonly unknown[],
   fixedOutput = false,
+  initialContext?: Record<string, unknown>,
 ): boolean {
   return probeGuardSatisfiable(
     guard.run,
     fixedOutput ? { ...event, output } : event,
     fixedOutput ? [] : [{ eventField: 'output', tag: 'o:', base: output }],
     [...guard.probeValues, ...extraValues],
+    initialContext,
   );
 }
 
@@ -1891,12 +2000,14 @@ function errorGuardSatisfiable(
   event: Readonly<Record<string, unknown>>,
   error: Error,
   extraValues: readonly unknown[],
+  initialContext?: Record<string, unknown>,
 ): boolean {
   return probeGuardSatisfiable(
     guard.run,
     event,
     [{ eventField: 'error', tag: 'r:', base: error, varyExisting: true }],
     [...guard.probeValues, ...extraValues],
+    initialContext,
   );
 }
 
@@ -2183,7 +2294,11 @@ function coverageArmResults(
         },
       ],
       [...guard.probeValues, ...GENERIC_VALUES, ...candidates],
-      { initialContext: context, assignContext: false },
+      {
+        initialContext: context,
+        assignContext: false,
+        discoverPayloadShape: node.kind === 'child' && outcome === 'onDone',
+      },
     );
     if (assignment !== undefined) {
       results.push(
@@ -3853,6 +3968,7 @@ export async function checkFsmCoverage(
     lastYield: started,
     actors: new Set(),
     questionFindings: new Set(),
+    machineInputs: new WeakMap(),
   };
   return coverageRuns.run(run, async () => {
     let completed = false;
@@ -4322,6 +4438,7 @@ async function runFsmCoverage(
                 candidate,
                 candidates,
                 state.actor === 'script',
+                initialCoverageContext,
               )
             ) {
               accepting.set(index, undefined);
@@ -4601,10 +4718,18 @@ async function runFsmCoverage(
               candidate,
               candidates,
               state.actor === 'script',
+              initialCoverageContext,
             ),
           ) ||
           (state.actor !== 'script' &&
-            doneGuardSatisfiable(guard, doneEvent, { guard: key }, candidates))
+            doneGuardSatisfiable(
+              guard,
+              doneEvent,
+              { guard: key },
+              candidates,
+              false,
+              initialCoverageContext,
+            ))
         );
       });
       if (!anyOutput) {
@@ -4642,7 +4767,15 @@ async function runFsmCoverage(
       }
       const guard = orderedArmPredicate(machine, rawErrorArms, index);
       if (guard === undefined) continue;
-      if (!errorGuardSatisfiable(guard, errorEvent, forcedError, candidates)) {
+      if (
+        !errorGuardSatisfiable(
+          guard,
+          errorEvent,
+          forcedError,
+          candidates,
+          initialCoverageContext,
+        )
+      ) {
         findings.push(
           `state ${stateKey}: onError arm ${index} (target ${
             onErrorArms[index]?.target ?? 'none'

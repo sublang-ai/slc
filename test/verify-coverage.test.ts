@@ -803,6 +803,74 @@ const dynamicCaptainMachine = () => {
   } as any);
 };
 
+/** A host-owned catalog gates a declared literal child through real input. */
+const catalogLiteralChildMachine = (
+  inputForm: 'function' | 'object',
+  requiredTarget = 'configured-child',
+) => {
+  const ordinary = goodMachine();
+  const states = ordinary.config.states as any;
+  const routedWork = {
+    ...states.work,
+    invoke: {
+      ...states.work.invoke,
+      onDone: [
+        {
+          target: '#callChild',
+          guard: ({ context, event }: any) =>
+            event.output.guard === 'ok' &&
+            context.enabledPlaybooks.some(
+              (entry: { id: string }) => entry.id === requiredTarget,
+            ) &&
+            context.initializedCatalogIds.includes(requiredTarget),
+        },
+        needsBossReplyArm(),
+      ],
+    },
+  };
+  const childInput = {
+    stateId: 'callChild',
+    playbookId: 'configured-child',
+    text: 'Complete the configured child request.',
+  };
+  return setup({
+    actors: {
+      captain: fromPromise(async () => {
+        throw new Error('coverage must provide captain');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('coverage must provide child');
+      }),
+    },
+  }).createMachine({
+    ...ordinary.config,
+    context: ({ input }: any) => {
+      if (!Array.isArray(input?.enabledPlaybooks)) {
+        throw new Error('host catalog is required');
+      }
+      return {
+        enabledPlaybooks: input.enabledPlaybooks,
+        initializedCatalogIds: input.enabledPlaybooks.map(
+          (entry: { id: string }) => entry.id,
+        ),
+      };
+    },
+    states: {
+      ...ordinary.config.states,
+      work: routedWork,
+      callChild: {
+        id: 'callChild',
+        invoke: {
+          src: 'playbook',
+          input: inputForm === 'function' ? () => childInput : childInput,
+          onDone: { target: '#done' },
+          onError: { target: '#failed' },
+        },
+      },
+    },
+  } as any);
+};
+
 /** A literal child call with independently selectable success/error arms. */
 /**
  * The recovering first `onError` arm a workflow writes for a child that
@@ -1257,6 +1325,91 @@ const childChainMachine = (
       done: { id: 'done', type: 'final' },
       childFailed: { id: 'childFailed', type: 'final' },
       failed: { id: 'failed', tags: 'playbook.parked' },
+    },
+  } as any);
+};
+
+/** Raw child success validates cardinality before reading named fields. */
+const enumeratedChildOutputMachine = (
+  fields: 3 | 4,
+  opts: {
+    countLast?: boolean;
+    wrongCount?: boolean;
+    shadowed?: boolean;
+    jsonDescriptors?: boolean;
+  } = {},
+) => {
+  const namedFields = (value: any) =>
+    typeof value.revision === 'string' &&
+    value.revision.trim() !== '' &&
+    value.approved === true &&
+    typeof value.summary === 'string' &&
+    value.summary.trim() !== '' &&
+    (fields === 3 || value.accepted === true);
+  const count = (value: any) =>
+    Object.keys(value).length === (opts.wrongCount ? fields - 1 : fields) &&
+    (!opts.jsonDescriptors ||
+      [
+        'revision',
+        'approved',
+        'summary',
+        ...(fields === 4 ? ['accepted'] : []),
+      ].every((key) => Object.hasOwn(value, key)));
+  const jsonRecord = (value: any) =>
+    !opts.jsonDescriptors ||
+    (Object.getPrototypeOf(value) === Object.prototype &&
+      Reflect.ownKeys(value).every((key) => {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        return (
+          typeof key === 'string' &&
+          descriptor?.enumerable &&
+          'value' in descriptor &&
+          (descriptor.value === null ||
+            ['string', 'boolean'].includes(typeof descriptor.value))
+        );
+      }));
+  const approved = ({ event }: any) =>
+    jsonRecord(event.output) &&
+    (opts.countLast
+      ? namedFields(event.output) && count(event.output)
+      : count(event.output) && namedFields(event.output));
+  return setup({
+    actors: {
+      playbook: fromPromise(async () => {
+        throw new Error('provide child');
+      }),
+    },
+  }).createMachine({
+    id: 'enumeratedChildOutput',
+    initial: 'ready',
+    on: {
+      BOSS_INTERRUPT: {
+        target: '#ready',
+        guard: ({ event }: any) => event.targetId === 'ready',
+      },
+    },
+    states: {
+      ready: { id: 'ready', on: { START: 'child' } },
+      child: {
+        id: 'child',
+        invoke: {
+          src: 'playbook',
+          input: () => ({
+            stateId: 'child',
+            playbookId: 'review',
+            text: 'Review.',
+          }),
+          onDone: [
+            ...(opts.shadowed ? [{ guard: approved, target: 'done' }] : []),
+            { guard: approved, target: 'done' },
+            { target: 'failed' },
+          ],
+          onError: { target: 'failed' },
+        },
+      },
+      awaitBossReply: { id: 'awaitBossReply', tags: 'playbook.parked' },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+      done: { id: 'done', type: 'final' },
     },
   } as any);
 };
@@ -1837,6 +1990,27 @@ describe('identifierLiterals', () => {
 });
 
 describe('checkFsmCoverage (verification-6)', () => {
+  it.each(['function', 'object'] as const)(
+    'initializes the host catalog from a declared %s literal child binding',
+    async (inputForm) => {
+      expect(
+        await checkFsmCoverage({
+          machine: catalogLiteralChildMachine(inputForm),
+        }),
+      ).toEqual([]);
+    },
+  );
+
+  it('does not enable an undeclared target named only in guard or source literals', async () => {
+    const findings = await checkFsmCoverage(
+      { machine: catalogLiteralChildMachine('function', 'undeclared-child') },
+      { sourceText: "const temptingIdentifier = 'undeclared-child';" },
+    );
+    expect(findings).toContain(
+      'state work: result "ok" has no reachable accepting transition',
+    );
+  });
+
   /* eslint-disable @typescript-eslint/no-explicit-any */
   it.each(['`artifactPath` (local path)', '`artifactPath: <local path>`'])(
     'supplies every declared output field in a closed contract: %s',
@@ -2745,6 +2919,41 @@ describe('checkFsmCoverage (verification-6)', () => {
     },
   );
   /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  it.each([3, 4] as const)(
+    'covers exact %i-field child output regardless of cardinality predicate order',
+    async (fields) => {
+      for (const countLast of [false, true]) {
+        for (const jsonDescriptors of [false, true]) {
+          expect(
+            await checkFsmCoverage({
+              machine: enumeratedChildOutputMachine(fields, {
+                countLast,
+                jsonDescriptors,
+              }),
+            }),
+          ).toEqual([]);
+        }
+      }
+    },
+  );
+
+  it('retains contradictory cardinality and shadowed child-output findings', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: enumeratedChildOutputMachine(3, { wrongCount: true }),
+      }),
+    ).toContain(
+      'state child: nested playbook onDone arm 0 is unsatisfiable under probing',
+    );
+    expect(
+      await checkFsmCoverage({
+        machine: enumeratedChildOutputMachine(4, { shadowed: true }),
+      }),
+    ).toContain(
+      'state child: nested playbook onDone arm 1 is unsatisfiable under probing',
+    );
+  });
 
   it('retains dead child approval and blank-reply failures without context patches', async () => {
     expect(
