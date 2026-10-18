@@ -1645,6 +1645,8 @@ interface ProbeOptions {
   varyExistingContext?: boolean;
   /** Raw child results have no declared acting-output field schema. */
   discoverPayloadShape?: boolean;
+  /** A selected-arm hint never replaces ordered concrete evaluation. */
+  payloadShapeGuard?: (arg: GuardArgs) => unknown;
   /** Host-owned context is not a mutable guard-probe input. */
   fixedContextFields?: readonly string[];
 }
@@ -1873,7 +1875,9 @@ function probeGuardAssignment(
             );
           }
         }
-        guard({
+        (discoverShape || shapeTag !== undefined
+          ? (options.payloadShapeGuard ?? guard)
+          : guard)({
           context: recording(
             baseContext,
             assignment.contextOverrides,
@@ -2350,6 +2354,10 @@ function coverageArmResults(
   const arms = transitionArms(node.value.invocation[outcome]);
   const guard = orderedArmPredicate(machine, arms, armIndex);
   if (guard === undefined) return [];
+  const shapeGuard =
+    node.kind === 'child' && outcome === 'onDone'
+      ? resolveGuard(machine, armGuard(arms[armIndex]))?.run
+      : undefined;
   const actorId = invocationActorId(machine, node.value);
   const event = {
     type: `xstate.${outcome === 'onDone' ? 'done' : 'error'}.actor.${actorId}`,
@@ -2438,6 +2446,7 @@ function coverageArmResults(
         initialContext: context,
         assignContext: false,
         discoverPayloadShape: node.kind === 'child' && outcome === 'onDone',
+        ...(shapeGuard === undefined ? {} : { payloadShapeGuard: shapeGuard }),
       },
     );
     if (assignment !== undefined) {

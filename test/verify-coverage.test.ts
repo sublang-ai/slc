@@ -1609,6 +1609,7 @@ const enumeratedChildOutputMachine = (
     literalRevision?: boolean;
     needsFifth?: boolean;
     nativeSeed?: boolean;
+    disjointPrior?: boolean;
     childFailure?: {
       expected: boolean;
       optional?: boolean;
@@ -1717,6 +1718,27 @@ const enumeratedChildOutputMachine = (
             text: 'Review.',
           }),
           onDone: [
+            ...(opts.disjointPrior
+              ? [
+                  {
+                    guard: ({ event }: any) => {
+                      const value = event.output;
+                      return (
+                        value !== null &&
+                        typeof value === 'object' &&
+                        Object.keys(value).length === 3 &&
+                        ['firstCommit', 'reviewRevision', 'clean'].every(
+                          (key) => Object.hasOwn(value, key),
+                        ) &&
+                        typeof value.firstCommit === 'string' &&
+                        typeof value.reviewRevision === 'string' &&
+                        value.clean === true
+                      );
+                    },
+                    target: 'done',
+                  },
+                ]
+              : []),
             ...(opts.shadowed ? [{ guard: approved, target: 'done' }] : []),
             { guard: approved, target: 'done' },
             { target: 'failed' },
@@ -3368,6 +3390,54 @@ describe('checkFsmCoverage (verification-6)', () => {
       ).not.toEqual([]);
     }
   });
+
+  it.each([0, 96])(
+    'discovers each child arm without combining disjoint earlier shapes (extra=%s)',
+    async (count) => {
+      expect(
+        await checkFsmCoverage(
+          {
+            machine: enumeratedChildOutputMachine(3, {
+              disjointPrior: true,
+              childFailure: { expected: false, optional: true },
+            }),
+          },
+          {
+            sourceText: [
+              String(childFailureShape),
+              ...Array.from(
+                { length: count },
+                (_, index) => `'unrelated_${index}'`,
+              ),
+            ].join('\n'),
+          },
+        ),
+      ).toEqual([]);
+    },
+  );
+
+  it.each([{ wrongCount: true }, { shadowed: true }])(
+    'preserves ordered disjoint-child refusal for %j',
+    async (controls) => {
+      const arm = controls.shadowed ? 2 : 1;
+      expect(
+        (
+          await checkFsmCoverage(
+            {
+              machine: enumeratedChildOutputMachine(3, {
+                disjointPrior: true,
+                childFailure: { expected: false, optional: true },
+                ...controls,
+              }),
+            },
+            { sourceText: String(childFailureShape) },
+          )
+        ).some((value) =>
+          value.includes(`child: nested playbook onDone arm ${arm}`),
+        ),
+      ).toBe(true);
+    },
+  );
 
   it.each(['string', 'boolean', 'number'] as const)(
     'reuses a predecessor-produced %s through fixed reached context',
