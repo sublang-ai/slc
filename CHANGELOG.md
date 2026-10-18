@@ -11,7 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.16.4] - 2026-10-18
+
 ### Fixed
+
+- Acting-result coverage preserves every declared field while guiding bounded
+  placeholder values from nonempty strings in actual reached context, retaining
+  the original result discriminator, ordered guards and replay limits.
 
 - A valid interrupt plan no longer suppresses lawful public entry routes;
   coverage retains the interrupt first and reuses bounded lazy alternatives
@@ -900,7 +906,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.3...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.4...HEAD
+[0.16.4]: https://github.com/sublang-ai/slc/compare/v0.16.3...v0.16.4
 [0.16.3]: https://github.com/sublang-ai/slc/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/sublang-ai/slc/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/sublang-ai/slc/compare/v0.16.0...v0.16.1
