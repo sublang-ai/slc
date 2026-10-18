@@ -11,6 +11,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Coverage fairly schedules admitted root invocations without expanding replay
+  limits or changing actual transition proof.
+
 ## [0.16.8] - 2026-10-18
 
 ### Fixed

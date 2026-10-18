@@ -2881,6 +2881,12 @@ async function searchCoverageEntry(
     );
     if (entry !== undefined) queue.push({ root: node, ...entry, steps: [] });
   }
+  // Family identity is only the declared root invocation. Keep every actual
+  // context, prefix and lazy entry alternative distinct within that family.
+  const rootFamilies = [
+    ...new Set(queue.map((path) => coverageNodeKey(path.root))),
+  ];
+  let familyCursor = 0;
   let attempts = 0;
   let entered = false;
   let transitionCovered = false;
@@ -2892,7 +2898,18 @@ async function searchCoverageEntry(
   let inputFailure: string | undefined;
   while (queue.length > 0 && attempts < MAX_COVERAGE_PATH_ATTEMPTS) {
     await coverageYield();
-    const path = queue.shift()!;
+    let pathIndex = 0;
+    for (let scanned = 0; scanned < rootFamilies.length; scanned++) {
+      const family = rootFamilies[familyCursor];
+      familyCursor = (familyCursor + 1) % rootFamilies.length;
+      const candidate = queue.findIndex(
+        (path) => coverageNodeKey(path.root) === family,
+      );
+      if (candidate < 0) continue;
+      pathIndex = candidate;
+      break;
+    }
+    const [path] = queue.splice(pathIndex, 1);
     attempts++;
     let replay = await replayCoveragePath(machine, nodes, path);
     let covered = false;
@@ -3020,7 +3037,7 @@ async function searchCoverageEntry(
         else queue.push(successor);
       }
       // Replay a discovered target, including its canonical question continuation,
-      // before unrelated prefixes; retain candidate order and the same budgets.
+      // before unrelated prefixes in its family; retain candidate order and budgets.
       queue.unshift(...continuations);
     } finally {
       replay.actor.stop();
