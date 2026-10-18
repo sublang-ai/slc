@@ -753,11 +753,13 @@ async function runCompletion(
             ];
         }
         if (findings.length === 0) {
+          const advisories = new Set<string>();
           prepared = await emitVerification(
             { ok: true, outputs: [], diagnostics: [] },
             verification,
             guardTarget,
             prepare,
+            (diagnostic) => advisories.add(diagnostic),
           );
           await emitEntryModule({
             cwd,
@@ -770,7 +772,9 @@ async function runCompletion(
           });
           const missing = targets.filter((target) => !pending.has(target.path));
           findings = [
-            ...prepared.diagnostics,
+            ...prepared.diagnostics.filter(
+              (diagnostic) => !advisories.has(diagnostic),
+            ),
             ...missing.map(
               (target) =>
                 `required completion output was not prepared: ${target.path}`,
@@ -817,6 +821,7 @@ async function runCompletion(
         ok: true,
         outputs,
         diagnostics: [
+          ...prepared.diagnostics,
           'checked retained current bundle; no phases executed or build history published',
         ],
       };
@@ -843,6 +848,7 @@ async function emitVerification(
   ctx: VerificationContext,
   guardTarget?: CompletionTargetGuard,
   write?: ArtifactWriter,
+  onAdvisory?: (diagnostic: string) => void,
 ): Promise<SlcResult> {
   if (!result.ok) return result;
   const hostTargets = verificationHostTargets(ctx);
@@ -924,6 +930,8 @@ async function emitVerification(
       write,
     });
     outputs.push(promptContract.path);
+    for (const advisory of promptContract.advisories)
+      onAdvisory?.(`verification: ${advisory}`);
     diagnostics.push(
       ...promptContract.diagnostics.map(
         (diagnostic) => `verification: ${diagnostic}`,

@@ -4347,8 +4347,9 @@ export async function emitPromptContractTest(opts: {
   /** The full-link target's installed engine declaration, when read (DR-028). */
   runtimeDeclaration?: PlaybookRuntimeDeclaration;
   write?: (path: string, content: string) => Promise<void>;
-}): Promise<{ path: string; diagnostics: string[] }> {
+}): Promise<{ path: string; diagnostics: string[]; advisories: string[] }> {
   const diagnostics: string[] = [];
+  const advisories: string[] = [];
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const config = findMachineConfig(await loadFsmModule(fsmPath));
   const rows = capturePromptContract(config);
@@ -4386,10 +4387,12 @@ export async function emitPromptContractTest(opts: {
       continue;
     }
     substitutions[inspected.actor] = inspected.substitutions;
+    const notes = inspected.diagnostics.map(
+      (diagnostic) => `prompt contract: ${diagnostic}`,
+    );
+    advisories.push(...notes);
     diagnostics.push(
-      ...inspected.diagnostics.map(
-        (diagnostic) => `prompt contract: ${diagnostic}`,
-      ),
+      ...notes,
       ...inspected.findings.map((finding) => `prompt contract: ${finding}`),
     );
   }
@@ -4421,7 +4424,7 @@ export async function emitPromptContractTest(opts: {
     `${opts.basename}.prompt-contract.test.ts`,
   );
   await (opts.write ?? writeFile)(path, content);
-  return { path, diagnostics };
+  return { path, diagnostics, advisories };
 }
 
 /**

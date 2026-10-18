@@ -152,6 +152,66 @@ describe('public retained-bundle completion (completion-6/7)', () => {
     },
   );
 
+  it.each([false, true])(
+    'preserves a non-finding prompt diagnostic without accepting composer drift=%s (verification-5/28)',
+    async (drift) => {
+      await fixture();
+      const fsm = join(bundle, `${name}.fsm.ts`);
+      const linked = join(bundle, `${name}.playbook.ts`);
+      const machine = (await readFile(fsm, 'utf8'))
+        .replace(
+          'export type WorkflowMachineInput = Record<string, never>;',
+          'export type WorkflowMachineInput = { readonly enabledPlaybooks: readonly unknown[] };',
+        )
+        .replace(
+          'context: { reviewLoops: 0, judgmentCount: 0 },',
+          `context: ({ input }) => {
+    if (!Array.isArray(input.enabledPlaybooks)) throw new Error('A catalog is required');
+    return { reviewLoops: 0, judgmentCount: 0 };
+  },`,
+        );
+      await writeFile(fsm, machine);
+      const originalLinked = await readFile(linked, 'utf8');
+      let adapted = originalLinked.replace(
+        'machineInput: () => ({}),',
+        'machineInput: () => ({ enabledPlaybooks: [] }),',
+      );
+      expect(adapted).not.toBe(originalLinked);
+      if (drift)
+        adapted = adapted.replace(
+          'composePlayerPrompt: defaultComposePlayerPrompt,',
+          'composePlayerPrompt: () => "wrong prompt",',
+        );
+      await writeFile(linked, adapted);
+      const before = await Promise.all(
+        ['text.md', 'gears.md', 'fsm.ts', 'playbook.ts'].map((suffix) =>
+          readFile(join(bundle, `${name}.${suffix}`)),
+        ),
+      );
+      const result = await invoke();
+      expect(result.ok, result.stderr).toBe(!drift);
+      expect(
+        await Promise.all(
+          ['text.md', 'gears.md', 'fsm.ts', 'playbook.ts'].map((suffix) =>
+            readFile(join(bundle, `${name}.${suffix}`)),
+          ),
+        ),
+      ).toEqual(before);
+      if (drift) {
+        expect(result.stderr).toContain('does not preserve the body line');
+        await noDerivedFiles();
+      } else {
+        expect(result.stderr).toContain('no resolvable initial context');
+        expect(result.stderr).toContain(
+          'no phases executed or build history published',
+        );
+        await access(join(cwd, `${name}.ts`));
+        await access(join(bundle, `${name}.prompt-contract.test.ts`));
+        await expect(access(join(bundle, '.slc'))).rejects.toThrow();
+      }
+    },
+  );
+
   it('preserves an actual usable complete build byte for byte', async () => {
     await fixture();
     const source = join(bundle, `${name}.text.md`);

@@ -13,6 +13,7 @@ and this project adheres to
 
 ### Fixed
 
+- Retained-bundle completion preserves prompt-probe advisories without treating them as verification failures; actual composition and validation failures still block output.
 - Child-output coverage tests a valid unmodified seed before discovering extra
   fields, preserving an absent optional field without weakening ordered guards
   or actual replay.
