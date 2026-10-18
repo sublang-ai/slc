@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   mkdtemp,
   mkdir,
@@ -386,10 +386,37 @@ describe('opt-in compilation benchmark', () => {
 
   it('cooperatively aborts an over-deadline run and retains failed evidence', async () => {
     const options = await fixture();
-    const result = await benchmarkCompile(
-      { ...options, timeoutSeconds: 0.25 },
-      { runtime, env: {}, adapterFactory: () => adapter([], true), validate },
-    );
+    const started = Promise.withResolvers();
+    const waitingAdapter = adapter([], true);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let result;
+    try {
+      const pending = benchmarkCompile(
+        { ...options, timeoutSeconds: 0.25 },
+        {
+          runtime,
+          env: {},
+          adapterFactory: () => ({
+            ...waitingAdapter,
+            async *run(...args) {
+              started.resolve();
+              yield* waitingAdapter.run(...args);
+            },
+          }),
+          validate,
+        },
+      );
+      await Promise.race([
+        started.promise,
+        pending.then(() => {
+          throw new Error('Benchmark finished before its adapter started');
+        }),
+      ]);
+      await vi.advanceTimersByTimeAsync(250);
+      result = await pending;
+    } finally {
+      vi.useRealTimers();
+    }
     expect(result.summary).toMatchObject({
       status: 'failure',
       deadlineExceeded: true,
