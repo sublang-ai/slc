@@ -2921,15 +2921,12 @@ async function searchCoverageEntry(
           drive: path.drive,
           steps: [...path.steps, step],
         };
-        if (
-          coverageNodeKey(node) === coverageNodeKey(target) &&
-          step.questionWait !== undefined
-        )
+        if (coverageNodeKey(step.next) === coverageNodeKey(target))
           continuations.push(successor);
         else queue.push(successor);
       }
-      // Continue a reached target before unrelated alternative prefixes, but
-      // retain candidate order and charge every replay to the same budgets.
+      // Replay a discovered target, including its canonical question continuation,
+      // before unrelated prefixes; retain candidate order and the same budgets.
       queue.unshift(...continuations);
     } finally {
       replay.actor.stop();

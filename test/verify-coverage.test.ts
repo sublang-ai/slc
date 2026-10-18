@@ -479,6 +479,163 @@ const successiveQuestionMachine = (
   } as any);
 };
 
+/** A discovered target competes with actual entry variants and question paths. */
+const queuedTargetSuccessorMachine = (
+  opts: {
+    requireRight?: boolean;
+    prefixLength?: number;
+    shadowed?: boolean;
+    escapesTarget?: boolean;
+    observed?: Array<{ route: string; reply: string; guard: string }>;
+  } = {},
+) => {
+  const base = questionResumedMachine();
+  const states = base.config.states as any;
+  const prefix: Record<string, any> = {};
+  const prefixLength = opts.prefixLength ?? 4;
+  for (let index = 0; index < prefixLength; index++) {
+    const id = `prefix${index}`;
+    prefix[id] = {
+      id,
+      invoke: {
+        src: 'playbook',
+        input: () => ({
+          stateId: id,
+          playbookId: 'child',
+          text: 'Choose a route.',
+        }),
+        onDone: ['left', 'right'].map((route) => ({
+          guard:
+            route === 'left'
+              ? ({ event }: any) =>
+                  Object.keys(event.output).length === 1 &&
+                  event.output.guard === 'left'
+              : ({ event }: any) =>
+                  Object.keys(event.output).length === 1 &&
+                  event.output.guard === 'right',
+          target: index === prefixLength - 1 ? '#work' : `#prefix${index + 1}`,
+          actions: assign(({ context }: any) => ({
+            route: `${context.route}/${route}`,
+          })),
+        })),
+        onError: '#failed',
+      },
+    };
+  }
+  const question = needsBossReplyArm('audit', 'writer', 'X-audit');
+  return setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('provide actor');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('provide child');
+      }),
+    },
+  }).createMachine({
+    id: 'queued-target',
+    initial: 'ready',
+    context: { route: '' } as any,
+    on: {
+      BOSS_INTERRUPT: {
+        target: '#prefix0',
+        reenter: true,
+        guard: ({ event }: any) => event.targetId === 'prefix0',
+      },
+    },
+    states: {
+      ...states,
+      ...prefix,
+      ready: {
+        id: 'ready',
+        on: {
+          GO: {
+            target: '#prefix0',
+            guard: ({ event }: any) =>
+              typeof event.label === 'string' && event.label.trim() !== '',
+            actions: assign({ label: ({ event }: any) => event.label }),
+          },
+        },
+      },
+      work: {
+        ...states.work,
+        invoke: {
+          ...states.work.invoke,
+          onDone: [
+            ...(opts.shadowed
+              ? states.work.invoke.onDone
+                  .slice(0, 2)
+                  .map((arm: any) => ({ ...arm, target: '#failed' }))
+              : []),
+            ...states.work.invoke.onDone.slice(0, 2).map((arm: any) => ({
+              ...arm,
+              target: '#audit',
+              actions: assign(({ context, event }: any) => ({
+                approvalReply: context.bossReply,
+                approvedGuard: event.output.guard,
+              })),
+            })),
+            ...states.work.invoke.onDone.slice(2),
+          ],
+        },
+      },
+      audit: {
+        id: 'audit',
+        ...(opts.escapesTarget ? { always: '#failed' } : {}),
+        invoke: {
+          src: 'player',
+          input: ({ context }: any) => ({
+            stateId: 'audit',
+            role: 'writer',
+            sourceItem: 'X-audit',
+            prompt: 'Audit the selected route.',
+            result: {
+              ok: 'The route is audited.',
+              needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            },
+            pendingBossQuestion: context.pendingBossQuestion,
+            bossReply: context.bossReply,
+          }),
+          onDone: [
+            {
+              target: '#done',
+              guard: ({ context, event }: any) =>
+                event.output.guard === 'ok' &&
+                (!opts.requireRight || context.route.endsWith('/right')),
+              actions: ({ context }: any) =>
+                opts.observed?.push({
+                  route: context.route,
+                  reply: context.approvalReply,
+                  guard: context.approvedGuard,
+                }),
+            },
+            question,
+          ],
+          onError: '#failed',
+        },
+      },
+      awaitBossReply: {
+        ...states.awaitBossReply,
+        on: {
+          BOSS_REPLY: [
+            {
+              target: '#audit',
+              reenter: true,
+              guard: ({ context, event }: any) =>
+                context.pendingBossQuestion?.questionId === 'audit' &&
+                event.questionId === 'audit' &&
+                typeof event.answer === 'string' &&
+                event.answer.trim() !== '',
+              actions: assign({ bossReply: ({ event }: any) => event.answer }),
+            },
+            ...states.awaitBossReply.on.BOSS_REPLY,
+          ],
+        },
+      },
+    },
+  } as any);
+};
+
 /** A script preflight followed by ordinary acting work, as in the cold demo. */
 const scriptWorkflow = (
   options: {
@@ -1429,6 +1586,15 @@ const accumulatedChildMachine = (
   } as any);
 };
 
+type ChildChainPrEvidence = {
+  variant: unknown;
+  entryType: unknown;
+  mode: unknown;
+  branches: number;
+  codeRevision: unknown;
+  decisionRevision: unknown;
+};
+
 /** Non-preemptive planning plus a DEV-like branch/decision/code/PR chain. */
 const childChainMachine = (
   opts: {
@@ -1442,6 +1608,7 @@ const childChainMachine = (
       shadowAlternate?: boolean;
       requireProof?: boolean;
       observed?: Array<{ id: string; variant: unknown; entryType: unknown }>;
+      observedPr?: ChildChainPrEvidence[];
     };
   } = {},
 ) => {
@@ -1680,10 +1847,27 @@ const childChainMachine = (
             throw new Error('decision must execute');
         },
       ),
-      pr: child('pr', [{ target: 'done' }], (context) => {
-        if (context.branches < 1 || typeof context.codeRevision !== 'string')
-          throw new Error('branch and code must execute');
-      }),
+      pr: child(
+        'pr',
+        [
+          {
+            target: 'done',
+            actions: ({ context }: any) =>
+              opts.entryVariants?.observedPr?.push({
+                variant: context.entryVariant,
+                entryType: context.entryType,
+                mode: context.mode,
+                branches: context.branches,
+                codeRevision: context.codeRevision,
+                decisionRevision: context.decisionRevision,
+              }),
+          },
+        ],
+        (context) => {
+          if (context.branches < 1 || typeof context.codeRevision !== 'string')
+            throw new Error('branch and code must execute');
+        },
+      ),
       awaitBossReply: {
         id: 'awaitBossReply',
         tags: 'playbook.parked',
@@ -4088,27 +4272,34 @@ describe('checkFsmCoverage (verification-6)', () => {
     ).toBe(true);
   });
 
-  it('reports bounded exhaustion for the complex preemptive entry fixture', async () => {
+  it('reaches PR through the alternate public route while retaining code budget exhaustion', async () => {
     const observed: Array<{
       id: string;
       variant: unknown;
       entryType: unknown;
     }> = [];
+    const observedPr: ChildChainPrEvidence[] = [];
     const findings = await checkFsmCoverage(
       {
         machine: childChainMachine({
-          entryVariants: { preemptive: true, observed },
+          entryVariants: { preemptive: true, observed, observedPr },
         }),
       },
       { sourceText: "'primary'\n'alternate'" },
     );
-    expect(
-      findings.some(
-        (finding) =>
-          finding.startsWith('state pr:') &&
-          finding.includes('exhausted 64-attempt path budget'),
-      ),
-    ).toBe(true);
+    expect(findings).toEqual([
+      'state code: nested playbook onDone arm 0: exhausted 64-attempt path budget',
+    ]);
+    expect(observedPr.length).toBeGreaterThan(0);
+    for (const result of observedPr) {
+      expect(result.variant).toBe('alternate');
+      expect(result.entryType).toBe('START');
+      expect(['branch', 'both']).toContain(result.mode);
+      expect(result.branches).toBeGreaterThanOrEqual(1);
+      expect(result.codeRevision).toEqual(expect.stringMatching(/\S/));
+      if (result.mode === 'both')
+        expect(result.decisionRevision).toEqual(expect.stringMatching(/\S/));
+    }
     expect(
       observed.some(
         (entry) =>
@@ -4911,6 +5102,73 @@ describe('checkFsmCoverage (verification-6)', () => {
       await checkFsmCoverage({ machine: reachedPrimitiveChildMachine(opts) }),
     ).not.toEqual([]);
   });
+
+  it.each([
+    { prefixLength: 4, requireRight: false },
+    { prefixLength: 3, requireRight: true },
+  ])(
+    'replays a queued target successor after $prefixLength child predecessors (require right $requireRight)',
+    async ({ prefixLength, requireRight }) => {
+      const observed: Array<{ route: string; reply: string; guard: string }> =
+        [];
+      const findings = await checkFsmCoverage(
+        {
+          machine: queuedTargetSuccessorMachine({
+            prefixLength,
+            requireRight,
+            observed,
+          }),
+        },
+        { artifactSchema: 3 },
+      );
+      expect(findings).toEqual([]);
+      expect(observed.length).toBeGreaterThan(0);
+      if (!requireRight)
+        expect(observed[0]?.route).toBe('/left/left/left/left');
+      for (const result of observed) {
+        expect(result.route.split('/').filter(Boolean)).toHaveLength(
+          prefixLength,
+        );
+        expect(result.reply).toMatch(/\S/);
+        expect(['approved', 'refused']).toContain(result.guard);
+        if (requireRight) expect(result.route.endsWith('/right')).toBe(true);
+      }
+    },
+  );
+
+  it('reports bounded exhaustion after rejecting queued target successors', async () => {
+    const observed: Array<{ route: string; reply: string; guard: string }> = [];
+    const findings = await checkFsmCoverage(
+      {
+        machine: queuedTargetSuccessorMachine({
+          prefixLength: 4,
+          requireRight: true,
+          observed,
+        }),
+      },
+      { artifactSchema: 3 },
+    );
+    expect(findings).toContain(
+      'state audit: result "ok" remains unproved: exhausted 8-invocation path depth; exhausted 64-attempt path budget',
+    );
+    expect(observed).toEqual([]);
+  });
+
+  it.each([{ shadowed: true }, { escapesTarget: true }])(
+    'refuses a queued target successor without actual entry %j',
+    async (options) => {
+      const observed: Array<{ route: string; reply: string; guard: string }> =
+        [];
+      const findings = await checkFsmCoverage(
+        { machine: queuedTargetSuccessorMachine({ ...options, observed }) },
+        { artifactSchema: 3 },
+      );
+      expect(findings.some((finding) => finding.includes('state audit:'))).toBe(
+        true,
+      );
+      expect(observed).toEqual([]);
+    },
+  );
 
   it('covers canonical question-resumed approved and refused arms by actual XState actions', async () => {
     const observed: Array<{
