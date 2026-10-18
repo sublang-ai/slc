@@ -1814,6 +1814,7 @@ const enumeratedChildOutputMachine = (
     needsFifth?: boolean;
     nativeSeed?: boolean;
     disjointPrior?: boolean;
+    priorOwnFieldsFirst?: boolean;
     fixedContextReads?: boolean;
     blockEntry?: boolean;
     childFailure?: ChildFailureOptions;
@@ -1947,10 +1948,14 @@ const enumeratedChildOutputMachine = (
                       return (
                         value !== null &&
                         typeof value === 'object' &&
-                        Object.keys(value).length === 3 &&
-                        ['firstCommit', 'reviewRevision', 'clean'].every(
-                          (key) => Object.hasOwn(value, key),
-                        ) &&
+                        (opts.priorOwnFieldsFirst
+                          ? ['firstCommit', 'reviewRevision', 'clean'].every(
+                              (key) => Object.hasOwn(value, key),
+                            ) && Object.keys(value).length === 3
+                          : Object.keys(value).length === 3 &&
+                            ['firstCommit', 'reviewRevision', 'clean'].every(
+                              (key) => Object.hasOwn(value, key),
+                            )) &&
                         typeof value.firstCommit === 'string' &&
                         typeof value.reviewRevision === 'string' &&
                         value.clean === true
@@ -1982,6 +1987,69 @@ const enumeratedChildOutputMachine = (
     },
   } as any);
 };
+
+/** A selected child guard must pass before excluding its earlier sibling. */
+const orderedChildValueMachine = (
+  opts: { blockEntry?: boolean; shadowed?: boolean } = {},
+  observed: unknown[] = [],
+) =>
+  setup({
+    actors: {
+      playbook: fromPromise(async () => {
+        throw new Error('provide child');
+      }),
+    },
+  }).createMachine({
+    id: 'orderedChildValue',
+    initial: 'ready',
+    context: { entryReady: false },
+    on: {
+      BOSS_INTERRUPT: {
+        target: '#ready',
+        guard: ({ event }: any) => event.targetId === 'ready',
+      },
+    },
+    states: {
+      ready: {
+        id: 'ready',
+        on: {
+          START: {
+            target: 'child',
+            actions: assign({ entryReady: !opts.blockEntry }),
+          },
+        },
+      },
+      child: {
+        id: 'child',
+        invoke: {
+          src: 'playbook',
+          input: () => ({
+            stateId: 'child',
+            playbookId: 'review',
+            text: 'Review.',
+          }),
+          onDone: [
+            {
+              guard: ({ event }: any) =>
+                opts.shadowed === true || event.output.route !== 'second',
+              target: 'done',
+            },
+            {
+              guard: ({ context, event }: any) =>
+                context.entryReady === true && event.output.accepted === true,
+              target: 'done',
+              actions: ({ event }: any) => observed.push(event.output),
+            },
+            { target: 'failed' },
+          ],
+          onError: { target: 'failed' },
+        },
+      },
+      awaitBossReply: { id: 'awaitBossReply', tags: 'playbook.parked' },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+      done: { id: 'done', type: 'final' },
+    },
+  } as any);
 
 const boundedPathMachine = (opts: { depth?: number; branching?: boolean }) => {
   const states: Record<string, any> = {
@@ -3863,6 +3931,53 @@ describe('checkFsmCoverage (verification-6)', () => {
           value.includes(`child: nested playbook onDone arm ${arm}`),
         ),
       ).toBe(true);
+    },
+  );
+
+  it('guides a child arm before spending its budget on earlier own-field reads', async () => {
+    expect(
+      await checkFsmCoverage(
+        {
+          machine: enumeratedChildOutputMachine(3, {
+            disjointPrior: true,
+            priorOwnFieldsFirst: true,
+            childFailure: { expected: false, optional: true },
+          }),
+        },
+        {
+          sourceText: [
+            String(childFailureShape),
+            ...Array.from({ length: 96 }, (_, index) => `'unrelated_${index}'`),
+          ].join('\n'),
+        },
+      ),
+    ).toEqual([]);
+  });
+
+  it('discovers ordered exclusions after the selected child guard accepts', async () => {
+    const observed: unknown[] = [];
+    expect(
+      await checkFsmCoverage({
+        machine: orderedChildValueMachine({}, observed),
+      }),
+    ).toEqual([]);
+    expect(observed).toContainEqual({ accepted: true, route: 'second' });
+  });
+
+  it.each([{ shadowed: true }, { blockEntry: true }])(
+    'retains conditional child-guidance refusal for %j',
+    async (opts) => {
+      const observed: unknown[] = [];
+      expect(
+        (
+          await checkFsmCoverage({
+            machine: orderedChildValueMachine(opts, observed),
+          })
+        ).some((finding) =>
+          finding.includes('child: nested playbook onDone arm 1'),
+        ),
+      ).toBe(true);
+      expect(observed).toEqual([]);
     },
   );
 
