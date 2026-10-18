@@ -1655,7 +1655,7 @@ function minedLiterals(fn: unknown): string[] {
 // helper call sites, invisible in the guard closures themselves; the module's
 // identifier-like string literals recover them without dragging prompt prose
 // into the candidate pool.
-const IDENTIFIER_LITERAL = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;
+const IDENTIFIER_LITERAL = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 // Bound comparisons (cycle limits, retry counters, exit statuses) route on
 // integers that neither the string miner nor the generic value pool supplies:
