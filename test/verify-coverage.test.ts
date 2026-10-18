@@ -16,6 +16,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { normalizeErrorCompact } from '@sublang/playbook/xstate-runtime';
+
 import { describe, expect, it } from 'vitest';
 import {
   assign,
@@ -1558,10 +1560,18 @@ const reachedPrimitiveChildMachine = (
   } as any);
 };
 
+interface ChildFailureOptions {
+  expected: boolean;
+  optional?: boolean;
+  requireError?: boolean;
+  errorShape?: (value: any) => boolean;
+  onErrorAccepted?: (error: unknown) => void;
+}
+
 /** Raw child success validates cardinality before reading named fields. */
 const childFailureShape = (
   value: any,
-  opts: { expected: boolean; optional?: boolean; requireError?: boolean },
+  opts: ChildFailureOptions,
   wrongCount = false,
 ) => {
   if (
@@ -1592,10 +1602,12 @@ const childFailureShape = (
     (!opts.optional ||
       ((!opts.requireError || Object.hasOwn(value, 'error')) &&
         (!Object.hasOwn(value, 'error') ||
-          (value.error !== null &&
-            typeof value.error === 'object' &&
-            typeof value.error.name === 'string' &&
-            typeof value.error.message === 'string'))))
+          (opts.errorShape !== undefined
+            ? opts.errorShape(value.error)
+            : value.error !== null &&
+              typeof value.error === 'object' &&
+              typeof value.error.name === 'string' &&
+              typeof value.error.message === 'string'))))
   );
 };
 
@@ -1610,11 +1622,7 @@ const enumeratedChildOutputMachine = (
     needsFifth?: boolean;
     nativeSeed?: boolean;
     disjointPrior?: boolean;
-    childFailure?: {
-      expected: boolean;
-      optional?: boolean;
-      requireError?: boolean;
-    };
+    childFailure?: ChildFailureOptions;
   } = {},
 ) => {
   const namedFields = (value: any) =>
@@ -1740,7 +1748,16 @@ const enumeratedChildOutputMachine = (
                 ]
               : []),
             ...(opts.shadowed ? [{ guard: approved, target: 'done' }] : []),
-            { guard: approved, target: 'done' },
+            {
+              guard: approved,
+              target: 'done',
+              ...(opts.childFailure?.onErrorAccepted === undefined
+                ? {}
+                : {
+                    actions: ({ event }: any) =>
+                      opts.childFailure?.onErrorAccepted?.(event.output.error),
+                  }),
+            },
             { target: 'failed' },
           ],
           onError: { target: 'failed' },
@@ -3372,11 +3389,7 @@ describe('checkFsmCoverage (verification-6)', () => {
         { sourceText: String(childFailureShape) },
       ),
     ).toEqual([]);
-    for (const controls of [
-      { wrongCount: true },
-      { shadowed: true },
-      { childFailure: { ...childFailure, requireError: true } },
-    ]) {
+    for (const controls of [{ wrongCount: true }, { shadowed: true }]) {
       expect(
         await checkFsmCoverage(
           {
@@ -3390,6 +3403,104 @@ describe('checkFsmCoverage (verification-6)', () => {
       ).not.toEqual([]);
     }
   });
+
+  it('covers a compact normalized child-error value', async () => {
+    const acceptedErrors: unknown[] = [];
+    const errorShape = (value: Record<string, unknown> | null) =>
+      value !== null &&
+      typeof value === 'object' &&
+      Object.keys(value).length === 2 &&
+      Object.hasOwn(value, 'name') &&
+      Object.hasOwn(value, 'message') &&
+      typeof value.name === 'string' &&
+      typeof value.message === 'string';
+    expect(
+      await checkFsmCoverage(
+        {
+          machine: enumeratedChildOutputMachine(4, {
+            childFailure: {
+              expected: false,
+              optional: true,
+              requireError: true,
+              errorShape,
+              onErrorAccepted: (error) => acceptedErrors.push(error),
+            },
+          }),
+        },
+        { sourceText: String(childFailureShape) },
+      ),
+    ).toEqual([]);
+    expect(acceptedErrors).toContainEqual(
+      normalizeErrorCompact(new Error('coverage: child failure')),
+    );
+    for (const controls of [{ wrongCount: true }, { shadowed: true }]) {
+      const arm = controls.shadowed ? 1 : 0;
+      expect(
+        (
+          await checkFsmCoverage(
+            {
+              machine: enumeratedChildOutputMachine(4, {
+                childFailure: {
+                  expected: false,
+                  optional: true,
+                  requireError: true,
+                  errorShape,
+                },
+                ...controls,
+              }),
+            },
+            { sourceText: String(childFailureShape) },
+          )
+        ).some((value) =>
+          value.includes(`child: nested playbook onDone arm ${arm}`),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it.each(['numeric-name', 'missing-message', 'extra-member'])(
+    'refuses an unsupported compact normalized child-error shape (%s)',
+    async (variant) => {
+      const errorShape = (value: Record<string, unknown> | null) => {
+        if (value === null || typeof value !== 'object') return false;
+        if (variant === 'numeric-name')
+          return (
+            Object.keys(value).length === 2 &&
+            typeof value.name === 'number' &&
+            typeof value.message === 'string'
+          );
+        if (variant === 'missing-message')
+          return (
+            Object.keys(value).length === 1 && typeof value.name === 'string'
+          );
+        return (
+          Object.keys(value).length === 3 &&
+          typeof value.name === 'string' &&
+          typeof value.message === 'string' &&
+          value.extra === true
+        );
+      };
+      expect(
+        (
+          await checkFsmCoverage(
+            {
+              machine: enumeratedChildOutputMachine(4, {
+                childFailure: {
+                  expected: false,
+                  optional: true,
+                  requireError: true,
+                  errorShape,
+                },
+              }),
+            },
+            { sourceText: String(childFailureShape) },
+          )
+        ).some((value) =>
+          value.includes('child: nested playbook onDone arm 0'),
+        ),
+      ).toBe(true);
+    },
+  );
 
   it.each([0, 96])(
     'discovers each child arm without combining disjoint earlier shapes (extra=%s)',
