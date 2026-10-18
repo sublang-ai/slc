@@ -1929,11 +1929,11 @@ function probeGuardAssignment(
           const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
           if (tag === 'c:' && typeof prop === 'string') contextRead(prop);
           if (
-            options.discoverPayloadShape === true &&
             tag !== 'c:' &&
             typeof prop === 'string' &&
             descriptor === undefined
           ) {
+            // Ordinary descriptor reads guide values without inventing one.
             reads.add(`${tag}${prop}`);
             enumerated.add(tag);
             noteShapeField(tag, prop);

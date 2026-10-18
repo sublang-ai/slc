@@ -1835,6 +1835,86 @@ const publicAfterInterruptMachine = (
   } as any);
 };
 
+/** Public entry reads own data without changing what a descriptor returns. */
+const descriptorEntryMachine = (
+  opts: {
+    inheritedOnly?: boolean;
+    falseGuard?: boolean;
+    shadowed?: boolean;
+    requireProof?: boolean;
+    wrongAttribute?: boolean;
+    fifthField?: boolean;
+  } = {},
+  observed: Array<{ id: string; route: unknown; entryType: unknown }> = [],
+  missingDescriptors: string[] = [],
+) => {
+  const base = publicAfterInterruptMachine(
+    { requireProof: opts.requireProof },
+    observed,
+  );
+  const data = (event: object, field: string): unknown => {
+    const descriptor = Object.getOwnPropertyDescriptor(event, field);
+    if (descriptor === undefined) missingDescriptors.push(field);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  };
+  const publicGuard = ({ event }: any) => {
+    const request = opts.inheritedOnly
+      ? Object.hasOwn(event, 'request')
+        ? undefined
+        : event.request
+      : data(event, 'request');
+    return (
+      typeof request === 'string' &&
+      request.trim() !== '' &&
+      data(event, 'mode') === 'public' &&
+      (!opts.wrongAttribute ||
+        Object.getOwnPropertyDescriptor(event, 'request')?.configurable ===
+          false) &&
+      (!opts.fifthField ||
+        ['first', 'second', 'third'].every(
+          (field) => data(event, field) === 'allow',
+        )) &&
+      opts.falseGuard !== true
+    );
+  };
+  const config = base.config as any;
+  const start = config.states.ready.on.START.at(-1);
+  const interrupt = config.on.BOSS_INTERRUPT;
+  return createMachine(
+    {
+      ...config,
+      on: {
+        ...config.on,
+        BOSS_INTERRUPT: {
+          ...interrupt,
+          guard: (args: any) =>
+            interrupt.guard(args) && data(args.event, 'permit') === 'allow',
+        },
+      },
+      states: {
+        ...config.states,
+        ready: {
+          ...config.states.ready,
+          on: {
+            START: [
+              ...(opts.shadowed
+                ? [
+                    {
+                      guard: ({ event }: any) => event.mode === 'public',
+                      target: 'failed',
+                    },
+                  ]
+                : []),
+              { ...start, guard: publicGuard },
+            ],
+          },
+        },
+      },
+    } as any,
+    base.implementations as any,
+  );
+};
+
 /** An actual predecessor supplies a value absent from the artifact literals. */
 const reachedPrimitiveChildMachine = (
   opts: {
@@ -3882,6 +3962,73 @@ describe('checkFsmCoverage (verification-6)', () => {
       findings.some((finding) => finding.startsWith('state alternateChild:')),
     ).toBe(true);
     expect(observed.some((entry) => entry.id === 'alternateChild')).toBe(false);
+  });
+
+  it('discovers descriptor-read public entries without fabricating descriptors', async () => {
+    const observed: Array<{ id: string; route: unknown; entryType: unknown }> =
+      [];
+    const missing: string[] = [];
+    expect(
+      await checkFsmCoverage({
+        machine: descriptorEntryMachine({}, observed, missing),
+      }),
+    ).toEqual([]);
+    expect(missing).toContain('permit');
+    expect(missing).toContain('request');
+    expect(
+      observed.some(
+        (entry) =>
+          entry.id === 'ordinaryChild' &&
+          entry.route === 'interrupt' &&
+          entry.entryType === 'BOSS_INTERRUPT',
+      ),
+    ).toBe(true);
+    expect(
+      observed.some(
+        (entry) =>
+          entry.id === 'alternateChild' &&
+          entry.route === 'public' &&
+          entry.entryType === 'START',
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    { inheritedOnly: true },
+    { falseGuard: true },
+    { shadowed: true },
+    { requireProof: true },
+    { wrongAttribute: true },
+  ])('retains descriptor-entry refusal for %j', async (opts) => {
+    const observed: Array<{ id: string; route: unknown; entryType: unknown }> =
+      [];
+    const findings = await checkFsmCoverage({
+      machine: descriptorEntryMachine(opts, observed),
+    });
+    expect(
+      findings.some((finding) => finding.startsWith('state alternateChild:')),
+    ).toBe(true);
+    expect(
+      observed.some(
+        (entry) => entry.id === 'alternateChild' && entry.entryType === 'START',
+      ),
+    ).toBe(false);
+  });
+
+  it('retains the four-field bound for descriptor-read public entries', async () => {
+    const observed: Array<{ id: string; route: unknown; entryType: unknown }> =
+      [];
+    const findings = await checkFsmCoverage({
+      machine: descriptorEntryMachine({ fifthField: true }, observed),
+    });
+    expect(
+      findings.some((finding) => finding.startsWith('state alternateChild:')),
+    ).toBe(true);
+    expect(
+      observed.some(
+        (entry) => entry.id === 'alternateChild' && entry.entryType === 'START',
+      ),
+    ).toBe(false);
   });
 
   it.each([false, true])(
