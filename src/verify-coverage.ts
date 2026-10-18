@@ -3171,6 +3171,45 @@ function captainPredecessorPlan(
   return undefined;
 }
 
+/** The direct interrupt required by the retained one-child legacy driver. */
+function captainPredecessorDrive(
+  machine: MachineLike,
+  predecessor: CaptainPredecessorPlan,
+  refs: readonly StateRef[],
+  values: readonly unknown[],
+): InterruptDrive {
+  const entryRef = predecessor.entry?.captain.ref ?? predecessor.playbook.ref;
+  const entryId =
+    predecessor.entry === undefined
+      ? interruptTargetForRef(
+          predecessor.playbook.ref,
+          predecessor.playbook.ref.stableId,
+        )
+      : captainInterruptTarget(predecessor.entry.captain);
+  return interruptDriveForRef(machine, refs, entryRef, entryId, values);
+}
+
+function unavailableCaptainPredecessorDrive(
+  machine: MachineLike,
+  captain: CaptainRef,
+  refs: readonly StateRef[],
+  captains: readonly CaptainRef[],
+  playbooks: readonly PlaybookRef[],
+  values: readonly unknown[] = [],
+): boolean {
+  const predecessor = captainPredecessorPlan(
+    machine,
+    captain,
+    playbooks,
+    refs,
+    captains,
+  );
+  return (
+    predecessor !== undefined &&
+    !captainPredecessorDrive(machine, predecessor, refs, values).satisfiable
+  );
+}
+
 interface ControllerCaptainEntryPlan {
   drive: InterruptDrive;
   preceding: Array<{
@@ -3510,19 +3549,10 @@ function captainProbeActor(
   let childUsed = false;
   const actorId = invocationActorId(machine, predecessor.playbook);
   const dynamic = dynamicPlaybookFields(predecessor.playbook);
-  const entryRef = predecessor.entry?.captain.ref ?? predecessor.playbook.ref;
-  const entryId =
-    predecessor.entry === undefined
-      ? interruptTargetForRef(
-          predecessor.playbook.ref,
-          predecessor.playbook.ref.stableId,
-        )
-      : captainInterruptTarget(predecessor.entry.captain);
-  const drive = interruptDriveForRef(
+  const drive = captainPredecessorDrive(
     machine,
+    predecessor,
     refs,
-    entryRef,
-    entryId,
     interruptValues,
   );
   if (!drive.satisfiable) return undefined;
@@ -4139,7 +4169,19 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
   const entrySettles = entryEvents.size * SETTLE_MS;
 
   let captainSettles = 0;
-  let guardProbeCalls = rootInterruptProbes;
+  // Each ordinary dispatch may inspect two child-output seeds per predecessor
+  // arm, then the selected legacy predecessor's required interrupt drive.
+  let guardProbeCalls =
+    rootInterruptProbes +
+    (controller
+      ? 0
+      : captains.length *
+        (1 +
+          2 *
+            playbooks.reduce(
+              (n, p) => n + transitionArms(p.invocation.onDone).length,
+              0,
+            )));
   let pathSearches = controller
     ? 0
     : playbooks.reduce(
@@ -4192,7 +4234,14 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
             refs,
             captain.ref,
             captainInterruptTarget(captain),
-          ).satisfiable))
+          ).satisfiable) ||
+        unavailableCaptainPredecessorDrive(
+          machine,
+          captain,
+          refs,
+          captains,
+          playbooks,
+        ))
     ) {
       pathSearches +=
         resultKeys.length +
@@ -4708,7 +4757,15 @@ async function runFsmCoverage(
             captain.ref,
             captainInterruptTarget(captain),
             sourceCandidates,
-          ).satisfiable))
+          ).satisfiable) ||
+        unavailableCaptainPredecessorDrive(
+          machine,
+          captain,
+          refs,
+          captains,
+          playbooks,
+          sourceCandidates,
+        ))
     ) {
       findings.push(
         ...(await probeNonPreemptiveActor(

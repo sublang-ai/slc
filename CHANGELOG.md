@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Coverage falls back to bounded public paths when a selected legacy child
+  predecessor cannot be driven directly, retaining real questions, guards and
+  target replay.
 - Coverage observes missing own-descriptor payload reads as bounded hints,
   retaining actual descriptors, original guards and concrete path replay.
 

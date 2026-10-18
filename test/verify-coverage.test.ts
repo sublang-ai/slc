@@ -1835,6 +1835,185 @@ const publicAfterInterruptMachine = (
   } as any);
 };
 
+/** A valid direct-actor diagnostic must not hide an undrivable child prefix. */
+const legacyPredecessorEntryMachine = (
+  opts: {
+    falseGuard?: boolean;
+    shadowed?: boolean;
+    falseContext?: boolean;
+    wrongQuestion?: boolean;
+  } = {},
+  observed: Array<{ state: string; entryType: unknown }> = [],
+) => {
+  const ready = (
+    id: string,
+    sourceItem: string,
+    result: Record<string, string>,
+  ) => ({
+    stateId: id,
+    sourceItem,
+    role: 'writer',
+    prompt: 'Synthetic task.',
+    result,
+  });
+  const accepted = ({ context, event }: any) =>
+    opts.falseGuard !== true &&
+    context.planned === true &&
+    context.policy.allowed === true &&
+    context.pendingBossQuestion?.questionId === 'approval' &&
+    typeof context.bossReply === 'string' &&
+    context.bossReply.trim() !== '' &&
+    event.output.guard === 'approved';
+  const question = needsBossReplyArm('approval', 'writer', 'FLOW-2');
+  if (opts.wrongQuestion)
+    question.actions = assign({
+      pendingBossQuestion: () => ({
+        questionId: 'other',
+        resumeStateId: 'approval',
+        sourceItem: 'FLOW-2',
+        asker: { kind: 'role', roleId: 'writer' },
+        question: 'Wrong identity?',
+      }),
+    } as any);
+  return setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('provide player');
+      }),
+      playbook: fromPromise(async () => {
+        throw new Error('provide child');
+      }),
+    },
+  }).createMachine({
+    id: 'legacyPredecessorEntry',
+    initial: 'ready',
+    context: {
+      planned: false,
+      entryType: '',
+      policy: { allowed: opts.falseContext !== true },
+    } as any,
+    on: {
+      BOSS_INTERRUPT: {
+        target: '#approval',
+        guard: ({ context, event }: any) =>
+          event.targetId === 'approval' && context.planned === true,
+        actions: assign(() => ({
+          planned: false,
+          entryType: 'BOSS_INTERRUPT',
+        })),
+      },
+    },
+    states: {
+      ready: {
+        id: 'ready',
+        on: {
+          START: {
+            target: 'prepare',
+            guard: ({ event }: any) => event.mode === 'fresh',
+            actions: assign(({ event }: any) => ({
+              planned: false,
+              entryType: event.type,
+            })),
+          },
+        },
+      },
+      prepare: {
+        id: 'prepare',
+        invoke: {
+          src: 'player',
+          input: () =>
+            ready('prepare', 'FLOW-1', {
+              ready: 'Proceed.',
+              needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            }),
+          onDone: [
+            {
+              guard: ({ event }: any) => event.output.guard === 'ready',
+              target: 'planning',
+            },
+            needsBossReplyArm('prepare', 'writer', 'FLOW-1'),
+            { target: 'failed' },
+          ],
+          onError: 'failed',
+        },
+      },
+      planning: {
+        id: 'planning',
+        invoke: {
+          src: 'playbook',
+          input: ({ context }: any) => {
+            observed.push({ state: 'planning', entryType: context.entryType });
+            return { stateId: 'planning', playbookId: 'plan', text: 'Plan.' };
+          },
+          onDone: {
+            target: 'approval',
+            guard: ({ event }: any) => event.output !== null,
+            actions: assign(() => ({ planned: true })),
+          },
+          onError: 'failed',
+        },
+      },
+      approval: {
+        id: 'approval',
+        invoke: {
+          src: 'player',
+          input: ({ context }: any) => {
+            observed.push({ state: 'approval', entryType: context.entryType });
+            return {
+              ...ready('approval', 'FLOW-2', {
+                approved: 'Approve.',
+                refused: 'Refuse.',
+                needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+              }),
+              ...(context.pendingBossQuestion
+                ? { pendingBossQuestion: context.pendingBossQuestion }
+                : {}),
+              ...(context.bossReply === undefined
+                ? {}
+                : { bossReply: context.bossReply }),
+            };
+          },
+          onDone: [
+            ...(opts.shadowed ? [{ guard: accepted, target: 'failed' }] : []),
+            { guard: accepted, target: 'done' },
+            {
+              guard: ({ context, event }: any) =>
+                context.planned === true &&
+                context.policy.allowed === true &&
+                typeof context.bossReply === 'string' &&
+                context.bossReply.trim() !== '' &&
+                event.output.guard === 'refused',
+              target: 'refused',
+            },
+            question,
+            { target: 'failed' },
+          ],
+          onError: 'failed',
+        },
+      },
+      awaitBossReply: {
+        id: 'awaitBossReply',
+        tags: 'playbook.parked',
+        on: {
+          BOSS_REPLY: ['prepare', 'approval'].map((id) => ({
+            target: id,
+            guard: ({ context, event }: any) =>
+              context.planned === (id === 'approval') &&
+              context.pendingBossQuestion?.questionId === id &&
+              event.questionId === id &&
+              typeof event.answer === 'string' &&
+              event.answer.trim() !== '',
+            actions: assign(({ event }: any) => ({ bossReply: event.answer })),
+          })),
+        },
+      },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+      done: { id: 'done', type: 'final' },
+      refused: { id: 'refused', type: 'final' },
+    },
+  } as any);
+};
+
 /** Public entry reads own data without changing what a descriptor returns. */
 const descriptorEntryMachine = (
   opts: {
@@ -3963,6 +4142,42 @@ describe('checkFsmCoverage (verification-6)', () => {
     ).toBe(true);
     expect(observed.some((entry) => entry.id === 'alternateChild')).toBe(false);
   });
+
+  it('uses real public paths when a legacy child predecessor has no interrupt drive', async () => {
+    const observed: Array<{ state: string; entryType: unknown }> = [];
+    expect(
+      await checkFsmCoverage(
+        { machine: legacyPredecessorEntryMachine({}, observed) },
+        {
+          artifactSchema: 3,
+          sourceText: "'fresh'",
+        },
+      ),
+    ).toEqual([]);
+    expect(observed).toContainEqual({ state: 'planning', entryType: 'START' });
+    expect(observed).toContainEqual({ state: 'approval', entryType: 'START' });
+  });
+
+  it.each([
+    { falseGuard: true },
+    { shadowed: true },
+    { falseContext: true },
+    { wrongQuestion: true },
+  ])(
+    'refuses an unproved legacy child predecessor fallback for %j',
+    async (controls) => {
+      const findings = await checkFsmCoverage(
+        { machine: legacyPredecessorEntryMachine(controls) },
+        {
+          artifactSchema: 3,
+          sourceText: "'fresh'",
+        },
+      );
+      expect(findings.some((finding) => finding.includes('approval'))).toBe(
+        true,
+      );
+    },
+  );
 
   it('discovers descriptor-read public entries without fabricating descriptors', async () => {
     const observed: Array<{ id: string; route: unknown; entryType: unknown }> =
