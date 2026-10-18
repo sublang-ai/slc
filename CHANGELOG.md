@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.16.8] - 2026-10-18
+
 ### Fixed
 
 - Coverage discovers source-defined routing identifiers beyond 32 characters,
@@ -945,7 +947,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.7...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.8...HEAD
+[0.16.8]: https://github.com/sublang-ai/slc/compare/v0.16.7...v0.16.8
 [0.16.7]: https://github.com/sublang-ai/slc/compare/v0.16.6...v0.16.7
 [0.16.6]: https://github.com/sublang-ai/slc/compare/v0.16.5...v0.16.6
 [0.16.5]: https://github.com/sublang-ai/slc/compare/v0.16.4...v0.16.5
