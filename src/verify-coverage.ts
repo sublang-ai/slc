@@ -1440,7 +1440,7 @@ function interruptDriveForRef(
       };
 }
 
-/** A bounded satisfying initial/root event that enters one Captain state. */
+/** The existing first satisfying event remains unchanged for direct callers. */
 function entryDriveForRef(
   machine: MachineLike,
   refs: readonly StateRef[],
@@ -1448,6 +1448,24 @@ function entryDriveForRef(
   extraValues: readonly unknown[] = [],
   initialContext: Record<string, unknown> = initializedCoverageContext(machine),
 ): InterruptDrive | undefined {
+  const first = entryDrivesForRef(
+    machine,
+    refs,
+    target,
+    extraValues,
+    initialContext,
+  ).next();
+  return first.done ? undefined : first.value;
+}
+
+/** Lazy one-field public events, never new context or an unguarded entry. */
+function* entryDrivesForRef(
+  machine: MachineLike,
+  refs: readonly StateRef[],
+  target: StateRef,
+  extraValues: readonly unknown[] = [],
+  initialContext: Record<string, unknown> = initializedCoverageContext(machine),
+): Generator<InterruptDrive, void> {
   const initialPath = initialActiveRefs(machine.config, refs);
   const surfaces = [
     ...initialPath
@@ -1475,35 +1493,83 @@ function entryDriveForRef(
         const guard = orderedArmPredicate(machine, arms, armIndex);
         if (guard === undefined) continue;
         const base = { type: eventType };
+        const values = [
+          ...guard.probeValues,
+          ...refs.flatMap((ref) => [
+            ref.key,
+            ref.stableId,
+            ...(ref.configId === undefined ? [] : [ref.configId]),
+          ]),
+          ...extraValues,
+        ];
+        const probeBudget = { probes: 0 };
         const assignment = probeGuardAssignment(
           guard.run,
           {},
           [{ tag: 'e:', base }],
-          [
-            ...guard.probeValues,
-            ...refs.flatMap((ref) => [
-              ref.key,
-              ref.stableId,
-              ...(ref.configId === undefined ? [] : [ref.configId]),
-            ]),
-            ...extraValues,
-          ],
+          values,
           {
             initialContext,
             varyExistingContext: true,
+            probeBudget,
           },
         );
         if (assignment !== undefined) {
-          return {
-            event: assignedPayload(base, assignment, 'e:'),
-            context: assignment.context,
-            satisfiable: true,
-          };
+          const event: Record<string, unknown> = assignedPayload(
+            base,
+            assignment,
+            'e:',
+          );
+          yield { event, context: assignment.context, satisfiable: true };
+          const fields = Object.keys(assignment.payloads['e:'] ?? {})
+            .filter((field) => field !== 'type')
+            .map((field) => ({ field, cursor: 0 }));
+          const candidates = [
+            ...new Set([
+              ...minedLiterals(guard.run),
+              ...values,
+              ...GENERIC_VALUES,
+            ]),
+          ];
+          // Scan each field to its next admitted value before returning to a
+          // permissive sibling field. Only accepted variants consume replays.
+          while (fields.some((field) => field.cursor < candidates.length)) {
+            for (const field of fields) {
+              while (field.cursor < candidates.length) {
+                coverageCheckpoint();
+                const value = candidates[field.cursor++];
+                if (Object.is(value, event[field.field])) continue;
+                if (++probeBudget.probes > MAX_PROBES) return;
+                const nextEvent = { ...event, [field.field]: value };
+                let accepted = false;
+                try {
+                  accepted = Boolean(
+                    guard.run({
+                      context: assignment.context,
+                      event: nextEvent,
+                    }),
+                  );
+                } catch {
+                  coverageCheckpoint();
+                } finally {
+                  coverageCheckpoint();
+                }
+                if (!accepted) continue;
+                yield {
+                  event: nextEvent,
+                  context: assignment.context,
+                  satisfiable: true,
+                };
+                break;
+              }
+            }
+          }
+          return;
         }
       }
     }
   }
-  return undefined;
+  return;
 }
 
 /** The arm XState selects for one concrete invocation output and context. */
@@ -1638,6 +1704,8 @@ export function guardSatisfiable(
 }
 
 interface ProbeOptions {
+  /** Public entry alternatives share the first solve's finite counter. */
+  probeBudget?: { probes: number };
   initialContext?: Record<string, unknown>;
   /** Nested-call driving varies actor output, not unreachable context. */
   assignContext?: boolean;
@@ -1724,7 +1792,7 @@ function probeGuardAssignment(
       if (!hasBaseline || values[index] !== baseline) yield values[index];
     }
   }
-  let probes = 0;
+  const probeBudget = options.probeBudget ?? { probes: 0 };
   const discovered = new Map<string, Set<string>>();
 
   const eventFor = (assignment: ProbeAssignment): Record<string, unknown> => {
@@ -1747,7 +1815,7 @@ function probeGuardAssignment(
 
   const passes = (assignment: ProbeAssignment, predicate = guard): boolean => {
     coverageCheckpoint();
-    probes++;
+    probeBudget.probes++;
     try {
       return Boolean(
         predicate({ context: assignment.context, event: eventFor(assignment) }),
@@ -1776,7 +1844,7 @@ function probeGuardAssignment(
       options.discoverPayloadShape === true &&
       options.payloadShapeGuard !== undefined &&
       !passes(assignment, options.payloadShapeGuard);
-    if (probes > MAX_PROBES) return [];
+    if (probeBudget.probes > MAX_PROBES) return [];
     let shapeTag: string | undefined;
     let shapeWidth = 0;
     const noteShapeField = (tag: string, field: string): void => {
@@ -1921,7 +1989,7 @@ function probeGuardAssignment(
         if (!enumerated.has(payload.tag)) continue;
         shapeTag = payload.tag;
         for (shapeWidth = 1; shapeWidth <= 4; shapeWidth++) {
-          if (++probes > MAX_PROBES) return [...reads];
+          if (++probeBudget.probes > MAX_PROBES) return [...reads];
           trace();
         }
       }
@@ -1969,7 +2037,7 @@ function probeGuardAssignment(
     depth: number,
   ): ProbeAssignment | undefined => {
     coverageCheckpoint();
-    if (probes > MAX_PROBES) return undefined;
+    if (probeBudget.probes > MAX_PROBES) return undefined;
     if (passes(assignment)) return assignment;
     if (depth >= 4) return undefined;
     for (const key of readsUnder(assignment)) {
@@ -2006,7 +2074,7 @@ function probeGuardAssignment(
         : undefined;
       for (const value of candidateValues(hasBaseline, baseline)) {
         coverageCheckpoint();
-        if (probes > MAX_PROBES) return undefined;
+        if (probeBudget.probes > MAX_PROBES) return undefined;
         const nextDepth = depth + (hasBaseline && value === baseline ? 0 : 1);
         const next =
           tag === 'c:'
@@ -2039,7 +2107,11 @@ function probeGuardAssignment(
   if (slots.length > 4) return undefined;
   // An observed own-field read may be an optional branch discriminator.
   // Try at most sixteen concrete shapes, sharing the same probe budget.
-  for (let mask = 0; mask < 1 << slots.length && probes <= MAX_PROBES; mask++) {
+  for (
+    let mask = 0;
+    mask < 1 << slots.length && probeBudget.probes <= MAX_PROBES;
+    mask++
+  ) {
     payloads = shapes.map((payload, index) => {
       if (payload.shapeFields === undefined) return payload;
       const fields = slots
@@ -2290,6 +2362,7 @@ interface PlaybookEntryPlan {
 interface ChildCoverageEntry {
   drive?: InterruptDrive;
   preceding?: PlaybookEntryPlan;
+  alternatives?: Iterator<InterruptDrive, void>;
 }
 
 /** One public drive or the actual initialized state, never a private jump. */
@@ -2308,8 +2381,9 @@ function childCoverageDrive(
     candidates,
   );
   if (interrupt.satisfiable) return { drive: interrupt };
-  const entry = entryDriveForRef(machine, refs, ref, candidates);
-  if (entry !== undefined) return { drive: entry };
+  const alternatives = entryDrivesForRef(machine, refs, ref, candidates);
+  const entry = alternatives.next();
+  if (!entry.done) return { drive: entry.value, alternatives };
   return initialActiveRefs(machine.config, refs).some((active) =>
     sameStateRef(active, ref),
   )
@@ -2331,6 +2405,7 @@ interface CoveragePath {
   root: CoverageInvocation;
   drive?: InterruptDrive;
   steps: readonly CoveragePathStep[];
+  alternatives?: Iterator<InterruptDrive, void>;
 }
 
 interface PendingCoverageInvocation {
@@ -2665,6 +2740,7 @@ async function searchCoverageEntry(
     const path = queue.shift()!;
     attempts++;
     let replay = await replayCoveragePath(machine, nodes, path);
+    let covered = false;
     try {
       if (replay.inputFailure !== undefined) inputFailure = replay.inputFailure;
       if (
@@ -2672,8 +2748,10 @@ async function searchCoverageEntry(
         coverageNodeKey(replay.pending.node) === coverageNodeKey(target)
       ) {
         entered = true;
-        if (await check(replay.actor, replay.pending))
+        if (await check(replay.actor, replay.pending)) {
+          covered = true;
           return { covered: true, entered };
+        }
         // A target check may have completed its actor. Re-enter the same
         // authored prefix before considering successors, charging that replay
         // against the same attempt limit.
@@ -2772,7 +2850,11 @@ async function searchCoverageEntry(
           limitations.add('unsupported repeated-invocation path');
           continue;
         }
-        const successor = { ...path, steps: [...path.steps, step] };
+        const successor: CoveragePath = {
+          root: path.root,
+          drive: path.drive,
+          steps: [...path.steps, step],
+        };
         if (
           coverageNodeKey(node) === coverageNodeKey(target) &&
           step.questionWait !== undefined
@@ -2785,6 +2867,20 @@ async function searchCoverageEntry(
       queue.unshift(...continuations);
     } finally {
       replay.actor.stop();
+      if (
+        !covered &&
+        path.alternatives !== undefined &&
+        attempts < MAX_COVERAGE_PATH_ATTEMPTS
+      ) {
+        const next = path.alternatives.next();
+        if (!next.done)
+          queue.push({
+            root: path.root,
+            drive: next.value,
+            steps: [],
+            alternatives: path.alternatives,
+          });
+      }
     }
   }
   if (queue.length > 0)

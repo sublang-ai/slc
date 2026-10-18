@@ -1435,8 +1435,17 @@ const childChainMachine = (
     deadDecision?: boolean;
     repeatBranch?: boolean;
     blankResumes?: boolean;
+    entryVariants?: {
+      modes?: readonly string[];
+      rejectAlternate?: boolean;
+      shadowAlternate?: boolean;
+      requireProof?: boolean;
+      observed?: Array<{ id: string; variant: unknown; entryType: unknown }>;
+    };
   } = {},
 ) => {
+  const entryModes = opts.entryVariants?.modes ?? ['primary', 'alternate'];
+  const alternate = entryModes.at(-1);
   const exactApproval = (value: any) =>
     value !== null &&
     typeof value === 'object' &&
@@ -1466,6 +1475,11 @@ const childChainMachine = (
         if (context.mode === undefined)
           throw new Error('planning must execute');
         inputCheck?.(context);
+        opts.entryVariants?.observed?.push({
+          id,
+          variant: context.entryVariant,
+          entryType: context.entryType,
+        });
         return { stateId: id, playbookId: id, text: context.mode };
       },
       onDone: arms,
@@ -1486,7 +1500,36 @@ const childChainMachine = (
     initial: 'ready',
     context: { branches: 0 } as any,
     states: {
-      ready: { id: 'ready', on: { START: { target: 'plan' } } },
+      ready: {
+        id: 'ready',
+        on: {
+          START: opts.entryVariants
+            ? [
+                ...(opts.entryVariants.shadowAlternate
+                  ? [
+                      {
+                        guard: ({ event }: any) => event.variant === alternate,
+                        target: 'failed',
+                      },
+                    ]
+                  : []),
+                {
+                  guard: ({ event }: any) =>
+                    typeof event.request === 'string' &&
+                    event.request.trim() !== '' &&
+                    entryModes.includes(event.variant) &&
+                    (!opts.entryVariants?.rejectAlternate ||
+                      event.variant !== alternate),
+                  target: 'plan',
+                  actions: assign(({ event }: any) => ({
+                    entryVariant: event.variant,
+                    entryType: event.type,
+                  })),
+                },
+              ]
+            : { target: 'plan' },
+        },
+      },
       plan: {
         id: 'plan',
         invoke: {
@@ -1512,7 +1555,14 @@ const childChainMachine = (
               ['branch', 'branch'],
               ['both', 'branch'],
             ].map(([key, target]) => ({
-              guard: ({ event }: any) => event.output.guard === key,
+              guard: ({ context, event }: any) =>
+                event.output.guard === key &&
+                (opts.entryVariants === undefined ||
+                  (['branch', 'both'].includes(key)
+                    ? context.entryVariant === alternate &&
+                      (!opts.entryVariants.requireProof ||
+                        context.entryProof === true)
+                    : context.entryVariant !== alternate)),
               target,
               actions: assign(({ event }: any) => ({
                 mode: event.output.guard,
@@ -3403,6 +3453,79 @@ describe('checkFsmCoverage (verification-6)', () => {
     expect(await checkFsmCoverage({ machine: childChainMachine() })).toEqual(
       [],
     );
+  });
+
+  it('covers ordinary and alternate public entry values through real multi-step paths', async () => {
+    const observed: Array<{
+      id: string;
+      variant: unknown;
+      entryType: unknown;
+    }> = [];
+    expect(
+      await checkFsmCoverage(
+        { machine: childChainMachine({ entryVariants: { observed } }) },
+        {
+          sourceText: [
+            ...Array.from({ length: 96 }, (_, index) => `'request_${index}'`),
+            "'primary'",
+            "'alternate'",
+          ].join('\n'),
+        },
+      ),
+    ).toEqual([]);
+    for (const variant of ['primary', 'alternate'])
+      expect(
+        observed.some(
+          (entry) =>
+            entry.id === 'code' &&
+            entry.variant === variant &&
+            entry.entryType === 'START',
+        ),
+      ).toBe(true);
+    expect(
+      observed.some(
+        (entry) => entry.id === 'pr' && entry.variant === 'alternate',
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    { rejectAlternate: true },
+    { shadowAlternate: true },
+    { requireProof: true },
+  ])('retains public entry route refusal for %j', async (entryVariants) => {
+    const observed: Array<{
+      id: string;
+      variant: unknown;
+      entryType: unknown;
+    }> = [];
+    const findings = await checkFsmCoverage(
+      {
+        machine: childChainMachine({
+          entryVariants: { ...entryVariants, observed },
+        }),
+      },
+      { sourceText: "'primary'\n'alternate'" },
+    );
+    expect(
+      findings.some((finding) => finding.startsWith('state branch:')),
+    ).toBe(true);
+    expect(observed.some((entry) => entry.id === 'branch')).toBe(false);
+  });
+
+  it('charges public entry alternatives to the existing replay limit', async () => {
+    const modes = Array.from({ length: 96 }, (_, index) => `variant_${index}`);
+    const findings = await checkFsmCoverage(
+      { machine: childChainMachine({ entryVariants: { modes } }) },
+      { sourceText: modes.map((value) => `'${value}'`).join('\n') },
+    );
+    expect(
+      findings.some(
+        (finding) =>
+          finding.startsWith('state branch:') &&
+          finding.includes('exhausted 64-attempt path budget'),
+      ),
+    ).toBe(true);
   });
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
