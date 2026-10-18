@@ -1545,6 +1545,46 @@ const reachedPrimitiveChildMachine = (
 };
 
 /** Raw child success validates cardinality before reading named fields. */
+const childFailureShape = (
+  value: any,
+  opts: { expected: boolean; optional?: boolean; requireError?: boolean },
+  wrongCount = false,
+) => {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    !Reflect.ownKeys(value).every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return (
+        typeof key === 'string' &&
+        descriptor?.enumerable &&
+        'value' in descriptor
+      );
+    })
+  )
+    return false;
+  const fields = [
+    'lastCommit',
+    'clean',
+    'status',
+    ...(opts.optional && Object.hasOwn(value, 'error') ? ['error'] : []),
+  ];
+  return (
+    Object.keys(value).length === fields.length - (wrongCount ? 1 : 0) &&
+    fields.every((key) => Object.hasOwn(value, key)) &&
+    typeof value.lastCommit === 'string' &&
+    value.clean === opts.expected &&
+    value.status === 'aborted' &&
+    (!opts.optional ||
+      ((!opts.requireError || Object.hasOwn(value, 'error')) &&
+        (!Object.hasOwn(value, 'error') ||
+          (value.error !== null &&
+            typeof value.error === 'object' &&
+            typeof value.error.name === 'string' &&
+            typeof value.error.message === 'string'))))
+  );
+};
+
 const enumeratedChildOutputMachine = (
   fields: 3 | 4,
   opts: {
@@ -1555,6 +1595,11 @@ const enumeratedChildOutputMachine = (
     literalRevision?: boolean;
     needsFifth?: boolean;
     nativeSeed?: boolean;
+    childFailure?: {
+      expected: boolean;
+      optional?: boolean;
+      requireError?: boolean;
+    };
   } = {},
 ) => {
   const namedFields = (value: any) =>
@@ -1623,12 +1668,14 @@ const enumeratedChildOutputMachine = (
     );
   };
   const approved = ({ event }: any) =>
-    opts.nativeSeed
-      ? nativeEnvelope(event.output)
-      : jsonRecord(event.output) &&
-        (opts.countLast
-          ? namedFields(event.output) && count(event.output)
-          : count(event.output) && namedFields(event.output));
+    opts.childFailure !== undefined
+      ? childFailureShape(event.output, opts.childFailure, opts.wrongCount)
+      : opts.nativeSeed
+        ? nativeEnvelope(event.output)
+        : jsonRecord(event.output) &&
+          (opts.countLast
+            ? namedFields(event.output) && count(event.output)
+            : count(event.output) && namedFields(event.output));
   return setup({
     actors: {
       playbook: fromPromise(async () => {
@@ -3261,6 +3308,49 @@ describe('checkFsmCoverage (verification-6)', () => {
             ...controls,
           }),
         }),
+      ).not.toEqual([]);
+    }
+  });
+
+  it.each([true, false])(
+    'covers a helper-hidden %s child-output value',
+    async (expected) => {
+      expect(
+        await checkFsmCoverage(
+          {
+            machine: enumeratedChildOutputMachine(3, {
+              childFailure: { expected },
+            }),
+          },
+          { sourceText: String(childFailureShape) },
+        ),
+      ).toEqual([]);
+    },
+  );
+
+  it('guides child values while preserving an absent optional own field', async () => {
+    const childFailure = { expected: false, optional: true };
+    expect(
+      await checkFsmCoverage(
+        { machine: enumeratedChildOutputMachine(3, { childFailure }) },
+        { sourceText: String(childFailureShape) },
+      ),
+    ).toEqual([]);
+    for (const controls of [
+      { wrongCount: true },
+      { shadowed: true },
+      { childFailure: { ...childFailure, requireError: true } },
+    ]) {
+      expect(
+        await checkFsmCoverage(
+          {
+            machine: enumeratedChildOutputMachine(3, {
+              childFailure,
+              ...controls,
+            }),
+          },
+          { sourceText: String(childFailureShape) },
+        ),
       ).not.toEqual([]);
     }
   });

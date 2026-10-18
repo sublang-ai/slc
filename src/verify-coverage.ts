@@ -1553,6 +1553,7 @@ function directTargetRef(
 const GENERIC_VALUES: unknown[] = [
   'coverage',
   true,
+  false,
   1,
   ['coverage'],
   COVERAGE_ENABLED_PLAYBOOKS,
@@ -1967,6 +1968,12 @@ function probeGuardAssignment(
       const payload = payloads.find((item) => item.tag === tag);
       if (
         payload?.shapeFields !== undefined &&
+        discovered.get(tag)?.has(field) &&
+        !payload.shapeFields.includes(field)
+      )
+        continue;
+      if (
+        payload?.shapeFields !== undefined &&
         new Set([...payload.shapeFields, ...Object.keys(assigned), field])
           .size > 4
       )
@@ -2005,16 +2012,41 @@ function probeGuardAssignment(
     return undefined;
   };
 
-  const found = search(initial, 0);
-  if (found === undefined) return undefined;
-  for (const payload of payloads) {
-    if (payload.shapeFields === undefined) continue;
-    found.payloads[payload.tag] = {
-      ...Object.fromEntries(payload.shapeFields.map((field) => [field, null])),
-      ...found.payloads[payload.tag],
-    };
+  const shapes = payloads;
+  const slots = shapes.flatMap((payload, index) =>
+    (payload.shapeFields ?? []).map((field) => ({ index, field })),
+  );
+  if (slots.length > 4) return undefined;
+  // An observed own-field read may be an optional branch discriminator.
+  // Try at most sixteen concrete shapes, sharing the same probe budget.
+  for (let mask = 0; mask < 1 << slots.length && probes <= MAX_PROBES; mask++) {
+    payloads = shapes.map((payload, index) => {
+      if (payload.shapeFields === undefined) return payload;
+      const fields = slots
+        .filter(
+          (slot, bit) => slot.index === index && (mask & (1 << bit)) !== 0,
+        )
+        .map((slot) => slot.field);
+      const base = overlay(payload.base, {});
+      for (const field of payload.shapeFields) {
+        if (!fields.includes(field)) delete base[field];
+      }
+      return { ...payload, base, shapeFields: fields };
+    });
+    const found = search(initial, 0);
+    if (found === undefined) continue;
+    for (const payload of payloads) {
+      if (payload.shapeFields === undefined) continue;
+      found.payloads[payload.tag] = {
+        ...Object.fromEntries(
+          payload.shapeFields.map((field) => [field, null]),
+        ),
+        ...found.payloads[payload.tag],
+      };
+    }
+    return found;
   }
-  return found;
+  return undefined;
 }
 
 function probeGuardSatisfiable(
