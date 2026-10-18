@@ -13,7 +13,15 @@ and this project adheres to
 
 ### Fixed
 
+- Coverage can follow successive canonical questions and replies within its
+  existing path limits, prioritizing a reached target before unrelated paths
+  while retaining honest exhaustion and target-failure diagnostics.
+- Generated schema-3 entries accept the configured option slice from the
+  current Captain interface; historical Players entries retain their envelope.
 - Retained-bundle completion preserves prompt-probe advisories without treating them as verification failures; actual composition and validation failures still block output.
+- Child-error coverage distinguishes a bare aborted result from an error or
+  failure terminal, preserving target identity, original ordered guards and
+  bounded actual replay without inventing optional session data.
 - Immutable context reads no longer suppress bounded child-output shape
   guidance, while false context preconditions, ordered guards and actual
   target replay retain their existing limits.

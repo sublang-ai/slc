@@ -1496,7 +1496,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
           requiredRoleIds: string[];
           runtimeProfile: { kind: string; compat: unknown };
           createRuntime(
-            options: { captainOptions?: unknown },
+            configuredOptions: unknown,
             hostCapabilities: unknown,
           ): {
             init(session: unknown): Promise<void>;

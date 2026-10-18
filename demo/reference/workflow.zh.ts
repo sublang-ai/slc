@@ -51,10 +51,10 @@ const entry = {
   requiredRoleIds: [...REQUIRED_ROLE_IDS],
   validateOptions,
   createRuntime(
-    options: { captainOptions?: unknown },
+    configuredOptions: unknown,
     hostCapabilities: HostCapabilities,
   ) {
-    const validated = validateOptions(options.captainOptions);
+    const validated = validateOptions(configuredOptions);
     return createPlaybookRuntime({
       configuredOptions: {
         ...validated,

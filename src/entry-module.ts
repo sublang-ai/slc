@@ -312,8 +312,8 @@ const entry = {
   intent: ${sourceString(spec.intent)},${schemaMembers}
   requiredRoleIds: [...REQUIRED_ROLE_IDS],
   validateOptions,
-  createRuntime(options: { captainOptions?: unknown }${schema3Param}) {
-    const validated = validateOptions(options.captainOptions);
+  createRuntime(${spec.schema3 ? 'configuredOptions: unknown' : 'options: { captainOptions?: unknown }'}${schema3Param}) {
+    const validated = validateOptions(${spec.schema3 ? 'configuredOptions' : 'options.captainOptions'});
     return ${runtimeExpression};
   },
 };

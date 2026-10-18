@@ -2383,6 +2383,11 @@ function coverageArmResults(
                 ? input.playbookId
                 : COVERAGE_PLAYBOOK_ID,
             ),
+            nestedAborted(
+              typeof input.playbookId === 'string'
+                ? input.playbookId
+                : COVERAGE_PLAYBOOK_ID,
+            ),
             nestedFailureTerminal(
               typeof input.playbookId === 'string'
                 ? input.playbookId
@@ -2582,7 +2587,7 @@ interface CoverageSearchResult {
   inputFailure?: string;
 }
 
-/** Finite path replay, with one canonical question/reply revisit at most. */
+/** Finite path replay, including bounded canonical question/reply revisits. */
 async function searchCoverageEntry(
   machine: MachineLike,
   target: CoverageInvocation,
@@ -2644,7 +2649,7 @@ async function searchCoverageEntry(
   }
   let attempts = 0;
   let entered = false;
-  let limitation: string | undefined;
+  const limitations = new Set<string>();
   let inputFailure: string | undefined;
   while (queue.length > 0 && attempts < MAX_COVERAGE_PATH_ATTEMPTS) {
     await coverageYield();
@@ -2665,7 +2670,9 @@ async function searchCoverageEntry(
         // against the same attempt limit.
         replay.actor.stop();
         if (attempts >= MAX_COVERAGE_PATH_ATTEMPTS) {
-          limitation = `exhausted ${MAX_COVERAGE_PATH_ATTEMPTS}-attempt path budget`;
+          limitations.add(
+            `exhausted ${MAX_COVERAGE_PATH_ATTEMPTS}-attempt path budget`,
+          );
           break;
         }
         attempts++;
@@ -2703,8 +2710,7 @@ async function searchCoverageEntry(
       }
       if (
         node.kind === 'acting' &&
-        Object.hasOwn(node.value.binding.result, NEEDS_BOSS_REPLY) &&
-        !path.steps.some((step) => step.questionWait !== undefined)
+        Object.hasOwn(node.value.binding.result, NEEDS_BOSS_REPLY)
       ) {
         for (const [index, arm] of transitionArms(
           node.value.invocation.onDone,
@@ -2739,9 +2745,12 @@ async function searchCoverageEntry(
           }
         }
       }
+      const continuations: CoveragePath[] = [];
       for (const step of nextSteps) {
         if (path.steps.length + 1 >= MAX_COVERAGE_PATH_STEPS) {
-          limitation = `exhausted ${MAX_COVERAGE_PATH_STEPS}-invocation path depth`;
+          limitations.add(
+            `exhausted ${MAX_COVERAGE_PATH_STEPS}-invocation path depth`,
+          );
           continue;
         }
         const visited = [path.root, ...path.steps.map((step) => step.next)].map(
@@ -2751,21 +2760,34 @@ async function searchCoverageEntry(
           step.questionWait === undefined &&
           visited.includes(coverageNodeKey(step.next))
         ) {
-          limitation ??= 'unsupported repeated-invocation path';
+          limitations.add('unsupported repeated-invocation path');
           continue;
         }
-        queue.push({ ...path, steps: [...path.steps, step] });
+        const successor = { ...path, steps: [...path.steps, step] };
+        if (
+          coverageNodeKey(node) === coverageNodeKey(target) &&
+          step.questionWait !== undefined
+        )
+          continuations.push(successor);
+        else queue.push(successor);
       }
+      // Continue a reached target before unrelated alternative prefixes, but
+      // retain candidate order and charge every replay to the same budgets.
+      queue.unshift(...continuations);
     } finally {
       replay.actor.stop();
     }
   }
   if (queue.length > 0)
-    limitation = `exhausted ${MAX_COVERAGE_PATH_ATTEMPTS}-attempt path budget`;
+    limitations.add(
+      `exhausted ${MAX_COVERAGE_PATH_ATTEMPTS}-attempt path budget`,
+    );
   return {
     covered: false,
     entered,
-    ...(limitation === undefined ? {} : { limitation }),
+    ...(limitations.size === 0
+      ? {}
+      : { limitation: [...limitations].join('; ') }),
     ...(inputFailure === undefined ? {} : { inputFailure }),
   };
 }
@@ -2804,6 +2826,19 @@ function nestedFailure(playbookId: string): Error {
         message: 'coverage: forced nested playbook failure',
       },
     },
+  });
+  return error;
+}
+
+/** A public aborted result may omit both child-session and error data. */
+function nestedAborted(playbookId: string): Error {
+  const error = new Error(`Child playbook ${playbookId} aborted`);
+  error.name = 'NestedPlaybookCallError';
+  Object.defineProperty(error, 'result', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: { status: 'aborted', playbookId },
   });
   return error;
 }
@@ -3456,9 +3491,7 @@ async function probePlaybookOutcome(
     );
     if (result.covered) continue;
     const label = `state ${playbook.ref.stableId}: nested playbook ${outcome} arm ${armIndex}`;
-    if (result.limitation !== undefined)
-      findings.push(`${label}: ${result.limitation}`);
-    else if (result.inputFailure !== undefined && !result.entered)
+    if (result.inputFailure !== undefined && !result.entered)
       findings.push(
         `state ${playbook.ref.stableId}: nested playbook actor failed to start during ${outcome} coverage: ${result.inputFailure}`,
       );
@@ -3466,9 +3499,12 @@ async function probePlaybookOutcome(
       findings.push(
         `${label} has no reachable entry under probing (dead or unsupported entry path)`,
       );
-    else if (!satisfiable)
+    else if (result.limitation === undefined && !satisfiable)
       findings.push(`${label} is unsatisfiable under probing`);
-    else findings.push(`${label} did not reach ${target.stableId}`);
+    else if (satisfiable)
+      findings.push(`${label} did not reach ${target.stableId}`);
+    if (result.limitation !== undefined)
+      findings.push(`${label}: ${result.limitation}`);
   }
   return findings;
 }
@@ -3523,7 +3559,7 @@ function reachedBossQuestionFinding(
   return finding;
 }
 
-/** No preemption is needed to audit ordinary acting outcomes and one reply. */
+/** No preemption is needed to audit ordinary acting outcomes and replies. */
 async function probeNonPreemptiveActor(
   machine: MachineLike,
   captain: CaptainRef,
@@ -3999,11 +4035,9 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
       captain.binding.actor !== 'script' &&
       resultKeys.includes(NEEDS_BOSS_REPLY)
     ) {
-      // An otherwise unproved arm can replay one already validated question
-      // prefix: entry, question wait, resumed invocation and target settle.
-      captainSettles += guardedDoneArms * 4 * PARALLEL_SETTLE_MS;
-      guardProbeCalls +=
-        guardedDoneArms * (rootInterruptProbes + 2 * resultKeys.length);
+      // An otherwise unproved arm uses the same bounded reached-context
+      // search, including each actual canonical question/reply revisit.
+      pathSearches += guardedDoneArms;
     }
     captainSettles +=
       resultKeys.reduce(
@@ -4051,7 +4085,7 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
     ...nodes.map((node) => {
       const done = transitionArms(node.value.invocation.onDone).length;
       const error = transitionArms(node.value.invocation.onError).length;
-      if (node.kind === 'child') return 3 * (done + error);
+      if (node.kind === 'child') return 3 * done + 4 * error;
       const keys = Object.keys(node.value.binding.result);
       const candidates =
         node.value.binding.actor === 'script'
@@ -4070,12 +4104,13 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
       MAX_COVERAGE_PATH_ATTEMPTS * 2 * maxNodeCandidates);
   // Parallel question/join helpers retain their independent entry probes.
   guardProbeCalls += 2 * parallels.length;
-  // Each charged replay contains at most eight invocation waits, one parked
-  // question wait and two target/reply settles, plus no-transition checks.
+  // Each charged replay contains at most eight invocation waits, up to
+  // seven parked question waits and two target/reply settles, plus
+  // no-transition checks.
   const pathSettles =
     pathSearches *
     MAX_COVERAGE_PATH_ATTEMPTS *
-    ((MAX_COVERAGE_PATH_STEPS + 3) * PARALLEL_SETTLE_MS + 2 * 10);
+    ((2 * MAX_COVERAGE_PATH_STEPS + 1) * PARALLEL_SETTLE_MS + 2 * 10);
   const parallelSettles = parallels.reduce(
     (total, parallel) =>
       total +
@@ -4950,81 +4985,70 @@ async function runFsmCoverage(
           sourceId !== undefined &&
           targetId !== undefined
         ) {
-          const entry = childCoverageDrive(
+          const node: CoverageInvocation = { kind: 'acting', value: captain };
+          let missedTarget = false;
+          const reached = await searchCoverageEntry(
             machine,
+            node,
             refs,
-            captain.ref,
-            captainInterruptTarget(captain),
+            captains,
+            playbooks,
             candidates,
+            async (actor, pending) => {
+              const outputs = coverageArmResults(
+                machine,
+                node,
+                'onDone',
+                index,
+                actor.getSnapshot().context,
+                pending.input,
+                candidates,
+                undefined,
+                undefined,
+                true,
+                true,
+              );
+              if (outputs.length === 0) return false;
+              const before = actor.coverageTransitions.length;
+              pending.complete(outputs[0]);
+              const landed = await settle(
+                actor,
+                (snapshot) =>
+                  atState(target)(snapshot) &&
+                  actor.coverageTransitions
+                    .slice(before)
+                    .some(
+                      (transition) =>
+                        transition.sourceId === sourceId &&
+                        transition.armIndex === index &&
+                        transition.event?.type === doneEvent.type &&
+                        transition.targetIds.includes(targetId),
+                    ),
+                PARALLEL_SETTLE_MS,
+              );
+              if (!landed) missedTarget = true;
+              return landed;
+            },
           );
-          if (entry !== undefined) {
-            const node: CoverageInvocation = { kind: 'acting', value: captain };
-            const replay = await replayCoveragePath(
-              machine,
-              coverageNodes(captains, playbooks),
-              {
-                root: node,
-                ...entry,
-                steps: [
-                  {
-                    node,
-                    result: validatedQuestion.output,
-                    next: node,
-                    questionWait: validatedQuestion.wait,
-                  },
-                ],
-              },
+          if (reached.covered) continue;
+          if (missedTarget)
+            findings.push(
+              `state ${stateKey}: onDone arm ${index} did not reach ${target.stableId} after canonical Boss reply`,
             );
-            try {
-              const pending = replay.pending;
-              if (
-                pending !== undefined &&
-                coverageNodeKey(pending.node) === coverageNodeKey(node)
-              ) {
-                const outputs = coverageArmResults(
-                  machine,
-                  node,
-                  'onDone',
-                  index,
-                  replay.actor.getSnapshot().context,
-                  pending.input,
-                  candidates,
-                  undefined,
-                  undefined,
-                  true,
-                  true,
-                );
-                if (outputs.length > 0) {
-                  const before = replay.actor.coverageTransitions.length;
-                  pending.complete(outputs[0]);
-                  if (
-                    await settle(
-                      replay.actor,
-                      (snapshot) =>
-                        atState(target)(snapshot) &&
-                        replay.actor.coverageTransitions
-                          .slice(before)
-                          .some(
-                            (transition) =>
-                              transition.sourceId === sourceId &&
-                              transition.armIndex === index &&
-                              transition.event?.type === doneEvent.type &&
-                              transition.targetIds.includes(targetId),
-                          ),
-                      PARALLEL_SETTLE_MS,
-                    )
-                  )
-                    continue;
-                  findings.push(
-                    `state ${stateKey}: onDone arm ${index} did not reach ${target.stableId} after canonical Boss reply`,
-                  );
-                  continue;
-                }
-              }
-            } finally {
-              replay.actor.stop();
-            }
-          }
+          if (reached.inputFailure !== undefined && !reached.entered)
+            findings.push(
+              `state ${stateKey}: onDone arm ${index} actor failed to start: ${reached.inputFailure}`,
+            );
+          if (reached.limitation !== undefined)
+            findings.push(
+              `state ${stateKey}: onDone arm ${index} remains unproved: ${reached.limitation}`,
+            );
+          if (
+            missedTarget ||
+            (reached.inputFailure !== undefined && !reached.entered) ||
+            reached.limitation !== undefined
+          )
+            continue;
         }
         findings.push(
           `state ${stateKey}: onDone arm ${index} (target ${

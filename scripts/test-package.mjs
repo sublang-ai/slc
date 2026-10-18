@@ -186,7 +186,7 @@ try {
       '  throw new Error(`${name} must not be used without a Boss turn`);',
       '};',
       'const runtime = entry.createRuntime(',
-      '  { captainOptions: { cwd: workdir } },',
+      '  { cwd: workdir },',
       '  {',
       '    repository: {',
       "      runExclusive: failGoverned('repository.runExclusive'),",

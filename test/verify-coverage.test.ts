@@ -16,7 +16,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { normalizeErrorCompact } from '@sublang/playbook/xstate-runtime';
+import {
+  normalizeErrorCompact,
+  validatePlaybookCallResult,
+} from '@sublang/playbook/xstate-runtime';
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -322,6 +325,151 @@ const questionResumedMachine = (
                 context.pendingBossQuestion?.resumeStateId === 'work' &&
                 typeof event.answer === 'string' &&
                 (opts.blankResumes || event.answer.trim() !== ''),
+            },
+            states.awaitBossReply.on.BOSS_REPLY[1],
+          ],
+        },
+      },
+    },
+  } as any);
+};
+
+/** Every counted answer comes from a real canonical wait/reply transition. */
+const successiveQuestionMachine = (
+  opts: {
+    requiredReplies?: number;
+    preemptive?: boolean;
+    branchingPrefix?: boolean;
+    malformedLaterQuestion?: boolean;
+    blankResumes?: boolean;
+    observed?: Array<{ guard: string; replies: any[]; prefixRoute?: string }>;
+  } = {},
+) => {
+  const base = questionResumedMachine({ blankResumes: opts.blankResumes });
+  const states = base.config.states as any;
+  const work = states.work;
+  const repliesRequired = opts.requiredReplies ?? 2;
+  const questionArm = work.invoke.onDone[2];
+  const prefix: Record<string, any> = {};
+  if (opts.branchingPrefix) {
+    for (let index = 0; index < 4; index++) {
+      const id = `prefix${index}`;
+      prefix[id] = {
+        id,
+        invoke: {
+          src: 'playbook',
+          input: () => ({
+            stateId: id,
+            playbookId: 'child',
+            text: 'Choose a route.',
+          }),
+          onDone: ['left', 'right'].map((route) => ({
+            guard:
+              route === 'left'
+                ? ({ event }: any) =>
+                    Object.keys(event.output).length === 1 &&
+                    event.output.guard === 'left'
+                : ({ event }: any) =>
+                    Object.keys(event.output).length === 1 &&
+                    event.output.guard === 'right',
+            target: index === 3 ? '#work' : `#prefix${index + 1}`,
+            actions: assign(({ context }: any) => ({
+              route: `${context.route ?? ''}/${route}`,
+            })),
+          })),
+          onError: '#failed',
+        },
+      };
+    }
+  }
+  return setup({
+    actors: {
+      playbook: fromPromise(async () => {
+        throw new Error('provide child');
+      }),
+      player: fromPromise(async () => {
+        throw new Error('provide actor');
+      }),
+    },
+  }).createMachine({
+    ...base.config,
+    on: opts.preemptive ? base.config.on : {},
+    context: { replyHistory: [] } as any,
+    states: {
+      ...states,
+      ...prefix,
+      ready: opts.branchingPrefix
+        ? { id: 'ready', on: { GO: '#prefix0' } }
+        : states.ready,
+      work: {
+        ...work,
+        invoke: {
+          ...work.invoke,
+          onDone: [
+            ...['approved', 'refused'].map((guard, index) => ({
+              ...work.invoke.onDone[index],
+              guard: (args: any) =>
+                Array.isArray(args.context.replyHistory) &&
+                args.context.replyHistory.length === repliesRequired &&
+                args.context.replyHistory.every(
+                  (reply: any) =>
+                    reply.questionId === 'work' &&
+                    reply.resumeStateId === 'work' &&
+                    reply.sourceItem === 'X-1' &&
+                    reply.asker?.kind === 'role' &&
+                    reply.asker.roleId === 'writer' &&
+                    typeof reply.question === 'string' &&
+                    typeof reply.answer === 'string' &&
+                    reply.answer.trim() !== '',
+                ) &&
+                work.invoke.onDone[index].guard(args),
+              actions: ({ context }: any) =>
+                opts.observed?.push({
+                  guard,
+                  prefixRoute: context.route,
+                  replies: context.replyHistory.map((reply: any) => ({
+                    ...reply,
+                    asker: { ...reply.asker },
+                  })),
+                }),
+            })),
+            {
+              ...questionArm,
+              actions: assign(({ context, event }: any) => ({
+                pendingBossQuestion: {
+                  questionId: 'work',
+                  resumeStateId: 'work',
+                  sourceItem:
+                    opts.malformedLaterQuestion &&
+                    context.replyHistory.length > 0
+                      ? 'X-other'
+                      : 'X-1',
+                  asker: { kind: 'role', roleId: 'writer' },
+                  question: event.output.question,
+                },
+                bossReply: undefined,
+              })),
+            },
+            work.invoke.onDone[3],
+          ],
+        },
+      },
+      awaitBossReply: {
+        ...states.awaitBossReply,
+        on: {
+          BOSS_REPLY: [
+            {
+              ...states.awaitBossReply.on.BOSS_REPLY[0],
+              guard: (args: any) =>
+                args.event.questionId === 'work' &&
+                states.awaitBossReply.on.BOSS_REPLY[0].guard(args),
+              actions: assign(({ context, event }: any) => ({
+                bossReply: event.answer,
+                replyHistory: [
+                  ...context.replyHistory,
+                  { ...context.pendingBossQuestion, answer: event.answer },
+                ],
+              })),
             },
             states.awaitBossReply.on.BOSS_REPLY[1],
           ],
@@ -1010,11 +1158,32 @@ const authoredFailureTerminalGuard = ({ event }: any): boolean => {
   );
 };
 
+const authoredAbortedChildGuard = (
+  { event }: any,
+  target = 'child',
+  session?: string,
+): boolean => {
+  if (!(event.error instanceof Error)) return false;
+  try {
+    return (
+      validatePlaybookCallResult(event.error.result, target, session).status ===
+      'aborted'
+    );
+  } catch {
+    return false;
+  }
+};
+
 const nestedMultiArmMachine = (
   opts: {
     deadDoneArm?: boolean;
     deadErrorArm?: boolean;
     authoredFailureTerminalArm?: boolean;
+    authoredAbortArm?: boolean;
+    wrongAbortTarget?: boolean;
+    requireAbortSession?: boolean;
+    shadowedAbortArm?: boolean;
+    onAbortError?: (error: unknown) => void;
   } = {},
 ) =>
   setup({
@@ -1059,13 +1228,36 @@ const nestedMultiArmMachine = (
             { target: '#doneFallback' },
           ],
           onError: [
+            ...(opts.shadowedAbortArm
+              ? [
+                  {
+                    target: '#errorFallback',
+                    guard: authoredAbortedChildGuard,
+                  },
+                ]
+              : []),
             {
               target: '#errorFirst',
               guard:
-                opts.authoredFailureTerminalArm === true
-                  ? authoredFailureTerminalGuard
-                  : ({ event }: any) =>
-                      event.error.name === 'RetryableChildError',
+                opts.authoredAbortArm === true
+                  ? (args: any) =>
+                      authoredAbortedChildGuard(
+                        args,
+                        opts.wrongAbortTarget ? 'other-child' : 'child',
+                        opts.requireAbortSession
+                          ? 'required-child-session'
+                          : undefined,
+                      )
+                  : opts.authoredFailureTerminalArm === true
+                    ? authoredFailureTerminalGuard
+                    : ({ event }: any) =>
+                        event.error.name === 'RetryableChildError',
+              ...(opts.onAbortError === undefined
+                ? {}
+                : {
+                    actions: ({ event }: any) =>
+                      opts.onAbortError?.(event.error),
+                  }),
             },
             {
               target: '#errorSecond',
@@ -2418,6 +2610,31 @@ describe('checkFsmCoverage (verification-6)', () => {
     },
   );
 
+  it('continues target-local questions before unrelated branching alternatives exhaust the path budget', async () => {
+    const observed: Array<{
+      guard: string;
+      replies: Array<Record<string, unknown>>;
+      prefixRoute?: string;
+    }> = [];
+    expect(
+      await checkFsmCoverage(
+        {
+          machine: successiveQuestionMachine({
+            branchingPrefix: true,
+            observed,
+          }),
+        },
+        { artifactSchema: 3 },
+      ),
+    ).toEqual([]);
+    expect(new Set(observed.map((value) => value.guard))).toEqual(
+      new Set(['approved', 'refused']),
+    );
+    expect(observed.every((value) => value.replies.length === 2)).toBe(true);
+    for (const value of observed)
+      expect(value.prefixRoute).toMatch(/^(\/(left|right)){4}$/);
+  });
+
   it.each(
     ['Output shall include', '输出应包含'].flatMap((clause) =>
       ['single-line', 'multiline'].map((layout) => ({ clause, layout })),
@@ -2578,8 +2795,10 @@ describe('checkFsmCoverage (verification-6)', () => {
       const findings = await checkFsmCoverage({ machine });
       if (variant === 'valid') expect(findings).toEqual([]);
       else {
-        expect(findings).toContain(
-          'BOSS_INTERRUPT target builder is unsatisfiable under context/event probing',
+        expect(findings).toContainEqual(
+          expect.stringMatching(
+            /^BOSS_INTERRUPT target builder: .*exhausted.*path/,
+          ),
         );
         if (variant === 'dead predecessor')
           expect(
@@ -2611,8 +2830,10 @@ describe('checkFsmCoverage (verification-6)', () => {
       const findings = await checkFsmCoverage({ machine });
       if (eventType === 'BOSS_INTERRUPT') expect(findings).toEqual([]);
       else
-        expect(findings).toContain(
-          'BOSS_INTERRUPT target work is unsatisfiable under context/event probing',
+        expect(findings).toContainEqual(
+          expect.stringMatching(
+            /^BOSS_INTERRUPT target work: .*exhausted.*path/,
+          ),
         );
     },
   );
@@ -2648,8 +2869,8 @@ describe('checkFsmCoverage (verification-6)', () => {
       await checkFsmCoverage({
         machine: goodMachine({ unsatisfiableInterrupt: true }),
       }),
-    ).toContain(
-      'BOSS_INTERRUPT target work is unsatisfiable under context/event probing',
+    ).toContainEqual(
+      expect.stringMatching(/^BOSS_INTERRUPT target work: .*exhausted.*path/),
     );
   });
 
@@ -3060,6 +3281,48 @@ describe('checkFsmCoverage (verification-6)', () => {
     expect(
       await checkFsmCoverage({ machine: nestedMultiArmMachine() }),
     ).toEqual([]);
+  });
+
+  it('covers the bare public aborted child result through actual rejection', async () => {
+    const errors: unknown[] = [];
+    expect(
+      await checkFsmCoverage({
+        machine: nestedMultiArmMachine({
+          authoredAbortArm: true,
+          onAbortError: (error) => errors.push(error),
+        }),
+      }),
+    ).toEqual([]);
+    expect(errors.length).toBeGreaterThan(0);
+    for (const error of errors) {
+      expect(error).toBeInstanceOf(Error);
+      expect(
+        validatePlaybookCallResult(
+          (error as Error & { result: unknown }).result,
+          'child',
+        ),
+      ).toEqual({ status: 'aborted', playbookId: 'child' });
+    }
+  });
+
+  it.each([
+    { wrongAbortTarget: true },
+    { requireAbortSession: true },
+    { shadowedAbortArm: true },
+  ])('refuses an unproved public child abort for %j', async (controls) => {
+    const arm = controls.shadowedAbortArm ? 1 : 0;
+    expect(
+      (
+        await checkFsmCoverage({
+          machine: nestedMultiArmMachine({
+            authoredAbortArm: true,
+            ...controls,
+          }),
+        })
+      ).some((finding) =>
+        finding.includes(`callChild: nested playbook onError arm ${arm}`),
+      ),
+    ).toBe(true);
   });
 
   it('enters a static child through each real preceding result and probes reached context (verification-43)', async () => {
@@ -3650,6 +3913,76 @@ describe('checkFsmCoverage (verification-6)', () => {
       ).toBe(true);
   });
 
+  it.each([false, true])(
+    'replays successive canonical questions before approved and refused outcomes (preemptive %s)',
+    async (preemptive) => {
+      const observed: Array<{
+        guard: string;
+        replies: Array<Record<string, unknown>>;
+      }> = [];
+      expect(
+        await checkFsmCoverage(
+          { machine: successiveQuestionMachine({ observed, preemptive }) },
+          { artifactSchema: 3 },
+        ),
+      ).toEqual([]);
+      expect(new Set(observed.map((value) => value.guard))).toEqual(
+        new Set(['approved', 'refused']),
+      );
+      for (const result of observed) {
+        expect(result.replies).toHaveLength(2);
+        for (const reply of result.replies)
+          expect(reply).toMatchObject({
+            questionId: 'work',
+            resumeStateId: 'work',
+            sourceItem: 'X-1',
+            asker: { kind: 'role', roleId: 'writer' },
+            question: expect.any(String),
+            answer: expect.stringMatching(/\S/),
+          });
+      }
+    },
+  );
+
+  it.each(
+    [
+      {
+        options: { malformedLaterQuestion: true },
+        finding: 'has no matching canonical scalar pending Boss question',
+      },
+      {
+        options: { blankResumes: true },
+        finding: 'a blank BOSS_REPLY answer must not resume the state',
+      },
+      {
+        options: { requiredReplies: 8 },
+        finding: 'exhausted 8-invocation path depth',
+      },
+    ].flatMap((value) =>
+      [false, true].map((preemptive) => ({ ...value, preemptive })),
+    ),
+  )(
+    'retains successive-question refusal for $options (preemptive $preemptive)',
+    async ({ options, finding, preemptive }) => {
+      const observed: Array<{
+        guard: string;
+        replies: Array<Record<string, unknown>>;
+      }> = [];
+      const findings = await checkFsmCoverage(
+        {
+          machine: successiveQuestionMachine({
+            ...options,
+            observed,
+            preemptive,
+          }),
+        },
+        { artifactSchema: 3 },
+      );
+      expect(findings.some((value) => value.includes(finding))).toBe(true);
+      if (!options.blankResumes) expect(observed).toEqual([]);
+    },
+  );
+
   it('uses the reached question arm after entry changes its guards', async () => {
     const observed: Array<{
       guard: string;
@@ -3713,13 +4046,15 @@ describe('checkFsmCoverage (verification-6)', () => {
   });
 
   it('requires the declared resumed target after the original guard accepts', async () => {
-    expect(
-      await checkFsmCoverage(
-        { machine: questionResumedMachine({ escapesTarget: true }) },
-        { artifactSchema: 3 },
-      ),
-    ).toContain(
+    const findings = await checkFsmCoverage(
+      { machine: questionResumedMachine({ escapesTarget: true }) },
+      { artifactSchema: 3 },
+    );
+    expect(findings).toContain(
       'state work: onDone arm 0 did not reach after after canonical Boss reply',
+    );
+    expect(findings.some((finding) => finding.includes('unsatisfiable'))).toBe(
+      false,
     );
   });
 
@@ -3728,8 +4063,10 @@ describe('checkFsmCoverage (verification-6)', () => {
       await checkFsmCoverage({
         machine: childChainMachine({ deadDecision: true }),
       }),
-    ).toContain(
-      'state decide: nested playbook onDone arm 0 is unsatisfiable under probing',
+    ).toContainEqual(
+      expect.stringMatching(
+        /^state decide: nested playbook onDone arm 0: .*exhausted.*path/,
+      ),
     );
     expect(
       (
@@ -3848,15 +4185,19 @@ describe('checkFsmCoverage (verification-6)', () => {
       await checkFsmCoverage({
         machine: accumulatedChildMachine({ deadChildArm: true }),
       }),
-    ).toContain(
-      'state child: nested playbook onDone arm 1 is unsatisfiable under probing',
+    ).toContainEqual(
+      expect.stringMatching(
+        /^state child: nested playbook onDone arm 1: .*exhausted.*path/,
+      ),
     );
     expect(
       await checkFsmCoverage({
         machine: accumulatedChildMachine({ shadowedChildArm: true }),
       }),
-    ).toContain(
-      'state child: nested playbook onDone arm 1 is unsatisfiable under probing',
+    ).toContainEqual(
+      expect.stringMatching(
+        /^state child: nested playbook onDone arm 1: .*exhausted.*path/,
+      ),
     );
   });
 
@@ -4163,7 +4504,7 @@ describe('checkFsmCoverage (verification-6)', () => {
       ],
     });
     expect((await checkFsmCoverage({ machine })).join('\n')).toMatch(
-      /onDone arm 0 .* is unsatisfiable under probing/,
+      /onDone arm 0 remains unproved: .*exhausted.*path/,
     );
   });
 
@@ -4428,9 +4769,19 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
     'executes emitted maintained DEV coverage with its capped timeout and preserves smaller bounds',
     async () => {
       expect(fsmCoverageTestTimeout(devFsm)).toBe(300_000);
-      expect(fsmCoverageTestTimeout({ machine: goodMachine() })).toBeLessThan(
-        300_000,
-      );
+      expect(
+        fsmCoverageTestTimeout({
+          machine: successiveQuestionMachine({ preemptive: true }),
+        }),
+      ).toBe(300_000);
+      expect(
+        fsmCoverageTestTimeout({
+          machine: setup({}).createMachine({
+            initial: 'done',
+            states: { done: { type: 'final' } },
+          }),
+        }),
+      ).toBeLessThan(300_000);
       const root = await mkdtemp(join(tmpdir(), 'slc-dev-coverage-suite-'));
       try {
         await symlink(

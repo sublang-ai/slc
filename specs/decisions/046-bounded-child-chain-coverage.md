@@ -19,14 +19,14 @@ The one-predecessor correction in [DR-045](045-static-child-coverage-entry.md) d
 - Explore finite invocation paths from actual initialized or public entry routes, replaying each predecessor output or rejection through XState before observing the next context.
 - Keep invocation entry discovery through eventless (`always`) transitions outside the supported coverage domain; entry expansion follows declared `initial` targets and parallel regions, so a runtime-valid FSM may receive an unsupported-entry or unsupported-parallel-join finding.
 - Preserve distinct paths when different outcomes reach the same invocation with different context; do not assign child-context fields or jump to private states.
-- Bound each target-arm or declared acting-result search to 64 replay attempts and eight invocation steps, excluding repeated invocations from a simple path except one canonical `needsBossReply` outcome, actual Boss wait, and nonblank `BOSS_REPLY` revisit per replay.
+- Bound each target-arm or declared acting-result search to 64 replay attempts and eight invocation steps, excluding repeated invocations from a simple path except successive canonical `needsBossReply` outcomes, each followed by its actual Boss wait and addressed nonblank `BOSS_REPLY` before revisiting the same invocation; every revisit consumes the existing path and replay budgets.
 - Use existing bounded guard and runtime-valid result candidates in declaration order; no workflow-specific field names or source-semantic inference select a route.
 - Require actual actor completion to select the ordered arm and reach its declared target; verify the ordinary question result's parked wait and reply routing, including blank-reply rejection.
-- Check an entered target before probing its possible successors, stop target probing at its first satisfying candidate, and replay the same prefix within the existing attempt budget when a failed target check may have advanced the actor.
+- Check an entered target before probing its possible successors, stop target probing at its first satisfying candidate, and replay the same prefix within the existing attempt budget when a failed target check may have advanced the actor; prioritize that reached target's canonical question/reply successors in candidate order before unrelated queued prefixes, preserving FIFO order for other successors.
 - Snapshot seed-object descriptors only within one guard-probe call, retaining fresh candidate objects, prototypes, accessors, symbols and property attributes without cross-call caching.
 - Cap the derived generated coverage-test timeout at 300,000 milliseconds, retaining any smaller derived bound; exceeding this execution deadline leaves verification failed or unverified, without asserting an unsatisfiable arm or asking for Source clarification.
 - Report exhausted budgets and cycle-dependent or unsupported entry paths explicitly rather than treating skipped work as success or proving semantic impossibility.
-- Keep unsupported histories visible; one question/reply revisit does not establish arbitrary loop or durable-session correctness.
+- Keep unsupported histories visible; bounded canonical question/reply revisits do not establish arbitrary loop or durable-session correctness.
 
 ## Consequences
 

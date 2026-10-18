@@ -4,7 +4,9 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPlaybookCaptainShell } from '@sublang/playbook/playbook-captain';
+import { emptyPlaybookEffectLedger } from '@sublang/playbook/xstate-runtime';
 import { emitEntryModule } from '../src/entry-module.js';
 import { checkEntryOptions } from '../src/entry-options.js';
 import { loadFsmModule } from '../src/verify.js';
@@ -68,7 +70,7 @@ describe('artifact-owned entry option integration (self-hosting-19)', () => {
       default: {
         validateOptions: typeof module.validateOptions;
         createRuntime: (
-          input: { captainOptions: unknown },
+          input: unknown,
           host: { token: object },
         ) => {
           input: { configuredOptions: unknown; hostCapabilities: unknown };
@@ -93,12 +95,174 @@ describe('artifact-owned entry option integration (self-hosting-19)', () => {
     ])
       expect(() => entry.validateOptions(invalid)).toThrow();
     const host = { token: {} };
-    const runtime = entry.createRuntime({ captainOptions: original }, host);
+    const runtime = entry.createRuntime(original, host);
     expect(runtime.input.configuredOptions).toEqual(original);
     expect(runtime.input.configuredOptions).not.toHaveProperty('cwd');
     expect(runtime.input.hostCapabilities).toBe(host);
     expect(runtime.spec.snapshotOptions).toBe(entry.validateOptions);
     expect(await readFile(path, 'utf8')).not.toContain(' as RuntimeOptions');
+  });
+
+  it('starts a required-option generated entry through the installed Captain shell (self-hosting-20)', async () => {
+    await writeFile(
+      linkedPath,
+      linked.replace(
+        'return {input, spec};',
+        `return {input, spec, async init() {}, async dispose() {}, async handleBossInput() {
+          return {outcome: 'terminal', state: {value: 'done', activeStateIds: ['done'], tags: [], status: 'done', quiescent: true, stateId: 'done'}, terminal: {stateId: 'done', kind: 'success', description: 'fixture completed'}};
+        }};`,
+      ),
+    );
+    const path = await emitEntryModule({
+      cwd: dir,
+      basename: 'flow',
+      pipeline: 'playbook',
+      gearsPath: join(dir, 'flow.gears.md'),
+      textPath: join(dir, 'flow.text.md'),
+    });
+    const { default: entry } = await loadFsmModule(path);
+    const construction = vi.spyOn(entry, 'createRuntime');
+    const identity = { worktree: dir, gitDir: join(dir, '.git') };
+    const refusedEffect = vi.fn(async () => {
+      throw new Error('unexpected repository effect');
+    });
+    const ledger = emptyPlaybookEffectLedger();
+    const host = {
+      authority: {
+        playbookId: 'flow',
+        artifactSchema: 3 as const,
+        cwd: dir,
+        sessionId: '10000000-0000-4000-8000-000000000001',
+        leaseOwnerToken: 'fixture-lease',
+        canonicalWorktree: identity,
+        requiredRoleIds: ['worker'],
+        concurrentRoleSets: [],
+      },
+      repository: {
+        identity,
+        observe: refusedEffect,
+        acquire: refusedEffect,
+        runExclusive: refusedEffect,
+        runCohort: refusedEffect,
+        runDeferred: refusedEffect,
+      },
+      effectLedger: { snapshot: () => ledger, writeAhead: refusedEffect },
+    };
+    const agent = {
+      adapter: 'codex',
+      model: { kind: 'provider-default' },
+      effort: { kind: 'provider-default' },
+    };
+    const shellFor = (options: unknown) =>
+      createPlaybookCaptainShell(
+        {
+          playbooks: {
+            flow: {
+              from: 'fixture:flow',
+              roles: {
+                worker: {
+                  playerId: 'worker',
+                  model: { kind: 'provider-default' },
+                  effort: { kind: 'provider-default' },
+                },
+              },
+              options,
+            },
+          },
+          sessionAgents: { captain: agent, players: { worker: agent } },
+          captainAdapter: 'codex',
+        },
+        {
+          loadModule: async () => ({ default: entry }),
+          hostCapabilities: { flow: host },
+        },
+      );
+    const signal = new AbortController().signal;
+    const session = {
+      signal,
+      players: [{ id: 'worker', adapter: 'codex' as const }],
+      emitStatus: async () => {},
+      emitTelemetry: async () => {},
+      setVisiblePlayers: async () => {},
+    };
+    const missing = shellFor({});
+    try {
+      await expect(missing.init!(session)).rejects.toThrow('catalog required');
+      expect(construction).not.toHaveBeenCalled();
+    } finally {
+      await missing.dispose!();
+    }
+    const supplied = { catalog: [{ id: 'review' }], enabled: false, count: 0 };
+    const shell = shellFor(supplied);
+    const player = vi.fn(async () => {
+      throw new Error('unexpected player call');
+    });
+    try {
+      await shell.init!(session);
+      expect(construction).not.toHaveBeenCalled();
+      await shell.handleBossTurn(
+        { id: 1, prompt: '/flow run', timestamp: 1 },
+        {
+          signal,
+          players: session.players,
+          callPlayer: player,
+          callCaptain: async () => ({
+            status: 'ok' as const,
+            turnId: 1,
+            finalText: 'fixture completed',
+            resumeToken: 'fixture',
+          }),
+          emitReply: async () => {},
+          setVisiblePlayers: async () => {},
+        },
+      );
+      expect(construction).toHaveBeenCalledTimes(1);
+      const result = construction.mock.results[0];
+      if (result.type === 'throw') throw result.value;
+      expect(construction.mock.calls[0][0]).toEqual(supplied);
+      expect(construction.mock.calls[0][0]).not.toHaveProperty(
+        'captainOptions',
+      );
+      expect(result.value.input.configuredOptions).toEqual(supplied);
+      expect(result.value.input.hostCapabilities).toBe(host);
+      expect(player).not.toHaveBeenCalled();
+      expect(refusedEffect).not.toHaveBeenCalled();
+    } finally {
+      await shell.dispose!();
+    }
+  });
+
+  it('retains the nonempty historical Players option envelope (self-hosting-20)', async () => {
+    await writeFile(
+      linkedPath,
+      `export default function createPlaybookRuntime(options: {cwd?: string}) {
+        return {options};
+      }`,
+    );
+    await writeFile(
+      join(dir, 'flow.gears.md'),
+      'Players:\n\n- Worker\n\n## Behaviors\n\n### FLOW-1\n\nCaptain shall run:\n> true\n',
+    );
+    const path = await emitEntryModule({
+      cwd: dir,
+      basename: 'flow',
+      pipeline: 'playbook',
+      gearsPath: join(dir, 'flow.gears.md'),
+      textPath: join(dir, 'flow.text.md'),
+    });
+    const { default: entry } = (await loadFsmModule(path)) as {
+      default: {
+        createRuntime(options: { captainOptions?: unknown }): {
+          options: { cwd: string };
+        };
+      };
+    };
+    expect(
+      entry.createRuntime({ captainOptions: { cwd: dir } }).options,
+    ).toEqual({ cwd: dir });
+    expect(() =>
+      entry.createRuntime({ captainOptions: { catalog: [] } }),
+    ).toThrow('unknown option');
   });
 
   it('checks a package-less linked/FSM pair without changing either source or relative type resolution', async () => {
