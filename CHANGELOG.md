@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.16.6] - 2026-10-18
+
 ### Fixed
 
 - Coverage replays discovered target successors before unrelated queued paths,
@@ -924,7 +926,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.5...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.6...HEAD
+[0.16.6]: https://github.com/sublang-ai/slc/compare/v0.16.5...v0.16.6
 [0.16.5]: https://github.com/sublang-ai/slc/compare/v0.16.4...v0.16.5
 [0.16.4]: https://github.com/sublang-ai/slc/compare/v0.16.3...v0.16.4
 [0.16.3]: https://github.com/sublang-ai/slc/compare/v0.16.2...v0.16.3
