@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-10-18
+
 ### Fixed
 
 - Prompt substitution derivation keeps absent values distinct from populated
@@ -917,7 +919,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.4...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.5...HEAD
+[0.16.5]: https://github.com/sublang-ai/slc/compare/v0.16.4...v0.16.5
 [0.16.4]: https://github.com/sublang-ai/slc/compare/v0.16.3...v0.16.4
 [0.16.3]: https://github.com/sublang-ai/slc/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/sublang-ai/slc/compare/v0.16.1...v0.16.2
