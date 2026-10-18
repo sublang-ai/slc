@@ -3940,6 +3940,17 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
         errorArms;
       continue;
     }
+    if (
+      !controller &&
+      captain.binding.actor !== 'script' &&
+      resultKeys.includes(NEEDS_BOSS_REPLY)
+    ) {
+      // An otherwise unproved arm can replay one already validated question
+      // prefix: entry, question wait, resumed invocation and target settle.
+      captainSettles += guardedDoneArms * 4 * PARALLEL_SETTLE_MS;
+      guardProbeCalls +=
+        guardedDoneArms * (rootInterruptProbes + 2 * resultKeys.length);
+    }
     captainSettles +=
       resultKeys.reduce(
         (total, key) =>
@@ -4460,6 +4471,8 @@ async function runFsmCoverage(
     const rawDoneArms = transitionArms(captain.invocation.onDone);
     const onDoneArms = normalizeArms(captain.invocation.onDone);
     const controllerResultByArm = new Map<number, string>();
+    let validatedQuestion:
+      { output: Record<string, unknown>; wait: StateRef } | undefined;
 
     // Every declared result needs an ordered arm accepting its valid output.
     // A fallback is reachable exactly when all preceding guards reject it.
@@ -4750,6 +4763,8 @@ async function runFsmCoverage(
           findings.push(
             `state ${stateKey}: ${BOSS_REPLY_EVENT} did not resume the suspended state`,
           );
+        } else if (!isController && state.actor !== 'script') {
+          validatedQuestion = { output: drivenOutput, wait: waitRef };
         }
         actor.stop();
 
@@ -4839,6 +4854,98 @@ async function runFsmCoverage(
         );
       });
       if (!anyOutput) {
+        const targetName = rawArmTarget(arm);
+        const target =
+          targetName === undefined
+            ? undefined
+            : stateRefForTarget(refs, targetName, captain.ref);
+        const sourceId = resolvedStateNode(machine, captain.ref)?.id;
+        const targetId =
+          target === undefined
+            ? undefined
+            : resolvedStateNode(machine, target)?.id;
+        if (
+          validatedQuestion !== undefined &&
+          target !== undefined &&
+          sourceId !== undefined &&
+          targetId !== undefined
+        ) {
+          const entry = childCoverageDrive(
+            machine,
+            refs,
+            captain.ref,
+            captainInterruptTarget(captain),
+            candidates,
+          );
+          if (entry !== undefined) {
+            const node: CoverageInvocation = { kind: 'acting', value: captain };
+            const replay = await replayCoveragePath(
+              machine,
+              coverageNodes(captains, playbooks),
+              {
+                root: node,
+                ...entry,
+                steps: [
+                  {
+                    node,
+                    result: validatedQuestion.output,
+                    next: node,
+                    questionWait: validatedQuestion.wait,
+                  },
+                ],
+              },
+            );
+            try {
+              const pending = replay.pending;
+              if (
+                pending !== undefined &&
+                coverageNodeKey(pending.node) === coverageNodeKey(node)
+              ) {
+                const outputs = coverageArmResults(
+                  machine,
+                  node,
+                  'onDone',
+                  index,
+                  replay.actor.getSnapshot().context,
+                  pending.input,
+                  candidates,
+                  undefined,
+                  undefined,
+                  true,
+                  true,
+                );
+                if (outputs.length > 0) {
+                  const before = replay.actor.coverageTransitions.length;
+                  pending.complete(outputs[0]);
+                  if (
+                    await settle(
+                      replay.actor,
+                      (snapshot) =>
+                        atState(target)(snapshot) &&
+                        replay.actor.coverageTransitions
+                          .slice(before)
+                          .some(
+                            (transition) =>
+                              transition.sourceId === sourceId &&
+                              transition.armIndex === index &&
+                              transition.event?.type === doneEvent.type &&
+                              transition.targetIds.includes(targetId),
+                          ),
+                      PARALLEL_SETTLE_MS,
+                    )
+                  )
+                    continue;
+                  findings.push(
+                    `state ${stateKey}: onDone arm ${index} did not reach ${target.stableId} after canonical Boss reply`,
+                  );
+                  continue;
+                }
+              }
+            } finally {
+              replay.actor.stop();
+            }
+          }
+        }
         findings.push(
           `state ${stateKey}: onDone arm ${index} (target ${
             onDoneArms[index]?.target ?? 'none'
