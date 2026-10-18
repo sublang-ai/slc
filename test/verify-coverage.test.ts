@@ -6456,8 +6456,10 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
       );
       expect(content).toContain('import * as fsm from "./code.fsm.js"');
       expect(content).toContain('new URL("./code.fsm.ts", import.meta.url)');
-      expect(content).toContain('checkFsmCoverage(fsm, { sourceText })');
-      expect(content).toContain('}, fsmCoverageTestTimeout(fsm));');
+      expect(content).toContain(
+        'checkFsmCoverage(fsm, { coverage, sourceText })',
+      );
+      expect(content).toContain('}, fsmCoverageTestTimeout(fsm, coverage));');
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
@@ -6472,7 +6474,7 @@ describe('generateFsmCoverageTest / emitFsmCoverageTest', () => {
     });
     expect(generated).toContain('new URL("./flow.fsm.ts", import.meta.url)');
     expect(generated).toContain('reaches every declared transition');
-    expect(generated).toContain('}, fsmCoverageTestTimeout(fsm));');
+    expect(generated).toContain('}, fsmCoverageTestTimeout(fsm, coverage));');
   });
 
   it('quotes generated strings and comments for punctuation-heavy basenames', () => {

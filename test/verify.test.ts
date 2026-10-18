@@ -4535,7 +4535,7 @@ describe('generateGearsFsmConformanceTest', () => {
     expect(emitted).toContain(
       'await checkGearsFsmConformanceAsync(gears, fsm, {',
     );
-    expect(emitted).toContain('fsmCoverageTestTimeout(fsm)');
+    expect(emitted).toContain('fsmCoverageTestTimeout(fsm, coverage)');
     expect(emitted).toContain('artifactSchema: 3');
     expect(emitted).toContain('./code.gears.md');
     expect(emitted).toContain('SPDX-License-Identifier');

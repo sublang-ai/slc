@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
 import { messageOf } from './errors.js';
+import { resolveCoverageBudget } from './verify-coverage.js';
 
 /**
  * Largest stall timeout that stays representable as a timer delay (DR-019).
@@ -61,6 +62,8 @@ export interface FileConfig {
   pipelinePath?: string[];
   /** Agent-stall watchdog window in seconds; `0` disables (DR-019, cli-34). */
   stallTimeout?: number;
+  coverageMaxInvocations?: number;
+  coverageMaxAttempts?: number;
 }
 
 /**
@@ -207,6 +210,8 @@ const ALLOWED_KEYS = [
   'reviewerFastMode',
   'pipelinePath',
   'stallTimeout',
+  'coverageMaxInvocations',
+  'coverageMaxAttempts',
 ] as const;
 
 function normalizeFileConfig(value: unknown, path: string): FileConfig {
@@ -283,6 +288,21 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
       input.stallTimeout,
       'stallTimeout',
       path,
+    );
+  }
+  try {
+    const coverage = resolveCoverageBudget({
+      maxInvocations: input.coverageMaxInvocations as number | undefined,
+      maxAttempts: input.coverageMaxAttempts as number | undefined,
+    });
+    if (input.coverageMaxInvocations !== undefined)
+      config.coverageMaxInvocations = coverage.maxInvocations;
+    if (input.coverageMaxAttempts !== undefined)
+      config.coverageMaxAttempts = coverage.maxAttempts;
+  } catch (error) {
+    throw new ConfigFileError(
+      'config-invalid',
+      `Config file ${path}: ${messageOf(error)}`,
     );
   }
   return config;

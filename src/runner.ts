@@ -94,6 +94,8 @@ import {
   readPlaybookRuntimeDeclaration,
 } from './runtime-contract.js';
 import {
+  resolveCoverageBudget,
+  type CoverageBudget,
   artifactSchemaForPlaybookProvenance,
   checkFsmContinuationInputs,
   checkFsmChildSuspension,
@@ -155,6 +157,7 @@ export interface SlcDeps {
   /** Invocation working directory anchoring artifact placement (DR-014); defaults to the process cwd. */
   cwd?: string;
   signal?: AbortSignal;
+  coverage?: CoverageBudget;
   /**
    * Receives phase start/finish/failure events with elapsed times as the run
    * progresses (DR-019, cli-32). Absent for hosts that want a quiet run.
@@ -184,7 +187,9 @@ export async function runSlc(
   deps: SlcDeps,
 ): Promise<SlcResult> {
   let invocation: Invocation;
+  let coverage: Readonly<Required<CoverageBudget>>;
   try {
+    coverage = resolveCoverageBudget(deps.coverage);
     invocation = parseInvocation(argv);
   } catch (error) {
     return failure(messageOf(error));
@@ -212,7 +217,7 @@ export async function runSlc(
   try {
     switch (invocation.kind) {
       case 'complete':
-        return finish(await runCompletion(invocation, deps));
+        return finish(await runCompletion(invocation, deps, coverage));
       case 'full':
         // The reserved playbook pipeline supplies a default link target
         // (self-hosting-13): a bare full run becomes a full-link against the
@@ -227,16 +232,17 @@ export async function runSlc(
                 options: [],
               },
               deps,
+              coverage,
             ),
           );
         }
-        return finish(await runFull(invocation, deps));
+        return finish(await runFull(invocation, deps, coverage));
       case 'phase':
-        return finish(await runSinglePhase(invocation, deps));
+        return finish(await runSinglePhase(invocation, deps, coverage));
       case 'link':
-        return finish(await runDirectLink(invocation, deps));
+        return finish(await runDirectLink(invocation, deps, coverage));
       case 'full-link':
-        return finish(await runFullLink(invocation, deps));
+        return finish(await runFullLink(invocation, deps, coverage));
     }
   } catch (error) {
     return failure(messageOf(error));
@@ -246,6 +252,7 @@ export async function runSlc(
 async function runFull(
   invocation: Extract<Invocation, { kind: 'full' }>,
   deps: SlcDeps,
+  coverage: Readonly<Required<CoverageBudget>>,
 ): Promise<SlcResult> {
   const cwd = runCwd(deps);
   const pipeline = await loadPipeline(
@@ -270,6 +277,7 @@ async function runFull(
       invocation.output === null ? undefined : resolve(cwd, invocation.output),
   });
   const steps = buildCompileSteps({
+    coverage,
     pipeline,
     plan,
     source,
@@ -281,6 +289,7 @@ async function runFull(
     signal: deps.signal,
   });
   const verification = {
+    coverage,
     pipeline: invocation.pipeline,
     plan,
     artDir,
@@ -314,6 +323,7 @@ function incrementalRun(
 async function runSinglePhase(
   invocation: Extract<Invocation, { kind: 'phase' }>,
   deps: SlcDeps,
+  coverage: Readonly<Required<CoverageBudget>>,
 ): Promise<SlcResult> {
   const cwd = runCwd(deps);
   const pipeline = await loadPipeline(
@@ -361,6 +371,7 @@ async function runSinglePhase(
       sourceFidelity,
       undefined,
       deps.signal,
+      coverage,
     );
     return executeSteps([step], pipeline, deps);
   }
@@ -384,6 +395,7 @@ async function runSinglePhase(
     sourceFidelity,
     undefined,
     deps.signal,
+    coverage,
   );
   return executeSteps([step], pipeline, deps);
 }
@@ -391,6 +403,7 @@ async function runSinglePhase(
 async function runDirectLink(
   invocation: Extract<Invocation, { kind: 'link' }>,
   deps: SlcDeps,
+  coverage: Readonly<Required<CoverageBudget>>,
 ): Promise<SlcResult> {
   const cwd = runCwd(deps);
   const pipeline = await loadPipeline(
@@ -411,6 +424,7 @@ async function runDirectLink(
   return executeSteps(
     [
       linkStep({
+        coverage,
         link,
         definitionPath: pipeline.linkFile as string,
         objects: invocation.objects.map((path) => resolve(cwd, path)),
@@ -428,6 +442,7 @@ async function runDirectLink(
 async function runFullLink(
   invocation: Extract<Invocation, { kind: 'full-link' }>,
   deps: SlcDeps,
+  coverage: Readonly<Required<CoverageBudget>>,
 ): Promise<SlcResult> {
   const cwd = runCwd(deps);
   const pipeline = await loadPipeline(
@@ -449,6 +464,7 @@ async function runFullLink(
   // Compile chain: the exit artifact becomes the object artifact (pipeline-15).
   const plan = planArtifacts({ phases: pipeline.phases, basename, artDir });
   const compileSteps = buildCompileSteps({
+    coverage,
     pipeline,
     plan,
     source,
@@ -483,6 +499,7 @@ async function runFullLink(
   const steps = [
     ...compileSteps,
     linkStep({
+      coverage,
       link,
       definitionPath: pipeline.linkFile as string,
       objects: [plan[plan.length - 1].path],
@@ -497,6 +514,7 @@ async function runFullLink(
   ];
 
   const verification = {
+    coverage,
     pipeline: invocation.pipeline,
     plan,
     artDir,
@@ -571,6 +589,7 @@ function runCwd(deps: SlcDeps): string {
 async function runCompletion(
   invocation: Extract<Invocation, { kind: 'complete' }>,
   deps: SlcDeps,
+  coverage: Readonly<Required<CoverageBudget>>,
 ): Promise<SlcResult> {
   const cwd = runCwd(deps);
   const pipeline = await loadPipeline(
@@ -647,6 +666,7 @@ async function runCompletion(
       .concat([{ path: pipeline.linkFile as string, phase: 'link' }]),
   );
   const verification = {
+    coverage,
     pipeline: invocation.pipeline,
     plan,
     artDir,
@@ -712,6 +732,7 @@ async function runCompletion(
             fsm.path,
             linkTarget,
             deps.signal,
+            coverage,
           );
         if (findings.length === 0) {
           const config = findMachineConfig(await loadFsmModule(fsm.path));
@@ -887,6 +908,7 @@ async function emitVerification(
   }
   outputs.push(
     await emitGearsFsmConformanceTest({
+      coverage: ctx.coverage,
       artifactDir: ctx.artDir,
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
@@ -948,6 +970,7 @@ async function emitVerification(
       );
     }
     const coverage = await emitFsmCoverageTest({
+      coverage: ctx.coverage,
       artifactDir: ctx.artDir,
       basename: ctx.basename,
       verifyModule: VERIFIER_SUPPORT_MODULE,
@@ -1015,6 +1038,7 @@ async function resolveVerificationSchema(
 }
 
 interface VerificationContext {
+  coverage?: CoverageBudget;
   pipeline: string;
   plan: readonly {
     path: string;
@@ -1186,6 +1210,7 @@ function buildCompileSteps(opts: {
   /** Concrete generated-artifact target, never a compiler phase pin. */
   linkTarget?: string;
   signal?: AbortSignal;
+  coverage?: CoverageBudget;
 }): PhaseStep[] {
   const { pipeline, plan, artDir, basename } = opts;
   const steps: PhaseStep[] = [];
@@ -1248,6 +1273,7 @@ function buildCompileSteps(opts: {
           opts.sourceFidelity,
           opts.linkTarget,
           opts.signal,
+          opts.coverage,
         ),
       );
       previous = artifact.path;
@@ -1266,6 +1292,7 @@ function buildCompileSteps(opts: {
         opts.sourceFidelity,
         opts.linkTarget,
         opts.signal,
+        opts.coverage,
       ),
     );
     previous = raw;
@@ -1286,6 +1313,7 @@ function buildCompileSteps(opts: {
           opts.sourceFidelity,
           opts.linkTarget,
           opts.signal,
+          opts.coverage,
         ),
       );
       previous = target;
@@ -1302,6 +1330,7 @@ function compileStep(
   sourceFidelity: boolean,
   linkTarget?: string,
   signal?: AbortSignal,
+  coverage?: CoverageBudget,
 ): PhaseStep {
   // Only a text-to-GEARS phase conserves authored Source fragments, and the
   // reserved meta-pipeline compiles definitions under its own fidelity gate
@@ -1317,7 +1346,13 @@ function compileStep(
             const findings = await checkFsmTypeScript(target, signal);
             if (findings.length > 0) return findings;
           }
-          return fsmConformanceFindings(source, target, linkTarget, signal);
+          return fsmConformanceFindings(
+            source,
+            target,
+            linkTarget,
+            signal,
+            coverage,
+          );
         }
       : undefined;
   const checks: MechanicalReview[] = [
@@ -1355,7 +1390,7 @@ function compileStep(
     ...(phase.source.format === 'fsm'
       ? {
           fsmSourceContinuation: () =>
-            fsmContinuationFindings(source, linkTarget, signal),
+            fsmContinuationFindings(source, linkTarget, signal, coverage),
         }
       : {}),
   };
@@ -1426,6 +1461,7 @@ async function fsmConformanceFindings(
   target: string,
   linkTarget?: string,
   signal?: AbortSignal,
+  coverage?: CoverageBudget,
 ): Promise<readonly string[]> {
   signal?.throwIfAborted();
   try {
@@ -1453,6 +1489,7 @@ async function fsmConformanceFindings(
     return findings.length > 0
       ? findings
       : await checkGearsFsmArtifact(gears, fsm, {
+          coverage,
           sourceText: await readFile(target, 'utf8'),
           ...(schema.artifactSchema === undefined
             ? {}
@@ -1488,6 +1525,7 @@ async function fsmContinuationFindings(
   source: string,
   linkTarget?: string,
   signal?: AbortSignal,
+  coverage?: CoverageBudget,
 ): Promise<readonly string[]> {
   signal?.throwIfAborted();
   const fsm = await loadFsmModule(source);
@@ -1504,6 +1542,7 @@ async function fsmContinuationFindings(
   return findings.length > 0
     ? findings
     : await checkFsmCoverage(fsm, {
+        coverage,
         sourceText: await readFile(source, 'utf8'),
         ...(schema.artifactSchema === undefined
           ? {}
@@ -1526,6 +1565,7 @@ function linkStep(opts: {
   options: readonly LinkOptionPair[];
   linked: string;
   signal?: AbortSignal;
+  coverage?: CoverageBudget;
   entryGearsPath?: string;
 }): PhaseStep {
   const { link } = opts;
@@ -1584,6 +1624,7 @@ function linkStep(opts: {
               fsmObjects[0],
               opts.linkTarget,
               opts.signal,
+              opts.coverage,
             ),
         }
       : {}),
