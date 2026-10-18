@@ -1622,6 +1622,8 @@ const enumeratedChildOutputMachine = (
     needsFifth?: boolean;
     nativeSeed?: boolean;
     disjointPrior?: boolean;
+    fixedContextReads?: boolean;
+    blockEntry?: boolean;
     childFailure?: ChildFailureOptions;
   } = {},
 ) => {
@@ -1690,8 +1692,15 @@ const enumeratedChildOutputMachine = (
           typeof value.error.message === 'string'))
     );
   };
-  const approved = ({ event }: any) =>
-    opts.childFailure !== undefined
+  const approved = ({ context, event }: any) => {
+    if (
+      opts.fixedContextReads &&
+      (context.entryReady !== true ||
+        context.lastError !== undefined ||
+        context.terminal !== undefined)
+    )
+      return false;
+    return opts.childFailure !== undefined
       ? childFailureShape(event.output, opts.childFailure, opts.wrongCount)
       : opts.nativeSeed
         ? nativeEnvelope(event.output)
@@ -1699,6 +1708,7 @@ const enumeratedChildOutputMachine = (
           (opts.countLast
             ? namedFields(event.output) && count(event.output)
             : count(event.output) && namedFields(event.output));
+  };
   return setup({
     actors: {
       playbook: fromPromise(async () => {
@@ -1708,6 +1718,7 @@ const enumeratedChildOutputMachine = (
   }).createMachine({
     id: 'enumeratedChildOutput',
     initial: 'ready',
+    ...(opts.fixedContextReads ? { context: { entryReady: false } } : {}),
     on: {
       BOSS_INTERRUPT: {
         target: '#ready',
@@ -1715,7 +1726,17 @@ const enumeratedChildOutputMachine = (
       },
     },
     states: {
-      ready: { id: 'ready', on: { START: 'child' } },
+      ready: {
+        id: 'ready',
+        on: {
+          START: opts.fixedContextReads
+            ? {
+                target: 'child',
+                actions: assign({ entryReady: !opts.blockEntry }),
+              }
+            : 'child',
+        },
+      },
       child: {
         id: 'child',
         invoke: {
@@ -3291,6 +3312,38 @@ describe('checkFsmCoverage (verification-6)', () => {
           ).toEqual([]);
         }
       }
+    },
+  );
+
+  it.each([3, 4] as const)(
+    'pads child fields after immutable reached-context reads (%s)',
+    async (fields) => {
+      expect(
+        await checkFsmCoverage({
+          machine: enumeratedChildOutputMachine(fields, {
+            fixedContextReads: true,
+          }),
+        }),
+      ).toEqual([]);
+    },
+  );
+
+  it.each([{ blockEntry: true }, { wrongCount: true }, { shadowed: true }])(
+    'preserves fixed-context child refusal for %j',
+    async (controls) => {
+      const arm = controls.shadowed ? 1 : 0;
+      expect(
+        (
+          await checkFsmCoverage({
+            machine: enumeratedChildOutputMachine(3, {
+              fixedContextReads: true,
+              ...controls,
+            }),
+          })
+        ).some((finding) =>
+          finding.includes(`child: nested playbook onDone arm ${arm}`),
+        ),
+      ).toBe(true);
     },
   );
 

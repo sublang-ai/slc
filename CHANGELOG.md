@@ -14,6 +14,9 @@ and this project adheres to
 ### Fixed
 
 - Retained-bundle completion preserves prompt-probe advisories without treating them as verification failures; actual composition and validation failures still block output.
+- Immutable context reads no longer suppress bounded child-output shape
+  guidance, while false context preconditions, ordered guards and actual
+  target replay retain their existing limits.
 - Raw-child completion coverage includes one compact normalized-error record
   without adding a dependency to emitted checkers, retaining ordered guard
   acceptance, actual target replay and existing search limits.
