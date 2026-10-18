@@ -19,7 +19,7 @@ When the user runs `slc` with `--version` or `-v`, the slc executable shall prin
 
 ### cli-2
 
-When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--complete` for retained-bundle emission without agents or history [[completion-1](completion.md#completion-1)], [[completion-2](completion.md#completion-2)], [[completion-5](completion.md#completion-5)], `--rebuild`, the `--config` option, and the configuration it reads — including the Coder and optional Reviewer config keys and environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md), [DR-006](../decisions/006-slc-configuration-sources.md), [DR-021](../decisions/021-incremental-compilation.md), [[cli-6](#cli-6)], [[cli-7](#cli-7)], [[cli-40](#cli-40)]).
+When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--complete` for retained-bundle emission without agents or history [[completion-1](completion.md#completion-1)], [[completion-2](completion.md#completion-2)], [[completion-5](completion.md#completion-5)], `--rebuild`, the `--config` option, and the configuration it reads — including the Coder, optional Reviewer and coverage-budget config keys and environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md), [DR-006](../decisions/006-slc-configuration-sources.md), [DR-021](../decisions/021-incremental-compilation.md), [[cli-6](#cli-6)], [[cli-7](#cli-7)], [[cli-40](#cli-40)]).
 
 ### cli-3
 
@@ -107,6 +107,10 @@ While `runSlc` is in progress, when the process receives an interrupt, the slc e
 
 Where the result is not a source-clarification outcome [[clarification-8](clarification.md#clarification-8)], when `runSlc` returns its result, the slc executable shall, on success, write the produced artifact paths or its `up to date` outcome to standard output, write every returned diagnostic to standard error, and return a zero exit code, and otherwise write the failure diagnostics to standard error and return a non-zero exit code ([DR-003](../decisions/003-slc-phase-execution.md), [DR-021](../decisions/021-incremental-compilation.md), [DR-023](../decisions/023-host-settled-link-object-imports.md)).
 
+### cli-44
+
+When the executable resolves verification configuration for compilation or agentless retained completion, it shall map flat YAML `coverageMaxInvocations` and `coverageMaxAttempts` to API `coverage.maxInvocations` and `coverage.maxAttempts`, using each non-blank `SLC_COVERAGE_MAX_INVOCATIONS` or `SLC_COVERAGE_MAX_ATTEMPTS` environment value over its corresponding YAML value, otherwise defaults 8 and 64, and reject non-integers, zero, negative or non-finite values and values above 64 or 1024 respectively before executing a phase, without changing the five-minute verification deadline [[verification-62](verification.md#verification-62)], while retaining file discovery and strict schema validation [[cli-20](#cli-20)], [[cli-21](#cli-21)].
+
 ## Verification
 
 ### cli-13
@@ -115,7 +119,7 @@ Where no agent is configured, when the slc executable is run with `--version` or
 
 ### cli-14
 
-Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, `--rebuild`, the `--config` option, and the Coder and optional Reviewer config keys and environment variables it reads to standard output and exit zero without resolving a pipeline or selecting an agent [[cli-2](#cli-2)], [[cli-9](#cli-9)].
+Where no agent is configured, when the slc executable is run with `--help` or `-h`, the slc executable shall print usage naming the documented invocation forms, `--rebuild`, the `--config` option, and the Coder, optional Reviewer and coverage-budget config keys and environment variables it reads to standard output and exit zero without resolving a pipeline or selecting an agent [[cli-2](#cli-2)], [[cli-9](#cli-9)].
 
 ### cli-15
 
@@ -201,6 +205,10 @@ Where a pipeline directory pins a phase to a current compiled `playbook` artifac
 | --- | --- |
 | The pin's contract decision selects `legacy`, `composed-v2`, or `composed-v3` and the artifact completes. | Write the artifact's declared target, exit zero, use the configured agent transport and selected per-player model for any player call, and never invoke the interpreted executor. |
 | The pin's contract decision rejects — including exact `@sublang/playbook@9.0.0` on a link target outside any installed engine. | Fail closed before artifact execution without invoking a player transport or the interpreted executor. |
+
+### cli-45
+
+Where configuration files and environment values specify coverage limits, when the integration suite runs the CLI dependency and completion boundaries, it shall verify per-key precedence, blank-variable fallback, default limits, help disclosure, agentless completion propagation, and refusal of invalid values before phase execution [[cli-44](#cli-44)].
 
 ## References
 

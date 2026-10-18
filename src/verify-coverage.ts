@@ -57,7 +57,36 @@ import {
 /** The `gears2fsm`-mandated captain actor name a machine declares. */
 export const CAPTAIN_ACTOR = 'captain';
 
+/** Finite per-target search limits; omission retains historical defaults. */
+export interface CoverageBudget {
+  maxInvocations?: number;
+  maxAttempts?: number;
+}
+
+/** Validate before artifact access and return an independent immutable policy. */
+export function resolveCoverageBudget(
+  value: CoverageBudget = {},
+): Readonly<Required<CoverageBudget>> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new TypeError('coverage must be an object');
+  for (const key of Reflect.ownKeys(value))
+    if (key !== 'maxInvocations' && key !== 'maxAttempts')
+      throw new TypeError(`Unknown coverage budget key: ${String(key)}`);
+  const { maxInvocations = 8, maxAttempts = 64 } = value;
+  for (const [key, limit, cap] of [
+    ['maxInvocations', maxInvocations, 64],
+    ['maxAttempts', maxAttempts, 1024],
+  ] as const) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > cap)
+      throw new RangeError(
+        `coverage.${key} must be an integer from 1 to ${cap}`,
+      );
+  }
+  return Object.freeze({ maxInvocations, maxAttempts });
+}
+
 interface CoverageRun {
+  coverage: Readonly<Required<CoverageBudget>>;
   literalChecks?: ReachedLiteralChildChecks;
   artifactSchema?: 1 | 3;
   questionFindings: Set<string>;
@@ -364,8 +393,6 @@ const SETTLE_MS = 1_000;
 const PARALLEL_SETTLE_MS = 250;
 const PARALLEL_QUESTION_SETTLE_MS = 500;
 const MAX_PARALLEL_COMBINATIONS = 64;
-const MAX_COVERAGE_PATH_STEPS = 8;
-const MAX_COVERAGE_PATH_ATTEMPTS = 64;
 
 /** Stable values shared by machine input, result output, and guard probing. */
 const COVERAGE_PLAYBOOK_ID = 'coverage-child-playbook';
@@ -2834,6 +2861,7 @@ async function searchCoverageEntry(
     pending: PendingCoverageInvocation,
   ) => Promise<boolean>,
 ): Promise<CoverageSearchResult> {
+  const budget = coverageRuns.getStore()!.coverage;
   const nodes = coverageNodes(captains, playbooks);
   const nodesForTarget = (raw: unknown, source: StateRef) => {
     const targetName = rawArmTarget(raw);
@@ -2896,7 +2924,7 @@ async function searchCoverageEntry(
       false);
   const limitations = new Set<string>();
   let inputFailure: string | undefined;
-  while (queue.length > 0 && attempts < MAX_COVERAGE_PATH_ATTEMPTS) {
+  while (queue.length > 0 && attempts < budget.maxAttempts) {
     await coverageYield();
     let pathIndex = 0;
     for (let scanned = 0; scanned < rootFamilies.length; scanned++) {
@@ -2929,9 +2957,9 @@ async function searchCoverageEntry(
         // authored prefix before considering successors, charging that replay
         // against the same attempt limit.
         replay.actor.stop();
-        if (attempts >= MAX_COVERAGE_PATH_ATTEMPTS) {
+        if (attempts >= budget.maxAttempts) {
           limitations.add(
-            `exhausted ${MAX_COVERAGE_PATH_ATTEMPTS}-attempt path budget`,
+            `exhausted ${budget.maxAttempts}-attempt path budget`,
           );
           break;
         }
@@ -3011,9 +3039,9 @@ async function searchCoverageEntry(
       }
       const continuations: CoveragePath[] = [];
       for (const step of nextSteps) {
-        if (path.steps.length + 1 >= MAX_COVERAGE_PATH_STEPS) {
+        if (path.steps.length + 1 >= budget.maxInvocations) {
           limitations.add(
-            `exhausted ${MAX_COVERAGE_PATH_STEPS}-invocation path depth`,
+            `exhausted ${budget.maxInvocations}-invocation path depth`,
           );
           continue;
         }
@@ -3044,7 +3072,7 @@ async function searchCoverageEntry(
       if (
         (!covered || needsLiteral()) &&
         path.alternatives !== undefined &&
-        attempts < MAX_COVERAGE_PATH_ATTEMPTS
+        attempts < budget.maxAttempts
       ) {
         const next = path.alternatives.next();
         if (!next.done)
@@ -3058,9 +3086,7 @@ async function searchCoverageEntry(
     }
   }
   if (queue.length > 0)
-    limitations.add(
-      `exhausted ${MAX_COVERAGE_PATH_ATTEMPTS}-attempt path budget`,
-    );
+    limitations.add(`exhausted ${budget.maxAttempts}-attempt path budget`);
   return {
     covered: transitionCovered,
     entered,
@@ -4255,7 +4281,11 @@ async function probeParallelJoins(
  * guard search, and a final scheduling margin. Generated tests use this instead
  * of Vitest's five-second default.
  */
-export function fsmCoverageTestTimeout(fsmModule: unknown): number {
+export function fsmCoverageTestTimeout(
+  fsmModule: unknown,
+  coverage?: CoverageBudget,
+): number {
+  const budget = resolveCoverageBudget(coverage);
   const machine = findMachine(fsmModule);
   const config = machine.config;
   const refs = stateRefs(config);
@@ -4430,16 +4460,16 @@ export function fsmCoverageTestTimeout(fsmModule: unknown): number {
   guardProbeCalls +=
     pathSearches *
     (nodes.length * (1 + entryArmCount) +
-      MAX_COVERAGE_PATH_ATTEMPTS * 2 * maxNodeCandidates);
+      budget.maxAttempts * 2 * maxNodeCandidates);
   // Parallel question/join helpers retain their independent entry probes.
   guardProbeCalls += 2 * parallels.length;
-  // Each charged replay contains at most eight invocation waits, up to
-  // seven parked question waits and two target/reply settles, plus
+  // Each charged replay contains at most the selected invocation count and
+  // one fewer parked question waits, plus two target/reply settles and
   // no-transition checks.
   const pathSettles =
     pathSearches *
-    MAX_COVERAGE_PATH_ATTEMPTS *
-    ((2 * MAX_COVERAGE_PATH_STEPS + 1) * PARALLEL_SETTLE_MS + 2 * 10);
+    budget.maxAttempts *
+    ((2 * budget.maxInvocations + 1) * PARALLEL_SETTLE_MS + 2 * 10);
   const parallelSettles = parallels.reduce(
     (total, parallel) =>
       total +
@@ -4481,6 +4511,7 @@ export async function checkFsmCoverage(
     sourceText?: string;
     signal?: AbortSignal;
     timeoutMs?: number;
+    coverage?: CoverageBudget;
   } = {},
 ): Promise<string[]> {
   return fsmCoverage(fsmModule, opts);
@@ -4494,8 +4525,10 @@ export async function checkGearsFsmConformanceAsync(
     sourceText?: string;
     signal?: AbortSignal;
     timeoutMs?: number;
+    coverage?: CoverageBudget;
   } = {},
 ): Promise<string[]> {
+  options = { ...options, coverage: resolveCoverageBudget(options.coverage) };
   const { findings, literalChecks } = prepareGearsFsmConformance(
     gears,
     findMachine(fsmModule).config,
@@ -4515,8 +4548,10 @@ export async function checkGearsFsmArtifact(
     sourceText?: string;
     signal?: AbortSignal;
     timeoutMs?: number;
+    coverage?: CoverageBudget;
   } = {},
 ): Promise<string[]> {
+  options = { ...options, coverage: resolveCoverageBudget(options.coverage) };
   const { findings, literalChecks } = prepareGearsFsmConformance(
     gears,
     findMachine(fsmModule).config,
@@ -4541,10 +4576,12 @@ async function fsmCoverage(
     signal?: AbortSignal;
     /** A caller may shorten, never extend, the derived cooperative deadline. */
     timeoutMs?: number;
+    coverage?: CoverageBudget;
   } = {},
   literalChecks?: ReachedLiteralChildChecks,
   literalOnly = false,
 ): Promise<string[]> {
+  const coverage = resolveCoverageBudget(opts.coverage);
   opts.signal?.throwIfAborted();
   if (
     opts.timeoutMs !== undefined &&
@@ -4555,6 +4592,7 @@ async function fsmCoverage(
     );
   const started = performance.now();
   const run: CoverageRun = {
+    coverage,
     literalChecks,
     signal: opts.signal,
     deadline:
@@ -4570,7 +4608,7 @@ async function fsmCoverage(
     try {
       run.deadline = Math.min(
         run.deadline,
-        started + fsmCoverageTestTimeout(fsmModule),
+        started + fsmCoverageTestTimeout(fsmModule, coverage),
       );
       await coverageYield(true);
       const schema = resolveArtifactSchemaForVerification({
@@ -5625,7 +5663,9 @@ export function generateFsmCoverageTest(opts: {
   fsmSourceFile: string;
   verifyModule: string;
   artifactSchema?: 1 | 3;
+  coverage?: CoverageBudget;
 }): string {
+  const coverage = resolveCoverageBudget(opts.coverage);
   const commentBasename = JSON.stringify(opts.basename)
     .replaceAll('\u2028', '\\u2028')
     .replaceAll('\u2029', '\\u2029');
@@ -5645,14 +5685,16 @@ import { describe, expect, it } from 'vitest';
 import { checkFsmCoverage, fsmCoverageTestTimeout } from ${verifyModule};
 import * as fsm from ${fsmModule};
 
+const coverage = ${JSON.stringify(coverage)};
+
 describe(${suiteName}, () => {
   it('reaches every declared transition', async () => {
     const sourceText = readFileSync(
       fileURLToPath(new URL(${fsmSourceFile}, import.meta.url)),
       'utf8',
     );
-    expect(await checkFsmCoverage(fsm, { sourceText${opts.artifactSchema === undefined ? '' : `, artifactSchema: ${opts.artifactSchema}`} })).toEqual([]);
-  }, fsmCoverageTestTimeout(fsm));
+    expect(await checkFsmCoverage(fsm, { coverage, sourceText${opts.artifactSchema === undefined ? '' : `, artifactSchema: ${opts.artifactSchema}`} })).toEqual([]);
+  }, fsmCoverageTestTimeout(fsm, coverage));
 });
 `;
 }
@@ -5670,8 +5712,10 @@ export async function emitFsmCoverageTest(opts: {
   basename: string;
   verifyModule?: string;
   artifactSchema?: 1 | 3;
+  coverage?: CoverageBudget;
   write?: (path: string, content: string) => Promise<void>;
 }): Promise<{ path: string; diagnostics: string[] }> {
+  const coverage = resolveCoverageBudget(opts.coverage);
   const fsmPath = join(opts.artifactDir, `${opts.basename}.fsm.ts`);
   const module = await loadFsmModule(fsmPath);
   const schema = resolveArtifactSchemaForVerification({
@@ -5683,12 +5727,14 @@ export async function emitFsmCoverageTest(opts: {
   });
   const artifactSchema = schema.artifactSchema;
   const findings = await checkFsmCoverage(module, {
+    coverage,
     sourceText: await readFile(fsmPath, 'utf8'),
     ...(opts.artifactSchema === undefined
       ? {}
       : { artifactSchema: opts.artifactSchema }),
   });
   const content = generateFsmCoverageTest({
+    coverage,
     basename: opts.basename,
     fsmModule: `./${opts.basename}.fsm.js`,
     fsmSourceFile: `./${opts.basename}.fsm.ts`,

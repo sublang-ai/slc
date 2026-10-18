@@ -16,3 +16,7 @@ agent: claude-code
 # Seconds of agent inactivity before a stalled call fails the run (DR-019);
 # 0 disables the watchdog.
 # stallTimeout: 2400
+
+# Finite per-target coverage exploration; deadline remains at most 300 seconds.
+# coverageMaxInvocations: 8 # integer 1..64
+# coverageMaxAttempts: 64 # integer 1..1024

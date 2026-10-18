@@ -19,6 +19,10 @@ import { createRequire } from 'node:module';
 
 import { messageOf } from './errors.js';
 import {
+  resolveCoverageBudget,
+  type CoverageBudget,
+} from './verify-coverage.js';
+import {
   createConfiguredCompiledFactory,
   createConfiguredExecutor,
   resolveAgentSelection,
@@ -117,10 +121,8 @@ export async function buildSlcDeps(
     // First-run seeding (DR-015): name the created user config on stderr.
     onSeed: (path) => note?.(`slc: seeded ${path} (agent: claude-code)\n`),
   });
-  const { selection, pipelinePath, stallTimeoutMs } = resolveRunConfig(
-    env,
-    file.config,
-  );
+  const { selection, pipelinePath, stallTimeoutMs, coverage } =
+    resolveRunConfig(env, file.config);
   const resolver = withReservedPipelines(
     createPipelineResolver(pipelineSearchRoots(pipelinePath, cwd)),
   );
@@ -143,7 +145,7 @@ export async function buildSlcDeps(
         ? undefined
         : (line: string) => progress({ kind: 'status', text: line }),
   });
-  return { resolver, executor, compiled, cwd, signal, progress };
+  return { resolver, executor, compiled, cwd, signal, progress, coverage };
 }
 
 /** Resolver-only dependencies: no agent selection, construction, or seeding. */
@@ -157,6 +159,7 @@ async function buildCompletionDeps({
   const file = await loadConfigFile({ cwd, configPath, env, seed: false });
   const pipelinePath =
     nonBlank(env.SLC_PIPELINE_PATH) ?? file.config.pipelinePath;
+  const coverage = resolveCoverageConfig(env, file.config);
   return {
     resolver: withReservedPipelines(
       createPipelineResolver(pipelineSearchRoots(pipelinePath, cwd)),
@@ -169,11 +172,13 @@ async function buildCompletionDeps({
     cwd,
     signal,
     progress,
+    coverage,
   };
 }
 
 /** The cligent-invocation selection after merging environment over file (DR-006). */
 export interface RunConfig {
+  coverage: Readonly<Required<CoverageBudget>>;
   selection: AgentSelection;
   /** Search-root source: an `SLC_PIPELINE_PATH` string, the file's sequence, or undefined. */
   pipelinePath: string | string[] | undefined;
@@ -216,7 +221,28 @@ export function resolveRunConfig(
     parseStallTimeout(nonBlank(env.SLC_STALL_TIMEOUT)) ??
     file.stallTimeout ??
     DEFAULT_STALL_TIMEOUT_SECONDS;
-  return { selection, pipelinePath, stallTimeoutMs: stallSeconds * 1000 };
+  return {
+    selection,
+    pipelinePath,
+    stallTimeoutMs: stallSeconds * 1000,
+    coverage: resolveCoverageConfig(env, file),
+  };
+}
+
+function resolveCoverageConfig(
+  env: Record<string, string | undefined>,
+  file: FileConfig,
+) {
+  const invocations = nonBlank(env.SLC_COVERAGE_MAX_INVOCATIONS);
+  const attempts = nonBlank(env.SLC_COVERAGE_MAX_ATTEMPTS);
+  return resolveCoverageBudget({
+    maxInvocations:
+      invocations === undefined
+        ? file.coverageMaxInvocations
+        : Number(invocations),
+    maxAttempts:
+      attempts === undefined ? file.coverageMaxAttempts : Number(attempts),
+  });
 }
 
 function parseStallTimeout(value: string | undefined): number | undefined {
@@ -299,6 +325,9 @@ export function usageText(): string {
     '  SLC_REVIEWER_EFFORT optional adapter-scoped reviewer reasoning effort',
     '  SLC_REVIEWER_FAST_MODE optional adapter-scoped reviewer fast mode: true | false',
     '  SLC_PIPELINE_PATH  search roots for <pipeline> references (default: cwd)',
+    '  SLC_COVERAGE_MAX_INVOCATIONS  coverageMaxInvocations: 1..64 (default: 8)',
+    '  SLC_COVERAGE_MAX_ATTEMPTS     coverageMaxAttempts: 1..1024 (default: 64)',
+    '                     coverage deadline remains at most 300 seconds',
     '  SLC_STALL_TIMEOUT  seconds of agent inactivity before a stalled call',
     '                     fails the run (default: 2400; 0 disables)',
     '',

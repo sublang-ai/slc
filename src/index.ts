@@ -24,3 +24,8 @@ export * from './progress.js';
 export * from './resolver.js';
 export * from './reviewing-agent.js';
 export * from './runner.js';
+
+export {
+  resolveCoverageBudget,
+  type CoverageBudget,
+} from './verify-coverage.js';

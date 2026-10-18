@@ -817,10 +817,16 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         agent: writingAgent({ prompts }),
       }),
       cwd: work,
+      coverage: { maxInvocations: 12, maxAttempts: 256 },
     });
 
     expect(repeated).toMatchObject({ ok: true, outcome: 'up-to-date' });
     expect(prompts).toEqual([]);
+    for (const suffix of ['gears-fsm.test.ts', 'fsm.coverage.test.ts']) {
+      const test = await readFile(join(artDir, `code.${suffix}`), 'utf8');
+      expect(test).toContain('"maxInvocations":12,"maxAttempts":256');
+      expect(test).toContain('fsmCoverageTestTimeout(fsm, coverage)');
+    }
     expect(await readFile(latest, 'utf8')).toBe(historyBefore);
     expect(await exists(join(artDir, '.slc-verify', 'verify.js'))).toBe(true);
     for (const output of deterministicOutputs) {

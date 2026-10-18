@@ -28,6 +28,10 @@ import { pathToFileURL } from 'node:url';
 import { types as nodeTypes } from 'node:util';
 
 import { hashFile } from './hash.js';
+import {
+  resolveCoverageBudget,
+  type CoverageBudget,
+} from './verify-coverage.js';
 
 /** A GEARS spec item with its acting prompt and optional source-owned results. */
 export interface GearsItem {
@@ -4638,9 +4642,11 @@ export function generateGearsFsmConformanceTest(opts: {
   verifyModule: string;
   /** Reviewed schema baked into roleless artifact checks when available. */
   artifactSchema?: 1 | 3;
+  coverage?: CoverageBudget;
   /** Emission-time schema evidence that must remain empty for a valid artifact. */
   schemaFindings?: readonly string[];
 }): string {
+  const coverage = resolveCoverageBudget(opts.coverage);
   return `// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
@@ -4652,6 +4658,8 @@ import { describe, expect, it } from 'vitest';
 
 import { checkGearsFsmConformanceAsync, fsmCoverageTestTimeout } from ${sourceString(opts.verifyModule)};
 import * as fsm from ${sourceString(opts.fsmModule)};
+
+const coverage = ${JSON.stringify(coverage)};
 
 const SCHEMA_FINDINGS: readonly string[] = ${JSON.stringify(opts.schemaFindings ?? [], null, 2)};
 
@@ -4667,6 +4675,7 @@ describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
     );
     expect(
       await checkGearsFsmConformanceAsync(gears, fsm, {
+        coverage,
         sourceText: readFileSync(fileURLToPath(new URL(${sourceString(opts.fsmSourceFile ?? opts.fsmModule.replace(/\.js$/, '.ts'))}, import.meta.url)), 'utf8'),
         ${
           opts.artifactSchema === undefined
@@ -4675,7 +4684,7 @@ describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
         }
       }),
     ).toEqual([]);
-  }, fsmCoverageTestTimeout(fsm));
+  }, fsmCoverageTestTimeout(fsm, coverage));
 });
 `;
 }
@@ -4696,11 +4705,13 @@ export async function emitGearsFsmConformanceTest(opts: {
   verifyModule?: string;
   /** Reviewed schema baked into roleless artifact checks when available. */
   artifactSchema?: 1 | 3;
+  coverage?: CoverageBudget;
   /** Emission-time schema evidence that must remain empty for a valid artifact. */
   schemaFindings?: readonly string[];
   write?: (path: string, content: string) => Promise<void>;
 }): Promise<string> {
   const content = generateGearsFsmConformanceTest({
+    coverage: opts.coverage,
     basename: opts.basename,
     // NodeNext source imports the TypeScript artifact through its runtime
     // `.js` specifier; Vitest resolves that edge to the sibling source.

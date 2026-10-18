@@ -11,6 +11,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Explicit finite coverage budgets through API, configuration and environment,
+  with unchanged defaults, actual replay, and a five-minute deadline; generated
+  tests and deterministic completion use the selected policy.
+
 ## [0.16.9] - 2026-10-18
 
 ### Fixed
