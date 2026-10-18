@@ -2431,8 +2431,9 @@ function childCoverageDrive(
     targetId,
     candidates,
   );
-  if (interrupt.satisfiable) return { drive: interrupt };
   const alternatives = entryDrivesForRef(machine, refs, ref, candidates);
+  // A valid interrupt need not preserve every public entry's reached context.
+  if (interrupt.satisfiable) return { drive: interrupt, alternatives };
   const entry = alternatives.next();
   if (!entry.done) return { drive: entry.value, alternatives };
   return initialActiveRefs(machine.config, refs).some((active) =>
