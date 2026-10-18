@@ -1686,6 +1686,7 @@ function probeGuardAssignment(
     ...new Set([...minedLiterals(guard), ...extraValues, ...GENERIC_VALUES]),
   ];
   let probes = 0;
+  const discovered = new Map<string, Set<string>>();
 
   const eventFor = (assignment: ProbeAssignment): Record<string, unknown> => {
     let event = { ...fixedEvent };
@@ -1721,12 +1722,21 @@ function probeGuardAssignment(
   };
 
   // Records the unassigned fields the guard reads under the given assignment.
-  const readsUnder = (assignment: ProbeAssignment): string[] => {
+  const readsUnder = (
+    assignment: ProbeAssignment,
+    discoverShape = false,
+  ): string[] => {
     coverageCheckpoint();
     const reads = new Set<string>();
     const enumerated = new Set<string>();
     let shapeTag: string | undefined;
     let shapeWidth = 0;
+    const noteShapeField = (tag: string, field: string): void => {
+      if (!discoverShape || tag !== shapeTag) return;
+      const fields = discovered.get(tag) ?? new Set<string>();
+      fields.add(field);
+      discovered.set(tag, fields);
+    };
     const recording = (
       base: object,
       assigned: Record<string, unknown>,
@@ -1764,6 +1774,19 @@ function probeGuardAssignment(
             descriptor === undefined
           ) {
             reads.add(`${tag}${prop}`);
+            enumerated.add(tag);
+            noteShapeField(tag, prop);
+            // Discovery can follow a chain of Object.hasOwn checks without
+            // choosing semantic values. Only concrete evaluation may accept
+            // the resulting named shape; this descriptor never reaches replay.
+            if (discoverShape && tag === shapeTag) {
+              return {
+                value: null,
+                enumerable: true,
+                configurable: true,
+                writable: true,
+              };
+            }
           }
           return descriptor;
         },
@@ -1772,7 +1795,9 @@ function probeGuardAssignment(
           if (prop in target) {
             const payload = payloads.find((item) => item.tag === tag);
             if (
-              (varyExisting || payload?.varyExisting === true) &&
+              (varyExisting ||
+                payload?.varyExisting === true ||
+                payload?.shapeFields?.includes(prop)) &&
               !(prop in assigned)
             ) {
               reads.add(`${tag}${prop}`);
@@ -1780,6 +1805,7 @@ function probeGuardAssignment(
             return target[prop];
           }
           reads.add(`${tag}${prop}`);
+          noteShapeField(tag, prop);
           return undefined;
         },
         has(target, prop) {
@@ -1828,7 +1854,10 @@ function probeGuardAssignment(
     // Exact cardinality may short-circuit before any named property is read.
     // Explore only an observed payload enumeration, within the same four-field
     // assignment bound. Context and fixed event fields remain unchanged.
-    if (options.discoverPayloadShape === true && reads.size === 0) {
+    if (
+      options.discoverPayloadShape === true &&
+      (discoverShape || reads.size === 0)
+    ) {
       for (const payload of payloads) {
         if (!enumerated.has(payload.tag)) continue;
         shapeTag = payload.tag;
@@ -1840,6 +1869,39 @@ function probeGuardAssignment(
     }
     return [...reads];
   };
+
+  const initial: ProbeAssignment = {
+    context: baseContext,
+    contextOverrides: {},
+    payloads: {},
+  };
+  if (options.discoverPayloadShape === true) {
+    // Exact own-field tests may hide every semantic read. Learn their names
+    // once, then let ordinary value reads guide the same bounded search over
+    // a fresh JSON-safe shape rather than exhausting unrelated combinations.
+    readsUnder(initial, true);
+    payloads = payloads.map((payload) => {
+      const fields = discovered.get(payload.tag);
+      if (fields === undefined || fields.size > 4) return payload;
+      const shapeFields = [...fields].filter(
+        (field) => !Object.hasOwn(payload.base, field),
+      );
+      const base = overlay(payload.base, {});
+      for (const field of shapeFields) {
+        Object.defineProperty(base, field, {
+          value: null,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      }
+      return {
+        ...payload,
+        base,
+        shapeFields,
+      };
+    });
+  }
 
   const search = (
     assignment: ProbeAssignment,
@@ -1863,6 +1925,12 @@ function probeGuardAssignment(
           ? assignment.contextOverrides
           : (assignment.payloads[tag] ?? {});
       const payload = payloads.find((item) => item.tag === tag);
+      if (
+        payload?.shapeFields !== undefined &&
+        new Set([...payload.shapeFields, ...Object.keys(assigned), field])
+          .size > 4
+      )
+        continue;
       const base = tag === 'c:' ? baseContext : payload?.base;
       const hasBaseline =
         base !== undefined && Object.prototype.hasOwnProperty.call(base, field);
@@ -1901,14 +1969,16 @@ function probeGuardAssignment(
     return undefined;
   };
 
-  return search(
-    {
-      context: baseContext,
-      contextOverrides: {},
-      payloads: {},
-    },
-    0,
-  );
+  const found = search(initial, 0);
+  if (found === undefined) return undefined;
+  for (const payload of payloads) {
+    if (payload.shapeFields === undefined) continue;
+    found.payloads[payload.tag] = {
+      ...Object.fromEntries(payload.shapeFields.map((field) => [field, null])),
+      ...found.payloads[payload.tag],
+    };
+  }
+  return found;
 }
 
 function probeGuardSatisfiable(
@@ -1935,6 +2005,8 @@ interface ProbePayload {
   base: object;
   /** Error properties are variable inputs even when the seed already has one. */
   varyExisting?: boolean;
+  /** Missing raw-child fields learned before semantic value-read guidance. */
+  shapeFields?: readonly string[];
 }
 
 interface ProbeAssignment {
