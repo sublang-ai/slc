@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Prompt substitution derivation keeps absent values distinct from populated
+  relays on other lines with the same quoted shape.
+
 - Coverage falls back to bounded public paths when a selected legacy child
   predecessor cannot be driven directly, retaining real questions, guards and
   target replay.

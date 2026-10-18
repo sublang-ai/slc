@@ -2586,18 +2586,22 @@ export function deriveSubstitutions(
         out[state.stateId] = [];
         continue;
       }
-      // A placeholder counts as substituted only when the exact body survives
-      // on its source line and that token's position carries one of the context
-      // sentinels. Derive line-by-line so an unrelated mutated line does not
-      // hide valid evidence, while merely deleting a token still cannot
-      // masquerade as substitution.
-      const evidenced = new Set<string>();
       const promptReads = promptSentinelFields(
         state,
         reads,
         probed.fields,
         roles,
       );
+      // The whole body fixes each token's position. A separate quoted line
+      // with the same literal shape cannot supply evidence for an absent value.
+      const body = matchPromptBody(state.prompt, composed, promptReads);
+      if (body !== null) {
+        out[state.stateId] = body.substitutions;
+        continue;
+      }
+      // Preserve partial evidence for a malformed body so an unrelated changed
+      // line does not hide valid substitutions. Body validation still fails it.
+      const evidenced = new Set<string>();
       for (const line of state.prompt.split('\n')) {
         for (const token of matchPromptBody(line, composed, promptReads)
           ?.substitutions ?? []) {
