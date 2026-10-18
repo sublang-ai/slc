@@ -2771,6 +2771,145 @@ const enumeratedChildOutputMachine = (
   } as any);
 };
 
+/** Descriptor values stay concrete while reached child output varies. */
+const descriptorChildValueMachine = (
+  opts: {
+    blockEntry?: boolean;
+    shadowed?: boolean;
+    accessorOnly?: boolean;
+    inheritedOnly?: boolean;
+    mixedReads?: boolean;
+  } = {},
+  observed: unknown[] = [],
+) => {
+  const config = enumeratedChildOutputMachine(3, {
+    fixedContextReads: true,
+    blockEntry: opts.blockEntry,
+  }).config as any;
+  const read = (value: object, key: string) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  };
+  const accepted = ({ context, event }: any) => {
+    const value = event.output;
+    return (
+      context.entryReady === true &&
+      value !== null &&
+      typeof value === 'object' &&
+      Object.getPrototypeOf(value) === Object.prototype &&
+      Object.keys(value).length === 3 &&
+      (!opts.accessorOnly ||
+        typeof Object.getOwnPropertyDescriptor(value, 'approved')?.get ===
+          'function') &&
+      (!opts.inheritedOnly || !Object.hasOwn(value, 'approved')) &&
+      typeof (opts.mixedReads ? value.revision : read(value, 'revision')) ===
+        'string' &&
+      (opts.mixedReads ? value.revision : read(value, 'revision')).trim() !==
+        '' &&
+      read(value, 'approved') === false &&
+      typeof read(value, 'summary') === 'string' &&
+      read(value, 'summary').trim() !== ''
+    );
+  };
+  config.states.child.invoke.onDone = [
+    ...(opts.shadowed ? [{ guard: accepted, target: 'done' }] : []),
+    {
+      guard: accepted,
+      target: 'done',
+      actions: ({ event }: any) => observed.push(event.output),
+    },
+    { target: 'failed' },
+  ];
+  return setup({
+    actors: { playbook: fromPromise(async () => ({})) },
+  }).createMachine(config);
+};
+
+/** No output is a resolved child value, not the pending-script sentinel. */
+const absentChildOutputMachine = (
+  opts: {
+    shadowed?: boolean;
+    blockEntry?: boolean;
+    expected?: 'null' | 'error';
+  } = {},
+  observed: unknown[] = [],
+) => {
+  const accepted = ({ context, event }: any) =>
+    context.entryReady === true &&
+    (opts.expected === 'null'
+      ? event.output === null
+      : opts.expected === 'error'
+        ? event.output instanceof Error
+        : event.output === undefined);
+  return setup({
+    actors: { playbook: fromPromise(async () => ({})) },
+  }).createMachine({
+    id: 'absentChildOutput',
+    initial: 'ready',
+    context: { entryReady: false, absentReached: false },
+    on: {
+      BOSS_INTERRUPT: {
+        target: '#ready',
+        guard: ({ event }: any) => event.targetId === 'ready',
+      },
+    },
+    states: {
+      ready: {
+        id: 'ready',
+        on: {
+          START: {
+            target: 'child',
+            actions: assign({ entryReady: !opts.blockEntry }),
+          },
+        },
+      },
+      child: {
+        id: 'child',
+        invoke: {
+          src: 'playbook',
+          input: () => ({
+            stateId: 'child',
+            playbookId: 'review',
+            text: 'Review.',
+          }),
+          onDone: [
+            ...(opts.shadowed ? [{ guard: accepted, target: 'done' }] : []),
+            {
+              guard: accepted,
+              target: 'following',
+              actions: [
+                assign({ absentReached: true }),
+                ({ event }: any) => observed.push(event.output),
+              ],
+            },
+            { target: 'failed' },
+          ],
+          onError: { target: 'failed' },
+        },
+      },
+      following: {
+        id: 'following',
+        invoke: {
+          src: 'playbook',
+          input: () => ({
+            stateId: 'following',
+            playbookId: 'review',
+            text: 'Review again.',
+          }),
+          onDone: {
+            guard: ({ context }: any) => context.absentReached === true,
+            target: 'done',
+          },
+          onError: { target: 'failed' },
+        },
+      },
+      awaitBossReply: { id: 'awaitBossReply', tags: 'playbook.parked' },
+      failed: { id: 'failed', tags: 'playbook.parked' },
+      done: { id: 'done', type: 'final' },
+    },
+  } as any);
+};
+
 /** A selected child guard must pass before excluding its earlier sibling. */
 const orderedChildValueMachine = (
   opts: { blockEntry?: boolean; shadowed?: boolean } = {},
@@ -4682,6 +4821,91 @@ describe('checkFsmCoverage (verification-6)', () => {
     },
   );
   /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  it.each([false, true])(
+    'guides present own-data descriptor child values through real replay (mixed=%s)',
+    async (mixedReads) => {
+      const observed: unknown[] = [];
+      expect(
+        await checkFsmCoverage({
+          machine: descriptorChildValueMachine({ mixedReads }, observed),
+        }),
+      ).toEqual([]);
+      expect(observed).not.toEqual([]);
+      for (const value of observed) {
+        expect(Object.keys(value as object).sort()).toEqual([
+          'approved',
+          'revision',
+          'summary',
+        ]);
+        expect(Object.getOwnPropertyDescriptor(value, 'approved')).toEqual({
+          value: false,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+      }
+    },
+  );
+
+  it.each([
+    { blockEntry: true },
+    { shadowed: true },
+    { accessorOnly: true },
+    { inheritedOnly: true },
+  ])('retains descriptor-value child refusal for %j', async (opts) => {
+    const findings = await checkFsmCoverage({
+      machine: descriptorChildValueMachine(opts),
+    });
+    expect(
+      findings.some((value) =>
+        value.includes(
+          `child: nested playbook onDone arm ${opts.shadowed ? 1 : 0}`,
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it('replays absent successful child output into a following child', async () => {
+    const result = validatePlaybookCallResult(
+      {
+        status: 'ok',
+        playbookId: 'review',
+        childSessionId: 'synthetic-review',
+      },
+      'review',
+    );
+    expect(result.status).toBe('ok');
+    expect('output' in result).toBe(false);
+    const observed: unknown[] = [];
+    expect(
+      await checkFsmCoverage({
+        machine: absentChildOutputMachine({}, observed),
+      }),
+    ).toEqual([]);
+    expect(observed.length).toBeGreaterThan(0);
+    expect(observed.every((value) => value === undefined)).toBe(true);
+  });
+
+  it.each([
+    { shadowed: true },
+    { blockEntry: true },
+    { expected: 'null' as const },
+    { expected: 'error' as const },
+  ])('keeps absent child output distinct and ordered for %j', async (opts) => {
+    const observed: unknown[] = [];
+    const findings = await checkFsmCoverage({
+      machine: absentChildOutputMachine(opts, observed),
+    });
+    expect(
+      findings.some((value) =>
+        value.includes(
+          `child: nested playbook onDone arm ${opts.shadowed ? 1 : 0}`,
+        ),
+      ),
+    ).toBe(true);
+    expect(observed).toEqual([]);
+  });
 
   it.each([3, 4] as const)(
     'covers exact %i-field child output regardless of cardinality predicate order',
