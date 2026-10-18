@@ -13,6 +13,12 @@ and this project adheres to
 
 ### Fixed
 
+- Child-output coverage tests a valid unmodified seed before discovering extra
+  fields, preserving an absent optional field without weakening ordered guards
+  or actual replay.
+- Acting-arm coverage replays a validated canonical question and Boss reply
+  before refusing guards that need that history. Resumed context stays fixed,
+  and the original ordered arm must actually reach its declared target.
 - Child-output coverage reuses bounded primitive values read from fixed reached
   context, preserving exact predecessor result identities that are absent from
   artifact literals. Context stays unchanged and unproved paths remain refused.

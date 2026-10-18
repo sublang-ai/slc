@@ -215,6 +215,106 @@ const goodMachine = (
   } as any);
 };
 
+/** Approval/refusal require the actual canonical question/reply history. */
+const questionResumedMachine = (
+  opts: {
+    wrongQuestion?: boolean;
+    contradictory?: boolean;
+    shadowed?: boolean;
+    blankResumes?: boolean;
+    escapesTarget?: boolean;
+    observed?: Array<{
+      guard: string;
+      questionId: string;
+      sourceItem: string;
+      reply: string;
+    }>;
+  } = {},
+) => {
+  const replied = (context: any) =>
+    context.pendingBossQuestion?.questionId === 'work' &&
+    context.pendingBossQuestion.resumeStateId === 'work' &&
+    typeof context.bossReply === 'string' &&
+    context.bossReply.trim() !== '';
+  const accepted =
+    (key: string) =>
+    ({ context, event }: any) =>
+      replied(context) &&
+      event.output.guard === key &&
+      (!opts.contradictory || event.output.guard !== key);
+  const ordinary = goodMachine();
+  const states = ordinary.config.states as any;
+  const approval = ['approved', 'refused'].map((key) => ({
+    guard: accepted(key),
+    target: opts.escapesTarget ? '#after' : '#done',
+    actions: ({ context, event }: any) =>
+      opts.observed?.push({
+        guard: event.output.guard,
+        questionId: context.pendingBossQuestion.questionId,
+        sourceItem: context.pendingBossQuestion.sourceItem,
+        reply: context.bossReply,
+      }),
+  }));
+  return setup({
+    actors: {
+      player: fromPromise(async () => {
+        throw new Error('provide actor');
+      }),
+    },
+  }).createMachine({
+    ...ordinary.config,
+    states: {
+      ...states,
+      after: { id: 'after', always: '#failed' },
+      work: {
+        ...states.work,
+        invoke: {
+          ...states.work.invoke,
+          src: 'player',
+          input: () => ({
+            stateId: 'work',
+            role: 'writer',
+            sourceItem: 'X-1',
+            prompt: 'Ask before choosing.',
+            result: {
+              approved: 'The choice is approved.',
+              refused: 'The choice is refused.',
+              needsBossReply: NEEDS_BOSS_REPLY_TEXT,
+            },
+          }),
+          onDone: [
+            ...(opts.shadowed
+              ? [{ guard: accepted('approved'), target: '#failed' }]
+              : []),
+            ...approval,
+            needsBossReplyArm(
+              'work',
+              'writer',
+              opts.wrongQuestion ? 'X-other' : 'X-1',
+            ),
+            { target: '#failed' },
+          ],
+        },
+      },
+      awaitBossReply: {
+        ...states.awaitBossReply,
+        on: {
+          BOSS_REPLY: [
+            {
+              ...states.awaitBossReply.on.BOSS_REPLY[0],
+              guard: ({ context, event }: any) =>
+                context.pendingBossQuestion?.resumeStateId === 'work' &&
+                typeof event.answer === 'string' &&
+                (opts.blankResumes || event.answer.trim() !== ''),
+            },
+            states.awaitBossReply.on.BOSS_REPLY[1],
+          ],
+        },
+      },
+    },
+  } as any);
+};
+
 /** A script preflight followed by ordinary acting work, as in the cold demo. */
 const scriptWorkflow = (
   options: {
@@ -1454,6 +1554,7 @@ const enumeratedChildOutputMachine = (
     jsonDescriptors?: boolean;
     literalRevision?: boolean;
     needsFifth?: boolean;
+    nativeSeed?: boolean;
   } = {},
 ) => {
   const namedFields = (value: any) =>
@@ -1489,11 +1590,45 @@ const enumeratedChildOutputMachine = (
             ['string', 'boolean'].includes(typeof descriptor.value))
         );
       }));
+  const nativeEnvelope = (value: any) => {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      !Reflect.ownKeys(value).every(
+        (key) =>
+          typeof key === 'string' &&
+          Object.getOwnPropertyDescriptor(value, key)?.enumerable,
+      )
+    )
+      return false;
+    const keys = [
+      'outcome',
+      'state',
+      'output',
+      'response',
+      ...(Object.hasOwn(value, 'error') ? ['error'] : []),
+    ];
+    return (
+      Object.keys(value).length === keys.length - (opts.wrongCount ? 1 : 0) &&
+      keys.every((key) => Object.hasOwn(value, key)) &&
+      value.outcome === 'terminal' &&
+      value.state !== null &&
+      typeof value.state === 'object' &&
+      typeof value.response === 'string' &&
+      (!Object.hasOwn(value, 'error') ||
+        (value.error !== null &&
+          typeof value.error === 'object' &&
+          typeof value.error.name === 'string' &&
+          typeof value.error.message === 'string'))
+    );
+  };
   const approved = ({ event }: any) =>
-    jsonRecord(event.output) &&
-    (opts.countLast
-      ? namedFields(event.output) && count(event.output)
-      : count(event.output) && namedFields(event.output));
+    opts.nativeSeed
+      ? nativeEnvelope(event.output)
+      : jsonRecord(event.output) &&
+        (opts.countLast
+          ? namedFields(event.output) && count(event.output)
+          : count(event.output) && namedFields(event.output));
   return setup({
     actors: {
       playbook: fromPromise(async () => {
@@ -3112,6 +3247,24 @@ describe('checkFsmCoverage (verification-6)', () => {
     }
   });
 
+  it('preserves an already valid native child seed with an absent optional field', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: enumeratedChildOutputMachine(4, { nativeSeed: true }),
+      }),
+    ).toEqual([]);
+    for (const controls of [{ wrongCount: true }, { shadowed: true }]) {
+      expect(
+        await checkFsmCoverage({
+          machine: enumeratedChildOutputMachine(4, {
+            nativeSeed: true,
+            ...controls,
+          }),
+        }),
+      ).not.toEqual([]);
+    }
+  });
+
   it.each(['string', 'boolean', 'number'] as const)(
     'reuses a predecessor-produced %s through fixed reached context',
     async (value) => {
@@ -3132,6 +3285,56 @@ describe('checkFsmCoverage (verification-6)', () => {
     expect(
       await checkFsmCoverage({ machine: reachedPrimitiveChildMachine(opts) }),
     ).not.toEqual([]);
+  });
+
+  it('covers canonical question-resumed approved and refused arms by actual XState actions', async () => {
+    const observed: Array<{
+      guard: string;
+      questionId: string;
+      sourceItem: string;
+      reply: string;
+    }> = [];
+    expect(
+      await checkFsmCoverage(
+        { machine: questionResumedMachine({ observed }) },
+        { artifactSchema: 3 },
+      ),
+    ).toEqual([]);
+    for (const key of ['approved', 'refused'])
+      expect(
+        observed.some(
+          (value) =>
+            value.guard === key &&
+            value.questionId === 'work' &&
+            value.sourceItem === 'X-1' &&
+            value.reply.trim() !== '',
+        ),
+      ).toBe(true);
+  });
+
+  it.each([
+    { wrongQuestion: true },
+    { contradictory: true },
+    { shadowed: true },
+    { blankResumes: true },
+  ])('retains question-resumed arm refusal for %j', async (opts) => {
+    expect(
+      await checkFsmCoverage(
+        { machine: questionResumedMachine(opts) },
+        { artifactSchema: 3 },
+      ),
+    ).not.toEqual([]);
+  });
+
+  it('requires the declared resumed target after the original guard accepts', async () => {
+    expect(
+      await checkFsmCoverage(
+        { machine: questionResumedMachine({ escapesTarget: true }) },
+        { artifactSchema: 3 },
+      ),
+    ).toContain(
+      'state work: onDone arm 0 did not reach after after canonical Boss reply',
+    );
   });
 
   it('retains dead child approval and blank-reply failures without context patches', async () => {
