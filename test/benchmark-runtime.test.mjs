@@ -104,7 +104,7 @@ const factory = createXStatePlaybookRuntime(machine, {
 });
 export default {
   id: 'minimal', requiredRoleIds: ['agent'], concurrentRoleSets: [],
-  createRuntime(options: { captainOptions?: Readonly<Record<string, string>> }, hostCapabilities: NonNullable<Parameters<typeof factory>[0]>['hostCapabilities']) { return factory({ configuredOptions: options.captainOptions ?? {}, hostCapabilities }); },
+  createRuntime(configuredOptions: Readonly<Record<string, string>>, hostCapabilities: NonNullable<Parameters<typeof factory>[0]>['hostCapabilities']) { return factory({ configuredOptions, hostCapabilities }); },
 };
 `,
   );

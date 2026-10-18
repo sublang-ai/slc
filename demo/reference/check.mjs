@@ -182,7 +182,7 @@ try {
   // declares exactly those ids, so the capabilities take them as emitted
   // (self-hosting-15).
   const runtime = registryEntry.createRuntime(
-    { captainOptions: { cwd: workdir } },
+    { cwd: workdir },
     await createWorktreeHostCapabilities({
       cwd: workdir,
       playbookId: registryEntry.id,
@@ -278,7 +278,7 @@ try {
   let commits = 0;
   let reviews = 0;
   const limited = registryEntry.createRuntime(
-    { captainOptions: { cwd: limitedWorkdir } },
+    { cwd: limitedWorkdir },
     await createWorktreeHostCapabilities({
       cwd: limitedWorkdir,
       playbookId: registryEntry.id,

@@ -13,6 +13,8 @@ and this project adheres to
 
 ### Fixed
 
+- Generated schema-3 entries accept the configured option slice from the
+  current Captain interface; historical Players entries retain their envelope.
 - Retained-bundle completion preserves prompt-probe advisories without treating them as verification failures; actual composition and validation failures still block output.
 - Child-error coverage distinguishes a bare aborted result from an error or
   failure terminal, preserving target identity, original ordered guards and
