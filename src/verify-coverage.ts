@@ -1914,6 +1914,8 @@ function probeGuardAssignment(
     payloads: {},
   };
   if (options.discoverPayloadShape === true) {
+    // Enrichment must not add an optional field to an already valid seed.
+    if (passes(initial)) return initial;
     // Exact own-field tests may hide every semantic read. Learn their names
     // once, then let ordinary value reads guide the same bounded search over
     // a fresh JSON-safe shape rather than exhausting unrelated combinations.

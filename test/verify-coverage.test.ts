@@ -1554,6 +1554,7 @@ const enumeratedChildOutputMachine = (
     jsonDescriptors?: boolean;
     literalRevision?: boolean;
     needsFifth?: boolean;
+    nativeSeed?: boolean;
   } = {},
 ) => {
   const namedFields = (value: any) =>
@@ -1589,11 +1590,45 @@ const enumeratedChildOutputMachine = (
             ['string', 'boolean'].includes(typeof descriptor.value))
         );
       }));
+  const nativeEnvelope = (value: any) => {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      !Reflect.ownKeys(value).every(
+        (key) =>
+          typeof key === 'string' &&
+          Object.getOwnPropertyDescriptor(value, key)?.enumerable,
+      )
+    )
+      return false;
+    const keys = [
+      'outcome',
+      'state',
+      'output',
+      'response',
+      ...(Object.hasOwn(value, 'error') ? ['error'] : []),
+    ];
+    return (
+      Object.keys(value).length === keys.length - (opts.wrongCount ? 1 : 0) &&
+      keys.every((key) => Object.hasOwn(value, key)) &&
+      value.outcome === 'terminal' &&
+      value.state !== null &&
+      typeof value.state === 'object' &&
+      typeof value.response === 'string' &&
+      (!Object.hasOwn(value, 'error') ||
+        (value.error !== null &&
+          typeof value.error === 'object' &&
+          typeof value.error.name === 'string' &&
+          typeof value.error.message === 'string'))
+    );
+  };
   const approved = ({ event }: any) =>
-    jsonRecord(event.output) &&
-    (opts.countLast
-      ? namedFields(event.output) && count(event.output)
-      : count(event.output) && namedFields(event.output));
+    opts.nativeSeed
+      ? nativeEnvelope(event.output)
+      : jsonRecord(event.output) &&
+        (opts.countLast
+          ? namedFields(event.output) && count(event.output)
+          : count(event.output) && namedFields(event.output));
   return setup({
     actors: {
       playbook: fromPromise(async () => {
@@ -3208,6 +3243,24 @@ describe('checkFsmCoverage (verification-6)', () => {
           },
           { sourceText },
         ),
+      ).not.toEqual([]);
+    }
+  });
+
+  it('preserves an already valid native child seed with an absent optional field', async () => {
+    expect(
+      await checkFsmCoverage({
+        machine: enumeratedChildOutputMachine(4, { nativeSeed: true }),
+      }),
+    ).toEqual([]);
+    for (const controls of [{ wrongCount: true }, { shadowed: true }]) {
+      expect(
+        await checkFsmCoverage({
+          machine: enumeratedChildOutputMachine(4, {
+            nativeSeed: true,
+            ...controls,
+          }),
+        }),
       ).not.toEqual([]);
     }
   });
