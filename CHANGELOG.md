@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-18
+
 ### Added
 
 - Explicit finite coverage budgets through API, configuration and environment,
@@ -960,7 +962,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.16.9...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/sublang-ai/slc/compare/v0.16.9...v0.17.0
 [0.16.9]: https://github.com/sublang-ai/slc/compare/v0.16.8...v0.16.9
 [0.16.8]: https://github.com/sublang-ai/slc/compare/v0.16.7...v0.16.8
 [0.16.7]: https://github.com/sublang-ai/slc/compare/v0.16.6...v0.16.7
