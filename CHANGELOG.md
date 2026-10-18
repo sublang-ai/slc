@@ -11,6 +11,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Coverage observes missing own-descriptor payload reads as bounded hints,
+  retaining actual descriptors, original guards and concrete path replay.
+
 ## [0.16.4] - 2026-10-18
 
 ### Fixed
