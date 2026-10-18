@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Reached child conformance proves bounded canonical structured JSON relays
+  without replacing container types or accepting unobserved payload mappings.
+
 - Literal child conformance preserves reached control values while proving
   optional relays across the existing bounded replay, retaining required
   mappings, actual nonempty payloads and exact authored separators.

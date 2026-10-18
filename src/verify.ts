@@ -25,6 +25,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { types as nodeTypes } from 'node:util';
 
 import { hashFile } from './hash.js';
 
@@ -3424,11 +3425,16 @@ function literalScalarContext(
   reads?: Set<string>,
   virtualPresence = true,
   capture?: (record: Record<string, unknown>) => void,
+  structures?: Set<string>,
+  aliases?: ReadonlyMap<object, object>,
+  captureStructure?: (field: string) => void,
 ): { context: Record<string, unknown>; failure: () => string | undefined } {
   let failure: string | undefined;
+  const wrapped = new Map<object, Record<string, unknown>>();
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' &&
     value !== null &&
+    !nodeTypes.isProxy(value) &&
     (Object.getPrototypeOf(value) === Object.prototype ||
       Object.getPrototypeOf(value) === null);
   const wrap = (
@@ -3436,6 +3442,10 @@ function literalScalarContext(
     path: string[],
     ancestors: Set<object>,
   ): Record<string, unknown> => {
+    if (nodeTypes.isProxy(record)) {
+      failure ??= 'proxy record';
+      return {};
+    }
     if (path.length > 32 || ancestors.has(record)) {
       failure ??=
         path.length > 32
@@ -3443,6 +3453,8 @@ function literalScalarContext(
           : 'cyclic record reads';
       return record;
     }
+    const prior = wrapped.get(record);
+    if (prior !== undefined) return prior;
     capture?.(record);
     const seen = new Set([...ancestors, record]);
     const copy = Object.create(Object.getPrototypeOf(record)) as Record<
@@ -3455,7 +3467,7 @@ function literalScalarContext(
       // source descriptor preventing a nested observational proxy.
       Object.defineProperty(copy, key, { ...descriptor, configurable: true });
     }
-    return new Proxy(copy, {
+    const proxy = new Proxy(copy, {
       get(target, property) {
         const value = Reflect.get(target, property);
         if (typeof property !== 'string') return value;
@@ -3464,11 +3476,27 @@ function literalScalarContext(
         const field = JSON.stringify(nested);
         if (value === undefined || typeof value === 'string') reads?.add(field);
         if (Object.hasOwn(values, field)) return values[field];
+        if (value !== null && typeof value === 'object') {
+          if (nodeTypes.isProxy(value)) {
+            failure ??= 'proxy record';
+            return value;
+          }
+          if (Array.isArray(value) || isRecord(value)) {
+            if (structures !== undefined && !structures.has(field)) {
+              structures.add(field);
+              captureStructure?.(field);
+            }
+          }
+          const alias = aliases?.get(value);
+          if (alias !== undefined) return alias;
+        }
         return isRecord(value) ? wrap(value, nested, seen) : value;
       },
       has: (target, property) =>
         virtualPresence || Reflect.has(target, property),
     });
+    wrapped.set(record, proxy);
+    return proxy;
   };
   return { context: wrap(base, [], new Set()), failure: () => failure };
 }
@@ -3726,6 +3754,8 @@ function literalPathValue(
 ): unknown {
   let value: unknown = context;
   for (const key of JSON.parse(field) as string[]) {
+    if (value !== null && typeof value === 'object' && nodeTypes.isProxy(value))
+      return null;
     if (typeof value !== 'object' || value === null || Array.isArray(value))
       return undefined;
     const captured = records?.get(value);
@@ -3771,17 +3801,229 @@ function literalRecordsUnchanged(
   });
 }
 
+interface LiteralJsonLeaf {
+  owner: object;
+  key: string;
+}
+interface LiteralJsonValue {
+  value: object;
+  text: string;
+  leaves: LiteralJsonLeaf[];
+}
+type LiteralJsonFacts = ReadonlyMap<
+  object,
+  { prototype: object | null; extensible: boolean }
+>;
+interface LiteralJsonGraph {
+  facts: LiteralJsonFacts;
+  values: Map<string, LiteralJsonValue>;
+  aliases: Map<object, object>;
+}
+
+/** Inspect only observed structured reads. No input accessor or JSON hook is run. */
+function literalJsonGraph(
+  context: Record<string, unknown>,
+  fields: ReadonlySet<string>,
+  records: Map<object, PropertyDescriptorMap>,
+  mutation?: LiteralJsonLeaf & { value: string },
+): LiteralJsonGraph | undefined {
+  let nodes = 0;
+  const aliases = new Map<object, object>();
+  const memo = new Map<
+    object,
+    { value: object; encoded: object; leaves: LiteralJsonLeaf[] }
+  >();
+  const captured = new Map<object, PropertyDescriptorMap>();
+  const facts = new Map<
+    object,
+    { prototype: object | null; extensible: boolean }
+  >();
+  const encodedLengths = new Map<object, number>();
+  const primitiveText = (value: unknown): string => {
+    if (typeof value === 'string' && Buffer.byteLength(value, 'utf8') > 65536)
+      throw Error('structured encoding bound');
+    return JSON.stringify(value);
+  };
+  const boundedText = (value: unknown): string => {
+    // Values here are detached JSON data only. Preflight repeated alias output
+    // before stringify, so a small shared graph cannot expand beyond the cap.
+    let bytes: number;
+    if (value !== null && typeof value === 'object') {
+      const keys = Object.keys(value);
+      const array = Array.isArray(value);
+      bytes = 2 + Math.max(0, keys.length - 1);
+      for (const key of keys) {
+        const child: unknown = Object.getOwnPropertyDescriptor(
+          value,
+          key,
+        )!.value;
+        const size =
+          child !== null && typeof child === 'object'
+            ? encodedLengths.get(child)
+            : Buffer.byteLength(primitiveText(child), 'utf8');
+        if (size === undefined) throw Error('unproved structured encoding');
+        bytes +=
+          size +
+          (array ? 0 : Buffer.byteLength(primitiveText(key), 'utf8') + 1);
+        if (bytes > 65536) throw Error('structured encoding bound');
+      }
+      encodedLengths.set(value, bytes);
+    } else bytes = Buffer.byteLength(primitiveText(value), 'utf8');
+    if (bytes > 65536) throw Error('structured encoding bound');
+    return JSON.stringify(value);
+  };
+  const visit = (
+    value: unknown,
+    ancestors: Set<object>,
+    depth: number,
+  ): {
+    value: unknown;
+    encoded: unknown;
+    leaves: LiteralJsonLeaf[];
+  } => {
+    if (depth > 32) throw Error('structured depth bound');
+    if (++nodes > 128) throw Error('structured node bound');
+    if (value !== null && typeof value === 'object') {
+      if (nodeTypes.isProxy(value)) throw Error('structured proxy');
+      if (ancestors.has(value)) throw Error('structured cycle');
+      const prior = memo.get(value);
+      if (prior !== undefined) return prior;
+    }
+    if (
+      value === null ||
+      typeof value === 'boolean' ||
+      typeof value === 'string' ||
+      (typeof value === 'number' && Number.isFinite(value))
+    ) {
+      boundedText(value);
+      return { value, encoded: value, leaves: [] };
+    }
+    if (typeof value !== 'object') throw Error('non-JSON structured value');
+    const array = Array.isArray(value);
+    const prototype = Object.getPrototypeOf(value);
+    if (
+      array
+        ? prototype !== Array.prototype
+        : prototype !== Object.prototype && prototype !== null
+    )
+      throw Error('structured prototype');
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    facts.set(value, { prototype, extensible: Object.isExtensible(value) });
+    const keys = Reflect.ownKeys(descriptors);
+    if (keys.some((key) => typeof key !== 'string'))
+      throw Error('structured symbol key');
+    if (keys.length > 129) throw Error('structured node bound');
+    let dataKeys = keys as string[];
+    if (array) {
+      const length = descriptors.length;
+      if (
+        !length ||
+        !('value' in length) ||
+        !Number.isInteger(length.value) ||
+        length.value < 0 ||
+        length.value > 128
+      )
+        throw Error('structured array length');
+      dataKeys = Array.from({ length: length.value }, (_, index) =>
+        String(index),
+      );
+      if (
+        keys.length !== dataKeys.length + 1 ||
+        dataKeys.some((key) => !Object.hasOwn(descriptors, key))
+      )
+        throw Error('structured array shape');
+    }
+    if (
+      dataKeys.some(
+        (key) => !('value' in descriptors[key]) || !descriptors[key].enumerable,
+      )
+    )
+      throw Error('structured descriptor');
+    const clone: object = array ? [] : Object.create(prototype);
+    // The encoding copy has no inherited hooks, including Array.prototype.toJSON.
+    const encoded: object = array
+      ? Object.setPrototypeOf([], null)
+      : Object.create(null);
+    const result = { value: clone, encoded, leaves: [] as LiteralJsonLeaf[] };
+    memo.set(value, result);
+    aliases.set(value, clone);
+    captured.set(value, descriptors);
+    const seen = new Set([...ancestors, value]);
+    const encodedValues = new Map<string, unknown>();
+    for (const key of dataKeys) {
+      const descriptor = descriptors[key];
+      const item =
+        mutation?.owner === value && mutation.key === key
+          ? mutation.value
+          : descriptor.value;
+      const child = visit(item, seen, depth + 1);
+      Object.defineProperty(clone, key, { ...descriptor, value: child.value });
+      encodedValues.set(key, child.encoded);
+      if (typeof descriptor.value === 'string')
+        result.leaves.push({ owner: value, key });
+      result.leaves.push(...child.leaves);
+    }
+    // Preserve control enumeration; sorting belongs only to the JSON copy.
+    for (const key of [...dataKeys].sort())
+      Object.defineProperty(encoded, key, {
+        value: encodedValues.get(key),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    if (array) Object.defineProperty(clone, 'length', descriptors.length);
+    if (!Object.isExtensible(value)) Object.preventExtensions(clone);
+    boundedText(encoded);
+    return result;
+  };
+  try {
+    const values = new Map<string, LiteralJsonValue>();
+    for (const field of fields) {
+      const original = literalPathValue(context, field, records);
+      if (original === null || typeof original !== 'object') continue;
+      const copied = visit(original, new Set(), 0);
+      const leaves = copied.leaves.filter(
+        (leaf, index, all) =>
+          all.findIndex(
+            (other) => other.owner === leaf.owner && other.key === leaf.key,
+          ) === index,
+      );
+      values.set(field, {
+        value: copied.value as object,
+        text: boundedText(copied.encoded),
+        leaves,
+      });
+    }
+    for (const [record, descriptors] of captured)
+      if (!records.has(record)) records.set(record, descriptors);
+    return { values, aliases, facts };
+  } catch {
+    return undefined;
+  }
+}
+
+function literalJsonUnchanged(facts: LiteralJsonFacts): boolean {
+  return [...facts].every(
+    ([value, before]) =>
+      Object.getPrototypeOf(value) === before.prototype &&
+      Object.isExtensible(value) === before.extensible,
+  );
+}
+
 interface ReachedLiteralWork {
   item: GearsItem;
   binding: PlaybookBinding;
   original: string;
   mapping: Map<string, string>;
+  structured: Set<string>;
   validated: boolean;
   cases: {
     context: Record<string, unknown>;
     text: string;
     influences: ReadonlySet<string>;
-    records: ReadonlyMap<object, PropertyDescriptorMap>;
+    structures: ReadonlySet<string>;
+    jsonFacts: LiteralJsonFacts;
+    records: Map<object, PropertyDescriptorMap>;
   }[];
   failure?: string;
 }
@@ -3811,6 +4053,7 @@ export class ReachedLiteralChildChecks {
         binding,
         original: finding,
         mapping: new Map(),
+        structured: new Set(),
         validated: false,
         cases: [],
       });
@@ -3856,7 +4099,12 @@ export class ReachedLiteralChildChecks {
     if (work === undefined || work.failure !== undefined) return;
     const { binding, item } = work;
     const fields = new Set<string>();
+    const structures = new Set<string>();
     const records = new Map<object, PropertyDescriptorMap>();
+    const jsonFacts = new Map<
+      object,
+      { prototype: object | null; extensible: boolean }
+    >();
     const observed = literalScalarContext(
       context,
       {},
@@ -3866,9 +4114,19 @@ export class ReachedLiteralChildChecks {
         if (!records.has(record))
           records.set(record, Object.getOwnPropertyDescriptors(record));
       },
+      structures,
+      undefined,
+      (field) => {
+        const snapshot = literalJsonGraph(context, new Set([field]), records);
+        for (const [value, facts] of snapshot?.facts ?? [])
+          if (!jsonFacts.has(value)) jsonFacts.set(value, facts);
+      },
     );
     const input = invocationInput(binding.invoke, observed.context);
-    if (observed.failure() !== undefined || fields.size > 128) {
+    if (
+      observed.failure() !== undefined ||
+      new Set([...fields, ...structures]).size > 128
+    ) {
       work.failure =
         'has unsupported composition (bounded scalar observation failed)';
       return;
@@ -3888,6 +4146,18 @@ export class ReachedLiteralChildChecks {
         'has unsupported composition (reached input or literal identity changed)';
       return;
     }
+    if (!literalRecordsUnchanged(records) || !literalJsonUnchanged(jsonFacts)) {
+      work.failure =
+        'has unsupported composition (observed structured context changed during input)';
+      return;
+    }
+    const structured = literalJsonGraph(context, structures, records);
+    const fieldText = (field: string, graph = structured): unknown =>
+      work.structured.has(field)
+        ? literalPathValue(context, field, records) === undefined
+          ? undefined
+          : (graph?.values.get(field)?.text ?? null)
+        : literalPathValue(context, field, records);
     const payloads = [...fields].flatMap((field) => {
       const value = literalPathValue(context, field, records);
       return value === undefined
@@ -3896,7 +4166,109 @@ export class ReachedLiteralChildChecks {
           ? [value]
           : [];
     });
+    payloads.push(
+      ...[...(structured?.values.values() ?? [])].map((value) => value.text),
+    );
     const influences = new Set<string>();
+    const acceptMapping = (
+      token: string,
+      field: string,
+      json: boolean,
+    ): boolean => {
+      const previous = work.mapping.get(token);
+      if (previous === undefined && work.validated) {
+        work.failure = `has an unproved late context substitution for ${token}`;
+        return false;
+      }
+      if (
+        previous !== undefined &&
+        (previous !== field || work.structured.has(field) !== json)
+      ) {
+        work.failure = `uses inconsistent context substitutions for ${token}`;
+        return false;
+      }
+      work.mapping.set(token, field);
+      if (json) work.structured.add(field);
+      influences.add(field);
+      return true;
+    };
+    const quotedRelays = new Set(
+      item.prompt
+        .split(/\r?\n/)
+        .flatMap(
+          (line) =>
+            /^> (?:[^<>\r\n]+: )?(<[^\s<>`]{1,60}>)$/.exec(line)?.[1] ?? [],
+        ),
+    );
+    const probedStructures = new Set<object>();
+    for (const [field, value] of structured?.values ?? []) {
+      if (probedStructures.has(value.value)) continue;
+      probedStructures.add(value.value);
+      const leaf = value.leaves[0];
+      if (leaf === undefined) continue;
+      const variant = literalJsonGraph(context, structures, records, {
+        ...leaf,
+        value: sentinelFor(field),
+      });
+      const encoded = variant?.values.get(field)?.text;
+      if (variant === undefined || encoded === undefined) continue;
+      const result = invocationInput(
+        binding.invoke,
+        literalScalarContext(
+          context,
+          {},
+          undefined,
+          false,
+          undefined,
+          undefined,
+          variant.aliases,
+        ).context,
+      );
+      if (
+        !('value' in result) ||
+        typeof result.value.text !== 'string' ||
+        result.value.text === actual.text ||
+        !result.value.text.includes(encoded)
+      )
+        continue;
+      if (
+        result.value.stateId !== binding.state.stateId ||
+        result.value.playbookId !== binding.state.playbookId ||
+        result.value.sourceItem !== actual.sourceItem
+      ) {
+        work.failure = 'has unsupported composition (literal identity changed)';
+        return;
+      }
+      const fixed = new Map(
+        [...work.mapping].map(([token, mapped]) => [
+          token,
+          String(fieldText(mapped, variant) ?? ''),
+        ]),
+      );
+      const matched = reachedTemplateMatch(
+        item.prompt,
+        result.value.text,
+        [
+          encoded,
+          ...payloads,
+          ...[...variant.values.values()].map((value) => value.text),
+        ],
+        fixed,
+      );
+      if (matched === undefined) {
+        work.failure =
+          'does not preserve the complete GEARS child-input template';
+        return;
+      }
+      for (const [token, text] of matched) {
+        if (text !== encoded) continue;
+        if (!quotedRelays.has(token)) {
+          work.failure = `has unsupported structured inline substitution for ${token}`;
+          return;
+        }
+        if (!acceptMapping(token, field, true)) return;
+      }
+    }
     for (const field of fields) {
       const marker = sentinelFor(field);
       const candidate = literalScalarContext(
@@ -3904,6 +4276,9 @@ export class ReachedLiteralChildChecks {
         { [field]: marker },
         undefined,
         false,
+        undefined,
+        undefined,
+        work.structured.size > 0 ? structured?.aliases : undefined,
       );
       const result = invocationInput(binding.invoke, candidate.context);
       if (
@@ -3925,9 +4300,7 @@ export class ReachedLiteralChildChecks {
       const fixed = new Map(
         [...work.mapping].map(([token, mapped]) => [
           token,
-          mapped === field
-            ? marker
-            : String(literalPathValue(context, mapped, records) ?? ''),
+          mapped === field ? marker : String(fieldText(mapped) ?? ''),
         ]),
       );
       const matched = reachedTemplateMatch(
@@ -3943,17 +4316,7 @@ export class ReachedLiteralChildChecks {
       }
       for (const [token, value] of matched) {
         if (value !== marker) continue;
-        const previous = work.mapping.get(token);
-        if (previous === undefined && work.validated) {
-          work.failure = `has an unproved late context substitution for ${token}`;
-          return;
-        }
-        if (previous !== undefined && previous !== field) {
-          work.failure = `uses inconsistent context substitutions for ${token}`;
-          return;
-        }
-        work.mapping.set(token, field);
-        influences.add(field);
+        if (!acceptMapping(token, field, false)) return;
       }
     }
     // Do not merge cases by read paths: a later mapping may reveal an unread
@@ -3963,10 +4326,20 @@ export class ReachedLiteralChildChecks {
         'has unsupported composition (too many pending reached cases)';
       return;
     }
-    work.cases.push({ context, text: actual.text, influences, records });
+    work.cases.push({
+      context,
+      text: actual.text,
+      influences,
+      structures,
+      jsonFacts,
+      records,
+    });
     if (!this.mapped(work)) return;
     for (const reached of work.cases) {
-      if (!literalRecordsUnchanged(reached.records)) {
+      if (
+        !literalRecordsUnchanged(reached.records) ||
+        !literalJsonUnchanged(reached.jsonFacts)
+      ) {
         work.failure =
           'has unsupported composition (observed context changed before proof)';
         return;
@@ -3986,11 +4359,24 @@ export class ReachedLiteralChildChecks {
           'has unsupported composition (reached input changed before proof)';
         return;
       }
-      const render = (values: Record<string, string>): string | undefined =>
+      const graph = literalJsonGraph(
+        reached.context,
+        reached.structures,
+        reached.records,
+      );
+      const render = (
+        values: Record<string, string>,
+        json = graph,
+      ): string | undefined =>
         renderLiteralChildTemplate(item.prompt, work.mapping, (field) =>
           Object.hasOwn(values, field)
             ? values[field]
-            : literalPathValue(reached.context, field, reached.records),
+            : work.structured.has(field)
+              ? literalPathValue(reached.context, field, reached.records) ===
+                undefined
+                ? undefined
+                : (json?.values.get(field)?.text ?? null)
+              : literalPathValue(reached.context, field, reached.records),
         );
       const expected = render({});
       if (expected === undefined || reached.text !== expected) {
@@ -4010,6 +4396,9 @@ export class ReachedLiteralChildChecks {
           values,
           undefined,
           false,
+          undefined,
+          undefined,
+          work.structured.size > 0 ? graph?.aliases : undefined,
         );
         const result = invocationInput(binding.invoke, candidate.context);
         const expected = render(values);
@@ -4037,8 +4426,64 @@ export class ReachedLiteralChildChecks {
       const activeFields = [...new Set(work.mapping.values())].filter((field) =>
         reached.influences.has(field),
       );
+      for (const field of new Set(work.mapping.values())) {
+        if (!work.structured.has(field)) continue;
+        const value = graph?.values.get(field);
+        if (
+          value === undefined &&
+          literalPathValue(reached.context, field, reached.records) !==
+            undefined
+        ) {
+          work.failure =
+            'has unsupported composition (structured JSON inspection failed)';
+          return;
+        }
+        for (const leaf of value?.leaves ?? [])
+          for (const literal of [
+            '«structured» $& <payload>\nsecond',
+            '«distinct» " \\ \r\nlast',
+          ]) {
+            const variant = literalJsonGraph(
+              reached.context,
+              reached.structures,
+              reached.records,
+              { ...leaf, value: literal },
+            );
+            if (variant === undefined) {
+              work.failure =
+                'has unsupported composition (structured JSON inspection failed)';
+              return;
+            }
+            const result = invocationInput(
+              binding.invoke,
+              literalScalarContext(
+                reached.context,
+                {},
+                undefined,
+                false,
+                undefined,
+                undefined,
+                variant.aliases,
+              ).context,
+            );
+            if (
+              !('value' in result) ||
+              result.value.stateId !== binding.state.stateId ||
+              result.value.playbookId !== binding.state.playbookId ||
+              result.value.sourceItem !== actual.sourceItem ||
+              result.value.text !== render({}, variant)
+            ) {
+              work.failure =
+                'does not preserve canonical structured JSON substitutions';
+              return;
+            }
+          }
+      }
+      const scalarFields = activeFields.filter(
+        (field) => !work.structured.has(field),
+      );
       // Perturb one mapped payload only: no other reached control/payload changes.
-      for (const field of activeFields) {
+      for (const field of scalarFields) {
         const multiline = item.prompt.split(/\r?\n/).some((line) => {
           const token = /^> [^<>\r\n]*(<[^\s<>`]{1,60}>)$/.exec(line)?.[1];
           return token !== undefined && work.mapping.get(token) === field;
@@ -4050,7 +4495,10 @@ export class ReachedLiteralChildChecks {
           if (!verifyPayload({ [field]: value }, value === '')) return;
         }
       }
-      if (!literalRecordsUnchanged(reached.records)) {
+      if (
+        !literalRecordsUnchanged(reached.records) ||
+        !literalJsonUnchanged(reached.jsonFacts)
+      ) {
         work.failure =
           'has unsupported composition (observed context changed during proof)';
         return;
@@ -4058,7 +4506,7 @@ export class ReachedLiteralChildChecks {
       // Removing several standalone relays must preserve authored separators too.
       if (
         !verifyPayload(
-          Object.fromEntries(activeFields.map((field) => [field, ''])),
+          Object.fromEntries(scalarFields.map((field) => [field, ''])),
           true,
         )
       )
