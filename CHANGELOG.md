@@ -11,6 +11,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Coverage retains an unresolved child-output descriptor hint across later reads
+  of already assigned fields, preserving actual guards and bounded replay.
+
 ## [0.17.0] - 2026-10-18
 
 ### Added
