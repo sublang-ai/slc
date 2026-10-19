@@ -2130,8 +2130,31 @@ function probeGuardAssignment(
       for (const payload of payloads) {
         if (!enumerated.has(payload.tag)) continue;
         shapeTag = payload.tag;
+        // Overriding existing default data keys preserves their enumerable set.
+        // New keys can encounter inherited setters; keep the original trials
+        // for those, event-level merges and descriptor-backed seeds.
+        const data = bases.get(payload.base)?.data;
+        const assigned = assignment.payloads[payload.tag] ?? {};
+        const unpaddedWidth =
+          payload.eventField !== undefined &&
+          data !== undefined &&
+          !Object.hasOwn(assigned, '__proto__') &&
+          Object.keys(assigned).every((key) => Object.hasOwn(data, key))
+            ? Object.keys(data).length
+            : undefined;
+        let previousWidth: number | undefined;
         for (shapeWidth = 1; shapeWidth <= 4; shapeWidth++) {
+          coverageCheckpoint();
           if (++probeBudget.probes > MAX_PROBES) return [...reads];
+          // Keep every logical trial's charge, but evaluate an identical
+          // guidance-only padding shape once within this payload/read pass.
+          // The first selected-shape trace remains separate from trace() above.
+          const width =
+            unpaddedWidth === undefined
+              ? undefined
+              : Math.max(unpaddedWidth, shapeWidth);
+          if (width !== undefined && width === previousWidth) continue;
+          previousWidth = width;
           trace();
         }
       }
