@@ -50,7 +50,7 @@ describe('reached optional literal-child relays', () => {
 
   it('does not deduplicate an unread stale payload between equivalent local entries', async () => {
     expect((await gate(fixture('stale-entry'))).join('\n')).toContain(
-      'complete GEARS child-input template',
+      'complete expanded GEARS child-input composition',
     );
   });
 
@@ -283,7 +283,7 @@ describe('reached optional literal-child relays', () => {
         expect(result.ok, result.output).toBe(fault === '');
         if (fault === 'stale')
           expect(result.output).toContain(
-            'complete GEARS child-input template',
+            'complete expanded GEARS child-input composition',
           );
         if (fault === 'separator')
           expect(result.output).toContain('empty standalone relay omission');
