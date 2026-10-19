@@ -17,6 +17,7 @@ agent: claude-code
 # 0 disables the watchdog.
 # stallTimeout: 2400
 
-# Finite per-target coverage exploration; deadline remains at most 300 seconds.
+# Finite per-target coverage exploration and a bounded duration ceiling.
 # coverageMaxInvocations: 8 # integer 1..64
 # coverageMaxAttempts: 64 # integer 1..1024
+# coverageMaxDurationMs: 300000 # integer 1..1800000; smaller derived timeouts apply

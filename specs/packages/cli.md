@@ -109,7 +109,7 @@ Where the result is not a source-clarification outcome [[clarification-8](clarif
 
 ### cli-44
 
-When the executable resolves verification configuration for compilation or agentless retained completion, it shall map flat YAML `coverageMaxInvocations` and `coverageMaxAttempts` to API `coverage.maxInvocations` and `coverage.maxAttempts`, using each non-blank `SLC_COVERAGE_MAX_INVOCATIONS` or `SLC_COVERAGE_MAX_ATTEMPTS` environment value over its corresponding YAML value, otherwise defaults 8 and 64, and reject non-integers, zero, negative or non-finite values and values above 64 or 1024 respectively before executing a phase, without changing the five-minute verification deadline [[verification-62](verification.md#verification-62)], while retaining file discovery and strict schema validation [[cli-20](#cli-20)], [[cli-21](#cli-21)].
+When the executable resolves verification configuration for compilation or agentless retained completion, it shall map flat YAML `coverageMaxInvocations`, `coverageMaxAttempts` and `coverageMaxDurationMs` to API `coverage.maxInvocations`, `coverage.maxAttempts` and `coverage.maxDurationMs`, using each non-blank `SLC_COVERAGE_MAX_INVOCATIONS`, `SLC_COVERAGE_MAX_ATTEMPTS` or `SLC_COVERAGE_MAX_DURATION_MS` environment value over its corresponding YAML value, otherwise defaults 8, 64 and 300,000, and reject non-safe-integers, zero, negative or non-finite values and values above 64, 1024 or 1,800,000 respectively before executing a phase, applying the duration as a ceiling on the derived verification deadline [[verification-62](verification.md#verification-62)], while retaining file discovery and strict schema validation [[cli-20](#cli-20)], [[cli-21](#cli-21)].
 
 ## Verification
 

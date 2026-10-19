@@ -235,6 +235,7 @@ function resolveCoverageConfig(
 ) {
   const invocations = nonBlank(env.SLC_COVERAGE_MAX_INVOCATIONS);
   const attempts = nonBlank(env.SLC_COVERAGE_MAX_ATTEMPTS);
+  const duration = nonBlank(env.SLC_COVERAGE_MAX_DURATION_MS);
   return resolveCoverageBudget({
     maxInvocations:
       invocations === undefined
@@ -242,6 +243,8 @@ function resolveCoverageConfig(
         : Number(invocations),
     maxAttempts:
       attempts === undefined ? file.coverageMaxAttempts : Number(attempts),
+    maxDurationMs:
+      duration === undefined ? file.coverageMaxDurationMs : Number(duration),
   });
 }
 
@@ -327,7 +330,8 @@ export function usageText(): string {
     '  SLC_PIPELINE_PATH  search roots for <pipeline> references (default: cwd)',
     '  SLC_COVERAGE_MAX_INVOCATIONS  coverageMaxInvocations: 1..64 (default: 8)',
     '  SLC_COVERAGE_MAX_ATTEMPTS     coverageMaxAttempts: 1..1024 (default: 64)',
-    '                     coverage deadline remains at most 300 seconds',
+    '  SLC_COVERAGE_MAX_DURATION_MS coverageMaxDurationMs: 1..1800000 (default: 300000)',
+    '                     duration ceiling; smaller derived allowances still apply',
     '  SLC_STALL_TIMEOUT  seconds of agent inactivity before a stalled call',
     '                     fails the run (default: 2400; 0 disables)',
     '',

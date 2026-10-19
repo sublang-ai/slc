@@ -11,6 +11,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Optional finite coverage duration ceilings through API, YAML and environment,
+  defaulting to five minutes and capped at thirty minutes; smaller derived
+  allowances and caller deadlines still apply to checks and emitted tests.
+
 ### Fixed
 
 - Coverage avoids duplicate ordinary-data padding guidance while retaining every

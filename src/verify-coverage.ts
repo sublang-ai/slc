@@ -61,6 +61,11 @@ export const CAPTAIN_ACTOR = 'captain';
 export interface CoverageBudget {
   maxInvocations?: number;
   maxAttempts?: number;
+  /**
+   * Duration ceiling in milliseconds: 1..1,800,000; default 300,000.
+   * Smaller derived allowances and caller timeouts still apply.
+   */
+  maxDurationMs?: number;
 }
 
 /** Validate before artifact access and return an independent immutable policy. */
@@ -70,19 +75,28 @@ export function resolveCoverageBudget(
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     throw new TypeError('coverage must be an object');
   for (const key of Reflect.ownKeys(value))
-    if (key !== 'maxInvocations' && key !== 'maxAttempts')
+    if (
+      key !== 'maxInvocations' &&
+      key !== 'maxAttempts' &&
+      key !== 'maxDurationMs'
+    )
       throw new TypeError(`Unknown coverage budget key: ${String(key)}`);
-  const { maxInvocations = 8, maxAttempts = 64 } = value;
+  const {
+    maxInvocations = 8,
+    maxAttempts = 64,
+    maxDurationMs = 300_000,
+  } = value;
   for (const [key, limit, cap] of [
     ['maxInvocations', maxInvocations, 64],
     ['maxAttempts', maxAttempts, 1024],
+    ['maxDurationMs', maxDurationMs, 1_800_000],
   ] as const) {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > cap)
       throw new RangeError(
         `coverage.${key} must be an integer from 1 to ${cap}`,
       );
   }
-  return Object.freeze({ maxInvocations, maxAttempts });
+  return Object.freeze({ maxInvocations, maxAttempts, maxDurationMs });
 }
 
 interface CoverageRun {
@@ -1664,7 +1678,6 @@ const MAX_SCRIPT_EXIT_STATUSES = 8;
 const PROBES_PER_TIMEOUT_MILLISECOND = 50;
 const COVERAGE_TIMEOUT_MARGIN_MS = 5_000;
 const MIN_COVERAGE_TEST_TIMEOUT_MS = 10_000;
-const MAX_COVERAGE_TEST_TIMEOUT_MS = 300_000;
 
 function minedLiterals(fn: unknown): string[] {
   let source: string;
@@ -4539,7 +4552,7 @@ export function fsmCoverageTestTimeout(
     guardProbeCalls * Math.ceil(MAX_PROBES / PROBES_PER_TIMEOUT_MILLISECOND);
 
   return Math.min(
-    MAX_COVERAGE_TEST_TIMEOUT_MS,
+    budget.maxDurationMs,
     Math.max(
       MIN_COVERAGE_TEST_TIMEOUT_MS,
       rootSettles +
@@ -4652,8 +4665,7 @@ async function fsmCoverage(
     literalChecks,
     signal: opts.signal,
     deadline:
-      started +
-      Math.min(opts.timeoutMs ?? Infinity, MAX_COVERAGE_TEST_TIMEOUT_MS),
+      started + Math.min(opts.timeoutMs ?? Infinity, coverage.maxDurationMs),
     lastYield: started,
     actors: new Set(),
     questionFindings: new Set(),

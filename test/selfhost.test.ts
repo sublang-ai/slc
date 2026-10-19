@@ -7,6 +7,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -799,6 +800,18 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     expect(initial.ok).toBe(true);
     const latest = join(artDir, '.slc', 'latest');
     const historyBefore = await readFile(latest, 'utf8');
+    const historyFilesBefore = await readdir(join(artDir, '.slc'), {
+      recursive: true,
+      withFileTypes: true,
+    });
+    const historyBytesBefore = await Promise.all(
+      historyFilesBefore
+        .filter((file) => file.isFile())
+        .map(async (file) => {
+          const path = join(file.parentPath, file.name);
+          return [path, await readFile(path)] as const;
+        }),
+    );
     const deterministicOutputs = [
       join(work, 'code.ts'),
       join(artDir, 'code.gears-fsm.test.ts'),
@@ -817,17 +830,27 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         agent: writingAgent({ prompts }),
       }),
       cwd: work,
-      coverage: { maxInvocations: 12, maxAttempts: 256 },
+      coverage: { maxDurationMs: 900_000 },
     });
 
     expect(repeated).toMatchObject({ ok: true, outcome: 'up-to-date' });
     expect(prompts).toEqual([]);
     for (const suffix of ['gears-fsm.test.ts', 'fsm.coverage.test.ts']) {
       const test = await readFile(join(artDir, `code.${suffix}`), 'utf8');
-      expect(test).toContain('"maxInvocations":12,"maxAttempts":256');
+      expect(test).toContain(
+        '"maxInvocations":8,"maxAttempts":64,"maxDurationMs":900000',
+      );
       expect(test).toContain('fsmCoverageTestTimeout(fsm, coverage)');
     }
     expect(await readFile(latest, 'utf8')).toBe(historyBefore);
+    expect(
+      await readdir(join(artDir, '.slc'), {
+        recursive: true,
+        withFileTypes: true,
+      }),
+    ).toEqual(historyFilesBefore);
+    for (const [path, bytes] of historyBytesBefore)
+      expect(await readFile(path)).toEqual(bytes);
     expect(await exists(join(artDir, '.slc-verify', 'verify.js'))).toBe(true);
     for (const output of deterministicOutputs) {
       expect(await exists(output)).toBe(true);
