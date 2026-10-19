@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Coverage avoids duplicate ordinary-data padding guidance while retaining every
+  logical probe charge, distinct shape and actual ordered transition replay.
+
 - Coverage copies ordinary guard-candidate data from a per-probe snapshot while
   retaining descriptor fallback, fresh candidates and unchanged search limits.
 
