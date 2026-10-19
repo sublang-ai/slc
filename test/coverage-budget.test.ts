@@ -13,7 +13,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { assign, createActor, fromCallback, fromPromise, setup } from 'xstate';
 import {
   checkFsmCoverage,
@@ -238,15 +238,15 @@ describe('finite coverage policy through public integration boundaries', () => {
 
   it('cleans up actual actors when a caller shortens an expanded duration policy', async () => {
     const lifetime = { started: 0, stopped: 0 };
+    const callerTimeoutMs = 100;
+    let logicalNow = 0;
     const machine = setup({
       actors: {
         playbook: fromPromise(async () => ({})),
         lifetime: fromCallback(() => {
           lifetime.started++;
-          const until = performance.now() + 150;
-          while (performance.now() < until) {
-            /* Finite synchronous artifact work remains cooperative. */
-          }
+          // Cross the deadline only after an actual actor has started.
+          logicalNow += callerTimeoutMs + 1;
           return () => {
             lifetime.stopped++;
           };
@@ -256,11 +256,21 @@ describe('finite coverage policy through public integration boundaries', () => {
       ...longMachine().config,
       invoke: { src: 'lifetime' },
     } as never);
-    await expect(
-      checkFsmCoverage({ machine }, { coverage: large, timeoutMs: 100 }),
-    ).rejects.toBeInstanceOf(FsmCoverageDeadlineError);
-    expect(lifetime.started).toBeGreaterThan(0);
-    expect(lifetime.stopped).toBe(lifetime.started);
+    const clock = vi
+      .spyOn(performance, 'now')
+      .mockImplementation(() => logicalNow);
+    try {
+      await expect(
+        checkFsmCoverage(
+          { machine },
+          { coverage: large, timeoutMs: callerTimeoutMs },
+        ),
+      ).rejects.toBeInstanceOf(FsmCoverageDeadlineError);
+      expect(lifetime.started).toBeGreaterThan(0);
+      expect(lifetime.stopped).toBe(lifetime.started);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it.each([

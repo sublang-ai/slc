@@ -1893,8 +1893,9 @@ function probeGuardAssignment(
     key: string,
     hasBaseline: boolean,
     baseline: unknown,
+    deferBaseline = false,
   ): Generator<unknown> {
-    if (hasBaseline) yield baseline;
+    if (hasBaseline && !deferBaseline) yield baseline;
     const guided = key.startsWith('o:')
       ? declaredValues.get(key.slice(2))
       : undefined;
@@ -1902,6 +1903,7 @@ function probeGuardAssignment(
       for (let index = 0; index < guided.length; index++) {
         if (guided[index] !== baseline) yield guided[index];
       }
+      if (hasBaseline && deferBaseline) yield baseline;
       return;
     }
     // A failed candidate can reveal a fixed-context value needed by this same
@@ -1909,6 +1911,7 @@ function probeGuardAssignment(
     for (let index = 0; index < values.length; index++) {
       if (!hasBaseline || values[index] !== baseline) yield values[index];
     }
+    if (hasBaseline && deferBaseline) yield baseline;
   }
   const probeBudget = options.probeBudget ?? { probes: 0 };
   const discovered = new Map<string, Set<string>>();
@@ -2224,10 +2227,13 @@ function probeGuardAssignment(
     });
   }
 
-  const search = (
+  function* search(
     assignment: ProbeAssignment,
     depth: number,
-  ): ProbeAssignment | undefined => {
+    deferred: boolean,
+  ): Generator<void, ProbeAssignment | undefined> {
+    // Resume before evaluation so the other traversal shares every probe charge.
+    yield;
     coverageCheckpoint();
     if (probeBudget.probes > MAX_PROBES) return undefined;
     if (passes(assignment)) return assignment;
@@ -2264,7 +2270,14 @@ function probeGuardAssignment(
       const baseline = hasBaseline
         ? (base as Record<string, unknown>)[field]
         : undefined;
-      for (const value of candidateValues(key, hasBaseline, baseline)) {
+      for (const value of candidateValues(
+        key,
+        hasBaseline,
+        baseline,
+        deferred &&
+          payload?.shapeFields?.includes(field) === true &&
+          baseline === null,
+      )) {
         coverageCheckpoint();
         if (probeBudget.probes > MAX_PROBES) return undefined;
         const nextDepth = depth + (hasBaseline && value === baseline ? 0 : 1);
@@ -2285,12 +2298,12 @@ function probeGuardAssignment(
                   },
                 },
               };
-        const found = search(next, nextDepth);
+        const found = yield* search(next, nextDepth, deferred);
         if (found !== undefined) return found;
       }
     }
     return undefined;
-  };
+  }
 
   const shapes = payloads;
   const slots = shapes.flatMap((payload, index) =>
@@ -2317,7 +2330,33 @@ function probeGuardAssignment(
       }
       return { ...payload, base, shapeFields: fields };
     });
-    const found = search(initial, 0);
+    const paired = payloads.some(
+      (payload) => (payload.shapeFields?.length ?? 0) > 0,
+    );
+    const continuations = [
+      search(initial, 0, false),
+      ...(paired ? [search(initial, 0, true)] : []),
+    ];
+    const active = continuations.map(() => true);
+    let found: ProbeAssignment | undefined;
+    try {
+      while (active.some(Boolean) && found === undefined) {
+        for (let index = 0; index < continuations.length; index++) {
+          if (!active[index]) continue;
+          const step = continuations[index].next();
+          if (step.done) {
+            active[index] = false;
+            if (step.value !== undefined) {
+              found = step.value;
+              break;
+            }
+          }
+        }
+      }
+    } finally {
+      // Neither continuation may retain a suspended read across presence masks.
+      for (const continuation of continuations) continuation.return(undefined);
+    }
     if (found === undefined) continue;
     for (const payload of payloads) {
       if (payload.shapeFields === undefined) continue;

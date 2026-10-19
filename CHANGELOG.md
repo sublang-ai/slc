@@ -19,6 +19,9 @@ and this project adheres to
 
 ### Fixed
 
+- Coverage interleaves synthetic-null-first and deferred value searches within
+  the same finite budget, preserving genuine baselines and actual transition proof.
+
 - Coverage avoids duplicate ordinary-data padding guidance while retaining every
   logical probe charge, distinct shape and actual ordered transition replay.
 
