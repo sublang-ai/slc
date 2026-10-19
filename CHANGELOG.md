@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Prompt fidelity accepts exact canonical JSON from typed input values while
+  retaining whole-template, repeated-token and continuation checks.
+
 - Child-input composition findings distinguish expanded relay rendering from
   authored template omission and omit reached baseline payload snippets.
 

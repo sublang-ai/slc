@@ -2352,6 +2352,28 @@ export function placeholdersIn(prompt: string): string[] {
 
 const sentinelFor = (field: string): string => `«${field}»`;
 
+// Accessor presence is retained as unavailable data, never promoted to a probe.
+const unavailablePromptFields = new WeakMap<object, ReadonlySet<string>>();
+function promptDataRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || nodeTypes.isProxy(value))
+    return undefined;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const copied: Record<string, unknown> = {};
+  const unavailable = new Set(unavailablePromptFields.get(value));
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if (!descriptor.enumerable) continue;
+    if (!('value' in descriptor)) unavailable.add(key);
+    Object.defineProperty(copied, key, {
+      value: 'value' in descriptor ? descriptor.value : undefined,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+  unavailablePromptFields.set(copied, unavailable);
+  return copied;
+}
+
 /**
  * Traces which context fields an `invoke.input` thunk reads, via a recording
  * proxy context; reads collected up to a throw are kept.
@@ -2362,10 +2384,13 @@ export function probeContextReads(
   initial: Record<string, unknown> = {},
 ): string[] {
   const reads = new Set<string>();
-  const context = new Proxy({ ...initial } as Record<string, unknown>, {
+  const context = new Proxy(promptDataRecord(initial) ?? {}, {
     get(target, prop) {
       if (typeof prop === 'string') reads.add(prop);
-      return Reflect.get(target, prop) as unknown;
+      const descriptor = Object.getOwnPropertyDescriptor(target, prop);
+      return descriptor && 'value' in descriptor
+        ? (descriptor.value as unknown)
+        : undefined;
     },
     has() {
       return true;
@@ -2426,7 +2451,7 @@ function initialMachineContext(
   const declared = config.context;
   if (declared === undefined) return {};
   if (typeof declared === 'object' && declared !== null) {
-    return { ...(declared as Record<string, unknown>) };
+    return promptDataRecord(declared);
   }
   if (typeof declared !== 'function') return undefined;
   try {
@@ -2444,7 +2469,7 @@ function initialMachineContext(
       event: { type: 'xstate.init' },
     });
     return typeof resolved === 'object' && resolved !== null
-      ? { ...(resolved as Record<string, unknown>) }
+      ? promptDataRecord(resolved)
       : undefined;
   } catch {
     return undefined;
@@ -2467,7 +2492,7 @@ function ordinaryTurnContext(
   if (initial === undefined) {
     return includeBossFields ? sentinelContext(reads) : ordinaryContext(reads);
   }
-  const context: Record<string, unknown> = { ...initial };
+  const context = promptDataRecord(initial) ?? {};
   if (!includeBossFields) {
     for (const field of BOSS_CONTEXT_FIELDS) {
       if (isKeyedBossRecord(context[field])) context[field] = {};
@@ -2476,6 +2501,7 @@ function ordinaryTurnContext(
   }
   for (const field of reads) {
     if (!includeBossFields && BOSS_CONTEXT_FIELDS.includes(field)) continue;
+    if (unavailablePromptFields.get(context)?.has(field)) continue;
     const current = context[field];
     if (current === undefined || typeof current === 'string') {
       context[field] = sentinelFor(field);
@@ -2509,23 +2535,25 @@ function placeholderField(token: string): string {
 }
 
 /**
- * Overlays one string sentinel on every placeholder-derived input field the
- * prompt relays, so a field the machine's initial context leaves empty or
- * derives through a typed value still evidences substitution (verification-5).
+ * Overlays string-valued placeholder inputs only; typed values keep their
+ * original shapes and accessor-derived values provide no evidence.
  * Returns the probed input and the sentinel field names it carries.
  */
 function withPlaceholderValues(
   state: CaptainState,
   input: unknown,
 ): { input: unknown; fields: string[] } {
-  if (typeof input !== 'object' || input === null) return { input, fields: [] };
-  const record = input as Record<string, unknown>;
-  const probed: Record<string, unknown> = { ...record };
+  const probed = promptDataRecord(input);
+  if (probed === undefined) return { input: undefined, fields: [] };
   const fields: string[] = [];
   for (const token of placeholdersIn(state.prompt)) {
     const field = placeholderField(token);
     if (field === '' || CONTRACT_INPUT_FIELDS.includes(field)) continue;
-    if (typeof record[field] !== 'string') continue;
+    if (
+      unavailablePromptFields.get(probed)?.has(field) ||
+      typeof probed[field] !== 'string'
+    )
+      continue;
     probed[field] = sentinelFor(field);
     if (!fields.includes(field)) fields.push(field);
   }
@@ -2542,11 +2570,34 @@ function declaredLocalRoles(config: MachineConfigLike): string[] {
 }
 
 function carriesSentinel(value: unknown, sentinel: string): boolean {
-  try {
-    return (JSON.stringify(value) ?? '').includes(sentinel);
-  } catch {
-    return false;
-  }
+  let visits = 0;
+  const seen = new Set<object>();
+  const visit = (current: unknown, depth: number): boolean => {
+    if (++visits > 128 || depth > 32) return false;
+    if (typeof current === 'string') return current.includes(sentinel);
+    if (
+      typeof current !== 'object' ||
+      current === null ||
+      nodeTypes.isProxy(current) ||
+      seen.has(current)
+    )
+      return false;
+    const prototype = Object.getPrototypeOf(current);
+    if (
+      Array.isArray(current)
+        ? prototype !== Array.prototype
+        : prototype !== Object.prototype && prototype !== null
+    )
+      return false;
+    seen.add(current);
+    return Object.entries(Object.getOwnPropertyDescriptors(current)).some(
+      ([key, descriptor]) =>
+        descriptor.enumerable &&
+        'value' in descriptor &&
+        (key.includes(sentinel) || visit(descriptor.value, depth + 1)),
+    );
+  };
+  return visit(value, 0);
 }
 
 /**
@@ -2565,9 +2616,11 @@ export function capturePromptContract(
     const reads = probeContextReads(inputFn, initial);
     const wires: Record<string, string[]> = {};
     try {
-      const input = inputFn({
-        context: ordinaryTurnContext(reads, initial, true),
-      });
+      const input = promptDataRecord(
+        inputFn({
+          context: ordinaryTurnContext(reads, initial, true),
+        }),
+      );
       if (typeof input === 'object' && input !== null) {
         for (const [key, value] of Object.entries(input)) {
           const carried = reads.filter((field) =>
@@ -2590,6 +2643,83 @@ export function capturePromptContract(
     });
   }
   return rows;
+}
+
+/** Finite JSON evidence from real input values, never from coerced sentinels. */
+function promptJsonEvidence(input: unknown): {
+  input: unknown;
+  forms: readonly string[];
+  unchanged: () => boolean;
+} {
+  const empty = { input, forms: [] as string[], unchanged: () => true };
+  if (typeof input !== 'object' || input === null || nodeTypes.isProxy(input))
+    return empty;
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  const records = new Map<object, PropertyDescriptorMap>([
+    [input, descriptors],
+  ]);
+  const fields = new Set<string>();
+  const forms = new Set<string>();
+  for (const [key, descriptor] of Object.entries(descriptors)
+    .filter(([key]) => !CONTRACT_INPUT_FIELDS.includes(key))
+    .slice(0, 128)) {
+    if (!descriptor.enumerable || !('value' in descriptor)) continue;
+    const value: unknown = descriptor.value;
+    if (
+      value === null ||
+      typeof value === 'boolean' ||
+      (typeof value === 'number' && Number.isFinite(value))
+    ) {
+      forms.add(JSON.stringify(value));
+    } else if (typeof value === 'object') {
+      const field = JSON.stringify([key]);
+      // An unsupported unused field supplies no evidence; it cannot prevent
+      // a different, supported value from being checked.
+      if (
+        literalJsonGraph(
+          input as Record<string, unknown>,
+          new Set([field]),
+          new Map([[input, descriptors]]),
+        ) !== undefined
+      )
+        fields.add(field);
+    }
+  }
+  const graph = literalJsonGraph(
+    input as Record<string, unknown>,
+    fields,
+    records,
+  );
+  const copied = Object.create(Object.getPrototypeOf(input)) as Record<
+    string,
+    unknown
+  >;
+  const copiedDescriptors = { ...descriptors };
+  if (graph !== undefined) {
+    for (const [field, value] of graph.values) {
+      const key = (JSON.parse(field) as string[])[0];
+      forms.add(value.text);
+      copiedDescriptors[key] = { ...descriptors[key], value: value.value };
+    }
+  }
+  Object.defineProperties(copied, copiedDescriptors);
+  // Watch the detached values passed to the composer as well as their source.
+  const copiedRecords = new Map<object, PropertyDescriptorMap>([
+    [copied, Object.getOwnPropertyDescriptors(copied)],
+  ]);
+  const copiedGraph =
+    graph === undefined
+      ? undefined
+      : literalJsonGraph(copied, fields, copiedRecords);
+  return {
+    input: copied,
+    forms: [...forms],
+    unchanged: () =>
+      literalRecordsUnchanged(records) &&
+      (graph === undefined || literalJsonUnchanged(graph.facts)) &&
+      literalRecordsUnchanged(copiedRecords) &&
+      (copiedGraph === undefined || literalJsonUnchanged(copiedGraph.facts)),
+  };
 }
 
 /**
@@ -2616,8 +2746,9 @@ export function deriveSubstitutions(
         state,
         inputFn({ context: ordinaryTurnContext(reads, initial) }),
       );
-      const composed = composeForState(compose, state, probed.input, roles);
-      if (typeof composed !== 'string') {
+      const evidence = promptJsonEvidence(probed.input);
+      const composed = composeForState(compose, state, evidence.input, roles);
+      if (typeof composed !== 'string' || !evidence.unchanged()) {
         out[state.stateId] = [];
         continue;
       }
@@ -2629,7 +2760,13 @@ export function deriveSubstitutions(
       );
       // The whole body fixes each token's position. A separate quoted line
       // with the same literal shape cannot supply evidence for an absent value.
-      const body = matchPromptBody(state.prompt, composed, promptReads);
+      const body = matchPromptBody(
+        state.prompt,
+        composed,
+        promptReads,
+        undefined,
+        evidence.forms,
+      );
       if (body !== null) {
         out[state.stateId] = body.substitutions;
         continue;
@@ -2638,8 +2775,13 @@ export function deriveSubstitutions(
       // line does not hide valid substitutions. Body validation still fails it.
       const evidenced = new Set<string>();
       for (const line of state.prompt.split('\n')) {
-        for (const token of matchPromptBody(line, composed, promptReads)
-          ?.substitutions ?? []) {
+        for (const token of matchPromptBody(
+          line,
+          composed,
+          promptReads,
+          undefined,
+          evidence.forms,
+        )?.substitutions ?? []) {
           evidenced.add(token);
         }
       }
@@ -2829,23 +2971,21 @@ export function checkPromptComposition(opts: {
     for (const resuming of modes) {
       let ordinary: string;
       let input: unknown;
+      let evidence: ReturnType<typeof promptJsonEvidence>;
       try {
         const probed = withPlaceholderValues(
           state,
           inputFn({ context: ordinaryTurnContext(reads, initial) }),
         );
-        input = probed.input;
+        evidence = promptJsonEvidence(probed.input);
+        input = evidence.input;
         promptReads = promptSentinelFields(state, reads, probed.fields, roles);
-        ordinary = composeForState(
-          opts.compose,
-          state,
-          probed.input,
-          roles,
-          resuming,
-        );
+        ordinary = composeForState(opts.compose, state, input, roles, resuming);
         if (typeof ordinary !== 'string') {
           throw new Error(`${composerName} returned a non-string value`);
         }
+        if (!evidence.unchanged())
+          throw new Error(`${composerName} changed observed input data`);
       } catch (error) {
         pushUnique(
           findings,
@@ -2855,7 +2995,14 @@ export function checkPromptComposition(opts: {
       }
       pushUnique(
         findings,
-        ...bodyFindings(state, ordinary, substituted, promptReads, 'ordinary'),
+        ...bodyFindings(
+          state,
+          ordinary,
+          substituted,
+          promptReads,
+          'ordinary',
+          evidence.forms,
+        ),
         ...literalPromptRelayFindings(
           state,
           ordinary,
@@ -2866,6 +3013,7 @@ export function checkPromptComposition(opts: {
           roles,
           relayFindingKeys,
           resuming,
+          evidence.forms,
         ),
       );
       pushUnique(findings, ...promptControlFindings(state, ordinary));
@@ -2919,6 +3067,7 @@ export function checkPromptComposition(opts: {
       const reply = sentinelFor('bossReply');
       let continuation: string;
       let input: unknown;
+      let evidence: ReturnType<typeof promptJsonEvidence>;
       try {
         const probed = probeContinuationInput(
           state,
@@ -2927,7 +3076,8 @@ export function checkPromptComposition(opts: {
           artifactSchema,
           usesKeyedBossQuestionContext(opts.config),
         );
-        input = probed.input;
+        evidence = promptJsonEvidence(probed.input);
+        input = evidence.input;
         promptReads = promptSentinelFields(state, reads, probed.fields, roles);
         continuation = composeForState(
           opts.compose,
@@ -2939,6 +3089,8 @@ export function checkPromptComposition(opts: {
         if (typeof continuation !== 'string') {
           throw new Error(`${composerName} returned a non-string value`);
         }
+        if (!evidence.unchanged())
+          throw new Error(`${composerName} changed observed input data`);
       } catch (error) {
         pushUnique(
           findings,
@@ -2967,6 +3119,7 @@ export function checkPromptComposition(opts: {
           resuming,
           question,
           reply,
+          evidence.forms,
         ),
         ...bodyFindings(
           state,
@@ -2974,6 +3127,7 @@ export function checkPromptComposition(opts: {
           substituted,
           promptReads,
           'continuation',
+          evidence.forms,
         ),
         ...promptControlFindings(state, continuation),
         ...literalPromptRelayFindings(
@@ -2986,6 +3140,7 @@ export function checkPromptComposition(opts: {
           roles,
           relayFindingKeys,
           resuming,
+          evidence.forms,
         ),
       );
     }
@@ -3062,6 +3217,7 @@ function continuationPrefixFindings(
   resuming: boolean | undefined,
   question: string,
   reply: string,
+  jsonForms: readonly string[] = [],
 ): string[] {
   const fullProfiles = [
     { preamble: CONTINUATION_PREAMBLE, questionLabel: BOSS_QUESTION_LABEL },
@@ -3117,7 +3273,7 @@ function continuationPrefixFindings(
       : []),
     [BOSS_REPLY_LABEL, replyBlock],
   ];
-  const bodyStart = bodyIndex(state, composed, substituted, reads);
+  const bodyStart = bodyIndex(state, composed, substituted, reads, jsonForms);
   for (const [label, value] of blocks) {
     // Authored domain text can itself quote the framework contract; a real
     // continuation must add its own sentinel-bearing blocks before that body.
@@ -3202,22 +3358,22 @@ interface PromptBodyMatch {
 /**
  * Finds the prompt body as one exact, line-bounded block inside a composed
  * prompt. In derivation mode, a placeholder may remain literal or be replaced
- * by one exact non-empty context sentinel; mixed replacement of repeated
- * tokens is rejected. With `expectedSubstitutions`, substituted positions must
- * carry a sentinel and every other placeholder must remain literal.
+ * by an exact scalar probe form or captured typed JSON value. Repeated tokens
+ * share one value. All line starts share one finite candidate-visit budget;
+ * exhausted search remains unproved, never wildcard acceptance.
  */
 function matchPromptBody(
   prompt: string,
   composed: string,
   reads: readonly string[],
   expectedSubstitutions?: readonly string[],
+  jsonForms: readonly string[] = [],
 ): PromptBodyMatch | null {
   const placeholderMatches = [...prompt.matchAll(PLACEHOLDER)];
   const sentinels = reads.map(sentinelFor);
-  const sentinelForms = sentinels.flatMap((sentinel) => [
-    sentinel,
-    JSON.stringify(sentinel),
-  ]);
+  const sentinelForms = sentinels
+    .flatMap((sentinel) => [sentinel, JSON.stringify(sentinel)])
+    .concat(jsonForms);
 
   // Decompose the prompt into literal segments separated by placeholders, then
   // scan the composed text segment by segment. A monolithic escaped regex over
@@ -3233,33 +3389,71 @@ function matchPromptBody(
   }
   segments.push(prompt.slice(offset));
 
+  let visits = 0;
   const tryFrom = (start: number): { end: number; values: string[] } | null => {
-    if (!composed.startsWith(segments[0], start)) return null;
-    let pos = start + segments[0].length;
+    if (++visits > 30_000 || !composed.startsWith(segments[0], start))
+      return null;
+    const beginning = start + segments[0].length;
+    if (tokens.length === 0)
+      return beginning === composed.length || composed[beginning] === '\n'
+        ? { end: beginning, values: [] }
+        : null;
+    const assigned = new Map<string, string>();
     const values: string[] = [];
-    for (let gap = 0; gap < tokens.length; gap++) {
+    const frame = (gap: number, pos: number) => {
       const token = tokens[gap];
-      const candidates =
+      const forms =
         expectedSubstitutions === undefined
           ? [token, ...sentinelForms]
           : expectedSubstitutions.includes(token)
             ? sentinelForms
             : [token];
-      const next = segments[gap + 1];
-      const chosen = candidates.find(
-        (candidate) =>
-          composed.startsWith(candidate, pos) &&
-          composed.startsWith(next, pos + candidate.length),
-      );
-      if (chosen === undefined) return null;
-      values.push(chosen);
-      pos += chosen.length + next.length;
+      return {
+        gap,
+        pos,
+        next: 0,
+        candidates: [
+          ...new Set(assigned.has(token) ? [assigned.get(token)!] : forms),
+        ],
+        chosen: false,
+        assignedHere: false,
+      };
+    };
+    const stack = [frame(0, beginning)];
+    while (stack.length > 0 && visits < 30_000) {
+      const current = stack.at(-1)!;
+      const token = tokens[current.gap];
+      if (current.chosen) {
+        if (current.assignedHere) assigned.delete(token);
+        values.length = current.gap;
+        current.chosen = false;
+      }
+      if (current.next === current.candidates.length) {
+        stack.pop();
+        continue;
+      }
+      visits++;
+      const candidate = current.candidates[current.next++];
+      const next = segments[current.gap + 1];
+      if (
+        !composed.startsWith(candidate, current.pos) ||
+        !composed.startsWith(next, current.pos + candidate.length)
+      )
+        continue;
+      current.assignedHere = !assigned.has(token);
+      if (current.assignedHere) assigned.set(token, candidate);
+      current.chosen = true;
+      values[current.gap] = candidate;
+      const pos = current.pos + candidate.length + next.length;
+      if (current.gap + 1 === tokens.length) {
+        if (pos === composed.length || composed[pos] === '\n')
+          return { end: pos, values: [...values] };
+      } else stack.push(frame(current.gap + 1, pos));
     }
-    if (pos !== composed.length && composed[pos] !== '\n') return null;
-    return { end: pos, values };
+    return null;
   };
 
-  for (let start = 0; start <= composed.length; start++) {
+  for (let start = 0; start <= composed.length && visits < 30_000; start++) {
     if (start !== 0 && composed[start - 1] !== '\n') continue;
     const attempt = tryFrom(start);
     if (attempt === null) continue;
@@ -3306,9 +3500,16 @@ function literalPromptRelayFindings(
   roles: readonly string[],
   findingKeys: Set<string>,
   resuming?: boolean,
+  jsonForms: readonly string[] = [],
 ): string[] {
   if (typeof input !== 'object' || input === null) return [];
-  const match = matchPromptBody(state.prompt, composed, reads, substituted);
+  const match = matchPromptBody(
+    state.prompt,
+    composed,
+    reads,
+    substituted,
+    jsonForms,
+  );
   if (match === null) return []; // Existing body diagnostics own this case.
   const tokens = [...state.prompt.matchAll(PLACEHOLDER)];
   const groups = new Map<string, string[]>();
@@ -3379,8 +3580,15 @@ function literalPromptRelayFindings(
     const key = `${state.stateId}:${label}`;
     const prefix = `${state.stateId}: prompt composition does not preserve ${label} text`;
     try {
-      const actual = composeForState(compose, state, probed, roles, resuming);
-      if (actual === expected) continue;
+      const evidence = promptJsonEvidence(probed);
+      const actual = composeForState(
+        compose,
+        state,
+        evidence.input,
+        roles,
+        resuming,
+      );
+      if (actual === expected && evidence.unchanged()) continue;
       pushRelayFinding(
         findings,
         findingKeys,
@@ -4535,8 +4743,12 @@ function bodyFindings(
   substituted: readonly string[],
   reads: readonly string[],
   turn: string,
+  jsonForms: readonly string[] = [],
 ): string[] {
-  if (matchPromptBody(state.prompt, composed, reads, substituted) !== null) {
+  if (
+    matchPromptBody(state.prompt, composed, reads, substituted, jsonForms) !==
+    null
+  ) {
     return [];
   }
 
@@ -4545,7 +4757,9 @@ function bodyFindings(
   // lines, and prefixes/suffixes around otherwise present lines.
   for (const line of state.prompt.split('\n')) {
     if (line.trim() === '') continue;
-    if (matchPromptBody(line, composed, reads, substituted) === null) {
+    if (
+      matchPromptBody(line, composed, reads, substituted, jsonForms) === null
+    ) {
       return [
         `${state.stateId}: a ${turn} turn does not preserve the body line "${line}"`,
       ];
@@ -4562,9 +4776,11 @@ function bodyIndex(
   composed: string,
   substituted: readonly string[],
   reads: readonly string[],
+  jsonForms: readonly string[] = [],
 ): number {
   return (
-    matchPromptBody(state.prompt, composed, reads, substituted)?.index ?? -1
+    matchPromptBody(state.prompt, composed, reads, substituted, jsonForms)
+      ?.index ?? -1
   );
 }
 
