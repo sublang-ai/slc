@@ -13,9 +13,9 @@
  * transport boundary.
  *
  * A request may carry a host-owned deterministic `mechanicalReview`. Its
- * findings are mechanical Reviewer findings (DR-029, phase-execution-51): the
+ * findings are mechanical findings (DR-029, phase-execution-51): the
  * round relays them to the Coder in place of its Reviewer call and spends one of
- * the permitted Reviewer calls, so the loop's bound is unchanged and no agent
+ * the permitted checking rounds, so the loop's bound is unchanged and no agent
  * judges an artifact a machine can already reject. Without a Reviewer, clean
  * mechanical checks return immediately and findings use the same bounded loop.
  */
@@ -28,7 +28,7 @@ import type {
   AgentRunResult,
 } from './interpreter.js';
 
-const MAX_REVIEWER_CALLS = 3;
+const MAX_CHECKING_ROUNDS = 3;
 const DEFAULT_REVIEW_RETRY_DELAY_MS = 15_000;
 
 /** Options for {@link createReviewingAgent}. */
@@ -71,7 +71,7 @@ export function createReviewingAgent(
       let reviewer: AgentClient | undefined;
       let reviewerResume: string | false | undefined = false;
       const transcript: string[] = [];
-      let reviewerCalls = 0;
+      let checkingRounds = 0;
 
       for (;;) {
         if (request.signal?.aborted) {
@@ -98,10 +98,12 @@ export function createReviewingAgent(
         }
         let findings: string;
         let findingCount: number;
+        let findingOrigin: 'mechanical' | 'Reviewer';
         if (mechanical.length > 0) {
-          reviewerCalls++;
+          checkingRounds++;
           findings = formatMechanicalFindings(mechanical);
           findingCount = mechanical.length;
+          findingOrigin = 'mechanical';
         } else {
           if (options.reviewer === undefined) return coderResult;
           if (reviewer === undefined) {
@@ -127,12 +129,12 @@ export function createReviewingAgent(
           };
           let review: AgentRunResult;
           try {
-            reviewerCalls++;
+            checkingRounds++;
             review = await reviewer.run(reviewerRequest);
             if (review.status === 'error' && review.stalled !== true) {
               // One bounded retry of the identical call: an adapter reports
               // transient overload as an error result, and the retry belongs to
-              // the same review call, so it consumes no further review slot. A
+              // the same checking round, so it consumes no further round. A
               // stall abort is marked structurally and never retried: that call
               // is hung, and a second one would only wait another full stall
               // window (phase-execution-36).
@@ -168,14 +170,13 @@ export function createReviewingAgent(
           }
           findings = review.text.trim();
           findingCount = verdict.findingCount;
+          findingOrigin = 'Reviewer';
         }
 
-        if (reviewerCalls === MAX_REVIEWER_CALLS) {
+        if (checkingRounds === MAX_CHECKING_ROUNDS) {
           return failClosed(
             coderResult,
-            options.reviewer === undefined
-              ? `Mechanical review reached the third and final checking round; unresolved mechanical findings:\n${findings}`
-              : `Reviewer reached the third and final review call; unresolved Reviewer findings:\n${findings}`,
+            `Compilation reached the third and final checking round; unresolved ${findingOrigin} findings:\n${findings}`,
           );
         }
 
@@ -183,7 +184,9 @@ export function createReviewingAgent(
           return failClosed(coderResult, 'compilation review aborted');
         }
         const priorTranscript = [...transcript];
-        transcript.push(`Reviewer verdict:\n${findings}`);
+        transcript.push(
+          `${findingOrigin === 'mechanical' ? 'Mechanical findings' : 'Reviewer verdict'}:\n${findings}`,
+        );
         const coderResume = coderResult.resumeToken;
         const priorCoderResult = coderResult;
         const correction = await options.coder.run({

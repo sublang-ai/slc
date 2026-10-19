@@ -792,7 +792,7 @@ describe('createReviewingAgent (DR-022)', () => {
     expect(coder.calls).toHaveLength(3);
     expect(result.status).toBe('error');
     expect(result.resumeToken).toBe('coder-2');
-    expect(result.text).toContain('third and final review call');
+    expect(result.text).toContain('third and final checking round');
     expect(result.text).toContain(
       `unresolved Reviewer findings:\n${finalFindings}`,
     );
@@ -835,7 +835,7 @@ describe('createReviewingAgent (DR-022)', () => {
     });
   });
 
-  it('spends one permitted Reviewer call per mechanical round and fails closed on the third (phase-execution-51)', async () => {
+  it('spends one checking round per mechanical finding without constructing a configured Reviewer (phase-execution-51)', async () => {
     const coder = queuedClient([
       { status: 'success', text: 'initial', resumeToken: 'coder-0' },
       {
@@ -850,7 +850,14 @@ describe('createReviewingAgent (DR-022)', () => {
       },
     ]);
     const reviewer = queuedClient([]);
-    const agent = createReviewingAgent({ coder, reviewer: () => reviewer });
+    let reviewerConstructions = 0;
+    const agent = createReviewingAgent({
+      coder,
+      reviewer: () => {
+        reviewerConstructions++;
+        return reviewer;
+      },
+    });
 
     const result = await agent.run(
       request({
@@ -863,12 +870,68 @@ describe('createReviewingAgent (DR-022)', () => {
     expect(reviewer.calls).toHaveLength(0);
     expect(coder.calls).toHaveLength(3);
     expect(result.status).toBe('error');
-    expect(result.text).toContain('third and final review call');
+    expect(result.text).toContain('third and final checking round');
     expect(result.text).toContain(
-      'unresolved Reviewer findings:\nFINDINGS:\n1. CASE-2: source instruction fragment at line 7 was dropped or changed',
+      'unresolved mechanical findings:\nFINDINGS:\n1. CASE-2: source instruction fragment at line 7 was dropped or changed',
     );
     expect(result.text).toContain('latest Coder output: correction two');
+    expect(reviewerConstructions).toBe(0);
+    expect(coder.calls[2].prompt).toContain('Mechanical findings:\nFINDINGS:');
+    expect(coder.calls[2].prompt).not.toContain('Reviewer verdict:\nFINDINGS:');
+    expect(result.text).not.toContain('third and final review call');
   });
+
+  it.each(['mechanical', 'Reviewer'] as const)(
+    'reports the actual final %s origin after mixed checking rounds',
+    async (origin) => {
+      const coder = queuedClient([
+        { status: 'success', text: 'initial' },
+        { status: 'success', text: correctionEnvelope('repair one') },
+        { status: 'success', text: correctionEnvelope('repair two') },
+      ]);
+      const reviewer = queuedClient([
+        { status: 'success', text: 'FINDINGS:\n1. Reviewer issue' },
+        { status: 'success', text: 'FINDINGS:\n1. Reviewer issue' },
+      ]);
+      const mechanicalRounds =
+        origin === 'mechanical'
+          ? [[], [], ['Mechanical issue']]
+          : [['Mechanical issue'], [], []];
+      let checks = 0;
+      const result = await createReviewingAgent({
+        coder,
+        reviewer: () => reviewer,
+      }).run(
+        request({
+          mechanicalReview: () => {
+            checks++;
+            return mechanicalRounds.shift()!;
+          },
+        }),
+      );
+      expect(result.status).toBe('error');
+      expect(result.text).toContain('third and final checking round');
+      expect(result.text).toContain(
+        `unresolved ${origin} findings:\nFINDINGS:\n1. ${origin === 'mechanical' ? 'Mechanical' : 'Reviewer'} issue`,
+      );
+      expect(result.text).toContain('latest Coder output: repair two');
+      expect(checks).toBe(3);
+      expect(coder.calls).toHaveLength(3);
+      expect(reviewer.calls).toHaveLength(2);
+      expect(result.text).not.toContain('third and final review call');
+      if (origin === 'Reviewer') {
+        expect(reviewer.calls[1].prompt).toContain(
+          'Mechanical findings:\nFINDINGS:\n1. Mechanical issue',
+        );
+        expect(reviewer.calls[1].prompt).toContain(
+          'Reviewer verdict:\nFINDINGS:\n1. Reviewer issue',
+        );
+        expect(reviewer.calls[1].prompt).toContain(
+          '--- CODER OUTPUT ---\nrepair two',
+        );
+      }
+    },
+  );
 
   it('fails closed when the mechanical review cannot run (phase-execution-51)', async () => {
     const coder = queuedClient([
