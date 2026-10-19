@@ -2061,6 +2061,12 @@ function probeGuardAssignment(
             !discoverShape &&
             shapeTag === undefined
           ) {
+            if (
+              tag === 'o:' &&
+              options.declaredResultFields?.includes(prop) &&
+              !Object.hasOwn(assigned, prop)
+            )
+              declaredField = prop;
             const payload = payloads.find((item) => item.tag === tag);
             // An assigned field cannot guide another choice, but reading it
             // must not erase an earlier unresolved descriptor-value hint.
