@@ -245,6 +245,21 @@ fail the phase, and source questions still stop for clarification
 ([DR-033](specs/decisions/033-early-conformance-and-mechanical-repair.md),
 [DR-035](specs/decisions/035-gears-contract-at-producer.md)).
 
+Coverage verification uses finite per-target limits. Optional YAML keys
+`coverageMaxInvocations` (default 8, maximum 64), `coverageMaxAttempts`
+(default 64, maximum 1024), and `coverageMaxDurationMs` (default 300000,
+maximum 1800000) accept positive safe integers. The matching environment
+variables are `SLC_COVERAGE_MAX_INVOCATIONS`, `SLC_COVERAGE_MAX_ATTEMPTS`
+and `SLC_COVERAGE_MAX_DURATION_MS`.
+
+The verification API accepts these as `coverage: { maxInvocations,
+maxAttempts, maxDurationMs }`. The duration is a ceiling: smaller derived
+work allowances and a caller's shorter `timeoutMs` still apply. Generated
+tests carry the complete policy. Increasing a limit does not guarantee
+coverage; an exhausted check remains incomplete. Changing only these
+settings preserves transformation reuse and history while deterministic
+completion regenerates auxiliary tests with the current policy.
+
 ### Reviewed compilation (two agents)
 
 Set `reviewerAgent` to compile with two independent agents. Your `agent`

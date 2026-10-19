@@ -120,13 +120,16 @@ describe('public retained-bundle completion (completion-6/7)', () => {
       await fixture(lang);
       env.SLC_COVERAGE_MAX_INVOCATIONS = '12';
       env.SLC_COVERAGE_MAX_ATTEMPTS = '256';
+      env.SLC_COVERAGE_MAX_DURATION_MS = '900000';
       const before = await readFile(join(bundle, `${name}.fsm.ts`));
       const result = await invoke();
       expect(result.ok, result.stderr).toBe(true);
       for (const suffix of ['gears-fsm.test.ts', 'fsm.coverage.test.ts']) {
         expect(
           await readFile(join(bundle, `${name}.${suffix}`), 'utf8'),
-        ).toContain('"maxInvocations":12,"maxAttempts":256');
+        ).toContain(
+          '"maxInvocations":12,"maxAttempts":256,"maxDurationMs":900000',
+        );
       }
       expect(result.stdout.trim().split('\n')).toHaveLength(11);
       expect(result.stderr).toContain(

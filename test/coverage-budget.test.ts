@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { assign, createActor, fromPromise, setup } from 'xstate';
+import { assign, createActor, fromCallback, fromPromise, setup } from 'xstate';
 import {
   checkFsmCoverage,
   checkGearsFsmArtifact,
@@ -86,7 +86,11 @@ function longMachine(
     states,
   });
 }
-const large = { maxInvocations: 12, maxAttempts: 1024 };
+const large = {
+  maxInvocations: 12,
+  maxAttempts: 1024,
+  maxDurationMs: 900_000,
+};
 
 describe('finite coverage policy through public integration boundaries', () => {
   it('executes a real ten-invocation path and isolates concurrent default/larger checks', async () => {
@@ -171,7 +175,7 @@ describe('finite coverage policy through public integration boundaries', () => {
     ).toBe(true);
   }, 120000);
 
-  it('does not accept an impossible guarded completion or extend the deadline', async () => {
+  it('does not accept an impossible guarded completion or extend the caller deadline', async () => {
     const findings = await checkFsmCoverage(
       { machine: longMachine(true) },
       { coverage: large },
@@ -193,6 +197,72 @@ describe('finite coverage policy through public integration boundaries', () => {
     ).toBe(300000);
   }, 120000);
 
+  it('uses the selected duration ceiling and retains smaller derived allowances', () => {
+    const artifact = { machine: longMachine() };
+    const work = { maxInvocations: 64, maxAttempts: 1024 };
+    expect(fsmCoverageTestTimeout(artifact, work)).toBe(300_000);
+    expect(
+      fsmCoverageTestTimeout(artifact, { ...work, maxDurationMs: 900_000 }),
+    ).toBe(900_000);
+    expect(
+      fsmCoverageTestTimeout(artifact, { ...work, maxDurationMs: 1_800_000 }),
+    ).toBe(1_800_000);
+    const small = {
+      machine: setup({}).createMachine({
+        initial: 'idle',
+        states: { idle: { on: { START: 'done' } }, done: { type: 'final' } },
+      }),
+    };
+    const derived = fsmCoverageTestTimeout(small);
+    expect(derived).toBe(10_000);
+    expect(fsmCoverageTestTimeout(small, { maxDurationMs: 900_000 })).toBe(
+      derived,
+    );
+    expect(fsmCoverageTestTimeout(small, { maxDurationMs: 1 })).toBe(1);
+  });
+
+  it('isolates concurrent duration policies and never lets caller timeout extend a ceiling', async () => {
+    const results = await Promise.allSettled([
+      checkFsmCoverage(
+        { machine: longMachine() },
+        { coverage: { ...large, maxDurationMs: 1 }, timeoutMs: 1_800_000 },
+      ),
+      checkFsmCoverage({ machine: longMachine() }, { coverage: large }),
+    ]);
+    expect(results[0]).toMatchObject({
+      status: 'rejected',
+      reason: expect.any(FsmCoverageDeadlineError),
+    });
+    expect(results[1]).toEqual({ status: 'fulfilled', value: [] });
+  }, 30_000);
+
+  it('cleans up actual actors when a caller shortens an expanded duration policy', async () => {
+    const lifetime = { started: 0, stopped: 0 };
+    const machine = setup({
+      actors: {
+        playbook: fromPromise(async () => ({})),
+        lifetime: fromCallback(() => {
+          lifetime.started++;
+          const until = performance.now() + 150;
+          while (performance.now() < until) {
+            /* Finite synchronous artifact work remains cooperative. */
+          }
+          return () => {
+            lifetime.stopped++;
+          };
+        }),
+      },
+    }).createMachine({
+      ...longMachine().config,
+      invoke: { src: 'lifetime' },
+    } as never);
+    await expect(
+      checkFsmCoverage({ machine }, { coverage: large, timeoutMs: 100 }),
+    ).rejects.toBeInstanceOf(FsmCoverageDeadlineError);
+    expect(lifetime.started).toBeGreaterThan(0);
+    expect(lifetime.stopped).toBe(lifetime.started);
+  });
+
   it.each([
     null,
     0,
@@ -205,6 +275,15 @@ describe('finite coverage policy through public integration boundaries', () => {
     { maxAttempts: Infinity },
     { maxAttempts: NaN },
     { maxAttempts: 1025 },
+    { maxDurationMs: 0 },
+    { maxDurationMs: -1 },
+    { maxDurationMs: 1.1 },
+    { maxDurationMs: '900000' },
+    { maxDurationMs: Infinity },
+    { maxDurationMs: NaN },
+    { maxDurationMs: 1_800_001 },
+    { maxDurationMs: Number.MAX_SAFE_INTEGER + 1 },
+    { maxDurationMs: null },
     { maxAttempt: 10 },
     { [Symbol('extra')]: 1 },
     Object.defineProperty({}, 'extra', { value: 1 }),
@@ -401,13 +480,16 @@ describe('finite coverage policy through public integration boundaries', () => {
         coverage: large,
       }),
     ]) {
-      expect(text).toContain('"maxInvocations":12,"maxAttempts":1024');
+      expect(text).toContain(
+        '"maxInvocations":12,"maxAttempts":1024,"maxDurationMs":900000',
+      );
       expect(text).toContain('fsmCoverageTestTimeout(fsm, coverage)');
       expect(text).not.toContain('process.env');
     }
     expect(resolveCoverageBudget()).toEqual({
       maxInvocations: 8,
       maxAttempts: 64,
+      maxDurationMs: 300_000,
     });
   });
 
@@ -417,12 +499,20 @@ describe('finite coverage policy through public integration boundaries', () => {
       const configPath = join(root, 'slc.config.yaml');
       await writeFile(
         configPath,
-        'agent: claude-code\ncoverageMaxInvocations: 12\ncoverageMaxAttempts: 256\n',
+        'agent: claude-code\ncoverageMaxInvocations: 12\ncoverageMaxAttempts: 256\ncoverageMaxDurationMs: 600000\n',
       );
       const file = await loadConfigFile({ cwd: root, configPath });
+      expect(resolveRunConfig({}, file.config).coverage.maxDurationMs).toBe(
+        600_000,
+      );
+      expect(
+        resolveRunConfig({ SLC_COVERAGE_MAX_DURATION_MS: ' ' }, file.config)
+          .coverage.maxDurationMs,
+      ).toBe(600_000);
       const env = {
         SLC_COVERAGE_MAX_ATTEMPTS: '1024',
         SLC_COVERAGE_MAX_INVOCATIONS: ' ',
+        SLC_COVERAGE_MAX_DURATION_MS: '900000',
       };
       expect(resolveRunConfig(env, file.config).coverage).toEqual(large);
       const deps = await buildSlcDeps(
@@ -474,9 +564,39 @@ describe('finite coverage policy through public integration boundaries', () => {
     },
   );
 
+  it.each(['0', '-1', '1.5', '1800001', 'Infinity', 'NaN', 'no'])(
+    'rejects invalid environment and YAML duration %s before adapter construction',
+    async (value) => {
+      const root = await mkdtemp(join(tmpdir(), 'slc-duration-invalid-'));
+      try {
+        const configPath = join(root, 'slc.config.yaml');
+        await writeFile(configPath, 'agent: claude-code\n');
+        await expect(
+          buildSlcDeps(
+            {
+              env: { SLC_COVERAGE_MAX_DURATION_MS: value },
+              cwd: root,
+              configPath,
+              signal: new AbortController().signal,
+            },
+            () => {
+              throw Error('adapter must not be constructed');
+            },
+          ),
+        ).rejects.toThrow('coverage.maxDurationMs');
+        await writeFile(configPath, `coverageMaxDurationMs: ${value}\n`);
+        await expect(loadConfigFile({ cwd: root, configPath })).rejects.toThrow(
+          'coverage.maxDurationMs',
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('refuses invalid run policy before resolver IO or phase work and documents env/config names', async () => {
     const result = await runSlc(['playbook', 'missing.md'], {
-      coverage: { maxAttempts: 1025 },
+      coverage: { maxDurationMs: 1_800_001 },
       resolver: () => {
         throw Error('resolver must not run');
       },
@@ -487,8 +607,10 @@ describe('finite coverage policy through public integration boundaries', () => {
       },
     });
     expect(result.ok).toBe(false);
-    expect(result.diagnostics.join(' ')).toContain('maxAttempts');
+    expect(result.diagnostics.join(' ')).toContain('maxDurationMs');
     expect(usageText()).toContain('SLC_COVERAGE_MAX_INVOCATIONS');
     expect(usageText()).toContain('coverageMaxAttempts');
+    expect(usageText()).toContain('coverageMaxDurationMs');
+    expect(usageText()).toContain('SLC_COVERAGE_MAX_DURATION_MS');
   });
 });

@@ -64,6 +64,7 @@ export interface FileConfig {
   stallTimeout?: number;
   coverageMaxInvocations?: number;
   coverageMaxAttempts?: number;
+  coverageMaxDurationMs?: number;
 }
 
 /**
@@ -212,6 +213,7 @@ const ALLOWED_KEYS = [
   'stallTimeout',
   'coverageMaxInvocations',
   'coverageMaxAttempts',
+  'coverageMaxDurationMs',
 ] as const;
 
 function normalizeFileConfig(value: unknown, path: string): FileConfig {
@@ -294,11 +296,14 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
     const coverage = resolveCoverageBudget({
       maxInvocations: input.coverageMaxInvocations as number | undefined,
       maxAttempts: input.coverageMaxAttempts as number | undefined,
+      maxDurationMs: input.coverageMaxDurationMs as number | undefined,
     });
     if (input.coverageMaxInvocations !== undefined)
       config.coverageMaxInvocations = coverage.maxInvocations;
     if (input.coverageMaxAttempts !== undefined)
       config.coverageMaxAttempts = coverage.maxAttempts;
+    if (input.coverageMaxDurationMs !== undefined)
+      config.coverageMaxDurationMs = coverage.maxDurationMs;
   } catch (error) {
     throw new ConfigFileError(
       'config-invalid',
