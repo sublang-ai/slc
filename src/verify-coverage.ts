@@ -1996,14 +1996,15 @@ function probeGuardAssignment(
             shapeTag === undefined
           ) {
             const payload = payloads.find((item) => item.tag === tag);
+            // An assigned field cannot guide another choice, but reading it
+            // must not erase an earlier unresolved descriptor-value hint.
             if (
-              varyExisting ||
-              payload?.varyExisting === true ||
-              payload?.shapeFields?.includes(prop)
+              (varyExisting ||
+                payload?.varyExisting === true ||
+                payload?.shapeFields?.includes(prop)) &&
+              !Object.hasOwn(assigned, prop)
             )
-              descriptorRead = Object.hasOwn(assigned, prop)
-                ? undefined
-                : `${tag}${prop}`;
+              descriptorRead = `${tag}${prop}`;
           }
           return descriptor;
         },
