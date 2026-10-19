@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-10-19
+
 ### Fixed
 
 - Prompt fidelity accepts exact canonical JSON from typed input values while
@@ -1001,7 +1003,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.18.1...HEAD
+[0.18.1]: https://github.com/sublang-ai/slc/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/sublang-ai/slc/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/sublang-ai/slc/compare/v0.16.9...v0.17.0
 [0.16.9]: https://github.com/sublang-ai/slc/compare/v0.16.8...v0.16.9
