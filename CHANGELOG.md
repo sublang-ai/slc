@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Coverage copies ordinary guard-candidate data from a per-probe snapshot while
+  retaining descriptor fallback, fresh candidates and unchanged search limits.
+
 - Coverage retains an unresolved child-output descriptor hint across later reads
   of already assigned fields, preserving actual guards and bounded replay.
 

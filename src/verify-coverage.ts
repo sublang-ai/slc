@@ -1769,7 +1769,11 @@ function probeGuardAssignment(
   // and retaining accessors, prototypes and non-enumerable Error properties.
   const bases = new WeakMap<
     object,
-    { prototype: object | null; descriptors: PropertyDescriptorMap }
+    {
+      prototype: object | null;
+      descriptors: PropertyDescriptorMap;
+      data?: Record<string, unknown>;
+    }
   >();
   const overlay = (
     base: object,
@@ -1781,12 +1785,40 @@ function probeGuardAssignment(
         prototype: Object.getPrototypeOf(base) as object | null,
         descriptors: Object.getOwnPropertyDescriptors(base),
       };
+      const descriptors = shape.descriptors;
+      if (
+        (shape.prototype === Object.prototype || shape.prototype === null) &&
+        Reflect.ownKeys(descriptors).every((key) => {
+          const descriptor = Reflect.get(
+            descriptors,
+            key,
+          ) as PropertyDescriptor;
+          return (
+            'value' in descriptor &&
+            descriptor.enumerable === true &&
+            descriptor.configurable === true &&
+            descriptor.writable === true
+          );
+        })
+      ) {
+        // Define once from descriptors: never read seed getters or assign an
+        // own __proto__ through a setter. Spread only this private data seed.
+        shape.data = Object.create(Object.prototype, descriptors) as Record<
+          string,
+          unknown
+        >;
+      }
       bases.set(base, shape);
     }
-    const copy = Object.create(shape.prototype, shape.descriptors) as Record<
-      string,
-      unknown
-    >;
+    const copy =
+      shape.data === undefined
+        ? (Object.create(shape.prototype, shape.descriptors) as Record<
+            string,
+            unknown
+          >)
+        : { ...shape.data };
+    if (shape.data !== undefined && shape.prototype === null)
+      Object.setPrototypeOf(copy, null);
     return Object.assign(copy, assigned);
   };
   // Guard-source literals first: the likeliest matches are tried earliest.
