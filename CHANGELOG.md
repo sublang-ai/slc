@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Compilation failures identify the final checking round and actual mechanical or
+  Reviewer findings without miscounting model calls; correction transcripts retain that origin.
+
 - Coverage guides declared result placeholders read through own data descriptors,
   retaining earlier unresolved fields across later assigned reads within existing bounds.
 
