@@ -2162,7 +2162,7 @@ describe('checkGearsFsmConformance', () => {
     );
     expect(findings).toMatch(/FSM playbook "security-review"/);
     expect(findings).toMatch(
-      /FSM playbook text does not preserve the complete GEARS child-input template/,
+      /FSM playbook text could not prove the complete expanded GEARS child-input composition/,
     );
   });
 
@@ -4972,7 +4972,7 @@ describe('composed literal child-input fidelity', () => {
       }),
     };
     expect(checkGearsFsmConformance(gears, machine).join('\n')).toMatch(
-      /complete GEARS child-input template/,
+      /complete expanded GEARS child-input composition/,
     );
     expect(machine.context).toMatchObject({
       typed: { nested: [7], enabled: false },
@@ -5061,7 +5061,7 @@ export const machine = createMachine({
         );
         if (fault)
           expect(consumer.diagnostics.join('\n')).toContain(
-            'complete GEARS child-input template',
+            'complete expanded GEARS child-input composition',
           );
         expect(await readFile(source, 'utf8')).toBe(gears);
         expect(await readFile(fsm, 'utf8')).toBe(generated);

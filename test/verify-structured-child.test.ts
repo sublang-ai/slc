@@ -374,9 +374,20 @@ describe('reached canonical structured child relays', () => {
   it.each(['drop', 'reorder', 'hardcode', 'noncanonical', 'corrupt'])(
     'refuses %s structured substitutions',
     async (fault) => {
-      expect(
-        await checkGearsFsmArtifact(gears, { machine: fixture(fault) }),
-      ).not.toEqual([]);
+      const findings = await checkGearsFsmArtifact(gears, {
+        machine: fixture(fault),
+      });
+      expect(findings).not.toEqual([]);
+      if (fault === 'noncanonical') {
+        expect(findings.join('\n')).toContain(
+          'could not prove the complete expanded GEARS child-input composition',
+        );
+        expect(findings.join('\n')).not.toContain(
+          'does not preserve the complete GEARS child-input template',
+        );
+        for (const payload of ['Request', 'Prior receipt', 'Current report'])
+          expect(findings.join('\n')).not.toContain(payload);
+      }
     },
   );
 });

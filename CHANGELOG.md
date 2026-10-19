@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Child-input composition findings distinguish expanded relay rendering from
+  authored template omission and omit reached baseline payload snippets.
+
 - Compilation failures identify the final checking round and actual mechanical or
   Reviewer findings without miscounting model calls; correction transcripts retain that origin.
 

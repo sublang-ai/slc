@@ -3575,7 +3575,7 @@ function literalPlaybookTextFinding(
   const matched = matchPromptBody(prompt, text, [...fields]);
   if (matched === null || matched.index !== 0 || matched.end !== text.length) {
     unproved?.();
-    return 'does not preserve the complete GEARS child-input template';
+    return 'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, and canonical compact JSON for structured relays';
   }
   const tokens = [...prompt.matchAll(PLACEHOLDER)].map((match) => match[0]);
   const mapping = new Map<string, { field: string }>();
@@ -4261,7 +4261,7 @@ export class ReachedLiteralChildChecks {
       );
       if (matched === undefined) {
         work.failure =
-          'does not preserve the complete GEARS child-input template';
+          'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, and canonical compact JSON for structured relays';
         return;
       }
       for (const [token, text] of matched) {
@@ -4315,7 +4315,7 @@ export class ReachedLiteralChildChecks {
       );
       if (matched === undefined) {
         work.failure =
-          'does not preserve the complete GEARS child-input template';
+          'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, and canonical compact JSON for structured relays';
         return;
       }
       for (const [token, value] of matched) {
@@ -4385,10 +4385,7 @@ export class ReachedLiteralChildChecks {
       const expected = render({});
       if (expected === undefined || reached.text !== expected) {
         work.failure =
-          'does not preserve the complete GEARS child-input template' +
-          (expected === undefined
-            ? ''
-            : ` (${firstDifferenceDiagnostic(expected, reached.text)})`);
+          'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, and canonical compact JSON for structured relays';
         return;
       }
       const verifyPayload = (
