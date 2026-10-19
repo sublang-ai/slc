@@ -13,6 +13,9 @@ and this project adheres to
 
 ### Fixed
 
+- Coverage guides declared result placeholders read through own data descriptors,
+  retaining earlier unresolved fields across later assigned reads within existing bounds.
+
 - Coverage tries newly observed bounded reached-context values before remaining
   static child-output candidates while preserving seeds, search limits and actual replay.
 
