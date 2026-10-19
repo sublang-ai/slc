@@ -11,6 +11,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Coverage tries newly observed bounded reached-context values before remaining
+  static child-output candidates while preserving seeds, search limits and actual replay.
+
 ## [0.18.0] - 2026-10-18
 
 ### Added

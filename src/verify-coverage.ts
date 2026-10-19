@@ -1845,6 +1845,7 @@ function probeGuardAssignment(
       ? Object.getOwnPropertyDescriptors(options.initialContext ?? {})
       : undefined;
   let reachedValues = 0;
+  const reachedCandidates: unknown[] = [];
   const declaredValues = new Map<string, string[]>();
   const declaredDistinct = new Set<string>();
   const noteContextRead = (field: string, declaredField?: string): void => {
@@ -1883,11 +1884,12 @@ function probeGuardAssignment(
         typeof value === 'boolean' ||
         (typeof value === 'number' && Number.isFinite(value))
       ) ||
-      values.some((candidate) => Object.is(candidate, value))
+      values.some((candidate) => Object.is(candidate, value)) ||
+      reachedCandidates.some((candidate) => Object.is(candidate, value))
     )
       return;
     reachedValues++;
-    values.push(value);
+    reachedCandidates.push(value);
   };
   function* candidateValues(
     key: string,
@@ -1906,10 +1908,26 @@ function probeGuardAssignment(
       if (hasBaseline && deferBaseline) yield baseline;
       return;
     }
-    // A failed candidate can reveal a fixed-context value needed by this same
-    // field. Include new bounded observations before completing its iteration.
-    for (let index = 0; index < values.length; index++) {
-      if (!hasBaseline || values[index] !== baseline) yield values[index];
+    // A deeper failed candidate can reveal a fixed-context value needed by
+    // this field. On every resume, try new bounded hints before the static tail.
+    // Admission keeps the two pools disjoint; Object.is retains signed zero.
+    const triedReached: unknown[] = [];
+    let index = 0;
+    while (true) {
+      const hint = reachedCandidates.findIndex(
+        (value) =>
+          (!hasBaseline || value !== baseline) &&
+          !triedReached.some((tried) => Object.is(tried, value)),
+      );
+      if (hint !== -1) {
+        const value = reachedCandidates[hint];
+        triedReached.push(value);
+        yield value;
+        continue;
+      }
+      if (index === values.length) break;
+      const value = values[index++];
+      if (!hasBaseline || value !== baseline) yield value;
     }
     if (hasBaseline && deferBaseline) yield baseline;
   }
