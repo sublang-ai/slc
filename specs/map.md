@@ -84,6 +84,7 @@ meta.md       The spec of specs
 | [DR-056](decisions/056-source-role-names.md) | 056-source-role-names.md | Source `Roles:` entries are single capitalized words, refused with the entry, rule and fix before any agent runs |
 | [DR-057](decisions/057-language-neutral-relay-marker.md) | 057-language-neutral-relay-marker.md | The parenthesized backticked `>` marks a quoted relay in any language, amending [DR-029](decisions/029-source-fidelity-gate.md); marker findings name what to write |
 | [DR-058](decisions/058-topology-bound-boss-questions.md) | 058-topology-bound-boss-questions.md | Select schema-3 continuation storage by root parallel topology and validate actual reached questions |
+| [DR-059](decisions/059-compiler-calls-turn-native-skills-off.md) | 059-compiler-calls-turn-native-skills-off.md | Every agent call requests `nativeSkills: false` where Cligent reports the adapter can honor it; Kimi Code and unlisted adapters keep native skills, a documented reduction |
 
 ## Packages
 
@@ -98,7 +99,7 @@ meta.md       The spec of specs
 | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
 | [incremental-compilation.md](packages/incremental-compilation.md) | Complete build history, sidecar-aware input identity, reuse/update/ordinary selection, update context, success-only publication, rebuilds, exclusions, and fixture acceptance |
 | [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
-| [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, the text-to-GEARS Source role-name boundary and Source-fidelity gate, the `playbook` link-fidelity gate, compiled runtime profiles selected by the declared engine contract, run-time definition relay, pin selection, status streaming, and the agent-stall watchdog |
+| [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, the text-to-GEARS Source role-name boundary and Source-fidelity gate, the `playbook` link-fidelity gate, compiled runtime profiles selected by the declared engine contract, run-time definition relay, pin selection, status streaming, the agent-stall watchdog, and native skill isolation |
 | [pinning.md](packages/pinning.md) | Closure derivation, pin-currency validation, and generation: SLC-owned declarations, context-selected path boundaries, boundary-contained definitions, currency verdicts, the compiled-execution fidelity gate, and fixture acceptance |
 | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, link-object import settlement, pass and normalization scheduling, and system acceptance |
 | [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |

@@ -16,6 +16,12 @@
  * omitted for an adapter Cligent gives no provider-enforced tool-restriction
  * surface, whose isolation then rests on the call's authored prompt envelope.
  *
+ * The transport also owns native skill isolation (DR-059, phase-execution-71):
+ * every call it makes turns its runtime's own skill discovery off where
+ * Cligent reports the adapter can, so skills installed in project or user
+ * skill folders never become compiler inputs no pin records; any other
+ * adapter keeps its native skills, a documented reduction.
+ *
  * The transport also owns the agent-stall watchdog (DR-019, phase-execution-36): with a
  * positive `stallTimeoutMs`, an in-flight call that observes no adapter event
  * for that window is aborted through a call-local controller — the caller's
@@ -28,7 +34,7 @@
  * adapter's event stream. See specs/packages/phase-execution.md.
  */
 
-import { Cligent } from '@sublang/cligent';
+import { Cligent, getNativeSkillSupport } from '@sublang/cligent';
 import type {
   AgentAdapter,
   AgentEvent,
@@ -75,6 +81,20 @@ function toolOptionsFor(
     return {};
   }
   return { allowedTools: [...allowedTools] };
+}
+
+/**
+ * The native-skill half of every call's Cligent options (phase-execution-71).
+ *
+ * `false` is requested only where Cligent's published support says the
+ * adapter honors it; Kimi Code, which has no per-run lever and rejects it,
+ * and an adapter Cligent publishes nothing for keep their runtime's own skill
+ * discovery rather than failing every call (DR-059).
+ */
+function nativeSkillOptionsFor(agent: string): { nativeSkills?: false } {
+  return getNativeSkillSupport(agent)?.disableSupported === true
+    ? { nativeSkills: false }
+    : {};
 }
 
 /** Timer seams for the stall watchdog; injected in tests. */
@@ -128,6 +148,8 @@ export function createCligentAgent(opts: {
     // Both validated adapter-scoped by the configuration layer (cli-7, cli-12).
     ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
     ...(opts.fastMode !== undefined ? { fastMode: opts.fastMode } : {}),
+    // No call overrides it, so this instance default reaches every run.
+    ...nativeSkillOptionsFor(opts.adapter.agent),
   });
   const stallMs = opts.stallTimeoutMs ?? 0;
   const timers = opts.watchdogTimers ?? defaultWatchdogTimers;

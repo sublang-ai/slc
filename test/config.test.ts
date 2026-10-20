@@ -22,6 +22,7 @@ import {
   runtimeContractForPin,
   type SupportedAgent,
 } from '../src/config.js';
+import { createCligentAgent } from '../src/cligent-agent.js';
 import type { CompiledSelection } from '../src/runner.js';
 
 import { writePlaybookEngineFixture } from './playbook-engine-fixture.js';
@@ -647,6 +648,173 @@ describe('createConfiguredExecutor (cli-7, cli-8)', () => {
       ]);
       // The substitution changes nothing else about either call.
       expect(promptOnly.map(withoutTools)).toEqual(enforcing.map(withoutTools));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('turns native skill discovery off on every call where the adapter can (phase-execution-71, phase-execution-72)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slc-native-skills-'));
+    const definitionPath = join(dir, 'phase.md');
+    const source = join(dir, 'source.md');
+    const target = join(dir, 'target.ts');
+    await writeFile(definitionPath, 'compiled phase definition');
+    await writeFile(source, 'source input');
+    // A composed-v2 fixture whose one turn makes a performing player call,
+    // which the configured Reviewer then reviews, a routing-only Captain call,
+    // and the hidden judge call.
+    await writeFile(
+      join(dir, 'phase.playbook.mjs'),
+      [
+        'export default function createPlaybookRuntime() {',
+        '  let ports;',
+        '  return {',
+        '    async init(session) { ports = session.ports; },',
+        '    async handleBossInput({ text, signal }) {',
+        "      const written = await ports.callPlayer('writer', text, signal, { resume: false });",
+        "      if (written.status !== 'ok') throw new Error('player failed');",
+        "      await ports.callCaptain('Route this.', signal, {",
+        "        visibility: 'visible',",
+        '        resume: false,',
+        '        allowedTools: [],',
+        '      });',
+        "      await ports.callJudge('Adjudicate this.', signal);",
+        '      return {',
+        "        outcome: 'terminal',",
+        '        state: {',
+        "          value: 'done',",
+        "          activeStateIds: ['done'],",
+        '          tags: [],',
+        "          status: 'done',",
+        '          quiescent: true,',
+        "          stateId: 'done',",
+        '        },',
+        '      };',
+        '    },',
+        '    async dispose() {},',
+        '  };',
+        '}',
+      ].join('\n'),
+    );
+
+    // Every call's options as the adapter receives them. The read-only
+    // Reviewer answers clean; the compiled player writes the target the
+    // seeded request names.
+    const capturingFactory =
+      (seen: AgentOptions[]): AdapterFactory =>
+      (id) =>
+        capturingAdapter(id, seen);
+    const capturingAdapter = (
+      id: string,
+      seen: AgentOptions[],
+    ): AgentAdapter => ({
+      agent: id,
+      async isAvailable() {
+        return true;
+      },
+      async *run(prompt: string, options?: AgentOptions) {
+        if (options !== undefined) seen.push(options);
+        const reviewing = options?.permissions?.fileWrite === 'deny';
+        const marker = 'Request: ';
+        const line = prompt
+          .split('\n')
+          .find((candidate) => candidate.startsWith(marker));
+        if (!reviewing && line !== undefined) {
+          const input = JSON.parse(line.slice(marker.length)) as {
+            target: string;
+          };
+          await writeFile(input.target, 'compiled output');
+        }
+        yield {
+          type: 'done',
+          agent: id,
+          timestamp: 1,
+          sessionId: `${id}-session`,
+          payload: {
+            status: 'success',
+            result: reviewing ? 'NO_FINDINGS' : 'agent reply',
+            usage: { inputTokens: 0, outputTokens: 0, toolUses: 0 },
+            durationMs: 1,
+          },
+        } as never;
+      },
+    });
+    const request = {
+      kind: 'compile' as const,
+      definitionPath,
+      source,
+      target,
+    };
+    const configuredCalls = async (
+      agent: SupportedAgent,
+    ): Promise<AgentOptions[]> => {
+      const seen: AgentOptions[] = [];
+      const selection = { agent, reviewer: { agent } };
+      const adapterFactory = capturingFactory(seen);
+      await expect(
+        createConfiguredExecutor(selection, { adapterFactory, cwd: dir }).run(
+          request,
+          new AbortController().signal,
+        ),
+      ).resolves.toMatchObject({ status: 'ok' });
+      const compiled = await createConfiguredCompiledFactory(selection, {
+        adapterFactory,
+        cwd: dir,
+      })({
+        phase: 'phase',
+        pipelineDir: dir,
+        record: {
+          artifact: { path: 'phase.playbook.mjs' },
+          linkTarget: { provenance: '@sublang/playbook@2.0.0' },
+        },
+      } as unknown as CompiledSelection);
+      await expect(
+        compiled.run(request, new AbortController().signal),
+      ).resolves.toMatchObject({ status: 'ok' });
+      await rm(target, { force: true });
+      return seen;
+    };
+    const transportCall = async (agent: string): Promise<AgentOptions> => {
+      const seen: AgentOptions[] = [];
+      await createCligentAgent({ adapter: capturingAdapter(agent, seen) }).run(
+        // No tool list, so tool isolation cannot tell the adapters apart
+        // (phase-execution-31).
+        { prompt: 'perform', cwd: dir, signal: new AbortController().signal },
+      );
+      expect(seen).toHaveLength(1);
+      return seen[0]!;
+    };
+    const withoutSignal = (options: AgentOptions): Record<string, unknown> => {
+      const { abortSignal, ...rest } = options;
+      void abortSignal;
+      return rest;
+    };
+
+    try {
+      for (const agent of SUPPORTED_AGENTS) {
+        const calls = await configuredCalls(agent);
+        // Interpreted Coder and Reviewer; compiled player, its Reviewer,
+        // routing Captain, and judge.
+        expect(calls, agent).toHaveLength(6);
+        expect(
+          calls.map((options) => options.nativeSkills),
+          agent,
+        ).toEqual(Array(6).fill(false));
+      }
+
+      // Kimi Code has no per-run lever, and Cligent publishes no support for
+      // an unlisted adapter: both keep native discovery, and nothing else
+      // about the call changes.
+      const honoring = await transportCall('codex');
+      const kimi = await transportCall('kimi');
+      const unlisted = await transportCall('fixture');
+      expect(honoring.nativeSkills).toBe(false);
+      expect(kimi.nativeSkills).toBeUndefined();
+      expect(unlisted.nativeSkills).toBeUndefined();
+      const { nativeSkills, ...rest } = withoutSignal(honoring);
+      void nativeSkills;
+      expect(withoutSignal(kimi)).toEqual(rest);
+      expect(withoutSignal(unlisted)).toEqual(rest);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

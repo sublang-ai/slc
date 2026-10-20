@@ -10,6 +10,7 @@ The evolving runtime boundary is settled by [DR-010](../decisions/010-playbook-r
 Playbook 10's roleless schema-3 host boundary is current: its contract follows [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), activated by [DR-027](../decisions/027-complete-playbook-10-activation.md).
 Under [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md), that schema-3 generation is selected by the installed engine's declared contract rather than by an exact release, and compiled execution relays the definition text at run time.
 Direct Captain control-call isolation is extended by [DR-012](../decisions/012-playbook-routing-control-separation.md).
+Every agent call turns its runtime's own skill discovery off where the adapter can, under [DR-059](../decisions/059-compiler-calls-turn-native-skills-off.md).
 A text-to-GEARS phase additionally refuses a Source whose role names break the rule of [DR-056](../decisions/056-source-role-names.md) before any agent runs, passes the deterministic Source-fidelity gate of [DR-029](../decisions/029-source-fidelity-gate.md) before any Reviewer judges its output, and a `playbook` link phase the link-fidelity gate of [DR-030](../decisions/030-link-fidelity-gate.md).
 Generic pipeline mechanics are specified in the `pipeline` package.
 Verification uses integration and system acceptance over the execution boundary, interpreted and compiled execution, and pin-driven selection, exercising the `slc` command with faked agent transports and fixture compiled artifacts.
@@ -238,6 +239,17 @@ Where a `composed-v2` or `composed-v3` compiled phase makes a transformation-per
 
 Where a positive stall timeout is configured, while any Coder, Reviewer, compiled player, Captain, or judge agent call is in flight, when the Cligent transport observes no agent event for the stall timeout, the slc command shall abort exactly that call through its abort plumbing and report it as a failed call with a diagnostic carrying the inactivity duration, unless the aborted call still yields a successful terminal outcome within the transport's post-abort drain, in which case that outcome stands so a completed call is never reported as a hang; a reported failure shall surface through the unchanged phase protocols as a failure report naming the phase and target, with no automatic transport retry or later review-loop call after the abort, and with fail-closed handling — never an interpreted fallback — for a pinned phase ([DR-019](../decisions/019-compile-progress-stall-watchdog.md), [[phase-execution-9](#phase-execution-9)], [[phase-execution-12](#phase-execution-12)], [[phase-execution-23](#phase-execution-23)], [[phase-execution-27](#phase-execution-27)], [[phase-execution-46](#phase-execution-46)]).
 
+### Native skill isolation
+
+#### phase-execution-71
+
+When transporting any Coder, Reviewer, compiled player, Captain, or judge agent call through Cligent [[1]], the slc command shall decide that call's `nativeSkills` option from Cligent's published native-skill support for the selected adapter [[3]] ([DR-059](../decisions/059-compiler-calls-turn-native-skills-off.md)):
+
+| Selected adapter | `nativeSkills` option |
+| --- | --- |
+| Its support reports `disableSupported: true` — `claude-code`, `codex`, `gemini`, and `opencode` | `false`, so the runtime's own skill discovery is off as far as that adapter's levers reach, leaving only what Cligent's support notes disclose — on Claude Code that includes project and user skills in subagents under an administrator policy tier that does not merge parent settings — while every other call setting is unchanged. |
+| Its support reports `disableSupported: false` — `kimi` — or Cligent publishes none for it | Omitted, so the call keeps that runtime's own skill discovery, a documented reduction rather than an equivalence. |
+
 ## Verification
 
 ### Interpreted-run acceptance
@@ -374,7 +386,14 @@ Where real XState fixtures expose reachable, shadowed or unsupported transitions
 
 Where the two-word-role fixture is the Source of a `text`-to-`gears` pipeline, when the slc command compiles it as an entry-form Source and, through normalization, as a raw Source, the suite shall verify that each run fails at its first step naming the Source path and the role-name finding, invokes no executor, and writes no target, while the same run with the role written as one word reaches the executor [[phase-execution-69](#phase-execution-69)].
 
+### Native skill isolation acceptance
+
+#### phase-execution-72
+
+Where an interpreted phase and a `composed-v2` compiled fixture phase run through the configured executor factories with a configured Reviewer over faked adapters, when the slc command transports their Coder, Reviewer, compiled player, routing Captain, and judge calls under a `claude-code`, `codex`, `gemini`, or `opencode` selection, every call shall reach its adapter with `nativeSkills: false`; whereas the same transport given a `kimi` adapter or an adapter Cligent publishes no support for shall reach it with no `nativeSkills` option and every other call setting identical to a `codex` call's [[phase-execution-71](#phase-execution-71)].
+
 ## References
 
 [1]: https://www.npmjs.com/package/@sublang/cligent "Cligent: Unified TypeScript SDK for AI Coding Agent CLIs"
 [2]: https://github.com/sublang-ai/playbook/blob/main/specs/decisions/013-routing-only-captain-control.md#addendum-a1-prompt-level-isolation-for-adapters-without-tool-enforcement "Playbook DR-013 Addendum A1: prompt-level isolation for adapters without tool enforcement"
+[3]: https://github.com/sublang-ai/cligent/blob/v0.35.0/specs/packages/skills.md#skills-11 "Cligent skills-11: native-skill support per adapter"

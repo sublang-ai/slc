@@ -11,6 +11,27 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Compiler calls turn native skills off.** Every Coder, Reviewer, compiled
+  player, Captain, and judge call asks its agent to turn off, as far as the
+  runtime allows, the skills it discovers by itself in project and user skill
+  folders, so skills installed there no longer become compiler inputs no pin
+  records. Claude Code, Codex, Gemini CLI, and managed OpenCode honor it,
+  except that Claude Code subagents still list project and user skills under
+  an administrator policy tier that does not merge parent settings; a library
+  host's Kimi Code adapter, which has no per-run lever, keeps its native
+  skills ([DR-059](specs/decisions/059-compiler-calls-turn-native-skills-off.md)).
+  A call the runtime cannot isolate now fails rather than running with native
+  skills: Codex with an unreadable skill root or more disabled skill paths
+  than the process arguments hold, Gemini CLI when its per-run home or skill
+  settings cannot be prepared, and a library host's external-mode OpenCode
+  adapter. SLC's own Cligent dependency moves to `^0.36.0` and the provenance
+  pins are refreshed; until a Playbook release requires it too, an install
+  nests Playbook's Cligent 0.34 copy, which compiled execution loads through
+  Playbook's host-capabilities module without making any agent call through
+  it, and Playbook's pinned runtime identity covers it.
+
 ## [0.18.1] - 2026-10-19
 
 ### Fixed
