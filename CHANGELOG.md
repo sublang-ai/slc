@@ -11,6 +11,19 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Compiler calls turn native skills off.** Every Coder, Reviewer, compiled
+  player, Captain, and judge call asks its agent not to load the skills it
+  discovers by itself in project and user skill folders, so skills installed
+  there no longer become compiler inputs no pin records. Claude Code, Codex,
+  Gemini CLI, and managed OpenCode honor it; Kimi Code, which has no per-run
+  lever, keeps its native skills
+  ([DR-059](specs/decisions/059-compiler-calls-turn-native-skills-off.md)).
+  SLC's own Cligent dependency moves to `^0.35.0` and the provenance pins are
+  refreshed; until a Playbook release requires it too, an install nests
+  Playbook's Cligent 0.34 copy, which no compiler path loads.
+
 ## [0.18.1] - 2026-10-19
 
 ### Fixed

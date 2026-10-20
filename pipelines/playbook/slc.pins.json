@@ -29,7 +29,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:3d59ccf026fd86e831aee39cb3a4d77b0a8e1faa878e922c925cf30372f194a7"
+          "hash": "sha256:c37c25df386579aa56bf45de62ba557ff8debcd7a90842fee01d228b2ae4c28b"
         },
         {
           "path": "workflow-contracts.json",
@@ -43,7 +43,7 @@
           "locator": "../../node_modules/@sublang/playbook",
           "provenance": "@sublang/playbook@17.10.1",
           "specifier": "@sublang/playbook/xstate-runtime",
-          "identity": "sha256:5add8cf65aa17b8eaa880dfb6cc773fbf47b3500a6864f7b5da6990973f50b9e"
+          "identity": "sha256:a2b3416bacbe398e29e4976d0a6b5cf2f60e494089b656eda88fde5338782786"
         },
         {
           "kind": "package",
@@ -87,7 +87,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:3d59ccf026fd86e831aee39cb3a4d77b0a8e1faa878e922c925cf30372f194a7"
+          "hash": "sha256:c37c25df386579aa56bf45de62ba557ff8debcd7a90842fee01d228b2ae4c28b"
         },
         {
           "path": "link.md",
@@ -109,7 +109,7 @@
           "locator": "../../node_modules/@sublang/playbook",
           "provenance": "@sublang/playbook@17.10.1",
           "specifier": "@sublang/playbook/xstate-runtime",
-          "identity": "sha256:5add8cf65aa17b8eaa880dfb6cc773fbf47b3500a6864f7b5da6990973f50b9e"
+          "identity": "sha256:a2b3416bacbe398e29e4976d0a6b5cf2f60e494089b656eda88fde5338782786"
         },
         {
           "kind": "package",
@@ -153,7 +153,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:3d59ccf026fd86e831aee39cb3a4d77b0a8e1faa878e922c925cf30372f194a7"
+          "hash": "sha256:c37c25df386579aa56bf45de62ba557ff8debcd7a90842fee01d228b2ae4c28b"
         },
         {
           "path": "gears2fsm.md",
@@ -183,7 +183,7 @@
           "locator": "../../node_modules/@sublang/playbook",
           "provenance": "@sublang/playbook@17.10.1",
           "specifier": "@sublang/playbook/xstate-runtime",
-          "identity": "sha256:5add8cf65aa17b8eaa880dfb6cc773fbf47b3500a6864f7b5da6990973f50b9e"
+          "identity": "sha256:a2b3416bacbe398e29e4976d0a6b5cf2f60e494089b656eda88fde5338782786"
         },
         {
           "kind": "package",
