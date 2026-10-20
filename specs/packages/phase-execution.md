@@ -247,7 +247,7 @@ When transporting any Coder, Reviewer, compiled player, Captain, or judge agent 
 
 | Selected adapter | `nativeSkills` option |
 | --- | --- |
-| Its support reports `disableSupported: true` — `claude-code`, `codex`, `gemini`, and `opencode` | `false`, so the runtime's own project and user skills stay out of the call while every other call setting is unchanged. |
+| Its support reports `disableSupported: true` — `claude-code`, `codex`, `gemini`, and `opencode` | `false`, so the runtime's own skill discovery is off as far as that adapter's levers reach, leaving only what Cligent's support notes disclose — on Claude Code that includes project and user skills in subagents under an administrator policy tier that does not merge parent settings — while every other call setting is unchanged. |
 | Its support reports `disableSupported: false` — `kimi` — or Cligent publishes none for it | Omitted, so the call keeps that runtime's own skill discovery, a documented reduction rather than an equivalence. |
 
 ## Verification
