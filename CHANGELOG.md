@@ -11,6 +11,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-20
+
 ### Changed
 
 - **Compiler calls turn native skills off.** Every Coder, Reviewer, compiled
@@ -26,11 +28,18 @@ and this project adheres to
   skills: Codex with an unreadable skill root or more disabled skill paths
   than the process arguments hold, Gemini CLI when its per-run home or skill
   settings cannot be prepared, and a library host's external-mode OpenCode
-  adapter. SLC's own Cligent dependency moves to `^0.36.0` and the provenance
-  pins are refreshed; until a Playbook release requires it too, an install
-  nests Playbook's Cligent 0.34 copy, which compiled execution loads through
-  Playbook's host-capabilities module without making any agent call through
-  it, and Playbook's pinned runtime identity covers it.
+  adapter.
+
+- **Adopt Playbook 17.11.0 and Cligent 0.36.0.** Playbook's Captain control
+  calls take the same native-skill switch on Cligent 0.36.0, so an install
+  again resolves one Cligent shared by the compiler and the host. The vendored
+  `text2gears` definition is re-synchronized byte-identically; it keeps the
+  compiler's standard Boss-question description, its compiled-execution
+  section is unchanged, so the reviewed bundle is retained, and the
+  provenance pins are regenerated
+  ([DR-028](specs/decisions/028-contract-based-adoption-without-recompilation.md)).
+- **The demo installs the coming releases.** Its consumer project declares
+  `@sublang/playbook` `^17.11.0` and `@sublang/slc` `^0.19.0`.
 
 ## [0.18.1] - 2026-10-19
 
@@ -1024,7 +1033,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.18.1...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/sublang-ai/slc/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/sublang-ai/slc/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/sublang-ai/slc/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/sublang-ai/slc/compare/v0.16.9...v0.17.0
