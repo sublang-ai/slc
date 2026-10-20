@@ -20,7 +20,7 @@ and this project adheres to
   Gemini CLI, and managed OpenCode honor it; Kimi Code, which has no per-run
   lever, keeps its native skills
   ([DR-059](specs/decisions/059-compiler-calls-turn-native-skills-off.md)).
-  SLC's own Cligent dependency moves to `^0.35.0` and the provenance pins are
+  SLC's own Cligent dependency moves to `^0.36.0` and the provenance pins are
   refreshed; until a Playbook release requires it too, an install nests
   Playbook's Cligent 0.34 copy, which no compiler path loads.
 

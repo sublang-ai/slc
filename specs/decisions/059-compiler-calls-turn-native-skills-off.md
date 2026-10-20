@@ -34,7 +34,7 @@ A resumed session keeps the skill listings and bodies already in its history [[1
 - A call Cligent still rejects under the switch fails like any other failed call; the transport never retries it without the switch.
 - Resumption is unchanged: SLC resumes only conversations its own calls began under the same switch, and its control calls already start fresh.
 - The switch is fixed host behavior: no configuration field, environment variable, or prompt change.
-- The direct Cligent requirement rises to `^0.35.0`.
+- The direct Cligent requirement rises to `^0.36.0`, the release Playbook's Captain control needs for the same switch [[4]], so one Cligent can serve both once Playbook requires it.
 
 ## Consequences
 
@@ -48,3 +48,4 @@ A resumed session keeps the skill listings and bodies already in its history [[1
 [1]: https://github.com/sublang-ai/cligent/blob/v0.35.0/specs/decisions/037-per-run-native-skill-switch.md "Cligent DR-037: Per-Run Native Skill Switch"
 [2]: https://github.com/sublang-ai/spex/blob/main/specs/decisions/124-skills-reach-every-agent.md "Spex DR-124: Skills Reach Every Agent"
 [3]: https://github.com/sublang-ai/cligent/blob/v0.35.0/specs/packages/skills.md#skills-11 "Cligent skills-11: native-skill support per adapter"
+[4]: https://github.com/sublang-ai/cligent/blob/v0.36.0/specs/decisions/038-native-skills-in-tmux-play-call-settings.md "Cligent DR-038: Native Skills in tmux-play Call Settings"
