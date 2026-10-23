@@ -85,6 +85,7 @@ meta.md       The spec of specs
 | [DR-057](decisions/057-language-neutral-relay-marker.md) | 057-language-neutral-relay-marker.md | The parenthesized backticked `>` marks a quoted relay in any language, amending [DR-029](decisions/029-source-fidelity-gate.md); marker findings name what to write |
 | [DR-058](decisions/058-topology-bound-boss-questions.md) | 058-topology-bound-boss-questions.md | Select schema-3 continuation storage by root parallel topology and validate actual reached questions |
 | [DR-059](decisions/059-compiler-calls-turn-native-skills-off.md) | 059-compiler-calls-turn-native-skills-off.md | Every agent call requests `nativeSkills: false` where Cligent reports the adapter can honor it; Kimi Code and unlisted adapters keep native skills, a documented reduction |
+| [DR-060](decisions/060-merge-on-green.md) | 060-merge-on-green.md | `main` protected on the CI workflow's `quality` job without the up-to-date requirement and merged by auto-merge on green; one run per pull-request head with CI on pushes to `main` and pull requests; no base branch deleted under a pull request; the pre-push check; suites deterministic by construction; no macOS matrix, so none reduced |
 
 ## Packages
 
@@ -95,7 +96,7 @@ meta.md       The spec of specs
 | [compilation-measurement.md](packages/compilation-measurement.md) | Opt-in cold-compilation and fixed-FSM link benchmarks, explicit settings, phase and agent-call measurements, cancellation, private local evidence, and artifact validation |
 | [completion.md](packages/completion.md) | Explicit retained-bundle verification and registry/test emission without phase execution, agent configuration, or build history |
 | [compiler.md](packages/compiler.md) | User-facing compiler contract: invocation forms, artifacts, run outcomes, optional reviewed execution, compiled-pin selection, raw-input normalization, and optimization passes |
-| [continuous-integration.md](packages/continuous-integration.md) | Push and pull-request gates for source quality, reviewed artifacts, reproducible current pins, exact multi-profile runtime contracts, routine locked Playbook adoption, demo acceptance, and package publication checks |
+| [continuous-integration.md](packages/continuous-integration.md) | Gates on pushes to `main` and pull requests for source quality, reviewed artifacts, reproducible current pins, exact multi-profile runtime contracts, routine locked Playbook adoption, demo acceptance, and package publication checks; merging on green with one run per pull-request head, the pre-push check, and deterministic suites |
 | [git.md](packages/git.md) | Commit identity checks, message conventions, AI attribution, intent references, and audit |
 | [incremental-compilation.md](packages/incremental-compilation.md) | Complete build history, sidecar-aware input identity, reuse/update/ordinary selection, update context, success-only publication, rebuilds, exclusions, and fixture acceptance |
 | [licensing.md](packages/licensing.md) | SPDX header scope, license detection, required headers, upstream preservation, and verification |
