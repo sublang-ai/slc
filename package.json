@@ -46,6 +46,8 @@
     "test:package": "node scripts/test-package.mjs",
     "test:acceptance": "node scripts/test-acceptance.mjs",
     "lint": "eslint .",
+    "typecheck": "node node_modules/@typescript/native/bin/tsc --project tsconfig.json --noEmit",
+    "prepush": "bash scripts/prepush.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify:definitions": "node scripts/verify-playbook-definitions.mjs",
