@@ -55,7 +55,11 @@ const manifest = JSON.parse(manifestSource);
 const lock = JSON.parse(lockSource);
 const pins = JSON.parse(pinsSource);
 
-assert.equal(workflow.on.push, null, 'CI must run on every push');
+assert.deepEqual(
+  workflow.on.push,
+  { branches: ['main'] },
+  'CI must run on every push to main',
+);
 assert.equal(
   workflow.on.pull_request,
   null,
