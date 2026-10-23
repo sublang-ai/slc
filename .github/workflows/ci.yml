@@ -1,15 +1,20 @@
 name: CI
 
 on:
+  # A pull request's head runs once, as its pull request; a branch push
+  # starts no run of its own beside it (DR-060).
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
+# One run per pull-request head: a push cancels the run it supersedes;
+# a push to main cancels nothing (continuous-integration-9).
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
