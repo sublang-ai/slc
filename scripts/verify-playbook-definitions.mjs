@@ -22,6 +22,20 @@ const lock = readJson(join(repoRoot, 'package-lock.json'));
 const declaredPlaybook = rootPackage.dependencies?.['@sublang/playbook'];
 const lockedPlaybook =
   lock.packages?.['node_modules/@sublang/playbook']?.version;
+const declaredCligent = rootPackage.dependencies?.['@sublang/cligent'];
+const cligentFloor = /^\^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
+  .exec(typeof declaredCligent === 'string' ? declaredCligent : '')
+  ?.slice(1)
+  .map(Number);
+if (
+  !cligentFloor ||
+  (cligentFloor[0] === 0 &&
+    (cligentFloor[1] < 36 || (cligentFloor[1] === 36 && cligentFloor[2] < 1)))
+) {
+  throw new Error(
+    `cannot verify definitions: @sublang/cligent must declare a caret minimum of at least 0.36.1 (declared ${String(declaredCligent)})`,
+  );
+}
 
 if (
   typeof lockedPlaybook !== 'string' ||

@@ -11,6 +11,17 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-10-25
+
+### Fixed
+
+- Require Cligent 0.36.1 for bounded recovery from the exact empty-image
+  browser-capture error within the original readiness deadline.
+
+### Security
+
+- Adopt Cligent's patched Zod 4.6.6 runtime dependency.
+
 ## [0.19.0] - 2026-10-20
 
 ### Changed
@@ -1033,7 +1044,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.19.1...HEAD
+[0.19.1]: https://github.com/sublang-ai/slc/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/sublang-ai/slc/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/sublang-ai/slc/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/sublang-ai/slc/compare/v0.17.0...v0.18.0
