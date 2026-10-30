@@ -19,7 +19,8 @@ const definitions = ['text2gears', 'gears2fsm', 'link', 'optimize', 'prefix'];
 
 const rootPackage = readJson(join(repoRoot, 'package.json'));
 const lock = readJson(join(repoRoot, 'package-lock.json'));
-const declaredPlaybook = rootPackage.dependencies?.['@sublang/playbook'];
+const declaredPlaybook = rootPackage.devDependencies?.['@sublang/playbook'];
+const playbookPeer = rootPackage.peerDependencies?.['@sublang/playbook'];
 const lockedPlaybook =
   lock.packages?.['node_modules/@sublang/playbook']?.version;
 const declaredCligent = rootPackage.dependencies?.['@sublang/cligent'];
@@ -40,10 +41,14 @@ if (
 if (
   typeof lockedPlaybook !== 'string' ||
   !/^\d+\.\d+\.\d+$/.test(lockedPlaybook) ||
-  declaredPlaybook !== `^${lockedPlaybook}`
+  declaredPlaybook !== lockedPlaybook ||
+  playbookPeer !== `^${lockedPlaybook}` ||
+  rootPackage.dependencies?.['@sublang/playbook'] !== undefined ||
+  rootPackage.optionalDependencies?.['@sublang/playbook'] !== undefined ||
+  rootPackage.peerDependenciesMeta?.['@sublang/playbook']?.optional === true
 ) {
   throw new Error(
-    `cannot verify definitions: @sublang/playbook must be locked to one exact release and declared as its caret range (declared ${String(declaredPlaybook)}, locked ${String(lockedPlaybook)})`,
+    `cannot verify definitions: @sublang/playbook must have an exact development release matching the lock and only its required caret peer for consumers (development ${String(declaredPlaybook)}, peer ${String(playbookPeer)}, locked ${String(lockedPlaybook)})`,
   );
 }
 const expectedPlaybookVersion = lockedPlaybook;

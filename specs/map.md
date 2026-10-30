@@ -86,6 +86,7 @@ meta.md       The spec of specs
 | [DR-058](decisions/058-topology-bound-boss-questions.md) | 058-topology-bound-boss-questions.md | Select schema-3 continuation storage by root parallel topology and validate actual reached questions |
 | [DR-059](decisions/059-compiler-calls-turn-native-skills-off.md) | 059-compiler-calls-turn-native-skills-off.md | Every agent call requests `nativeSkills: false` where Cligent reports the adapter can honor it; Kimi Code and unlisted adapters keep native skills, a documented reduction |
 | [DR-060](decisions/060-merge-on-green.md) | 060-merge-on-green.md | `main` protected on the CI workflow's `quality` job without the up-to-date requirement and merged by auto-merge on green; one run per pull-request head with CI on pushes to `main` and pull requests; no base branch deleted under a pull request; the pre-push check; suites deterministic by construction; no macOS matrix, so none reduced |
+| [DR-061](decisions/061-consumer-supplied-playbook.md) | 061-consumer-supplied-playbook.md | Required consumer Playbook peer with exact development provenance and installed-package acceptance |
 
 ## Packages
 
@@ -103,7 +104,7 @@ meta.md       The spec of specs
 | [phase-execution.md](packages/phase-execution.md) | Execution boundary, generic checks, blocked protocol, interpreted and optional reviewed execution, the text-to-GEARS Source role-name boundary and Source-fidelity gate, the `playbook` link-fidelity gate, compiled runtime profiles selected by the declared engine contract, run-time definition relay, pin selection, status streaming, the agent-stall watchdog, and native skill isolation |
 | [pinning.md](packages/pinning.md) | Closure derivation, pin-currency validation, and generation: SLC-owned declarations, context-selected path boundaries, boundary-contained definitions, currency verdicts, the compiled-execution fidelity gate, and fixture acceptance |
 | [pipeline.md](packages/pipeline.md) | Pipeline resolution, format and chain validation, source and artifact paths, invocation and link mechanics, link-object import settlement, pass and normalization scheduling, and system acceptance |
-| [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, and opt-in live acceptance |
+| [release.md](packages/release.md) | SemVer and changelog policy, package and publication gates, trusted idempotent release workflow, installed-package smoke, required Playbook peer, and opt-in live acceptance |
 | [self-hosting.md](packages/self-hosting.md) | Reserved and `playbook` pipeline resolution, runnable `playbook` artifacts and entry modules, routine adoption retaining bundles by verified equivalence, and system acceptance |
 | [verification.md](packages/verification.md) | Compilation correctness: actor, child, and script conformance; introspection, prompt, transition, runtime, compiled-execution, Source-fidelity, Source role-name, and link-fidelity checks; portable generated tests; and emitted-module load integrity |
 | [workflow-acceptance.md](packages/workflow-acceptance.md) | Opt-in maintained CODE and DEV runtime acceptance harness with scripted children, question-profile ledger oracles, protected hashes, and nested Git receipts |

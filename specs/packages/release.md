@@ -72,6 +72,10 @@ When the scoped package is published, npm shall use `--access public`.
 
 When the package is packed for publication, the tarball shall include the built executable, public JavaScript and declaration surfaces, normalization definition, starter configuration, README, license, and package manifest, and shall exclude source, tests, specs, demo artifacts, repository scripts, and workflow files.
 
+#### release-25
+
+The published package shall require `@sublang/playbook` as a non-optional peer whose range is the caret range of the exact development release verified with its definitions, bundles, and pins [[self-hosting-11](self-hosting.md#self-hosting-11)], with no ordinary or optional Playbook dependency ([DR-061](../decisions/061-consumer-supplied-playbook.md)).
+
 #### release-11
 
 Where a compiled thin artifact imports `@sublang/playbook/xstate-runtime` and its FSM imports `xstate` from the artifact's destination, the documentation shall provide an installation that resolves those imports from the artifact's own location — either by placing `@sublang/slc` and `@sublang/playbook` in the target project, or by relying on a host that provisions its own engine beside the artifact (`@sublang/playbook` 3.1 and later) — and shall state that a project-local install is authoritative wherever it resolves and that a project manifest declaring `@sublang/playbook` requires its own install because provisioning refuses to shadow a declared dependency.
@@ -147,6 +151,16 @@ Where the project is built, when the release package smoke creates and installs 
 #### release-15
 
 Where the publishable tarball is installed into an empty project, when the committed English demo bundle is copied outside the repository and its freshly completed entry is imported from that project, the entry shall resolve the shared Playbook engine and XState FSM dependency from the consumer install without relying on this checkout or a global module path [[release-11](#release-11)].
+
+#### release-26
+
+Where the built tarball is installed with npm's normal peer resolution into isolated consumer projects, when package acceptance runs, the suite shall verify the required Playbook peer contract [[release-25](#release-25)] through these cases:
+
+| Consumer | Required outcome |
+| --- | --- |
+| No explicit Playbook dependency | npm installs the required peer and the installed compiler launches. |
+| An explicit Playbook dependency at the adopted development release | The consumer, compiler definitions and default link target, and emitted artifact resolve the same real Playbook package; the retained bundle completes and its runtime initializes and disposes through that engine. |
+| An explicit incompatible Playbook dependency | Installation fails with npm's peer-resolution conflict rather than adding a private compiler engine. |
 
 ### Release-workflow acceptance
 

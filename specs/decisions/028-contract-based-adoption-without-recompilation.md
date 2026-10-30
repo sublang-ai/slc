@@ -6,6 +6,7 @@
 ## Status
 
 Accepted
+Amended by [DR-061](061-consumer-supplied-playbook.md) in the dependency contract alone: Playbook is a required consumer peer and an exact development reference.
 
 ## Context
 

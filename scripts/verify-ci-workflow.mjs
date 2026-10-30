@@ -878,8 +878,8 @@ requireTestCase(
 );
 
 // One locked Playbook set (continuous-integration-4): the exact release the
-// lock resolves is the accepted release, the manifest declares its caret
-// range, and every recorded provenance names it — so a routine adoption
+// lock resolves is the exact development release, the published peer declares
+// its caret range, and every recorded provenance names it — so a routine adoption
 // changes the manifest, lock, definitions, and pins, never this audit (DR-028).
 const lockedPlaybook = lock.packages?.['node_modules/@sublang/playbook'];
 const lockedPlaybookVersion = lockedPlaybook?.version;
@@ -889,8 +889,18 @@ assert.match(
   'Playbook lock must resolve one exact release',
 );
 assert.equal(
-  manifest.dependencies?.['@sublang/playbook'],
+  manifest.devDependencies?.['@sublang/playbook'],
+  lockedPlaybookVersion,
+);
+assert.equal(
+  manifest.peerDependencies?.['@sublang/playbook'],
   `^${lockedPlaybookVersion}`,
+);
+assert.equal(manifest.dependencies?.['@sublang/playbook'], undefined);
+assert.equal(manifest.optionalDependencies?.['@sublang/playbook'], undefined);
+assert.notEqual(
+  manifest.peerDependenciesMeta?.['@sublang/playbook']?.optional,
+  true,
 );
 assert.equal(
   lockedPlaybook.link,

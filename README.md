@@ -54,6 +54,12 @@ npm install -g @anthropic-ai/claude-agent-sdk @openai/codex-sdk
 slc --version
 ```
 
+SLC requires a compatible `@sublang/playbook` peer (`^18.1.0`).
+Install both in an application to share its runtime with the compiler; npm
+also installs the required peer when SLC is installed by itself. An explicit
+incompatible Playbook dependency fails npm installation instead of selecting
+a private compiler engine.
+
 Requirements:
 
 - A POSIX platform — macOS or Linux.

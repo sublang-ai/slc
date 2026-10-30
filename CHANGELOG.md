@@ -11,6 +11,19 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-29
+
+### Changed
+
+- Require Playbook `^18.1.0` as a peer so an application and its compiler
+  share the application-supplied runtime. npm installs the peer for standalone
+  consumers and rejects an incompatible explicit runtime. Development keeps
+  the exact Playbook 18.1.0 reference and its reviewed definitions, bundles,
+  and provenance pins.
+- Adopt Playbook 18.1.0, synchronize its published compilation definitions
+  and local inputs, and verify the retained compiler and demo artifacts
+  against that engine. The demo now requests SLC 0.20 and Playbook 18.1.
+
 ## [0.19.1] - 2026-10-25
 
 ### Fixed
@@ -1044,7 +1057,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.19.1...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/sublang-ai/slc/compare/v0.19.1...v0.20.0
 [0.19.1]: https://github.com/sublang-ai/slc/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/sublang-ai/slc/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/sublang-ai/slc/compare/v0.18.0...v0.18.1
