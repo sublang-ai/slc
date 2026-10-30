@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import { execFileSync } from 'node:child_process';
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
@@ -79,27 +80,96 @@ try {
     }
   }
 
+  const tarball = join(packs, report.filename);
+  const installArgs = [
+    'install',
+    '--ignore-scripts',
+    '--no-audit',
+    '--no-fund',
+    '--package-lock=false',
+    '--cache',
+    cache,
+    tarball,
+  ];
+  // A consumer installs no SLC devDependencies: npm must supply the required
+  // peer even when the consumer names only the compiler (release-26).
+  const standalone = join(scratch, 'standalone');
+  mkdirSync(standalone);
+  writeFileSync(
+    join(standalone, 'package.json'),
+    JSON.stringify({ name: 'slc-standalone-smoke', private: true }),
+  );
+  execFileSync('npm', installArgs, { cwd: standalone, stdio: 'pipe' });
+  const standalonePackage = join(standalone, 'node_modules', '@sublang', 'slc');
+  const installedManifest = JSON.parse(
+    readFileSync(join(standalonePackage, 'package.json'), 'utf8'),
+  );
+  assert.equal(
+    installedManifest.peerDependencies?.['@sublang/playbook'],
+    `^${manifest.devDependencies['@sublang/playbook']}`,
+  );
+  assert.equal(
+    installedManifest.dependencies?.['@sublang/playbook'],
+    undefined,
+  );
+  assert.equal(
+    installedManifest.optionalDependencies?.['@sublang/playbook'],
+    undefined,
+  );
+  assert.notEqual(
+    installedManifest.peerDependenciesMeta?.['@sublang/playbook']?.optional,
+    true,
+  );
+  assert.equal(
+    execFileSync(
+      process.execPath,
+      [join(standalonePackage, 'dist', 'cli.js'), '--version'],
+      { cwd: standalone, encoding: 'utf8' },
+    ).trim(),
+    `slc ${manifest.version}`,
+  );
+  assert.ok(
+    existsSync(join(standalone, 'node_modules', '@sublang', 'playbook')),
+    'standalone npm installation must install the required Playbook peer',
+  );
+
+  const incompatible = join(scratch, 'incompatible');
+  mkdirSync(incompatible);
+  writeFileSync(
+    join(incompatible, 'package.json'),
+    JSON.stringify({
+      name: 'slc-incompatible-peer-smoke',
+      private: true,
+      dependencies: { '@sublang/playbook': '17.11.0' },
+    }),
+  );
+  const conflict = spawnSync('npm', installArgs, {
+    cwd: incompatible,
+    encoding: 'utf8',
+  });
+  assert.ifError(conflict.error);
+  assert.notEqual(conflict.status, 0, 'incompatible explicit peer must fail');
+  assert.match(conflict.stderr, /ERESOLVE/);
+  assert.match(conflict.stderr, /peer @sublang\/playbook/);
+
   const consumer = join(scratch, 'consumer');
   mkdirSync(consumer);
   writeFileSync(
     join(consumer, 'package.json'),
-    `${JSON.stringify({ name: 'slc-package-smoke', private: true, type: 'module' }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        name: 'slc-package-smoke',
+        private: true,
+        type: 'module',
+        dependencies: {
+          '@sublang/playbook': manifest.devDependencies['@sublang/playbook'],
+        },
+      },
+      null,
+      2,
+    )}\n`,
   );
-  const tarball = join(packs, report.filename);
-  execFileSync(
-    'npm',
-    [
-      'install',
-      '--ignore-scripts',
-      '--no-audit',
-      '--no-fund',
-      '--package-lock=false',
-      '--cache',
-      cache,
-      tarball,
-    ],
-    { cwd: consumer, stdio: 'pipe' },
-  );
+  execFileSync('npm', installArgs, { cwd: consumer, stdio: 'pipe' });
 
   const bin = join(
     consumer,
@@ -161,9 +231,27 @@ try {
   writeFileSync(
     join(consumer, 'smoke.mjs'),
     [
-      "import { join } from 'node:path';",
-      "await import('@sublang/slc');",
+      "import assert from 'node:assert/strict';",
+      "import { realpathSync } from 'node:fs';",
+      "import { createRequire } from 'node:module';",
+      "import { dirname, join } from 'node:path';",
+      "const slc = await import('@sublang/slc');",
       "await import('@sublang/slc/verify');",
+      'const consumerRequire = createRequire(import.meta.url);',
+      "const compilerRequire = createRequire(consumerRequire.resolve('@sublang/slc'));",
+      "const artifactRequire = createRequire(join(process.cwd(), 'workflow.playbook', 'workflow.playbook.ts'));",
+      "const engine = '@sublang/playbook/xstate-runtime';",
+      'const enginePath = realpathSync(consumerRequire.resolve(engine));',
+      'assert.equal(realpathSync(compilerRequire.resolve(engine)), enginePath);',
+      'assert.equal(realpathSync(artifactRequire.resolve(engine)), enginePath);',
+      'assert.equal(',
+      '  realpathSync(slc.reservedSlcPipelineDir()),',
+      "  realpathSync(dirname(consumerRequire.resolve('@sublang/playbook/slc/link.md'))),",
+      ');',
+      'assert.equal(',
+      '  realpathSync(slc.defaultPlaybookLinkTarget()),',
+      "  realpathSync(join(dirname(consumerRequire.resolve('@sublang/playbook/runtime')), 'runtime.ts')),",
+      ');',
       "const entry = (await import('./workflow.ts')).default;",
       "if (entry.id !== 'workflow') throw new Error('external entry did not load');",
       "const factory = (await import('./workflow.playbook/workflow.playbook.ts')).default;",
@@ -238,7 +326,7 @@ try {
   });
 
   console.log(
-    `package smoke passed: ${manifest.name}@${manifest.version} (${paths.size} files)`,
+    `package smoke passed: ${manifest.name}@${manifest.version} (${paths.size} files; automatic, shared, and incompatible Playbook peers)`,
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });

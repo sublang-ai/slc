@@ -33,7 +33,8 @@ const rootPackage = JSON.parse(
 const lock = JSON.parse(
   readFileSync(join(repoRoot, 'package-lock.json'), 'utf8'),
 );
-const declaredPlaybook = rootPackage.dependencies?.['@sublang/playbook'];
+const declaredPlaybook = rootPackage.devDependencies?.['@sublang/playbook'];
+const playbookPeer = rootPackage.peerDependencies?.['@sublang/playbook'];
 const lockedPlaybook =
   lock.packages?.['node_modules/@sublang/playbook']?.version;
 const declaredXstate = rootPackage.dependencies?.xstate;
@@ -41,15 +42,19 @@ const lockedXstate = lock.packages?.['node_modules/xstate']?.version;
 // The adoption runs from a clean registry install (DR-017, self-hosting-11); the
 // earlier packed-sibling fallback was retired by the later registry adoption.
 // The accepted Playbook release is whichever exact release the lock resolves,
-// declared as its caret range, so a routine adoption edits nothing here
-// (DR-028).
+// declared as its exact development dependency and required caret peer, so a
+// routine adoption edits nothing here (DR-028, DR-061).
 if (
   typeof lockedPlaybook !== 'string' ||
   !/^\d+\.\d+\.\d+$/.test(lockedPlaybook) ||
-  declaredPlaybook !== `^${lockedPlaybook}`
+  declaredPlaybook !== lockedPlaybook ||
+  playbookPeer !== `^${lockedPlaybook}` ||
+  rootPackage.dependencies?.['@sublang/playbook'] !== undefined ||
+  rootPackage.optionalDependencies?.['@sublang/playbook'] !== undefined ||
+  rootPackage.peerDependenciesMeta?.['@sublang/playbook']?.optional === true
 ) {
   throw new Error(
-    `refusing to generate pins: @sublang/playbook must be locked to one exact release and declared as its caret range (declared ${String(declaredPlaybook)}, locked ${String(lockedPlaybook)})`,
+    `refusing to generate pins: @sublang/playbook must have an exact development release matching the lock and only its required caret peer for consumers (development ${String(declaredPlaybook)}, peer ${String(playbookPeer)}, locked ${String(lockedPlaybook)})`,
   );
 }
 if (
