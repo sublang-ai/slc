@@ -11,6 +11,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-11-02
+
+### Changed
+
+- Require Cligent `^0.37.0` and the Playbook peer `^18.1.2`, so an
+  application on Playbook 18.1.2 shares one Cligent with the compiler.
+  Cligent 0.37.0 raises the Codex runtime floor to 0.159.1, which serves
+  `gpt-6.1-sol`.
+- Adopt Playbook 18.1.2 for development. Its compilation definitions are
+  unchanged, so the retained compiler and demo artifacts stay as they are
+  and only the provenance pins are refreshed.
+
 ## [0.20.0] - 2026-10-29
 
 ### Changed
@@ -1057,7 +1069,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.20.1...HEAD
+[0.20.1]: https://github.com/sublang-ai/slc/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/sublang-ai/slc/compare/v0.19.1...v0.20.0
 [0.19.1]: https://github.com/sublang-ai/slc/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/sublang-ai/slc/compare/v0.18.1...v0.19.0

@@ -28,13 +28,9 @@ const cligentFloor = /^\^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
   .exec(typeof declaredCligent === 'string' ? declaredCligent : '')
   ?.slice(1)
   .map(Number);
-if (
-  !cligentFloor ||
-  (cligentFloor[0] === 0 &&
-    (cligentFloor[1] < 36 || (cligentFloor[1] === 36 && cligentFloor[2] < 1)))
-) {
+if (!cligentFloor || (cligentFloor[0] === 0 && cligentFloor[1] < 37)) {
   throw new Error(
-    `cannot verify definitions: @sublang/cligent must declare a caret minimum of at least 0.36.1 (declared ${String(declaredCligent)})`,
+    `cannot verify definitions: @sublang/cligent must declare a caret minimum of at least 0.37.0 (declared ${String(declaredCligent)})`,
   );
 }
 
