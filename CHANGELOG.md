@@ -11,6 +11,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.20.2] - 2026-11-03
+
+### Changed
+
+- Require Cligent `^0.38.0` and the Playbook peer `^18.1.3`, so an
+  application on Playbook 18.1.3 shares one Cligent with the compiler.
+  Cligent 0.38.0 admits resuming a Claude session on the provider default
+  model and passes the Claude Code executable to model discovery.
+- Adopt Playbook 18.1.3 for development. Its compilation definitions are
+  unchanged, so the retained compiler and demo artifacts stay as they are
+  and only the provenance pins are refreshed.
+
 ## [0.20.1] - 2026-11-02
 
 ### Changed
@@ -1069,7 +1081,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.20.1...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.20.2...HEAD
+[0.20.2]: https://github.com/sublang-ai/slc/compare/v0.20.1...v0.20.2
 [0.20.1]: https://github.com/sublang-ai/slc/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/sublang-ai/slc/compare/v0.19.1...v0.20.0
 [0.19.1]: https://github.com/sublang-ai/slc/compare/v0.19.0...v0.19.1
