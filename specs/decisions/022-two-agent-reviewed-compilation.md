@@ -7,6 +7,8 @@
 
 Accepted
 
+Extended by [DR-062](062-independent-ultracode-configuration.md) for independent Coder and Reviewer Ultracode settings and older-consumer validation.
+
 ## Context
 
 An executing phase can produce a structurally complete artifact with a material correctness or specification defect.

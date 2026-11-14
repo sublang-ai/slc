@@ -7,6 +7,8 @@
 
 Accepted
 
+Extended by [DR-062](062-independent-ultracode-configuration.md) for independent Coder and Reviewer Ultracode settings and older-consumer validation.
+
 ## Context
 
 `slc` reaches coding agents through Cligent (npm `@sublang/cligent` [[1]]); agent, model, and pipeline-path selection is `slc` configuration, not phase semantics ([DR-004](004-slc-interpreted-phase-execution.md)).

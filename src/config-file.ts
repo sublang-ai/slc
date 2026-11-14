@@ -54,11 +54,13 @@ export interface FileConfig {
   effort?: string;
   /** Literal adapter-scoped fast-mode request; omission is the agent CLI's default. */
   fastMode?: boolean;
+  ultracode?: boolean;
   /** Optional independent Reviewer; presence enables reviewed calls (DR-022). */
   reviewerAgent?: string;
   reviewerModel?: string;
   reviewerEffort?: string;
   reviewerFastMode?: boolean;
+  reviewerUltracode?: boolean;
   pipelinePath?: string[];
   /** Agent-stall watchdog window in seconds; `0` disables (DR-019, cli-34). */
   stallTimeout?: number;
@@ -205,10 +207,12 @@ const ALLOWED_KEYS = [
   'model',
   'effort',
   'fastMode',
+  'ultracode',
   'reviewerAgent',
   'reviewerModel',
   'reviewerEffort',
   'reviewerFastMode',
+  'reviewerUltracode',
   'pipelinePath',
   'stallTimeout',
   'coverageMaxInvocations',
@@ -246,6 +250,16 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
   }
   if (input.effort !== undefined) {
     config.effort = requireString(input.effort, 'effort', path);
+  }
+  if (input.ultracode !== undefined) {
+    config.ultracode = requireBoolean(input.ultracode, 'ultracode', path);
+  }
+  if (input.reviewerUltracode !== undefined) {
+    config.reviewerUltracode = requireBoolean(
+      input.reviewerUltracode,
+      'reviewerUltracode',
+      path,
+    );
   }
   if (input.fastMode !== undefined) {
     config.fastMode = requireBoolean(input.fastMode, 'fastMode', path);

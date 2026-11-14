@@ -18,6 +18,7 @@
  */
 
 import { resolve } from 'node:path';
+import { ultracodeOptionsFor } from './ultracode.js';
 
 import { ClaudeCodeAdapter } from '@sublang/cligent/adapters/claude-code';
 import { CodexAdapter } from '@sublang/cligent/adapters/codex';
@@ -95,12 +96,17 @@ export interface AgentSelection {
    * fast-mode capability contract, which slc does not duplicate (cli-7).
    */
   fastMode?: boolean;
+  ultracode?: boolean;
   /** Optional independent Reviewer selection; presence enables DR-022. */
   reviewer?: Omit<AgentSelection, 'reviewer'>;
 }
 
 /** Machine-readable reason agent configuration was refused (cli-12). */
 export type ConfigErrorCode =
+  | 'ultracode-invalid'
+  | 'ultracode-unsupported'
+  | 'reviewer-ultracode-invalid'
+  | 'reviewer-ultracode-unsupported'
   | 'agent-unset'
   | 'agent-unsupported'
   | 'effort-unsupported'
@@ -152,6 +158,7 @@ export function resolveAgentSelection(
     agent: 'SLC_AGENT',
     model: 'SLC_MODEL',
     effort: 'SLC_EFFORT',
+    ultracode: 'SLC_ULTRACODE',
     fastMode: 'SLC_FAST_MODE',
     unsetCode: 'agent-unset',
     unsupportedCode: 'agent-unsupported',
@@ -167,6 +174,7 @@ export function resolveAgentSelection(
     agent: 'SLC_REVIEWER_AGENT',
     model: 'SLC_REVIEWER_MODEL',
     effort: 'SLC_REVIEWER_EFFORT',
+    ultracode: 'SLC_REVIEWER_ULTRACODE',
     fastMode: 'SLC_REVIEWER_FAST_MODE',
     unsetCode: 'reviewer-agent-unset',
     unsupportedCode: 'reviewer-agent-unsupported',
@@ -185,6 +193,7 @@ function resolveOneSelection(
     model: string;
     effort: string;
     fastMode: string;
+    ultracode: string;
     unsetCode: ConfigErrorCode;
     unsupportedCode: ConfigErrorCode;
     effortCode: ConfigErrorCode;
@@ -197,15 +206,22 @@ function resolveOneSelection(
   const model = (env[names.model] ?? '').trim();
   const effort = (env[names.effort] ?? '').trim();
   const fastMode = (env[names.fastMode] ?? '').trim();
+  const ultracode = (env[names.ultracode] ?? '').trim();
   if (agent === '') {
-    if (!names.required && model === '' && effort === '' && fastMode === '') {
+    if (
+      !names.required &&
+      model === '' &&
+      effort === '' &&
+      fastMode === '' &&
+      ultracode === ''
+    ) {
       return undefined;
     }
     throw new ConfigError(
       names.unsetCode,
       names.required
         ? `${names.agent} is not set; set it to one of: ${SUPPORTED_AGENTS.join(', ')}`
-        : `${names.agent} is not set; ${names.model}, ${names.effort}, and ${names.fastMode} require a reviewer agent; set ${names.agent} to one of: ${SUPPORTED_AGENTS.join(', ')}`,
+        : `${names.agent} is not set; ${names.model}, ${names.effort}, ${names.fastMode}, and ${names.ultracode} require a reviewer agent; set ${names.agent} to one of: ${SUPPORTED_AGENTS.join(', ')}`,
     );
   }
   if (!isSupportedAgent(agent)) {
@@ -218,6 +234,24 @@ function resolveOneSelection(
     throw new ConfigError(
       names.effortCode,
       `${names.effort} "${effort}" is not supported by ${agent}; choose one of: ${(supportedEffortValues(agent) ?? []).join(', ')}`,
+    );
+  }
+  const ultracodePrefix = names.required ? '' : 'reviewer-';
+  if (ultracode !== '' && ultracode !== 'true' && ultracode !== 'false') {
+    throw new ConfigError(
+      `${ultracodePrefix}ultracode-invalid`,
+      `${names.ultracode} "${ultracode}" must be exactly true or false`,
+    );
+  }
+  try {
+    ultracodeOptionsFor(
+      agent,
+      ultracode === '' ? undefined : ultracode === 'true',
+    );
+  } catch (error) {
+    throw new ConfigError(
+      `${ultracodePrefix}ultracode-unsupported`,
+      `${names.ultracode}: ${messageOf(error)}`,
     );
   }
   if (fastMode !== '' && fastMode !== 'true' && fastMode !== 'false') {
@@ -240,6 +274,7 @@ function resolveOneSelection(
     model: model === '' ? undefined : model,
     effort: effort === '' ? undefined : effort,
     fastMode: fastMode === '' ? undefined : fastMode === 'true',
+    ultracode: ultracode === '' ? undefined : ultracode === 'true',
   };
 }
 
@@ -295,6 +330,7 @@ export function createConfiguredAgentClient(
     permissions: opts.permissions,
     effort: selection.effort,
     fastMode: selection.fastMode,
+    ultracode: selection.ultracode,
     stallTimeoutMs: opts.stallTimeoutMs,
   });
 }

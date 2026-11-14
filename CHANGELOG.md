@@ -11,6 +11,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Configure Claude Ultracode independently of effort for Coder and Reviewer
+  roles with `ultracode` / `reviewerUltracode` YAML settings and
+  `SLC_ULTRACODE` / `SLC_REVIEWER_ULTRACODE` environment overrides.
+  Cligent capability metadata governs support; explicit Claude booleans on
+  older consumers require an upgrade, preserving the legacy effort shorthand
+  without silently ignoring an explicit disabling request.
+
 ### Changed
 
 - Accept Cligent `^0.38.0 || ^0.39.0`, allowing applications to share

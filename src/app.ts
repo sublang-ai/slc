@@ -209,6 +209,9 @@ export function resolveRunConfig(
     SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.model,
     SLC_EFFORT: nonBlank(env.SLC_EFFORT) ?? file.effort,
     SLC_FAST_MODE: nonBlank(env.SLC_FAST_MODE) ?? flag(file.fastMode),
+    SLC_ULTRACODE: nonBlank(env.SLC_ULTRACODE) ?? flag(file.ultracode),
+    SLC_REVIEWER_ULTRACODE:
+      nonBlank(env.SLC_REVIEWER_ULTRACODE) ?? flag(file.reviewerUltracode),
     SLC_REVIEWER_AGENT: nonBlank(env.SLC_REVIEWER_AGENT) ?? file.reviewerAgent,
     SLC_REVIEWER_MODEL: nonBlank(env.SLC_REVIEWER_MODEL) ?? file.reviewerModel,
     SLC_REVIEWER_EFFORT:
@@ -316,10 +319,12 @@ export function usageText(): string {
     '    ./slc.config.yaml',
     '    ${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml',
     '  Keys: agent, model, effort, fastMode, reviewerAgent, reviewerModel,',
-    '        reviewerEffort, reviewerFastMode, pipelinePath, stallTimeout.',
+    '        reviewerEffort, reviewerFastMode, ultracode, reviewerUltracode, pipelinePath, stallTimeout.',
     '',
     '  SLC_AGENT          agent CLI: claude-code | codex | gemini | opencode',
     '  SLC_MODEL          optional model for the agent CLI',
+    '  SLC_ULTRACODE     optional native Ultracode boolean (true or false)',
+    '  SLC_REVIEWER_ULTRACODE optional independent Reviewer Ultracode boolean',
     '  SLC_EFFORT         optional adapter-scoped reasoning effort (e.g. xhigh)',
     '  SLC_FAST_MODE      optional adapter-scoped fast mode: true | false',
     '                     (omit for the agent CLI default)',

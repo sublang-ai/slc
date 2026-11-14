@@ -111,6 +111,14 @@ Where the result is not a source-clarification outcome [[clarification-8](clarif
 
 When the executable resolves verification configuration for compilation or agentless retained completion, it shall map flat YAML `coverageMaxInvocations`, `coverageMaxAttempts` and `coverageMaxDurationMs` to API `coverage.maxInvocations`, `coverage.maxAttempts` and `coverage.maxDurationMs`, using each non-blank `SLC_COVERAGE_MAX_INVOCATIONS`, `SLC_COVERAGE_MAX_ATTEMPTS` or `SLC_COVERAGE_MAX_DURATION_MS` environment value over its corresponding YAML value, otherwise defaults 8, 64 and 300,000, and reject non-safe-integers, zero, negative or non-finite values and values above 64, 1024 or 1,800,000 respectively before executing a phase, applying the duration as a ceiling on the derived verification deadline [[verification-62](verification.md#verification-62)], while retaining file discovery and strict schema validation [[cli-20](#cli-20)], [[cli-21](#cli-21)].
 
+### cli-46
+
+Per [DR-062](../decisions/062-independent-ultracode-configuration.md), the executable shall resolve independent optional Coder `ultracode` and Reviewer `reviewerUltracode` booleans from YAML, overridden respectively by nonblank `SLC_ULTRACODE` and `SLC_REVIEWER_ULTRACODE` holding exactly `true` or `false`, requiring a Reviewer agent for Reviewer settings and leaving omitted switches at their native defaults.
+
+### cli-47
+
+When an explicit Ultracode switch reaches an agent boundary, the executable shall use consumer-supplied Cligent's `isUltracodeSupported` capability to forward supported booleans unchanged, omit unsupported false, and reject unsupported true and either explicit Claude boolean with missing capability metadata before execution, naming the variable and adapter or required consumer upgrade.
+
 ## Verification
 
 ### cli-13
@@ -209,6 +217,10 @@ Where a pipeline directory pins a phase to a current compiled `playbook` artifac
 ### cli-45
 
 Where configuration files and environment values specify coverage limits, when the integration suite runs the CLI dependency and completion boundaries, it shall verify per-key precedence, blank-variable fallback, default limits, help disclosure, agentless completion propagation, and refusal of invalid values before phase execution [[cli-44](#cli-44)].
+
+### cli-48
+
+When both roles use YAML and environment Ultracode settings, the integration check shall verify precedence, exact boolean validation, missing Reviewer rejection, and unchanged omission defaults [[cli-46](#cli-46)], plus exact supported forwarding and unsupported or older-consumer activation errors [[cli-47](#cli-47)].
 
 ## References
 

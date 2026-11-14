@@ -356,3 +356,11 @@ We welcome contributions of all kinds.
 ## License
 
 [Apache-2.0](LICENSE)
+
+Optional `ultracode: true` or `false` and `reviewerUltracode: true` or
+`false` select Claude Ultracode independently of effort. `SLC_ULTRACODE`
+and `SLC_REVIEWER_ULTRACODE` override these YAML settings with exactly
+`true` or `false`. Omission preserves existing native defaults. Either explicit Claude boolean requires a consumer-supplied Cligent exposing
+`isUltracodeSupported`; upgrade Cligent if that capability is unavailable.
+Unsupported adapters ignore false and reject true. Reviewer settings require
+`reviewerAgent`; account and workflow availability remain native policy.

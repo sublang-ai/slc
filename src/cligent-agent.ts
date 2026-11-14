@@ -43,6 +43,7 @@ import type {
 
 import type { AgentClient, AgentRunResult } from './interpreter.js';
 import { formatElapsed } from './progress.js';
+import { ultracodeOptionsFor } from './ultracode.js';
 
 /**
  * Cligent adapters with no provider-enforced tool-restriction surface
@@ -133,6 +134,7 @@ export function createCligentAgent(opts: {
    * agent CLI's default.
    */
   fastMode?: boolean;
+  ultracode?: boolean;
   /**
    * Milliseconds of adapter-event inactivity after which the in-flight call is
    * aborted and reported as an error (DR-019, phase-execution-36). Zero or absent
@@ -148,6 +150,7 @@ export function createCligentAgent(opts: {
     // Both validated adapter-scoped by the configuration layer (cli-7, cli-12).
     ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
     ...(opts.fastMode !== undefined ? { fastMode: opts.fastMode } : {}),
+    ...ultracodeOptionsFor(opts.adapter.agent, opts.ultracode),
     // No call overrides it, so this instance default reaches every run.
     ...nativeSkillOptionsFor(opts.adapter.agent),
   });

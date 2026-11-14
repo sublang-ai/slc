@@ -21,3 +21,6 @@ agent: claude-code
 # coverageMaxInvocations: 8 # integer 1..64
 # coverageMaxAttempts: 64 # integer 1..1024
 # coverageMaxDurationMs: 300000 # integer 1..1800000; smaller derived timeouts apply
+
+# ultracode: true
+# reviewerUltracode: false
