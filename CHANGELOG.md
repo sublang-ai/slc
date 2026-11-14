@@ -11,6 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Accept Cligent `^0.38.0 || ^0.39.0`, allowing applications to share
+  Cligent 0.39 with the compiler while retaining the published 0.38.0
+  development lock. The definition-adoption gate accepts caret unions only
+  when every branch preserves its existing 0.37.0 minimum.
+
 ## [0.20.2] - 2026-11-03
 
 ### Changed

@@ -24,13 +24,23 @@ const playbookPeer = rootPackage.peerDependencies?.['@sublang/playbook'];
 const lockedPlaybook =
   lock.packages?.['node_modules/@sublang/playbook']?.version;
 const declaredCligent = rootPackage.dependencies?.['@sublang/cligent'];
-const cligentFloor = /^\^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
-  .exec(typeof declaredCligent === 'string' ? declaredCligent : '')
-  ?.slice(1)
-  .map(Number);
-if (!cligentFloor || (cligentFloor[0] === 0 && cligentFloor[1] < 37)) {
+const cligentFloors =
+  typeof declaredCligent === 'string'
+    ? declaredCligent
+        .split('||')
+        .map((range) =>
+          /^\^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
+            .exec(range.trim())
+            ?.slice(1)
+            .map(Number),
+        )
+    : [];
+if (
+  cligentFloors.length === 0 ||
+  cligentFloors.some((floor) => !floor || (floor[0] === 0 && floor[1] < 37))
+) {
   throw new Error(
-    `cannot verify definitions: @sublang/cligent must declare a caret minimum of at least 0.37.0 (declared ${String(declaredCligent)})`,
+    `cannot verify definitions: @sublang/cligent must declare caret ranges with every minimum at least 0.37.0 (declared ${String(declaredCligent)})`,
   );
 }
 
