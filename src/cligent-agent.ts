@@ -123,11 +123,12 @@ export const defaultWatchdogTimers: WatchdogTimers = {
 /** Wraps a Cligent adapter as an {@link AgentClient} for the interpreter. */
 export function createCligentAgent(opts: {
   /** Any Cligent adapter; effort is validated adapter-scoped upstream (cli-12). */
-  adapter: AgentAdapter<string, boolean>;
+  adapter: AgentAdapter<string, boolean, string>;
   maxTurns?: number;
   permissions?: PermissionPolicy;
   /** Adapter-scoped reasoning effort, validated by the configuration layer. */
   effort?: string;
+  subagentModel?: string;
   /**
    * Literal adapter-scoped fast-mode request (`false` asks for it off), its
    * adapter support validated by the configuration layer; absent leaves the
@@ -150,6 +151,9 @@ export function createCligentAgent(opts: {
     // Both validated adapter-scoped by the configuration layer (cli-7, cli-12).
     ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
     ...(opts.fastMode !== undefined ? { fastMode: opts.fastMode } : {}),
+    ...(opts.subagentModel !== undefined
+      ? { subagentModel: opts.subagentModel }
+      : {}),
     ...ultracodeOptionsFor(opts.adapter.agent, opts.ultracode),
     // No call overrides it, so this instance default reaches every run.
     ...nativeSkillOptionsFor(opts.adapter.agent),

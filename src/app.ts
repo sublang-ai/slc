@@ -204,21 +204,36 @@ export function resolveRunConfig(
   env: Record<string, string | undefined>,
   file: FileConfig,
 ): RunConfig {
-  const selection = resolveAgentSelection({
-    SLC_AGENT: nonBlank(env.SLC_AGENT) ?? file.agent,
-    SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.model,
-    SLC_EFFORT: nonBlank(env.SLC_EFFORT) ?? file.effort,
-    SLC_FAST_MODE: nonBlank(env.SLC_FAST_MODE) ?? flag(file.fastMode),
-    SLC_ULTRACODE: nonBlank(env.SLC_ULTRACODE) ?? flag(file.ultracode),
-    SLC_REVIEWER_ULTRACODE:
-      nonBlank(env.SLC_REVIEWER_ULTRACODE) ?? flag(file.reviewerUltracode),
-    SLC_REVIEWER_AGENT: nonBlank(env.SLC_REVIEWER_AGENT) ?? file.reviewerAgent,
-    SLC_REVIEWER_MODEL: nonBlank(env.SLC_REVIEWER_MODEL) ?? file.reviewerModel,
-    SLC_REVIEWER_EFFORT:
-      nonBlank(env.SLC_REVIEWER_EFFORT) ?? file.reviewerEffort,
-    SLC_REVIEWER_FAST_MODE:
-      nonBlank(env.SLC_REVIEWER_FAST_MODE) ?? flag(file.reviewerFastMode),
-  });
+  const selection = resolveAgentSelection(
+    {
+      ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      SLC_AGENT: nonBlank(env.SLC_AGENT) ?? file.agent,
+      SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.model,
+      SLC_SUBAGENT_MODEL:
+        nonBlank(env.SLC_SUBAGENT_MODEL) ??
+        (file.subagentModel === false ? 'false' : file.subagentModel),
+      SLC_REVIEWER_SUBAGENT_MODEL:
+        nonBlank(env.SLC_REVIEWER_SUBAGENT_MODEL) ??
+        (file.reviewerSubagentModel === false
+          ? 'false'
+          : file.reviewerSubagentModel),
+      SLC_EFFORT: nonBlank(env.SLC_EFFORT) ?? file.effort,
+      SLC_FAST_MODE: nonBlank(env.SLC_FAST_MODE) ?? flag(file.fastMode),
+      SLC_ULTRACODE: nonBlank(env.SLC_ULTRACODE) ?? flag(file.ultracode),
+      SLC_REVIEWER_ULTRACODE:
+        nonBlank(env.SLC_REVIEWER_ULTRACODE) ?? flag(file.reviewerUltracode),
+      SLC_REVIEWER_AGENT:
+        nonBlank(env.SLC_REVIEWER_AGENT) ?? file.reviewerAgent,
+      SLC_REVIEWER_MODEL:
+        nonBlank(env.SLC_REVIEWER_MODEL) ?? file.reviewerModel,
+      SLC_REVIEWER_EFFORT:
+        nonBlank(env.SLC_REVIEWER_EFFORT) ?? file.reviewerEffort,
+      SLC_REVIEWER_FAST_MODE:
+        nonBlank(env.SLC_REVIEWER_FAST_MODE) ?? flag(file.reviewerFastMode),
+    },
+    { modelDefaults: file.modelDefaults },
+  );
   const pipelinePath = nonBlank(env.SLC_PIPELINE_PATH) ?? file.pipelinePath;
   const stallSeconds =
     parseStallTimeout(nonBlank(env.SLC_STALL_TIMEOUT)) ??
@@ -318,11 +333,14 @@ export function usageText(): string {
     '  environment variable below:',
     '    ./slc.config.yaml',
     '    ${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml',
-    '  Keys: agent, model, effort, fastMode, reviewerAgent, reviewerModel,',
+    '  Keys: agent, model, modelDefaults, subagentModel, effort, fastMode,',
+    '        reviewerAgent, reviewerModel, reviewerSubagentModel,',
     '        reviewerEffort, reviewerFastMode, ultracode, reviewerUltracode, pipelinePath, stallTimeout.',
     '',
     '  SLC_AGENT          agent CLI: claude-code | codex | gemini | opencode',
     '  SLC_MODEL          optional model for the agent CLI',
+    '  SLC_SUBAGENT_MODEL subagentModel: native subagent model (inherit allowed)',
+    '  SLC_REVIEWER_SUBAGENT_MODEL reviewerSubagentModel: independent reviewer subagents',
     '  SLC_ULTRACODE     optional native Ultracode boolean (true or false)',
     '  SLC_REVIEWER_ULTRACODE optional independent Reviewer Ultracode boolean',
     '  SLC_EFFORT         optional adapter-scoped reasoning effort (e.g. xhigh)',

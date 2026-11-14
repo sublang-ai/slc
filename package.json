@@ -59,7 +59,7 @@
     "prepublishOnly": "npm run release:check"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.284",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.325",
     "@eslint/js": "^10.0.1",
     "@openai/codex-sdk": "^0.159.0",
     "@sublang/playbook": "18.1.3",

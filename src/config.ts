@@ -26,6 +26,8 @@ import { GeminiAdapter } from '@sublang/cligent/adapters/gemini';
 import { OpenCodeAdapter } from '@sublang/cligent/adapters/opencode';
 import {
   assertFastModeSupported,
+  assertSubagentModelSupported,
+  getSubagentModelSupport,
   isEffortSupported,
   supportedEffortValues,
 } from '@sublang/cligent';
@@ -58,6 +60,17 @@ export const SUPPORTED_AGENTS = [
 /** One of the registered agent CLI ids (cli-7). */
 export type SupportedAgent = (typeof SUPPORTED_AGENTS)[number];
 
+/** Opt-in model pairs for official provider services (DR-063). */
+const DEFAULT_MODEL_PAIRS: Partial<
+  Record<SupportedAgent, Readonly<{ model: string; subagentModel: string }>>
+> = {
+  'claude-code': {
+    model: 'claude-fable-5-2',
+    subagentModel: 'claude-opus-5-5',
+  },
+  codex: { model: 'gpt-6-astra', subagentModel: 'gpt-6.1-sol' },
+};
+
 /**
  * Constructs the Cligent adapter for a supported agent id (cli-7). Cligent
  * types each adapter by its own effort vocabulary, fast-mode support, and
@@ -88,6 +101,7 @@ export interface AgentSelection {
   agent: SupportedAgent;
   /** Optional model; omitted so the agent CLI uses its own default. */
   model?: string;
+  subagentModel?: string;
   /** Optional adapter-scoped reasoning effort; omitted for the default. */
   effort?: string;
   /**
@@ -107,6 +121,8 @@ export type ConfigErrorCode =
   | 'ultracode-unsupported'
   | 'reviewer-ultracode-invalid'
   | 'reviewer-ultracode-unsupported'
+  | 'subagent-model-unsupported'
+  | 'reviewer-subagent-model-unsupported'
   | 'agent-unset'
   | 'agent-unsupported'
   | 'effort-unsupported'
@@ -153,10 +169,14 @@ export function isSupportedAgent(agent: string): agent is SupportedAgent {
  */
 export function resolveAgentSelection(
   env: Record<string, string | undefined>,
+  options: { modelDefaults?: boolean } = {},
 ): AgentSelection {
+  const useDefaults = options.modelDefaults === true;
   const selection = resolveOneSelection(env, {
     agent: 'SLC_AGENT',
     model: 'SLC_MODEL',
+    subagentModel: 'SLC_SUBAGENT_MODEL',
+    useDefaults,
     effort: 'SLC_EFFORT',
     ultracode: 'SLC_ULTRACODE',
     fastMode: 'SLC_FAST_MODE',
@@ -173,6 +193,8 @@ export function resolveAgentSelection(
   const reviewer = resolveOneSelection(env, {
     agent: 'SLC_REVIEWER_AGENT',
     model: 'SLC_REVIEWER_MODEL',
+    subagentModel: 'SLC_REVIEWER_SUBAGENT_MODEL',
+    useDefaults,
     effort: 'SLC_REVIEWER_EFFORT',
     ultracode: 'SLC_REVIEWER_ULTRACODE',
     fastMode: 'SLC_REVIEWER_FAST_MODE',
@@ -191,6 +213,8 @@ function resolveOneSelection(
   names: {
     agent: string;
     model: string;
+    subagentModel: string;
+    useDefaults: boolean;
     effort: string;
     fastMode: string;
     ultracode: string;
@@ -204,6 +228,7 @@ function resolveOneSelection(
 ): Omit<AgentSelection, 'reviewer'> | undefined {
   const agent = (env[names.agent] ?? '').trim();
   const model = (env[names.model] ?? '').trim();
+  const subagentModel = (env[names.subagentModel] ?? '').trim();
   const effort = (env[names.effort] ?? '').trim();
   const fastMode = (env[names.fastMode] ?? '').trim();
   const ultracode = (env[names.ultracode] ?? '').trim();
@@ -211,6 +236,7 @@ function resolveOneSelection(
     if (
       !names.required &&
       model === '' &&
+      subagentModel === '' &&
       effort === '' &&
       fastMode === '' &&
       ultracode === ''
@@ -221,7 +247,7 @@ function resolveOneSelection(
       names.unsetCode,
       names.required
         ? `${names.agent} is not set; set it to one of: ${SUPPORTED_AGENTS.join(', ')}`
-        : `${names.agent} is not set; ${names.model}, ${names.effort}, ${names.fastMode}, and ${names.ultracode} require a reviewer agent; set ${names.agent} to one of: ${SUPPORTED_AGENTS.join(', ')}`,
+        : `${names.agent} is not set; ${names.model}, ${names.subagentModel}, ${names.effort}, ${names.fastMode}, and ${names.ultracode} require a reviewer agent; set ${names.agent} to one of: ${SUPPORTED_AGENTS.join(', ')}`,
     );
   }
   if (!isSupportedAgent(agent)) {
@@ -269,9 +295,61 @@ function resolveOneSelection(
       throw new ConfigError(names.fastModeCode, messageOf(error));
     }
   }
+  if (subagentModel !== '' && subagentModel !== 'false') {
+    try {
+      assertSubagentModelSupported(agent, names.subagentModel);
+    } catch (error) {
+      throw new ConfigError(
+        names.required
+          ? 'subagent-model-unsupported'
+          : 'reviewer-subagent-model-unsupported',
+        messageOf(error),
+      );
+    }
+  }
+  const customEndpoint =
+    agent === 'claude-code'
+      ? env.ANTHROPIC_BASE_URL
+      : agent === 'codex'
+        ? env.OPENAI_BASE_URL
+        : undefined;
+  let isCustomEndpoint = false;
+  if (
+    names.useDefaults &&
+    DEFAULT_MODEL_PAIRS[agent] &&
+    customEndpoint?.trim()
+  ) {
+    try {
+      const url = new URL(customEndpoint.trim());
+      const host =
+        agent === 'claude-code' ? 'api.anthropic.com' : 'api.openai.com';
+      const path = url.pathname.replace(/\/+$/, '');
+      isCustomEndpoint =
+        url.protocol !== 'https:' ||
+        url.hostname !== host ||
+        url.port !== '' ||
+        url.search !== '' ||
+        url.hash !== '' ||
+        (agent === 'claude-code' ? path !== '' : path !== '/v1');
+    } catch {
+      isCustomEndpoint = true;
+    }
+  }
+  const pair =
+    names.useDefaults && !isCustomEndpoint
+      ? DEFAULT_MODEL_PAIRS[agent]
+      : undefined;
+  const selectedSubagent =
+    subagentModel === 'false'
+      ? undefined
+      : subagentModel ||
+        (getSubagentModelSupport(agent)?.requestSupported
+          ? pair?.subagentModel
+          : undefined);
   return {
     agent,
-    model: model === '' ? undefined : model,
+    model: model || pair?.model,
+    ...(selectedSubagent ? { subagentModel: selectedSubagent } : {}),
     effort: effort === '' ? undefined : effort,
     fastMode: fastMode === '' ? undefined : fastMode === 'true',
     ultracode: ultracode === '' ? undefined : ultracode === 'true',
@@ -329,6 +407,7 @@ export function createConfiguredAgentClient(
     maxTurns: opts.maxTurns,
     permissions: opts.permissions,
     effort: selection.effort,
+    subagentModel: selection.subagentModel,
     fastMode: selection.fastMode,
     ultracode: selection.ultracode,
     stallTimeoutMs: opts.stallTimeoutMs,

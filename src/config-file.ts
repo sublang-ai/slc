@@ -51,6 +51,8 @@ const TEMPLATE_PATH = fileURLToPath(
 export interface FileConfig {
   agent?: string;
   model?: string;
+  modelDefaults?: boolean;
+  subagentModel?: string | false;
   effort?: string;
   /** Literal adapter-scoped fast-mode request; omission is the agent CLI's default. */
   fastMode?: boolean;
@@ -58,6 +60,7 @@ export interface FileConfig {
   /** Optional independent Reviewer; presence enables reviewed calls (DR-022). */
   reviewerAgent?: string;
   reviewerModel?: string;
+  reviewerSubagentModel?: string | false;
   reviewerEffort?: string;
   reviewerFastMode?: boolean;
   reviewerUltracode?: boolean;
@@ -205,6 +208,9 @@ async function readConfigFile(path: string): Promise<FileConfig> {
 const ALLOWED_KEYS = [
   'agent',
   'model',
+  'modelDefaults',
+  'subagentModel',
+  'reviewerSubagentModel',
   'effort',
   'fastMode',
   'ultracode',
@@ -242,6 +248,26 @@ function normalizeFileConfig(value: unknown, path: string): FileConfig {
   }
 
   const config: FileConfig = {};
+  if (input.modelDefaults !== undefined)
+    config.modelDefaults = requireBoolean(
+      input.modelDefaults,
+      'modelDefaults',
+      path,
+    );
+  if (input.subagentModel !== undefined)
+    config.subagentModel =
+      input.subagentModel === false
+        ? false
+        : requireString(input.subagentModel, 'subagentModel', path);
+  if (input.reviewerSubagentModel !== undefined)
+    config.reviewerSubagentModel =
+      input.reviewerSubagentModel === false
+        ? false
+        : requireString(
+            input.reviewerSubagentModel,
+            'reviewerSubagentModel',
+            path,
+          );
   if (input.agent !== undefined) {
     config.agent = requireString(input.agent, 'agent', path);
   }

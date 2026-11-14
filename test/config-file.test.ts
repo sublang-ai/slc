@@ -185,7 +185,10 @@ describe('loadConfigFile (cli-20, cli-21)', () => {
 
     const expected = join(home, 'slc', 'config.yaml');
     expect(loaded.path).toBe(expected);
-    expect(loaded.config).toEqual({ agent: 'claude-code' });
+    expect(loaded.config).toEqual({
+      agent: 'claude-code',
+      modelDefaults: true,
+    });
     expect(seeded).toEqual([expected]);
     const template = await readFile(expected, 'utf8');
     expect(template).toContain('# fastMode:');

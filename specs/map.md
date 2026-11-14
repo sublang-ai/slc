@@ -90,6 +90,8 @@ meta.md       The spec of specs
 
 | [DR-062](decisions/062-independent-ultracode-configuration.md) | 062-independent-ultracode-configuration.md | Independent Coder/Reviewer Ultracode YAML and environment switches, Cligent capability checks, and faithful older-consumer errors |
 
+| [DR-063](decisions/063-adapter-model-defaults-and-subagent-selection.md) | 063-adapter-model-defaults-and-subagent-selection.md | Opt-in adapter model pairs and independent Coder/Reviewer native subagent selection |
+
 ## Packages
 
 | File | Summary |

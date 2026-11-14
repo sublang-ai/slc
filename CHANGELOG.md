@@ -13,6 +13,11 @@ and this project adheres to
 
 ### Added
 
+- First-run configs opt into adapter-aware Claude Fable 5.2 / Opus 5.5 and
+  Codex GPT-6 Astra / GPT-6.1 Sol model pairs. Existing configs keep provider
+  defaults unless `modelDefaults: true` is set. Independent Coder/Reviewer
+  subagent model settings support named pins, `inherit`, and `false`.
+
 - Configure Claude Ultracode independently of effort for Coder and Reviewer
   roles with `ultracode` / `reviewerUltracode` YAML settings and
   `SLC_ULTRACODE` / `SLC_REVIEWER_ULTRACODE` environment overrides.
@@ -21,6 +26,10 @@ and this project adheres to
   without silently ignoring an explicit disabling request.
 
 ### Changed
+
+- Verify the standalone compiler with Claude Agent SDK 0.3.325 (development
+  range `^0.3.325`), which supports the seeded Fable 5.2 model. Published
+  consumers still supply their SDK independently.
 
 - Accept Cligent `^0.38.0 || ^0.39.0`, allowing applications to share
   Cligent 0.39 with the compiler while retaining the published 0.38.0
