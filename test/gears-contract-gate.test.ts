@@ -411,6 +411,8 @@ describe('GEARS result-contract producer and consumer boundaries (DR-035)', () =
     GEARS.replace('Captain shall act:', 'the workflow shall act:'),
     // Two IDs that one case-insensitive `sourceItem` could not tell apart.
     `${GEARS}\n### task-1\n\nThe workflow shall keep the repository unchanged.\n`,
+    // The same heading twice: two items sharing one anchor.
+    `${GEARS}\n### TASK-1\n\nThe workflow shall keep the repository unchanged.\n`,
   ])(
     'reports package-contract findings through conformance and the real producer boundary',
     async (content) => {

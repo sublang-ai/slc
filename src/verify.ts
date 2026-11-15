@@ -1475,8 +1475,10 @@ function gearsSourceItemResolver(items: readonly GearsItem[]): {
   for (const item of items) {
     const key = foldAsciiCase(item.id);
     const spellings = folded.get(key);
+    // Count every heading: two items spelled alike collide as much as two
+    // that differ in case.
     if (spellings === undefined) folded.set(key, [item.id]);
-    else if (!spellings.includes(item.id)) spellings.push(item.id);
+    else spellings.push(item.id);
   }
   const findings = [...folded.values()]
     .filter((spellings) => spellings.length > 1)
