@@ -19,7 +19,7 @@ The machines Playbook maintains are verified and are not recompiled for a change
 ## Decision
 
 - An item's kind is read from fixed machine syntax alone: an item with an unquoted line containing `Captain shall` is an action item; any other item is declarative, whether a requirement or a test.
-- Conformance requires each action item to map to exactly one executable working leaf of its declared actor kind and every such leaf to cite an existing action item.
+- Conformance requires each action item to map to exactly one executable working leaf of its declared actor kind and every such leaf to bind an existing action item: by its `sourceItem`, or, for a nested-call leaf that carries none, by the call it makes — its literal target and input text, or the context fields a dynamic call names.
 - A declarative item maps to no leaf and is no finding; SLC checks nothing in its text.
 - A declarative item that carries a prompt blockquote or a `Results:` label, and a leaf that cites a declarative item, are findings, so an action that lost its acting clause is reported rather than read as a requirement.
 - A leaf's `sourceItem` matches an item ID without regard to ASCII letter case, and two item IDs of one package that differ only in case are a finding.
