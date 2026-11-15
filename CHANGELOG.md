@@ -11,11 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-14
+
 ### Added
 
 - First-run configs opt into adapter-aware Claude Fable 5.2 / Opus 5.5 and
-  Codex GPT-6 Astra / GPT-6.1 Sol model pairs when installed Cligent supplies
-  them. Cloud routes, custom endpoints and older Cligent keep provider defaults.
+  Codex GPT-6 Astra / GPT-6.1 Sol model pairs when Cligent supplies
+  them for the selected provider.
   Tool-free control turns omit child tuning. Existing configs keep provider
   defaults unless `modelDefaults: true` is set. Independent Coder/Reviewer
   subagent model settings support named pins, `inherit`, and `false`.
@@ -23,9 +25,7 @@ and this project adheres to
 - Configure Claude Ultracode independently of effort for Coder and Reviewer
   roles with `ultracode` / `reviewerUltracode` YAML settings and
   `SLC_ULTRACODE` / `SLC_REVIEWER_ULTRACODE` environment overrides.
-  Cligent capability metadata governs support; explicit Claude booleans on
-  older consumers require an upgrade, preserving the legacy effort shorthand
-  without silently ignoring an explicit disabling request.
+  Unsupported adapters ignore false and reject true.
 
 ### Changed
 
@@ -33,10 +33,9 @@ and this project adheres to
   range `^0.3.325`), which supports the seeded Fable 5.2 model. Published
   consumers still supply their SDK independently.
 
-- Accept Cligent `^0.38.0 || ^0.39.0`, allowing applications to share
-  Cligent 0.39 with the compiler while retaining the published 0.38.0
-  development lock. The definition-adoption gate accepts caret unions only
-  when every branch preserves its existing 0.37.0 minimum.
+- Require Cligent `^0.39.0` and Playbook `^18.3.0` so the compiler and
+  launcher share the same model-selection and Ultracode capabilities.
+  Adopt Playbook’s REVIEW output contract for unsettled findings.
 
 ## [0.20.2] - 2026-11-03
 
@@ -1108,7 +1107,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.20.2...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/sublang-ai/slc/compare/v0.20.2...v0.21.0
 [0.20.2]: https://github.com/sublang-ai/slc/compare/v0.20.1...v0.20.2
 [0.20.1]: https://github.com/sublang-ai/slc/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/sublang-ai/slc/compare/v0.19.1...v0.20.0

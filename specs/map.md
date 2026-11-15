@@ -87,9 +87,9 @@ meta.md       The spec of specs
 | [DR-059](decisions/059-compiler-calls-turn-native-skills-off.md) | 059-compiler-calls-turn-native-skills-off.md | Every agent call requests `nativeSkills: false` where Cligent reports the adapter can honor it; Kimi Code and unlisted adapters keep native skills, a documented reduction |
 | [DR-060](decisions/060-merge-on-green.md) | 060-merge-on-green.md | `main` protected on the CI workflow's `quality` job without the up-to-date requirement and merged by auto-merge on green; one run per pull-request head with CI on pushes to `main` and pull requests; no base branch deleted under a pull request; the pre-push check; suites deterministic by construction; no macOS matrix, so none reduced |
 | [DR-061](decisions/061-consumer-supplied-playbook.md) | 061-consumer-supplied-playbook.md | Required consumer Playbook peer with exact development provenance and installed-package acceptance |
-| [DR-062](decisions/062-independent-ultracode-configuration.md) | 062-independent-ultracode-configuration.md | Independent Coder/Reviewer Ultracode YAML and environment switches, Cligent capability checks, and faithful older-consumer errors |
+| [DR-062](decisions/062-independent-ultracode-configuration.md) | 062-independent-ultracode-configuration.md | Independent Coder/Reviewer Ultracode YAML and environment switches, Cligent capability checks under DR-064’s required `^0.39.0` floor |
 | [DR-063](decisions/063-adapter-model-defaults-and-subagent-selection.md) | 063-adapter-model-defaults-and-subagent-selection.md | Opt-in adapter model pairs and independent Coder/Reviewer native subagent selection, amended by DR-064 |
-| [DR-064](decisions/064-runtime-owned-model-defaults.md) | 064-runtime-owned-model-defaults.md | Installed Cligent supplies provider-appropriate defaults within its runtime floor |
+| [DR-064](decisions/064-runtime-owned-model-defaults.md) | 064-runtime-owned-model-defaults.md | Required Cligent supplies primary and child defaults, with child requests limited to performing calls; amends DR-062 and DR-063 |
 
 ## Packages
 

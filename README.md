@@ -54,7 +54,7 @@ npm install -g @anthropic-ai/claude-agent-sdk @openai/codex-sdk
 slc --version
 ```
 
-SLC requires a compatible `@sublang/playbook` peer (`^18.1.3`).
+SLC requires a compatible `@sublang/playbook` peer (`^18.3.0`).
 Install both in an application to share its runtime with the compiler; npm
 also installs the required peer when SLC is installed by itself. An explicit
 incompatible Playbook dependency fails npm installation instead of selecting
@@ -228,11 +228,14 @@ and the full rules are in the
 
 The first run seeds `~/.config/slc/config.yaml` with
 `agent: claude-code` and `modelDefaults: true`, so a fresh machine needs no setup.
-The opt-in defaults are Claude Fable 5.2 with Opus 5.5 subagents, or Codex
-GPT-6 Astra with GPT-6.1 Sol subagents when supplied by the installed Cligent. Older Cligent releases leave both models
-to the provider. Explicit model fields win. For Claude, Cligent reads provider
-variables from the environment and Claude Code’s user settings. Custom endpoints
-and cloud-provider routes use their own model IDs. A
+Cligent 0.39 supplies the primary and child models: Claude Fable 5.2 with
+Opus 5.5 subagents or Codex GPT-6 Astra with GPT-6.1 Sol subagents for its
+direct-provider defaults. SLC passes the run environment and user home to
+Cligent and uses only the defaults it returns. This lookup does not resolve
+per-project, working-directory or managed provider settings that the SDK may
+apply during the run. For projects using those routes, set `modelDefaults: false`
+in the working-directory `slc.config.yaml` to leave omitted models to the SDK,
+or explicitly select both models. Explicit model fields win. A
 `slc.config.yaml` in the working directory wins over the user config,
 and `SLC_AGENT`, `SLC_MODEL`, and the other `SLC_*` variables override
 either, per key.
@@ -264,8 +267,7 @@ validation rules live in the [CLI spec](specs/packages/cli.md);
 Optional `ultracode: true` or `false` and `reviewerUltracode: true` or
 `false` select Claude Ultracode independently of effort. `SLC_ULTRACODE`
 and `SLC_REVIEWER_ULTRACODE` override these YAML settings with exactly
-`true` or `false`. Omission preserves existing native defaults. Either explicit Claude boolean requires a consumer-supplied Cligent exposing
-`isUltracodeSupported`; upgrade Cligent if that capability is unavailable.
+`true` or `false`. Omission preserves existing native defaults. Claude accepts either boolean.
 Unsupported adapters ignore false and reject true. Reviewer settings require
 `reviewerAgent`; account and workflow availability remain native policy.
 

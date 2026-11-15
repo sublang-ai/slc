@@ -9,7 +9,7 @@ Accepted
 
 Extended by [DR-063](063-adapter-model-defaults-and-subagent-selection.md) for opt-in defaults and independent subagent models.
 
-Extended by [DR-062](062-independent-ultracode-configuration.md) for independent Coder and Reviewer Ultracode settings and older-consumer validation.
+Extended by [DR-062](062-independent-ultracode-configuration.md) for independent Coder and Reviewer Ultracode settings under the required Cligent floor.
 
 ## Context
 

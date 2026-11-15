@@ -21,15 +21,13 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 
 describe('definition adoption (self-hosting-12)', () => {
   it.each([
-    ['^0.38.0', true],
-    ['^0.38.0 || ^0.39.0', true],
-    ['^0.38.0 || ^0.36.0', false],
-    ['^0.36.0 || ^0.38.0', false],
-    ['^0.38.0 || >=0.39.0', false],
-    ['^0.38.0 ||', false],
+    ['^0.39.0', true],
+    ['^0.38.0', false],
+    ['^0.38.0 || ^0.39.0', false],
+    ['>=0.39.0', false],
     [undefined, false],
   ])(
-    'checks every caret branch of %s before accepting definitions',
+    'checks the Cligent requirement %s before accepting definitions',
     (range, accepted) => {
       const dir = mkdtempSync(join(tmpdir(), 'slc-definition-adoption-'));
       try {
@@ -65,7 +63,9 @@ describe('definition adoption (self-hosting-12)', () => {
           expect(run.stdout).toContain('prefix.md: matches');
         } else {
           expect(run.status).not.toBe(0);
-          expect(run.stderr).toContain('every minimum at least 0.37.0');
+          expect(run.stderr).toContain(
+            'single caret range with minimum at least 0.39.0',
+          );
           expect(run.stdout).toBe('');
         }
       } finally {

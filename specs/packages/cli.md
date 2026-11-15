@@ -122,12 +122,11 @@ When a role requests Ultracode, the executable shall convey the literal boolean 
 | Capability | Outcome |
 | --- | --- |
 | Supported | Forward either boolean unchanged. |
-| Unsupported adapter, including non-Claude on older Cligent | Omit false and refuse true before execution, naming the adapter. |
-| Claude on an older Cligent without independent Ultracode support | Refuse either boolean before execution, naming the required upgrade. |
+| Unsupported adapter | Omit false and refuse true before execution, naming the adapter. |
 
 ### cli-49
 
-Where YAML `modelDefaults: true` is set, the executable shall fill each omitted Coder and enabled Reviewer model from the installed Cligent’s defaults for the effective adapter, process environment and Claude Code user settings, leaving models to the provider on older releases without that contract and on custom endpoints or cloud-provider routes ([DR-063](../decisions/063-adapter-model-defaults-and-subagent-selection.md), [DR-064](../decisions/064-runtime-owned-model-defaults.md)).
+Where YAML `modelDefaults: true` is set, the executable shall fill each omitted primary and enabled child model for the Coder and configured Reviewer from Cligent’s `defaultAgentModels(adapter, env, homeDir)`, passing the role’s effective adapter, the run’s environment and its user home (the first nonempty `HOME`, `USERPROFILE`, or OS home), and leaving unreturned fields unset; this is an environment and user-level lookup, not resolution of effective project, working-directory or managed provider settings ([DR-063](../decisions/063-adapter-model-defaults-and-subagent-selection.md), [DR-064](../decisions/064-runtime-owned-model-defaults.md)).
 
 ### cli-50
 
@@ -240,11 +239,11 @@ Where configuration files and environment values specify coverage limits, when t
 
 ### cli-48
 
-When both roles use YAML and environment Ultracode settings, the integration check shall verify precedence, exact boolean validation, missing Reviewer rejection, and unchanged omission defaults [[cli-46](#cli-46)], plus exact supported forwarding and unsupported or older-consumer activation errors [[cli-47](#cli-47)].
+When both roles use YAML and environment Ultracode settings, the integration check shall verify precedence, exact boolean validation, missing Reviewer rejection, and unchanged omission defaults [[cli-46](#cli-46)], plus exact supported forwarding and adapter-naming errors for unsupported activation [[cli-47](#cli-47)].
 
 ### cli-51
 
-When a fresh starter and a hand-authored config drive the configured executor factories, the integration suite shall assert per-role primary and child selection, including literal delivery at the agent boundary, explicit overrides, unset and disabled defaults, provider-owned selection for a custom service or missing Cligent defaults contract, unsupported child refusal and omission of child tuning from tool-free control requests [[cli-49](#cli-49)], [[cli-50](#cli-50)].
+When a fresh starter and a hand-authored config drive the configured executors, the integration suite shall verify primary and child defaults for both roles against the required Cligent release, literal pins at the adapter, the run environment and home reaching the policy, explicit per-field overrides including a named primary with default child, provider selection with missing or disabled opt-in, and refusal of unsupported child pins naming the setting and adapter [[cli-49](#cli-49)], [[cli-50](#cli-50)].
 
 ## References
 

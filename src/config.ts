@@ -19,7 +19,6 @@
 
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
-import * as cligent from '@sublang/cligent';
 import { ultracodeOptionsFor } from './ultracode.js';
 
 import { ClaudeCodeAdapter } from '@sublang/cligent/adapters/claude-code';
@@ -28,6 +27,7 @@ import { GeminiAdapter } from '@sublang/cligent/adapters/gemini';
 import { OpenCodeAdapter } from '@sublang/cligent/adapters/opencode';
 import {
   assertFastModeSupported,
+  defaultAgentModels,
   assertSubagentModelSupported,
   isEffortSupported,
   supportedEffortValues,
@@ -60,16 +60,6 @@ export const SUPPORTED_AGENTS = [
 
 /** One of the registered agent CLI ids (cli-7). */
 export type SupportedAgent = (typeof SUPPORTED_AGENTS)[number];
-
-// Cligent owns the models its supported runtime floors can serve. Older
-// installations without this export keep their pre-opt-in provider defaults.
-const { defaultAgentModels } = cligent as typeof cligent & {
-  defaultAgentModels?: (
-    adapter: string,
-    env: NodeJS.ProcessEnv,
-    homeDir: string,
-  ) => { model?: string; subagentModel?: string };
-};
 
 /**
  * Constructs the Cligent adapter for a supported agent id (cli-7). Cligent
@@ -308,7 +298,7 @@ function resolveOneSelection(
     }
   }
   const pair = names.useDefaults
-    ? defaultAgentModels?.(agent, env, env.HOME || env.USERPROFILE || homedir())
+    ? defaultAgentModels(agent, env, env.HOME || env.USERPROFILE || homedir())
     : undefined;
   const selectedSubagent =
     subagentModel === 'false'

@@ -4,7 +4,9 @@
 # (DR-006, DR-022).
 agent: claude-code
 # Use the model pair supplied by the installed Cligent for this adapter and
-# provider. Earlier Cligent releases leave both models to the provider.
+# provider as detected from environment and user-level settings only.
+# Project/cwd and managed routing are not resolved here; set false in the
+# project config for those routes, or explicitly select both models.
 # Set false to leave omitted models to the agent CLI. Explicit models win.
 modelDefaults: true
 # model: claude-fable-5-2

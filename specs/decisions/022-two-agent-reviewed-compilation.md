@@ -7,7 +7,7 @@
 
 Accepted
 
-Extended by [DR-062](062-independent-ultracode-configuration.md) for independent Coder and Reviewer Ultracode settings and older-consumer validation.
+Extended by [DR-062](062-independent-ultracode-configuration.md) for independent Coder and Reviewer Ultracode settings under the required Cligent floor.
 
 ## Context
 
