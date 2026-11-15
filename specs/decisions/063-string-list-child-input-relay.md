@@ -26,7 +26,9 @@ Considered and declined:
 - A reached own dense array whose every element is a string may map a child-input token through its elements joined in order by `, `, in an inline slot or an explicit quoted relay.
 - Canonical compact JSON remains the only other structured form, and is tried first; a list is never both.
 - The mapping is established only by perturbing an existing element, then verified with two distinct single-line literal values for every element, all other reached values unchanged, in every reached case.
+- One reached element shows no separator, order or selection, so two distinct single-line literal values also verify one further element appended after the last.
 - An empty list establishes no mapping and renders as the empty string, under the rules an empty string has in that slot.
+- A case reached before the mapping waits for it only on tokens that then map to its empty list; any other token left empty keeps its finding.
 - The descriptor, Proxy, alias, drift, traversal and size refusals of structured JSON relays apply to the list unchanged.
 - The synchronous conformance API stays conservative: a list relay is proved only from reached cases.
 - The composition diagnostic names the comma-joined list beside canonical compact JSON.
@@ -35,4 +37,4 @@ Considered and declined:
 
 The gate fixes one rendering for a list of strings, so a compiled machine that joins with another separator is reported and repaired during compilation.
 A list element that itself contains `, ` renders ambiguously for a reader; the proof concerns rendering, not parsing, and still holds.
-Playbook's `code` reference passes the artifact gate unchanged.
+Playbook's `code` reference has its commit list proved; the gate still reports that machine, because it omits the labelled IR-number relay of a direct intent, which is outside this record.

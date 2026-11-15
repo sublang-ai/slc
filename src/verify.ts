@@ -3841,6 +3841,10 @@ function literalScalarContext(
   return { context: wrap(base, [], new Set()), failure: () => failure };
 }
 
+/** One diagnostic for every unproved expanded composition (verification-39). */
+const UNPROVED_CHILD_COMPOSITION =
+  'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, canonical compact JSON for structured relays, and comma-joined string lists';
+
 /** Verify the FSM-owned composer; child inputs reach the bridge already rendered. */
 function literalPlaybookTextFinding(
   prompt: string,
@@ -3911,7 +3915,7 @@ function literalPlaybookTextFinding(
   const matched = matchPromptBody(prompt, text, [...fields]);
   if (matched === null || matched.index !== 0 || matched.end !== text.length) {
     unproved?.();
-    return 'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, and canonical compact JSON for structured relays';
+    return UNPROVED_CHILD_COMPOSITION;
   }
   const tokens = [...prompt.matchAll(PLACEHOLDER)].map((match) => match[0]);
   const mapping = new Map<string, { field: string }>();
@@ -4145,10 +4149,15 @@ interface LiteralJsonLeaf {
   owner: object;
   key: string;
 }
+/** A detached-copy change: one string leaf replaced, or one element appended. */
+type LiteralJsonMutation =
+  (LiteralJsonLeaf & { value: string }) | { owner: object; append: string };
 interface LiteralJsonValue {
   value: object;
   text: string;
   leaves: LiteralJsonLeaf[];
+  /** The elements joined by `, `, only for a dense array holding strings alone. */
+  list?: string;
 }
 type LiteralJsonFacts = ReadonlyMap<
   object,
@@ -4165,7 +4174,7 @@ function literalJsonGraph(
   context: Record<string, unknown>,
   fields: ReadonlySet<string>,
   records: Map<object, PropertyDescriptorMap>,
-  mutation?: LiteralJsonLeaf & { value: string },
+  mutation?: LiteralJsonMutation,
 ): LiteralJsonGraph | undefined {
   let nodes = 0;
   const aliases = new Map<object, object>();
@@ -4293,7 +4302,10 @@ function literalJsonGraph(
     for (const key of dataKeys) {
       const descriptor = descriptors[key];
       const item =
-        mutation?.owner === value && mutation.key === key
+        mutation !== undefined &&
+        'key' in mutation &&
+        mutation.owner === value &&
+        mutation.key === key
           ? mutation.value
           : descriptor.value;
       const child = visit(item, seen, depth + 1);
@@ -4303,6 +4315,27 @@ function literalJsonGraph(
         result.leaves.push({ owner: value, key });
       result.leaves.push(...child.leaves);
     }
+    let length = dataKeys.length;
+    if (
+      array &&
+      mutation !== undefined &&
+      'append' in mutation &&
+      mutation.owner === value
+    ) {
+      // A synthetic last element exists only on the copy and is no leaf of
+      // the reached list; the encoding bound below still covers it.
+      const key = String(length++);
+      const last = dataKeys.at(-1);
+      Object.defineProperty(clone, key, {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        ...(last === undefined ? {} : descriptors[last]),
+        value: mutation.append,
+      });
+      encodedValues.set(key, mutation.append);
+      dataKeys = [...dataKeys, key];
+    }
     // Preserve control enumeration; sorting belongs only to the JSON copy.
     for (const key of [...dataKeys].sort())
       Object.defineProperty(encoded, key, {
@@ -4311,7 +4344,11 @@ function literalJsonGraph(
         configurable: true,
         writable: true,
       });
-    if (array) Object.defineProperty(clone, 'length', descriptors.length);
+    if (array)
+      Object.defineProperty(clone, 'length', {
+        ...descriptors.length,
+        value: length,
+      });
     if (!Object.isExtensible(value)) Object.preventExtensions(clone);
     boundedText(encoded);
     return result;
@@ -4328,10 +4365,12 @@ function literalJsonGraph(
             (other) => other.owner === leaf.owner && other.key === leaf.key,
           ) === index,
       );
+      const list = literalStringListText(copied.value);
       values.set(field, {
         value: copied.value as object,
         text: boundedText(copied.encoded),
         leaves,
+        ...(list === undefined ? {} : { list }),
       });
     }
     for (const [record, descriptors] of captured)
@@ -4342,11 +4381,68 @@ function literalJsonGraph(
   }
 }
 
+/** Read the detached copy's own data only; no array method or hook is run. */
+function literalStringListText(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  let text = '';
+  for (let index = 0; index < value.length; index++) {
+    const item: unknown = Object.getOwnPropertyDescriptor(value, index)?.value;
+    if (typeof item !== 'string') return undefined;
+    text += index === 0 ? item : `, ${item}`;
+  }
+  return text;
+}
+
 function literalJsonUnchanged(facts: LiteralJsonFacts): boolean {
   return [...facts].every(
     ([value, before]) =>
       Object.getPrototypeOf(value) === before.prototype &&
       Object.isExtensible(value) === before.extensible,
+  );
+}
+
+/** A mapped structure's rendering: joined elements for a list, else JSON. */
+function reachedRelayText(
+  work: ReachedLiteralWork,
+  field: string,
+  graph: LiteralJsonGraph | undefined,
+): string | undefined {
+  const value = graph?.values.get(field);
+  return work.lists.has(field) ? value?.list : value?.text;
+}
+
+/** The unmapped tokens a case leaves empty where an observed, unmapped empty
+ * list may stand, or none. Waiting is never evidence: a pending case is
+ * validated later, and only with each such token mapped to its empty list. */
+function awaitsReachedList(
+  work: ReachedLiteralWork,
+  text: string,
+  graph: LiteralJsonGraph | undefined,
+  valueOf: (field: string) => unknown,
+): string[] {
+  const mapped = new Set(work.mapping.values());
+  if (
+    ![...(graph?.values ?? [])].some(
+      ([field, value]) =>
+        value.list !== undefined &&
+        value.leaves.length === 0 &&
+        !mapped.has(field),
+    )
+  )
+    return [];
+  const matched = reachedTemplateMatch(
+    work.item.prompt,
+    text,
+    [''],
+    new Map(
+      [...work.mapping].map(([token, field]) => [
+        token,
+        String(valueOf(field) ?? ''),
+      ]),
+    ),
+  );
+  return [...(matched ?? [])].flatMap(([token, value]) =>
+    value === '' && !work.mapping.has(token) ? [token] : [],
   );
 }
 
@@ -4356,6 +4452,8 @@ interface ReachedLiteralWork {
   original: string;
   mapping: Map<string, string>;
   structured: Set<string>;
+  /** Fields relayed as a comma-joined string list; never also `structured`. */
+  lists: Set<string>;
   validated: boolean;
   cases: {
     context: Record<string, unknown>;
@@ -4364,6 +4462,8 @@ interface ReachedLiteralWork {
     structures: ReadonlySet<string>;
     jsonFacts: LiteralJsonFacts;
     records: Map<object, PropertyDescriptorMap>;
+    /** Tokens this case left empty while it waited for a list mapping. */
+    awaited: Set<string>;
   }[];
   failure?: string;
 }
@@ -4394,6 +4494,7 @@ export class ReachedLiteralChildChecks {
         original: finding,
         mapping: new Map(),
         structured: new Set(),
+        lists: new Set(),
         validated: false,
         cases: [],
       });
@@ -4493,10 +4594,10 @@ export class ReachedLiteralChildChecks {
     }
     const structured = literalJsonGraph(context, structures, records);
     const fieldText = (field: string, graph = structured): unknown =>
-      work.structured.has(field)
+      work.structured.has(field) || work.lists.has(field)
         ? literalPathValue(context, field, records) === undefined
           ? undefined
-          : (graph?.values.get(field)?.text ?? null)
+          : (reachedRelayText(work, field, graph) ?? null)
         : literalPathValue(context, field, records);
     const payloads = [...fields].flatMap((field) => {
       const value = literalPathValue(context, field, records);
@@ -4508,27 +4609,39 @@ export class ReachedLiteralChildChecks {
     });
     payloads.push(
       ...[...(structured?.values.values() ?? [])].map((value) => value.text),
+      // A string list fills a slot as its joined elements, the empty list as
+      // the empty string. A provisional candidate is never mapping evidence.
+      ...[...(structured?.values.values() ?? [])].flatMap(
+        (value) => value.list ?? [],
+      ),
     );
     const influences = new Set<string>();
     const acceptMapping = (
       token: string,
       field: string,
-      json: boolean,
+      kind: 'scalar' | 'json' | 'list',
     ): boolean => {
       const previous = work.mapping.get(token);
       if (previous === undefined && work.validated) {
         work.failure = `has an unproved late context substitution for ${token}`;
         return false;
       }
+      const known = work.structured.has(field)
+        ? 'json'
+        : work.lists.has(field)
+          ? 'list'
+          : 'scalar';
       if (
-        previous !== undefined &&
-        (previous !== field || work.structured.has(field) !== json)
+        (previous !== undefined && (previous !== field || known !== kind)) ||
+        // One field is relayed as canonical JSON or as a joined list, never both.
+        (known !== 'scalar' && kind !== 'scalar' && known !== kind)
       ) {
         work.failure = `uses inconsistent context substitutions for ${token}`;
         return false;
       }
       work.mapping.set(token, field);
-      if (json) work.structured.add(field);
+      if (kind === 'json') work.structured.add(field);
+      if (kind === 'list') work.lists.add(field);
       influences.add(field);
       return true;
     };
@@ -4567,8 +4680,19 @@ export class ReachedLiteralChildChecks {
       if (
         !('value' in result) ||
         typeof result.value.text !== 'string' ||
-        result.value.text === actual.text ||
-        !result.value.text.includes(encoded)
+        result.value.text === actual.text
+      )
+        continue;
+      // Canonical JSON is tried first. Only a text not carrying it may relay a
+      // list of strings as its elements joined by `, ` (DR-063).
+      const joined = result.value.text.includes(encoded)
+        ? undefined
+        : value.list === undefined
+          ? undefined
+          : variant.values.get(field)?.list;
+      if (
+        !result.value.text.includes(encoded) &&
+        (joined === undefined || !result.value.text.includes(joined))
       )
         continue;
       if (
@@ -4585,28 +4709,36 @@ export class ReachedLiteralChildChecks {
           String(fieldText(mapped, variant) ?? ''),
         ]),
       );
+      const relayed = joined ?? encoded;
       const matched = reachedTemplateMatch(
         item.prompt,
         result.value.text,
         [
-          encoded,
+          relayed,
           ...payloads,
           ...[...variant.values.values()].map((value) => value.text),
+          ...(joined === undefined
+            ? []
+            : [...variant.values.values()].flatMap(
+                (value) => value.list ?? [],
+              )),
         ],
         fixed,
       );
       if (matched === undefined) {
-        work.failure =
-          'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, and canonical compact JSON for structured relays';
+        work.failure = UNPROVED_CHILD_COMPOSITION;
         return;
       }
       for (const [token, text] of matched) {
-        if (text !== encoded) continue;
-        if (!quotedRelays.has(token)) {
+        if (text !== relayed) continue;
+        if (joined === undefined && !quotedRelays.has(token)) {
           work.failure = `has unsupported structured inline substitution for ${token}`;
           return;
         }
-        if (!acceptMapping(token, field, true)) return;
+        if (
+          !acceptMapping(token, field, joined === undefined ? 'json' : 'list')
+        )
+          return;
       }
     }
     for (const field of fields) {
@@ -4618,7 +4750,9 @@ export class ReachedLiteralChildChecks {
         false,
         undefined,
         undefined,
-        work.structured.size > 0 ? structured?.aliases : undefined,
+        work.structured.size + work.lists.size > 0
+          ? structured?.aliases
+          : undefined,
       );
       const result = invocationInput(binding.invoke, candidate.context);
       if (
@@ -4650,13 +4784,12 @@ export class ReachedLiteralChildChecks {
         fixed,
       );
       if (matched === undefined) {
-        work.failure =
-          'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, and canonical compact JSON for structured relays';
+        work.failure = UNPROVED_CHILD_COMPOSITION;
         return;
       }
       for (const [token, value] of matched) {
         if (value !== marker) continue;
-        if (!acceptMapping(token, field, false)) return;
+        if (!acceptMapping(token, field, 'scalar')) return;
       }
     }
     // Do not merge cases by read paths: a later mapping may reveal an unread
@@ -4673,6 +4806,7 @@ export class ReachedLiteralChildChecks {
       structures,
       jsonFacts,
       records,
+      awaited: new Set(),
     });
     if (!this.mapped(work)) return;
     for (const reached of work.cases) {
@@ -4704,6 +4838,13 @@ export class ReachedLiteralChildChecks {
         reached.structures,
         reached.records,
       );
+      const reachedValue = (field: string, json = graph): unknown =>
+        work.structured.has(field) || work.lists.has(field)
+          ? literalPathValue(reached.context, field, reached.records) ===
+            undefined
+            ? undefined
+            : (reachedRelayText(work, field, json) ?? null)
+          : literalPathValue(reached.context, field, reached.records);
       const render = (
         values: Record<string, string>,
         json = graph,
@@ -4711,18 +4852,36 @@ export class ReachedLiteralChildChecks {
         renderLiteralChildTemplate(item.prompt, work.mapping, (field) =>
           Object.hasOwn(values, field)
             ? values[field]
-            : work.structured.has(field)
-              ? literalPathValue(reached.context, field, reached.records) ===
-                undefined
-                ? undefined
-                : (json?.values.get(field)?.text ?? null)
-              : literalPathValue(reached.context, field, reached.records),
+            : reachedValue(field, json),
         );
       const expected = render({});
       if (expected === undefined || reached.text !== expected) {
-        work.failure =
-          'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, and canonical compact JSON for structured relays';
+        // An empty list establishes no mapping. Before any proof, its case
+        // stays pending for a nonempty reached list, which then validates it.
+        const awaited =
+          expected === undefined || work.validated
+            ? []
+            : awaitsReachedList(work, reached.text, graph, reachedValue);
+        for (const token of awaited) reached.awaited.add(token);
+        if (awaited.length > 0) return;
+        work.failure = UNPROVED_CHILD_COMPOSITION;
         return;
+      }
+      // Waiting was granted to an empty list alone. A token that turned out
+      // to be anything else keeps the finding its case had without the wait.
+      for (const token of reached.awaited) {
+        const field = work.mapping.get(token);
+        const value =
+          field === undefined ? undefined : graph?.values.get(field);
+        if (
+          field === undefined ||
+          !work.lists.has(field) ||
+          value?.list !== '' ||
+          value.leaves.length > 0
+        ) {
+          work.failure = UNPROVED_CHILD_COMPOSITION;
+          return;
+        }
       }
       const verifyPayload = (
         values: Record<string, string>,
@@ -4735,7 +4894,9 @@ export class ReachedLiteralChildChecks {
           false,
           undefined,
           undefined,
-          work.structured.size > 0 ? graph?.aliases : undefined,
+          work.structured.size + work.lists.size > 0
+            ? graph?.aliases
+            : undefined,
         );
         const result = invocationInput(binding.invoke, candidate.context);
         const expected = render(values);
@@ -4764,7 +4925,8 @@ export class ReachedLiteralChildChecks {
         reached.influences.has(field),
       );
       for (const field of new Set(work.mapping.values())) {
-        if (!work.structured.has(field)) continue;
+        const list = work.lists.has(field);
+        if (!list && !work.structured.has(field)) continue;
         const value = graph?.values.get(field);
         if (
           value === undefined &&
@@ -4775,49 +4937,63 @@ export class ReachedLiteralChildChecks {
             'has unsupported composition (structured JSON inspection failed)';
           return;
         }
-        for (const leaf of value?.leaves ?? [])
-          for (const literal of [
-            '«structured» $& <payload>\nsecond',
-            '«distinct» " \\ \r\nlast',
-          ]) {
-            const variant = literalJsonGraph(
-              reached.context,
-              reached.structures,
-              reached.records,
-              { ...leaf, value: literal },
-            );
-            if (variant === undefined) {
-              work.failure =
-                'has unsupported composition (structured JSON inspection failed)';
-              return;
-            }
-            const result = invocationInput(
-              binding.invoke,
-              literalScalarContext(
-                reached.context,
-                {},
-                undefined,
-                false,
-                undefined,
-                undefined,
-                variant.aliases,
-              ).context,
-            );
-            if (
-              !('value' in result) ||
-              result.value.stateId !== binding.state.stateId ||
-              result.value.playbookId !== binding.state.playbookId ||
-              result.value.sourceItem !== actual.sourceItem ||
-              result.value.text !== render({}, variant)
-            ) {
-              work.failure =
-                'does not preserve canonical structured JSON substitutions';
-              return;
-            }
+        const holds = (mutation: LiteralJsonMutation): boolean => {
+          const variant = literalJsonGraph(
+            reached.context,
+            reached.structures,
+            reached.records,
+            mutation,
+          );
+          if (variant === undefined) {
+            work.failure =
+              'has unsupported composition (structured JSON inspection failed)';
+            return false;
           }
+          const result = invocationInput(
+            binding.invoke,
+            literalScalarContext(
+              reached.context,
+              {},
+              undefined,
+              false,
+              undefined,
+              undefined,
+              variant.aliases,
+            ).context,
+          );
+          if (
+            'value' in result &&
+            result.value.stateId === binding.state.stateId &&
+            result.value.playbookId === binding.state.playbookId &&
+            result.value.sourceItem === actual.sourceItem &&
+            result.value.text === render({}, variant)
+          )
+            return true;
+          work.failure = list
+            ? 'does not preserve comma-joined string-list substitutions'
+            : 'does not preserve canonical structured JSON substitutions';
+          return false;
+        };
+        // Every string leaf, hence every element of a list, takes two values.
+        for (const leaf of value?.leaves ?? [])
+          for (const literal of list
+            ? [
+                `«Element» $& $$ $\x60 $' ${[...work.mapping.keys()].join(' ')}`,
+                '«Distinct» " \\ [x]',
+              ]
+            : ['«structured» $& <payload>\nsecond', '«distinct» " \\ \r\nlast'])
+            if (!holds({ ...leaf, value: literal })) return;
+        // Replacing elements never shows what stands between two of them, so
+        // one reached element alone proves no separator, order or selection.
+        // A further last element on the detached copy does, in every case;
+        // its two values sort before and after ordinary text, in mixed case.
+        const elements = list ? value?.leaves[0]?.owner : undefined;
+        if (elements !== undefined)
+          for (const append of ['!Appended " \\ $$', '«Appended» $& [y]'])
+            if (!holds({ owner: elements, append })) return;
       }
       const scalarFields = activeFields.filter(
-        (field) => !work.structured.has(field),
+        (field) => !work.structured.has(field) && !work.lists.has(field),
       );
       // Perturb one mapped payload only: no other reached control/payload changes.
       for (const field of scalarFields) {
