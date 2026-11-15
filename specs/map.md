@@ -34,7 +34,7 @@ meta.md       The spec of specs
 | [DR-006](decisions/006-slc-configuration-sources.md) | 006-slc-configuration-sources.md | Configuration sources and precedence: env over config file, discovery, schema |
 | [DR-007](decisions/007-slc-phase-artifact-pinning.md) | 007-slc-phase-artifact-pinning.md | Phase artifact pinning: currentness, semantic inputs, and compiled selection |
 | [DR-008](decisions/008-slc-file-capability.md) | 008-slc-file-capability.md | File capability (superseded): compiled execution writes through agents and relies on the [DR-003](decisions/003-slc-phase-execution.md) generic checks |
-| [DR-009](decisions/009-slc-playbook-pipeline-compilation.md) | 009-slc-playbook-pipeline-compilation.md | `playbook` pipeline compilation: generic invocation, compile-output scope, compiled performing, link reconciliation, and artifact-derived verification |
+| [DR-009](decisions/009-slc-playbook-pipeline-compilation.md) | 009-slc-playbook-pipeline-compilation.md | `playbook` pipeline compilation: generic invocation, compile-output scope, compiled performing, link reconciliation, and artifact-derived verification; conformance scoped to action items, amended by DR-062 |
 | [DR-010](decisions/010-playbook-runtime-contract-evolution.md) | 010-playbook-runtime-contract-evolution.md | Playbook runtime evolution: exact legacy/session-v1/composed-v2 profiles, fail-closed adoption, structured outcomes, host ports, trace privacy, and CI deferral |
 | [DR-011](decisions/011-playbook-1-0-captain-contract-adoption.md) | 011-playbook-1-0-captain-contract-adoption.md | Playbook 1.0 adoption: final six-port composed profile, distinct Captain/player verification, dynamic child wiring, scripted child coverage, and atomic reviewed assets |
 | [DR-012](decisions/012-playbook-routing-control-separation.md) | 012-playbook-routing-control-separation.md | Playbook routing/control separation: source-owned result metadata, exact Boss text, isolated Captain calls, and visible-prose ownership |
@@ -87,6 +87,7 @@ meta.md       The spec of specs
 | [DR-059](decisions/059-compiler-calls-turn-native-skills-off.md) | 059-compiler-calls-turn-native-skills-off.md | Every agent call requests `nativeSkills: false` where Cligent reports the adapter can honor it; Kimi Code and unlisted adapters keep native skills, a documented reduction |
 | [DR-060](decisions/060-merge-on-green.md) | 060-merge-on-green.md | `main` protected on the CI workflow's `quality` job without the up-to-date requirement and merged by auto-merge on green; one run per pull-request head with CI on pushes to `main` and pull requests; no base branch deleted under a pull request; the pre-push check; suites deterministic by construction; no macOS matrix, so none reduced |
 | [DR-061](decisions/061-consumer-supplied-playbook.md) | 061-consumer-supplied-playbook.md | Required consumer Playbook peer with exact development provenance and installed-package acceptance |
+| [DR-062](decisions/062-compiled-gears-as-a-spec-package.md) | 062-compiled-gears-as-a-spec-package.md | Compiled GEARS as a spec package: item kind from `Captain shall` alone, action items mapped one-to-one to leaves, declarative items mapped to none, citations matched ignoring ASCII letter case; amends DR-009 |
 
 ## Packages
 

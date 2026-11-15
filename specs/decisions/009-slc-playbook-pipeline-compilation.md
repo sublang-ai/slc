@@ -6,6 +6,7 @@
 ## Status
 
 Accepted
+Amended by [DR-062](062-compiled-gears-as-a-spec-package.md) in one scope: conformance requires each action item, not each `gears` item, to map to exactly one executable leaf.
 
 ## Context
 
