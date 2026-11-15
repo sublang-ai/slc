@@ -24,9 +24,9 @@ Considered and declined:
 ## Decision
 
 - In reached-case proof, an invocation renders every complete labelled relay line, `> Label: <token>`, whose mapped value is empty or absent in one of two ways: the label kept with an empty value, or the line omitted with its separator, as a standalone relay is.
-- One invocation uses one of the two for every such line, in every reached case and under every probe; a mixture is a finding.
-- Blank lines that an omission leaves at the end of the composed text are dropped with it; no other line changes.
-- A labelled line whose mapped value is not empty is never omitted, an omitted line is no mapping evidence, and a relay missing in every reached case stays unproved.
+- One invocation uses one of the two for every such line, in every reached case the proof observes and under every probe; a mixture is a finding.
+- Where an omitted line follows the last line with content, the composed text ends at that line's content, without the blank lines and separators after it; no other line changes.
+- A labelled line whose mapped value is not empty is never omitted, an omitted line is no mapping evidence, and a relay that no reached case and no probe of an observed read shows stays unproved.
 - The static proof and the synchronous conformance API are unchanged.
 
 ## Consequences
@@ -34,3 +34,4 @@ Considered and declined:
 The gate accepts two renderings of an empty labelled relay and says which one a machine uses only by holding it to that one.
 Playbook's `code` reference, with [DR-063](063-string-list-child-input-relay.md), passes the artifact gate unchanged.
 A composer that drops a labelled line whose value is present is still reported.
+As for every reached-case rule, a case reached after the proof completes is not examined, so a rendering that changes only there goes unseen.

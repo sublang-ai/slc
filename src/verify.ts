@@ -3845,6 +3845,10 @@ function literalScalarContext(
 const UNPROVED_CHILD_COMPOSITION =
   'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, canonical compact JSON for structured relays, and comma-joined string lists';
 
+/** One invocation rendered an empty labelled relay line both ways (DR-064). */
+const MIXED_EMPTY_LABELLED_RELAYS =
+  'mixes kept and omitted empty labelled child-input relay lines';
+
 /** Verify the FSM-owned composer; child inputs reach the bridge already rendered. */
 function literalPlaybookTextFinding(
   prompt: string,
@@ -3990,11 +3994,18 @@ function literalPlaybookTextFinding(
   return undefined;
 }
 
-/** Exact whole-template renderer shared by initial and reached-case proofs. */
+/** A complete relay line of a child-input template, with its separator. */
+const STANDALONE_RELAY_LINE = /^> (<[^\s<>`]{1,60}>)(?:\r?\n)?$/;
+const LABELLED_RELAY_LINE = /^> [^<>\r\n]+: (<[^\s<>`]{1,60}>)(?:\r?\n)?$/;
+
+/** Exact whole-template renderer shared by initial and reached-case proofs.
+ * An empty standalone relay line is always omitted; an empty labelled one is
+ * kept with its label, or omitted too where a reached invocation does so. */
 function renderLiteralChildTemplate(
   prompt: string,
   mapping: ReadonlyMap<string, string>,
   valueOf: (field: string) => unknown,
+  omitEmptyLabels = false,
 ): string | undefined {
   if (
     [...mapping.values()].some((field) => {
@@ -4003,17 +4014,28 @@ function renderLiteralChildTemplate(
     })
   )
     return undefined;
-  const template = prompt
-    .split(/(?<=\n)/)
-    .filter((line) => {
-      const token = /^> (<[^\s<>`]{1,60}>)(?:\r?\n)?$/.exec(line)?.[1];
-      const field = token === undefined ? undefined : mapping.get(token);
-      return (
-        field === undefined ||
-        (valueOf(field) !== undefined && valueOf(field) !== '')
-      );
-    })
-    .join('');
+  const empty = (token: string | undefined): boolean => {
+    const field = token === undefined ? undefined : mapping.get(token);
+    return (
+      field !== undefined &&
+      (valueOf(field) === undefined || valueOf(field) === '')
+    );
+  };
+  // Whether a labelled line is omitted after the last line kept with content.
+  let trailing = false;
+  const kept = prompt.split(/(?<=\n)/).filter((line) => {
+    if (empty(STANDALONE_RELAY_LINE.exec(line)?.[1])) return false;
+    if (omitEmptyLabels && empty(LABELLED_RELAY_LINE.exec(line)?.[1])) {
+      trailing = true;
+      return false;
+    }
+    if (!/^\r?\n$/.test(line)) trailing = false;
+    return true;
+  });
+  // The blank lines such an omission leaves at the end go with it (DR-064).
+  const template = trailing
+    ? kept.join('').replace(/(?:\r?\n)+$/, '')
+    : kept.join('');
   return template.replace(PLACEHOLDER, (token, offset: number) => {
     const field = mapping.get(token);
     if (field === undefined) return token;
@@ -4024,17 +4046,22 @@ function renderLiteralChildTemplate(
   });
 }
 
-/** A finite provisional match. Omitted lines never constitute mapping evidence. */
+/** A finite provisional match. Omitted lines never constitute mapping evidence.
+ * With `omitLabels`, a labelled relay line may be absent as a standalone one
+ * may, and the text may end where only blank lines and absent relay lines, one
+ * of them labelled, follow a line's content (DR-064). The exact rendering is
+ * decided by the reached-case validation, never by this match. */
 function reachedTemplateMatch(
   prompt: string,
   text: string,
   payloads: readonly string[],
   fixed: ReadonlyMap<string, string>,
+  omitLabels = false,
 ): Map<string, string> | undefined {
   type Part =
-    | { literal: string }
+    | { literal: string; blank?: boolean }
     | { token: string; quoted: boolean }
-    | { optional: Part[] };
+    | { optional: Part[]; labelled: boolean };
   const parts: Part[] = [];
   for (const line of prompt.split(/(?<=\n)/)) {
     const chunk: Part[] = [];
@@ -4044,11 +4071,17 @@ function reachedTemplateMatch(
       chunk.push({ token: match[0], quoted: line.startsWith('> ') });
       offset = match.index + match[0].length;
     }
-    chunk.push({ literal: line.slice(offset) });
-    if (/^> <[^\s<>`]{1,60}>(?:\r?\n)?$/.test(line))
-      parts.push({ optional: chunk });
+    chunk.push({ literal: line.slice(offset), blank: /^\r?\n$/.test(line) });
+    if (STANDALONE_RELAY_LINE.test(line))
+      parts.push({ optional: chunk, labelled: false });
+    else if (omitLabels && LABELLED_RELAY_LINE.test(line))
+      parts.push({ optional: chunk, labelled: true });
     else parts.push(...chunk);
   }
+  const droppedTail = (rest: readonly Part[]): boolean =>
+    rest.every(
+      (part) => 'optional' in part || ('literal' in part && part.blank),
+    ) && rest.some((part) => 'optional' in part && part.labelled);
   let attempts = 0;
   const walk = (
     remaining: readonly Part[],
@@ -4059,10 +4092,18 @@ function reachedTemplateMatch(
     if (remaining.length === 0)
       return offset === text.length ? values : undefined;
     const [part, ...rest] = remaining;
-    if ('literal' in part)
-      return text.startsWith(part.literal, offset)
-        ? walk(rest, offset + part.literal.length, values)
+    if ('literal' in part) {
+      if (text.startsWith(part.literal, offset))
+        return walk(rest, offset + part.literal.length, values);
+      const content = part.literal.replace(/\r?\n$/, '');
+      return !part.blank &&
+        content !== part.literal &&
+        text.length === offset + content.length &&
+        text.endsWith(content) &&
+        droppedTail(rest)
+        ? values
         : undefined;
+    }
     if ('optional' in part)
       return (
         walk([...part.optional, ...rest], offset, values) ??
@@ -4088,7 +4129,10 @@ function reachedTemplateMatch(
     }
     return undefined;
   };
-  return walk(parts, 0, new Map());
+  return (
+    walk(parts, 0, new Map()) ??
+    (text === '' && droppedTail(parts) ? new Map() : undefined)
+  );
 }
 
 function literalPathValue(
@@ -4440,6 +4484,7 @@ function awaitsReachedList(
         String(valueOf(field) ?? ''),
       ]),
     ),
+    work.emptyLabels !== 'kept',
   );
   return [...(matched ?? [])].flatMap(([token, value]) =>
     value === '' && !work.mapping.has(token) ? [token] : [],
@@ -4454,6 +4499,9 @@ interface ReachedLiteralWork {
   structured: Set<string>;
   /** Fields relayed as a comma-joined string list; never also `structured`. */
   lists: Set<string>;
+  /** How this invocation renders every empty labelled relay line, once a
+   * reached case or probe has shown which of the two it uses (DR-064). */
+  emptyLabels?: 'kept' | 'omitted';
   validated: boolean;
   cases: {
     context: Record<string, unknown>;
@@ -4724,6 +4772,7 @@ export class ReachedLiteralChildChecks {
               )),
         ],
         fixed,
+        work.emptyLabels !== 'kept',
       );
       if (matched === undefined) {
         work.failure = UNPROVED_CHILD_COMPOSITION;
@@ -4782,6 +4831,7 @@ export class ReachedLiteralChildChecks {
         text,
         [marker, ...payloads],
         fixed,
+        work.emptyLabels !== 'kept',
       );
       if (matched === undefined) {
         work.failure = UNPROVED_CHILD_COMPOSITION;
@@ -4847,14 +4897,38 @@ export class ReachedLiteralChildChecks {
           : literalPathValue(reached.context, field, reached.records);
       const render = (
         values: Record<string, string>,
-        json = graph,
+        json: typeof graph,
+        omitEmptyLabels: boolean,
       ): string | undefined =>
-        renderLiteralChildTemplate(item.prompt, work.mapping, (field) =>
-          Object.hasOwn(values, field)
-            ? values[field]
-            : reachedValue(field, json),
+        renderLiteralChildTemplate(
+          item.prompt,
+          work.mapping,
+          (field) =>
+            Object.hasOwn(values, field)
+              ? values[field]
+              : reachedValue(field, json),
+          omitEmptyLabels,
         );
-      const expected = render({});
+      // One invocation keeps every empty labelled relay line or omits every
+      // one (DR-064). The first text the two renderings tell apart fixes
+      // which; a later text that follows the other one is a mixture.
+      const owed = (
+        text: unknown,
+        values: Record<string, string>,
+        json = graph,
+      ): string | undefined => {
+        const kept = render(values, json, false);
+        const omitted = render(values, json, true);
+        if (kept === omitted) return kept;
+        work.emptyLabels ??=
+          text === omitted ? 'omitted' : text === kept ? 'kept' : undefined;
+        const omits = work.emptyLabels === 'omitted';
+        if (text === (omits ? kept : omitted))
+          work.failure = MIXED_EMPTY_LABELLED_RELAYS;
+        return omits ? omitted : kept;
+      };
+      const expected = owed(reached.text, {});
+      if (work.failure !== undefined) return;
       if (expected === undefined || reached.text !== expected) {
         // An empty list establishes no mapping. Before any proof, its case
         // stays pending for a nonempty reached list, which then validates it.
@@ -4899,7 +4973,11 @@ export class ReachedLiteralChildChecks {
             : undefined,
         );
         const result = invocationInput(binding.invoke, candidate.context);
-        const expected = render(values);
+        const expected = owed(
+          'value' in result ? result.value.text : undefined,
+          values,
+        );
+        if (work.failure !== undefined) return false;
         if (
           candidate.failure() === undefined &&
           'value' in result &&
@@ -4961,12 +5039,18 @@ export class ReachedLiteralChildChecks {
               variant.aliases,
             ).context,
           );
+          const expected = owed(
+            'value' in result ? result.value.text : undefined,
+            {},
+            variant,
+          );
+          if (work.failure !== undefined) return false;
           if (
             'value' in result &&
             result.value.stateId === binding.state.stateId &&
             result.value.playbookId === binding.state.playbookId &&
             result.value.sourceItem === actual.sourceItem &&
-            result.value.text === render({}, variant)
+            result.value.text === expected
           )
             return true;
           work.failure = list
