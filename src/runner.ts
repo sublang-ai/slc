@@ -101,6 +101,7 @@ import {
   checkFsmChildSuspension,
   checkFsmCoverage,
   checkGearsActorContract,
+  checkGearsPackageContract,
   checkGearsFsmArtifact,
   checkGearsResultContract,
   checkLinkedModuleContract,
@@ -1403,6 +1404,7 @@ async function gearsContractFindings(path: string): Promise<readonly string[]> {
     return [
       ...checkGearsResultContract(gears),
       ...checkGearsActorContract(gears),
+      ...checkGearsPackageContract(gears),
     ];
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];

@@ -54,6 +54,10 @@ When a compilation-correctness check classifies a `gears` item, the check shall 
 
 When a GEARS↔FSM conformance check [[verification-1](#verification-1)] resolves a leaf's `sourceItem`, the check shall cite the `gears` item whose ID equals it ignoring ASCII letter case and name that item by its ID as written in every finding ([DR-062](../decisions/062-compiled-gears-as-a-spec-package.md)).
 
+#### verification-68
+
+When checking a GEARS package contract independently of an FSM, the slc command shall return exactly the conformance findings [[verification-1](#verification-1)] that need no machine — a declarative item [[verification-65](#verification-65)] carrying a prompt blockquote or a `Results:` label, and two item IDs equal ignoring ASCII letter case — as a pure function of that GEARS text, so the phase that produces or consumes the artifact reports them ([DR-062](../decisions/062-compiled-gears-as-a-spec-package.md)).
+
 #### verification-39
 
 When checking a literal nested-playbook input [[verification-1](#verification-1)], the conformance check shall verify the complete GEARS child-text template through the invocation's observable composition under this case matrix, without assuming that a placeholder's spelling names a context field or inspecting function source ([DR-041](../decisions/041-composed-child-input-fidelity.md)):
@@ -644,6 +648,8 @@ Where synthetic `gears` artifacts in the spec-package form carry lowercase actio
 | Requirement and test items, including a plain bullet list and a table, mapped to no leaf. | No conformance, result-contract, or actor-contract finding [[verification-1](#verification-1)] [[verification-65](#verification-65)]. |
 | A declarative item with a prompt blockquote, with a `Results:` label, or cited by a leaf. | A finding naming that item [[verification-1](#verification-1)]. |
 | Two item IDs equal ignoring ASCII letter case. | A finding naming both [[verification-1](#verification-1)]. |
+| A produced artifact whose authored prompt lost its acting clause, or whose IDs collide ignoring case, with no FSM yet. | The package-contract check returns the same findings as conformance, and the real producer boundary fails with them before downstream work [[verification-68](#verification-68)]. |
+| A package-form artifact with no such defect, checked with no FSM. | No package-contract finding [[verification-68](#verification-68)]. |
 | An artifact in the earlier form, with prose around each action item's statement. | No finding [[verification-1](#verification-1)]. |
 
 ## References
