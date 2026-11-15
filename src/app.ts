@@ -206,8 +206,7 @@ export function resolveRunConfig(
 ): RunConfig {
   const selection = resolveAgentSelection(
     {
-      ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
-      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      ...env,
       SLC_AGENT: nonBlank(env.SLC_AGENT) ?? file.agent,
       SLC_MODEL: nonBlank(env.SLC_MODEL) ?? file.model,
       SLC_SUBAGENT_MODEL:
@@ -339,8 +338,8 @@ export function usageText(): string {
     '',
     '  SLC_AGENT          agent CLI: claude-code | codex | gemini | opencode',
     '  SLC_MODEL          optional model for the agent CLI',
-    '  SLC_SUBAGENT_MODEL subagentModel: native subagent model (inherit allowed)',
-    '  SLC_REVIEWER_SUBAGENT_MODEL reviewerSubagentModel: independent reviewer subagents',
+    '  SLC_SUBAGENT_MODEL native subagent model: a model ID, inherit, or false',
+    '  SLC_REVIEWER_SUBAGENT_MODEL native Reviewer subagent model: a model ID, inherit, or false',
     '  SLC_ULTRACODE     optional native Ultracode boolean (true or false)',
     '  SLC_REVIEWER_ULTRACODE optional independent Reviewer Ultracode boolean',
     '  SLC_EFFORT         optional adapter-scoped reasoning effort (e.g. xhigh)',

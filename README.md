@@ -229,9 +229,10 @@ and the full rules are in the
 The first run seeds `~/.config/slc/config.yaml` with
 `agent: claude-code` and `modelDefaults: true`, so a fresh machine needs no setup.
 The opt-in defaults are Claude Fable 5.2 with Opus 5.5 subagents, or Codex
-GPT-6 Astra with GPT-6.1 Sol subagents where installed Cligent supports them.
-Omitted `modelDefaults` preserves agent CLI defaults. Explicit model fields win;
-a custom `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL` suppresses implicit model pins. A
+GPT-6 Astra with GPT-6.1 Sol subagents when supplied by the installed Cligent. Older Cligent releases leave both models
+to the provider. Explicit model fields win. For Claude, Cligent reads provider
+variables from the environment and Claude Code’s user settings. Custom endpoints
+and cloud-provider routes use their own model IDs. A
 `slc.config.yaml` in the working directory wins over the user config,
 and `SLC_AGENT`, `SLC_MODEL`, and the other `SLC_*` variables override
 either, per key.
@@ -259,6 +260,18 @@ decides which agent CLIs accept them, and a literal on one that does not
 refuses the run before any agent call. Discovery order, `--config`, and
 validation rules live in the [CLI spec](specs/packages/cli.md);
 `slc --help` prints the summary.
+
+Optional `ultracode: true` or `false` and `reviewerUltracode: true` or
+`false` select Claude Ultracode independently of effort. `SLC_ULTRACODE`
+and `SLC_REVIEWER_ULTRACODE` override these YAML settings with exactly
+`true` or `false`. Omission preserves existing native defaults. Either explicit Claude boolean requires a consumer-supplied Cligent exposing
+`isUltracodeSupported`; upgrade Cligent if that capability is unavailable.
+Unsupported adapters ignore false and reject true. Reviewer settings require
+`reviewerAgent`; account and workflow availability remain native policy.
+
+`SLC_SUBAGENT_MODEL` and `SLC_REVIEWER_SUBAGENT_MODEL` override their YAML
+fields per key; `false` suppresses a child pin, while `inherit` requests native
+parent-model inheritance. Explicit requests require installed Cligent support.
 
 Mechanical checks run by default at GEARS-producing phases, the GEARS-to-FSM
 boundary, and Playbook linking. A failing check returns its findings to the
@@ -374,15 +387,3 @@ We welcome contributions of all kinds.
 ## License
 
 [Apache-2.0](LICENSE)
-
-Optional `ultracode: true` or `false` and `reviewerUltracode: true` or
-`false` select Claude Ultracode independently of effort. `SLC_ULTRACODE`
-and `SLC_REVIEWER_ULTRACODE` override these YAML settings with exactly
-`true` or `false`. Omission preserves existing native defaults. Either explicit Claude boolean requires a consumer-supplied Cligent exposing
-`isUltracodeSupported`; upgrade Cligent if that capability is unavailable.
-Unsupported adapters ignore false and reject true. Reviewer settings require
-`reviewerAgent`; account and workflow availability remain native policy.
-
-`SLC_SUBAGENT_MODEL` and `SLC_REVIEWER_SUBAGENT_MODEL` override their YAML
-fields per key; `false` suppresses a child pin, while `inherit` requests native
-parent-model inheritance. Explicit requests require installed Cligent support.

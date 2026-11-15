@@ -3,8 +3,8 @@
 # SLC_REVIEWER_* variables, plus SLC_STALL_TIMEOUT, override these per key
 # (DR-006, DR-022).
 agent: claude-code
-# Adapter-aware defaults: Claude Fable 5.2 / Opus 5.5 subagents;
-# Codex GPT-6 Astra / GPT-6.1 Sol subagents, where Cligent supports it.
+# Use the model pair supplied by the installed Cligent for this adapter and
+# provider. Earlier Cligent releases leave both models to the provider.
 # Set false to leave omitted models to the agent CLI. Explicit models win.
 modelDefaults: true
 # model: claude-fable-5-2

@@ -14,7 +14,9 @@ and this project adheres to
 ### Added
 
 - First-run configs opt into adapter-aware Claude Fable 5.2 / Opus 5.5 and
-  Codex GPT-6 Astra / GPT-6.1 Sol model pairs. Existing configs keep provider
+  Codex GPT-6 Astra / GPT-6.1 Sol model pairs when installed Cligent supplies
+  them. Cloud routes, custom endpoints and older Cligent keep provider defaults.
+  Tool-free control turns omit child tuning. Existing configs keep provider
   defaults unless `modelDefaults: true` is set. Independent Coder/Reviewer
   subagent model settings support named pins, `inherit`, and `false`.
 

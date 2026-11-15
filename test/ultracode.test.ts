@@ -2,16 +2,23 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import { describe, expect, it, vi } from 'vitest';
+import { Cligent } from '@sublang/cligent';
 
-const metadata = vi.hoisted(() => ({ available: true }));
-vi.mock('@sublang/cligent', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  isUltracodeSupported: (agent: string) =>
-    metadata.available && agent === 'claude-code',
-}));
+vi.mock('@sublang/cligent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sublang/cligent')>();
+  return {
+    ...actual,
+    Cligent: vi.fn(actual.Cligent),
+    defaultAgentModels: undefined,
+    isUltracodeSupported: (agent: string) => agent === 'claude-code',
+  };
+});
 
 import { resolveRunConfig } from '../src/app.js';
-import { resolveAgentSelection } from '../src/config.js';
+import {
+  createConfiguredAgentClient,
+  resolveAgentSelection,
+} from '../src/config.js';
 import { ultracodeOptionsFor } from '../src/ultracode.js';
 
 describe('independent role Ultracode configuration', () => {
@@ -27,12 +34,14 @@ describe('independent role Ultracode configuration', () => {
     );
     expect(config.selection.ultracode).toBe(false);
     expect(config.selection.reviewer?.ultracode).toBe(true);
-    expect(ultracodeOptionsFor('claude-code', false)).toEqual({
-      ultracode: false,
-    });
-    expect(ultracodeOptionsFor('claude-code', true)).toEqual({
-      ultracode: true,
-    });
+    createConfiguredAgentClient(config.selection);
+    createConfiguredAgentClient(config.selection.reviewer!);
+    expect(vi.mocked(Cligent).mock.calls.map(([, options]) => options)).toEqual(
+      [
+        expect.objectContaining({ ultracode: false }),
+        expect.objectContaining({ ultracode: true }),
+      ],
+    );
   });
   it('rejects malformed values and Reviewer settings without its agent', () => {
     for (const key of ['SLC_ULTRACODE', 'SLC_REVIEWER_ULTRACODE']) {

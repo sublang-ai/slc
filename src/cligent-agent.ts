@@ -151,9 +151,6 @@ export function createCligentAgent(opts: {
     // Both validated adapter-scoped by the configuration layer (cli-7, cli-12).
     ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
     ...(opts.fastMode !== undefined ? { fastMode: opts.fastMode } : {}),
-    ...(opts.subagentModel !== undefined
-      ? { subagentModel: opts.subagentModel }
-      : {}),
     ...ultracodeOptionsFor(opts.adapter.agent, opts.ultracode),
     // No call overrides it, so this instance default reaches every run.
     ...nativeSkillOptionsFor(opts.adapter.agent),
@@ -182,6 +179,11 @@ export function createCligentAgent(opts: {
           cwd,
           model,
           ...(resume !== undefined ? { resume } : {}),
+          // A tool-free control call cannot delegate, even on an adapter
+          // whose tool restriction is expressed only by the authored prompt.
+          ...(opts.subagentModel !== undefined && allowedTools?.length !== 0
+            ? { subagentModel: opts.subagentModel }
+            : {}),
           ...toolOptionsFor(opts.adapter.agent, allowedTools),
         })) {
           // Any adapter event is activity, regardless of type: the reliable

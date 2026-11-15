@@ -5,7 +5,9 @@
 
 ## Status
 
-Accepted
+Accepted (2026-11-14).
+
+Amended by [DR-064](064-runtime-owned-model-defaults.md) in provider and compatibility selection.
 
 Amends [DR-015](015-first-run-config-seeding.md)'s starter defaults and extends [DR-006](006-slc-configuration-sources.md)'s schema.
 

@@ -1,17 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-import * as cligent from '@sublang/cligent';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { resolveAgentSelection } from '../src/config.js';
 import { ultracodeOptionsFor } from '../src/ultracode.js';
 
-it('keeps older consumers loadable while refusing unrepresentable activation', () => {
-  if (
-    typeof (cligent as unknown as Record<string, unknown>)
-      .isUltracodeSupported === 'function'
-  )
-    return;
+vi.mock('@sublang/cligent', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  isUltracodeSupported: undefined,
+  defaultAgentModels: undefined,
+}));
+
+it('uses provider defaults and rejects unrepresentable requests on older Cligent', () => {
+  const config = resolveAgentSelection(
+    { SLC_AGENT: 'claude-code', SLC_REVIEWER_AGENT: 'codex' },
+    { modelDefaults: true },
+  );
+  for (const role of [config, config.reviewer!]) {
+    expect(role.model).toBeUndefined();
+    expect(role.subagentModel).toBeUndefined();
+  }
+  expect(() => ultracodeOptionsFor('codex', true)).toThrow(
+    'ultracode is not supported by adapter "codex"',
+  );
   expect(ultracodeOptionsFor('claude-code', undefined)).toEqual({});
   expect(ultracodeOptionsFor('codex', false)).toEqual({});
   expect(() => ultracodeOptionsFor('claude-code', false)).toThrow(

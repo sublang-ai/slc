@@ -19,7 +19,7 @@ When the user runs `slc` with `--version` or `-v`, the slc executable shall prin
 
 ### cli-2
 
-When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--complete` for retained-bundle emission without agents or history [[completion-1](completion.md#completion-1)], [[completion-2](completion.md#completion-2)], [[completion-5](completion.md#completion-5)], `--rebuild`, the `--config` option, and the configuration it reads — including the Coder, optional Reviewer and coverage-budget config keys and environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md), [DR-006](../decisions/006-slc-configuration-sources.md), [DR-021](../decisions/021-incremental-compilation.md), [[cli-6](#cli-6)], [[cli-7](#cli-7)], [[cli-40](#cli-40)]).
+When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--complete` for retained-bundle emission without agents or history [[completion-1](completion.md#completion-1)], [[completion-2](completion.md#completion-2)], [[completion-5](completion.md#completion-5)], `--rebuild`, the `--config` option, and the configuration it reads — including the Coder, optional Reviewer and coverage-budget config keys and environment variables, with each supported child-model and Ultracode environment variable printed by its exact name [[cli-46](#cli-46)], [[cli-50](#cli-50)] — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md), [DR-006](../decisions/006-slc-configuration-sources.md), [DR-021](../decisions/021-incremental-compilation.md), [[cli-6](#cli-6)], [[cli-7](#cli-7)], [[cli-40](#cli-40)]).
 
 ### cli-3
 
@@ -117,15 +117,27 @@ Per [DR-062](../decisions/062-independent-ultracode-configuration.md), the execu
 
 ### cli-47
 
-When an explicit Ultracode switch reaches an agent boundary, the executable shall use consumer-supplied Cligent's `isUltracodeSupported` capability to forward supported booleans unchanged, omit unsupported false, and reject unsupported true and either explicit Claude boolean with missing capability metadata before execution, naming the variable and adapter or required consumer upgrade.
+When a role requests Ultracode, the executable shall convey the literal boolean according to installed Cligent’s capability ([DR-062](../decisions/062-independent-ultracode-configuration.md)):
+
+| Capability | Outcome |
+| --- | --- |
+| Supported | Forward either boolean unchanged. |
+| Unsupported adapter, including non-Claude on older Cligent | Omit false and refuse true before execution, naming the adapter. |
+| Claude on an older Cligent without independent Ultracode support | Refuse either boolean before execution, naming the required upgrade. |
 
 ### cli-49
 
-Where YAML `modelDefaults: true` is set, the executable shall fill omitted Coder and enabled Reviewer main models with `claude-fable-5-2` for Claude Code or `gpt-6-astra` for Codex, and omitted subagent models with `claude-opus-5-5` or `gpt-6.1-sol` respectively only where installed Cligent reports subagent-model support, suppressing implicit pins for the corresponding custom `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL` (the official service URLs retain defaults) and preserving explicit selections ([DR-063](../decisions/063-adapter-model-defaults-and-subagent-selection.md)).
+Where YAML `modelDefaults: true` is set, the executable shall fill each omitted Coder and enabled Reviewer model from the installed Cligent’s defaults for the effective adapter, process environment and Claude Code user settings, leaving models to the provider on older releases without that contract and on custom endpoints or cloud-provider routes ([DR-063](../decisions/063-adapter-model-defaults-and-subagent-selection.md), [DR-064](../decisions/064-runtime-owned-model-defaults.md)).
 
 ### cli-50
 
-When resolving Coder and optional Reviewer configuration, the executable shall apply nonblank `SLC_SUBAGENT_MODEL` and `SLC_REVIEWER_SUBAGENT_MODEL` over YAML `subagentModel` and `reviewerSubagentModel`, accept `false` as suppression of a default child pin, forward `inherit` or a named model through Cligent to every configured client only where its capability contract supports the request, and refuse a Reviewer child setting without a Reviewer agent.
+When resolving Coder or Reviewer subagent configuration, the executable shall use the nonblank `SLC_SUBAGENT_MODEL` or `SLC_REVIEWER_SUBAGENT_MODEL` over the corresponding YAML `subagentModel` or `reviewerSubagentModel` with the applicable result:
+
+| Selection | Result |
+| --- | --- |
+| `false` | Suppress any default child pin. |
+| `inherit` or named model | Pass it to performing calls on a supported adapter, and refuse it before execution with a diagnostic naming the field and adapter on an unsupported adapter. Tool-free controls omit child tuning [[phase-execution-31](phase-execution.md#phase-execution-31)]. |
+| Reviewer child setting without a Reviewer agent | Refuse before execution. |
 
 ## Verification
 
@@ -232,7 +244,7 @@ When both roles use YAML and environment Ultracode settings, the integration che
 
 ### cli-51
 
-When the config loader and executor factories run with seeded or explicitly configured model settings, the executable shall preserve main and child overrides, provider defaults when model defaults are omitted or disabled, custom-endpoint implicit-pin suppression, optional Reviewer isolation, and native child request delivery through installed Cligent [[cli-49](#cli-49)], [[cli-50](#cli-50)].
+When a fresh starter and a hand-authored config drive the configured executor factories, the integration suite shall assert per-role primary and child selection, including literal delivery at the agent boundary, explicit overrides, unset and disabled defaults, provider-owned selection for a custom service or missing Cligent defaults contract, unsupported child refusal and omission of child tuning from tool-free control requests [[cli-49](#cli-49)], [[cli-50](#cli-50)].
 
 ## References
 

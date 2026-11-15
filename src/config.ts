@@ -17,7 +17,9 @@
  * construction. See specs/packages/cli.md.
  */
 
+import { homedir } from 'node:os';
 import { resolve } from 'node:path';
+import * as cligent from '@sublang/cligent';
 import { ultracodeOptionsFor } from './ultracode.js';
 
 import { ClaudeCodeAdapter } from '@sublang/cligent/adapters/claude-code';
@@ -27,7 +29,6 @@ import { OpenCodeAdapter } from '@sublang/cligent/adapters/opencode';
 import {
   assertFastModeSupported,
   assertSubagentModelSupported,
-  getSubagentModelSupport,
   isEffortSupported,
   supportedEffortValues,
 } from '@sublang/cligent';
@@ -60,15 +61,14 @@ export const SUPPORTED_AGENTS = [
 /** One of the registered agent CLI ids (cli-7). */
 export type SupportedAgent = (typeof SUPPORTED_AGENTS)[number];
 
-/** Opt-in model pairs for official provider services (DR-063). */
-const DEFAULT_MODEL_PAIRS: Partial<
-  Record<SupportedAgent, Readonly<{ model: string; subagentModel: string }>>
-> = {
-  'claude-code': {
-    model: 'claude-fable-5-2',
-    subagentModel: 'claude-opus-5-5',
-  },
-  codex: { model: 'gpt-6-astra', subagentModel: 'gpt-6.1-sol' },
+// Cligent owns the models its supported runtime floors can serve. Older
+// installations without this export keep their pre-opt-in provider defaults.
+const { defaultAgentModels } = cligent as typeof cligent & {
+  defaultAgentModels?: (
+    adapter: string,
+    env: NodeJS.ProcessEnv,
+    homeDir: string,
+  ) => { model?: string; subagentModel?: string };
 };
 
 /**
@@ -307,45 +307,13 @@ function resolveOneSelection(
       );
     }
   }
-  const customEndpoint =
-    agent === 'claude-code'
-      ? env.ANTHROPIC_BASE_URL
-      : agent === 'codex'
-        ? env.OPENAI_BASE_URL
-        : undefined;
-  let isCustomEndpoint = false;
-  if (
-    names.useDefaults &&
-    DEFAULT_MODEL_PAIRS[agent] &&
-    customEndpoint?.trim()
-  ) {
-    try {
-      const url = new URL(customEndpoint.trim());
-      const host =
-        agent === 'claude-code' ? 'api.anthropic.com' : 'api.openai.com';
-      const path = url.pathname.replace(/\/+$/, '');
-      isCustomEndpoint =
-        url.protocol !== 'https:' ||
-        url.hostname !== host ||
-        url.port !== '' ||
-        url.search !== '' ||
-        url.hash !== '' ||
-        (agent === 'claude-code' ? path !== '' : path !== '/v1');
-    } catch {
-      isCustomEndpoint = true;
-    }
-  }
-  const pair =
-    names.useDefaults && !isCustomEndpoint
-      ? DEFAULT_MODEL_PAIRS[agent]
-      : undefined;
+  const pair = names.useDefaults
+    ? defaultAgentModels?.(agent, env, env.HOME || env.USERPROFILE || homedir())
+    : undefined;
   const selectedSubagent =
     subagentModel === 'false'
       ? undefined
-      : subagentModel ||
-        (getSubagentModelSupport(agent)?.requestSupported
-          ? pair?.subagentModel
-          : undefined);
+      : subagentModel || pair?.subagentModel;
   return {
     agent,
     model: model || pair?.model,

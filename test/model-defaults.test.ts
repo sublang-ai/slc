@@ -1,18 +1,38 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfigFile } from '../src/config-file.js';
-import { getSubagentModelSupport } from '@sublang/cligent';
 import { resolveRunConfig } from '../src/app.js';
 import {
   createConfiguredAgentClient,
   type AdapterFactory,
 } from '../src/config.js';
 
-it('resolves opt-in defaults and delivers child pins through installed Cligent (cli-51)', async () => {
+// Stand in for the two results the model policy can return, including
+// on the published dependency lock that predates the policy export.
+const defaultModels = vi.hoisted(() =>
+  vi.fn((agent: string, env: NodeJS.ProcessEnv) => {
+    if (
+      agent === 'claude-code' &&
+      !env.CLAUDE_CODE_USE_VERTEX &&
+      !env.ANTHROPIC_BASE_URL
+    ) {
+      return { model: 'claude-fable-5-2', subagentModel: 'claude-opus-5-5' };
+    }
+    return agent === 'codex'
+      ? { model: 'gpt-6-astra', subagentModel: 'gpt-6.1-sol' }
+      : {};
+  }),
+);
+vi.mock('@sublang/cligent', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  defaultAgentModels: defaultModels,
+}));
+
+it('resolves opt-in defaults and delivers child pins to runtime calls and omits them from tool-free controls (cli-51)', async () => {
   for (const [agent, parent, child] of [
     ['claude-code', 'claude-fable-5-2', 'claude-opus-5-5'],
     ['codex', 'gpt-6-astra', 'gpt-6.1-sol'],
@@ -21,9 +41,8 @@ it('resolves opt-in defaults and delivers child pins through installed Cligent (
       {},
       { agent, modelDefaults: true },
     ).selection;
-    const supported = getSubagentModelSupport(agent)?.requestSupported;
     expect(selection.model).toBe(parent);
-    expect(selection.subagentModel).toBe(supported ? child : undefined);
+    expect(selection.subagentModel).toBe(child);
     let delivered: Record<string, unknown> | undefined;
     const factory: AdapterFactory = () => ({
       agent,
@@ -45,15 +64,26 @@ it('resolves opt-in defaults and delivers child pins through installed Cligent (
         } as never;
       },
     });
-    await createConfiguredAgentClient(selection, {
+    const client = createConfiguredAgentClient(selection, {
       adapterFactory: factory,
-    }).run({
+    });
+    await client.run({
       prompt: 'check',
       model: selection.model,
       signal: new AbortController().signal,
     });
     expect(delivered?.model).toBe(parent);
-    expect(delivered?.subagentModel).toBe(supported ? child : undefined);
+    expect(delivered?.subagentModel).toBe(child);
+    await client.run({
+      prompt: 'judge',
+      model: selection.model,
+      allowedTools: [],
+      signal: new AbortController().signal,
+    });
+    expect(delivered?.subagentModel).toBeUndefined();
+    expect(
+      resolveRunConfig({}, { agent, modelDefaults: false }).selection.model,
+    ).toBeUndefined();
     expect(resolveRunConfig({}, { agent }).selection.model).toBeUndefined();
     expect(
       resolveRunConfig(
@@ -72,12 +102,20 @@ it('resolves opt-in defaults and delivers child pins through installed Cligent (
       { agent: 'claude-code', modelDefaults: true },
     ).selection.model,
   ).toBeUndefined();
+  const local = {
+    HOME: '/user-home',
+    CLAUDE_CONFIG_DIR: '/user-settings',
+    CLAUDE_CODE_USE_VERTEX: '1',
+  };
   expect(
-    resolveRunConfig(
-      { ANTHROPIC_BASE_URL: 'https://api.anthropic.com/' },
-      { agent: 'claude-code', modelDefaults: true },
-    ).selection.model,
-  ).toBe('claude-fable-5-2');
+    resolveRunConfig(local, { agent: 'claude-code', modelDefaults: true })
+      .selection.model,
+  ).toBeUndefined();
+  expect(defaultModels).toHaveBeenCalledWith(
+    'claude-code',
+    expect.objectContaining(local),
+    '/user-home',
+  );
   expect(() =>
     resolveRunConfig(
       { SLC_REVIEWER_SUBAGENT_MODEL: 'false' },
@@ -92,7 +130,12 @@ it('keeps explicit child inheritance and provider settings', () => {
       SLC_SUBAGENT_MODEL: 'inherit',
       ANTHROPIC_BASE_URL: 'https://user:secret@custom.test',
     },
-    { agent: 'claude-code', modelDefaults: true, model: 'authored' },
+    {
+      agent: 'claude-code',
+      modelDefaults: true,
+      model: 'authored',
+      subagentModel: false,
+    },
   ).selection;
   expect(selection.model).toBe('authored');
   expect(selection.subagentModel).toBe('inherit');
@@ -123,6 +166,12 @@ it('keeps explicit child inheritance and provider settings', () => {
   expect(() =>
     resolveRunConfig({ SLC_SUBAGENT_MODEL: 'pinned' }, { agent: 'gemini' }),
   ).toThrow(/subagent/i);
+  expect(() =>
+    resolveRunConfig(
+      { SLC_REVIEWER_SUBAGENT_MODEL: 'pinned' },
+      { agent: 'claude-code', reviewerAgent: 'gemini' },
+    ),
+  ).toThrow(/SLC_REVIEWER_SUBAGENT_MODEL/);
 });
 
 it('seeds adapter-aware defaults while preserving authored legacy omission', async () => {
