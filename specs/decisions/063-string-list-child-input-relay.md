@@ -37,4 +37,4 @@ Considered and declined:
 
 The gate fixes one rendering for a list of strings, so a compiled machine that joins with another separator is reported and repaired during compilation.
 A list element that itself contains `, ` renders ambiguously for a reader; the proof concerns rendering, not parsing, and still holds.
-Playbook's `code` reference has its commit list proved; the gate still reports that machine, because it omits the labelled IR-number relay of a direct intent, which is outside this record.
+Playbook's `code` reference has its commit list proved; it passes the artifact gate once an omitted empty labelled relay is admitted ([DR-064](064-empty-labelled-relay-omission.md)).

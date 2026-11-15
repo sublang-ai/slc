@@ -89,6 +89,7 @@ meta.md       The spec of specs
 | [DR-061](decisions/061-consumer-supplied-playbook.md) | 061-consumer-supplied-playbook.md | Required consumer Playbook peer with exact development provenance and installed-package acceptance |
 | [DR-062](decisions/062-compiled-gears-as-a-spec-package.md) | 062-compiled-gears-as-a-spec-package.md | Compiled GEARS as a spec package: item kind from `Captain shall` alone, action items mapped one-to-one to leaves, declarative items mapped to none, citations matched ignoring ASCII letter case; amends DR-009 |
 | [DR-063](decisions/063-string-list-child-input-relay.md) | 063-string-list-child-input-relay.md | String-list child-input relay: a reached list of strings fills a token as its elements joined by `, `, proved from reached cases; amends DR-041 |
+| [DR-064](decisions/064-empty-labelled-relay-omission.md) | 064-empty-labelled-relay-omission.md | Empty labelled relay omission: in reached-case proof an invocation keeps or omits every empty labelled relay line, one way throughout; amends DR-050 and DR-041 |
 
 ## Packages
 

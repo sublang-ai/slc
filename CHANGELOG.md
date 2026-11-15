@@ -27,6 +27,9 @@ and this project adheres to
   an inline slot or a quoted relay, verified in every reached case; another
   separator, a dropped or altered element, and a list proved only from an
   empty case remain findings.
+- Admit an omitted empty labelled relay in reached-case proof (DR-064): an
+  invocation keeps the label with an empty value or omits the line, one way
+  for every such line; a mixture, and omitting a present value, are findings.
 
 ## [0.20.2] - 2026-11-03
 
