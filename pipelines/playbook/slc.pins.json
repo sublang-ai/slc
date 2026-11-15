@@ -29,7 +29,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:d19d7ee480705691f203932c5b7b6594830947dd0c2099b5d445d60b1f900d8c"
+          "hash": "sha256:0d732786a94b0267082f93a64da67c2438a3fee40138ed4cd0fad410e2e0a23a"
         },
         {
           "path": "workflow-contracts.json",
@@ -43,7 +43,7 @@
           "locator": "../../node_modules/@sublang/playbook",
           "provenance": "@sublang/playbook@18.3.0",
           "specifier": "@sublang/playbook/xstate-runtime",
-          "identity": "sha256:a23be606c40e9e560bab1108c1ad045357b196f6ce518f822ee7bad9a1aa4b80"
+          "identity": "sha256:d1c68d78556bf08421cdff89b8ee2946a0f7c323c4f8209aba8f01a8c8924ff1"
         },
         {
           "kind": "package",
@@ -87,7 +87,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:d19d7ee480705691f203932c5b7b6594830947dd0c2099b5d445d60b1f900d8c"
+          "hash": "sha256:0d732786a94b0267082f93a64da67c2438a3fee40138ed4cd0fad410e2e0a23a"
         },
         {
           "path": "link.md",
@@ -109,7 +109,7 @@
           "locator": "../../node_modules/@sublang/playbook",
           "provenance": "@sublang/playbook@18.3.0",
           "specifier": "@sublang/playbook/xstate-runtime",
-          "identity": "sha256:a23be606c40e9e560bab1108c1ad045357b196f6ce518f822ee7bad9a1aa4b80"
+          "identity": "sha256:d1c68d78556bf08421cdff89b8ee2946a0f7c323c4f8209aba8f01a8c8924ff1"
         },
         {
           "kind": "package",
@@ -153,7 +153,7 @@
         },
         {
           "path": "../../package-lock.json",
-          "hash": "sha256:d19d7ee480705691f203932c5b7b6594830947dd0c2099b5d445d60b1f900d8c"
+          "hash": "sha256:0d732786a94b0267082f93a64da67c2438a3fee40138ed4cd0fad410e2e0a23a"
         },
         {
           "path": "gears2fsm.md",
@@ -183,7 +183,7 @@
           "locator": "../../node_modules/@sublang/playbook",
           "provenance": "@sublang/playbook@18.3.0",
           "specifier": "@sublang/playbook/xstate-runtime",
-          "identity": "sha256:a23be606c40e9e560bab1108c1ad045357b196f6ce518f822ee7bad9a1aa4b80"
+          "identity": "sha256:d1c68d78556bf08421cdff89b8ee2946a0f7c323c4f8209aba8f01a8c8924ff1"
         },
         {
           "kind": "package",
