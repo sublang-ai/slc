@@ -41,7 +41,8 @@ export interface GearsItem {
   prompt: string;
   /**
    * Direct Captain work, delegated player work, or an optimizer-introduced
-   * script item (`Captain shall run:`); absent for playbook calls.
+   * script item (`Captain shall run:`); absent for playbook calls and for
+   * declarative (requirement or test) items, which carry no `Captain shall`.
    */
   actor?: 'captain' | 'player' | 'script';
   /** Target id when this item invokes another playbook rather than a player. */
@@ -1446,6 +1447,52 @@ function isPlaybookItem(item: GearsItem): boolean {
   return item.playbookId !== undefined || item.playbookIdContext !== undefined;
 }
 
+/**
+ * A declarative item — a requirement or a test — has no unquoted `Captain
+ * shall` line, so the parser assigns it no actor and no nested call; it maps to
+ * no leaf (verification-65; DR-062).
+ */
+function isDeclarativeItem(item: GearsItem): boolean {
+  return item.actor === undefined && !isPlaybookItem(item);
+}
+
+function foldAsciiCase(id: string): string {
+  return id.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
+/**
+ * Resolves a leaf's `sourceItem` to the spelling of the GEARS item it cites:
+ * an exact ID first, else the item whose ID equals it ignoring ASCII letter
+ * case, so a machine compiled before lowercase package IDs keeps citing them
+ * (verification-66; DR-062). Also reports IDs that differ only in case.
+ */
+function gearsSourceItemResolver(items: readonly GearsItem[]): {
+  resolve: (sourceItem: string) => string;
+  findings: string[];
+} {
+  const exact = new Set(items.map((item) => item.id));
+  const folded = new Map<string, string[]>();
+  for (const item of items) {
+    const key = foldAsciiCase(item.id);
+    const spellings = folded.get(key);
+    if (spellings === undefined) folded.set(key, [item.id]);
+    else if (!spellings.includes(item.id)) spellings.push(item.id);
+  }
+  const findings = [...folded.values()]
+    .filter((spellings) => spellings.length > 1)
+    .map(
+      (spellings) =>
+        `GEARS items ${spellings.join(', ')} have IDs equal ignoring ASCII letter case`,
+    );
+  return {
+    resolve: (sourceItem) =>
+      exact.has(sourceItem)
+        ? sourceItem
+        : (folded.get(foldAsciiCase(sourceItem))?.[0] ?? sourceItem),
+    findings,
+  };
+}
+
 function gearsPlaybookSignature(item: GearsItem): string {
   return item.playbookIdContext === undefined
     ? JSON.stringify(['static', item.playbookId, item.prompt])
@@ -1615,10 +1662,12 @@ export function checkFsmChildSuspension(config: MachineConfigLike): string[] {
 
 /**
  * Checks GEARS↔FSM conformance and returns human-readable findings (empty when
- * conformant): every GEARS item maps to one state with the same player and the
- * prompt verbatim, every captain state references a known item, and every
+ * conformant): every GEARS action item maps to one state with the same player
+ * and the prompt verbatim, a declarative item maps to none, every captain state
+ * cites a known action item ignoring ASCII letter case, and every
  * captain state's `result` map declares the Boss-reply suspension key with its
- * adjudicator contract (verification-1, verification-3; DR-009).
+ * adjudicator contract (verification-1, verification-3, verification-65,
+ * verification-66; DR-009, DR-062).
  */
 function gearsFsmConformance(
   gears: string,
@@ -1627,9 +1676,19 @@ function gearsFsmConformance(
   reached?: ReachedLiteralChildChecks,
 ): string[] {
   const items = parseGearsItems(gears);
+  // Every comparison below reads a state's sourceItem in its GEARS item's own
+  // spelling; the original playbook bindings stay for reached-input replay,
+  // which compares the FSM's own spelling with the runtime input.
+  const citation = gearsSourceItemResolver(items);
   const roleContract = inspectGearsRoleContract(gears);
   const controller = isControllerMachine(config);
-  const captainBindings = enumerateCaptainBindings(config);
+  const captainBindings = enumerateCaptainBindings(config).map((binding) => ({
+    ...binding,
+    state: {
+      ...binding.state,
+      sourceItem: citation.resolve(binding.state.sourceItem),
+    },
+  }));
   const states = captainBindings.map(({ state }) => state);
   const controllerNearMisses = captainBindings.flatMap(
     ({ state, pinActor }) => {
@@ -1653,7 +1712,14 @@ function gearsFsmConformance(
       .map(({ state }) => state),
   );
   const playbookBindings = enumeratePlaybookBindings(config);
-  const playbookStates = playbookBindings.map(({ state }) => state);
+  const playbookStates = playbookBindings.map(({ state }) =>
+    state.sourceItem === undefined
+      ? state
+      : { ...state, sourceItem: citation.resolve(state.sourceItem) },
+  );
+  const playbookBindingOf = new Map(
+    playbookStates.map((state, index) => [state, playbookBindings[index]]),
+  );
   const initialContext = initialMachineContext(config);
   const literalChecks = new Map<
     PlaybookInvocationState,
@@ -1666,9 +1732,7 @@ function gearsFsmConformance(
     let checked = literalChecks.get(state);
     if (checked === undefined) literalChecks.set(state, (checked = new Map()));
     if (!checked.has(item.prompt)) {
-      const binding = playbookBindings.find(
-        (candidate) => candidate.state === state,
-      );
+      const binding = playbookBindingOf.get(state);
       checked.set(
         item.prompt,
         binding === undefined
@@ -1680,8 +1744,11 @@ function gearsFsmConformance(
     }
     return checked.get(item.prompt);
   };
-  const scriptStates = enumerateScriptStates(config);
-  const findings: string[] = [];
+  const scriptStates = enumerateScriptStates(config).map((state) => ({
+    ...state,
+    sourceItem: citation.resolve(state.sourceItem),
+  }));
+  const findings: string[] = [...citation.findings];
 
   if (
     typeof config.meta === 'object' &&
@@ -1842,7 +1909,7 @@ function gearsFsmConformance(
         // Unproved pairs cannot establish sourceItem-less one-to-one binding.
         literalPlaybookTextFinding(
           item.prompt,
-          playbookBindings.find((binding) => binding.state === candidate)!,
+          playbookBindingOf.get(candidate)!,
           initialContext,
         ) === undefined,
     );
@@ -1850,6 +1917,22 @@ function gearsFsmConformance(
   }
 
   for (const item of items) {
+    if (isDeclarativeItem(item)) {
+      // A requirement or test item maps to no leaf; only machine syntax that
+      // belongs to an action is a finding, so an action that lost its acting
+      // clause is reported rather than read as a requirement (DR-062).
+      if (item.prompt !== '') {
+        findings.push(
+          `GEARS item ${item.id} has a prompt blockquote but no \`Captain shall\` acting clause`,
+        );
+      }
+      if (item.result !== undefined && item.resultFindings === undefined) {
+        findings.push(
+          `GEARS item ${item.id} declares Results metadata but no \`Captain shall\` acting clause`,
+        );
+      }
+      continue;
+    }
     if (isPlaybookItem(item)) {
       const matched = playbookMatchesByItem.get(item) ?? [];
       if (matched.length === 0) {
@@ -1986,6 +2069,15 @@ function gearsFsmConformance(
     }
   }
   const itemIds = new Set(items.map((item) => item.id));
+  const declarativeItemIds = new Set(
+    items.filter(isDeclarativeItem).map((item) => item.id),
+  );
+  const declarativeCitation = (
+    kind: string,
+    state: { stateId: string },
+    id: string,
+  ): string =>
+    `${kind} ${state.stateId} cites declarative GEARS item ${id}, which has no \`Captain shall\` acting clause`;
   const playbookItemIds = new Set(playbookItems.map((item) => item.id));
   const scriptItemIds = new Set(
     items.filter((item) => item.actor === 'script').map((item) => item.id),
@@ -1995,6 +2087,10 @@ function gearsFsmConformance(
     if (!itemIds.has(state.sourceItem)) {
       findings.push(
         `FSM script state ${state.stateId} references unknown GEARS item ${state.sourceItem}`,
+      );
+    } else if (declarativeItemIds.has(state.sourceItem)) {
+      findings.push(
+        declarativeCitation('FSM script state', state, state.sourceItem),
       );
     } else if (!scriptItemIds.has(state.sourceItem)) {
       findings.push(
@@ -2007,6 +2103,8 @@ function gearsFsmConformance(
       findings.push(
         `FSM state ${state.stateId} references unknown GEARS item ${state.sourceItem}`,
       );
+    } else if (declarativeItemIds.has(state.sourceItem)) {
+      findings.push(declarativeCitation('FSM state', state, state.sourceItem));
     }
     const bossReply = state.result[NEEDS_BOSS_REPLY];
     if (controller) {
@@ -2038,6 +2136,13 @@ function gearsFsmConformance(
       );
     }
     if (
+      state.sourceItem !== undefined &&
+      declarativeItemIds.has(state.sourceItem)
+    ) {
+      findings.push(
+        declarativeCitation('FSM playbook state', state, state.sourceItem),
+      );
+    } else if (
       state.sourceItem !== undefined &&
       !playbookItemIds.has(state.sourceItem)
     ) {

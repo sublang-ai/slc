@@ -11,6 +11,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Check a `gears` artifact in the spec-package form (DR-062): only an item
+  with an unquoted `Captain shall` line is an action item mapped to one leaf;
+  requirement and test items map to none, a leaf's `sourceItem` matches an
+  item ID ignoring ASCII letter case, and a declarative item carrying a
+  prompt or `Results:`, a leaf citing one, and IDs equal ignoring case are
+  findings. Artifacts in the earlier form stay conformant.
+
 ## [0.20.2] - 2026-11-03
 
 ### Changed
