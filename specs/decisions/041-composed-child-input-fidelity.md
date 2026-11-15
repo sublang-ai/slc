@@ -6,6 +6,7 @@
 ## Status
 
 Accepted
+Amended by [DR-063](063-string-list-child-input-relay.md) in one scope: a reached list of strings may fill a child-input token as its elements joined by a comma and a space.
 
 ## Context
 

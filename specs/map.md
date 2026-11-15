@@ -66,7 +66,7 @@ meta.md       The spec of specs
 | [DR-038](decisions/038-quoted-task-runtime-acceptance.md) | 038-quoted-task-runtime-acceptance.md | Exact literal or quoted task text in runtime benchmark acceptance, with separate retrospective validation |
 | [DR-039](decisions/039-strict-fsm-boundary.md) | 039-strict-fsm-boundary.md | Strict standalone FSM type checking at the producer and before protected-input consumers |
 | [DR-040](decisions/040-early-continuation-input-contract.md) | 040-early-continuation-input-contract.md | Existing canonical Boss-continuation input probe at the FSM producer and before protected-input consumers |
-| [DR-041](decisions/041-composed-child-input-fidelity.md) | 041-composed-child-input-fidelity.md | Whole-template verification of composed literal child input with observed placeholder dataflow |
+| [DR-041](decisions/041-composed-child-input-fidelity.md) | 041-composed-child-input-fidelity.md | Whole-template verification of composed literal child input with observed placeholder dataflow; a comma-joined string list by DR-063 |
 | [DR-042](decisions/042-literal-prompt-relay-fidelity.md) | 042-literal-prompt-relay-fidelity.md | Literal single-pass and multiline quoted prompt-relay verification |
 | [DR-043](decisions/043-stall-watchdog-default-window.md) | 043-stall-watchdog-default-window.md | The agent-stall watchdog's default window becomes 2400 seconds, amending [DR-019](decisions/019-compile-progress-stall-watchdog.md); the watchdog's other rules stand |
 | [DR-044](decisions/044-artifact-owned-entry-options.md) | 044-artifact-owned-entry-options.md | Artifact-owned entry options with explicit new-output validation and legacy compatibility |
@@ -88,6 +88,7 @@ meta.md       The spec of specs
 | [DR-060](decisions/060-merge-on-green.md) | 060-merge-on-green.md | `main` protected on the CI workflow's `quality` job without the up-to-date requirement and merged by auto-merge on green; one run per pull-request head with CI on pushes to `main` and pull requests; no base branch deleted under a pull request; the pre-push check; suites deterministic by construction; no macOS matrix, so none reduced |
 | [DR-061](decisions/061-consumer-supplied-playbook.md) | 061-consumer-supplied-playbook.md | Required consumer Playbook peer with exact development provenance and installed-package acceptance |
 | [DR-062](decisions/062-compiled-gears-as-a-spec-package.md) | 062-compiled-gears-as-a-spec-package.md | Compiled GEARS as a spec package: item kind from `Captain shall` alone, action items mapped one-to-one to leaves, declarative items mapped to none, citations matched ignoring ASCII letter case; amends DR-009 |
+| [DR-063](decisions/063-string-list-child-input-relay.md) | 063-string-list-child-input-relay.md | String-list child-input relay: a reached list of strings fills a token as its elements joined by `, `, proved from reached cases; amends DR-041 |
 
 ## Packages
 

@@ -22,6 +22,11 @@ and this project adheres to
 - Report a declarative `gears` item that carries a prompt or `Results:`, and
   item IDs equal ignoring case, where the artifact is produced or consumed
   as well as at conformance, so the phase that can still edit it repairs it.
+- Prove a literal child input that relays a list of strings (DR-063): a
+  reached array of strings fills a token as its elements joined by `, `, in
+  an inline slot or a quoted relay, verified in every reached case; another
+  separator, a dropped or altered element, and a list proved only from an
+  empty case remain findings.
 
 ## [0.20.2] - 2026-11-03
 
