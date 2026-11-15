@@ -11,7 +11,7 @@ and this project adheres to
 
 ## [Unreleased]
 
-## [0.21.0] - 2026-11-14
+## [0.21.0] - 2026-11-15
 
 ### Added
 
@@ -33,9 +33,15 @@ and this project adheres to
   range `^0.3.325`), which supports the seeded Fable 5.2 model. Published
   consumers still supply their SDK independently.
 
-- Require Cligent `^0.39.0` and Playbook `^18.3.0` so the compiler and
+- Require Cligent `^0.39.0` and Playbook `^18.3.1` so the compiler and
   launcher share the same model-selection and Ultracode capabilities.
-  Adopt Playbook’s REVIEW output contract for unsettled findings.
+  Adopt Playbook’s REVIEW output contract for unsettled findings and its
+  canonical CODE child-call clause with verifiable commit-scope relays.
+
+### Fixed
+
+- Accept observed reentering result transitions when an acting phase loops
+  back to its own working leaf, while rejecting self-targets without reentry.
 
 ## [0.20.2] - 2026-11-03
 
