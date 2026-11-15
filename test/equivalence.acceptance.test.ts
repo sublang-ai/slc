@@ -1018,24 +1018,9 @@ describe('reference equivalence harness (verification-9)', () => {
     'accepts the reference compared to itself',
     async () => {
       const reference = await loadReference();
-      // Playbook 10.0.0's shipped reference does not satisfy its own gears2fsm
-      // definition (no exported `concurrentRoleSets` despite declaring role
-      // `coder`, and two nested `review` calls whose text is not the GEARS prompt
-      // verbatim), and it declares no BOSS_INTERRUPT targets. Comparing it to
-      // itself still establishes equivalence: every finding appears identically
-      // on both sides, so nothing distinguishes produced from reference.
-      const findings = await checkReferenceEquivalence({
-        produced: reference,
-        reference,
-      });
-      const produced = findings
-        .filter((finding) => finding.startsWith('produced: '))
-        .map((finding) => finding.slice('produced: '.length));
-      const mirrored = findings
-        .filter((finding) => finding.startsWith('reference: '))
-        .map((finding) => finding.slice('reference: '.length));
-      expect(produced).toEqual(mirrored);
-      expect(findings).toHaveLength(produced.length + mirrored.length);
+      expect(
+        await checkReferenceEquivalence({ produced: reference, reference }),
+      ).toEqual([]);
     },
     referenceEquivalenceTestTimeout,
   );

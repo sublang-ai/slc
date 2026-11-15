@@ -953,6 +953,7 @@ interface DrivenActor {
 }
 
 interface TransitionObservation {
+  reenter?: boolean;
   sourceId?: string;
   targetIds: readonly string[];
   event?: Record<string, unknown>;
@@ -1094,6 +1095,7 @@ function makeActor(
               );
               const observed: TransitionObservation = {
                 root: source === provided.root,
+                reenter: (transition as { reenter?: unknown }).reenter === true,
                 ...(typeof event === 'object' && event !== null
                   ? { event: event as Record<string, unknown> }
                   : {}),
@@ -5363,7 +5365,7 @@ async function runFsmCoverage(
       const actor = probe.actor;
       const transitionStart = actor.coverageTransitions.length;
       const sourceId = resolvedStateNode(machine, captain.ref)?.id;
-      const questionCompletion = () =>
+      const observedCompletion = () =>
         actor.coverageTransitions
           .slice(transitionStart)
           .find(
@@ -5402,9 +5404,17 @@ async function runFsmCoverage(
                     (initialRef !== undefined && atState(initialRef)(snapshot))
                 : key === NEEDS_BOSS_REPLY
                   ? (snapshot) =>
-                      questionCompletion() !== undefined &&
+                      observedCompletion() !== undefined &&
                       leftState(captain.ref)(snapshot)
-                  : leftState(captain.ref),
+                  : (snapshot) => {
+                      if (leftState(captain.ref)(snapshot)) return true;
+                      const completion = observedCompletion();
+                      return (
+                        completion?.reenter === true &&
+                        sourceId !== undefined &&
+                        completion.targetIds.includes(sourceId)
+                      );
+                    },
             );
       if (!transitioned) {
         findings.push(
@@ -5413,7 +5423,7 @@ async function runFsmCoverage(
             : `state ${stateKey}: result "${key}" fired no transition`,
         );
       } else if (key === NEEDS_BOSS_REPLY) {
-        const completion = questionCompletion();
+        const completion = observedCompletion();
         const completedArm = completion?.armIndex;
         const waitTarget =
           completedArm === undefined

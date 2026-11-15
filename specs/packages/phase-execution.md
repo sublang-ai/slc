@@ -211,7 +211,15 @@ Where compiled execution selects the `composed-v3` runtime contract [[phase-exec
 
 #### phase-execution-31
 
-Where a `composed-v2` or `composed-v3` compiled phase makes a direct Captain call, the slc command shall require own data properties `visibility: 'visible' | 'hidden'` and `resume: false`, reject a missing, accessor-backed, inherited, or different value before transport, and treat the tool restriction as source-owned per the linked artifact: an `allowedTools` property, when present, shall be an own explicitly empty array — rejected otherwise — and carried into the transported call, while an absent property carries no tool restriction so a transformation-performing Captain works through the host Captain's tools; when the same phase makes a hidden judge call, the slc command shall independently supply `resume: false` and that same empty allowlist so adjudication cannot resume the visible Captain conversation or gain tools; and because tool-restriction enforcement is a capability Cligent [[1]] publishes no metadata for, the slc command shall itself decide whether each requested empty allowlist reaches Cligent — sending it for an adapter with a provider-enforced tool-restriction surface, and omitting the tool-list option entirely for the `codex`, `kimi`, and `opencode` adapters, which refuse any tool-list value including the empty one, so that call keeps its fresh conversation and rests on the linked artifact's authored hidden-control prompt envelope, a documented reduction in enforcement rather than an equivalence [[2]] — while an unrecognized adapter still receives the empty allowlist and any non-empty restriction, never the host's way of expressing tool-free, crosses unsubstituted to fail closed ([DR-012](../decisions/012-playbook-routing-control-separation.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md)).
+Where a `composed-v2` or `composed-v3` phase uses a Captain or judge port, the slc command shall apply these call restrictions ([DR-012](../decisions/012-playbook-routing-control-separation.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), [DR-064](../decisions/064-runtime-owned-model-defaults.md)).
+
+| Case | Required behavior |
+| --- | --- |
+| Direct Captain call | Require own data properties `visibility` equal to `visible` or `hidden` and `resume: false`. An omitted `allowedTools` leaves the performing Captain’s tools available. A supplied `allowedTools` must be an own data property holding an empty array. Reject invalid options before transport. |
+| Hidden judge call | Supply `resume: false` and an empty tool allowlist independently of the visible Captain conversation. |
+| Tool-free control call on any adapter | Omit the child model on the transport request. |
+| Empty tool allowlist at the Cligent boundary | Omit the tool-list option for `codex`, `kimi`, and `opencode`, whose tool restriction relies on the linked artifact’s authored control prompt [[2]]. Send the empty allowlist to every other adapter, including unrecognized adapters [[1]]. |
+| Nonempty allowlist at the Cligent boundary | Forward the list unchanged so unsupported restrictions fail closed. |
 
 #### phase-execution-27
 
@@ -330,7 +338,14 @@ When the slc command runs a fixture phase, a phase with no pin file or absent fr
 
 #### phase-execution-32
 
-Where a `composed-v2` or `composed-v3` fixture calls Captain with visible or hidden control work and then calls its hidden judge, when the SLC phase adapter runs it, each transported call shall carry `resume: false` and an explicitly empty allowed-tool list without sharing an agent conversation, and when the same fixture control calls run a configured agent's Cligent adapter, that adapter shall observe the empty allowed-tool list under a `claude-code` selection and no tool-list option at all under a `codex` selection while every other call setting stays identical, and a non-empty allowlist requested of that same `codex` transport shall reach its adapter unsubstituted; whereas any missing, inherited, accessor-backed, non-false resume, or nonempty allowed-tool option on the direct Captain call shall reject before the agent transport runs [[phase-execution-31](#phase-execution-31)].
+Where a `composed-v2` or `composed-v3` fixture configures a child model, the integration suite shall verify the compiled host’s Captain and judge call restrictions [[phase-execution-31](#phase-execution-31)].
+
+| Case | Required observation |
+| --- | --- |
+| Performing Captain followed by a visible or hidden tool-free Captain and a hidden judge | The adapter receives the child model on the performing call. Both control calls start fresh conversations with `resume: false` and omit the child model. |
+| Tool-free control calls under `claude-code` and `codex` | The Claude adapter receives an empty allowlist. The Codex adapter receives no tool-list option, with every other call setting identical. |
+| Nonempty allowlist sent to the Codex transport | The Codex adapter receives that list unchanged. |
+| Direct Captain option missing, inherited, accessor-backed or invalid | The host rejects the call before transport. |
 
 #### phase-execution-37
 

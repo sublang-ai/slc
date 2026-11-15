@@ -5936,6 +5936,28 @@ describe('checkFsmCoverage (verification-6)', () => {
     expect(await checkFsmCoverage({ machine })).toEqual([]);
   });
 
+  it.each([true, false])(
+    'requires observed invocation reentry for a self-targeting result (reenter=%s)',
+    async (reenter) => {
+      const machine = goodMachine({
+        onDone: [
+          {
+            target: '#work',
+            reenter,
+            guard: ({ event }: DoneGuardArgs) => event.output.guard === 'ok',
+          },
+          needsBossReplyArm(),
+        ],
+      });
+      const findings = await checkFsmCoverage({ machine });
+      if (reenter) expect(findings).toEqual([]);
+      else
+        expect(findings).toContain(
+          'state work: result "ok" fired no transition',
+        );
+    },
+  );
+
   it('detects a declared result with no accepting transition', async () => {
     const machine = goodMachine({
       result: { orphan: 'No onDone arm accepts this declared result.' },

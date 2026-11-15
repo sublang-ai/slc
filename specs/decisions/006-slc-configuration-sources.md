@@ -7,6 +7,10 @@
 
 Accepted
 
+Extended by [DR-063](063-adapter-model-defaults-and-subagent-selection.md) for opt-in defaults and independent subagent models.
+
+Extended by [DR-062](062-independent-ultracode-configuration.md) for independent Coder and Reviewer Ultracode settings under the required Cligent floor.
+
 ## Context
 
 `slc` reaches coding agents through Cligent (npm `@sublang/cligent` [[1]]); agent, model, and pipeline-path selection is `slc` configuration, not phase semantics ([DR-004](004-slc-interpreted-phase-execution.md)).
