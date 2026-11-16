@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# DR-063: String-list Child-input Relay
+# DR-066: String-list Child-input Relay
 
 ## Status
 
@@ -37,4 +37,4 @@ Considered and declined:
 
 The gate fixes one rendering for a list of strings, so a compiled machine that joins with another separator is reported and repaired during compilation.
 A list element that itself contains `, ` renders ambiguously for a reader; the proof concerns rendering, not parsing, and still holds.
-Playbook's `code` reference has its commit list proved; it passes the artifact gate once an omitted empty labelled relay is admitted ([DR-064](064-empty-labelled-relay-omission.md)).
+Playbook's `code` reference has its commit list proved; it passes the artifact gate once an omitted empty labelled relay is admitted ([DR-067](067-empty-labelled-relay-omission.md)).

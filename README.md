@@ -54,7 +54,7 @@ npm install -g @anthropic-ai/claude-agent-sdk @openai/codex-sdk
 slc --version
 ```
 
-SLC requires a compatible `@sublang/playbook` peer (`^18.1.3`).
+SLC requires a compatible `@sublang/playbook` peer (`^18.3.1`).
 Install both in an application to share its runtime with the compiler; npm
 also installs the required peer when SLC is installed by itself. An explicit
 incompatible Playbook dependency fails npm installation instead of selecting
@@ -75,6 +75,17 @@ The second install line supplies the agent SDKs for the default Claude
 and Codex lineup; name the SDKs your own lineup needs instead. A missing
 or too-old SDK stops the compile before any agent call and names the
 exact package and version to install.
+The Claude Fable 5.2 defaults require Claude Agent SDK 0.3.321 or newer;
+this repository verifies 0.3.325. Upgrade the SDK in the same installation
+root as the compiler, for example:
+
+```bash
+npm install -g @anthropic-ai/claude-agent-sdk@0.3.325
+```
+
+The SDK supplies the runtime used by Cligent. Updating a separately installed
+`claude` CLI does not update that SDK runtime. For a project-local compiler,
+run the SDK install in that project without `-g`.
 
 Compiled artifacts import the Playbook engine from their own directory;
 when that import does not resolve, `playbook run` (3.1+) links its own
@@ -216,7 +227,15 @@ and the full rules are in the
 ## Configuration
 
 The first run seeds `~/.config/slc/config.yaml` with
-`agent: claude-code`, so a fresh machine needs no setup. A
+`agent: claude-code` and `modelDefaults: true`, so a fresh machine needs no setup.
+Cligent 0.39 supplies the primary and child models: Claude Fable 5.2 with
+Opus 5.5 subagents or Codex GPT-6 Astra with GPT-6.1 Sol subagents for its
+direct-provider defaults. SLC passes the run environment and user home to
+Cligent and uses only the defaults it returns. This lookup does not resolve
+per-project, working-directory or managed provider settings that the SDK may
+apply during the run. For projects using those routes, set `modelDefaults: false`
+in the working-directory `slc.config.yaml` to leave omitted models to the SDK,
+or explicitly select both models. Explicit model fields win. A
 `slc.config.yaml` in the working directory wins over the user config,
 and `SLC_AGENT`, `SLC_MODEL`, and the other `SLC_*` variables override
 either, per key.
@@ -224,11 +243,14 @@ either, per key.
 ```yaml
 # slc.config.yaml
 agent: claude-code # claude-code | codex | gemini | opencode
-model: claude-opus-5-5 # optional; omit to use the agent CLI's default
+modelDefaults: true # optional adapter-aware model pairs
+model: claude-fable-5-2 # optional explicit override
+subagentModel: claude-opus-5-5 # optional; false disables pin, inherit follows parent
 effort: high # optional adapter-scoped reasoning effort
 fastMode: true # optional adapter-scoped fast mode; false is a literal request
 reviewerAgent: codex # optional; enables reviewed compilation
-reviewerModel: gpt-6.1-sol # optional reviewer model
+reviewerModel: gpt-6-astra # optional reviewer model
+reviewerSubagentModel: gpt-6.1-sol # optional reviewer subagent model
 reviewerEffort: xhigh # optional reviewer reasoning effort
 reviewerFastMode: true # optional reviewer fast mode
 stallTimeout: 2400 # seconds of agent silence before a stalled call fails
@@ -241,6 +263,17 @@ decides which agent CLIs accept them, and a literal on one that does not
 refuses the run before any agent call. Discovery order, `--config`, and
 validation rules live in the [CLI spec](specs/packages/cli.md);
 `slc --help` prints the summary.
+
+Optional `ultracode: true` or `false` and `reviewerUltracode: true` or
+`false` select Claude Ultracode independently of effort. `SLC_ULTRACODE`
+and `SLC_REVIEWER_ULTRACODE` override these YAML settings with exactly
+`true` or `false`. Omission preserves existing native defaults. Claude accepts either boolean.
+Unsupported adapters ignore false and reject true. Reviewer settings require
+`reviewerAgent`; account and workflow availability remain native policy.
+
+`SLC_SUBAGENT_MODEL` and `SLC_REVIEWER_SUBAGENT_MODEL` override their YAML
+fields per key; `false` suppresses a child pin, while `inherit` requests native
+parent-model inheritance. Explicit requests require installed Cligent support.
 
 Mechanical checks run by default at GEARS-producing phases, the GEARS-to-FSM
 boundary, and Playbook linking. A failing check returns its findings to the

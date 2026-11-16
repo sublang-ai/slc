@@ -1450,7 +1450,7 @@ function isPlaybookItem(item: GearsItem): boolean {
 /**
  * A declarative item — a requirement or a test — has no unquoted `Captain
  * shall` line, so the parser assigns it no actor and no nested call; it maps to
- * no leaf (verification-65; DR-062).
+ * no leaf (verification-71; DR-065).
  */
 function isDeclarativeItem(item: GearsItem): boolean {
   return item.actor === undefined && !isPlaybookItem(item);
@@ -1464,7 +1464,7 @@ function foldAsciiCase(id: string): string {
  * Resolves a leaf's `sourceItem` to the spelling of the GEARS item it cites:
  * an exact ID first, else the item whose ID equals it ignoring ASCII letter
  * case, so a machine compiled before lowercase package IDs keeps citing them
- * (verification-66; DR-062). Also reports IDs that differ only in case.
+ * (verification-66; DR-065). Also reports IDs that differ only in case.
  */
 function gearsSourceItemResolver(items: readonly GearsItem[]): {
   resolve: (sourceItem: string) => string;
@@ -1497,7 +1497,7 @@ function gearsSourceItemResolver(items: readonly GearsItem[]): {
 
 /**
  * Machine syntax a declarative item must not carry: an action that lost its
- * acting clause is reported rather than read as a requirement (DR-062).
+ * acting clause is reported rather than read as a requirement (DR-065).
  */
 function declarativeItemFindings(item: GearsItem): string[] {
   const findings: string[] = [];
@@ -1518,7 +1518,7 @@ function declarativeItemFindings(item: GearsItem): string[] {
  * Package-form findings that need no consumer FSM: item IDs equal ignoring
  * ASCII letter case and declarative items carrying action syntax. Run at the
  * producer boundary so the phase that can still edit the GEARS repairs them
- * (verification-68; DR-062).
+ * (verification-68; DR-065).
  */
 export function checkGearsPackageContract(gears: string): string[] {
   const items = parseGearsItems(gears);
@@ -1701,8 +1701,8 @@ export function checkFsmChildSuspension(config: MachineConfigLike): string[] {
  * and the prompt verbatim, a declarative item maps to none, every captain state
  * cites a known action item ignoring ASCII letter case, and every
  * captain state's `result` map declares the Boss-reply suspension key with its
- * adjudicator contract (verification-1, verification-3, verification-65,
- * verification-66; DR-009, DR-062).
+ * adjudicator contract (verification-1, verification-3, verification-71,
+ * verification-66; DR-009, DR-065).
  */
 function gearsFsmConformance(
   gears: string,
@@ -1954,7 +1954,7 @@ function gearsFsmConformance(
   for (const item of items) {
     if (isDeclarativeItem(item)) {
       // A requirement or test item maps to no leaf; only machine syntax that
-      // belongs to an action is a finding (DR-062).
+      // belongs to an action is a finding (DR-065).
       findings.push(...declarativeItemFindings(item));
       continue;
     }
@@ -3847,7 +3847,7 @@ function literalScalarContext(
 const UNPROVED_CHILD_COMPOSITION =
   'could not prove the complete expanded GEARS child-input composition; check literal text, relay substitution/quoting/omission, canonical compact JSON for structured relays, and comma-joined string lists';
 
-/** One invocation rendered an empty labelled relay line both ways (DR-064). */
+/** One invocation rendered an empty labelled relay line both ways (DR-067). */
 const MIXED_EMPTY_LABELLED_RELAYS =
   'mixes kept and omitted empty labelled child-input relay lines';
 
@@ -4034,7 +4034,7 @@ function renderLiteralChildTemplate(
     if (!/^\r?\n$/.test(line)) trailing = false;
     return true;
   });
-  // The blank lines such an omission leaves at the end go with it (DR-064).
+  // The blank lines such an omission leaves at the end go with it (DR-067).
   const template = trailing
     ? kept.join('').replace(/(?:\r?\n)+$/, '')
     : kept.join('');
@@ -4051,7 +4051,7 @@ function renderLiteralChildTemplate(
 /** A finite provisional match. Omitted lines never constitute mapping evidence.
  * With `omitLabels`, a labelled relay line may be absent as a standalone one
  * may, and the text may end where only blank lines and absent relay lines, one
- * of them labelled, follow a line's content (DR-064). The exact rendering is
+ * of them labelled, follow a line's content (DR-067). The exact rendering is
  * decided by the reached-case validation, never by this match. */
 function reachedTemplateMatch(
   prompt: string,
@@ -4502,7 +4502,7 @@ interface ReachedLiteralWork {
   /** Fields relayed as a comma-joined string list; never also `structured`. */
   lists: Set<string>;
   /** How this invocation renders every empty labelled relay line, once a
-   * reached case or probe has shown which of the two it uses (DR-064). */
+   * reached case or probe has shown which of the two it uses (DR-067). */
   emptyLabels?: 'kept' | 'omitted';
   validated: boolean;
   cases: {
@@ -4734,7 +4734,7 @@ export class ReachedLiteralChildChecks {
       )
         continue;
       // Canonical JSON is tried first. Only a text not carrying it may relay a
-      // list of strings as its elements joined by `, ` (DR-063).
+      // list of strings as its elements joined by `, ` (DR-066).
       const joined = result.value.text.includes(encoded)
         ? undefined
         : value.list === undefined
@@ -4912,7 +4912,7 @@ export class ReachedLiteralChildChecks {
           omitEmptyLabels,
         );
       // One invocation keeps every empty labelled relay line or omits every
-      // one (DR-064). The first text the two renderings tell apart fixes
+      // one (DR-067). The first text the two renderings tell apart fixes
       // which; a later text that follows the other one is a mixture.
       const owed = (
         text: unknown,

@@ -2403,15 +2403,13 @@ describe('conformance against the reference artifacts', () => {
       join(referenceDir, 'code.gears.md'),
       'utf8',
     );
-    // The published reference is a schema-3 `Roles` workflow: two delegated
-    // Coder phases (CODE-1, CODE-3) each followed by a literal nested `review`
-    // call (CODE-2, CODE-4).
+    // The schema-3 reference has two delegated Coder phases followed by
+    // one review over all phase commits.
     const items = parseGearsItems(referenceGears);
     expect(items.map((item) => item.id)).toEqual([
       'CODE-1',
       'CODE-2',
       'CODE-3',
-      'CODE-4',
     ]);
     expect(inspectGearsRoleContract(referenceGears)).toMatchObject({
       generation: 'schema-3',
@@ -2594,13 +2592,13 @@ describe('pinIntrospection (verification-4)', () => {
     });
   });
 
-  it('pins the reference machine: two delegated Coder phases and two review calls', async () => {
+  it('pins the reference machine: two delegated Coder phases and one review', async () => {
     const pins = pinIntrospection(findMachineConfig(await referenceFsm()));
     expect(pins.initial).toBe('ready');
     // Declaration order in the reference is not item order; coverage is a set.
     expect(pins.captain.map((state) => state.sourceItem).sort()).toEqual([
       'CODE-1',
-      'CODE-3',
+      'CODE-2',
     ]);
     expect(pins.captain.map((state) => state.state)).toEqual([
       'firstPhase',
@@ -2611,7 +2609,6 @@ describe('pinIntrospection (verification-4)', () => {
       expect(state).toMatchObject({ actor: 'player', role: 'coder' });
       expect(state.player).toBe('');
     }
-    // The nested calls are literal `review` targets carrying their items.
     expect(
       pins.playbook?.map(({ state, playbookId, sourceItem }) => ({
         state,
@@ -2620,14 +2617,9 @@ describe('pinIntrospection (verification-4)', () => {
       })),
     ).toEqual([
       {
-        state: 'reviewNewIntentPhase',
+        state: 'reviewIntent',
         playbookId: 'review',
-        sourceItem: 'CODE-2',
-      },
-      {
-        state: 'reviewIrTaskPhase',
-        playbookId: 'review',
-        sourceItem: 'CODE-4',
+        sourceItem: 'CODE-3',
       },
     ]);
     // Both delegated phases expose guarded root interrupt targets.
@@ -4027,7 +4019,7 @@ describe('checkPromptComposition (verification-5)', () => {
         player: '',
         role: 'coder',
       },
-      { state: 'irTaskPhase', sourceItem: 'CODE-3', player: '', role: 'coder' },
+      { state: 'irTaskPhase', sourceItem: 'CODE-2', player: '', role: 'coder' },
     ]);
     expect(
       checkPromptComposition({
@@ -4040,8 +4032,8 @@ describe('checkPromptComposition (verification-5)', () => {
       playbook._internal.composePlayerPrompt,
     );
     // The published reference substitutes the relayed caller
-    // input and run results on every phase, the IR number and previous-phase
-    // review on the IR-task phase, and the Coder model on both commits.
+    // input and run results on every phase, the IR number on the IR-task
+    // phase, and the Coder model on both commits.
     expect(substituted.firstPhase).toEqual([
       '<coder-llm>',
       '<caller-input>',
@@ -4052,7 +4044,6 @@ describe('checkPromptComposition (verification-5)', () => {
       '<caller-input>',
       '<ir-number>',
       '<run-results>',
-      '<previous-phase-review>',
     ]);
   });
 });

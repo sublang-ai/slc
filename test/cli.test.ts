@@ -230,8 +230,17 @@ describe('conveniences (cli-13, cli-14)', () => {
         'SLC_REVIEWER_MODEL',
         'SLC_REVIEWER_EFFORT',
         'SLC_REVIEWER_FAST_MODE',
+        'subagentModel',
+        'reviewerSubagentModel',
+        'modelDefaults',
+        'ultracode',
+        'reviewerUltracode',
+        'SLC_SUBAGENT_MODEL',
+        'SLC_REVIEWER_SUBAGENT_MODEL',
+        'SLC_ULTRACODE',
+        'SLC_REVIEWER_ULTRACODE',
       ]) {
-        expect(help).toContain(name);
+        expect(help).toMatch(new RegExp(`\\b${name}\\b`));
       }
       // Reworded cli-2: help names --config and the config file, not just env.
       expect(help).toContain('--config');

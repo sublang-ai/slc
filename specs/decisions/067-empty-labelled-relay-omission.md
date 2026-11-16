@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# DR-064: Empty Labelled Relay Omission
+# DR-067: Empty Labelled Relay Omission
 
 ## Status
 
@@ -32,6 +32,6 @@ Considered and declined:
 ## Consequences
 
 The gate accepts two renderings of an empty labelled relay and says which one a machine uses only by holding it to that one.
-Playbook's `code` reference, with [DR-063](063-string-list-child-input-relay.md), passes the artifact gate unchanged.
+Playbook's `code` reference, with [DR-066](066-string-list-child-input-relay.md), passes the artifact gate unchanged.
 A composer that drops a labelled line whose value is present is still reported.
 As for every reached-case rule, a case reached after the proof completes is not examined, so a rendering that changes only there goes unseen.

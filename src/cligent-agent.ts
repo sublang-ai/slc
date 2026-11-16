@@ -43,6 +43,7 @@ import type {
 
 import type { AgentClient, AgentRunResult } from './interpreter.js';
 import { formatElapsed } from './progress.js';
+import { ultracodeOptionsFor } from './ultracode.js';
 
 /**
  * Cligent adapters with no provider-enforced tool-restriction surface
@@ -122,17 +123,19 @@ export const defaultWatchdogTimers: WatchdogTimers = {
 /** Wraps a Cligent adapter as an {@link AgentClient} for the interpreter. */
 export function createCligentAgent(opts: {
   /** Any Cligent adapter; effort is validated adapter-scoped upstream (cli-12). */
-  adapter: AgentAdapter<string, boolean>;
+  adapter: AgentAdapter<string, boolean, string>;
   maxTurns?: number;
   permissions?: PermissionPolicy;
   /** Adapter-scoped reasoning effort, validated by the configuration layer. */
   effort?: string;
+  subagentModel?: string;
   /**
    * Literal adapter-scoped fast-mode request (`false` asks for it off), its
    * adapter support validated by the configuration layer; absent leaves the
    * agent CLI's default.
    */
   fastMode?: boolean;
+  ultracode?: boolean;
   /**
    * Milliseconds of adapter-event inactivity after which the in-flight call is
    * aborted and reported as an error (DR-019, phase-execution-36). Zero or absent
@@ -148,6 +151,7 @@ export function createCligentAgent(opts: {
     // Both validated adapter-scoped by the configuration layer (cli-7, cli-12).
     ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
     ...(opts.fastMode !== undefined ? { fastMode: opts.fastMode } : {}),
+    ...ultracodeOptionsFor(opts.adapter.agent, opts.ultracode),
     // No call overrides it, so this instance default reaches every run.
     ...nativeSkillOptionsFor(opts.adapter.agent),
   });
@@ -175,6 +179,11 @@ export function createCligentAgent(opts: {
           cwd,
           model,
           ...(resume !== undefined ? { resume } : {}),
+          // A tool-free control call cannot delegate, even on an adapter
+          // whose tool restriction is expressed only by the authored prompt.
+          ...(opts.subagentModel !== undefined && allowedTools?.length !== 0
+            ? { subagentModel: opts.subagentModel }
+            : {}),
           ...toolOptionsFor(opts.adapter.agent, allowedTools),
         })) {
           // Any adapter event is activity, regardless of type: the reliable
