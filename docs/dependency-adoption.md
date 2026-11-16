@@ -3,6 +3,15 @@
 
 # Dependency adoption
 
+## Playbook 19.0.0 adoption — 2026-11-15
+
+SLC 0.22.0 uses the published Playbook 19.0.0 definitions and requires the
+`^19.0.0` peer. The adoption retains the three compiled phase bundles and
+refreshes their pins under [DR-028](../specs/decisions/028-contract-based-adoption-without-recompilation.md).
+
+Real-agent installed-package acceptance (`npm run test:acceptance`): NOT RUN,
+waived by the owner on 2026-11-15. The deterministic release checks apply.
+
 ## Release adoption — 2026-10-02
 
 SLC adopts published Cligent `^0.33.1` and Playbook `^17.4.0` together. The

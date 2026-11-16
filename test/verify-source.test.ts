@@ -241,7 +241,7 @@ When a fabricated condition holds, Captain shall prompt Coder:
 
     expect(checkSourceGearsContract(source, dropped)).toEqual([
       `source instruction fragment at line ${fragment.start + 1} was dropped or changed`,
-      'CODE-1: authored prompt fragments are out of Source order',
+      'code-1: authored prompt fragments are out of Source order',
     ]);
   });
 
@@ -249,7 +249,7 @@ When a fabricated condition holds, Captain shall prompt Coder:
     const { source, gears } = maintained('code');
     const fragments = sourcePromptFragments(source);
     const lines = gears.split('\n');
-    // CODE-1 carries the first-phase instruction and the every-phase appendix,
+    // code-1 carries the first-phase instruction and the every-phase appendix,
     // in that order; swapping the two blocks keeps both contiguous.
     const instructions = fragments.filter(
       (fragment) => fragment.kind === 'instruction',
@@ -268,7 +268,7 @@ When a fabricated condition holds, Captain shall prompt Coder:
     ].join('\n');
 
     expect(checkSourceGearsContract(source, swapped)).toEqual([
-      'CODE-1: authored prompt fragments are out of Source order',
+      'code-1: authored prompt fragments are out of Source order',
     ]);
   });
 
@@ -292,7 +292,7 @@ When a fabricated condition holds, Captain shall prompt Coder:
       );
       if (relay === undefined) throw new Error('the pair authors no relay');
       const block = fragmentRange(lines, relay.lines);
-      // CODE-1's relay follows its instructions and ends the quoted prompt.
+      // code-1's relay follows its instructions and ends the quoted prompt.
       expect(lines[block.start - 1]).toBe('>');
       expect(lines[block.end]).toBe('');
       return pair;
@@ -338,7 +338,7 @@ When a fabricated condition holds, Captain shall prompt Coder:
       if (relay === undefined) throw new Error('the pair authors no relay');
       const lines = gears.split('\n');
       const block = fragmentRange(lines, relay.lines);
-      // The moved block trails CODE-1 behind the blank quoted line the pass left.
+      // The moved block trails code-1 behind the blank quoted line the pass left.
       expect(lines[block.start - 1]).toBe('>');
       const dropped = [
         ...lines.slice(0, block.start - 1),
@@ -354,7 +354,7 @@ When a fabricated condition holds, Captain shall prompt Coder:
         ...lines.slice(block.end),
       ].join('\n');
       expect(checkSourceGearsContract(source, duplicated)).toEqual([
-        'CODE-1: authored prompt fragments are out of Source order',
+        'code-1: authored prompt fragments are out of Source order',
       ]);
     });
 
@@ -1273,7 +1273,7 @@ When a fabricated condition holds, Captain shall prompt Coder:
     expect(quotedKebab).not.toBe(gears);
 
     expect(checkSourceGearsContract(source, quotedKebab)).toEqual([
-      'DECIDE-3: result `committed` names the non-identifier output property "decide-commit"',
+      'decide-3: result `committed` names the non-identifier output property "decide-commit"',
     ]);
   });
 
