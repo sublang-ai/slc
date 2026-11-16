@@ -1,6 +1,6 @@
 {
   "name": "@sublang/slc",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "SubLang Compiler (slc): runs phase pipelines.",
   "license": "Apache-2.0",
   "repository": {
@@ -62,7 +62,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.325",
     "@eslint/js": "^10.0.1",
     "@openai/codex-sdk": "^0.159.0",
-    "@sublang/playbook": "18.3.1",
+    "@sublang/playbook": "19.0.0",
     "@typescript/native": "npm:typescript@^7.0.2",
     "eslint": "^10.10.0",
     "globals": "^17.12.0",
@@ -80,6 +80,6 @@
     "yaml": "^2.9.1"
   },
   "peerDependencies": {
-    "@sublang/playbook": "^18.3.1"
+    "@sublang/playbook": "^19.0.0"
   }
 }

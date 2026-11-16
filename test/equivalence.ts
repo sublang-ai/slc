@@ -36,6 +36,7 @@ import {
   hasControllerDecisionNearMiss,
   inspectGearsRoleContract,
   isControllerMachine,
+  isDeclarativeItem,
   parseGearsItems,
   pinIntrospection,
   resolveArtifactSchemaForVerification,
@@ -1657,6 +1658,7 @@ export function playerLineSets(gears: string): Map<string, Set<string>> {
   const sets = new Map<string, Set<string>>();
   const roleContract = inspectGearsRoleContract(gears);
   for (const item of parseGearsItems(gears)) {
+    if (isDeclarativeItem(item)) continue;
     // A nested call is an authored playbook dependency, not a Captain player
     // prompt. Key it by target so changing `code-review` to `security-review`
     // cannot compare equal merely because both behaviors say Captain calls it.

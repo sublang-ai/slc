@@ -97,9 +97,9 @@ For each eligible item, the pass shall rewrite only the blockquote:
   blank line between consecutive blocks.
 - Keep the item's ID, heading, condition, acting clause, `Results:`, and any
   other metadata unchanged.
-- Preserve every other item and every non-item section byte-for-byte,
-  including an `## Optimizations` section the optimize pass appended, except
-  a legacy `## Prefixed prompts` section (see [Provenance](#provenance)).
+- Preserve every other item — action, requirement, and test items alike —
+  and every section heading byte-for-byte, except a legacy
+  `## Prefixed prompts` section (see [Provenance](#provenance)).
 
 Because no line changes, the target stays in the Source language and every
 authored fragment remains intact; only the order of relay blocks relative to
@@ -108,7 +108,7 @@ instructions changes.
 E.g., the source item
 
 ```markdown
-### REVIEW-2
+### review-2
 
 When Reviewer raises or keeps any finding, Captain shall relay the caller input and Reviewer's findings to Coder with the disposition prompt:
 
@@ -126,7 +126,7 @@ Results:
 becomes
 
 ```markdown
-### REVIEW-2
+### review-2
 
 When Reviewer raises or keeps any finding, Captain shall relay the caller input and Reviewer's findings to Coder with the disposition prompt:
 
@@ -167,13 +167,13 @@ fragment.
 The adjacent `prefix-prompts.mjs` tool performs this rewrite exactly:
 
 ```sh
-node "<definition-directory>/prefix-prompts.mjs" --source "<source.gears.md>" --target "<target.gears.md>" [--keep <ITEM-ID>]...
+node "<definition-directory>/prefix-prompts.mjs" --source "<source.gears.md>" --target "<target.gears.md>" [--keep <item-id>]...
 ```
 
 It reads the source, rewrites every item eligible by the mechanical rules
 above, removes a legacy `## Prefixed prompts` section, writes the target, and
 prints the rewritten item IDs — or reports that no item was eligible.
-`--keep` excludes an item the tool would otherwise rewrite.
+`--keep` names the item ID as the package writes it and excludes that item from rewriting.
 
 The pass shall use the tool rather than rewrite by hand:
 

@@ -27,6 +27,7 @@ import {
 } from '../node_modules/@sublang/playbook/src/xstate-playbook-runtime.js';
 import { runSlc } from '../src/runner.js';
 import { emitVerifierSupport } from '../src/verify-support.js';
+import { checkGearsFsmConformanceAsync } from '../src/verify-coverage.js';
 
 import {
   CONTROLLER_ACTION_GUARDS,
@@ -2403,14 +2404,21 @@ describe('conformance against the reference artifacts', () => {
       join(referenceDir, 'code.gears.md'),
       'utf8',
     );
-    // The schema-3 reference has two delegated Coder phases followed by
-    // one review over all phase commits.
+    // The package-form schema-3 reference has declarative items beside two
+    // delegated Coder phases followed by one review over all phase commits.
     const items = parseGearsItems(referenceGears);
-    expect(items.map((item) => item.id)).toEqual([
-      'CODE-1',
-      'CODE-2',
-      'CODE-3',
+    const actions = items.filter(
+      (item) =>
+        item.actor !== undefined ||
+        item.playbookId !== undefined ||
+        item.playbookIdContext !== undefined,
+    );
+    expect(actions.map((item) => item.id)).toEqual([
+      'code-1',
+      'code-2',
+      'code-3',
     ]);
+    expect(items.length).toBeGreaterThan(actions.length);
     expect(inspectGearsRoleContract(referenceGears)).toMatchObject({
       generation: 'schema-3',
       roleIds: ['coder'],
@@ -2418,13 +2426,14 @@ describe('conformance against the reference artifacts', () => {
       findings: [],
     });
     const fsm = await referenceFsm();
-    // Playbook 16's recompiled reference exports the required empty
-    // concurrency declaration and preserves its composed nested-call inputs.
+    // The retained machine exports the required empty concurrency declaration;
+    // reached-input proof checks its composed nested-call inputs.
     expect(findConcurrentRoleSets(fsm)).toEqual([]);
     expect(
-      checkGearsFsmConformance(referenceGears, findMachineConfig(fsm), {
+      await checkGearsFsmConformanceAsync(referenceGears, fsm, {
         artifactSchema: 3,
         concurrentRoleSets: findConcurrentRoleSets(fsm),
+        sourceText: readFileSync(join(referenceDir, 'code.fsm.ts'), 'utf8'),
       }),
     ).toEqual([]);
   });

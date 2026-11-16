@@ -11,7 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-15
+
 ### Changed
+
+- Adopt Playbook 19.0.0 and require the `^19.0.0` peer. Full compiles now
+  produce the reviewable GEARS package form. The three compiled phase
+  bundles are retained with updated definitions and pins.
 
 - Check a `gears` artifact in the spec-package form (DR-065): only an item
   with an unquoted `Captain shall` line is an action item mapped to one leaf;
@@ -1133,7 +1139,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/sublang-ai/slc/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/sublang-ai/slc/compare/v0.20.2...v0.21.0
 [0.20.2]: https://github.com/sublang-ai/slc/compare/v0.20.1...v0.20.2
 [0.20.1]: https://github.com/sublang-ai/slc/compare/v0.20.0...v0.20.1

@@ -7,9 +7,10 @@
  *
  * A compiled artifact is a judgment-produced program, so `slc` re-checks it
  * against its source. The GEARS↔FSM conformance check verifies that every GEARS
- * item the `text2gears` phase produced maps to exactly one FSM state carrying
- * that item's player binding and its prompt body verbatim, and that no FSM state
- * references an unknown item — so a `gears2fsm` result cannot silently drift from
+ * action item the `text2gears` phase produced maps to exactly one working FSM
+ * leaf with its actor binding and authored prompt or child-input template
+ * preserved. Declarative items map to no leaf, and every working leaf binds a
+ * known action item — so a `gears2fsm` result cannot silently drift from
  * its GEARS source (the [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md)
  * auditable GEARS-to-FSM mapping).
  *
@@ -1452,7 +1453,7 @@ function isPlaybookItem(item: GearsItem): boolean {
  * shall` line, so the parser assigns it no actor and no nested call; it maps to
  * no leaf (verification-71; DR-065).
  */
-function isDeclarativeItem(item: GearsItem): boolean {
+export function isDeclarativeItem(item: GearsItem): boolean {
   return item.actor === undefined && !isPlaybookItem(item);
 }
 
@@ -5271,7 +5272,7 @@ describe(${sourceString(`${opts.basename}: GEARS↔FSM conformance`)}, () => {
     expect(SCHEMA_FINDINGS).toEqual([]);
   });
 
-  it('maps every GEARS item to a state with its player and verbatim prompt', async () => {
+  it('maps every GEARS action item to a state with its actor and preserved prompt', async () => {
     const gears = readFileSync(
       fileURLToPath(new URL(${sourceString(opts.gearsFile)}, import.meta.url)),
       'utf8',
