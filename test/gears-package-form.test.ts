@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
-// verification-67: a `gears` artifact in the spec-package form (DR-062) beside
+// verification-67: a `gears` artifact in the spec-package form (DR-065) beside
 // a machine compiled before it, whose sourceItem citations are uppercase.
 
 import { describe, expect, it } from 'vitest';
@@ -206,7 +206,7 @@ describe('package-form GEARS conformance (verification-67)', () => {
   });
 
   it('maps requirement and test items to no leaf and checks none of their text', () => {
-    // verification-1, verification-65: flow-5..flow-8 carry lists and a table.
+    // verification-1, verification-71: flow-5..flow-8 carry lists and a table.
     expect(checkGearsResultContract(packageGears)).toEqual([]);
     expect(checkGearsActorContract(packageGears)).toEqual([]);
     expect(

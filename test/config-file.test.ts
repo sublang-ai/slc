@@ -41,6 +41,24 @@ describe('loadConfigFile (cli-20, cli-21)', () => {
     return path;
   }
 
+  it('accepts role Ultracode booleans and rejects quoted boolean strings', async () => {
+    await write(
+      cwd,
+      CONFIG_FILE,
+      'ultracode: true\nreviewerUltracode: false\n',
+    );
+    expect((await loadConfigFile({ cwd, configHome: home })).config).toEqual({
+      ultracode: true,
+      reviewerUltracode: false,
+    });
+    for (const key of ['ultracode', 'reviewerUltracode']) {
+      await write(cwd, CONFIG_FILE, `${key}: "false"\n`);
+      await expect(loadConfigFile({ cwd, configHome: home })).rejects.toThrow(
+        key,
+      );
+    }
+  });
+
   it('parses a full config into a partial selection', async () => {
     const path = await write(
       cwd,
@@ -167,7 +185,10 @@ describe('loadConfigFile (cli-20, cli-21)', () => {
 
     const expected = join(home, 'slc', 'config.yaml');
     expect(loaded.path).toBe(expected);
-    expect(loaded.config).toEqual({ agent: 'claude-code' });
+    expect(loaded.config).toEqual({
+      agent: 'claude-code',
+      modelDefaults: true,
+    });
     expect(seeded).toEqual([expected]);
     const template = await readFile(expected, 'utf8');
     expect(template).toContain('# fastMode:');

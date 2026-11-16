@@ -522,16 +522,15 @@ describe('createConfiguredExecutor (cli-7, cli-8)', () => {
     }
   });
 
-  it('requests the control-call tool allowlist only from an adapter that enforces one (phase-execution-31, phase-execution-32)', async () => {
+  it('omits child tuning on compiled tool-free Captain and judge calls for both adapter tool policies (phase-execution-31, phase-execution-32)', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'slc-control-isolation-'));
     const definitionPath = join(dir, 'phase.md');
     const source = join(dir, 'source.md');
     const target = join(dir, 'target.ts');
     await writeFile(definitionPath, 'compiled phase definition');
     await writeFile(source, 'source input');
-    // A composed-v2 fixture whose single turn makes exactly the two control
-    // calls: a routing-only Captain call carrying the source-owned empty
-    // allowlist, then the hidden judge call the host isolates itself.
+    // A performing Captain can delegate. The two control calls that follow
+    // forbid tools, through both the source-owned and the host-owned paths.
     await writeFile(
       join(dir, 'phase.playbook.mjs'),
       [
@@ -542,6 +541,7 @@ describe('createConfiguredExecutor (cli-7, cli-8)', () => {
         '  return {',
         '    async init(session) { ports = session.ports; },',
         '    async handleBossInput({ text, signal }) {',
+        "      await ports.callCaptain('Transform this.', signal, { visibility: 'visible', resume: false });",
         "      await ports.callCaptain('Route this.', signal, {",
         "        visibility: 'visible',",
         '        resume: false,',
@@ -599,7 +599,7 @@ describe('createConfiguredExecutor (cli-7, cli-8)', () => {
         },
       });
       const executor = await createConfiguredCompiledFactory(
-        { agent },
+        { agent, subagentModel: 'pinned-child' },
         { adapterFactory: factory, cwd: dir },
       )({
         phase: 'phase',
@@ -630,22 +630,23 @@ describe('createConfiguredExecutor (cli-7, cli-8)', () => {
       const enforcing = await controlCallOptions('claude-code');
       const promptOnly = await controlCallOptions('codex');
 
-      // The same two control calls under either selection.
-      expect(enforcing).toHaveLength(2);
-      expect(promptOnly).toHaveLength(2);
+      for (const calls of [enforcing, promptOnly]) {
+        expect(calls).toHaveLength(3);
+        expect(calls[0]?.subagentModel).toBe('pinned-child');
+        expect(calls[1]?.subagentModel).toBeUndefined();
+        expect(calls[2]?.subagentModel).toBeUndefined();
+      }
       // Only an adapter with a provider-enforced tool-restriction surface is
       // asked for the empty allowlist: Codex refuses any tool-list value, so
       // requesting one there would fail every control call before the model
       // ran, leaving the artifact's authored control envelope as the
       // isolation (DR-012).
-      expect(enforcing.map((options) => options.allowedTools)).toEqual([
-        [],
-        [],
-      ]);
-      expect(promptOnly.map((options) => options.allowedTools)).toEqual([
-        undefined,
-        undefined,
-      ]);
+      expect(enforcing.slice(1).map((options) => options.allowedTools)).toEqual(
+        [[], []],
+      );
+      expect(
+        promptOnly.slice(1).map((options) => options.allowedTools),
+      ).toEqual([undefined, undefined]);
       // The substitution changes nothing else about either call.
       expect(promptOnly.map(withoutTools)).toEqual(enforcing.map(withoutTools));
     } finally {

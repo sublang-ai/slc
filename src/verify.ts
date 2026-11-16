@@ -1450,7 +1450,7 @@ function isPlaybookItem(item: GearsItem): boolean {
 /**
  * A declarative item — a requirement or a test — has no unquoted `Captain
  * shall` line, so the parser assigns it no actor and no nested call; it maps to
- * no leaf (verification-65; DR-062).
+ * no leaf (verification-71; DR-065).
  */
 function isDeclarativeItem(item: GearsItem): boolean {
   return item.actor === undefined && !isPlaybookItem(item);
@@ -1464,7 +1464,7 @@ function foldAsciiCase(id: string): string {
  * Resolves a leaf's `sourceItem` to the spelling of the GEARS item it cites:
  * an exact ID first, else the item whose ID equals it ignoring ASCII letter
  * case, so a machine compiled before lowercase package IDs keeps citing them
- * (verification-66; DR-062). Also reports IDs that differ only in case.
+ * (verification-66; DR-065). Also reports IDs that differ only in case.
  */
 function gearsSourceItemResolver(items: readonly GearsItem[]): {
   resolve: (sourceItem: string) => string;
@@ -1497,7 +1497,7 @@ function gearsSourceItemResolver(items: readonly GearsItem[]): {
 
 /**
  * Machine syntax a declarative item must not carry: an action that lost its
- * acting clause is reported rather than read as a requirement (DR-062).
+ * acting clause is reported rather than read as a requirement (DR-065).
  */
 function declarativeItemFindings(item: GearsItem): string[] {
   const findings: string[] = [];
@@ -1518,7 +1518,7 @@ function declarativeItemFindings(item: GearsItem): string[] {
  * Package-form findings that need no consumer FSM: item IDs equal ignoring
  * ASCII letter case and declarative items carrying action syntax. Run at the
  * producer boundary so the phase that can still edit the GEARS repairs them
- * (verification-68; DR-062).
+ * (verification-68; DR-065).
  */
 export function checkGearsPackageContract(gears: string): string[] {
   const items = parseGearsItems(gears);
@@ -1701,8 +1701,8 @@ export function checkFsmChildSuspension(config: MachineConfigLike): string[] {
  * and the prompt verbatim, a declarative item maps to none, every captain state
  * cites a known action item ignoring ASCII letter case, and every
  * captain state's `result` map declares the Boss-reply suspension key with its
- * adjudicator contract (verification-1, verification-3, verification-65,
- * verification-66; DR-009, DR-062).
+ * adjudicator contract (verification-1, verification-3, verification-71,
+ * verification-66; DR-009, DR-065).
  */
 function gearsFsmConformance(
   gears: string,
@@ -1954,7 +1954,7 @@ function gearsFsmConformance(
   for (const item of items) {
     if (isDeclarativeItem(item)) {
       // A requirement or test item maps to no leaf; only machine syntax that
-      // belongs to an action is a finding (DR-062).
+      // belongs to an action is a finding (DR-065).
       findings.push(...declarativeItemFindings(item));
       continue;
     }

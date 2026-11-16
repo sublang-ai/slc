@@ -19,7 +19,7 @@ When the user runs `slc` with `--version` or `-v`, the slc executable shall prin
 
 ### cli-2
 
-When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--complete` for retained-bundle emission without agents or history [[completion-1](completion.md#completion-1)], [[completion-2](completion.md#completion-2)], [[completion-5](completion.md#completion-5)], `--rebuild`, the `--config` option, and the configuration it reads — including the Coder, optional Reviewer and coverage-budget config keys and environment variables — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md), [DR-006](../decisions/006-slc-configuration-sources.md), [DR-021](../decisions/021-incremental-compilation.md), [[cli-6](#cli-6)], [[cli-7](#cli-7)], [[cli-40](#cli-40)]).
+When the user runs `slc` with `--help` or `-h`, the slc executable shall print usage that names the documented invocation forms, `--complete` for retained-bundle emission without agents or history [[completion-1](completion.md#completion-1)], [[completion-2](completion.md#completion-2)], [[completion-5](completion.md#completion-5)], `--rebuild`, the `--config` option, and the configuration it reads — including the Coder, optional Reviewer and coverage-budget config keys and environment variables, with each supported child-model and Ultracode environment variable printed by its exact name [[cli-46](#cli-46)], [[cli-50](#cli-50)] — to standard output and exit zero, without resolving a pipeline or executing any phase ([DR-001](../decisions/001-slc-pipeline-layout-naming-invocation.md), [DR-002](../decisions/002-slc-link-phases.md), [DR-006](../decisions/006-slc-configuration-sources.md), [DR-021](../decisions/021-incremental-compilation.md), [[cli-6](#cli-6)], [[cli-7](#cli-7)], [[cli-40](#cli-40)]).
 
 ### cli-3
 
@@ -55,7 +55,7 @@ Where the invocation is not completion-only [[completion-2](completion.md#comple
 
 ### cli-29
 
-Where the invocation is not completion-only [[completion-2](completion.md#completion-2)] and no config file exists in the working directory or the user config location and `--config` is not given, when the user runs a documented invocation form, the slc executable shall seed `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` with the bundled starter defaults — `agent: claude-code` active, Coder model/effort/fast mode and Reviewer agent/model/effort/fast mode as commented examples so agent defaults apply and reviewed compilation remains disabled — name the created file on stderr, and carry out the run with those defaults, so a first run needs no prior setup ([DR-015](../decisions/015-first-run-config-seeding.md)).
+Where the invocation is not completion-only [[completion-2](completion.md#completion-2)] and no config file exists in the working directory or the user config location and `--config` is not given, when the user runs a documented invocation form, the slc executable shall seed `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` with the bundled starter defaults — `agent: claude-code` and `modelDefaults: true` active, Coder model/effort/fast mode and Reviewer agent/model/effort/fast mode as commented examples so reviewed compilation remains disabled — name the created file on stderr, and carry out the run with those defaults, so a first run needs no prior setup ([DR-015](../decisions/015-first-run-config-seeding.md)).
 
 ## Internal Behavior
 
@@ -65,7 +65,7 @@ When the slc executable receives a `<pipeline>` reference other than the reserve
 
 ### cli-7
 
-Where the resolved agent — a non-blank `SLC_AGENT` environment variable, otherwise the config file's `agent` field — names one of the Cligent agent adapters the executable registers — `claude-code`, `codex`, `gemini`, or `opencode` — and the resolved model — a non-blank `SLC_MODEL`, otherwise the config file's `model` field — optionally names a model, the resolved effort — a non-blank `SLC_EFFORT`, otherwise the config file's `effort` field — optionally names a reasoning effort the selected agent supports per Cligent's adapter-scoped effort metadata (an unsupported value refuses the run), and the resolved fast mode — a non-blank `SLC_FAST_MODE` holding exactly `true` or `false`, otherwise the config file's boolean `fastMode` field — optionally requests fast mode as a literal, `false` included, that Cligent's adapter-scoped fast-mode capability contract accepts for the selected agent (a literal for an agent that contract reports unsupported refuses the run naming the agent, and any other environment value refuses the run naming the variable, each before any agent call), the executable shall construct the coding-agent transport for that agent CLI through Cligent [[1]] with that model, effort, and fast mode in its call settings — omitting any of them so the agent CLI uses its own default when neither source supplies it — leaving the agent CLI to read its credentials from the inherited process environment, keeping no adapter capability list of its own wherever Cligent publishes that capability — its one exception being tool-restriction enforcement, for which Cligent publishes no metadata [[phase-execution-31](phase-execution.md#phase-execution-31)] — and shall treat the selection as configuration that does not change phase semantics ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-006](../decisions/006-slc-configuration-sources.md), [[phase-execution-13](phase-execution.md#phase-execution-13)]).
+Where the resolved agent — a non-blank `SLC_AGENT` environment variable, otherwise the config file's `agent` field — names one of the Cligent agent adapters the executable registers — `claude-code`, `codex`, `gemini`, or `opencode` — and the resolved model — a non-blank `SLC_MODEL`, otherwise the config file's `model` field — optionally names a model, the resolved effort — a non-blank `SLC_EFFORT`, otherwise the config file's `effort` field — optionally names a reasoning effort the selected agent supports per Cligent's adapter-scoped effort metadata (an unsupported value refuses the run), and the resolved fast mode — a non-blank `SLC_FAST_MODE` holding exactly `true` or `false`, otherwise the config file's boolean `fastMode` field — optionally requests fast mode as a literal, `false` included, that Cligent's adapter-scoped fast-mode capability contract accepts for the selected agent (a literal for an agent that contract reports unsupported refuses the run naming the agent, and any other environment value refuses the run naming the variable, each before any agent call), the executable shall construct the coding-agent transport for that agent CLI through Cligent [[1]] with that model, effort, and fast mode in its call settings — leaving omitted settings to the agent CLI except for explicitly enabled model defaults [[cli-49](#cli-49)] — leaving the agent CLI to read its credentials from the inherited process environment, keeping no adapter capability list of its own wherever Cligent publishes that capability — its one exception being tool-restriction enforcement, for which Cligent publishes no metadata [[phase-execution-31](phase-execution.md#phase-execution-31)] — and shall treat the selection as configuration that does not change phase semantics ([DR-004](../decisions/004-slc-interpreted-phase-execution.md), [DR-006](../decisions/006-slc-configuration-sources.md), [[phase-execution-13](phase-execution.md#phase-execution-13)]).
 
 ### cli-12
 
@@ -81,7 +81,7 @@ Where `--config <path>` names a file that does not exist, or a loaded config fil
 
 ### cli-30
 
-Where the invocation is not completion-only [[completion-2](completion.md#completion-2)], when discovery finds neither the working-directory `slc.config.yaml` nor the user config file, the executable shall create `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from the starter template bundled with the host — `agent: claude-code` set, Coder `model`, `effort`, and `fastMode` plus `reviewerAgent`, `reviewerModel`, `reviewerEffort`, and `reviewerFastMode` as commented examples so reviewed compilation is disabled — report the created path on stderr, load the seeded file, and shall not seed when `--config` is given or when either discovered file exists ([DR-015](../decisions/015-first-run-config-seeding.md)).
+Where the invocation is not completion-only [[completion-2](completion.md#completion-2)], when discovery finds neither the working-directory `slc.config.yaml` nor the user config file, the executable shall create `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml` from the starter template bundled with the host — `agent: claude-code` and `modelDefaults: true` set, Coder `model`, `effort`, and `fastMode` plus `reviewerAgent`, `reviewerModel`, `reviewerEffort`, and `reviewerFastMode` as commented examples so reviewed compilation is disabled — report the created path on stderr, load the seeded file, and shall not seed when `--config` is given or when either discovered file exists ([DR-015](../decisions/015-first-run-config-seeding.md)).
 
 ### cli-8
 
@@ -110,6 +110,33 @@ Where the result is not a source-clarification outcome [[clarification-8](clarif
 ### cli-44
 
 When the executable resolves verification configuration for compilation or agentless retained completion, it shall map flat YAML `coverageMaxInvocations`, `coverageMaxAttempts` and `coverageMaxDurationMs` to API `coverage.maxInvocations`, `coverage.maxAttempts` and `coverage.maxDurationMs`, using each non-blank `SLC_COVERAGE_MAX_INVOCATIONS`, `SLC_COVERAGE_MAX_ATTEMPTS` or `SLC_COVERAGE_MAX_DURATION_MS` environment value over its corresponding YAML value, otherwise defaults 8, 64 and 300,000, and reject non-safe-integers, zero, negative or non-finite values and values above 64, 1024 or 1,800,000 respectively before executing a phase, applying the duration as a ceiling on the derived verification deadline [[verification-62](verification.md#verification-62)], while retaining file discovery and strict schema validation [[cli-20](#cli-20)], [[cli-21](#cli-21)].
+
+### cli-46
+
+Per [DR-062](../decisions/062-independent-ultracode-configuration.md), the executable shall resolve independent optional Coder `ultracode` and Reviewer `reviewerUltracode` booleans from YAML, overridden respectively by nonblank `SLC_ULTRACODE` and `SLC_REVIEWER_ULTRACODE` holding exactly `true` or `false`, requiring a Reviewer agent for Reviewer settings and leaving omitted switches at their native defaults.
+
+### cli-47
+
+When a role requests Ultracode, the executable shall convey the literal boolean according to installed Cligent’s capability ([DR-062](../decisions/062-independent-ultracode-configuration.md)):
+
+| Capability | Outcome |
+| --- | --- |
+| Supported | Forward either boolean unchanged. |
+| Unsupported adapter | Omit false and refuse true before execution, naming the adapter. |
+
+### cli-49
+
+Where YAML `modelDefaults: true` is set, the executable shall fill each omitted primary and enabled child model for the Coder and configured Reviewer from Cligent’s `defaultAgentModels(adapter, env, homeDir)`, passing the role’s effective adapter, the run’s environment and its user home (the first nonempty `HOME`, `USERPROFILE`, or OS home), and leaving unreturned fields unset; this is an environment and user-level lookup, not resolution of effective project, working-directory or managed provider settings ([DR-063](../decisions/063-adapter-model-defaults-and-subagent-selection.md), [DR-064](../decisions/064-runtime-owned-model-defaults.md)).
+
+### cli-50
+
+When resolving Coder or Reviewer subagent configuration, the executable shall use the nonblank `SLC_SUBAGENT_MODEL` or `SLC_REVIEWER_SUBAGENT_MODEL` over the corresponding YAML `subagentModel` or `reviewerSubagentModel` with the applicable result:
+
+| Selection | Result |
+| --- | --- |
+| `false` | Suppress any default child pin. |
+| `inherit` or named model | Pass it to performing calls on a supported adapter, and refuse it before execution with a diagnostic naming the field and adapter on an unsupported adapter. Tool-free controls omit child tuning [[phase-execution-31](phase-execution.md#phase-execution-31)]. |
+| Reviewer child setting without a Reviewer agent | Refuse before execution. |
 
 ## Verification
 
@@ -179,7 +206,7 @@ Where a loaded config file is malformed YAML, declares an unknown key, or holds 
 
 ### cli-31
 
-Where neither the working-directory `slc.config.yaml` nor the user config file exists and `--config` is absent, when the slc executable runs a full pipeline, the slc executable shall create the user config file with active `agent: claude-code`, commented `model`, `effort`, `fastMode`, `reviewerAgent`, `reviewerModel`, `reviewerEffort`, and `reviewerFastMode` examples, and no active Reviewer or fast-mode selection, name it on stderr, and complete the run with the seeded Coder selection; where the working-directory file exists, where the user file exists, or where `--config` is given, the slc executable shall create no file [[cli-29](#cli-29)], [[cli-30](#cli-30)].
+Where neither the working-directory `slc.config.yaml` nor the user config file exists and `--config` is absent, when the slc executable runs a full pipeline, the slc executable shall create the user config file with active `agent: claude-code` and `modelDefaults: true`, commented `model`, `effort`, `fastMode`, `reviewerAgent`, `reviewerModel`, `reviewerEffort`, and `reviewerFastMode` examples, and no active Reviewer or fast-mode selection, name it on stderr, and complete the run with the seeded Coder selection; where the working-directory file exists, where the user file exists, or where `--config` is given, the slc executable shall create no file [[cli-29](#cli-29)], [[cli-30](#cli-30)].
 
 ### cli-41
 
@@ -209,6 +236,14 @@ Where a pipeline directory pins a phase to a current compiled `playbook` artifac
 ### cli-45
 
 Where configuration files and environment values specify coverage limits, when the integration suite runs the CLI dependency and completion boundaries, it shall verify per-key precedence, blank-variable fallback, default limits, help disclosure, agentless completion propagation, and refusal of invalid values before phase execution [[cli-44](#cli-44)].
+
+### cli-48
+
+When both roles use YAML and environment Ultracode settings, the integration check shall verify precedence, exact boolean validation, missing Reviewer rejection, and unchanged omission defaults [[cli-46](#cli-46)], plus exact supported forwarding and adapter-naming errors for unsupported activation [[cli-47](#cli-47)].
+
+### cli-51
+
+When a fresh starter and a hand-authored config drive the configured executors, the integration suite shall verify primary and child defaults for both roles against the required Cligent release, literal pins at the adapter, the run environment and home reaching the policy, explicit per-field overrides including a named primary with default child, provider selection with missing or disabled opt-in, and refusal of unsupported child pins naming the setting and adapter [[cli-49](#cli-49)], [[cli-50](#cli-50)].
 
 ## References
 

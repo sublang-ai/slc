@@ -7,6 +7,8 @@
 
 Accepted
 
+Amended by [DR-063](063-adapter-model-defaults-and-subagent-selection.md) for opt-in seeded model pairs.
+
 ## Context
 
 `agent` is `slc`'s one required setting with no built-in default ([DR-006](006-slc-configuration-sources.md)): a run with no config file and no `SLC_AGENT` refuses with `agent-unset`.

@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
 
-# DR-062: Compiled GEARS as a Spec Package
+# DR-065: Compiled GEARS as a Spec Package
 
 ## Status
 

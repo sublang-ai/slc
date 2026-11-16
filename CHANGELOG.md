@@ -13,7 +13,7 @@ and this project adheres to
 
 ### Changed
 
-- Check a `gears` artifact in the spec-package form (DR-062): only an item
+- Check a `gears` artifact in the spec-package form (DR-065): only an item
   with an unquoted `Captain shall` line is an action item mapped to one leaf;
   requirement and test items map to none, a leaf's `sourceItem` matches an
   item ID ignoring ASCII letter case, and a declarative item carrying a
@@ -22,6 +22,38 @@ and this project adheres to
 - Report a declarative `gears` item that carries a prompt or `Results:`, and
   item IDs equal ignoring case, where the artifact is produced or consumed
   as well as at conformance, so the phase that can still edit it repairs it.
+
+## [0.21.0] - 2026-11-15
+
+### Added
+
+- First-run configs opt into adapter-aware Claude Fable 5.2 / Opus 5.5 and
+  Codex GPT-6 Astra / GPT-6.1 Sol model pairs when Cligent supplies
+  them for the selected provider.
+  Tool-free control turns omit child tuning. Existing configs keep provider
+  defaults unless `modelDefaults: true` is set. Independent Coder/Reviewer
+  subagent model settings support named pins, `inherit`, and `false`.
+
+- Configure Claude Ultracode independently of effort for Coder and Reviewer
+  roles with `ultracode` / `reviewerUltracode` YAML settings and
+  `SLC_ULTRACODE` / `SLC_REVIEWER_ULTRACODE` environment overrides.
+  Unsupported adapters ignore false and reject true.
+
+### Changed
+
+- Verify the standalone compiler with Claude Agent SDK 0.3.325 (development
+  range `^0.3.325`), which supports the seeded Fable 5.2 model. Published
+  consumers still supply their SDK independently.
+
+- Require Cligent `^0.39.0` and Playbook `^18.3.1` so the compiler and
+  launcher share the same model-selection and Ultracode capabilities.
+  Adopt Playbook’s REVIEW output contract for unsettled findings and its
+  canonical CODE child-call clause with verifiable commit-scope relays.
+
+### Fixed
+
+- Accept observed reentering result transitions when an acting phase loops
+  back to its own working leaf, while rejecting self-targets without reentry.
 
 ## [0.20.2] - 2026-11-03
 
@@ -1093,7 +1125,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.20.2...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/sublang-ai/slc/compare/v0.20.2...v0.21.0
 [0.20.2]: https://github.com/sublang-ai/slc/compare/v0.20.1...v0.20.2
 [0.20.1]: https://github.com/sublang-ai/slc/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/sublang-ai/slc/compare/v0.19.1...v0.20.0

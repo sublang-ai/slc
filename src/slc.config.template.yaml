@@ -3,14 +3,22 @@
 # SLC_REVIEWER_* variables, plus SLC_STALL_TIMEOUT, override these per key
 # (DR-006, DR-022).
 agent: claude-code
-# model: claude-opus-5-5
+# Use the model pair supplied by the installed Cligent for this adapter and
+# provider as detected from environment and user-level settings only.
+# Project/cwd and managed routing are not resolved here; set false in the
+# project config for those routes, or explicitly select both models.
+# Set false to leave omitted models to the agent CLI. Explicit models win.
+modelDefaults: true
+# model: claude-fable-5-2
+# subagentModel: claude-opus-5-5 # or inherit
 # effort: high
 # Fast mode is a literal request (true or false) where the agent CLI supports
 # it; omit it to keep the agent CLI's default.
 # fastMode: true
 # Optional independent review/fix loop; disabled until reviewerAgent is set.
 # reviewerAgent: codex
-# reviewerModel: gpt-6.1-sol
+# reviewerModel: gpt-6-astra
+# reviewerSubagentModel: gpt-6.1-sol
 # reviewerEffort: xhigh
 # reviewerFastMode: true
 # Seconds of agent inactivity before a stalled call fails the run (DR-019);
@@ -21,3 +29,6 @@ agent: claude-code
 # coverageMaxInvocations: 8 # integer 1..64
 # coverageMaxAttempts: 64 # integer 1..1024
 # coverageMaxDurationMs: 300000 # integer 1..1800000; smaller derived timeouts apply
+
+# ultracode: true
+# reviewerUltracode: false
