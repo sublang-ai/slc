@@ -16,6 +16,7 @@ import { runSlc, type SlcDeps } from '../src/runner.js';
 import { parseGearsContract } from '../src/verify-source.js';
 import {
   checkGearsFsmConformance,
+  checkGearsPackageContract,
   checkGearsResultContract,
   parseGearsItems,
 } from '../src/verify.js';
@@ -394,6 +395,30 @@ describe('GEARS result-contract producer and consumer boundaries (DR-035)', () =
     'reports the same parser findings through conformance and the real producer boundary',
     async (content) => {
       const findings = checkGearsResultContract(content);
+      expect(findings.length).toBeGreaterThan(0);
+      const conformance = checkGearsFsmConformance(content, { states: {} });
+      const result = await runSlc(['flow', source], deps(writing(content)));
+      expect(result.ok).toBe(false);
+      for (const finding of findings) {
+        expect(conformance).toContain(finding);
+        expect(result.diagnostics.join('\n')).toContain(finding);
+      }
+    },
+  );
+
+  it.each([
+    // An authored prompt whose acting clause was lost reads as a requirement.
+    GEARS.replace('Captain shall act:', 'the workflow shall act:'),
+    // Two IDs that one case-insensitive `sourceItem` could not tell apart.
+    `${GEARS}\n### task-1\n\nThe workflow shall keep the repository unchanged.\n`,
+    // The same heading twice: two items sharing one anchor.
+    `${GEARS}\n### TASK-1\n\nThe workflow shall keep the repository unchanged.\n`,
+  ])(
+    'reports package-contract findings through conformance and the real producer boundary',
+    async (content) => {
+      // verification-68: no FSM is needed, so the producer can still repair.
+      expect(checkGearsResultContract(content)).toEqual([]);
+      const findings = checkGearsPackageContract(content);
       expect(findings.length).toBeGreaterThan(0);
       const conformance = checkGearsFsmConformance(content, { states: {} });
       const result = await runSlc(['flow', source], deps(writing(content)));

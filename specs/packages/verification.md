@@ -19,11 +19,14 @@ Essential project-specific references: `slc`, this project's compiler CLI; and `
 
 #### verification-1
 
-When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc command shall recursively traverse nested and parallel state nodes, recover each leaf's binding by evaluating its `invoke.input` under the machine's resolved initial context, require every `gears` item to map to exactly one executable working leaf of its declared actor kind and every such leaf to reference an existing item, and apply all applicable conformance requirements ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md)):
+When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc command shall recursively traverse nested and parallel state nodes, recover each leaf's binding by evaluating its `invoke.input` under the machine's resolved initial context, require every `gears` action item [[verification-71](#verification-71)] to map to exactly one executable working leaf of its declared actor kind and every such leaf to bind an existing action item — by its `sourceItem` [[verification-66](#verification-66)], or, for a nested-call leaf that carries none, by the call it makes: its literal target and input text [[verification-39](#verification-39)], or the context fields a dynamic call names — and apply all applicable conformance requirements ([DR-009](../decisions/009-slc-playbook-pipeline-compilation.md), [DR-011](../decisions/011-playbook-1-0-captain-contract-adoption.md), [DR-024](../decisions/024-playbook-10-schema-3-adoption.md), [DR-028](../decisions/028-contract-based-adoption-without-recompilation.md), [DR-065](../decisions/065-compiled-gears-as-a-spec-package.md)):
 
 | Case | Required conformance |
 | --- | --- |
 | The machine root | Omit an own `meta.playbook` namespace, regardless of its value: public playbook metadata belongs only to state nodes declared under `states`; the root's XState `id`, description, and other metadata namespaces remain outside this restriction ([DR-036](../decisions/036-machine-root-public-identity.md)). |
+| Declarative item [[verification-71](#verification-71)] | Map to no leaf and report no finding for its text, except one finding for a prompt blockquote it carries and one for a `Results:` label it carries unless a result-contract finding [[verification-13](#verification-13)] already reports that label. |
+| Leaf whose `sourceItem` cites a declarative item [[verification-66](#verification-66)] | Report a finding naming the leaf and the item. |
+| Two item IDs of one `gears` artifact equal ignoring ASCII letter case | Report a finding naming both IDs as written. |
 | Every state node declared under `states` in a structured machine | Carry a non-empty explicit state id and matching `meta.playbook.stateId`. |
 | Direct-Captain leaf | Invoke `captain` and carry that same id plus the item's prompt body verbatim without `player` or `role` binding. |
 | Schema-3 delegated-role leaf | Invoke `player`, carry `meta.playbook.role` and `invoke.input.role` equal to the source role's canonical lowercase local id, omit `invoke.input.player`, and preserve the role locally without encoding a concrete player or alias. |
@@ -37,6 +40,23 @@ When checking a compiled `playbook` artifact's GEARS↔FSM conformance, the slc 
 | Schema-3 artifact with no parallel group | Export `concurrentRoleSets` as the exact empty array. |
 | Schema-3 root final state, once any root final state of the artifact declares a terminal kind | Carry `meta.playbook.terminal` equal to exactly `success` or `failure`, so a caller reads the reached outcome's published meaning from the machine; a final inside a parallel region stages the join and declares no kind, and an artifact retained from before the kind was compiled declares none at all and is exempt. |
 | Schema-1 artifact whose FSM module independently exports `concurrentRoleSets` | Preserve schema-1 classification because the export is not artifact-schema evidence [[verification-21](#verification-21)]. |
+
+#### verification-71
+
+When a compilation-correctness check classifies a `gears` item, the check shall read only fixed machine syntax, never condition or requirement prose ([DR-016](../decisions/016-gears-grammar-provenance.md), [DR-065](../decisions/065-compiled-gears-as-a-spec-package.md)):
+
+| Item | Kind |
+| --- | --- |
+| A line outside its blockquotes and its `Results:` block contains `Captain shall` | Action item |
+| Any other item, a requirement or a test | Declarative item |
+
+#### verification-66
+
+When a GEARS↔FSM conformance check [[verification-1](#verification-1)] resolves a leaf's `sourceItem`, the check shall cite the `gears` item whose ID equals it ignoring ASCII letter case and name that item by its ID as written in every finding ([DR-065](../decisions/065-compiled-gears-as-a-spec-package.md)).
+
+#### verification-68
+
+When checking a GEARS package contract independently of an FSM, the slc command shall return exactly the conformance findings [[verification-1](#verification-1)] that need no machine — a declarative item [[verification-71](#verification-71)] carrying a prompt blockquote or a `Results:` label, and two item IDs equal ignoring ASCII letter case — as a pure function of that GEARS text, so the phase that produces or consumes the artifact reports them ([DR-065](../decisions/065-compiled-gears-as-a-spec-package.md)).
 
 #### verification-39
 
@@ -53,7 +73,7 @@ When checking a literal nested-playbook input [[verification-1](#verification-1)
 | Reached structured JSON relay | An observed own array or plain-record payload may map an explicit quoted relay through exact compact JSON, equal to ordinary `JSON.stringify` of recursively key-sorted data records (including ordinary numeric-index key ordering), preserving array order and JSON string escaping, and encode only finite JSON primitives and dense arrays/plain records with enumerable own data properties. Inspect descriptors and encode a detached copy without invoking getters, `toJSON` or custom hooks; reject Proxies before their reflective traps, custom prototypes, accessors, symbol/extra array keys, cycles, more than 32 levels or 128 visits including repeated aliases, or more than 65,536 UTF-8 encoded bytes, checking encoded size before serialization. Establish mapping only through a type-preserving perturbation of an existing string leaf, then verify two distinct literal values for every string leaf of the mapped container with all other reached values unchanged. Preserve aliases across observed structured roots, container prototypes and data descriptors; capture descendant facts on the first observed read before evaluation continues and refuse later descriptor, prototype or extensibility drift. Validate the full canonical encoding in every reached case; an empty or numeric-only container cannot establish mapping alone, and encoded `[]` or `{}` is not an empty relay. Preserve the existing scalar, inline and absence rules. |
 | Unprovable composition | Report a composition finding for missing or inconsistent correspondence, unsupported value shapes, input evaluation failure, cyclic record reads or reads beyond 32 record levels, more than 128 observed scalar reads, reads not stabilizing within four passes, more than 4,096 reached-template matching steps per scalar probe, or more than 64 pending reached cases per invocation rather than inventing startup defaults, guessing field names, or accepting drift. |
 | Dynamic composition diagnostic | Identify an unproved expanded child-input composition, including literal text, relay substitution, quoting, omission and canonical compact JSON for structured relays, without asserting that authored template text is missing or quoting reached payloads in a baseline mismatch. |
-| Matching without `sourceItem` | Retain one-to-one literal-target/template matching in declaration order after explicit source-item and exact-signature matches. |
+| Matching without `sourceItem` | Retain one-to-one literal-target/template matching in declaration order after explicit source-item [[verification-66](#verification-66)] and exact-signature matches. |
 
 #### verification-3
 
@@ -297,7 +317,7 @@ When the slc command checks a linked `playbook` module's fidelity to the FSM bes
 
 #### verification-15
 
-When checking GEARS↔FSM conformance, the slc command shall recognize as the optimizer-introduced script kind every GEARS item with the literal `Captain shall run:` clause, a blockquoted static script, and exactly two exit-status `Results:` guards, and pair each script item with exactly one `script` actor state whose `command` carries the blockquote verbatim and whose result map preserves the item's two guards in declared order with no `needsBossReply`, reporting drift, an agent-actor realization of a script item, and a script state realizing a non-script item as findings ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
+When checking GEARS↔FSM conformance, the slc command shall recognize as the optimizer-introduced script kind every GEARS item with the literal `Captain shall run:` clause, a blockquoted static script, and exactly two exit-status `Results:` guards, and pair each script item with exactly one `script` actor state citing it [[verification-66](#verification-66)] whose `command` carries the blockquote verbatim and whose result map preserves the item's two guards in declared order with no `needsBossReply`, reporting drift, an agent-actor realization of a script item, and a script state realizing a non-script item as findings ([DR-013](../decisions/013-normalize-and-pass-phases.md)).
 
 #### verification-16
 
@@ -621,6 +641,22 @@ Where a real XState artifact supplies typed JSON data to a linked player or dire
 #### verification-65
 
 Where real XState acting-result transitions target their own working leaf, when coverage runs, the integration suite shall accept an observed completion with explicit reentry and reject the same self-target without reentry [[verification-6](#verification-6)].
+
+### Package-form GEARS acceptance
+
+#### verification-67
+
+Where synthetic `gears` artifacts in the spec-package form carry lowercase action, requirement, and test items beside FSM states citing uppercase `sourceItem` values, when the integration suite checks their conformance, the check shall produce the applicable outcome:
+
+| Case | Required outcome |
+| --- | --- |
+| Lowercase action items cited by uppercase direct-Captain, delegated-role, script, and nested-playbook leaves. | No finding [[verification-1](#verification-1)] [[verification-66](#verification-66)]. |
+| Requirement and test items, including a plain bullet list and a table, mapped to no leaf. | No conformance, result-contract, or actor-contract finding [[verification-1](#verification-1)] [[verification-71](#verification-71)]. |
+| A declarative item with a prompt blockquote, with a `Results:` label, or cited by a leaf. | A finding naming that item [[verification-1](#verification-1)]. |
+| Two item IDs equal ignoring ASCII letter case. | A finding naming both [[verification-1](#verification-1)]. |
+| A produced artifact whose authored prompt lost its acting clause, or whose IDs collide ignoring case, with no FSM yet. | The package-contract check returns the same findings as conformance, and the real producer boundary fails with them before downstream work [[verification-68](#verification-68)]. |
+| A package-form artifact with no such defect, checked with no FSM. | No package-contract finding [[verification-68](#verification-68)]. |
+| An artifact in the earlier form, with prose around each action item's statement. | No finding [[verification-1](#verification-1)]. |
 
 ## References
 
