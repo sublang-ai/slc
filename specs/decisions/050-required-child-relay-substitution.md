@@ -6,6 +6,7 @@
 ## Status
 
 Accepted
+Amended by [DR-067](067-empty-labelled-relay-omission.md) in one scope: in reached-case proof, an invocation may omit a labelled quoted relay line whose value is empty or absent.
 
 ## Context
 

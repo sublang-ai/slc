@@ -6,6 +6,8 @@
 ## Status
 
 Accepted
+Amended by [DR-066](066-string-list-child-input-relay.md) in one scope: a reached list of strings may fill a child-input token as its elements joined by a comma and a space.
+Amended by [DR-067](067-empty-labelled-relay-omission.md) in one scope: in reached-case proof, an invocation may omit a labelled quoted relay line whose value is empty or absent.
 
 ## Context
 

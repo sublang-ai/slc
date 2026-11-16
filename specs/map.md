@@ -66,7 +66,7 @@ meta.md       The spec of specs
 | [DR-038](decisions/038-quoted-task-runtime-acceptance.md) | 038-quoted-task-runtime-acceptance.md | Exact literal or quoted task text in runtime benchmark acceptance, with separate retrospective validation |
 | [DR-039](decisions/039-strict-fsm-boundary.md) | 039-strict-fsm-boundary.md | Strict standalone FSM type checking at the producer and before protected-input consumers |
 | [DR-040](decisions/040-early-continuation-input-contract.md) | 040-early-continuation-input-contract.md | Existing canonical Boss-continuation input probe at the FSM producer and before protected-input consumers |
-| [DR-041](decisions/041-composed-child-input-fidelity.md) | 041-composed-child-input-fidelity.md | Whole-template verification of composed literal child input with observed placeholder dataflow |
+| [DR-041](decisions/041-composed-child-input-fidelity.md) | 041-composed-child-input-fidelity.md | Whole-template verification of composed literal child input with observed placeholder dataflow; a comma-joined string list by DR-066 and an omitted empty labelled relay by DR-067 |
 | [DR-042](decisions/042-literal-prompt-relay-fidelity.md) | 042-literal-prompt-relay-fidelity.md | Literal single-pass and multiline quoted prompt-relay verification |
 | [DR-043](decisions/043-stall-watchdog-default-window.md) | 043-stall-watchdog-default-window.md | The agent-stall watchdog's default window becomes 2400 seconds, amending [DR-019](decisions/019-compile-progress-stall-watchdog.md); the watchdog's other rules stand |
 | [DR-044](decisions/044-artifact-owned-entry-options.md) | 044-artifact-owned-entry-options.md | Artifact-owned entry options with explicit new-output validation and legacy compatibility |
@@ -91,6 +91,8 @@ meta.md       The spec of specs
 | [DR-063](decisions/063-adapter-model-defaults-and-subagent-selection.md) | 063-adapter-model-defaults-and-subagent-selection.md | Opt-in adapter model pairs and independent Coder/Reviewer native subagent selection, amended by DR-064 |
 | [DR-064](decisions/064-runtime-owned-model-defaults.md) | 064-runtime-owned-model-defaults.md | Required Cligent supplies primary and child defaults, with child requests limited to performing calls; amends DR-062 and DR-063 |
 | [DR-065](decisions/065-compiled-gears-as-a-spec-package.md) | 065-compiled-gears-as-a-spec-package.md | Compiled GEARS as a spec package: item kind from `Captain shall` alone, action items mapped one-to-one to leaves, declarative items mapped to none, citations matched ignoring ASCII letter case; amends DR-009 |
+| [DR-066](decisions/066-string-list-child-input-relay.md) | 066-string-list-child-input-relay.md | String-list child-input relay: a reached list of strings fills a token as its elements joined by `, `, proved from reached cases; amends DR-041 |
+| [DR-067](decisions/067-empty-labelled-relay-omission.md) | 067-empty-labelled-relay-omission.md | Empty labelled relay omission: in reached-case proof an invocation keeps or omits every empty labelled relay line, one way throughout; amends DR-050 and DR-041 |
 
 ## Packages
 
