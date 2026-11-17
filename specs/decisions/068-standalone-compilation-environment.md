@@ -1,0 +1,43 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai> -->
+
+# DR-068: Standalone Compilation Environment
+
+## Status
+
+Proposed specification; direction approved by the user, detailed contract awaiting review; implementation has not started.
+Amends [DR-009](009-slc-playbook-pipeline-compilation.md), [DR-014](014-cwd-output-invocation-defaults-entry-emission.md), [DR-020](020-playbook-4-0-adoption.md), [DR-039](039-strict-fsm-boundary.md), and [DR-061](061-consumer-supplied-playbook.md) only as stated below.
+
+## Context
+
+A globally installed compiler can load its own dependencies while its generated files cannot resolve those same packages from an empty destination.
+An unrelated ancestor package can also classify generated TypeScript as CommonJS, and checking or importing a changed artifact in a reused process can observe the wrong module format or stale exports.
+Agent-selected verification commands have treated missing ambient declarations and dependency diagnostics as workflow defects.
+Bounded coverage can fail to discover a valid public input, which is insufficient evidence that a workflow is unreachable.
+
+## Decision
+
+- Normal SLC installation acquires both default Agent SDKs through the adopting Cligent release, with no duplicate SDK runtime ranges in SLC.
+- Keep the required compatible Playbook peer and exact reviewed development provenance; no private conflicting engine is introduced.
+- Give every workflow one internal environment; provide no independent/project modes or environment-selection flag, and do not select dependencies from surrounding project manifests.
+- Prepare standalone artifacts through Playbook's shared environment service, using compiler-owned private ESM metadata and direct runtime links inside the artifact directory, without an npm project or registry install at the destination root.
+- Select one Playbook/XState pair before Agent work, and use it for authoritative definitions, the default link target, generated imports, checking, and loading.
+- Record that pair, compiler and source identities, compatibility, module formats, and entry location in a versioned build manifest; environment changes invalidate unchecked reuse.
+- Emit a real JavaScript `.mjs` entry for new workflows; preserve historical `.ts` artifact consumption without introducing another compilation mode.
+- Extend compiler-owned strict verification from FSM roots to linked and emitted entry modules; check changed revisions in fresh execution contexts and require safe entry initialization/disposal before acceptance.
+- Distinguish environment failure, an established artifact defect, and incomplete verification; incomplete verification remains fail-closed without asserting semantic impossibility, and known return-contract omissions are checked at the producing GEARS boundary.
+- Permit finite, recorded public-input witnesses for coverage, replayed from the real initial state under the existing limits; context patching alone is never reachability evidence.
+- Keep phase commands, input/output identities, timing, exit status, reuse decisions, and final gate evidence inspectable, without making compiler archives required for runtime loading.
+- Locate managed manifests through explicit entry metadata, reject a lost managed manifest without legacy downgrade, preserve the existing already-in-artifact layout, and add no blanket `-o` directory restriction.
+- Verify packed global installations with separate real Codex and Claude cold-generation samples and an independent reuse check; retain each sampled outcome without claiming all natural-language generation is stable.
+
+- Pre-merge validation separates locally built/installed functional candidates from real branch prerelease registry installs, retaining stable publication gates without making a formal stable release a prerequisite.
+- The shared compilation dependency/environment contract supports macOS, Linux and native Windows; POSIX-only historical front-end constraints do not exempt the native Windows compiler/library path.
+
+## Consequences
+
+Users can compile in an empty output directory after installing SLC once, without creating a Node project or installing project dependencies.
+The compiler's own TypeScript, Node typings, and Agent SDKs remain distinct from an artifact's linked runtime environment.
+The new entry extension requires coordinated SLC entry emission and Playbook loading support; adaptation or release gates for the separate `spex-playbook` Skill are outside this change.
+Runtime links are machine-local and can require compatible repair or recompilation after global upgrades; portable dependency bundles are outside this change.
+Extra local checks add bounded work and may expose real defects earlier, but neither SDK inclusion nor deterministic checking guarantees AI generation success or business-result quality.
