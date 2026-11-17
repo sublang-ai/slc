@@ -44,11 +44,15 @@ const lockedXstate = lock.packages?.['node_modules/xstate']?.version;
 // The accepted Playbook release is whichever exact release the lock resolves,
 // declared as its exact development dependency and required caret peer, so a
 // routine adoption edits nothing here (DR-028, DR-061).
+const candidatePlaybook =
+  /^\d+\.\d+\.\d+-rc\.(?:0|[1-9]\d*)$/.test(rootPackage.version) &&
+  /^\d+\.\d+\.\d+-rc\.(?:0|[1-9]\d*)$/.test(lockedPlaybook ?? '');
 if (
   typeof lockedPlaybook !== 'string' ||
-  !/^\d+\.\d+\.\d+$/.test(lockedPlaybook) ||
+  (!/^\d+\.\d+\.\d+$/.test(lockedPlaybook) && !candidatePlaybook) ||
   declaredPlaybook !== lockedPlaybook ||
-  playbookPeer !== `^${lockedPlaybook}` ||
+  playbookPeer !==
+    (candidatePlaybook ? lockedPlaybook : `^${lockedPlaybook}`) ||
   rootPackage.dependencies?.['@sublang/playbook'] !== undefined ||
   rootPackage.optionalDependencies?.['@sublang/playbook'] !== undefined ||
   rootPackage.peerDependenciesMeta?.['@sublang/playbook']?.optional === true

@@ -12,7 +12,7 @@ the procedure's limit is reached.
 
 ## Quick start with the precompiled workflow
 
-Use macOS or Linux, Node.js ≥ 23.6,
+Use macOS or Linux, Node.js ≥ 25.5.0,
 `git`, and an installed, authenticated [Claude Code CLI](https://www.anthropic.com/claude-code).
 From `demo/`, install dependencies and prepare a fresh scratch copy.
 The local Git identity below is for the exercise; replace it with your own
@@ -91,12 +91,12 @@ the [performance report](../docs/compilation-performance.md) records measured
 settings and their limits. If unresolved source behavior needs clarification,
 exit `2` names the source and questions: edit the source and repeat the command.
 
-The fresh entry is `./workflow.ts`, with intermediates and tests under
+The fresh entry is `./workflow.mjs`, with intermediates and tests under
 `./workflow.playbook/`. To run it, change only the English entry's `from`
 in `.spex/config/playbook.config.yaml` from `../../reference/workflow.ts`
-to `../../workflow.ts`,
+to `../../workflow.mjs`,
 then repeat the list and run commands above. The Chinese reference remains
-available; compiling `workflow.zh.txt` similarly emits `workflow.zh.ts`.
+available; compiling `workflow.zh.txt` similarly emits `workflow.zh.mjs`.
 
 | Artifact | Purpose |
 | --- | --- |
@@ -106,7 +106,7 @@ available; compiling `workflow.zh.txt` similarly emits `workflow.zh.ts`.
 | `workflow.fsm.ts` | Deterministic state machine. |
 | `workflow.playbook.ts` | Linked runtime module. |
 | `workflow.*.test.ts` | Generated checks binding the artifacts to the requirements. |
-| `workflow.ts` | Registry entry to enable in Playbook configuration. |
+| `workflow.mjs` | Registry entry to enable in Playbook configuration. |
 
 ## Roles and reuse
 
@@ -141,7 +141,7 @@ path in the config, bind every `requiredRoleIds` role, and invoke the
 command from that project's root. The host provisions its engine beside
 external artifacts when needed. A project declaring `@sublang/playbook`
 must install it locally; provisioning cannot shadow a declared dependency.
-Install that lineup's SDKs beside the host's Cligent installation.
+Claude and Codex SDKs are included by Cligent; optional backends retain their own setup requirements.
 
 The procedure is the reusable source: edit it, compile a new version, and
 inspect the generated requirements and tests before sharing the entry and

@@ -15,7 +15,7 @@ describe('slc bin entry', () => {
   });
 
   it('reports a semver version', () => {
-    expect(version()).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(version()).toMatch(/^\d+\.\d+\.\d+(?:-rc\.(?:0|[1-9]\d*))?$/);
   });
 
   it('prints the version with --version and exits 0 (cli-1)', async () => {
@@ -38,6 +38,9 @@ describe('slc bin entry', () => {
     expect(out.join('')).toMatch(/Usage:/);
     expect(out.join('')).toContain('SLC_AGENT');
     expect(out.join('')).toContain('SLC_REVIEWER_AGENT');
+    expect(out.join('')).toContain('<basename>.mjs');
+    expect(out.join('')).toContain('one automatic workflow-owned environment');
+    expect(out.join('')).toContain('no project-root Node setup');
   });
 
   it('seeds the user config on a bare first run (cli-29, DR-015)', async () => {

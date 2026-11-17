@@ -106,7 +106,9 @@ try {
   );
   assert.equal(
     installedManifest.peerDependencies?.['@sublang/playbook'],
-    `^${manifest.devDependencies['@sublang/playbook']}`,
+    /^\d+\.\d+\.\d+-rc\.(?:0|[1-9]\d*)$/.test(manifest.version)
+      ? manifest.devDependencies['@sublang/playbook']
+      : `^${manifest.devDependencies['@sublang/playbook']}`,
   );
   assert.equal(
     installedManifest.dependencies?.['@sublang/playbook'],
@@ -210,7 +212,7 @@ try {
     },
   );
   if (
-    !completed.trim().split('\n').includes(join(consumer, 'workflow.ts')) ||
+    !completed.trim().split('\n').includes(join(consumer, 'workflow.mjs')) ||
     existsSync(join(configHome, 'slc', 'config.yaml'))
   ) {
     throw new Error(
@@ -252,7 +254,7 @@ try {
       '  realpathSync(slc.defaultPlaybookLinkTarget()),',
       "  realpathSync(join(dirname(consumerRequire.resolve('@sublang/playbook/runtime')), 'runtime.ts')),",
       ');',
-      "const entry = (await import('./workflow.ts')).default;",
+      "const entry = (await import('./workflow.mjs')).default;",
       "if (entry.id !== 'workflow') throw new Error('external entry did not load');",
       "const factory = (await import('./workflow.playbook/workflow.playbook.ts')).default;",
       'const profile = entry.runtimeProfile;',

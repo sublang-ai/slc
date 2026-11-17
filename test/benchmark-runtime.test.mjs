@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inspectArtifactEnvironment } from '@sublang/playbook/artifact-environment';
 import { validateArtifacts } from '../scripts/benchmark-compile.mjs';
 import { checkMinimalRuntime } from '../scripts/benchmark-runtime.mjs';
 
@@ -34,11 +35,19 @@ async function entryFixture({
 } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'slc-runtime-entry-'));
   directories.push(directory);
-  await symlink(
-    fileURLToPath(new URL('../node_modules', import.meta.url)),
-    join(directory, 'node_modules'),
-    'dir',
-  );
+  const environment = await inspectArtifactEnvironment();
+  await mkdir(join(directory, 'node_modules', '@sublang'), { recursive: true });
+  for (const [name, target] of [
+    ['xstate', environment.xstate.root],
+    ['@sublang/playbook', environment.playbook.root],
+  ]) {
+    await symlink(
+      target,
+      join(directory, 'node_modules', name),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+  }
+  await writeFile(join(directory, 'package.json'), '{"type":"module"}\n');
   const entry = join(directory, 'minimal.ts');
   await writeFile(
     entry,

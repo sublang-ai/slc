@@ -434,7 +434,7 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
     ['object', 'clean'],
     ['link target', 'throw'],
   ] as const)(
-    'rejects import-time changes to the %s before a %s preflight can select its consumer',
+    'prevents import-time changes to the %s before a %s preflight can select its consumer',
     async (protectedKind, outcome) => {
       const input = join(root, 'task.fsm.ts');
       const runtime = join(root, 'runtime.ts');
@@ -482,14 +482,9 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
       expect(result.ok).toBe(false);
       expect(selections).toBe(0);
       const diagnostic = result.diagnostics.join('\n');
-      expect(diagnostic).toContain(
-        `protected path "${changed}" changed during the run`,
-      );
-      expect(diagnostic).not.toContain('invalid FSM source');
+      expect(diagnostic).toContain('forbidden verification side effect');
       expect(diagnostic).not.toContain('import failed after mutation');
-      expect(await readFile(changed, 'utf8')).toBe(
-        original + '\n// changed during preflight import\n',
-      );
+      expect(await readFile(changed, 'utf8')).toBe(original);
     },
   );
 
@@ -645,7 +640,7 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
   );
 
   it.each(['clean', 'finding', 'cancel'])(
-    'prioritizes action-time protected mutation over a %s post-acceptance coverage outcome',
+    'prevents action-time protected mutation before a %s post-acceptance coverage outcome',
     async (outcome) => {
       const controller = new AbortController();
       const content =
@@ -675,10 +670,11 @@ describe('early GEARS-to-FSM gate and configured repair (DR-033)', () => {
       expect(result.ok).toBe(false);
       expect(calls).toHaveLength(1);
       expect(result.diagnostics.join('\n')).toContain(
-        `protected path "${source}" changed during the run`,
+        'forbidden verification side effect',
       );
       expect(result.diagnostics.join('\n')).not.toContain('invalid FSM source');
       expect(result.clarification).toBeUndefined();
+      expect(await readFile(source, 'utf8')).toBe(GEARS);
     },
   );
 });

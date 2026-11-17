@@ -7,6 +7,7 @@
 // (workflow.zh.*). Each stage prints its verdict; any failure exits 1.
 
 import { execFile, execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import {
   access,
@@ -73,7 +74,10 @@ if (profile === undefined) {
 }
 const { basename, players, roles, limitState, limitGuards } = profile;
 const bundle = join(here, `${basename}.playbook`);
-const entry = join(here, `${basename}.ts`);
+const entry = join(
+  here,
+  `${basename}.${existsSync(join(here, `${basename}.mjs`)) ? 'mjs' : 'ts'}`,
+);
 
 // The optimize pass rewrites the Git check into an agent-free script (demo
 // READMEs, DR-013): present in the optimized gears and its FSM, absent from the
@@ -122,7 +126,11 @@ if (missing.length > 0) {
 const entrySource = await readFile(entry, 'utf8');
 report(
   'entry declares the canonical role ids',
-  roles.every((role) => entrySource.includes(`'${role}'`)),
+  roles.every(
+    (role) =>
+      entrySource.includes(`'${role}'`) ||
+      entrySource.includes(JSON.stringify(role)),
+  ),
   roles.join(', '),
 );
 const text = await readFile(join(bundle, `${basename}.text.md`), 'utf8');

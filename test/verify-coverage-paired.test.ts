@@ -236,7 +236,7 @@ describe('paired synthetic-field coverage through public XState entry', () => {
         { coverage, sourceText, artifactSchema: 3, timeoutMs: 10000 },
       );
       expect(findings).toContain(
-        `state child: nested playbook onDone arm ${arm} is unsatisfiable under probing`,
+        `state child: nested playbook onDone arm ${arm} remains unverified after bounded probing`,
       );
       expect(observed.some((row) => row.selected === 'accepted')).toBe(false);
     },

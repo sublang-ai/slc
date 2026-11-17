@@ -348,7 +348,7 @@ export function createCompiledExecutor(opts: {
           definitionReferenceContext(
             resolve(opts.runRoot, request.definitionPath),
           ),
-          request.kind === 'link' ? request.outputContract : undefined,
+          request.outputContract,
         ]
           .filter((part) => part !== undefined)
           .join('\n\n'),

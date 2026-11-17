@@ -142,6 +142,10 @@ When resolving Coder or Reviewer subagent configuration, the executable shall us
 
 When showing `playbook` compilation help, the executable shall describe automatic preparation of the workflow-owned internal environment [[standalone-compilation-1](standalone-compilation.md#standalone-compilation-1)] and the new `.mjs` entry [[standalone-compilation-4](standalone-compilation.md#standalone-compilation-4)], without presenting an independent/project environment-mode choice.
 
+### cli-54
+
+When invoked as `slc check types <target>`, `slc check fsm <gears> <fsm> [runtime-contract]`, `slc check link <linked> <fsm>`, or `slc check entry <entry> <fsm>`, the CLI shall run its corresponding compiler-owned isolated check without selecting an Agent, emit a JSON finding report, and exit successfully only when the check is verified.
+
 ## Verification
 
 ### cli-13

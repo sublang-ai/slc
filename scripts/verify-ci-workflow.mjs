@@ -160,18 +160,30 @@ assert.equal(
 
 const setup = step('Set up Node.js');
 assert.equal(setup.uses, 'actions/setup-node@v6');
-assert.deepEqual(setup.with, { 'node-version': 24, cache: 'npm' });
-const minimumEngine = manifest.engines?.node?.match(/^>=(\d+)(?:\.(\d+))?$/);
+assert.deepEqual(setup.with, { 'node-version': '25.5.0', cache: 'npm' });
+const minimumEngine = manifest.engines?.node?.match(
+  /^>=(\d+)(?:\.(\d+))?(?:\.(\d+))?$/,
+);
 assert.ok(minimumEngine, 'package Node.js engine must be a simple minimum');
 const configuredNode = String(setup.with['node-version']).match(
-  /^(\d+)(?:\.(\d+))?$/,
+  /^(\d+)(?:\.(\d+))?(?:\.(\d+))?$/,
 );
 assert.ok(configuredNode, 'CI Node.js version must be numeric');
-const configured = [Number(configuredNode[1]), Number(configuredNode[2] ?? 0)];
-const minimum = [Number(minimumEngine[1]), Number(minimumEngine[2] ?? 0)];
+const configured = [
+  Number(configuredNode[1]),
+  Number(configuredNode[2] ?? 0),
+  Number(configuredNode[3] ?? 0),
+];
+const minimum = [
+  Number(minimumEngine[1]),
+  Number(minimumEngine[2] ?? 0),
+  Number(minimumEngine[3] ?? 0),
+];
 assert.ok(
   configured[0] > minimum[0] ||
-    (configured[0] === minimum[0] && configured[1] >= minimum[1]),
+    (configured[0] === minimum[0] &&
+      (configured[1] > minimum[1] ||
+        (configured[1] === minimum[1] && configured[2] >= minimum[2]))),
   'CI Node.js version does not satisfy the package engine',
 );
 
@@ -883,10 +895,15 @@ requireTestCase(
 // changes the manifest, lock, definitions, and pins, never this audit (DR-028).
 const lockedPlaybook = lock.packages?.['node_modules/@sublang/playbook'];
 const lockedPlaybookVersion = lockedPlaybook?.version;
+const coordinatedCandidate =
+  /^\d+\.\d+\.\d+-rc\.(?:0|[1-9]\d*)$/.test(manifest.version) &&
+  /^\d+\.\d+\.\d+-rc\.(?:0|[1-9]\d*)$/.test(lockedPlaybookVersion ?? '');
 assert.match(
   String(lockedPlaybookVersion),
-  /^\d+\.\d+\.\d+$/,
-  'Playbook lock must resolve one exact release',
+  coordinatedCandidate
+    ? /^\d+\.\d+\.\d+-rc\.(?:0|[1-9]\d*)$/
+    : /^\d+\.\d+\.\d+$/,
+  'Playbook lock must resolve one exact release or coordinated candidate',
 );
 assert.equal(
   manifest.devDependencies?.['@sublang/playbook'],
@@ -894,7 +911,7 @@ assert.equal(
 );
 assert.equal(
   manifest.peerDependencies?.['@sublang/playbook'],
-  `^${lockedPlaybookVersion}`,
+  coordinatedCandidate ? lockedPlaybookVersion : `^${lockedPlaybookVersion}`,
 );
 assert.equal(manifest.dependencies?.['@sublang/playbook'], undefined);
 assert.equal(manifest.optionalDependencies?.['@sublang/playbook'], undefined);
