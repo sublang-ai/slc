@@ -8,6 +8,8 @@
 Accepted
 Amended by [DR-065](065-compiled-gears-as-a-spec-package.md) in one scope: conformance requires each action item, not each `gears` item, to map to exactly one executable leaf.
 
+Amended by [DR-068](068-standalone-compilation-environment.md) for managed artifact environments, explicit standalone ESM entries, selected-runtime identity and compiler-owned verification.
+
 ## Context
 
 `slc playbook <source>` should compile a domain workflow description through the `playbook` pipeline.

@@ -132,7 +132,12 @@ Where an FSM has a resolved artifact schema [[verification-21](#verification-21)
 
 #### verification-33
 
-When checking a TypeScript FSM, the slc command shall type-check its unchanged root as standalone ESM with SLC's installed TypeScript, preserving original filenames and import resolution while retaining imported files' actual module formats, under ES2022 NodeNext strict checking with unused-local, unused-parameter, implicit-override, switch-fallthrough, isolated-module, case-consistency, verbatim-module and erasable-syntax checks, allowing native `.ts` imports under `noEmit`, skipping installed declaration checks, and selecting only SLC's installed Node ambient types, without project compiler configuration, source execution, emitted files, or unrelated test inputs, returning deterministic file/line/code diagnostics and failing closed on checker failure, with cancellation checked before local checking and after yielding pending cancellation events ([DR-039](../decisions/039-strict-fsm-boundary.md)).
+When checking a TypeScript FSM, linked module, or emitted entry, SLC shall apply one compiler-owned strict-check policy to unchanged artifact roots:
+
+- SLC's installed TypeScript and Node ambient types, ES2022 NodeNext strict checking, unused-local, unused-parameter, implicit-override, switch-fallthrough, isolated-module, case-consistency, verbatim-module and erasable-syntax checks;
+- native `.ts` imports under `noEmit`, installed declaration checking skipped, original filenames and relative imports preserved, and runtime declarations resolved from the selected target environment [[standalone-compilation-3](standalone-compilation.md#standalone-compilation-3)];
+- actual standalone ESM scope or project module formats, including `allowJs` and `checkJs` for emitted JavaScript-entry import and export checking, without reading project tsconfig, using a project/global compiler, checking unrelated tests, modifying sources or dependencies, or emitting files;
+- deterministic file/line/code diagnostics, separate checker-environment failure, and cancellation checked before local work and after yielding pending cancellation events ([DR-039](../decisions/039-strict-fsm-boundary.md), [DR-068](../decisions/068-standalone-compilation-environment.md)).
 
 ### Test generation
 
@@ -219,7 +224,7 @@ When a compiled `playbook` artifact's `gears` and `fsm` are produced at their ca
 | Bounded generated-test execution | Set a timeout derived from the checker's bounded settle, parallel-combination, and guard-probe budgets rather than relying on the test runner's default timeout, capped at the selected duration limit, defaulting to 300,000 milliseconds, with any smaller derived bound retained [[verification-62](#verification-62)]; include every child-arm and selected non-preemptive acting-result search, public-entry candidate, replay, question/reply wait and target-arm candidate in the conservative scheduling allowance; treat deadline exhaustion as failed or unverified coverage, not an unsatisfiable-arm or Source-clarification finding; synthesize structured Captain and player output fields exclusively from every plain or annotated backticked identifier named after an explicit `Output shall include` or `输出应包含` clause, retaining generic Captain field-name synthesis from prose only when no such clause exists; match dynamic call ids to a seeded enabled-playbook catalog exactly; and enter a dynamic call through the Captain transition that populates its context before driving child success or failure. |
 | Initialized host catalog | Seed the machine input and initialized guard context with the generic dynamic-child entry plus each distinct literal target recovered from a valid declared child binding; preserve initialized catalog-dependent fields through actual initialization, exclude dynamic bindings and arbitrary guard or source literals from these extra entries, keep the host catalog fixed while ordinary arm-satisfiability diagnostics vary other initialized context fields within their probe budget, and retain findings for a target absent from that catalog. |
 | Ordered result acceptance | Count an unguarded fallback for a declared result only when every preceding guard rejects that valid output under bounded probing; exclude only a controller decision’s last guard-free fallback to a parked leaf with no invocation, child states, `always` or `after` transition, or entry or exit action that raises, sends, or enqueues an event, targeted by the last guard-free error arm and by no earlier result arm ([DR-053](../decisions/053-recovery-controller-discrimination.md)); preserve controller action-arm distinctness and report missing, shadowed, unresolved, or unsatisfiable transitions rather than inferring intended routing from result names or prose ([DR-034](../decisions/034-faithful-transition-coverage.md)). |
-| A `BOSS_INTERRUPT` arm has valid context preconditions that the machine's initial input alone cannot represent. | Bounded-probe missing and existing context fields plus missing Boss-supplied event fields, restore an XState persisted initial snapshot with satisfying context and no stale children, and drive the authored ordered transition using matching artifact identifiers and catalog, call, final-response, or accumulated-state sentinels; report an unsatisfiable guard or a transition that does not enter its target rather than accepting direct guard evaluation as coverage. |
+| A `BOSS_INTERRUPT` arm has context preconditions unavailable in the initial state. | Establish them by actual predecessor/public-event replay, including a valid recorded public-entry witness [[verification-74](#verification-74)], before sending the interrupt; private snapshot context substitution alone proves no reachable entry, and exhausted or unsupported exploration remains unverified rather than unsatisfiable [[verification-73](#verification-73)]. |
 
 #### verification-12
 
@@ -329,7 +334,7 @@ When checking FSM transition coverage, the slc command shall drive `script` acto
 
 #### verification-18
 
-When the slc command emits a `.ts` or `.js` module as a linked target after full or direct linking [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)] and generic post-link settlement [[pipeline-40](pipeline.md#pipeline-40)], or as a `playbook` entry module [[self-hosting-15](self-hosting.md#self-hosting-15)], it shall verify that every relative import specifier in the emitted module resolves exactly from the module's own location and shall fail the run with a diagnostic naming the module and each unresolvable specifier ([DR-023](../decisions/023-host-settled-link-object-imports.md)); a compile whose output cannot load is a failed compile, not a success with a latent runtime error, as exposed by the [[release-17](release.md#release-17)] acceptance gate when an interpreted link emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.
+When the slc command emits a `.ts`, `.js`, or `.mjs` module as a linked target after full or direct linking [[pipeline-15](pipeline.md#pipeline-15)], [[pipeline-18](pipeline.md#pipeline-18)] and generic post-link settlement [[pipeline-40](pipeline.md#pipeline-40)], or as a `playbook` entry module [[self-hosting-15](self-hosting.md#self-hosting-15)], it shall verify that every relative import specifier in the emitted module resolves exactly from the module's own location and shall fail the run with a diagnostic naming the module and each unresolvable specifier ([DR-023](../decisions/023-host-settled-link-object-imports.md)); a compile whose output cannot load is a failed compile, not a success with a latent runtime error, as exposed by the [[release-17](release.md#release-17)] acceptance gate when an interpreted link emitted `./<basename>.fsm.js` beside a `.ts`-only bundle.
 
 ### Child-call tags
 
@@ -363,7 +368,78 @@ When a public asynchronous coverage or GEARS/FSM checker, timeout estimator, tes
 | Timeout and incomplete coverage | Derive work allowance from the selected invocation and attempt limits, retain any smaller derived bound under the selected `maxDurationMs` ceiling and a caller's shorter positive deadline, and report exhausted limits as incomplete finite exploration rather than proving unreachability. |
 | Incremental reuse | Keep existing content-based reuse [[incremental-compilation-2](incremental-compilation.md#incremental-compilation-2)]; changing only the budget does not execute model phases or rewrite transformation history. The current policy applies to deterministic completion and generated suites wherever completion already runs, including all-phase reuse and restoration of missing auxiliary files; new coverage failures do not relabel prior historical acceptance. |
 
+#### verification-72
+
+When checking an artifact revision's loadability, exports, conformance, linked composition or entry lifecycle, SLC shall execute the check in a fresh process or isolated loader context with fresh transitive module state, perform function-valued checks inside that context, and return only JSON diagnostics, requiring the current file digests and module format to match the selected build rather than using an import query string as CommonJS cache invalidation.
+
+#### verification-73
+
+When a required compiler-owned check finishes without acceptance, SLC shall report a structured cause and fail closed without converting one class of evidence into another:
+
+| Cause | Diagnostic and repair |
+| --- | --- |
+| Missing or incompatible checker, SDK, runtime, declaration, or module environment | Environment failure naming the actual dependency or path and remedy; no request to change workflow semantics. |
+| Established invalid artifact type, export, contract, ordered transition, or source-preservation mismatch | Artifact defect with phase, location and concrete finding, eligible for bounded same-Coder correction [[phase-execution-56](phase-execution.md#phase-execution-56)]. |
+| Probe/search/time budget exhaustion, unsupported entry shape, or no discovered witness | Unverified coverage naming the selected limits and incomplete obligation; no claim that failure to find a path proves impossibility. |
+| Caller cancellation or checker infrastructure crash | Canceled or checker-failed result, with cleanup and no accepted artifact. |
+
+#### verification-74
+
+Where an FSM exports optional `coverageWitnesses`, when bounded coverage evaluates its public entry, SLC shall admit only the following replay evidence under the selected coverage budgets [[verification-62](#verification-62)]:
+
+- JSON data `{ schema: "sublang.slc.coverage-witnesses.v1", entries: [{ input?: <JSON startup-options record>, events: [<JSON public event>, ...] }, ...] }`, rejecting malformed, non-data or unbounded values before replay;
+- source-permitted startup options and genuine public event payloads, including a valid absolute task path where the Source requires one, never fabricated enabled targets or private runtime state;
+- execution from the real initial state with normal entry guards, actions, ordered transitions and existing scripted actor outcomes, with every witness and replay charged to the same finite attempt, invocation and duration budgets;
+- observations of the audited target and result through actual transitions, with no private state jump, context patch, weakened guard or mere export of an asserted success;
+- identical witness use in producer, consumer, retained completion and emitted checks, recorded with its artifact digest and current budget; an invalid witness never overrides a concrete defect or proves an otherwise unobserved route.
+
+#### verification-75
+
+When preparing a performing call or accepting its output, SLC shall make the compiler-owned check operation, selected environment and exact flags authoritative in the performing context and run the applicable gates itself before phase or entry acceptance, treating Agent-selected project/global `tsc` commands and self-reported success as advisory rather than proof, with an Agent `BLOCKED` report retained honestly instead of silently relabeled as acceptance [[phase-execution-56](phase-execution.md#phase-execution-56)].
+
+### verification-79
+
+Where a new or changed registry entry has passed typing and import checks, when SLC decides whether compilation or retained-bundle completion succeeds, it shall require a compiler-owned initialization probe for that exact entry and target environment before acceptance:
+
+- probe the unpublished candidate through its explicit planned environment rather than requiring its not-yet-published accepted manifest, load the actual emitted entry in a fresh checking context, validate a Source-permitted option record, construct its runtime, initialize a fixture session with the required host capabilities and ports, and dispose it;
+- use the empty option slice where valid, otherwise a concrete Source-permitted fixture, never invent domain defaults or remove genuine required options to make the check pass;
+- use inert recording capabilities, send no business Boss turn, dispatch no real Agent or nested workflow, and perform no business repository or external-service mutation;
+- report a concrete constructor, initializer or disposal failure as an artifact finding, and unavailable required fixture data or unsupported safe initialization as unverified rather than silently omitting the probe or declaring Source invalid;
+- retain the current entry/runtime identity, options provenance, ordered lifecycle observations and final result, allowing a previous pass only while those checked identities remain unchanged ([DR-068](../decisions/068-standalone-compilation-environment.md)).
+
+### verification-81
+
+Where Source requires terminal returns, when SLC accepts text2gears output, it shall require a Source-aware return-contract check before any GEARS consumer:
+
+- correlate each Source-required returned value and its condition with a GEARS workflow-output obligation and, where it consumes an acting result, a declared producer field with the correct value ownership;
+- check actual Source and GEARS bytes, preserve source spans and item references in findings, and mechanically validate the resulting field declarations and bindings rather than accepting a Coder's success statement alone;
+- return the concrete omission to the producer through bounded correction, or stop at that producer boundary with an artifact finding; ambiguity or an unsupported semantic determination remains clarification or unverified evidence, never a claim of complete mechanical understanding of arbitrary natural language;
+- record the check operation and whether evidence came from deterministic parsing or Source-aware judgment, retaining the existing bounded correction policy [[phase-execution-56](phase-execution.md#phase-execution-56)].
+
+### verification-83
+
+Where a planned invocation will execute an Agent-backed phase, when SLC prepares that invocation, it shall preflight the compiler-owned TypeScript/Node checking tools, selected runtime environment, and actual Coder and configured Reviewer SDK/native-runtime availability through Cligent before the first phase call:
+
+- report missing, damaged, unsupported or incompatible selected dependencies as environment failures with the actual identity and remedy, without asking the Coder to change workflow semantics;
+- retain credential/provider readiness as a separate host concern, use an authoritative credential check where available without starting a business task, and classify a subsequently established authentication/access rejection as an environment failure rather than a generated-code defect;
+- require neither an unselected optional adapter nor an Agent credential for completion-only or unchanged-reuse work that invokes no Agent, and do not claim provider access is proven merely because an SDK imports.
+
 ## Verification
+
+### verification-80
+
+Where the installed compiler receives entries that import successfully but fail in construction, initialization or disposal, plus entries with optional and genuinely required startup options, when full compilation, completion and unchanged reuse run, the integration suite shall verify mandatory current-identity lifecycle acceptance, no success after a failed or omitted probe, no invented required value, distinct unverified fixture absence, no business execution, and fresh checking after artifact or runtime changes [[verification-79](#verification-79)].
+
+### verification-82
+
+Where an explicit-return workflow fixture and its produced GEARS are supplied through the installed compiler, when the producer boundary is exercised with complete and deliberately omitted contracts, the integration suite shall verify these outcomes [[verification-81](#verification-81)]:
+
+| Candidate | Outcome |
+| --- | --- |
+| Source requires a success message and a failure reason under distinct conditions; GEARS preserves both obligations and producer fields | Producer acceptance, with no added acting step or invented result field. |
+| GEARS omits the terminal-return obligation, its consumed producer field, or one Source-required return condition | Finding at text2gears, followed by bounded producer correction or failure before optimize, gears2fsm or link; a downstream link failure alone does not satisfy this test. |
+| Coder says verification passed while the explicit fixture's actual contract is incomplete | No producer acceptance based on that assertion. |
+| The checker cannot establish a Source-to-GEARS correspondence | Honest clarification or unverified result, with no arbitrary-natural-language completeness claim. |
 
 ### Reference acceptance
 
@@ -505,7 +581,7 @@ Where real XState fixtures exercise machine-root and ordinary state identities, 
 
 #### verification-34
 
-Where real TypeScript fixtures use standalone ESM roots, relative imports, project compiler and ambient declarations, and compiler configuration, when the integration suite checks them, the suite shall verify SLC-owned compiler and Node ambient authority, ignored project compiler configuration, preserved original filenames and imported module formats, strict diagnostics for invalid types, unchanged source and dependency bytes, cancellation, and distinct checker failure [[verification-33](#verification-33)].
+Where real FSM, linked-module and `.mjs` entry fixtures include valid and invalid artifact types, unrelated project compiler settings and missing or conflicting ambient declarations, when the integration suite checks each accepted phase boundary and deterministic entry output, the suite shall verify compiler-owned TypeScript and Node ambient authority, selected runtime declarations, preserved actual module formats and filenames, strict artifact diagnostics, unchanged source/dependency bytes, cancellation and distinct checker-environment failure [[verification-33](#verification-33)].
 
 ### Continuation input acceptance
 
@@ -667,6 +743,22 @@ Where synthetic `gears` artifacts in the spec-package form carry lowercase actio
 | A produced artifact whose authored prompt lost its acting clause, or whose IDs collide ignoring case, with no FSM yet. | The package-contract check returns the same findings as conformance, and the real producer boundary fails with them before downstream work [[verification-68](#verification-68)]. |
 | A package-form artifact with no such defect, checked with no FSM. | No package-contract finding [[verification-68](#verification-68)]. |
 | An artifact in the earlier form, with prose around each action item's statement. | No finding [[verification-1](#verification-1)]. |
+
+### verification-76
+
+Where fresh ESM/CommonJS fixtures are rewritten between checks in the same parent process, when the actual compiler gates run, the integration suite shall verify current-revision exports and behavior, function-valued checks completed inside the isolated context, JSON-only reports and no stale transitive module state [[verification-72](#verification-72)].
+
+### verification-77
+
+Where real XState fixtures require an absolute-path public entry, a legitimate predecessor context, an impossible guard, or more work than selected limits allow, when the checker and its emitted suites replay valid, invalid and absent witnesses, the integration suite shall verify observed initial-to-target traces, unchanged ordered guards and budgets, rejection of fabricated/private-context evidence [[verification-74](#verification-74)], and distinct artifact, environment, unverified, canceled and checker-failed causes [[verification-73](#verification-73)].
+
+### verification-78
+
+When installed-compiler integration drives an Agent reporting success after a wrong project `tsc`, an Agent reporting `BLOCKED`, and an Agent correcting a compiler finding, the suite shall verify compiler-owned gate authority and truthful final phase status without treating Agent prose as acceptance [[verification-75](#verification-75)].
+
+### verification-84
+
+When installed-compiler integration crosses selected-Coder and selected-Reviewer missing SDK/native runtime, incompatible toolchain, known authentication rejection, and valid setup with credential-free completion/reuse controls, the suite shall verify pre-phase environment refusal, selected-runtime-only admission, separate authentication classification and no invented credential requirement for Agent-free work [[verification-83](#verification-83)].
 
 ## References
 

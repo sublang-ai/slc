@@ -8,6 +8,8 @@
 Accepted
 Amends [DR-028](028-contract-based-adoption-without-recompilation.md) in the dependency contract alone: consumers supply a required Playbook peer, while the repository verifies one exact development release.
 
+Amended by [DR-068](068-standalone-compilation-environment.md): retain the required compatible peer and exact development provenance, and give each workflow its own environment from that selected compiler runtime, independently of surrounding project manifests and without changing their dependencies.
+
 ## Context
 
 An ordinary Playbook dependency can install a compiler-private engine when an application's runtime requirement differs.

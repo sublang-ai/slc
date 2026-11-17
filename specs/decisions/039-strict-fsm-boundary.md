@@ -8,6 +8,8 @@
 Accepted.
 Extends the existing artifact checks in [DR-033](033-early-conformance-and-mechanical-repair.md).
 
+Amended by [DR-068](068-standalone-compilation-environment.md): the compiler-owned strict policy also checks linked modules and emitted entries against one selected target environment, with fresh-revision load checks.
+
 ## Context
 
 A generated FSM loaded and passed structural conformance despite a TypeScript error in its declared output type.
