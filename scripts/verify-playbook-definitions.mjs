@@ -24,21 +24,33 @@ const playbookPeer = rootPackage.peerDependencies?.['@sublang/playbook'];
 const lockedPlaybook =
   lock.packages?.['node_modules/@sublang/playbook']?.version;
 const declaredCligent = rootPackage.dependencies?.['@sublang/cligent'];
-const cligentFloor = /^\^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
-  .exec(declaredCligent)
-  ?.slice(1)
+const candidate = /^\d+\.\d+\.\d+-rc\.(?:0|[1-9]\d*)$/.test(
+  rootPackage.version,
+);
+const cligentFloor = (
+  /^\^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(declaredCligent) ??
+  (candidate
+    ? /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-rc\.(?:0|[1-9]\d*)$/.exec(
+        declaredCligent,
+      )
+    : null)
+)
+  ?.slice(1, 4)
   .map(Number);
-if (!cligentFloor || (cligentFloor[0] === 0 && cligentFloor[1] < 39)) {
+if (!cligentFloor || (cligentFloor[0] === 0 && cligentFloor[1] < 40)) {
   throw new Error(
-    `cannot verify definitions: @sublang/cligent must declare a single caret range with minimum at least 0.39.0 (declared ${String(declaredCligent)})`,
+    `cannot verify definitions: @sublang/cligent must declare a single caret range with minimum at least 0.40.0 or an exact coordinated rc.N candidate (declared ${String(declaredCligent)})`,
   );
 }
+const candidatePlaybook =
+  candidate && /^\d+\.\d+\.\d+-rc\.(?:0|[1-9]\d*)$/.test(lockedPlaybook ?? '');
 
 if (
   typeof lockedPlaybook !== 'string' ||
-  !/^\d+\.\d+\.\d+$/.test(lockedPlaybook) ||
+  (!/^\d+\.\d+\.\d+$/.test(lockedPlaybook) && !candidatePlaybook) ||
   declaredPlaybook !== lockedPlaybook ||
-  playbookPeer !== `^${lockedPlaybook}` ||
+  playbookPeer !==
+    (candidatePlaybook ? lockedPlaybook : `^${lockedPlaybook}`) ||
   rootPackage.dependencies?.['@sublang/playbook'] !== undefined ||
   rootPackage.optionalDependencies?.['@sublang/playbook'] !== undefined ||
   rootPackage.peerDependenciesMeta?.['@sublang/playbook']?.optional === true

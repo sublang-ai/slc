@@ -99,7 +99,13 @@ export function resolveCoverageBudget(
   return Object.freeze({ maxInvocations, maxAttempts, maxDurationMs });
 }
 
+interface CoverageWitness {
+  input?: Record<string, unknown>;
+  events: Record<string, unknown>[];
+}
+
 interface CoverageRun {
+  witnesses: readonly CoverageWitness[];
   coverage: Readonly<Required<CoverageBudget>>;
   literalChecks?: ReachedLiteralChildChecks;
   artifactSchema?: 1 | 3;
@@ -815,6 +821,17 @@ function playbookRefs(config: MachineConfigLike): PlaybookRef[] {
 // so it may not import a sibling module.
 function coverageErrorMessage(error: unknown): string {
   try {
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'ERR_ACCESS_DENIED'
+    ) {
+      const detail = error as Error & {
+        permission?: unknown;
+        resource?: unknown;
+      };
+      return `artifact: forbidden verification side effect (${String(detail.permission)} at ${String(detail.resource)}): ${error.message}`;
+    }
     return error instanceof Error ? error.message : String(error);
   } catch {
     coverageCheckpoint();
@@ -1005,6 +1022,7 @@ function makeActor(
   playbookScript: PlaybookScript = () => null,
   restoredContext?: Record<string, unknown>,
   observeTransition?: (transition: TransitionObservation) => void,
+  publicInput?: Record<string, unknown>,
 ): DrivenActor {
   coverageCheckpoint();
   const coverageInputs = new Map<string, Record<string, unknown>>();
@@ -1060,7 +1078,7 @@ function makeActor(
     createActor(
       provided as never,
       {
-        input: coverageMachineInput(machine),
+        input: { ...coverageMachineInput(machine), ...publicInput },
         ...(restoredSnapshot === undefined
           ? {}
           : { snapshot: restoredSnapshot }),
@@ -2672,6 +2690,7 @@ interface CoveragePath {
   root: CoverageInvocation;
   drive?: InterruptDrive;
   steps: readonly CoveragePathStep[];
+  witness?: CoverageWitness;
   alternatives?: Iterator<InterruptDrive, void>;
 }
 
@@ -2883,7 +2902,14 @@ async function replayCoveragePath(
       pending = { node, input, complete };
     });
   };
-  const actor = makeActor(machine, script, script, path.drive?.context);
+  const actor = makeActor(
+    machine,
+    script,
+    script,
+    path.drive?.context,
+    undefined,
+    path.witness?.input,
+  );
   const trustedEntry =
     path.drive === undefined ||
     isDeepStrictEqual(path.drive.context, initializedMachineContext(machine));
@@ -2903,6 +2929,12 @@ async function replayCoveragePath(
   };
   gate.armed = true;
   if (path.drive !== undefined) actor.send(path.drive.event);
+  for (const event of path.witness?.events ?? []) {
+    coverageCheckpoint();
+    pending = undefined;
+    actor.send(event);
+    await coverageYield(true);
+  }
   const wait = () =>
     settle(
       actor,
@@ -3043,6 +3075,13 @@ async function searchCoverageEntry(
     );
     if (entry !== undefined) queue.push({ root: node, ...entry, steps: [] });
   }
+  for (const node of nodes) {
+    if (!reachable.has(coverageNodeKey(node))) continue;
+    for (const witness of coverageRuns.getStore()?.witnesses ?? []) {
+      if (witness.events.length <= budget.maxInvocations)
+        queue.unshift({ root: node, steps: [], witness });
+    }
+  }
   // Family identity is only the declared root invocation. Keep every actual
   // context, prefix and lazy entry alternative distinct within that family.
   const rootFamilies = [
@@ -3173,7 +3212,10 @@ async function searchCoverageEntry(
       }
       const continuations: CoveragePath[] = [];
       for (const step of nextSteps) {
-        if (path.steps.length + 1 >= budget.maxInvocations) {
+        if (
+          path.steps.length + (path.witness?.events.length ?? 0) + 1 >=
+          budget.maxInvocations
+        ) {
           limitations.add(
             `exhausted ${budget.maxInvocations}-invocation path depth`,
           );
@@ -3192,6 +3234,7 @@ async function searchCoverageEntry(
         const successor: CoveragePath = {
           root: path.root,
           drive: path.drive,
+          witness: path.witness,
           steps: [...path.steps, step],
         };
         if (coverageNodeKey(step.next) === coverageNodeKey(target))
@@ -3969,7 +4012,7 @@ async function probePlaybookOutcome(
         `${label} has no reachable entry under probing (dead or unsupported entry path)`,
       );
     else if (result.limitation === undefined && !satisfiable)
-      findings.push(`${label} is unsatisfiable under probing`);
+      findings.push(`${label} remains unverified after bounded probing`);
     else if (satisfiable)
       findings.push(`${label} did not reach ${target.stableId}`);
     if (result.limitation !== undefined)
@@ -4725,7 +4768,16 @@ async function fsmCoverage(
       'FSM coverage timeout must be a positive finite number',
     );
   const started = performance.now();
+  let witnesses: CoverageWitness[];
+  try {
+    witnesses = readCoverageWitnesses(fsmModule);
+  } catch (error) {
+    return [
+      `${error instanceof Error && error.name === 'UnverifiedCoverageWitnessInput' ? 'unverified: public coverageWitnesses' : 'artifact: invalid public coverageWitnesses'}: ${error instanceof Error ? error.message : String(error)}`,
+    ];
+  }
   const run: CoverageRun = {
+    witnesses,
     coverage,
     literalChecks,
     signal: opts.signal,
@@ -4785,6 +4837,7 @@ async function reachedLiteralContexts(
     playbooks = playbookRefs(machine.config);
   const candidates = [
     ...identifierLiterals(sourceText),
+    ...absolutePathCandidates(sourceText),
     ...numericLiterals(sourceText),
   ];
   for (const playbook of playbooks) {
@@ -4819,6 +4872,7 @@ async function runFsmCoverage(
   );
   const sourceCandidates = [
     ...identifierLiterals(sourceText),
+    ...absolutePathCandidates(sourceText),
     ...numericLiterals(sourceText),
   ];
   const isController = isControllerMachine(config);
@@ -5054,7 +5108,7 @@ async function runFsmCoverage(
           }
         }
         findings.push(
-          `${INTERRUPT_EVENT} target ${arm.target} is unsatisfiable under context/event probing`,
+          `${INTERRUPT_EVENT} target ${arm.target} remains unverified after bounded context/event probing`,
         );
         continue;
       }
@@ -5666,7 +5720,7 @@ async function runFsmCoverage(
         findings.push(
           `state ${stateKey}: onDone arm ${index} (target ${
             onDoneArms[index]?.target ?? 'none'
-          }) is unsatisfiable under probing`,
+          }) remains unverified after bounded probing`,
         );
       }
     }
@@ -5709,7 +5763,7 @@ async function runFsmCoverage(
         findings.push(
           `state ${stateKey}: onError arm ${index} (target ${
             onErrorArms[index]?.target ?? 'none'
-          }) is unsatisfiable under probing`,
+          }) remains unverified after bounded probing`,
         );
       }
     }
@@ -5890,4 +5944,121 @@ export async function emitFsmCoverageTest(opts: {
     path,
     diagnostics: findings.map((finding) => `fsm coverage: ${finding}`),
   };
+}
+
+/** Filesystem examples are public input candidates, never private state patches. */
+function absolutePathCandidates(source: string): string[] {
+  const quoted = source.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g) ?? [];
+  return [
+    ...new Set([
+      process.platform === 'win32'
+        ? 'C:\\slc-verification\\task.md'
+        : '/tmp/slc-verification/task.md',
+      '/tmp/task.md',
+      '/workspace/task.md',
+      ...quoted
+        .map((item) => item.slice(1, -1))
+        .filter(
+          (item) => /^(?:\/|[A-Za-z]:[\\/])/.test(item) && item.length < 512,
+        ),
+    ]),
+  ];
+}
+
+function readCoverageWitnesses(module: unknown): CoverageWitness[] {
+  if (
+    !module ||
+    typeof module !== 'object' ||
+    !Object.hasOwn(module, 'coverageWitnesses')
+  )
+    return [];
+  const raw = (module as Record<string, unknown>).coverageWitnesses;
+  const plain = (value: unknown): value is Record<string, unknown> =>
+    !!value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(value));
+  const jsonSafe = (value: unknown, seen = new Set<object>()): boolean => {
+    if (
+      value === null ||
+      typeof value === 'string' ||
+      typeof value === 'boolean'
+    )
+      return true;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (!value || typeof value !== 'object' || seen.has(value)) return false;
+    if (!Array.isArray(value) && !plain(value)) return false;
+    seen.add(value);
+    const valid = Reflect.ownKeys(value).every((key) => {
+      if (Array.isArray(value) && key === 'length') return true;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return (
+        typeof key === 'string' &&
+        !!descriptor &&
+        'value' in descriptor &&
+        jsonSafe(descriptor.value, seen)
+      );
+    });
+    seen.delete(value);
+    return valid;
+  };
+  if (
+    !plain(raw) ||
+    !jsonSafe(raw) ||
+    raw.schema !== 'sublang.slc.coverage-witnesses.v1' ||
+    Object.keys(raw).some((key) => !['schema', 'entries'].includes(key)) ||
+    !Array.isArray(raw.entries) ||
+    raw.entries.length > 64
+  )
+    throw new Error('expected JSON schema and at most 64 entries');
+  for (const entry of raw.entries) {
+    if (
+      plain(entry) &&
+      plain(entry.input) &&
+      Object.keys(entry.input).some((key) =>
+        [
+          'enabledPlaybooks',
+          'stateId',
+          'selfPlaybookId',
+          'bossIntent',
+          'hostCapabilities',
+          'context',
+          'snapshot',
+          'roleBindings',
+          'ports',
+          'repository',
+          'effectLedger',
+          'authority',
+        ].includes(key),
+      )
+    )
+      throw new Error(
+        'startup options must not override compiler-owned host authority or private runtime state',
+      );
+    if (
+      !plain(entry) ||
+      Object.keys(entry).some((key) => !['input', 'events'].includes(key)) ||
+      (entry.input !== undefined && !plain(entry.input)) ||
+      !Array.isArray(entry.events) ||
+      entry.events.length > 64 ||
+      entry.events.some(
+        (event) =>
+          !plain(event) ||
+          typeof event.type !== 'string' ||
+          !event.type ||
+          event.type.startsWith('xstate.'),
+      )
+    )
+      throw new Error(
+        'only public input records and public event sequences are allowed',
+      );
+    if (plain(entry.input) && Object.keys(entry.input).length) {
+      const error = new Error(
+        'nonempty witness startup options require an independent Source-derived validation contract; public events-only replay remains available',
+      );
+      error.name = 'UnverifiedCoverageWitnessInput';
+      throw error;
+    }
+  }
+  return raw.entries as unknown as CoverageWitness[];
 }

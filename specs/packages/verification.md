@@ -370,7 +370,7 @@ When a public asynchronous coverage or GEARS/FSM checker, timeout estimator, tes
 
 #### verification-72
 
-When checking an artifact revision's loadability, exports, conformance, linked composition or entry lifecycle, SLC shall execute the check in a fresh process or isolated loader context with fresh transitive module state, perform function-valued checks inside that context, and return only JSON diagnostics, requiring the current file digests and module format to match the selected build rather than using an import query string as CommonJS cache invalidation.
+When checking an artifact revision's loadability, exports, conformance, linked composition or entry lifecycle, SLC shall execute the check in a fresh process or isolated loader context with fresh transitive module state, perform function-valued checks inside that context, and return only authenticated, schema-validated complete JSON diagnostics over a checker-owned private reporting capability unavailable to the artifact, ignoring unrelated artifact IPC instead of treating a missing findings array as success, and requiring the current file digests and module format to match the selected build rather than using an import query string as CommonJS cache invalidation.
 
 #### verification-73
 
@@ -388,7 +388,7 @@ When a required compiler-owned check finishes without acceptance, SLC shall repo
 Where an FSM exports optional `coverageWitnesses`, when bounded coverage evaluates its public entry, SLC shall admit only the following replay evidence under the selected coverage budgets [[verification-62](#verification-62)]:
 
 - JSON data `{ schema: "sublang.slc.coverage-witnesses.v1", entries: [{ input?: <JSON startup-options record>, events: [<JSON public event>, ...] }, ...] }`, rejecting malformed, non-data or unbounded values before replay;
-- source-permitted startup options and genuine public event payloads, including a valid absolute task path where the Source requires one, never fabricated enabled targets or private runtime state;
+- source-permitted startup options and genuine public event payloads, with a nonempty startup-input witness remaining unverified while no independent Source-derived option-validation contract is available, including a valid absolute task path where the Source requires one, never fabricated enabled targets or private runtime state;
 - execution from the real initial state with normal entry guards, actions, ordered transitions and existing scripted actor outcomes, with every witness and replay charged to the same finite attempt, invocation and duration budgets;
 - observations of the audited target and result through actual transitions, with no private state jump, context patch, weakened guard or mere export of an asserted success;
 - identical witness use in producer, consumer, retained completion and emitted checks, recorded with its artifact digest and current budget; an invalid witness never overrides a concrete defect or proves an otherwise unobserved route.

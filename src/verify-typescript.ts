@@ -36,6 +36,8 @@ function check(
   const ts = installed('typescript') as typeof import('typescript');
   const parsed = ts.parseCommandLine([
     '--noEmit',
+    '--allowJs',
+    '--checkJs',
     '--strict',
     '--noUnusedLocals',
     '--noUnusedParameters',

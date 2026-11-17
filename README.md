@@ -49,53 +49,39 @@ without waiting on a compile.
 ## Install
 
 ```bash
-npm install -g @sublang/slc @sublang/playbook
-npm install -g @anthropic-ai/claude-agent-sdk @openai/codex-sdk
+npm install -g @sublang/slc
 slc --version
 ```
 
-SLC requires a compatible `@sublang/playbook` peer (`^19.0.0`).
-Install both in an application to share its runtime with the compiler; npm
-also installs the required peer when SLC is installed by itself. An explicit
-incompatible Playbook dependency fails npm installation instead of selecting
-a private compiler engine.
+For prerelease testing, name the exact published candidate version.
+SLC's required Playbook peer and its ordinary Cligent dependency acquire the
+compatible runtime, Claude Agent SDK and Codex SDK automatically.
+There is no separate SDK install for those two backends.
+An explicit incompatible Playbook dependency remains an npm peer conflict.
 
-Requirements:
+Compilation and safe library initialization support macOS, Linux and native
+Windows with Node.js >= 25.5.0 and npm (Node 26 LTS is recommended). Authenticate the selected Agent before
+compiling; installing its SDK does not authenticate it. Gemini and OpenCode
+retain their separate runtime requirements. The interactive tmux host and
+business workflows containing POSIX script steps have their own shell and
+runtime requirements.
 
-- A POSIX platform — macOS or Linux.
-  Compiled script steps execute through `sh`.
-- Node.js >= 23.6 (compiled artifacts are imported as native TypeScript).
-- One supported coding-agent CLI, installed and authenticated:
-  [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview),
-  [Codex CLI](https://github.com/openai/codex),
-  [Gemini CLI](https://github.com/google-gemini/gemini-cli), or
-  [OpenCode](https://opencode.ai).
+Each workflow owns a private ESM environment inside its artifact directory:
+`package.json`, `node_modules/xstate`, and `node_modules/@sublang/playbook`.
+SLC prepares the two runtime links from its selected installed pair, using
+unprivileged directory junctions on Windows. It does not create a Node
+project or install dependencies in the invocation directory, and does not
+use enclosing project dependencies or TypeScript settings as authority.
+The compiler uses its own TypeScript and Node typings.
 
-The second install line supplies the agent SDKs for the default Claude
-and Codex lineup; name the SDKs your own lineup needs instead. A missing
-or too-old SDK stops the compile before any agent call and names the
-exact package and version to install.
-The Claude Fable 5.2 defaults require Claude Agent SDK 0.3.321 or newer;
-this repository verifies 0.3.325. Upgrade the SDK in the same installation
-root as the compiler, for example:
-
-```bash
-npm install -g @anthropic-ai/claude-agent-sdk@0.3.325
-```
-
-The SDK supplies the runtime used by Cligent. Updating a separately installed
-`claude` CLI does not update that SDK runtime. For a project-local compiler,
-run the SDK install in that project without `-g`.
-
-Compiled artifacts import the Playbook engine from their own directory;
-when that import does not resolve, `playbook run` (3.1+) links its own
-engine beside the artifact and says so (`--no-provision` opts out).
-Working inside an npm project? Install the same set there and prefix the
-commands with `npx`: a project-local install is authoritative wherever it
-resolves, a project manifest declaring `@sublang/playbook` must install
-it itself, and a global SDK is invisible to a project's nested
-`@sublang/cligent`
-([[release-11](specs/packages/release.md#release-11)] has the full rules).
+The generated `build-manifest.json` records actual entry and runtime code
+identities. The matching Playbook host validates these before import.
+Runtime links are machine-local: after an installation moves or changes,
+restore the recorded installation or revalidate/recompile with SLC.
+Source snapshots, GEARS, logs and checker evidence are provenance; they are
+not required to load unchanged accepted runtime code.
+Genuinely historical entries retain the legacy loader behavior
+([[release-11](specs/packages/release.md#release-11)]).
 
 ## Quick start
 
@@ -104,13 +90,26 @@ Write a prose workflow as a `.md` or `.txt` file —
 example — and compile it from any directory:
 
 ```bash
+SLC_AGENT=codex SLC_MODEL=gpt-6.1-sol slc playbook my-workflow.md
+```
+
+In native PowerShell:
+
+```powershell
+$env:SLC_AGENT = 'codex'
+$env:SLC_MODEL = 'gpt-6.1-sol'
 slc playbook my-workflow.md
 ```
+
+Use `SLC_AGENT=claude-code` for Claude Code. Provider and authentication
+settings belong to the selected Agent, including its Anthropic-compatible
+endpoint/model configuration when using a supported external provider.
+No project manifest, tsconfig or child Git repository is required for compilation.
 
 Artifacts land in your working directory: `my-workflow.playbook/` holds
 the intermediates — `my-workflow.gears.md`, the XState machine
 `my-workflow.fsm.ts`, the linked runtime module, and its verification
-tests — and `my-workflow.ts` is the registry entry. Enable it in
+tests — and `my-workflow.mjs` is the JavaScript registry entry. Enable it in
 `${SPEX_HOME:-$HOME/.spex}/config/playbook.config.yaml`, binding every role
 listed in its `requiredRoleIds` to a stable player. The following example
 assumes the source declares one `worker` role:
@@ -133,7 +132,7 @@ players:
 
 playbooks:
   my-workflow:
-    from: /absolute/path/to/my-workflow.ts
+    from: /absolute/path/to/my-workflow.mjs
     roles:
       worker: my.worker
 ```
@@ -188,7 +187,7 @@ slc playbook ./plan.playbook/plan.text.md --complete --link <runtime-target>
 ```
 
 `--complete` checks the explicitly selected entry-form Source and its current
-GEARS, FSM, and linked module, then emits the verification files and `plan.ts`.
+GEARS, FSM, and linked module, then emits the verification files and `plan.mjs`.
 It requires no agent credentials, seeds no config, leaves the authored files
 and build history unchanged, and never falls back to compilation.
 Omit `--link` when the retained bundle targets the installed Playbook runtime.
@@ -228,7 +227,7 @@ and the full rules are in the
 
 The first run seeds `~/.config/slc/config.yaml` with
 `agent: claude-code` and `modelDefaults: true`, so a fresh machine needs no setup.
-Cligent 0.39 supplies the primary and child models: Claude Fable 5.2 with
+Cligent supplies the primary and child models: Claude Fable 5.2 with
 Opus 5.5 subagents or Codex GPT-6 Astra with GPT-6.1 Sol subagents for its
 direct-provider defaults. SLC passes the run environment and user home to
 Cligent and uses only the defaults it returns. This lookup does not resolve

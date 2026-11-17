@@ -27,7 +27,7 @@ When preparing a workflow's output environment [[standalone-compilation-1](#stan
 
 When resolving a build's target environment, SLC shall bind all runtime-dependent operations to one compatible resolved Playbook/XState pair, selected from the compiler installation for the workflow-owned environment [[standalone-compilation-1](#standalone-compilation-1)], with XState resolved through the selected Playbook package and artifact resolution required to agree:
 
-- Resolve and validate physical package roots, versions, runtime ABI, artifact schema support, and required compiler assets before Agent work.
+- Resolve and validate physical package roots, versions, runtime ABI, artifact schema support, and required compiler assets before Agent work, requiring Node.js 25.5.0 or later with native network permissions so the initialization probe cannot perform network writes through an unpatched transport.
 - Select authoritative phase definitions and the default runtime link target from that Playbook root, retaining explicit pipeline definitions only with their complete semantic-input identity and supported runtime contract [[self-hosting-9](self-hosting.md#self-hosting-9)].
 - Resolve generated imports, dependency declarations, and runtime loading against that same pair; use SLC's own TypeScript and Node typings for compiler-owned checking [[verification-33](verification.md#verification-33)].
 - Refuse a custom link target with an unprovable or incompatible runtime identity instead of mixing it with a different installed engine.

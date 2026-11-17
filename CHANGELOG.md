@@ -11,6 +11,22 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.23.0-rc.7] - 2026-11-18
+
+- Preserve environment attribution for occupied workflow metadata and established provider routing/proxy refusals.
+
+### Added
+
+- Prepare one workflow-owned environment from the installed Playbook runtime, emit a real JavaScript registry entry and publish an identity-checked build manifest after safe initialization and disposal. Retain per-invocation phase, Agent and checker evidence.
+
+### Changed
+
+- Require coordinated Cligent and Playbook candidates with included Claude/Codex SDKs. Use compiler-owned TypeScript and Node typings, fresh checking contexts and bounded public-entry witnesses without fabricated host authority.
+
+### Fixed
+
+- Isolate generated modules from ancestor project settings, validate explicit Source terminal returns, preserve the last successful runtime after candidate failure and preserve supported relocated outputs.
+
 ## [0.22.0] - 2026-11-15
 
 ### Changed
@@ -1139,7 +1155,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.7...HEAD
+[0.23.0-rc.7]: https://github.com/sublang-ai/slc/compare/v0.22.0...v0.23.0-rc.7
 [0.22.0]: https://github.com/sublang-ai/slc/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/sublang-ai/slc/compare/v0.20.2...v0.21.0
 [0.20.2]: https://github.com/sublang-ai/slc/compare/v0.20.1...v0.20.2

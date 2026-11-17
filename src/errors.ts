@@ -11,6 +11,17 @@
 
 /** Renders any thrown value as a diagnostic string. */
 export function messageOf(error: unknown): string {
+  if (
+    error instanceof Error &&
+    'code' in error &&
+    error.code === 'ERR_ACCESS_DENIED'
+  ) {
+    const detail = error as Error & {
+      permission?: unknown;
+      resource?: unknown;
+    };
+    return `artifact: forbidden verification side effect (${String(detail.permission)} at ${String(detail.resource)}): ${error.message}`;
+  }
   return error instanceof Error ? error.message : String(error);
 }
 

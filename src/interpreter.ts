@@ -68,6 +68,8 @@ export interface AgentRunResult {
 
 /** The transport to a coding agent, backed by Cligent in production. */
 export interface AgentClient {
+  /** Selected SDK/native availability only; does not start a provider session. */
+  preflight?(): Promise<void>;
   run(request: AgentRunRequest): Promise<AgentRunResult>;
 }
 
@@ -133,7 +135,7 @@ export function buildPhasePrompt(opts: {
     ...(request.kind === 'compile' && request.update !== undefined
       ? [...updateContextLines(request.update, request.target), '']
       : []),
-    ...(request.kind === 'link' && request.outputContract !== undefined
+    ...(request.outputContract !== undefined
       ? [request.outputContract, '']
       : []),
     'When done, reply with a concise summary of what you produced and any ambiguity you resolved.',

@@ -1,6 +1,6 @@
 {
   "name": "@sublang/slc",
-  "version": "0.22.0",
+  "version": "0.23.0-rc.7",
   "description": "SubLang Compiler (slc): runs phase pipelines.",
   "license": "Apache-2.0",
   "repository": {
@@ -38,7 +38,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=23.6"
+    "node": ">=25.5.0"
   },
   "scripts": {
     "build": "rm -rf dist && node node_modules/@typescript/native/bin/tsc --project tsconfig.json && cp src/normalize.md src/slc.config.template.yaml dist/",
@@ -62,7 +62,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.325",
     "@eslint/js": "^10.0.1",
     "@openai/codex-sdk": "^0.159.0",
-    "@sublang/playbook": "19.0.0",
+    "@sublang/playbook": "19.1.0-rc.4",
     "@typescript/native": "npm:typescript@^7.0.2",
     "eslint": "^10.10.0",
     "globals": "^17.12.0",
@@ -72,7 +72,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@sublang/cligent": "^0.39.0",
+    "@sublang/cligent": "0.40.0-rc.2",
     "@sublang/spex": "^3.0.0",
     "@types/node": "^25.9.6",
     "typescript": "^6.0.3",
@@ -80,6 +80,6 @@
     "yaml": "^2.9.1"
   },
   "peerDependencies": {
-    "@sublang/playbook": "^19.0.0"
+    "@sublang/playbook": "19.1.0-rc.4"
   }
 }

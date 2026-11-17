@@ -5,7 +5,7 @@
 
 ## Status
 
-Proposed specification; direction approved by the user, detailed contract awaiting review; implementation has not started.
+Approved direction; implementation and delivery acceptance authorized by the user on 2026-11-17.
 Amends [DR-009](009-slc-playbook-pipeline-compilation.md), [DR-014](014-cwd-output-invocation-defaults-entry-emission.md), [DR-020](020-playbook-4-0-adoption.md), [DR-039](039-strict-fsm-boundary.md), and [DR-061](061-consumer-supplied-playbook.md) only as stated below.
 
 ## Context
@@ -41,3 +41,13 @@ The compiler's own TypeScript, Node typings, and Agent SDKs remain distinct from
 The new entry extension requires coordinated SLC entry emission and Playbook loading support; adaptation or release gates for the separate `spex-playbook` Skill are outside this change.
 Runtime links are machine-local and can require compatible repair or recompilation after global upgrades; portable dependency bundles are outside this change.
 Extra local checks add bounded work and may expose real defects earlier, but neither SDK inclusion nor deterministic checking guarantees AI generation success or business-result quality.
+
+## Implementation Evidence
+
+Independent native checks reproduced a constructor bypass through an unrelated child IPC message and an actual loopback business write on Node 23.6, whose permission model does not restrict networking.
+The SLC minimum is therefore Node 25.5.0, whose native network permission is checked before Agent work, while Cligent and Playbook retain their separate runtime floors.
+Checker reports carry a private per-run capability and a complete validated envelope; artifact-visible IPC is not an acceptance signal.
+A generated witness cannot establish the Source permission of its own arbitrary startup options, so a nonempty witness input without an independent Source contract remains unverified; events-only replay remains supported.
+
+Native acceptance also exposed an occupied private manifest and actual proxy/workspace-routing refusals being labeled as artifact defects.
+Their established environment cause is retained through failure reporting; unknown isolated-check exceptions remain checker failures rather than invented workflow defects.

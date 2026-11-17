@@ -142,6 +142,8 @@ export type ExecuteRequest =
        * rewrites the source toward (DR-013). Protected like definitions.
        */
       references?: readonly string[];
+      /** Compiler-supplied operation, independent of project tooling. */
+      outputContract?: string;
       /** Update-mode context; absent for a fresh compile (DR-021, incremental-compilation-15). */
       update?: UpdateContext;
     }

@@ -334,11 +334,37 @@ export function createConfiguredExecutor(
   } = {},
 ): PhaseExecutor {
   const coder = createConfiguredAgentClient(selection, opts);
-  const agent = configuredReviewingClient(selection, coder, opts);
-  return createInterpretedExecutor({
+  let preparedReviewer: AgentClient | undefined;
+  const reviewerForPhase = () =>
+    (preparedReviewer ??= createConfiguredAgentClient(selection.reviewer!, {
+      ...opts,
+      permissions: {
+        fileWrite: 'deny',
+        shellExecute: 'deny',
+        networkAccess: 'deny',
+      },
+    }));
+  const agent = configuredReviewingClient(
+    selection,
+    coder,
+    opts,
+    selection.reviewer ? reviewerForPhase : undefined,
+  );
+  const interpreted = createInterpretedExecutor({
     agent,
     config: { model: selection.model, cwd: opts.cwd },
   });
+  return {
+    run: async (request, signal) => {
+      await coder.preflight?.();
+      if (selection.reviewer) await reviewerForPhase().preflight?.();
+      try {
+        return await interpreted.run(request, signal);
+      } finally {
+        preparedReviewer = undefined;
+      }
+    },
+  };
 }
 
 /**
@@ -422,22 +448,25 @@ function configuredReviewingClient(
   selection: AgentSelection,
   coder: AgentClient,
   opts: Parameters<typeof createConfiguredAgentClient>[1],
+  preparedReviewer?: () => AgentClient,
 ): AgentClient {
   const reviewer = selection.reviewer;
   if (reviewer === undefined) return createReviewingAgent({ coder });
   return createReviewingAgent({
     coder,
-    reviewer: () =>
-      createConfiguredAgentClient(reviewer, {
-        ...opts,
-        // Reviewer inspection is read-only even though the Coder is allowed to
-        // write its declared artifact (DR-022).
-        permissions: {
-          fileWrite: 'deny',
-          shellExecute: 'deny',
-          networkAccess: 'deny',
-        },
-      }),
+    reviewer:
+      preparedReviewer ??
+      (() =>
+        createConfiguredAgentClient(reviewer, {
+          ...opts,
+          // Reviewer inspection is read-only even though the Coder is allowed to
+          // write its declared artifact (DR-022).
+          permissions: {
+            fileWrite: 'deny',
+            shellExecute: 'deny',
+            networkAccess: 'deny',
+          },
+        })),
     reviewerModel: reviewer.model,
   });
 }
