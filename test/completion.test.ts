@@ -165,6 +165,9 @@ describe('public retained-bundle completion (completion-6/7)', () => {
       });
       expect(checked.stdout).toContain(`all stages pass for ${lang}`);
     },
+    // This integrates compiler checks, Git effects and four emitted suites.
+    // Keep a finite case budget with room for ordinary CI scheduling variation.
+    60_000,
   );
 
   it.each([false, true])(
