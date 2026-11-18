@@ -11,6 +11,24 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-18
+
+### Added
+
+- Compile workflows with a workflow-owned ESM environment and a canonical JavaScript entry that Playbook can register directly.
+- Retain phase, agent, and checker evidence for each compilation.
+
+### Changed
+
+- Adopt the public Cligent 0.40.0 and Playbook 19.1.0 releases with included Claude and Codex SDKs. Select the agent and model through environment variables.
+- Use compiler-owned TypeScript and Node typings to prepare and verify outputs independently of the surrounding Node project.
+- Require reachable public-entry evidence for finite FSM checking and preserve explicit Source return contracts.
+
+### Fixed
+
+- Preserve the last successful artifact when a new compilation fails.
+- Preserve supported relocated outputs and reject inconsistent runtime or entry metadata.
+
 ## [0.23.0-rc.13] - 2026-11-18
 
 ### Changed
@@ -1169,7 +1187,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.13...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.13...v0.23.0
 [0.23.0-rc.13]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.11...v0.23.0-rc.13
 [0.23.0-rc.11]: https://github.com/sublang-ai/slc/compare/v0.22.0...v0.23.0-rc.11
 [0.22.0]: https://github.com/sublang-ai/slc/compare/v0.21.0...v0.22.0
