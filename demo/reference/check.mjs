@@ -7,6 +7,7 @@
 // (workflow.zh.*). Each stage prints its verdict; any failure exits 1.
 
 import { execFile, execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import {
   access,
@@ -25,6 +26,17 @@ const execFileAsync = promisify(execFile);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
+// These maintained review loops exceed the default eight-call proof path.
+// Give this explicit demo check the same finite policy as its completion
+// regression; this does not change SLC's default policy or generated workflow.
+const demoCoverageEnv = {
+  ...process.env,
+  SLC_COVERAGE_MAX_INVOCATIONS:
+    process.env.SLC_COVERAGE_MAX_INVOCATIONS || '64',
+  SLC_COVERAGE_MAX_ATTEMPTS: process.env.SLC_COVERAGE_MAX_ATTEMPTS || '1024',
+  SLC_COVERAGE_MAX_DURATION_MS:
+    process.env.SLC_COVERAGE_MAX_DURATION_MS || '900000',
+};
 
 // `players` are the display names the READMEs and the normalized text carry;
 // `roles` are the canonical lowercase local role ids the compiled machine's
@@ -73,7 +85,10 @@ if (profile === undefined) {
 }
 const { basename, players, roles, limitState, limitGuards } = profile;
 const bundle = join(here, `${basename}.playbook`);
-const entry = join(here, `${basename}.ts`);
+const entry = join(
+  here,
+  `${basename}.${existsSync(join(here, `${basename}.mjs`)) ? 'mjs' : 'ts'}`,
+);
 
 // The optimize pass rewrites the Git check into an agent-free script (demo
 // READMEs, DR-013): present in the optimized gears and its FSM, absent from the
@@ -122,7 +137,11 @@ if (missing.length > 0) {
 const entrySource = await readFile(entry, 'utf8');
 report(
   'entry declares the canonical role ids',
-  roles.every((role) => entrySource.includes(`'${role}'`)),
+  roles.every(
+    (role) =>
+      entrySource.includes(`'${role}'`) ||
+      entrySource.includes(JSON.stringify(role)),
+  ),
   roles.join(', '),
 );
 const text = await readFile(join(bundle, `${basename}.text.md`), 'utf8');
@@ -468,7 +487,7 @@ try {
   const { stdout } = await execFileAsync(
     'node',
     [join(repoRoot, 'scripts', 'verify-artifacts.mjs'), bundle, basename],
-    { cwd: repoRoot },
+    { cwd: repoRoot, env: demoCoverageEnv },
   );
   report(
     'independent artifact review has no findings',

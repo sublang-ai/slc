@@ -7,6 +7,8 @@
 
 Accepted.
 
+Amended by [DR-068](068-standalone-compilation-environment.md) for SDK delivery: Cligent now supplies both default SDKs as ordinary dependencies, while SLC keeps no duplicate SDK runtime ranges; historical adoption evidence remains unchanged.
+
 ## Context
 
 - `@sublang/playbook` 4.0.0 is published [[1]]. Its breaking change is dependency

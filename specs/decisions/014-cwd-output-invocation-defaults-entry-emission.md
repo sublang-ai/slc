@@ -7,6 +7,8 @@
 
 Accepted; completion-only emission eligibility amended by [DR-054](054-deterministic-bundle-completion.md).
 
+Amended by [DR-068](068-standalone-compilation-environment.md): new registry entries use real JavaScript `.mjs` beside the internal ESM bundle; historical `.ts` artifact consumption remains supported.
+
 ## Context
 
 AI compilation is nondeterministic: recompiling a source whose reference bundle is committed beside it ([DR-001](001-slc-pipeline-layout-naming-invocation.md)) overwrites reviewed artifacts in place with byte-different output.

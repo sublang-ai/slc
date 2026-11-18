@@ -21,7 +21,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 
 describe('definition adoption (self-hosting-12)', () => {
   it.each([
-    ['^0.39.0', true],
+    ['^0.40.0', true],
+    ['0.40.0-rc.1', true],
+    ['^0.39.0', false],
     ['^0.38.0', false],
     ['^0.38.0 || ^0.39.0', false],
     ['>=0.39.0', false],
@@ -64,7 +66,7 @@ describe('definition adoption (self-hosting-12)', () => {
         } else {
           expect(run.status).not.toBe(0);
           expect(run.stderr).toContain(
-            'single caret range with minimum at least 0.39.0',
+            'single caret range with minimum at least 0.40.0',
           );
           expect(run.stdout).toBe('');
         }

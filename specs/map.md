@@ -93,11 +93,14 @@ meta.md       The spec of specs
 | [DR-065](decisions/065-compiled-gears-as-a-spec-package.md) | 065-compiled-gears-as-a-spec-package.md | Compiled GEARS as a spec package: item kind from `Captain shall` alone, action items mapped one-to-one to leaves, declarative items mapped to none, citations matched ignoring ASCII letter case; amends DR-009 |
 | [DR-066](decisions/066-string-list-child-input-relay.md) | 066-string-list-child-input-relay.md | String-list child-input relay: a reached list of strings fills a token as its elements joined by `, `, proved from reached cases; amends DR-041 |
 | [DR-067](decisions/067-empty-labelled-relay-omission.md) | 067-empty-labelled-relay-omission.md | Empty labelled relay omission: in reached-case proof an invocation keeps or omits every empty labelled relay line, one way throughout; amends DR-050 and DR-041 |
+| [DR-068](decisions/068-standalone-compilation-environment.md) | 068-standalone-compilation-environment.md | Global standalone compilation, selected runtime identity, ESM entries and compiler-owned checks |
 
 ## Packages
 
 | File | Summary |
 | --- | --- |
+| [delivery-acceptance.md](packages/delivery-acceptance.md) | Core native macOS/Linux/Windows CLI goal, parent-state matrix and separate local/registry acceptance |
+| [standalone-compilation.md](packages/standalone-compilation.md) | One workflow-owned internal environment, entry format and reproducible build evidence |
 | [clarification.md](packages/clarification.md) | Generic noninteractive source questions, executor stopping, structured diagnostics, and original-source reruns |
 | [cli.md](packages/cli.md) | Published executable behavior, host wiring, configuration, successful-diagnostic routing, progress and heartbeat reporting, cancellation, and bin-boundary verification |
 | [compilation-measurement.md](packages/compilation-measurement.md) | Opt-in cold-compilation and fixed-FSM link benchmarks, explicit settings, phase and agent-call measurements, cancellation, private local evidence, and artifact validation |

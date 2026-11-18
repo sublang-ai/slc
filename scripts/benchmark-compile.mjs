@@ -315,6 +315,8 @@ export async function typecheckArtifacts({ files, work, root, signal, log }) {
     '--ignoreConfig',
     '--noEmit',
     '--strict',
+    '--allowJs',
+    '--checkJs',
     '--noUnusedLocals',
     '--noUnusedParameters',
     '--noImplicitOverride',
@@ -372,7 +374,13 @@ export async function validateArtifacts({
   log,
   runtimeCheck,
 }) {
-  const entries = readdirSync(work).filter((name) => name.endsWith('.ts'));
+  const names = readdirSync(work);
+  const modernEntries = names.filter(
+    (name) => name.endsWith('.mjs') && !name.endsWith('.config.mjs'),
+  );
+  const entries = modernEntries.length
+    ? modernEntries
+    : names.filter((name) => name.endsWith('.ts'));
   const tests = [];
   for (const name of readdirSync(work)) {
     if (!name.endsWith('.playbook')) continue;

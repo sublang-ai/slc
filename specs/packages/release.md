@@ -15,7 +15,7 @@ Essential project-specific references are `slc`, this project's compiler CLI; `r
 
 #### release-1
 
-The project shall follow Semantic Versioning 2.0.0 [[1]] using `MAJOR.MINOR.PATCH`, where MAJOR indicates breaking changes, MINOR indicates new features, and PATCH indicates bug fixes.
+The project shall follow Semantic Versioning 2.0.0 [[1]] using stable `MAJOR.MINOR.PATCH` and candidate `MAJOR.MINOR.PATCH-rc.N`, where MAJOR indicates breaking changes, MINOR indicates new features, and PATCH indicates bug fixes.
 
 #### release-2
 
@@ -29,7 +29,7 @@ The project shall document all notable changes in `CHANGELOG.md` following the K
 
 #### release-4
 
-When preparing a release, the developer or agent shall review all commits since the previous release, move the relevant `[Unreleased]` entries into a section for the new version and release date, preserve an empty `[Unreleased]` section, and update the comparison links.
+When preparing a stable release, the developer or agent shall review all commits since the previous release, move the relevant `[Unreleased]` entries into a section for the new version and release date, preserve an empty `[Unreleased]` section, and update the comparison links.
 
 #### release-5
 
@@ -39,11 +39,11 @@ The changelog shall group entries under the headings `Added`, `Changed`, `Deprec
 
 #### release-6
 
-A release shall be triggered by pushing a git tag matching `vMAJOR.MINOR.PATCH`.
+A stable release shall be triggered by pushing a git tag matching `vMAJOR.MINOR.PATCH`.
 
 #### release-7
 
-When a release tag is pushed, the GitHub release workflow shall execute the release process and applicable idempotency outcomes:
+When a stable release tag is pushed, the GitHub release workflow shall execute the release process and applicable idempotency outcomes:
 
 | Process case | Required outcome |
 | --- | --- |
@@ -74,11 +74,11 @@ When the package is packed for publication, the tarball shall include the built 
 
 #### release-25
 
-The published package shall require `@sublang/playbook` as a non-optional peer whose range is the caret range of the exact development release verified with its definitions, bundles, and pins [[self-hosting-11](self-hosting.md#self-hosting-11)], with no ordinary or optional Playbook dependency ([DR-061](../decisions/061-consumer-supplied-playbook.md)).
+The published package shall require `@sublang/playbook` as a non-optional peer whose range is the stable caret range, or exact coordinated candidate version under [[release-30](#release-30)], of the development release verified with its definitions, bundles, and pins [[self-hosting-11](self-hosting.md#self-hosting-11)], with no ordinary or optional Playbook dependency ([DR-061](../decisions/061-consumer-supplied-playbook.md)).
 
 #### release-11
 
-Where a compiled thin artifact imports `@sublang/playbook/xstate-runtime` and its FSM imports `xstate` from the artifact's destination, the documentation shall provide an installation that resolves those imports from the artifact's own location — either by placing `@sublang/slc` and `@sublang/playbook` in the target project, or by relying on a host that provisions its own engine beside the artifact (`@sublang/playbook` 3.1 and later) — and shall state that a project-local install is authoritative wherever it resolves and that a project manifest declaring `@sublang/playbook` requires its own install because provisioning refuses to shadow a declared dependency.
+Where a compiled thin artifact imports the shared Playbook runtime and XState, the documentation shall describe global-once standalone compilation with internal dependency preparation [[standalone-compilation-2](standalone-compilation.md#standalone-compilation-2)] and the manifest-declared entry [[standalone-compilation-4](standalone-compilation.md#standalone-compilation-4)], distinguish the compiler's toolchain from the artifact runtime, explain independence from surrounding project dependencies without modifying them [[standalone-compilation-1](standalone-compilation.md#standalone-compilation-1)], and explain machine-local links, compatible repair and rebuild requirements [[standalone-compilation-6](standalone-compilation.md#standalone-compilation-6)].
 
 #### release-23
 
@@ -112,7 +112,7 @@ When the package build runs, it shall remove any previously generated output bef
 
 #### release-13
 
-When preparing a release tag, the developer or agent shall complete the checklist for every applicable case:
+When preparing a stable release tag, the developer or agent shall complete the checklist for every applicable case:
 
 | Preparation case | Required checklist |
 | --- | --- |
@@ -139,6 +139,33 @@ Where a maintainer prepares a release tag, when the opt-in local acceptance gate
 | Run portion is selected | Select the updated entry when Compile and Update ran, the freshly compiled entry when Compile ran but Update was skipped, or the committed reference when Compile was skipped; copy that schema-3 entry, its bundle, and the buggy sample into a scratch run directory; require at least one entry-declared role; enable the entry in the installed Playbook host's configuration with every declared role and the Captain bound explicitly to real agents, so the maintainer's personal run defaults cannot change the test; drive the entry to a successful terminal result by invoking its effective slash command with the task [[self-hosting-14](self-hosting.md#self-hosting-14)]; require the installed host’s durable session to be settled successfully with no engaged workflow or unresolved effects and its final root settlement trace to carry a successful terminal; require an initial Git commit preserving the original sample followed by at least one agent commit; and require the repaired sample to pass the compiled median driver ([DR-024](../decisions/024-playbook-10-schema-3-adoption.md), [DR-027](../decisions/027-complete-playbook-10-activation.md)). |
 | Compile and Run are selected | Include repository initialization and an initial baseline commit in the compiled fixture’s scripted setup before delegation, so the governed player changes tracked code without consuming pre-existing worktree content. |
 | Run is selected without Compile | Prepare a clean initial Git baseline before invoking the committed reference workflow, whose authored setup only initializes Git. |
+
+#### release-27
+
+The published compiler shall acquire Claude Agent SDK and Codex SDK through an ordinary Cligent dependency whose minimum release supplies both as ordinary dependencies, without restating SDK runtime ranges or requiring users to install either SDK separately, while preserving the required Playbook peer [[release-25](#release-25)] and Cligent-owned readiness checks before Agent work ([DR-068](../decisions/068-standalone-compilation-environment.md)).
+
+#### release-28
+
+When compiler-changing release acceptance runs against a freshly packed candidate installed alone into an isolated global prefix, the gate shall verify the actual global-install and backend matrix rather than substitute SDK import or cached success for generation:
+
+- both included SDKs load through the installed compiler's actual Cligent dependency tree without a checkout, development-only package or unrelated global SDK [[release-27](#release-27)];
+- credential-free installed-CLI checks cover automatic internal environment preparation, the entry's actual import, initialization and disposal, and actionable prerequisite failures [[standalone-compilation-2](standalone-compilation.md#standalone-compilation-2)], [[verification-79](verification.md#verification-79)];
+- credentialed cold compilation exercises Codex and Claude Code separately as Coder backends, using the same complete natural-language fixture, equivalent compiler/check settings and fresh directories without prior artifacts or history; for this standalone-environment delivery, Claude/GLM may use a separate simplest self-contained fixture for its workability smoke [[delivery-acceptance-4](delivery-acceptance.md#delivery-acceptance-4)];
+- at least two independent cold runs per backend are recorded, with at least one accepted complete generation and entry initialization/disposal per backend required to establish backend support; for this standalone-environment delivery, the explicitly scoped single Claude/GLM workability smoke [[delivery-acceptance-4](delivery-acceptance.md#delivery-acceptance-4)] replaces repeated Claude samples, while Codex retains the native-platform and parent-directory matrix; retain failures and scoped cancellations separately rather than requiring or claiming universal generation success;
+- repeated samples and their fixed sample count are declared before the run, generation outcomes are reported separately from deterministic environment acceptance, and a later retry uses another fresh directory with its own record;
+- only after a successful cold run, execute a separate unchanged-repeat reuse check and record it as reuse, never as another generation success [[release-13](#release-13)];
+- record every phase's inputs, outputs, corrections, checks, elapsed time, exit status, backend/SDK identity and final outcome, with absent authentication reported as an unmet prerequisite [[standalone-compilation-8](standalone-compilation.md#standalone-compilation-8)].
+
+### release-30
+
+When a same-repository branch candidate is published for pre-merge delivery acceptance, the publisher shall use a distinct candidate lane under [DR-068](../decisions/068-standalone-compilation-environment.md):
+
+- a unique SemVer `MAJOR.MINOR.PATCH-rc.N` package version, a matching immutable candidate source/tag identity, passing checks for that exact branch/PR head, and no requirement that the candidate already be merged into `main`;
+- an explicit non-`latest` npm dist-tag, provenance, public scoped-package access and the existing trusted OIDC publication authority, with no stable-tag publication or stable GitHub release as a side effect;
+- ordinary build, package, dependency-audit and credential-free gates retained, with the stable-only `main` and final stable preparation-record requirements confined to stable publication;
+- coordinated candidate dependencies naming the exact intended Cligent/Playbook candidate versions where needed, recorded separately from stable caret-range policy, with no checkout path, workspace link or manual SDK installation in the registry consumer;
+- a durable record of source head, PR, version, dependency candidate set, tarball integrity and actual registry installation results; runtime-source or packed-file changes require a new candidate and affected verification, while unpacked documentation-only changes retain the immutable published source/tag identity and require current-head CI plus recorded packed-file equivalence;
+- formal stable publication remains a later, separately gated operation, and acceptance does not require moving `latest` before merge.
 
 ## Verification
 
@@ -203,6 +230,14 @@ Where the source suite places the role-bearing schema-3 registry fixture and its
 #### release-24
 
 Where the supplied demo configuration is copied into an isolated demo home with a clean sample baseline, when demo onboarding acceptance invokes the installed Playbook host's list command, the host shall load and list both English and Chinese reference entries with their exact declared role bindings and explicit model and effort selections, without any agent call or baseline change [[release-23](#release-23)].
+
+#### release-29
+
+Where a packed candidate is ready, when its isolated production and global consumer installation matrix runs, the suite shall verify ordinary Cligent delivery of both SDKs without duplicated SDK ranges [[release-27](#release-27)], automatic internal-environment instructions and preservation of surrounding projects [[release-11](#release-11)], and the distinct deterministic and credentialed cold/reuse acceptance outcomes [[release-28](#release-28)].
+
+### release-31
+
+When candidate publication and exact-version clean-prefix installation are exercised through the actual configured publisher, the system suite shall verify source/PR identity, candidate version and tag, trusted publication, intended transitive candidate acquisition, retained stable-lane restrictions and no mutation of `latest`, retaining failed and skipped publication evidence rather than claiming an unperformed install [[release-30](#release-30)].
 
 ## References
 

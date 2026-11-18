@@ -22,10 +22,10 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { importFreshArtifact } from '@sublang/playbook/artifact-environment';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { types as nodeTypes } from 'node:util';
 
 import { hashFile } from './hash.js';
@@ -5343,10 +5343,7 @@ export async function emitGearsFsmConformanceTest(opts: {
  * module cache.
  */
 export async function loadFsmModule(fsmPath: string): Promise<unknown> {
-  const resolved = resolve(fsmPath);
-  const url = pathToFileURL(resolved);
-  url.searchParams.set('v', await hashFile(resolved));
-  return import(url.href);
+  return importFreshArtifact(resolve(fsmPath));
 }
 
 /**

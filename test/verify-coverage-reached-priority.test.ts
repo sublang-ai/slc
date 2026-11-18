@@ -210,7 +210,7 @@ describe('newly reached values through public XState entry', () => {
         { coverage, sourceText, artifactSchema: 3, timeoutMs: 10000 },
       ),
     ).toContain(
-      'state child: nested playbook onDone arm 0 is unsatisfiable under probing',
+      'state child: nested playbook onDone arm 0 remains unverified after bounded probing',
     );
     expect(observed.predecessorRevisions.length).toBeGreaterThan(0);
     expect(observed.accepted).toEqual([]);

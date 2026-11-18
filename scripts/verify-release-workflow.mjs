@@ -2,6 +2,11 @@
 // SPDX-FileCopyrightText: 2026 SubLang International <https://sublang.ai>
 
 import assert from 'node:assert/strict';
+import {
+  releaseChannel,
+  authorizedCandidatePull,
+  passingReleaseRun,
+} from './release-source-guard.mjs';
 import { readFile } from 'node:fs/promises';
 
 import { parse } from 'yaml';
@@ -23,7 +28,8 @@ const jobs = Object.values(workflow.jobs);
 const allSteps = jobs.flatMap((job) => job.steps ?? []);
 const registryCredential =
   /(?:NODE_AUTH_TOKEN|NPM_(?:BOOTSTRAP_)?TOKEN|_authToken|npm_config_.*auth)/i;
-const coreSemver = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/;
+const coreSemver =
+  /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-rc\.(?:0|[1-9][0-9]*))?$/;
 
 const step = (name) => {
   const match = steps.find((candidate) => candidate.name === name);
@@ -84,7 +90,7 @@ assert.match(
 
 const changelogSections = [
   ...changelog.matchAll(
-    /^## \[(Unreleased|(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))\](?: - (\d{4}-\d{2}-\d{2}))?$/gm,
+    /^## \[(Unreleased|(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-rc\.(?:0|[1-9][0-9]*))?)\](?: - (\d{4}-\d{2}-\d{2}))?$/gm,
   ),
 ];
 assert.ok(changelogSections.length >= 2, 'changelog has no released version');
@@ -158,34 +164,75 @@ for (let index = 1; index < changelogSections.length; index += 1) {
 // it through the complete release path (release-6, release-7).
 assert.deepEqual(workflow.on.push.tags, ['v[0-9]*']);
 const tagCheck = step('Verify tag matches package version');
-assert.ok(tagCheck.run.includes('^v[0-9]+\\.[0-9]+\\.[0-9]+$'));
+assert.ok(tagCheck.run.includes('(-rc\\.[0-9]+)?$'));
 assert.match(tagCheck.run, /require\('\.\/package\.json'\)\.version/);
 assert.match(tagCheck.run, /GITHUB_REF_NAME/);
 
 const ciGate = step('Require passing CI for this commit');
-assert.match(ciGate.run, /actions\/workflows\/ci\.yml\/runs/);
-assert.match(ciGate.run, /head_sha=\$\{SHA\}/);
-assert.match(ciGate.run, /event=push/);
-assert.match(ciGate.run, /branch=main/);
-const pollLoop = ciGate.run.match(
-  /for attempt in \$\(seq 1 ([1-9][0-9]*)\); do\n([\s\S]*?)\n\s*done/,
-);
-assert.ok(pollLoop, 'CI gate needs a bounded poll loop');
-const [, pollBound, pollBody] = pollLoop;
-assert.match(
-  pollBody,
-  /if \[ "\$conclusion" = "success" \]; then\s+echo "CI passed for \$\{SHA\}\."\s+break\s+fi\s+echo "::error::CI concluded '\$\{conclusion\}' for \$\{SHA\}"\s+exit 1/,
-);
-const timeoutGuard = pollBody.match(
-  /if \[ "\$attempt" = ([1-9][0-9]*) \]; then([\s\S]*?)\n\s*fi/,
-);
-assert.ok(timeoutGuard, 'CI gate needs a fail-closed timeout');
+assert.equal(ciGate.run, 'node scripts/release-source-guard.mjs');
+assert.equal(workflow.permissions['actions'], 'read');
+assert.equal(workflow.permissions['pull-requests'], 'read');
+const sourceGate = await readProjectFile('scripts/release-source-guard.mjs');
+assert.match(sourceGate, /attempt < 60/);
+assert.match(sourceGate, /candidate must be the fixed current head/);
+assert.equal(releaseChannel('v1.2.3', '1.2.3'), 'latest');
+assert.equal(releaseChannel('v1.2.3-rc.1', '1.2.3-rc.1'), 'rc-global-cli');
+for (const tag of ['v01.2.3', 'v1.2.3-beta.1', 'v1.2.3-rc.01'])
+  assert.throws(() => releaseChannel(tag, tag.slice(1)));
+const repo = 'sublang-ai/slc',
+  sha = 'candidate-head';
+const pr = {
+  number: 123,
+  state: 'open',
+  base: { ref: 'main', repo: { full_name: repo } },
+  head: { ref: 'candidate', sha, repo: { full_name: repo } },
+};
+assert.equal(authorizedCandidatePull([pr], repo, sha), pr);
 assert.equal(
-  timeoutGuard[1],
-  pollBound,
-  'CI poll and timeout bounds must match',
+  authorizedCandidatePull([{ ...pr, state: 'closed' }], repo, sha),
+  undefined,
 );
-assert.match(timeoutGuard[2], /^\s*exit 1\s*$/m);
+const run = {
+  head_sha: sha,
+  head_repository: { full_name: repo },
+  head_branch: 'candidate',
+  event: 'pull_request',
+  pull_requests: [],
+  status: 'completed',
+  conclusion: 'success',
+  created_at: '2026-11-17T00:00:00Z',
+  run_attempt: 1,
+};
+const context = { candidate: true, repo, sha, pr };
+assert.equal(passingReleaseRun([run], context), true);
+for (const patch of [
+  { head_sha: 'other' },
+  { head_branch: 'main' },
+  { event: 'push' },
+  { conclusion: 'failure' },
+  { status: 'in_progress' },
+  { head_repository: { full_name: 'fork/slc' } },
+  { pull_requests: [{ number: 999 }] },
+])
+  assert.equal(passingReleaseRun([{ ...run, ...patch }], context), false);
+assert.equal(
+  passingReleaseRun([{ ...run, event: 'push', head_branch: 'main' }], {
+    ...context,
+    candidate: false,
+  }),
+  true,
+);
+assert.equal(passingReleaseRun([run], { ...context, candidate: false }), false);
+assert.equal(
+  passingReleaseRun(
+    [
+      run,
+      { ...run, created_at: '2026-11-17T00:01:00Z', conclusion: 'failure' },
+    ],
+    context,
+  ),
+  false,
+);
 assert.equal(step('Install locked dependencies').run, 'npm ci');
 assert.equal(step('Run release checks').run, 'npm run release:check');
 
@@ -282,10 +329,12 @@ assert.match(detection.run, /::error::/);
 
 const trusted = step('Publish to npm with trusted OIDC');
 assert.equal(trusted.if, "steps.npm_version.outputs.published == 'false'");
-assert.equal(
-  trusted.run,
-  'npm publish --ignore-scripts --provenance --access public',
+assert.ok(
+  trusted.run.startsWith(
+    'npm publish --ignore-scripts --provenance --access public --tag ',
+  ),
 );
+assert.match(trusted.run, /releaseChannel/);
 assert.equal(trusted.env, undefined);
 
 const skip = step('Skip the already published version');

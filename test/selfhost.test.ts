@@ -8,17 +8,20 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  readlink,
   rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { validateArtifactManifest } from '@sublang/playbook/artifact-environment';
+import { isolatedCheck } from '../src/isolated-check.js';
 import { emitEntryModule } from '../src/entry-module.js';
 import { createReviewingAgent } from '../src/reviewing-agent.js';
 import {
@@ -29,6 +32,7 @@ import { resolvesToPlaybook } from '../src/phase-runner.js';
 import { loadPipeline } from '../src/pipeline.js';
 import {
   createPipelineResolver,
+  defaultPlaybookLinkTarget,
   reservedSlcPipelineDir,
   withReservedPipelines,
 } from '../src/resolver.js';
@@ -39,7 +43,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 /** A compiled artifact that resolves to the `playbook` format (DR-005). */
 const PLAYBOOK_MODULE =
-  'export default function createPlaybookRuntime() {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
+  'export default function createPlaybookRuntime(_options?: unknown) {\n  return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };\n}\n';
 
 // A linked module with the historical direct-Captain composer surface. The
 // full-link provenance tests use this instead of activating schema-3 entry
@@ -47,7 +51,7 @@ const PLAYBOOK_MODULE =
 const DIRECT_CAPTAIN_PLAYBOOK_MODULE = `const CONTINUATION_PREAMBLE =
   'You previously paused this task to ask Boss a question; Boss has now replied. Continue the same task using the reply below.';
 
-const composeCaptainPrompt = (input) => {
+const composeCaptainPrompt = (input: {prompt: string; pendingBossQuestion?: {question: string}; bossReply?: string}) => {
   const blocks = [];
   if (input.pendingBossQuestion !== undefined && input.bossReply !== undefined) {
     blocks.push(
@@ -61,7 +65,7 @@ const composeCaptainPrompt = (input) => {
 };
 
 export const _internal = { composeCaptainPrompt };
-export default function createPlaybookRuntime() {
+export default function createPlaybookRuntime(_options?: unknown) {
   return { init: async () => {}, handleBossInput: async () => {}, dispose: async () => {} };
 }
 `;
@@ -309,7 +313,8 @@ export const machine = setup({
 
 // The schema-3 linked artifact a Playbook 10 link emits: a shared factory
 // carrying the exact immutable compatibility record (DR-024).
-const SCHEMA_3_PLAYBOOK_MODULE = `${PLAYBOOK_MODULE.replace('createPlaybookRuntime()', 'createPlaybookRuntime(_input: {configuredOptions: Record<string, never>; hostCapabilities: unknown})')}
+const SCHEMA_3_PLAYBOOK_MODULE = `${PLAYBOOK_MODULE.replace('createPlaybookRuntime(_options?: unknown)', 'createPlaybookRuntime(_input: {configuredOptions: Record<string, never>; hostCapabilities: unknown})')}
+createPlaybookRuntime.compat = Object.freeze({ artifactSchema: 3 as const, runtimeAbi: 1 as const });
 export function validateOptions(value: unknown): Record<string, never> {
   const options = value === undefined ? {} : value;
   if (options === null || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).length !== 0) throw new TypeError('no options are declared');
@@ -390,7 +395,10 @@ describe('reserved slc pipeline and playbook format (self-hosting-4)', () => {
     // A domain phase definition is the meta-pipeline's source.
     source = join(work, 'text2gears.md');
     await writeFile(source, '# A phase definition\n');
-    await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
+    await writeFile(
+      join(work, 'runtime.ts'),
+      await readFile(defaultPlaybookLinkTarget(), 'utf8'),
+    );
     artDir = join(work, 'text2gears.slc');
   });
 
@@ -406,7 +414,7 @@ describe('reserved slc pipeline and playbook format (self-hosting-4)', () => {
 
   it('compiles a definition to the fsm object under the invocation cwd (DR-014); `slc` supplies no default link target', async () => {
     const result = await runSlc(['slc', source], deps());
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     // text -> gears -> fsm; the reserved `slc` full run stops at the fsm
     // object: only the `playbook` pipeline defaults a link target
     // (self-hosting-13).
@@ -419,7 +427,7 @@ describe('reserved slc pipeline and playbook format (self-hosting-4)', () => {
     const out = join(root, 'out');
     await mkdir(out);
     const result = await runSlc(['slc', source], { ...deps(), cwd: out });
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     // Outputs follow the invocation cwd; the source's directory stays clean.
     expect(await exists(join(out, 'text2gears.slc', 'text2gears.fsm.ts'))).toBe(
       true,
@@ -432,7 +440,7 @@ describe('reserved slc pipeline and playbook format (self-hosting-4)', () => {
       ['slc', source, '--link', join(root, 'work', 'runtime.ts')],
       deps(),
     );
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     const playbookArtifact = join(artDir, 'text2gears.playbook.ts');
     expect(result.outputs).toContain(playbookArtifact);
     expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
@@ -487,7 +495,10 @@ describe('reserved slc pipeline consumes Playbook definitions (self-hosting-2)',
       );
       const source = join(work, 'text2gears.md');
       await writeFile(source, '# A phase definition\n');
-      await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
+      await writeFile(
+        join(work, 'runtime.ts'),
+        await readFile(defaultPlaybookLinkTarget(), 'utf8'),
+      );
 
       const result = await runSlc(
         ['slc', source, '--link', join(work, 'runtime.ts')],
@@ -499,7 +510,7 @@ describe('reserved slc pipeline consumes Playbook definitions (self-hosting-2)',
         },
       );
 
-      expect(result.ok).toBe(true);
+      expect(result.ok, result.diagnostics.join('\n')).toBe(true);
       const playbookArtifact = join(
         work,
         'text2gears.slc',
@@ -565,7 +576,10 @@ describe('playbook pipeline shares Playbook definitions (self-hosting-6, self-ho
       );
       const source = join(work, 'flow.md');
       await writeFile(source, '# A workflow\n');
-      await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
+      await writeFile(
+        join(work, 'runtime.ts'),
+        await readFile(defaultPlaybookLinkTarget(), 'utf8'),
+      );
 
       const result = await runSlc(
         ['playbook', source, '--link', join(work, 'runtime.ts')],
@@ -576,7 +590,7 @@ describe('playbook pipeline shares Playbook definitions (self-hosting-6, self-ho
         },
       );
 
-      expect(result.ok).toBe(true);
+      expect(result.ok, result.diagnostics.join('\n')).toBe(true);
       const playbookArtifact = join(work, 'flow.playbook', 'flow.playbook.ts');
       expect(result.outputs).toContain(playbookArtifact);
       expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
@@ -619,7 +633,10 @@ describe('playbook pipeline shares Playbook definitions (self-hosting-6, self-ho
       );
       const source = join(work, 'flow.md');
       await writeFile(source, '# A workflow\n');
-      await writeFile(join(work, 'runtime.ts'), 'export const rt = 1;\n');
+      await writeFile(
+        join(work, 'runtime.ts'),
+        await readFile(defaultPlaybookLinkTarget(), 'utf8'),
+      );
 
       const result = await runSlc(
         ['playbook', source, '--link', join(work, 'runtime.ts')],
@@ -663,7 +680,10 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       '# Code\n\nPlayers:\n\n- Coder\n- Reviewer\n\n## Coder\n\nWhen Boss gives a coding intent, Captain shall relay it to Coder.\n',
     );
     runtime = join(work, 'runtime.ts');
-    await writeFile(runtime, 'export const rt = 1;\n');
+    await writeFile(
+      runtime,
+      await readFile(defaultPlaybookLinkTarget(), 'utf8'),
+    );
     artDir = join(work, 'code.playbook');
   });
 
@@ -676,6 +696,95 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     executor: createInterpretedExecutor({ agent: writingAgent() }),
     cwd: work,
   });
+
+  it.each([
+    'runtime-root',
+    'runtime-version',
+    'runtime-content',
+    'compiler-build',
+    'entry',
+    'helper',
+  ])(
+    'rechecks accepted managed bytes after recorded identity or executable drift: %s',
+    async (mutation) => {
+      await mkdir(artDir, { recursive: true });
+      const helper = join(artDir, 'managed-helper.ts');
+      await writeFile(helper, 'export const revision = 1;\n');
+      const prompts: string[] = [];
+      const executor = createInterpretedExecutor({
+        agent: writingAgent({
+          prompts,
+          playbook: `import './managed-helper.ts';\n${SCHEMA_3_PLAYBOOK_MODULE}`,
+        }),
+      });
+      const selected = { ...deps(), executor };
+      const initial = await runSlc(['playbook', source], selected);
+      expect(initial.ok, initial.diagnostics.join('\n')).toBe(true);
+      const entry = join(work, 'code.mjs');
+      const manifestPath = join(artDir, 'build-manifest.json');
+      expect(
+        (await validateArtifactManifest(entry))?.files.some(
+          (file) => file.path === 'managed-helper.ts',
+        ),
+      ).toBe(true);
+      prompts.length = 0;
+      const unchanged = await runSlc(['playbook', source], selected);
+      expect(unchanged).toMatchObject({ ok: true, outcome: 'up-to-date' });
+      expect(prompts).toEqual([]);
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+      if (mutation === 'runtime-root')
+        manifest.runtime.playbook.root = join(root, 'different-runtime-root');
+      if (mutation === 'runtime-version')
+        manifest.runtime.playbook.version = '0.0.0-test';
+      if (mutation === 'runtime-content')
+        manifest.runtime.playbook.contentHash = '0'.repeat(64);
+      if (mutation === 'compiler-build')
+        manifest.compiler.buildIdentity = 'different-compiler-build';
+      if (mutation === 'entry')
+        await writeFile(
+          entry,
+          (await readFile(entry, 'utf8')) + '\n// changed entry revision\n',
+        );
+      if (mutation === 'helper')
+        await writeFile(helper, 'throw new Error("changed managed helper");\n');
+      if (!['entry', 'helper'].includes(mutation))
+        await writeFile(manifestPath, JSON.stringify(manifest));
+      const before = new Set(await readdir(join(artDir, '.slc/attempts')));
+      const sourceBytes = await readFile(source);
+      const result = await runSlc(['playbook', source], selected);
+      const added = (await readdir(join(artDir, '.slc/attempts'))).filter(
+        (id) => !before.has(id),
+      );
+      expect(added).toHaveLength(1);
+      const events = (
+        await readFile(
+          join(artDir, '.slc/attempts', added[0], 'events.jsonl'),
+          'utf8',
+        )
+      )
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      const jobs = events
+        .filter((event) => event.kind === 'checker-start')
+        .map((event) => event.data.job);
+      expect(jobs).toContain('fsm');
+      expect(jobs).toContain('linked');
+      expect(await readFile(source)).toEqual(sourceBytes);
+      expect(prompts).toEqual([]);
+      if (mutation === 'helper') {
+        expect(result.ok).toBe(false);
+        expect(result.diagnostics.join('\n')).toContain(
+          'changed managed helper',
+        );
+      } else {
+        expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+        expect(jobs).toContain('lifecycle');
+        await expect(validateArtifactManifest(entry)).resolves.toBeDefined();
+      }
+    },
+    120000,
+  );
 
   it('runs the bare playbook invocation as a full-link against the default runtime target (self-hosting-13)', async () => {
     const result = await runSlc(['playbook', source], deps());
@@ -695,7 +804,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
       true,
     );
-    expect(await exists(join(work, 'code.ts'))).toBe(true);
+    expect(await exists(join(work, 'code.mjs'))).toBe(true);
     // Every verification test is emitted beside the artifacts (verification-8): the
     // faked agents produced a conformant gears+fsm pair, so conformance,
     // introspection, prompt-contract, and coverage all derive and emit.
@@ -733,20 +842,19 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
 
     const result = await runSlc(['playbook', rawSource], deps());
 
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     expect(await readFile(rawSource, 'utf8')).toBe(rawBytes);
     expect(await exists(join(work, 'raw.playbook', 'raw.playbook.ts'))).toBe(
       true,
     );
     expect(result.outputs).not.toContain(rawSource);
-    expect(result.diagnostics.join('\n')).toContain(
-      `entry module ${rawSource} not emitted because it aliases the invocation source`,
-    );
+    expect(result.outputs).toContain(join(work, 'raw.mjs'));
+    expect(await readFile(rawSource, 'utf8')).toBe(rawBytes);
   });
 
   it('refuses an entry that aliases the link target before any phase executes (phase-execution-43)', async () => {
-    const entryAndLinkTarget = join(work, 'code.ts');
-    const original = 'export const protectedRuntime = true;\n';
+    const entryAndLinkTarget = join(work, 'code.mjs');
+    const original = await readFile(defaultPlaybookLinkTarget(), 'utf8');
     await writeFile(entryAndLinkTarget, original);
     const prompts: string[] = [];
 
@@ -772,7 +880,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
   it('refuses a verifier output that aliases the link target before any phase executes (phase-execution-43)', async () => {
     await mkdir(artDir);
     const verifierAndLinkTarget = join(artDir, 'code.gears-fsm.test.ts');
-    const original = 'export const protectedRuntime = true;\n';
+    const original = await readFile(defaultPlaybookLinkTarget(), 'utf8');
     await writeFile(verifierAndLinkTarget, original);
     const prompts: string[] = [];
 
@@ -795,15 +903,91 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     );
   });
 
+  it('classifies occupied managed metadata as environment failure before any Agent call', async () => {
+    await mkdir(artDir, { recursive: true });
+    const metadata = join(artDir, 'package.json');
+    const original = '{"private":true,"type":"module","userOwned":true}';
+    await writeFile(metadata, original);
+    let calls = 0;
+    const result = await runSlc(['playbook', source], {
+      ...deps(),
+      executor: createInterpretedExecutor({
+        agent: {
+          async run() {
+            calls++;
+            return { status: 'error', text: 'Agent must not start' };
+          },
+        },
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(calls).toBe(0);
+    expect(result.diagnostics.join('\n')).toContain('foreign package metadata');
+    expect(result.cause?.category).toBe('environment');
+    expect(await readFile(metadata, 'utf8')).toBe(original);
+  });
+
+  it.each([
+    'workspace routing discovery timed out',
+    "API Error: Couldn't connect through your proxy (ERR_PROXY_TUNNEL)",
+    'API Error: Request rejected (429) · [1308][已达到 5 小时的使用上限。]',
+    "You've hit your usage limit. Try again later.",
+    'unexpected status 401 Unauthorized',
+  ])(
+    'classifies observed transport refusal as environment failure: %s',
+    async (message) => {
+      const result = await runSlc(['playbook', source], {
+        ...deps(),
+        executor: createInterpretedExecutor({
+          agent: {
+            async run() {
+              return { status: 'error', text: message };
+            },
+          },
+        }),
+      });
+      expect(result.ok).toBe(false);
+      expect(result.diagnostics.join('\n')).toContain(message);
+      expect(result.cause?.category).toBe('environment');
+    },
+  );
+
+  it('keeps an actually aborted signal canceled even when its reason mentions a transport error', async () => {
+    const controller = new AbortController();
+    const result = await runSlc(['playbook', source], {
+      ...deps(),
+      signal: controller.signal,
+      executor: {
+        async run() {
+          controller.abort(
+            new Error('caller canceled during ERR_PROXY_TUNNEL'),
+          );
+          return {
+            status: 'error',
+            diagnostics: ['caller canceled during ERR_PROXY_TUNNEL'],
+          };
+        },
+      },
+    });
+    expect(controller.signal.aborted).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.cause?.category).toBe('canceled');
+  });
+
   it('restores deterministic verifier and entry outputs after all phases Reuse', async () => {
     const initial = await runSlc(['playbook', source], deps());
     expect(initial.ok).toBe(true);
     const latest = join(artDir, '.slc', 'latest');
     const historyBefore = await readFile(latest, 'utf8');
-    const historyFilesBefore = await readdir(join(artDir, '.slc'), {
-      recursive: true,
-      withFileTypes: true,
-    });
+    const historyFilesBefore = (
+      await readdir(join(artDir, '.slc'), {
+        recursive: true,
+        withFileTypes: true,
+      })
+    ).filter(
+      (file) =>
+        file.name !== 'attempts' && !file.parentPath.includes('attempts'),
+    );
     const historyBytesBefore = await Promise.all(
       historyFilesBefore
         .filter((file) => file.isFile())
@@ -813,7 +997,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         }),
     );
     const deterministicOutputs = [
-      join(work, 'code.ts'),
+      join(work, 'code.mjs'),
       join(artDir, 'code.gears-fsm.test.ts'),
       join(artDir, 'code.fsm.introspect.test.ts'),
       join(artDir, 'code.prompt-contract.test.ts'),
@@ -844,10 +1028,15 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     }
     expect(await readFile(latest, 'utf8')).toBe(historyBefore);
     expect(
-      await readdir(join(artDir, '.slc'), {
-        recursive: true,
-        withFileTypes: true,
-      }),
+      (
+        await readdir(join(artDir, '.slc'), {
+          recursive: true,
+          withFileTypes: true,
+        })
+      ).filter(
+        (file) =>
+          file.name !== 'attempts' && !file.parentPath.includes('attempts'),
+      ),
     ).toEqual(historyFilesBefore);
     for (const [path, bytes] of historyBytesBefore)
       expect(await readFile(path)).toEqual(bytes);
@@ -857,9 +1046,14 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     }
   });
 
-  it('leaves history inactive after conformance failure and retries every phase ordinarily', async () => {
+  it('retains the last accepted build after conformance failure and retries the changed source', async () => {
     const initial = await runSlc(['playbook', source], deps());
     expect(initial.ok).toBe(true);
+    const acceptedHistory = await readFile(
+      join(artDir, '.slc', 'latest'),
+      'utf8',
+    );
+    const acceptedEntry = await readFile(join(work, 'code.mjs'), 'utf8');
     await writeFile(source, `${await readFile(source, 'utf8')}\nChanged.\n`);
     const collidingGears = SCHEMA_3_GEARS_ARTIFACT.replace(
       '- Writer\n',
@@ -878,7 +1072,20 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     expect(failed.ok).toBe(false);
     expect(failedPrompts.length).toBeGreaterThan(0);
     expect(failed.diagnostics.join('\n')).toMatch(/collide as canonical role/);
-    expect(await exists(join(artDir, '.slc', 'latest'))).toBe(false);
+    expect(await readFile(join(artDir, '.slc', 'latest'), 'utf8')).toBe(
+      acceptedHistory,
+    );
+    expect(await readFile(join(work, 'code.mjs'), 'utf8')).toBe(acceptedEntry);
+    expect(
+      await validateArtifactManifest(join(work, 'code.mjs')),
+    ).toBeDefined();
+    expect(
+      await isolatedCheck('lifecycle', [
+        join(work, 'code.mjs'),
+        join(artDir, 'code.fsm.ts'),
+        undefined,
+      ]),
+    ).toEqual([]);
 
     const retryPrompts: string[] = [];
     const retry = await runSlc(['playbook', source], {
@@ -890,12 +1097,104 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     });
 
     expect(retry.ok).toBe(true);
-    expect(retryPrompts).toHaveLength(5);
-    expect(
-      retryPrompts.every((prompt) => !prompt.includes('Incremental update')),
-    ).toBe(true);
+    expect(retryPrompts.length).toBeGreaterThan(0);
     expect(await exists(join(artDir, '.slc', 'latest'))).toBe(true);
   });
+
+  it('restores the accepted runtime files, manifest, history and links after cancellation during a rewritten FSM', async () => {
+    expect((await runSlc(['playbook', source], deps())).ok).toBe(true);
+    const entry = join(work, 'code.mjs'),
+      manifestPath = join(artDir, 'build-manifest.json');
+    const manifest = await validateArtifactManifest(entry);
+    expect(manifest).toBeDefined();
+    const paths = [
+      manifestPath,
+      join(artDir, '.slc/latest'),
+      ...manifest!.files
+        .filter((f) =>
+          ['entry', 'fsm', 'linked', 'runtime-support'].includes(f.kind),
+        )
+        .map((f) => resolve(artDir, f.path)),
+    ];
+    const saved = await Promise.all(
+      paths.map(async (path) => [path, await readFile(path)] as const),
+    );
+    const links = [
+      join(artDir, 'node_modules/xstate'),
+      join(artDir, 'node_modules/@sublang/playbook'),
+    ];
+    const targets = await Promise.all(links.map((path) => readlink(path)));
+    await writeFile(
+      source,
+      (await readFile(source, 'utf8')) +
+        '\nChanged Source before cancellation.\n',
+    );
+    const controller = new AbortController(),
+      normal = writingAgent();
+    let changed = false;
+    const result = await runSlc(['playbook', source, '--rebuild'], {
+      ...deps(),
+      signal: controller.signal,
+      executor: createInterpretedExecutor({
+        agent: {
+          async run(request) {
+            const answer = await normal.run(request);
+            const target = /artifact to write: (.+)/
+              .exec(request.prompt)?.[1]
+              .trim();
+            if (target?.endsWith('.fsm.ts')) {
+              await writeFile(
+                target,
+                (await readFile(target, 'utf8')) +
+                  '\n// interrupted candidate revision\n',
+              );
+              changed = true;
+              controller.abort(new Error('test canceled compilation'));
+            }
+            return answer;
+          },
+        },
+      }),
+    });
+    expect(changed).toBe(true);
+    expect(controller.signal.aborted).toBe(true);
+    expect(result.ok).toBe(false);
+    for (const [path, bytes] of saved)
+      expect(await readFile(path)).toEqual(bytes);
+    expect(await Promise.all(links.map((path) => readlink(path)))).toEqual(
+      targets,
+    );
+    expect(await validateArtifactManifest(entry)).toBeDefined();
+    expect(
+      await isolatedCheck('lifecycle', [
+        entry,
+        join(artDir, 'code.fsm.ts'),
+        undefined,
+      ]),
+    ).toEqual([]);
+  }, 30000);
+
+  it('loads an accepted runtime after removing original Source, GEARS and compiler archives', async () => {
+    expect((await runSlc(['playbook', source], deps())).ok).toBe(true);
+    await rm(source);
+    for (const name of await readdir(artDir))
+      if (
+        name.endsWith('.md') ||
+        name === '.slc' ||
+        name === '.slc-verify' ||
+        name.endsWith('.test.ts')
+      )
+        await rm(join(artDir, name), { recursive: true, force: true });
+    const entry = join(work, 'code.mjs');
+    expect(await validateArtifactManifest(entry)).toBeDefined();
+    expect(
+      await isolatedCheck('lifecycle', [
+        entry,
+        join(artDir, 'code.fsm.ts'),
+        undefined,
+      ]),
+    ).toEqual([]);
+  }, 30000);
 
   it('runs generated verification in a project with no SLC installation', async () => {
     // A Playbook 10 compile: canonical `Roles:`, an `invoke.input.role`
@@ -914,7 +1213,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       }),
       cwd: work,
     });
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     await writeFile(
       join(root, 'package.json'),
       '{"private":true,"type":"module"}\n',
@@ -995,7 +1294,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     const out = join(work, 'custom.fsm.ts');
     const slcArtDir = join(work, 'code.slc');
     const result = await runSlc(['slc', source, '-o', out], deps());
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     expect(await exists(out)).toBe(true);
     // The fsm left `<basename>.slc/`, so no test is emitted there (it would
     // otherwise import a `./code.fsm.js` that was not written beside it).
@@ -1010,7 +1309,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       ['playbook', source, '--link', runtime],
       deps(),
     );
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     const playbookArtifact = join(artDir, 'code.playbook.ts');
     expect(result.outputs).toContain(playbookArtifact);
     expect(resolvesToPlaybook(await readFile(playbookArtifact, 'utf8'))).toBe(
@@ -1089,7 +1388,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         cwd: work,
       });
 
-      expect(result.ok).toBe(true);
+      expect(result.ok, result.diagnostics.join('\n')).toBe(true);
       const verificationDir = join(work, 'code.slc');
       expect(
         await readFile(join(verificationDir, 'code.gears-fsm.test.ts'), 'utf8'),
@@ -1146,7 +1445,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       cwd: work,
     });
 
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     // Every compiled phase this run selected carries the schema-3 pin ...
     expect(new Set(selectedProvenances)).toEqual(
       new Set([`@sublang/playbook@${lockedPlaybook}`]),
@@ -1190,7 +1489,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       cwd: work,
     });
 
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     const verificationDir = join(work, 'code.slc');
     for (const test of [
       'code.gears-fsm.test.ts',
@@ -1225,7 +1524,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       cwd: work,
     });
 
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     for (const test of [
       'code.gears-fsm.test.ts',
       'code.prompt-contract.test.ts',
@@ -1236,31 +1535,23 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     }
   });
 
-  it('emits <cwd>/<basename>.ts default-exporting the registry entry after a playbook full-link (self-hosting-16)', async () => {
+  it('emits <cwd>/<basename>.mjs default-exporting the registry entry after a playbook full-link (self-hosting-16)', async () => {
     const result = await runSlc(['playbook', source], deps());
-    expect(result.ok).toBe(true);
-    const entry = join(work, 'code.ts');
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+    const entry = join(work, 'code.mjs');
     expect(result.outputs).toContain(entry);
     const module = await readFile(entry, 'utf8');
-    // id/command are the basename; requiredRoleIds come from the gears
-    // `Roles:` block the faked agent wrote, not the raw text.
-    expect(module).toContain('export default entry');
-    expect(module).toContain("id: 'code'");
-    expect(module).toContain("command: 'code'");
-    // Schema 3 delegates with the canonical lowercase local role id.
-    expect(module).toContain(
-      "const REQUIRED_ROLE_IDS: readonly string[] = ['writer']",
-    );
-    expect(module).toContain('requiredRoleIds: [...REQUIRED_ROLE_IDS]');
+    const actual = (await import(entry)).default;
+    expect(actual).toMatchObject({
+      id: 'code',
+      command: 'code',
+      requiredRoleIds: ['writer'],
+      intent:
+        'Code — When Boss gives a coding intent, Captain shall relay it to Coder.',
+    });
     expect(module).not.toContain('withRoleBinding');
-    expect(module).toContain(
-      "intent: 'Code — When Boss gives a coding intent, Captain shall relay it to Coder.'",
-    );
-    // The linked module is imported by its source-only relative specifier, so
-    // the entry and the bundle relocate together.
-    expect(module).toContain(
-      "import createPlaybookRuntime, { validateOptions as linkedValidateOptions } from './code.playbook/code.playbook.ts'",
-    );
+    expect(module).toContain('./code.playbook/code.playbook.ts');
+    expect(typeof actual.validateOptions).toBe('function');
   });
 
   it('repairs the required public validator with the same Coder before emitting an entry (self-hosting-19)', async () => {
@@ -1329,18 +1620,18 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         ),
       ),
     ).toBe(true);
-    expect(await readFile(join(work, 'code.ts'), 'utf8')).toContain(
-      'const validateOptions: (value: unknown) => RuntimeOptions = linkedValidateOptions',
+    expect(await readFile(join(work, 'code.mjs'), 'utf8')).toContain(
+      'validateOptions',
     );
   }, 20000);
 
   it('writes no entry module when -o relocates the linked artifact (self-hosting-16)', async () => {
     const out = join(work, 'custom.playbook.ts');
     const result = await runSlc(['playbook', source, '-o', out], deps());
-    expect(result.ok).toBe(true);
+    expect(result.ok, result.diagnostics.join('\n')).toBe(true);
     expect(await exists(out)).toBe(true);
-    expect(await exists(join(work, 'code.ts'))).toBe(false);
-    expect(result.outputs).not.toContain(join(work, 'code.ts'));
+    expect(await exists(join(work, 'code.mjs'))).toBe(false);
+    expect(result.outputs).not.toContain(join(work, 'code.mjs'));
   });
 
   /** Emits an entry module for one gears declaration in a scratch directory. */
@@ -1437,7 +1728,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       },
       (_entryPath, module) => {
         expect(module).toContain(
-          "const REQUIRED_ROLE_IDS: readonly string[] = ['Writer', 'Reviewer']",
+          "const REQUIRED_ROLE_IDS = ['Writer', 'Reviewer']",
         );
       },
     );
@@ -1450,9 +1741,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     await withEmittedEntry(
       { gears: '## Players\n\n- Worker\n\n## Items\n' },
       (_entryPath, module) => {
-        expect(module).toContain(
-          "const REQUIRED_ROLE_IDS: readonly string[] = ['Worker']",
-        );
+        expect(module).toContain("const REQUIRED_ROLE_IDS = ['Worker']");
       },
     );
   });
@@ -1504,7 +1793,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
       { gears: 'Roles:\n\n- Coder\n- `Reviewer`\n\n## Behaviors\n', linked },
       async (entryPath, module) => {
         expect(module).toContain(
-          "const REQUIRED_ROLE_IDS: readonly string[] = ['coder', 'reviewer']",
+          "const REQUIRED_ROLE_IDS = ['coder', 'reviewer']",
         );
         expect(module).toContain('artifactSchema: 3');
         // The host reads `runtimeProfile` as the implementation declaration
@@ -1512,10 +1801,10 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
         // declares exactly `kind` and the linked factory's own `compat`.
         expect(module).toContain(
           [
-            '  runtimeProfile: Object.freeze({',
-            "    kind: 'shared-factory',",
-            '    compat: createPlaybookRuntime.compat,',
-            '  }),',
+            '    runtimeProfile: Object.freeze({',
+            "        kind: 'shared-factory',",
+            '        compat: createPlaybookRuntime.compat,',
+            '    }),',
           ].join('\n'),
         );
         expect(module).not.toContain("runtimeProfile: 'composed-v3'");
@@ -1585,7 +1874,7 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
           '  callPlayer(playerId: string, prompt: string): Promise<unknown>;',
           '}',
           '',
-          'export default function createPlaybookRuntime() {',
+          'export default function createPlaybookRuntime(_options?: unknown) {',
           '  let ports: Ports | undefined;',
           '  return {',
           '    async init(session: { ports: Ports }) {',

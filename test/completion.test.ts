@@ -56,6 +56,12 @@ describe('public retained-bundle completion (completion-6/7)', () => {
       SLC_REVIEWER_AGENT: '',
       SLC_REVIEWER_MODEL: '',
       SLC_REVIEWER_EFFORT: '',
+      // This maintained two-review demo needs more than the default eight
+      // actual invocations, plus a finite allowance for alternate prefixes.
+      // Product defaults remain covered independently by coverage-budget.test.
+      SLC_COVERAGE_MAX_INVOCATIONS: '64',
+      SLC_COVERAGE_MAX_ATTEMPTS: '1024',
+      SLC_COVERAGE_MAX_DURATION_MS: '900000',
     };
   });
 
@@ -111,16 +117,13 @@ describe('public retained-bundle completion (completion-6/7)', () => {
     const files = await readdir(bundle);
     expect(files).not.toContain('.slc-verify');
     expect(files.some((file) => file.endsWith('.test.ts'))).toBe(false);
-    await expect(access(join(cwd, `${name}.ts`))).rejects.toThrow();
+    await expect(access(join(cwd, `${name}.mjs`))).rejects.toThrow();
   }
 
   it.each(['en', 'zh'])(
     'checks and performs the actual %s retained entry without credentials or history',
     async (lang) => {
       await fixture(lang);
-      env.SLC_COVERAGE_MAX_INVOCATIONS = '12';
-      env.SLC_COVERAGE_MAX_ATTEMPTS = '256';
-      env.SLC_COVERAGE_MAX_DURATION_MS = '900000';
       const before = await readFile(join(bundle, `${name}.fsm.ts`));
       const result = await invoke();
       expect(result.ok, result.stderr).toBe(true);
@@ -128,10 +131,10 @@ describe('public retained-bundle completion (completion-6/7)', () => {
         expect(
           await readFile(join(bundle, `${name}.${suffix}`), 'utf8'),
         ).toContain(
-          '"maxInvocations":12,"maxAttempts":256,"maxDurationMs":900000',
+          '"maxInvocations":64,"maxAttempts":1024,"maxDurationMs":900000',
         );
       }
-      expect(result.stdout.trim().split('\n')).toHaveLength(11);
+      expect(result.stdout.trim().split('\n')).toHaveLength(12);
       expect(result.stderr).toContain(
         'no phases executed or build history published',
       );
@@ -139,7 +142,7 @@ describe('public retained-bundle completion (completion-6/7)', () => {
       await expect(
         access(join(root, 'config', 'slc', 'config.yaml')),
       ).rejects.toThrow();
-      await expect(access(join(bundle, '.slc'))).rejects.toThrow();
+      await expect(access(join(bundle, '.slc', 'latest'))).rejects.toThrow();
       // The unchanged maintained checker exercises real shared-factory runtime
       // success/failure paths with Git commits, installed registry validation,
       // all four emitted suites and independent artifact review; no agent call.
@@ -157,9 +160,14 @@ describe('public retained-bundle completion (completion-6/7)', () => {
         process.execPath,
         [join(cwd, 'check.mjs'), lang],
         { cwd: root, env },
-      );
+      ).catch((error) => {
+        throw new Error(String(error.stdout) + '\n' + String(error.stderr));
+      });
       expect(checked.stdout).toContain(`all stages pass for ${lang}`);
     },
+    // This integrates compiler checks, Git effects and four emitted suites.
+    // Keep a finite case budget with room for ordinary CI scheduling variation.
+    60_000,
   );
 
   it.each([false, true])(
@@ -215,9 +223,9 @@ describe('public retained-bundle completion (completion-6/7)', () => {
         expect(result.stderr).toContain(
           'no phases executed or build history published',
         );
-        await access(join(cwd, `${name}.ts`));
+        await access(join(cwd, `${name}.mjs`));
         await access(join(bundle, `${name}.prompt-contract.test.ts`));
-        await expect(access(join(bundle, '.slc'))).rejects.toThrow();
+        await expect(access(join(bundle, '.slc', 'latest'))).rejects.toThrow();
       }
     },
   );
@@ -263,7 +271,7 @@ describe('public retained-bundle completion (completion-6/7)', () => {
     await fixture();
     const result = await invoke([], bundle);
     expect(result.ok, result.stderr).toBe(true);
-    const entry = join(bundle, `${name}.ts`);
+    const entry = join(bundle, `${name}.mjs`);
     expect(await readFile(entry, 'utf8')).toContain(
       "from './workflow.playbook.ts'",
     );
@@ -324,7 +332,7 @@ describe('public retained-bundle completion (completion-6/7)', () => {
           [
             '--input-type=module',
             '-e',
-            `console.log((await import(${JSON.stringify(join(cwd, `${name}.ts`))})).default.id);`,
+            `console.log((await import(${JSON.stringify(join(cwd, `${name}.mjs`))})).default.id);`,
           ],
           { cwd: root, env },
         );
@@ -376,7 +384,7 @@ describe('public retained-bundle completion (completion-6/7)', () => {
       expect(await readFile(linked)).toEqual(before);
       if (form === 'ordinary') {
         expect(result.ok, result.stderr).toBe(true);
-        await access(join(cwd, `${name}.ts`));
+        await access(join(cwd, `${name}.mjs`));
         return;
       }
       expect(result.ok, result.stderr).toBe(false);
@@ -478,12 +486,12 @@ describe('public retained-bundle completion (completion-6/7)', () => {
       await fixture();
       const linked = join(bundle, `${name}.playbook.ts`);
       const original = await readFile(linked, 'utf8');
-      // A stateful composer stays valid through initial checking, then mutates
-      // the Source during later test-content derivation. The prepare sink must
-      // keep already-derived support content off disk until that probe settles.
+      // Every check now has fresh module state. Mutate on the observed property
+      // read rather than relying on counters shared by older cached modules;
+      // both a completed and a throwing probe must preserve the Source.
       const modified = original.replace(
         'composePlayerPrompt: defaultComposePlayerPrompt,',
-        `get composePlayerPrompt() {\n    composerReads++;\n    if (composerReads >= ${throws ? 1 : 2}) {\n      writeFileSync(new URL('./workflow.text.md', import.meta.url), 'mutated Source');\n      ${throws ? "throw new Error('probe stopped');" : ''}\n    }\n    return defaultComposePlayerPrompt;\n  },`,
+        `get composePlayerPrompt() {\n    composerReads++;\n    if (composerReads >= 1) {\n      writeFileSync(new URL('./workflow.text.md', import.meta.url), 'mutated Source');\n      ${throws ? "throw new Error('probe stopped');" : ''}\n    }\n    return defaultComposePlayerPrompt;\n  },`,
       );
       expect(modified).not.toBe(original);
       await writeFile(
@@ -492,15 +500,17 @@ describe('public retained-bundle completion (completion-6/7)', () => {
       );
       const result = await invoke();
       expect(result.ok, result.stderr).toBe(false);
-      expect(result.stderr).toContain('protected path');
-      expect(result.stderr).toContain('changed during the run');
+      expect(result.stderr).toContain('forbidden verification side effect');
+      expect(await readFile(join(bundle, 'workflow.text.md'), 'utf8')).not.toBe(
+        'mutated Source',
+      );
       await noDerivedFiles();
     },
   );
 
   it('refuses physical entry aliases before writing support', async () => {
     await fixture();
-    await symlink(join(bundle, `${name}.text.md`), join(cwd, `${name}.ts`));
+    await symlink(join(bundle, `${name}.text.md`), join(cwd, `${name}.mjs`));
     const result = await invoke();
     expect(result.ok).toBe(false);
     expect(result.stderr).toMatch(/alias|symbolic|regular file/);
@@ -551,7 +561,7 @@ describe('public retained-bundle completion (completion-6/7)', () => {
       [
         '--input-type=module',
         '-e',
-        `const e = (await import(${JSON.stringify(join(cwd, `${name}.ts`))})).default; console.log(JSON.stringify(e.validateOptions({cwd:'/tmp'}))); try { e.validateOptions(null); process.exit(2); } catch {}`,
+        `const e = (await import(${JSON.stringify(join(cwd, `${name}.mjs`))})).default; console.log(JSON.stringify(e.validateOptions({cwd:'/tmp'}))); try { e.validateOptions(null); process.exit(2); } catch {}`,
       ],
       { cwd: root, env },
     );
@@ -560,7 +570,7 @@ describe('public retained-bundle completion (completion-6/7)', () => {
 
   it('reports actual partial writes when flushing the entry fails', async () => {
     await fixture();
-    const entry = join(cwd, `${name}.ts`);
+    const entry = join(cwd, `${name}.mjs`);
     await writeFile(entry, 'prior entry');
     await chmod(entry, 0o400);
     const result = await invoke();

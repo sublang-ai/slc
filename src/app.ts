@@ -145,7 +145,16 @@ export async function buildSlcDeps(
         ? undefined
         : (line: string) => progress({ kind: 'status', text: line }),
   });
-  return { resolver, executor, compiled, cwd, signal, progress, coverage };
+  return {
+    resolver,
+    executor,
+    compiled,
+    cwd,
+    signal,
+    progress,
+    coverage,
+    auditConfiguration: { selection, pipelinePath, stallTimeoutMs, coverage },
+  };
 }
 
 /** Resolver-only dependencies: no agent selection, construction, or seeding. */
@@ -246,7 +255,7 @@ export function resolveRunConfig(
   };
 }
 
-function resolveCoverageConfig(
+export function resolveCoverageConfig(
   env: Record<string, string | undefined>,
   file: FileConfig,
 ) {
@@ -309,7 +318,9 @@ export function usageText(): string {
     'Artifacts land in the working directory (<cwd>/<basename>.<pipeline>/);',
     'an entry source with a foreign extension is normalized first, and the',
     'playbook pipeline links against the installed @sublang/playbook runtime',
-    'when --link is omitted, also emitting the runnable <basename>.ts entry.',
+    'when --link is omitted, also emitting the runnable <basename>.mjs entry.',
+    'Each playbook uses one automatic workflow-owned environment inside its',
+    'artifact directory; no project-root Node setup is required.',
     'Unresolved source behavior exits 2 with questions on stderr; edit the',
     'original source and run the same command again. No interactive answers.',
     '',

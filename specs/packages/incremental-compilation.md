@@ -18,7 +18,7 @@ Where a full invocation [[pipeline-9](pipeline.md#pipeline-9)] or full-link invo
 
 #### incremental-compilation-2
 
-While a usable active build [[incremental-compilation-10](#incremental-compilation-10)] matches every scheduled phase's current inputs [[incremental-compilation-13](#incremental-compilation-13)], [[incremental-compilation-14](#incremental-compilation-14)] and every live target is readable, when the user repeats the eligible invocation, the slc command shall report `up to date`, invoke no phase executor, preserve live phase outputs including manual refinements, and publish no build.
+While any managed target environment remains validated [[standalone-compilation-6](standalone-compilation.md#standalone-compilation-6)] and a usable active build [[incremental-compilation-10](#incremental-compilation-10)] matches every scheduled phase's current inputs [[incremental-compilation-13](#incremental-compilation-13)], [[incremental-compilation-14](#incremental-compilation-14)] and every live target is readable, when the user repeats the eligible invocation, the slc command shall report `up to date`, invoke no phase executor, preserve live phase outputs including manual refinements, and publish no build.
 
 #### incremental-compilation-3
 

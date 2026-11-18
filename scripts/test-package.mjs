@@ -106,7 +106,9 @@ try {
   );
   assert.equal(
     installedManifest.peerDependencies?.['@sublang/playbook'],
-    `^${manifest.devDependencies['@sublang/playbook']}`,
+    /^\d+\.\d+\.\d+-rc\.(?:0|[1-9]\d*)$/.test(manifest.version)
+      ? manifest.devDependencies['@sublang/playbook']
+      : `^${manifest.devDependencies['@sublang/playbook']}`,
   );
   assert.equal(
     installedManifest.dependencies?.['@sublang/playbook'],
@@ -206,11 +208,16 @@ try {
         HOME: join(scratch, 'completion-home'),
         XDG_CONFIG_HOME: configHome,
         SLC_AGENT: 'unused-unsupported-agent',
+        // The retained two-review demo requires a larger finite proof path;
+        // the compiler's ordinary defaults are tested separately.
+        SLC_COVERAGE_MAX_INVOCATIONS: '64',
+        SLC_COVERAGE_MAX_ATTEMPTS: '1024',
+        SLC_COVERAGE_MAX_DURATION_MS: '900000',
       },
     },
   );
   if (
-    !completed.trim().split('\n').includes(join(consumer, 'workflow.ts')) ||
+    !completed.trim().split('\n').includes(join(consumer, 'workflow.mjs')) ||
     existsSync(join(configHome, 'slc', 'config.yaml'))
   ) {
     throw new Error(
@@ -252,7 +259,7 @@ try {
       '  realpathSync(slc.defaultPlaybookLinkTarget()),',
       "  realpathSync(join(dirname(consumerRequire.resolve('@sublang/playbook/runtime')), 'runtime.ts')),",
       ');',
-      "const entry = (await import('./workflow.ts')).default;",
+      "const entry = (await import('./workflow.mjs')).default;",
       "if (entry.id !== 'workflow') throw new Error('external entry did not load');",
       "const factory = (await import('./workflow.playbook/workflow.playbook.ts')).default;",
       'const profile = entry.runtimeProfile;',

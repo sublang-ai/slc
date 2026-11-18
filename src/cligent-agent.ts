@@ -34,7 +34,13 @@
  * adapter's event stream. See specs/packages/phase-execution.md.
  */
 
-import { Cligent, getNativeSkillSupport } from '@sublang/cligent';
+import {
+  Cligent,
+  getNativeSkillSupport,
+  locateAgentExecutable,
+  AGENT_RUNTIME_TARGETS,
+  readRuntimeVersion,
+} from '@sublang/cligent';
 import type {
   AgentAdapter,
   AgentEvent,
@@ -43,6 +49,11 @@ import type {
 
 import type { AgentClient, AgentRunResult } from './interpreter.js';
 import { formatElapsed } from './progress.js';
+import {
+  auditEvent,
+  compilationAudit,
+  auditAgentRevision,
+} from './compilation-audit.js';
 import { ultracodeOptionsFor } from './ultracode.js';
 
 /**
@@ -158,7 +169,33 @@ export function createCligentAgent(opts: {
   const stallMs = opts.stallTimeoutMs ?? 0;
   const timers = opts.watchdogTimers ?? defaultWatchdogTimers;
 
+  const preflight = async () => {
+    const available = await opts.adapter.isAvailable();
+    const agent = opts.adapter.agent;
+    const runtimeId = agent === 'claude-code' ? 'claude' : agent;
+    if (available && !compilationAudit.getStore()) return;
+    const native =
+      runtimeId === 'claude' || runtimeId === 'codex'
+        ? locateAgentExecutable(runtimeId as 'claude' | 'codex')
+        : undefined;
+    const targets =
+      AGENT_RUNTIME_TARGETS[runtimeId as keyof typeof AGENT_RUNTIME_TARGETS];
+    await auditEvent('agent-preflight', {
+      agent,
+      available,
+      native,
+      installed: targets?.map((target) => ({
+        package: target.package,
+        version: readRuntimeVersion(target),
+      })),
+    });
+    if (available) return;
+    throw new Error(
+      `environment: selected ${agent} adapter is unavailable; ${JSON.stringify({ native, requirements: targets, installed: targets?.map((target) => ({ package: target.package, version: readRuntimeVersion(target) })) })}; restore the SLC installation with its included SDK/native packages`,
+    );
+  };
   return {
+    preflight,
     async run({
       prompt,
       cwd,
@@ -167,6 +204,15 @@ export function createCligentAgent(opts: {
       allowedTools,
       signal,
     }): Promise<AgentRunResult> {
+      await preflight();
+      await auditEvent('agent-call', {
+        agent: opts.adapter.agent,
+        cwd,
+        model,
+        prompt,
+        resume,
+        allowedTools,
+      });
       const watchdog = createWatchdog(signal, stallMs, timers);
       const texts: string[] = [];
       let resultText = '';
@@ -191,6 +237,7 @@ export function createCligentAgent(opts: {
           // iteration (DR-019).
           watchdog.touch();
           const event: AgentEvent = raw;
+          await auditEvent('agent-event', event);
           if (event.type === 'text') {
             texts.push(event.payload.content);
           } else if (event.type === 'error') {
@@ -209,6 +256,7 @@ export function createCligentAgent(opts: {
         }
       } finally {
         watchdog.dispose();
+        await auditAgentRevision(opts.adapter.agent);
       }
 
       // A real success that lands inside Cligent's post-abort drain wins over

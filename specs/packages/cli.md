@@ -138,6 +138,14 @@ When resolving Coder or Reviewer subagent configuration, the executable shall us
 | `inherit` or named model | Pass it to performing calls on a supported adapter, and refuse it before execution with a diagnostic naming the field and adapter on an unsupported adapter. Tool-free controls omit child tuning [[phase-execution-31](phase-execution.md#phase-execution-31)]. |
 | Reviewer child setting without a Reviewer agent | Refuse before execution. |
 
+### cli-52
+
+When showing `playbook` compilation help, the executable shall describe automatic preparation of the workflow-owned internal environment [[standalone-compilation-1](standalone-compilation.md#standalone-compilation-1)] and the new `.mjs` entry [[standalone-compilation-4](standalone-compilation.md#standalone-compilation-4)], without presenting an independent/project environment-mode choice.
+
+### cli-54
+
+When invoked as `slc check types <target>`, `slc check fsm <gears> <fsm> [runtime-contract]`, `slc check link <linked> <fsm>`, or `slc check entry <entry> <fsm>`, the CLI shall run its corresponding compiler-owned isolated check without selecting an Agent, emit a JSON finding report, and exit successfully only when the check is verified.
+
 ## Verification
 
 ### cli-13
@@ -244,6 +252,10 @@ When both roles use YAML and environment Ultracode settings, the integration che
 ### cli-51
 
 When a fresh starter and a hand-authored config drive the configured executors, the integration suite shall verify primary and child defaults for both roles against the required Cligent release, literal pins at the adapter, the run environment and home reaching the policy, explicit per-field overrides including a named primary with default child, provider selection with missing or disabled opt-in, and refusal of unsupported child pins naming the setting and adapter [[cli-49](#cli-49)], [[cli-50](#cli-50)].
+
+### cli-53
+
+When subprocess integration invokes help and compiles fixtures from an empty directory and from beneath projects with absent, compatible and incompatible runtime dependencies, the suite shall verify that help describes the single automatic workflow environment and `.mjs` entry, with no environment-mode selection [[cli-52](#cli-52)].
 
 ## References
 

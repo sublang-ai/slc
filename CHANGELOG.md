@@ -11,6 +11,36 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.23.0-rc.13] - 2026-11-18
+
+### Changed
+
+- Prepare a workflow-owned ESM environment with compiler-owned TypeScript and Node typings, canonical `.mjs` entries, checked runtime identity and safe entry initialization/disposal across parent-directory states.
+- Pin coordinated public-registry Cligent and Playbook candidates, automatically acquiring both Codex and Claude SDK runtime stacks; select the Agent and model through environment variables.
+- Refresh compatible locked transitive dependencies to remove existing production advisories and unrelated development advisories; retain only the explicitly deferred development-only picomatch advisory, with its raw audit evidence preserved.
+
+## [0.23.0-rc.11] - 2026-11-18
+
+- Supply independently caller-owned startup data through actual actor input; the repository review binds only its own current pinned meta-definition contract, while artifact-authored startup witnesses remain unverified.
+- Require actual public-entry/predecessor replay instead of synthetic context restoration, including bounded loops, observed self-reentry, reached-context interrupts into the audited target and finite progress-aware question scheduling.
+- Apply configured finite coverage policy consistently to the standalone FSM check and artifact-review commands without constructing an Agent.
+
+- Preserve environment attribution for occupied workflow metadata and established provider routing/proxy refusals.
+
+### Added
+
+- Prepare one workflow-owned environment from the installed Playbook runtime, emit a real JavaScript registry entry and publish an identity-checked build manifest after safe initialization and disposal. Retain per-invocation phase, Agent and checker evidence.
+
+### Changed
+
+- Require coordinated Cligent and Playbook candidates with included Claude/Codex SDKs. Use compiler-owned TypeScript and Node typings, fresh checking contexts and bounded public-entry witnesses without fabricated host authority.
+
+### Fixed
+
+- Require actual initial/public predecessor replay for coverage, retain observed explicit self-reentry, and never restore a solver-created private context as proof.
+
+- Isolate generated modules from ancestor project settings, validate explicit Source terminal returns, preserve the last successful runtime after candidate failure and preserve supported relocated outputs.
+
 ## [0.22.0] - 2026-11-15
 
 ### Changed
@@ -1139,7 +1169,9 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.13...HEAD
+[0.23.0-rc.13]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.11...v0.23.0-rc.13
+[0.23.0-rc.11]: https://github.com/sublang-ai/slc/compare/v0.22.0...v0.23.0-rc.11
 [0.22.0]: https://github.com/sublang-ai/slc/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/sublang-ai/slc/compare/v0.20.2...v0.21.0
 [0.20.2]: https://github.com/sublang-ai/slc/compare/v0.20.1...v0.20.2

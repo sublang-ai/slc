@@ -10,7 +10,7 @@
 
 ## 先运行预编译工作流
 
-需要macOS或Linux、Node.js ≥ 23.6、`git`，以及已安装并登录的[Claude Code CLI](https://www.anthropic.com/claude-code)。
+需要macOS或Linux、Node.js ≥ 25.5.0、`git`，以及已安装并登录的[Claude Code CLI](https://www.anthropic.com/claude-code)。
 在`demo/`目录安装依赖，并准备全新的临时副本。
 下面的Git身份仅用于演示；若需在提交中记录自己的身份，可改为自己的姓名和邮箱：
 
@@ -75,9 +75,9 @@ stdout列出制品路径，stderr报告各阶段的进度与心跳。
 耗时取决于规程和模型，[性能报告](../docs/compilation-performance.md)保留实测设置和结论的适用范围。
 若源规程存在必须澄清的行为，编译以`2`退出，并列出源文件与问题；修改源文件，再运行同一命令。
 
-新入口是`./workflow.zh.ts`，中间制品与测试在`./workflow.zh.playbook/`中。
-若要运行新编译版本，把`.spex/config/playbook.config.yaml`中中文工作流的`from`由`../../reference/workflow.zh.ts`改为`../../workflow.zh.ts`，再重复上面的列表检查与运行命令。
-英文参考入口仍然可用；编译`workflow.txt`会相应生成`workflow.ts`。
+新入口是`./workflow.zh.mjs`，中间制品与测试在`./workflow.zh.playbook/`中。
+若要运行新编译版本，把`.spex/config/playbook.config.yaml`中中文工作流的`from`由`../../reference/workflow.zh.ts`改为`../../workflow.zh.mjs`，再重复上面的列表检查与运行命令。
+英文参考入口仍然可用；编译`workflow.txt`会相应生成`workflow.mjs`。
 
 | 制品 | 用途 |
 | --- | --- |
@@ -87,7 +87,7 @@ stdout列出制品路径，stderr报告各阶段的进度与心跳。
 | `workflow.zh.fsm.ts` | 确定性的状态机。 |
 | `workflow.zh.playbook.ts` | 链接后的运行时模块。 |
 | `workflow.zh.*.test.ts` | 将制品与规约绑定的验证测试。 |
-| `workflow.zh.ts` | 需要在Playbook配置中启用的注册入口。 |
+| `workflow.zh.mjs` | 需要在Playbook配置中启用的注册入口。 |
 
 ## 角色与跨组复用
 
@@ -116,7 +116,7 @@ Codex CLI也需要登录。
 在其他项目中复用时，把入口与对应的`.playbook/`目录一起复制过去，在配置中启用新的绝对入口路径，绑定`requiredRoleIds`中的全部角色，再从新项目根目录调用斜杠命令。
 宿主会按需把运行时引擎链接到外部制品旁边。
 项目若声明了`@sublang/playbook`，则必须在项目内安装它；自动链接不会掩盖缺失的已声明依赖。
-相应SDK需安装在宿主Cligent能解析到的位置。
+Cligent自动提供Claude和Codex SDK；其他可选后端仍需满足各自的安装要求。
 
 规程源文本是可复用的内容：修改规程、编译新版本，检查生成的规约与测试，再分享入口和制品目录。
 稳定player的绑定由使用规程的团队配置。

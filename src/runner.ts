@@ -35,6 +35,7 @@ import {
   type StepToRecord,
 } from './build-history.js';
 import { emitEntryModule } from './entry-module.js';
+import { managedCompilation } from './managed-compilation.js';
 import {
   linkObjectEdges,
   reconcileLinkObjectImportSpecifiers,
@@ -104,7 +105,6 @@ import {
   checkGearsPackageContract,
   checkGearsFsmArtifact,
   checkGearsResultContract,
-  checkLinkedModuleContract,
   emitFsmCoverageTest,
   FsmCoverageDeadlineError,
   emitFsmIntrospectionTest,
@@ -123,8 +123,14 @@ import {
   emitVerifierSupport,
   verifierSupportFiles,
 } from './verify-support.js';
-import { checkSourceGearsContract, checkSourceRoles } from './verify-source.js';
+import {
+  checkSourceGearsContract,
+  checkSourceRoles,
+  checkSourceReturnContracts,
+} from './verify-source.js';
 import { checkFsmTypeScript } from './verify-typescript.js';
+import { isolatedCheck } from './isolated-check.js';
+import { auditEvent } from './compilation-audit.js';
 import {
   checkEntryOptions,
   ENTRY_OPTIONS_CONTRACT,
@@ -159,16 +165,26 @@ export interface SlcDeps {
   cwd?: string;
   signal?: AbortSignal;
   coverage?: CoverageBudget;
+  /** Non-secret effective CLI selections for managed invocation provenance. */
+  auditConfiguration?: unknown;
   /**
    * Receives phase start/finish/failure events with elapsed times as the run
    * progresses (DR-019, cli-32). Absent for hosts that want a quiet run.
    */
   progress?: ProgressSink;
+  /** Final managed-bundle acceptance before incremental success publication. */
+  finalize?: (result: SlcResult) => Promise<SlcResult>;
+  /** Recheck retained bytes after compiler/runtime identity changes. */
+  revalidateReuse?: boolean;
 }
 
 /** The outcome of an `slc` run. */
 export interface SlcResult {
   ok: boolean;
+  cause?: {
+    category: import('./check-report.js').CheckFailureCategory;
+    source: 'compiler-diagnostic';
+  };
   /** Artifact paths written, in order. */
   outputs: string[];
   /** Diagnostics: agent summaries on success, or the failure report. */
@@ -183,7 +199,7 @@ export interface SlcResult {
  * Never rejects: malformed invocations, refusals, and phase failures all return
  * `{ ok: false }` with diagnostics.
  */
-export async function runSlc(
+async function runSlcCore(
   argv: readonly string[],
   deps: SlcDeps,
 ): Promise<SlcResult> {
@@ -492,7 +508,7 @@ async function runFullLink(
     invocation.pipeline === 'playbook' &&
     invocation.output === null &&
     gearsPlan !== undefined
-      ? resolve(cwd, `${basename}.ts`)
+      ? resolve(cwd, `${basename}.mjs`)
       : null;
   const entryAliasesSource =
     entryCandidate !== null && (await pathsAlias(entryCandidate, source));
@@ -561,6 +577,7 @@ async function runFullLink(
           pipeline: invocation.pipeline,
           gearsPath: gearsPlan.path,
           textPath,
+          artifactDir: artDir,
         });
         const missing = await unresolvableRelativeImports(entryPath);
         if (missing.length > 0) {
@@ -629,7 +646,7 @@ async function runCompletion(
       'completion requires the text/GEARS/TypeScript-FSM/Playbook canonical pipeline formats',
     );
   const linked = join(artDir, `${basename}.playbook.ts`);
-  const entryPath = join(cwd, `${basename}.ts`);
+  const entryPath = join(cwd, `${basename}.mjs`);
   const linkTarget =
     invocation.linkTarget === null
       ? defaultPlaybookLinkTarget()
@@ -684,7 +701,8 @@ async function runCompletion(
       ...definitions,
       ...declared.paths,
       ...pinInputs,
-      join(artDir, '.slc'),
+      join(artDir, '.slc', 'latest'),
+      join(artDir, '.slc', 'builds'),
       ...targets.flatMap((target) => target.protectedInputs ?? []),
     ]),
   ];
@@ -728,19 +746,17 @@ async function runCompletion(
             ...(await checkFsmTypeScript(fsm.path, deps.signal)),
           ];
         if (findings.length === 0)
-          findings = await fsmConformanceFindings(
-            gears.path,
-            fsm.path,
-            linkTarget,
+          findings = await isolatedCheck(
+            'fsm',
+            [gears.path, fsm.path, linkTarget, coverage],
             deps.signal,
-            coverage,
           );
         if (findings.length === 0) {
-          const config = findMachineConfig(await loadFsmModule(fsm.path));
-          findings = [
-            ...checkFsmChildSuspension(config),
-            ...(await linkFidelityFindings(linked, fsm.path)),
-          ];
+          findings = await isolatedCheck(
+            'linked',
+            [linked, fsm.path, false],
+            deps.signal,
+          );
         }
         if (findings.length === 0) {
           const module = (await loadLinkedModuleForVerification({
@@ -1342,19 +1358,8 @@ function compileStep(
     phase.target.format === 'gears';
   const fsmConformance =
     phase.source.format === 'gears' && phase.target.format === 'fsm'
-      ? async () => {
-          if (phase.target.ext === '.ts') {
-            const findings = await checkFsmTypeScript(target, signal);
-            if (findings.length > 0) return findings;
-          }
-          return fsmConformanceFindings(
-            source,
-            target,
-            linkTarget,
-            signal,
-            coverage,
-          );
-        }
+      ? () =>
+          isolatedCheck('fsm', [source, target, linkTarget, coverage], signal)
       : undefined;
   const checks: MechanicalReview[] = [
     ...(gated ? [() => sourceFidelityFindings(source, target)] : []),
@@ -1375,6 +1380,16 @@ function compileStep(
       target,
       ...(mechanicalReview === undefined ? {} : { mechanicalReview }),
     },
+    ...(phase.target.format === 'fsm'
+      ? {
+          outputContract: async () =>
+            compilerCheckInstruction('fsm', [
+              source,
+              target,
+              ...(linkTarget ? [linkTarget] : []),
+            ]),
+        }
+      : {}),
     phase: phase.name,
     pinKey: phase.name,
     targetExt: phase.target.ext,
@@ -1391,7 +1406,11 @@ function compileStep(
     ...(phase.source.format === 'fsm'
       ? {
           fsmSourceContinuation: () =>
-            fsmContinuationFindings(source, linkTarget, signal, coverage),
+            isolatedCheck(
+              'continuation',
+              [source, linkTarget, coverage],
+              signal,
+            ),
         }
       : {}),
   };
@@ -1451,14 +1470,27 @@ async function sourceFidelityFindings(
     return [];
   }
   try {
-    return checkSourceGearsContract(sourceText, gearsText);
+    const findings = [
+      ...checkSourceGearsContract(sourceText, gearsText),
+      ...checkSourceReturnContracts(sourceText, gearsText),
+    ];
+    await auditEvent('source-gears-check', {
+      source,
+      target,
+      sourceDigest: hashBytes(Buffer.from(sourceText)),
+      targetDigest: hashBytes(Buffer.from(gearsText)),
+      method:
+        'deterministic authored fragments and explicit terminal-return spans',
+      findings,
+    });
+    return findings;
   } catch (error) {
     return [`Source fidelity could not be checked: ${messageOf(error)}`];
   }
 }
 
 /** Reuses the emitted GEARS-to-FSM suite before accepting its input (DR-033). */
-async function fsmConformanceFindings(
+export async function fsmConformanceFindings(
   source: string,
   target: string,
   linkTarget?: string,
@@ -1523,7 +1555,7 @@ async function fsmSchema(config: MachineConfigLike, linkTarget?: string) {
   });
 }
 
-async function fsmContinuationFindings(
+export async function fsmContinuationFindings(
   source: string,
   linkTarget?: string,
   signal?: AbortSignal,
@@ -1580,16 +1612,12 @@ function linkStep(opts: {
       .generation === 'schema-3';
   const gated =
     link.target.format === PLAYBOOK_LINKED_FORMAT && fsmObjects.length === 1
-      ? async () => [
-          ...(await linkFidelityFindings(opts.linked, fsmObjects[0])),
-          ...((await entryRequired())
-            ? await checkEntryOptions({
-                linkedPath: opts.linked,
-                fsmPath: fsmObjects[0],
-                signal: opts.signal,
-              })
-            : []),
-        ]
+      ? async () =>
+          isolatedCheck(
+            'linked',
+            [opts.linked, fsmObjects[0], await entryRequired()],
+            opts.signal,
+          )
       : undefined;
   return {
     request: {
@@ -1604,7 +1632,10 @@ function linkStep(opts: {
     ...(gated !== undefined && opts.entryGearsPath !== undefined
       ? {
           outputContract: async () =>
-            (await entryRequired()) ? ENTRY_OPTIONS_CONTRACT : undefined,
+            [
+              (await entryRequired()) ? ENTRY_OPTIONS_CONTRACT : '',
+              compilerCheckInstruction('link', [opts.linked, fsmObjects[0]]),
+            ].join('\n'),
         }
       : {}),
     phase: 'link',
@@ -1622,11 +1653,10 @@ function linkStep(opts: {
     ...(gated !== undefined && link.source.format === 'fsm'
       ? {
           fsmSourceContinuation: () =>
-            fsmContinuationFindings(
-              fsmObjects[0],
-              opts.linkTarget,
+            isolatedCheck(
+              'continuation',
+              [fsmObjects[0], opts.linkTarget, opts.coverage],
               opts.signal,
-              opts.coverage,
             ),
         }
       : {}),
@@ -1640,16 +1670,6 @@ function linkStep(opts: {
  * and an unexpected failure becomes a finding, so the gate never throws into
  * the executor it guards.
  */
-async function linkFidelityFindings(
-  linked: string,
-  fsmPath: string,
-): Promise<readonly string[]> {
-  try {
-    return await checkLinkedModuleContract({ linkedPath: linked, fsmPath });
-  } catch (error) {
-    return [`link fidelity could not be checked: ${messageOf(error)}`];
-  }
-}
 
 /**
  * Runs steps in order, selecting interpreted or compiled execution per phase from
@@ -1839,6 +1859,36 @@ async function executeSteps(
         );
         return stopped(index);
       }
+      if (deps.revalidateReuse) {
+        const checks = [
+          step.sourceRoles,
+          step.gearsSourceContract,
+          step.fsmSourceTypecheck,
+          step.fsmSourceContinuation,
+          step.compileFidelity,
+          step.linkFidelity,
+        ].filter((check): check is MechanicalReview => check !== undefined);
+        const checkProtected = await watchProtectedPaths(protectedInputs);
+        let findings: readonly string[] = [];
+        for (const check of checks) {
+          findings = await check();
+          if (findings.length) break;
+        }
+        findings = [...findings, ...(await checkProtected())];
+        if (findings.length) {
+          diagnostics.push(
+            formatFailureReport({
+              phase: step.phase,
+              target,
+              reasons: [
+                'retained artifact revalidation failed; review findings or run --rebuild to regenerate',
+                ...findings,
+              ],
+            }),
+          );
+          return stopped(index);
+        }
+      }
       deps.progress?.({
         kind: 'status',
         text: `reusing ${step.phase} → ${target}`,
@@ -1871,7 +1921,7 @@ async function executeSteps(
             update: { priorInput: mode.priorInput, diff: mode.diff },
           }
         : step.request;
-    if (request.kind === 'link' && step.outputContract !== undefined) {
+    if (step.outputContract !== undefined) {
       const outputContract = await step.outputContract();
       if (outputContract !== undefined)
         request = { ...request, outputContract };
@@ -2160,7 +2210,8 @@ async function executeSteps(
       ? { outcome: 'up-to-date' as const }
       : {}),
   };
-  const completed = await complete(selected, guardCompletionTarget, pinFile);
+  const candidate = await complete(selected, guardCompletionTarget, pinFile);
+  const completed = deps.finalize ? await deps.finalize(candidate) : candidate;
   return state === undefined
     ? completed
     : publishIncremental(completed, state, steps);
@@ -2773,4 +2824,38 @@ async function revalidateChain(dir: string): Promise<void> {
 
 function failure(message: string): SlcResult {
   return { ok: false, outputs: [], diagnostics: [message] };
+}
+
+/** Public compiler boundary with workflow-owned environment and invocation evidence. */
+export async function runSlc(
+  argv: readonly string[],
+  deps: SlcDeps,
+): Promise<SlcResult> {
+  return managedCompilation(argv, deps, runSlcCore);
+}
+
+function compilerCheckInstruction(kind: string, paths: string[]): string {
+  return [
+    'Compiler-owned verification operation (run after writing the target):',
+    (process.platform === 'win32' ? '& ' : '') +
+      [
+        process.execPath,
+        fileURLToPath(new URL('./cli.js', import.meta.url)),
+        'check',
+        kind,
+        ...paths,
+      ]
+        .map(shellArgument)
+        .join(' '),
+    'Use this operation instead of a project or global tsc command. Its toolchain and Node typings are supplied by SLC; do not install dependencies or create a project package.json/tsconfig.',
+    'The compiler reruns this gate. Agent summaries or unavailable alternative checks do not decide acceptance.',
+    'Treat bounded search exhaustion as unverified; public JSON coverageWitnesses may supply legal inputs, never patch private context or weaken guards.',
+  ].join('\n');
+}
+
+/** Shell syntax is selected for the platform, independent of JSON quoting. */
+function shellArgument(value: string): string {
+  return process.platform === 'win32'
+    ? "'" + value.replaceAll("'", "''") + "'"
+    : "'" + value.replaceAll("'", "'\"'\"'") + "'";
 }

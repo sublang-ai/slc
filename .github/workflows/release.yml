@@ -8,6 +8,7 @@ permissions:
   contents: write
   id-token: write
   actions: read
+  pull-requests: read
 
 jobs:
   release:
@@ -21,14 +22,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 25.5.0
           registry-url: https://registry.npmjs.org
           cache: npm
 
       - name: Verify tag matches package version
         run: |
           TAG="${GITHUB_REF_NAME}"
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
             echo "::error::Release tag $TAG must match vMAJOR.MINOR.PATCH"
             exit 1
           fi
@@ -41,29 +42,7 @@ jobs:
       - name: Require passing CI for this commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          SHA="${GITHUB_SHA}"
-          for attempt in $(seq 1 60); do
-            run=$(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SHA}&event=push&branch=main&per_page=1" \
-              --jq '.workflow_runs[0] // {} | [.status // "none", .conclusion // "none"] | @tsv' \
-              2>/dev/null || echo "")
-            status=$(printf '%s' "$run" | cut -f1)
-            conclusion=$(printf '%s' "$run" | cut -f2)
-            if [ "$status" = "completed" ]; then
-              if [ "$conclusion" = "success" ]; then
-                echo "CI passed for ${SHA}."
-                break
-              fi
-              echo "::error::CI concluded '${conclusion}' for ${SHA}"
-              exit 1
-            fi
-            if [ "$attempt" = 60 ]; then
-              echo "::error::Timed out waiting for successful CI on ${SHA}"
-              exit 1
-            fi
-            sleep 10
-          done
+        run: node scripts/release-source-guard.mjs
 
       - name: Upgrade npm for trusted publishing
         run: npm install -g npm@11.8.0
@@ -107,7 +86,7 @@ jobs:
 
       - name: Publish to npm with trusted OIDC
         if: steps.npm_version.outputs.published == 'false'
-        run: npm publish --ignore-scripts --provenance --access public
+        run: npm publish --ignore-scripts --provenance --access public --tag "$(node --input-type=module -e 'import { releaseChannel } from "./scripts/release-source-guard.mjs"; import { readFileSync } from "node:fs"; console.log(releaseChannel(process.env.GITHUB_REF_NAME, JSON.parse(readFileSync("package.json", "utf8")).version));')"
 
       - name: Skip the already published version
         if: steps.npm_version.outputs.published == 'true'
@@ -120,5 +99,5 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             echo "Release $GITHUB_REF_NAME already exists; leaving it unchanged."
           else
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file /tmp/release-notes.md
+            gh release create "$GITHUB_REF_NAME" $([[ "$GITHUB_REF_NAME" == *-rc.* ]] && echo --prerelease) --title "$GITHUB_REF_NAME" --notes-file /tmp/release-notes.md
           fi

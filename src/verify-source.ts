@@ -937,3 +937,102 @@ export function checkSourceGearsContract(
 
   return findings;
 }
+
+/** Conservative Source-span check for explicitly named terminal-return fields. */
+export function checkSourceReturnContracts(
+  source: string,
+  gears: string,
+): string[] {
+  const requirements = [
+    ...source.matchAll(
+      /(?:返回|\breturns?\s+)\s*[`"']?([A-Za-z_$][A-Za-z0-9_$]*)[`"']?(?=\s|字符串|字段|[，。,.;；:：]|$)/g,
+    ),
+  ];
+  if (!requirements.length) return [];
+  const items = parseGearsContract(gears);
+  const sections = [
+    ...gears.matchAll(
+      /^###\s+(\S+)\s*\n([\s\S]*?)(?=^###\s|^##\s|$(?![\s\S]))/gm,
+    ),
+  ];
+  const outcome = (text: string): string | undefined => {
+    if (
+      /(?:无法|失败|不足|不能|\bfail(?:ure|ed)?\b|\bunavailable\b|\berror\b)/i.test(
+        text,
+      )
+    )
+      return 'failure';
+    if (/(?:成功|已生成|\bsuccess(?:ful(?:ly)?)?\b|\bgenerated\b)/i.test(text))
+      return 'success';
+    if (/(?:无条件|始终|总是|\balways\b|\bunconditionally\b)/i.test(text))
+      return 'always';
+    return undefined;
+  };
+  const findings: string[] = [];
+  for (const match of requirements) {
+    const field = match[1];
+    const index = match.index!;
+    const start =
+      Math.max(
+        source.lastIndexOf('\n', index - 1),
+        source.lastIndexOf('。', index - 1),
+        source.lastIndexOf('；', index - 1),
+        source.lastIndexOf(';', index - 1),
+      ) + 1;
+    const end = source.indexOf('。', index);
+    const span = source.slice(start, end < 0 ? source.length : end);
+    const line = source.slice(0, index).split('\n').length;
+    const condition = outcome(span.slice(0, index - start));
+    const label = `Source line ${line} ${JSON.stringify(span)}: terminal return ${field}`;
+    if (!condition) {
+      findings.push(
+        `unverified: ${label} has an unsupported return-condition correspondence; make the Source condition explicit or supply Source-aware review evidence`,
+      );
+      continue;
+    }
+    const producers = items.filter((item) =>
+      item.results.some((result) =>
+        result.fields.some((member) => member.name === field),
+      ),
+    );
+    if (!producers.length) {
+      findings.push(
+        `${label} has no declared producer field; use canonical Results / Output shall include field declarations in the producing action`,
+      );
+      continue;
+    }
+    const obligations = sections.filter((section) => {
+      const text = section[2];
+      const firstLine = text.trimStart().split('\n')[0];
+      return (
+        !/Captain shall (?:prompt|relay|run|call)/.test(firstLine) &&
+        new RegExp(`(?:^|[^A-Za-z0-9_$])${field}(?:$|[^A-Za-z0-9_$])`).test(
+          text,
+        ) &&
+        /(?:交给调用者|返回|\breturn|\bcaller\b)/i.test(text) &&
+        producers.some((item) => text.includes(`(#${item.id})`))
+      );
+    });
+    if (
+      !obligations.some(
+        (section) =>
+          condition === 'always' || outcome(section[2]) === condition,
+      )
+    )
+      findings.push(
+        `${label} has no matching ${condition} workflow-output obligation citing its producer [${producers.map((item) => item.id).join(', ')}]`,
+      );
+    if (
+      /verbatim final text/i.test(span) &&
+      producers.some((item) =>
+        item.results.some((result) =>
+          result.fields.some(
+            (member) => member.name === field && !member.verbatim,
+          ),
+        ),
+      )
+    )
+      findings.push(`${label} lost verbatim-final-text ownership`);
+  }
+  return [...new Set(findings)];
+}

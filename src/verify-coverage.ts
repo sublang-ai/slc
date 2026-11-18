@@ -25,7 +25,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { isDeepStrictEqual } from 'node:util';
+import { isDeepStrictEqual, types as utilTypes } from 'node:util';
 
 import { createActor, fromPromise } from 'xstate';
 
@@ -99,7 +99,14 @@ export function resolveCoverageBudget(
   return Object.freeze({ maxInvocations, maxAttempts, maxDurationMs });
 }
 
+interface CoverageWitness {
+  input?: Record<string, unknown>;
+  events: Record<string, unknown>[];
+}
+
 interface CoverageRun {
+  machineInput?: Record<string, unknown>;
+  witnesses: readonly CoverageWitness[];
   coverage: Readonly<Required<CoverageBudget>>;
   literalChecks?: ReachedLiteralChildChecks;
   artifactSchema?: 1 | 3;
@@ -441,7 +448,7 @@ interface CoverageMachineInput {
 /** Literal bindings, not arbitrary guard literals, declare extra child ids. */
 function coverageMachineInput(machine: MachineLike): CoverageMachineInput {
   const cached = coverageRuns.getStore()?.machineInputs.get(machine.config);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) return freshMachineInput(cached);
   const enabledPlaybooks: CoverageMachineInput['enabledPlaybooks'][number][] = [
     ...COVERAGE_ENABLED_PLAYBOOKS,
   ];
@@ -465,7 +472,19 @@ function coverageMachineInput(machine: MachineLike): CoverageMachineInput {
   }
   const input = { ...COVERAGE_MACHINE_INPUT, enabledPlaybooks };
   coverageRuns.getStore()?.machineInputs.set(machine.config, input);
-  return input;
+  return freshMachineInput(input);
+}
+
+/** Cached templates are never passed to artifact code, including seed actors. */
+function freshMachineInput(
+  template: CoverageMachineInput,
+): CoverageMachineInput {
+  const caller = coverageRuns.getStore()?.machineInput;
+  return {
+    ...(caller === undefined ? {} : snapshotCallerMachineInput(caller)),
+    ...template,
+    enabledPlaybooks: template.enabledPlaybooks.map((entry) => ({ ...entry })),
+  };
 }
 
 /**
@@ -815,6 +834,17 @@ function playbookRefs(config: MachineConfigLike): PlaybookRef[] {
 // so it may not import a sibling module.
 function coverageErrorMessage(error: unknown): string {
   try {
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'ERR_ACCESS_DENIED'
+    ) {
+      const detail = error as Error & {
+        permission?: unknown;
+        resource?: unknown;
+      };
+      return `artifact: forbidden verification side effect (${String(detail.permission)} at ${String(detail.resource)}): ${error.message}`;
+    }
     return error instanceof Error ? error.message : String(error);
   } catch {
     coverageCheckpoint();
@@ -972,39 +1002,12 @@ type PlaybookScript = (
   actorId: string,
 ) => ScriptResult | Promise<ScriptResult>;
 
-function persistedSnapshotWithContext(
-  provided: MachineLike,
-  context: Record<string, unknown>,
-): Record<string, unknown> {
-  const seed = trackCoverageActor(
-    createActor(
-      provided as never,
-      { input: coverageMachineInput(provided) } as never,
-    ) as unknown as {
-      getPersistedSnapshot(): Record<string, unknown>;
-      stop(): unknown;
-    },
-  );
-  let completed = false;
-  try {
-    const snapshot = {
-      ...seed.getPersistedSnapshot(),
-      context: { ...context },
-      children: {},
-    };
-    completed = true;
-    return snapshot;
-  } finally {
-    stopCoverageActors([seed], !completed);
-  }
-}
-
 function makeActor(
   machine: MachineLike,
   script: CaptainScript,
   playbookScript: PlaybookScript = () => null,
-  restoredContext?: Record<string, unknown>,
   observeTransition?: (transition: TransitionObservation) => void,
+  publicInput?: Record<string, unknown>,
 ): DrivenActor {
   coverageCheckpoint();
   const coverageInputs = new Map<string, Record<string, unknown>>();
@@ -1052,18 +1055,11 @@ function makeActor(
       ),
     },
   });
-  const restoredSnapshot =
-    restoredContext === undefined
-      ? undefined
-      : persistedSnapshotWithContext(provided, restoredContext);
   const actor = trackCoverageActor(
     createActor(
       provided as never,
       {
-        input: coverageMachineInput(machine),
-        ...(restoredSnapshot === undefined
-          ? {}
-          : { snapshot: restoredSnapshot }),
+        input: { ...coverageMachineInput(machine), ...publicInput },
         inspect: (inspection: unknown) => {
           if (
             typeof inspection !== 'object' ||
@@ -1423,6 +1419,7 @@ function interruptDriveForRef(
   targetId: string,
   extraValues: readonly unknown[] = [],
   selectedArmIndex?: number,
+  reachedContext?: Record<string, unknown>,
 ): InterruptDrive {
   const arms = transitionArms((machine.config.on ?? {})[INTERRUPT_EVENT]);
   const armIndex =
@@ -1446,15 +1443,7 @@ function interruptDriveForRef(
         ? entryTarget.stableId
         : targetId,
   };
-  const targetPlaybook = playbookRefs(machine.config).find((playbook) =>
-    sameStateRef(playbook.ref, target),
-  );
-  const initialContext = initializedCoverageContext(
-    machine,
-    targetPlaybook === undefined
-      ? undefined
-      : dynamicPlaybookFields(targetPlaybook),
-  );
+  const initialContext = reachedContext ?? initializedMachineContext(machine);
   if (armIndex < 0 || armIndex >= arms.length) {
     return { event: base, context: initialContext, satisfiable: false };
   }
@@ -1477,7 +1466,7 @@ function interruptDriveForRef(
     ],
     {
       initialContext,
-      varyExistingContext: true,
+      assignContext: false,
     },
   );
   return assignment === undefined
@@ -1495,7 +1484,7 @@ function entryDriveForRef(
   refs: readonly StateRef[],
   target: StateRef,
   extraValues: readonly unknown[] = [],
-  initialContext: Record<string, unknown> = initializedCoverageContext(machine),
+  initialContext: Record<string, unknown> = initializedMachineContext(machine),
 ): InterruptDrive | undefined {
   const first = entryDrivesForRef(
     machine,
@@ -1513,7 +1502,7 @@ function* entryDrivesForRef(
   refs: readonly StateRef[],
   target: StateRef,
   extraValues: readonly unknown[] = [],
-  initialContext: Record<string, unknown> = initializedCoverageContext(machine),
+  initialContext: Record<string, unknown> = initializedMachineContext(machine),
   allEntrySurfaces = false,
 ): Generator<InterruptDrive, void> {
   const initialPath = initialActiveRefs(machine.config, refs);
@@ -1560,7 +1549,7 @@ function* entryDrivesForRef(
           values,
           {
             initialContext,
-            varyExistingContext: true,
+            assignContext: false,
             probeBudget,
           },
         );
@@ -1571,7 +1560,47 @@ function* entryDrivesForRef(
             'e:',
           );
           yield { event, context: assignment.context, satisfiable: true };
-          const fields = Object.keys(assignment.payloads['e:'] ?? {})
+          const entryFields = Object.keys(assignment.payloads['e:'] ?? {});
+          // A guard-free START may copy its task into context only in an
+          // action. Observe those event reads during a real, stopped entry;
+          // never infer context keys or alter a private actor snapshot.
+          if (
+            entryFields.length === 0 &&
+            armGuard(arm) === undefined &&
+            typeof arm === 'object' &&
+            arm !== null &&
+            'actions' in arm
+          ) {
+            const reads = new Set<string>();
+            const observed = new Proxy(
+              { ...event },
+              {
+                get(value, key, receiver) {
+                  if (
+                    typeof key === 'string' &&
+                    key !== 'type' &&
+                    !Reflect.has(value, key) &&
+                    reads.size < 5
+                  )
+                    reads.add(key);
+                  return Reflect.get(value, key, receiver);
+                },
+              },
+            );
+            const actor = makeActor(
+              machine,
+              () => null,
+              () => null,
+            );
+            try {
+              if (++probeBudget.probes > MAX_PROBES) return;
+              actor.send(observed);
+            } finally {
+              actor.stop();
+            }
+            if (reads.size <= 4) entryFields.push(...reads);
+          }
+          const fields = entryFields
             .filter((field) => field !== 'type')
             .map((field) => ({ field, cursor: 0 }));
           const candidates = [
@@ -2642,9 +2671,7 @@ function childCoverageDrive(
     refs,
     ref,
     candidates,
-    coverageRuns.getStore()?.literalChecks?.pending()
-      ? initializedMachineContext(machine)
-      : initializedCoverageContext(machine),
+    initializedMachineContext(machine),
     coverageRuns.getStore()?.literalChecks?.pending() ?? false,
   );
   // A valid interrupt need not preserve every public entry's reached context.
@@ -2666,12 +2693,88 @@ interface CoveragePathStep {
   result: Exclude<ScriptResult, null>;
   next: CoverageInvocation;
   questionWait?: StateRef;
+  questionContext?: { value: unknown };
+  interrupt?: {
+    event: Record<string, unknown>;
+    armIndex: number;
+    targetId: string;
+  };
+}
+
+/** A scheduling hint only: unsupported data never compares equal or loses a path. */
+function questionProgressSnapshot(
+  context: Record<string, unknown>,
+): { value: unknown } | undefined {
+  let visits = 0;
+  let textSize = 0;
+  const active = new Set<object>();
+  const copies = new Map<object, object>();
+  const unsupported = Symbol('unsupported');
+  const copy = (value: unknown, depth: number): unknown => {
+    if (++visits > 128 || depth > 8) throw unsupported;
+    if (typeof value === 'string') {
+      textSize += value.length;
+      if (textSize > 65536) throw unsupported;
+    }
+    if (
+      value === null ||
+      ['undefined', 'boolean', 'number', 'string', 'bigint'].includes(
+        typeof value,
+      )
+    )
+      return value;
+    if (
+      typeof value !== 'object' ||
+      utilTypes.isProxy(value) ||
+      active.has(value)
+    )
+      throw unsupported;
+    const previous = copies.get(value);
+    if (previous !== undefined) return previous;
+    const prototype = Object.getPrototypeOf(value);
+    if (
+      prototype !== Object.prototype &&
+      prototype !== null &&
+      prototype !== Array.prototype
+    )
+      throw unsupported;
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > 128) throw unsupported;
+    if (
+      Array.isArray(value) &&
+      (value.length > 127 || keys.length !== value.length + 1)
+    )
+      throw unsupported;
+    const result = Array.isArray(value)
+      ? []
+      : (Object.create(prototype) as object);
+    copies.set(value, result);
+    active.add(value);
+    for (const key of keys) {
+      if (typeof key !== 'string') throw unsupported;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !('value' in descriptor))
+        throw unsupported;
+      Object.defineProperty(result, key, {
+        ...descriptor,
+        value: copy(descriptor.value, depth + 1),
+      });
+    }
+    active.delete(value);
+    return result;
+  };
+  try {
+    return { value: copy(context, 0) };
+  } catch {
+    return undefined;
+  }
 }
 
 interface CoveragePath {
   root: CoverageInvocation;
   drive?: InterruptDrive;
   steps: readonly CoveragePathStep[];
+  witness?: CoverageWitness;
   alternatives?: Iterator<InterruptDrive, void>;
 }
 
@@ -2883,7 +2986,13 @@ async function replayCoveragePath(
       pending = { node, input, complete };
     });
   };
-  const actor = makeActor(machine, script, script, path.drive?.context);
+  const actor = makeActor(
+    machine,
+    script,
+    script,
+    undefined,
+    path.witness?.input,
+  );
   const trustedEntry =
     path.drive === undefined ||
     isDeepStrictEqual(path.drive.context, initializedMachineContext(machine));
@@ -2903,6 +3012,12 @@ async function replayCoveragePath(
   };
   gate.armed = true;
   if (path.drive !== undefined) actor.send(path.drive.event);
+  for (const event of path.witness?.events ?? []) {
+    coverageCheckpoint();
+    pending = undefined;
+    actor.send(event);
+    await coverageYield(true);
+  }
   const wait = () =>
     settle(
       actor,
@@ -2927,7 +3042,24 @@ async function replayCoveragePath(
     observe(current);
     pending = undefined;
     expected = step.next;
-    current.complete(step.result);
+    if (step.interrupt !== undefined) {
+      const before = actor.coverageTransitions.length;
+      actor.send(step.interrupt.event);
+      if (
+        !actor.coverageTransitions
+          .slice(before)
+          .some(
+            (transition) =>
+              transition.root &&
+              transition.armIndex === step.interrupt!.armIndex &&
+              transition.event === step.interrupt!.event &&
+              transition.targetIds.includes(step.interrupt!.targetId),
+          )
+      ) {
+        completedPrefix = false;
+        break;
+      }
+    } else current.complete(step.result);
     if (step.questionWait !== undefined) {
       if (
         !(await settle(actor, atState(step.questionWait), PARALLEL_SETTLE_MS))
@@ -3008,7 +3140,19 @@ async function searchCoverageEntry(
     );
   };
   const reachable = new Set([coverageNodeKey(target)]);
+  const rootInterruptArms = transitionArms(
+    (machine.config.on ?? {})[INTERRUPT_EVENT],
+  );
   for (let pass = 0; pass < nodes.length; pass++) {
+    if (
+      rootInterruptArms.some((arm) =>
+        nodesForTarget(arm, target.value.ref).some((next) =>
+          reachable.has(coverageNodeKey(next)),
+        ),
+      )
+    ) {
+      for (const node of nodes) reachable.add(coverageNodeKey(node));
+    }
     for (const node of nodes) {
       if (
         ['onDone', 'onError'].some((outcome) =>
@@ -3042,6 +3186,13 @@ async function searchCoverageEntry(
       candidates,
     );
     if (entry !== undefined) queue.push({ root: node, ...entry, steps: [] });
+  }
+  for (const node of nodes) {
+    if (!reachable.has(coverageNodeKey(node))) continue;
+    for (const witness of coverageRuns.getStore()?.witnesses ?? []) {
+      if (witness.events.length <= budget.maxInvocations)
+        queue.unshift({ root: node, steps: [], witness });
+    }
   }
   // Family identity is only the declared root invocation. Keep every actual
   // context, prefix and lazy entry alternative distinct within that family.
@@ -3105,6 +3256,40 @@ async function searchCoverageEntry(
       const node = pending.node;
       const context = replay.actor.getSnapshot().context;
       const nextSteps: CoveragePathStep[] = [];
+      for (const [armIndex, arm] of rootInterruptArms.entries()) {
+        for (const next of nodesForTarget(arm, node.value.ref)) {
+          if (coverageNodeKey(next) !== coverageNodeKey(target)) continue;
+          if (!reachable.has(coverageNodeKey(next))) continue;
+          const drive = interruptDriveForRef(
+            machine,
+            refs,
+            next.value.ref,
+            next.kind === 'acting'
+              ? captainInterruptTarget(next.value)
+              : interruptTargetForRef(next.value.ref, next.value.ref.stableId),
+            candidates,
+            armIndex,
+            context,
+          );
+          if (!drive.satisfiable) continue;
+          const rawTarget = rawArmTarget(arm);
+          const targetRef =
+            rawTarget === undefined
+              ? undefined
+              : stateRefForTarget(refs, rawTarget);
+          const targetId =
+            targetRef === undefined
+              ? undefined
+              : resolvedStateNode(machine, targetRef)?.id;
+          if (targetId !== undefined)
+            nextSteps.push({
+              node,
+              result: undefined,
+              next,
+              interrupt: { event: drive.event, armIndex, targetId },
+            });
+        }
+      }
       for (const outcome of ['onDone', 'onError'] as const) {
         for (const [index, arm] of transitionArms(
           node.value.invocation[outcome],
@@ -3167,34 +3352,57 @@ async function searchCoverageEntry(
               typeof result.question !== 'string'
             )
               continue;
-            nextSteps.push({ node, result, next: node, questionWait: waitRef });
+            const questionContext = questionProgressSnapshot(context);
+            nextSteps.push({
+              node,
+              result,
+              next: node,
+              questionWait: waitRef,
+              ...(questionContext === undefined ? {} : { questionContext }),
+            });
           }
         }
       }
       const continuations: CoveragePath[] = [];
       for (const step of nextSteps) {
-        if (path.steps.length + 1 >= budget.maxInvocations) {
+        if (
+          path.steps.length + (path.witness?.events.length ?? 0) + 1 >=
+          budget.maxInvocations
+        ) {
           limitations.add(
             `exhausted ${budget.maxInvocations}-invocation path depth`,
           );
           continue;
         }
-        const visited = [path.root, ...path.steps.map((step) => step.next)].map(
-          coverageNodeKey,
-        );
-        if (
-          step.questionWait === undefined &&
-          visited.includes(coverageNodeKey(step.next))
-        ) {
-          limitations.add('unsupported repeated-invocation path');
-          continue;
-        }
         const successor: CoveragePath = {
           root: path.root,
           drive: path.drive,
+          witness: path.witness,
           steps: [...path.steps, step],
         };
-        if (coverageNodeKey(step.next) === coverageNodeKey(target))
+        const previousQuestion =
+          step.questionWait === undefined
+            ? undefined
+            : [...path.steps]
+                .reverse()
+                .find(
+                  (previous) =>
+                    previous.questionWait !== undefined &&
+                    coverageNodeKey(previous.next) ===
+                      coverageNodeKey(step.next),
+                );
+        const repeatedQuestion =
+          step.questionContext !== undefined &&
+          previousQuestion?.questionContext !== undefined &&
+          isDeepStrictEqual(
+            step.questionContext.value,
+            previousQuestion.questionContext.value,
+          );
+        if (
+          coverageNodeKey(step.next) === coverageNodeKey(target) &&
+          step.interrupt === undefined &&
+          !repeatedQuestion
+        )
           continuations.push(successor);
         else queue.push(successor);
       }
@@ -3728,7 +3936,6 @@ function controllerCaptainProbeActor(
       return planned.output;
     },
     () => null,
-    entry.drive.context,
     (transition) => {
       if (
         controllerResultConsumed &&
@@ -3806,7 +4013,6 @@ function captainProbeActor(
           ? throwingScript(captain.binding.sourceItem, gate)
           : onceScript(captain.binding.sourceItem, result, gate),
         () => null,
-        drive.context,
       ),
       event: drive.event,
     };
@@ -3857,7 +4063,6 @@ function captainProbeActor(
       childUsed = true;
       return predecessor.childOutput;
     },
-    drive.context,
   );
   return {
     actor,
@@ -3969,7 +4174,7 @@ async function probePlaybookOutcome(
         `${label} has no reachable entry under probing (dead or unsupported entry path)`,
       );
     else if (result.limitation === undefined && !satisfiable)
-      findings.push(`${label} is unsatisfiable under probing`);
+      findings.push(`${label} remains unverified after bounded probing`);
     else if (satisfiable)
       findings.push(`${label} did not reach ${target.stableId}`);
     if (result.limitation !== undefined)
@@ -4091,10 +4296,37 @@ async function probeNonPreemptiveActor(
             targetName === undefined
               ? undefined
               : stateRefForTarget(refs, targetName, captain.ref);
-          if (target === undefined || sameStateRef(target, captain.ref))
+          if (
+            target === undefined ||
+            (sameStateRef(target, captain.ref) &&
+              (typeof arm !== 'object' ||
+                arm === null ||
+                !('reenter' in arm) ||
+                arm.reenter !== true))
+          )
             return false;
+          const before = actor.coverageTransitions.length;
           pending.complete(outputs[0]);
-          if (!(await settle(actor, atState(target), PARALLEL_SETTLE_MS)))
+          if (
+            !(await settle(
+              actor,
+              (snapshot) =>
+                atState(target)(snapshot) &&
+                (!sameStateRef(target, captain.ref) ||
+                  actor.coverageTransitions
+                    .slice(before)
+                    .some(
+                      (transition) =>
+                        transition.sourceId ===
+                          resolvedStateNode(machine, captain.ref)?.id &&
+                        transition.armIndex === index &&
+                        transition.reenter &&
+                        transition.event?.type ===
+                          invocationEvent(machine, captain, 'done').type,
+                    )),
+              PARALLEL_SETTLE_MS,
+            ))
+          )
             return false;
           if (key !== NEEDS_BOSS_REPLY) return true;
           if (
@@ -4171,7 +4403,14 @@ async function probeNonPreemptiveActor(
         targetName === undefined
           ? undefined
           : stateRefForTarget(refs, targetName, captain.ref);
-      if (target === undefined || sameStateRef(target, captain.ref)) {
+      if (
+        target === undefined ||
+        (sameStateRef(target, captain.ref) &&
+          (typeof arm !== 'object' ||
+            arm === null ||
+            !('reenter' in arm) ||
+            arm.reenter !== true))
+      ) {
         findings.push(
           `${label}: ${outcome} arm ${index} has no distinct observable target`,
         );
@@ -4192,8 +4431,30 @@ async function probeNonPreemptiveActor(
           true,
         );
         if (outputs.length === 0) return false;
+        const before = actor.coverageTransitions.length;
         pending.complete(outputs[0]);
-        return await settle(actor, atState(target), PARALLEL_SETTLE_MS);
+        return await settle(
+          actor,
+          (snapshot) =>
+            atState(target)(snapshot) &&
+            (!sameStateRef(target, captain.ref) ||
+              actor.coverageTransitions
+                .slice(before)
+                .some(
+                  (transition) =>
+                    transition.sourceId ===
+                      resolvedStateNode(machine, captain.ref)?.id &&
+                    transition.armIndex === index &&
+                    transition.reenter &&
+                    transition.event?.type ===
+                      invocationEvent(
+                        machine,
+                        captain,
+                        outcome === 'onDone' ? 'done' : 'error',
+                      ).type,
+                )),
+          PARALLEL_SETTLE_MS,
+        );
       });
       if (!result.covered)
         findings.push(
@@ -4262,7 +4523,7 @@ async function probeParallelQuestions(
     interruptValues,
   );
   const { script, calls } = scriptedOutputs(plans);
-  const actor = makeActor(machine, script, () => null, drive.context);
+  const actor = makeActor(machine, script, () => null);
   actor.send(drive.event);
   const parked = await settle(
     actor,
@@ -4385,7 +4646,7 @@ async function probeParallelJoins(
         output: combination[index],
       }));
       const { script, calls } = scriptedOutputs(entries);
-      const actor = makeActor(machine, script, () => null, drive.context);
+      const actor = makeActor(machine, script, () => null);
       actor.send(drive.event);
       exercised = await settle(
         actor,
@@ -4646,6 +4907,7 @@ export async function checkFsmCoverage(
     signal?: AbortSignal;
     timeoutMs?: number;
     coverage?: CoverageBudget;
+    machineInput?: Record<string, unknown>;
   } = {},
 ): Promise<string[]> {
   return fsmCoverage(fsmModule, opts);
@@ -4660,9 +4922,15 @@ export async function checkGearsFsmConformanceAsync(
     signal?: AbortSignal;
     timeoutMs?: number;
     coverage?: CoverageBudget;
+    machineInput?: Record<string, unknown>;
   } = {},
 ): Promise<string[]> {
   options = { ...options, coverage: resolveCoverageBudget(options.coverage) };
+  if (options.machineInput !== undefined)
+    options = {
+      ...options,
+      machineInput: snapshotCallerMachineInput(options.machineInput),
+    };
   const { findings, literalChecks } = prepareGearsFsmConformance(
     gears,
     findMachine(fsmModule).config,
@@ -4683,9 +4951,15 @@ export async function checkGearsFsmArtifact(
     signal?: AbortSignal;
     timeoutMs?: number;
     coverage?: CoverageBudget;
+    machineInput?: Record<string, unknown>;
   } = {},
 ): Promise<string[]> {
   options = { ...options, coverage: resolveCoverageBudget(options.coverage) };
+  if (options.machineInput !== undefined)
+    options = {
+      ...options,
+      machineInput: snapshotCallerMachineInput(options.machineInput),
+    };
   const { findings, literalChecks } = prepareGearsFsmConformance(
     gears,
     findMachine(fsmModule).config,
@@ -4711,11 +4985,16 @@ async function fsmCoverage(
     /** A caller may shorten, never extend, the derived cooperative deadline. */
     timeoutMs?: number;
     coverage?: CoverageBudget;
+    machineInput?: Record<string, unknown>;
   } = {},
   literalChecks?: ReachedLiteralChildChecks,
   literalOnly = false,
 ): Promise<string[]> {
   const coverage = resolveCoverageBudget(opts.coverage);
+  const machineInput =
+    opts.machineInput === undefined
+      ? undefined
+      : snapshotCallerMachineInput(opts.machineInput);
   opts.signal?.throwIfAborted();
   if (
     opts.timeoutMs !== undefined &&
@@ -4725,7 +5004,17 @@ async function fsmCoverage(
       'FSM coverage timeout must be a positive finite number',
     );
   const started = performance.now();
+  let witnesses: CoverageWitness[];
+  try {
+    witnesses = readCoverageWitnesses(fsmModule);
+  } catch (error) {
+    return [
+      `${error instanceof Error && error.name === 'UnverifiedCoverageWitnessInput' ? 'unverified: public coverageWitnesses' : 'artifact: invalid public coverageWitnesses'}: ${error instanceof Error ? error.message : String(error)}`,
+    ];
+  }
   const run: CoverageRun = {
+    ...(machineInput === undefined ? {} : { machineInput }),
+    witnesses,
     coverage,
     literalChecks,
     signal: opts.signal,
@@ -4785,6 +5074,7 @@ async function reachedLiteralContexts(
     playbooks = playbookRefs(machine.config);
   const candidates = [
     ...identifierLiterals(sourceText),
+    ...absolutePathCandidates(sourceText),
     ...numericLiterals(sourceText),
   ];
   for (const playbook of playbooks) {
@@ -4819,6 +5109,7 @@ async function runFsmCoverage(
   );
   const sourceCandidates = [
     ...identifierLiterals(sourceText),
+    ...absolutePathCandidates(sourceText),
     ...numericLiterals(sourceText),
   ];
   const isController = isControllerMachine(config);
@@ -4976,7 +5267,7 @@ async function runFsmCoverage(
           : captainPublicStateId(targetCaptain);
       if (target === undefined) {
         findings.push(
-          `${INTERRUPT_EVENT} target ${arm.target} is not enterable`,
+          `${INTERRUPT_EVENT} target ${arm.target} remains unverified after actual public interrupt replay`,
         );
         continue;
       }
@@ -4991,8 +5282,9 @@ async function runFsmCoverage(
       if (!drive.satisfiable) {
         if (
           !isController &&
-          targetCaptain !== undefined &&
-          targetCaptain.binding.actor !== 'script'
+          ((targetCaptain !== undefined &&
+            targetCaptain.binding.actor !== 'script') ||
+            targetPlaybook !== undefined)
         ) {
           const guard = orderedArmPredicate(
             machine,
@@ -5001,7 +5293,9 @@ async function runFsmCoverage(
           );
           const reached = await searchCoverageEntry(
             machine,
-            { kind: 'acting', value: targetCaptain },
+            targetCaptain !== undefined
+              ? { kind: 'acting', value: targetCaptain }
+              : { kind: 'child', value: targetPlaybook! },
             refs,
             captains,
             playbooks,
@@ -5054,7 +5348,7 @@ async function runFsmCoverage(
           }
         }
         findings.push(
-          `${INTERRUPT_EVENT} target ${arm.target} is unsatisfiable under context/event probing`,
+          `${INTERRUPT_EVENT} target ${arm.target} remains unverified after bounded context/event probing`,
         );
         continue;
       }
@@ -5063,16 +5357,31 @@ async function runFsmCoverage(
         machine,
         () => null,
         () => null,
-        drive.context,
       );
+      const before = actor.coverageTransitions.length;
       actor.send(drive.event);
-      const entered = await settle(actor, atState(target));
+      const entered = await settle(
+        actor,
+        (snapshot) =>
+          atState(target)(snapshot) &&
+          actor.coverageTransitions
+            .slice(before)
+            .some(
+              (transition) =>
+                transition.root &&
+                transition.armIndex === armIndex &&
+                transition.event === drive.event &&
+                transition.targetIds.includes(
+                  resolvedStateNode(machine, target)?.id ?? '',
+                ),
+            ),
+      );
       if (
         !entered &&
         !(targetPlaybook !== undefined && actor.coverageErrors.length > 0)
       ) {
         findings.push(
-          `${INTERRUPT_EVENT} target ${arm.target} is not enterable`,
+          `${INTERRUPT_EVENT} target ${arm.target} remains unverified after actual public interrupt replay`,
         );
       }
       actor.stop();
@@ -5666,7 +5975,7 @@ async function runFsmCoverage(
         findings.push(
           `state ${stateKey}: onDone arm ${index} (target ${
             onDoneArms[index]?.target ?? 'none'
-          }) is unsatisfiable under probing`,
+          }) remains unverified after bounded probing`,
         );
       }
     }
@@ -5709,7 +6018,7 @@ async function runFsmCoverage(
         findings.push(
           `state ${stateKey}: onError arm ${index} (target ${
             onErrorArms[index]?.target ?? 'none'
-          }) is unsatisfiable under probing`,
+          }) remains unverified after bounded probing`,
         );
       }
     }
@@ -5890,4 +6199,203 @@ export async function emitFsmCoverageTest(opts: {
     path,
     diagnostics: findings.map((finding) => `fsm coverage: ${finding}`),
   };
+}
+
+/** Filesystem examples are public input candidates, never private state patches. */
+function absolutePathCandidates(source: string): string[] {
+  const quoted = source.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g) ?? [];
+  return [
+    ...new Set([
+      process.platform === 'win32'
+        ? 'C:\\slc-verification\\task.md'
+        : '/tmp/slc-verification/task.md',
+      '/tmp/task.md',
+      '/workspace/task.md',
+      ...quoted
+        .map((item) => item.slice(1, -1))
+        .filter(
+          (item) => /^(?:\/|[A-Za-z]:[\\/])/.test(item) && item.length < 512,
+        ),
+    ]),
+  ];
+}
+
+const RESERVED_MACHINE_INPUT_FIELDS = new Set([
+  'enabledPlaybooks',
+  'stateId',
+  'selfPlaybookId',
+  'bossIntent',
+  'hostCapabilities',
+  'context',
+  'snapshot',
+  'roleBindings',
+  'ports',
+  'repository',
+  'effectLedger',
+  'authority',
+]);
+
+/** Caller-owned input is separate from an artifact's self-declared witnesses. */
+function snapshotCallerMachineInput(value: unknown): Record<string, unknown> {
+  let visits = 0;
+  let bytes = 0;
+  const active = new Set<object>();
+  const fail = (): never => {
+    throw new TypeError(
+      'coverage.machineInput must be bounded plain JSON data without compiler-owned authority fields',
+    );
+  };
+  const copy = (item: unknown, depth: number): unknown => {
+    if (++visits > 4096 || depth > 32) return fail();
+    if (typeof item === 'string') {
+      bytes += Buffer.byteLength(item);
+      if (bytes > 1048576) return fail();
+      return item;
+    }
+    if (item === null || typeof item === 'boolean') return item;
+    if (typeof item === 'number') return Number.isFinite(item) ? item : fail();
+    if (typeof item !== 'object' || utilTypes.isProxy(item) || active.has(item))
+      return fail();
+    const array = Array.isArray(item);
+    const prototype = Object.getPrototypeOf(item);
+    if (
+      array
+        ? prototype !== Array.prototype
+        : prototype !== Object.prototype && prototype !== null
+    )
+      return fail();
+    const keys = Reflect.ownKeys(item);
+    if (
+      keys.length > 4096 ||
+      (array &&
+        ((item as unknown[]).length > 4095 ||
+          keys.length !== (item as unknown[]).length + 1))
+    )
+      return fail();
+    const result: object = array ? [] : (Object.create(prototype) as object);
+    active.add(item);
+    for (const key of keys) {
+      if (array && key === 'length') continue;
+      if (
+        typeof key !== 'string' ||
+        (depth === 0 && RESERVED_MACHINE_INPUT_FIELDS.has(key))
+      )
+        return fail();
+      if (array) {
+        const index = Number(key);
+        if (
+          !Number.isSafeInteger(index) ||
+          index < 0 ||
+          String(index) !== key ||
+          index >= (item as unknown[]).length
+        )
+          return fail();
+      }
+      bytes += Buffer.byteLength(key);
+      if (bytes > 1048576) return fail();
+      const descriptor = Object.getOwnPropertyDescriptor(item, key);
+      if (
+        descriptor === undefined ||
+        !('value' in descriptor) ||
+        !descriptor.enumerable
+      )
+        return fail();
+      Object.defineProperty(result, key, {
+        value: copy(descriptor.value, depth + 1),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    }
+    active.delete(item);
+    return result;
+  };
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return fail();
+  return copy(value, 0) as Record<string, unknown>;
+}
+
+function readCoverageWitnesses(module: unknown): CoverageWitness[] {
+  if (
+    !module ||
+    typeof module !== 'object' ||
+    !Object.hasOwn(module, 'coverageWitnesses')
+  )
+    return [];
+  const raw = (module as Record<string, unknown>).coverageWitnesses;
+  const plain = (value: unknown): value is Record<string, unknown> =>
+    !!value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(value));
+  const jsonSafe = (value: unknown, seen = new Set<object>()): boolean => {
+    if (
+      value === null ||
+      typeof value === 'string' ||
+      typeof value === 'boolean'
+    )
+      return true;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (!value || typeof value !== 'object' || seen.has(value)) return false;
+    if (!Array.isArray(value) && !plain(value)) return false;
+    seen.add(value);
+    const valid = Reflect.ownKeys(value).every((key) => {
+      if (Array.isArray(value) && key === 'length') return true;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return (
+        typeof key === 'string' &&
+        !!descriptor &&
+        'value' in descriptor &&
+        jsonSafe(descriptor.value, seen)
+      );
+    });
+    seen.delete(value);
+    return valid;
+  };
+  if (
+    !plain(raw) ||
+    !jsonSafe(raw) ||
+    raw.schema !== 'sublang.slc.coverage-witnesses.v1' ||
+    Object.keys(raw).some((key) => !['schema', 'entries'].includes(key)) ||
+    !Array.isArray(raw.entries) ||
+    raw.entries.length > 64
+  )
+    throw new Error('expected JSON schema and at most 64 entries');
+  for (const entry of raw.entries) {
+    if (
+      plain(entry) &&
+      plain(entry.input) &&
+      Object.keys(entry.input).some((key) =>
+        RESERVED_MACHINE_INPUT_FIELDS.has(key),
+      )
+    )
+      throw new Error(
+        'startup options must not override compiler-owned host authority or private runtime state',
+      );
+    if (
+      !plain(entry) ||
+      Object.keys(entry).some((key) => !['input', 'events'].includes(key)) ||
+      (entry.input !== undefined && !plain(entry.input)) ||
+      !Array.isArray(entry.events) ||
+      entry.events.length > 64 ||
+      entry.events.some(
+        (event) =>
+          !plain(event) ||
+          typeof event.type !== 'string' ||
+          !event.type ||
+          event.type.startsWith('xstate.'),
+      )
+    )
+      throw new Error(
+        'only public input records and public event sequences are allowed',
+      );
+    if (plain(entry.input) && Object.keys(entry.input).length) {
+      const error = new Error(
+        'nonempty witness startup options require an independent Source-derived validation contract; public events-only replay remains available',
+      );
+      error.name = 'UnverifiedCoverageWitnessInput';
+      throw error;
+    }
+  }
+  return raw.entries as unknown as CoverageWitness[];
 }

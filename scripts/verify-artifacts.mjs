@@ -15,6 +15,7 @@
 //   node scripts/verify-artifacts.mjs <artifactDir> <basename> [--source <path>]
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,6 +39,7 @@ export const reviewArtifact = async ({
   fidelity,
   /** Checks Source fidelity between the Source and the GEARS (DR-029). */
   sourceFidelity,
+  coverage,
   log = console.log,
 }) => {
   const {
@@ -61,6 +63,7 @@ export const reviewArtifact = async ({
   const fsm = await loadFsmModule(fsmPath);
   const config = findMachineConfig(fsm);
   let provenance;
+  let callerMachineInput;
   let runtimeDeclaration;
   let record;
   if (pinning !== undefined) {
@@ -128,14 +131,6 @@ export const reviewArtifact = async ({
     ...schemaResolution.findings.map((finding) => `schema: ${finding}`),
   );
 
-  section('gears↔fsm conformance and transition coverage');
-  const conformance = await checkGearsFsmArtifact(gears, fsm, {
-    sourceText: readFileSync(fsmPath, 'utf8'),
-    ...(artifactSchema === undefined ? {} : { artifactSchema }),
-  });
-  findings.push(...conformance.map((f) => `conformance: ${f}`));
-  log(conformance.length === 0 ? 'ok' : conformance.join('\n'));
-
   section('compiled-execution fidelity');
   if (fidelity === undefined) {
     log('not reviewed: no fidelity checker supplied');
@@ -149,10 +144,37 @@ export const reviewArtifact = async ({
     if (!existsSync(definitionPath)) {
       log(`not applicable: no definition at ${definitionPath}`);
     } else {
+      const definitionText = readFileSync(definitionPath, 'utf8');
       const verdict = fidelity.checkCompiledExecutionFidelity(
-        readFileSync(definitionPath, 'utf8'),
+        definitionText,
         gears,
       );
+      // DR-028 is the independent host contract for these owned, pinned
+      // compiler shells only. Ordinary artifact exports or matching basenames
+      // cannot authorize startup values. Establish identity and fidelity before
+      // coverage; never synthesize a context field or a definition default.
+      const ownedPipelinePath = fileURLToPath(
+        new URL('../pipelines/playbook/', import.meta.url),
+      );
+      const ownedPipeline = existsSync(ownedPipelinePath)
+        ? realpathSync(ownedPipelinePath)
+        : undefined;
+      if (
+        provenance !== undefined &&
+        ownedPipeline !== undefined &&
+        record !== undefined &&
+        verdict.applicable &&
+        verdict.findings.length === 0 &&
+        ['text2gears', 'gears2fsm', 'link'].includes(basename) &&
+        realpathSync(pipelineDir) === ownedPipeline &&
+        realpathSync(definitionPath) ===
+          realpathSync(join(ownedPipeline, basename + '.md')) &&
+        record.definition.hash ===
+          'sha256:' + createHash('sha256').update(definitionText).digest('hex')
+      ) {
+        callerMachineInput = { definition: definitionText };
+        log(`host input: current pinned definition ${record.definition.hash}`);
+      }
       if (!verdict.applicable) {
         log(`not applicable: ${verdict.reason}`);
       } else {
@@ -189,6 +211,18 @@ export const reviewArtifact = async ({
       );
     }
   }
+
+  section('gears↔fsm conformance and transition coverage');
+  const conformance = await checkGearsFsmArtifact(gears, fsm, {
+    sourceText: readFileSync(fsmPath, 'utf8'),
+    ...(callerMachineInput === undefined || findings.length
+      ? {}
+      : { machineInput: callerMachineInput }),
+    ...(artifactSchema === undefined ? {} : { artifactSchema }),
+    ...(coverage === undefined ? {} : { coverage }),
+  });
+  findings.push(...conformance.map((f) => `conformance: ${f}`));
+  log(conformance.length === 0 ? 'ok' : conformance.join('\n'));
 
   section('introspection');
   const pins = pinIntrospection(config);
@@ -308,7 +342,15 @@ if (
       import('../dist/compiled-execution.js'),
       import('../dist/verify-source.js'),
     ]);
+    const { resolveCoverageConfig } = await import('../dist/app.js');
+    const { loadConfigFile } = await import('../dist/config-file.js');
+    const file = await loadConfigFile({
+      cwd: process.cwd(),
+      env: process.env,
+      seed: false,
+    });
     const result = await reviewArtifact({
+      coverage: resolveCoverageConfig(process.env, file.config),
       dir,
       basename,
       ...(source === undefined ? {} : { source }),
