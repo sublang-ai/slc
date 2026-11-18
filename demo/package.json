@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Consumer project for the slc demo: npm install here, then compile and run the workflow from this directory.",
   "dependencies": {
-    "@sublang/playbook": "19.1.0-rc.4",
-    "@sublang/slc": "0.23.0-rc.7"
+    "@sublang/playbook": "19.1.0-rc.5",
+    "@sublang/slc": "0.23.0-rc.11"
   }
 }

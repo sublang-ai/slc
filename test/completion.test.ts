@@ -56,6 +56,12 @@ describe('public retained-bundle completion (completion-6/7)', () => {
       SLC_REVIEWER_AGENT: '',
       SLC_REVIEWER_MODEL: '',
       SLC_REVIEWER_EFFORT: '',
+      // This maintained two-review demo needs more than the default eight
+      // actual invocations, plus a finite allowance for alternate prefixes.
+      // Product defaults remain covered independently by coverage-budget.test.
+      SLC_COVERAGE_MAX_INVOCATIONS: '64',
+      SLC_COVERAGE_MAX_ATTEMPTS: '1024',
+      SLC_COVERAGE_MAX_DURATION_MS: '900000',
     };
   });
 
@@ -118,9 +124,6 @@ describe('public retained-bundle completion (completion-6/7)', () => {
     'checks and performs the actual %s retained entry without credentials or history',
     async (lang) => {
       await fixture(lang);
-      env.SLC_COVERAGE_MAX_INVOCATIONS = '12';
-      env.SLC_COVERAGE_MAX_ATTEMPTS = '256';
-      env.SLC_COVERAGE_MAX_DURATION_MS = '900000';
       const before = await readFile(join(bundle, `${name}.fsm.ts`));
       const result = await invoke();
       expect(result.ok, result.stderr).toBe(true);
@@ -128,7 +131,7 @@ describe('public retained-bundle completion (completion-6/7)', () => {
         expect(
           await readFile(join(bundle, `${name}.${suffix}`), 'utf8'),
         ).toContain(
-          '"maxInvocations":12,"maxAttempts":256,"maxDurationMs":900000',
+          '"maxInvocations":64,"maxAttempts":1024,"maxDurationMs":900000',
         );
       }
       expect(result.stdout.trim().split('\n')).toHaveLength(12);

@@ -255,7 +255,7 @@ export function resolveRunConfig(
   };
 }
 
-function resolveCoverageConfig(
+export function resolveCoverageConfig(
   env: Record<string, string | undefined>,
   file: FileConfig,
 ) {

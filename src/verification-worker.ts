@@ -58,7 +58,13 @@ async function check(job: string, args: unknown[]): Promise<readonly string[]> {
     const types = await checkFsmTypeScript(target);
     return types.length
       ? types
-      : fsmConformanceFindings(source, target, linkTarget, undefined, coverage);
+      : fsmConformanceFindings(
+          source,
+          target,
+          typeof linkTarget === 'string' ? linkTarget : undefined,
+          undefined,
+          coverage,
+        );
   }
   if (job === 'continuation') {
     const [source, target, coverage] = args as [

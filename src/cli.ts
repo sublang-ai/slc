@@ -13,6 +13,8 @@
  */
 
 import { messageOf } from './errors.js';
+import { resolveCoverageConfig } from './app.js';
+import { loadConfigFile } from './config-file.js';
 import { isolatedCheck } from './isolated-check.js';
 import { checkFailureCategory } from './check-report.js';
 import { resolve } from 'node:path';
@@ -43,6 +45,16 @@ const check = async (): Promise<number> => {
       'usage: slc check types <target> | fsm <gears> <fsm> [runtime] | link <linked> <fsm> | entry <entry> <fsm>',
     );
   const values: unknown[] = paths.map((path) => resolve(path));
+  const file = await loadConfigFile({
+    cwd: process.cwd(),
+    env: process.env,
+    seed: false,
+  });
+  const coverage = resolveCoverageConfig(process.env, file.config);
+  if (kind === 'fsm') {
+    values[2] ??= null;
+    values[3] = coverage;
+  }
   if (kind === 'link') values.push(true);
   const findings = await isolatedCheck(item.job, values, signal);
   await new Promise<void>((resolveOutput, rejectOutput) =>

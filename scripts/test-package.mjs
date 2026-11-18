@@ -208,6 +208,11 @@ try {
         HOME: join(scratch, 'completion-home'),
         XDG_CONFIG_HOME: configHome,
         SLC_AGENT: 'unused-unsupported-agent',
+        // The retained two-review demo requires a larger finite proof path;
+        // the compiler's ordinary defaults are tested separately.
+        SLC_COVERAGE_MAX_INVOCATIONS: '64',
+        SLC_COVERAGE_MAX_ATTEMPTS: '1024',
+        SLC_COVERAGE_MAX_DURATION_MS: '900000',
       },
     },
   );

@@ -697,6 +697,95 @@ describe('playbook pipeline interpreted end to end (self-hosting-8, self-hosting
     cwd: work,
   });
 
+  it.each([
+    'runtime-root',
+    'runtime-version',
+    'runtime-content',
+    'compiler-build',
+    'entry',
+    'helper',
+  ])(
+    'rechecks accepted managed bytes after recorded identity or executable drift: %s',
+    async (mutation) => {
+      await mkdir(artDir, { recursive: true });
+      const helper = join(artDir, 'managed-helper.ts');
+      await writeFile(helper, 'export const revision = 1;\n');
+      const prompts: string[] = [];
+      const executor = createInterpretedExecutor({
+        agent: writingAgent({
+          prompts,
+          playbook: `import './managed-helper.ts';\n${SCHEMA_3_PLAYBOOK_MODULE}`,
+        }),
+      });
+      const selected = { ...deps(), executor };
+      const initial = await runSlc(['playbook', source], selected);
+      expect(initial.ok, initial.diagnostics.join('\n')).toBe(true);
+      const entry = join(work, 'code.mjs');
+      const manifestPath = join(artDir, 'build-manifest.json');
+      expect(
+        (await validateArtifactManifest(entry))?.files.some(
+          (file) => file.path === 'managed-helper.ts',
+        ),
+      ).toBe(true);
+      prompts.length = 0;
+      const unchanged = await runSlc(['playbook', source], selected);
+      expect(unchanged).toMatchObject({ ok: true, outcome: 'up-to-date' });
+      expect(prompts).toEqual([]);
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+      if (mutation === 'runtime-root')
+        manifest.runtime.playbook.root = join(root, 'different-runtime-root');
+      if (mutation === 'runtime-version')
+        manifest.runtime.playbook.version = '0.0.0-test';
+      if (mutation === 'runtime-content')
+        manifest.runtime.playbook.contentHash = '0'.repeat(64);
+      if (mutation === 'compiler-build')
+        manifest.compiler.buildIdentity = 'different-compiler-build';
+      if (mutation === 'entry')
+        await writeFile(
+          entry,
+          (await readFile(entry, 'utf8')) + '\n// changed entry revision\n',
+        );
+      if (mutation === 'helper')
+        await writeFile(helper, 'throw new Error("changed managed helper");\n');
+      if (!['entry', 'helper'].includes(mutation))
+        await writeFile(manifestPath, JSON.stringify(manifest));
+      const before = new Set(await readdir(join(artDir, '.slc/attempts')));
+      const sourceBytes = await readFile(source);
+      const result = await runSlc(['playbook', source], selected);
+      const added = (await readdir(join(artDir, '.slc/attempts'))).filter(
+        (id) => !before.has(id),
+      );
+      expect(added).toHaveLength(1);
+      const events = (
+        await readFile(
+          join(artDir, '.slc/attempts', added[0], 'events.jsonl'),
+          'utf8',
+        )
+      )
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      const jobs = events
+        .filter((event) => event.kind === 'checker-start')
+        .map((event) => event.data.job);
+      expect(jobs).toContain('fsm');
+      expect(jobs).toContain('linked');
+      expect(await readFile(source)).toEqual(sourceBytes);
+      expect(prompts).toEqual([]);
+      if (mutation === 'helper') {
+        expect(result.ok).toBe(false);
+        expect(result.diagnostics.join('\n')).toContain(
+          'changed managed helper',
+        );
+      } else {
+        expect(result.ok, result.diagnostics.join('\n')).toBe(true);
+        expect(jobs).toContain('lifecycle');
+        await expect(validateArtifactManifest(entry)).resolves.toBeDefined();
+      }
+    },
+    120000,
+  );
+
   it('runs the bare playbook invocation as a full-link against the default runtime target (self-hosting-13)', async () => {
     const result = await runSlc(['playbook', source], deps());
     expect(result.ok, result.diagnostics.join('\n')).toBe(true);

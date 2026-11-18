@@ -51,3 +51,9 @@ A generated witness cannot establish the Source permission of its own arbitrary 
 
 Native acceptance also exposed an occupied private manifest and actual proxy/workspace-routing refusals being labeled as artifact defects.
 Their established environment cause is retained through failure reporting; unknown isolated-check exceptions remain checker failures rather than invented workflow defects.
+
+Actual-initial replay exposed maintained bounded review loops that the former synthetic-context driver had bypassed. Repeated invocations therefore remain eligible only through actual transitions and newly reached actor starts, with every revisit charged to the unchanged configured depth, attempt and duration limits; no private snapshot or larger default budget substitutes for proof.
+
+Maintained demo completion now records an explicit 64-invocation/1,024-attempt/900,000 ms proof policy after the smaller 12/256 policy exhausted finite exploration. Product defaults remain 8/64/300,000. Actual reached-context interrupts into the audited target, action-observed guard-free entry fields and progress-aware question scheduling close the observed gaps; unsearched public-event combinations remain unverified rather than receiving a reachability claim. Original demo FSM, GEARS and Source bytes are retained.
+
+The independent meta-artifact review also exposed link’s legitimate required `definition` input. Caller-supplied bounded JSON `machineInput` is a separate host-owned API input, never an artifact export or context patch. The repository review supplies exact definition bytes only after its own current pin and compiled-execution contract establish DR-028 authority; ordinary workflows and nonempty artifact witnesses receive no inferred startup values.
