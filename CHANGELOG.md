@@ -1170,7 +1170,7 @@ and this project adheres to
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
 [Unreleased]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.13...HEAD
-[0.23.0-rc.13]: https://github.com/sublang-ai/slc/compare/v0.22.0...v0.23.0-rc.13
+[0.23.0-rc.13]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.11...v0.23.0-rc.13
 [0.23.0-rc.11]: https://github.com/sublang-ai/slc/compare/v0.22.0...v0.23.0-rc.11
 [0.22.0]: https://github.com/sublang-ai/slc/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/sublang-ai/slc/compare/v0.20.2...v0.21.0
