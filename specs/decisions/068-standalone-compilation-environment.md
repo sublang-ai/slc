@@ -30,6 +30,8 @@ Bounded coverage can fail to discover a valid public input, which is insufficien
 - Keep phase commands, input/output identities, timing, exit status, reuse decisions, and final gate evidence inspectable, without making compiler archives required for runtime loading.
 - Locate managed manifests through explicit entry metadata, reject a lost managed manifest without legacy downgrade, preserve the existing already-in-artifact layout, and add no blanket `-o` directory restriction.
 - Verify packed global installations with separate real Codex and Claude cold-generation samples and an independent reuse check; retain each sampled outcome without claiming all natural-language generation is stable.
+- Under the user’s narrowed 2026-11-18 acceptance scope, use Codex for the native-platform/parent matrix and only one successful simple-flow Claude/GLM compilation for workability; stop additional Claude scenarios and preserve their records as scope cancellations.
+- Unpacked documentation-only integration does not replace the already immutable public candidate: compare every packed file and run current-head CI, without repeating unaffected model calls or publication; runtime-source or packed-file changes still need a new candidate.
 
 - Pre-merge validation separates locally built/installed functional candidates from real branch prerelease registry installs, retaining stable publication gates without making a formal stable release a prerequisite.
 - The shared compilation dependency/environment contract supports macOS, Linux and native Windows; POSIX-only historical front-end constraints do not exempt the native Windows compiler/library path.

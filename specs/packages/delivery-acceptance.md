@@ -36,13 +36,13 @@ When testing parent-directory independence, acceptance shall create a new empty 
 
 Permitted factorization conditions:
 
-- Separately identified current evidence of real source-only cold compilation on every native platform and backend in both a no-project, outside-Git empty parent and a CommonJS stress fixture with a real Git ancestor, spaces and Chinese characters in the child path, conflicting parent runtimes and unrelated compiler/types settings.
+- Separately identified current evidence of real source-only cold compilation with Codex on every native platform in both a no-project, outside-Git empty parent and a CommonJS stress fixture with a real Git ancestor, spaces and Chinese characters in the child path, conflicting parent runtimes and unrelated compiler/types settings.
 - Current installed-CLI environment/checking/initialization revalidation of immutable independently accepted workflow inputs for each matrix state, exercising the actual selected runtime and checks in fresh children, preserving independent accepted-code hashes and disclosing zero generation calls, without describing retained-input cases as source-only cold compilation.
 - Identification of the common workflow-owned preparation and compiler-owned checking paths exercised by both layers, with independent review of why remaining parent-state differences cannot select another Agent runtime or checking environment; any uncovered Agent trust, path or environment branch requires a further real cold case.
 
 ### delivery-acceptance-4
 
-When validating Agent-backed compilation, acceptance shall cover `codex` using the owner's login configuration and `claude-code` using the authorized GLM Coding Plan context as separately identified backends, with the actual provider/model and SDK/native-runtime versions recorded and the test context isolated from unrelated daily Agent settings, without committing or printing credentials or describing GLM-backed Claude Code as an Anthropic-model test.
+When validating this standalone-environment delivery, acceptance shall use `codex` with the owner's login configuration for the native-platform and parent-directory matrix and only one successful simple-flow compilation with `claude-code` in the authorized GLM Coding Plan context to confirm that backend works, recording actual provider/model and SDK/native-runtime identities in isolated test contexts without credentials in evidence or describing GLM as an Anthropic model, with no additional Claude/GLM platform or scenario matrix required.
 
 ### delivery-acceptance-5
 
@@ -55,7 +55,7 @@ When preparing delivery evidence, maintainers shall separate functional and regi
 | Layer | Method and claim |
 | --- | --- |
 | Local functional acceptance | Build and pack the candidate sources, install their production artifacts into an isolated tool environment, record how the coordinated local package graph was supplied, and run the native-platform/backend/parent matrix [[delivery-acceptance-2](#delivery-acceptance-2)], [[delivery-acceptance-3](#delivery-acceptance-3)], [[delivery-acceptance-4](#delivery-acceptance-4)]; this proves operation of the installed candidate, not registry dependency acquisition. |
-| Registry-install acceptance | Publish coordinated branch candidates through the candidate release gate [[release-30](release.md#release-30)], install only the exact SLC candidate globally from the registry into a fresh isolated prefix, inspect the actual complete production dependency tree and packaged files, then perform real post-install compilation smoke on every native platform and backend; this proves acquisition and installed-package usability. |
+| Registry-install acceptance | Publish coordinated branch candidates through the candidate release gate [[release-30](release.md#release-30)], install only the exact SLC candidate globally from the registry into a fresh isolated prefix, inspect the actual complete production dependency tree and packaged files, then perform real post-install compilation smoke on every native platform with Codex, plus the separately scoped Claude/GLM workability smoke [[delivery-acceptance-4](#delivery-acceptance-4)]; this proves acquisition and installed-package usability. |
 
 ### delivery-acceptance-7
 
