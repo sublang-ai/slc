@@ -26,6 +26,17 @@ const execFileAsync = promisify(execFile);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
+// These maintained review loops exceed the default eight-call proof path.
+// Give this explicit demo check the same finite policy as its completion
+// regression; this does not change SLC's default policy or generated workflow.
+const demoCoverageEnv = {
+  ...process.env,
+  SLC_COVERAGE_MAX_INVOCATIONS:
+    process.env.SLC_COVERAGE_MAX_INVOCATIONS || '64',
+  SLC_COVERAGE_MAX_ATTEMPTS: process.env.SLC_COVERAGE_MAX_ATTEMPTS || '1024',
+  SLC_COVERAGE_MAX_DURATION_MS:
+    process.env.SLC_COVERAGE_MAX_DURATION_MS || '900000',
+};
 
 // `players` are the display names the READMEs and the normalized text carry;
 // `roles` are the canonical lowercase local role ids the compiled machine's
@@ -476,7 +487,7 @@ try {
   const { stdout } = await execFileAsync(
     'node',
     [join(repoRoot, 'scripts', 'verify-artifacts.mjs'), bundle, basename],
-    { cwd: repoRoot },
+    { cwd: repoRoot, env: demoCoverageEnv },
   );
   report(
     'independent artifact review has no findings',

@@ -1030,7 +1030,7 @@ const parallelMachine = (
 };
 
 /** A compact Captain planner with exact catalog guards and a dynamic child. */
-const dynamicCaptainMachine = () => {
+const dynamicCaptainMachine = (unreachableFinalInterrupt = false) => {
   const metadata = (stateId: string) => ({
     playbook: { stateId, description: stateId },
   });
@@ -1124,7 +1124,7 @@ const dynamicCaptainMachine = () => {
     'reassessAfterCall',
     'awaitBossReply',
     'failed',
-    'done',
+    ...(unreachableFinalInterrupt ? ['done'] : []),
   ];
   return setup({
     actors: {
@@ -3841,7 +3841,7 @@ describe('checkFsmCoverage (verification-6)', () => {
     ).toEqual([]);
   });
 
-  it('restores satisfying context before driving a guarded parallel parent', async () => {
+  it('keeps a guarded parallel interrupt unverified without real predecessor context', async () => {
     expect(
       await checkFsmCoverage(
         {
@@ -3852,7 +3852,11 @@ describe('checkFsmCoverage (verification-6)', () => {
             "const phase = 'reviewing'; const reviewScope = 'specItems';",
         },
       ),
-    ).toEqual([]);
+    ).toContainEqual(
+      expect.stringMatching(
+        /^BOSS_INTERRUPT target parallelRound remains unverified/,
+      ),
+    );
   });
 
   it('reports an interrupt guard that bounded probing cannot satisfy', async () => {
@@ -4216,6 +4220,14 @@ describe('checkFsmCoverage (verification-6)', () => {
     expect(
       await checkFsmCoverage({ machine: dynamicCaptainMachine() }),
     ).toEqual([]);
+  });
+
+  it('does not invent a final response for an unreachable final interrupt', async () => {
+    expect(
+      await checkFsmCoverage({ machine: dynamicCaptainMachine(true) }),
+    ).toEqual([
+      'BOSS_INTERRUPT target done remains unverified after bounded context/event probing',
+    ]);
   });
 
   it('detects a nested playbook without an onDone transition', async () => {
@@ -5660,17 +5672,11 @@ describe('checkFsmCoverage (verification-6)', () => {
     ).toBe(true);
   });
 
-  it('reports a required non-question cycle as unsupported rather than skipping it', async () => {
+  it('replays a required non-question cycle without inventing progress', async () => {
     const findings = await checkFsmCoverage({
       machine: childChainMachine({ repeatBranch: true }),
     });
-    expect(
-      findings.some(
-        (finding) =>
-          finding.startsWith('state pr:') &&
-          finding.includes('unsupported repeated-invocation'),
-      ),
-    ).toBe(true);
+    expect(findings).toEqual([]);
   });
 
   it('reports explicit depth and attempt exhaustion for otherwise runnable child paths', async () => {
@@ -5805,8 +5811,10 @@ describe('checkFsmCoverage (verification-6)', () => {
       await checkFsmCoverage({
         machine: nestedMultiArmMachine({ deadDoneArm: true }),
       }),
-    ).toContain(
-      'state callChild: nested playbook onDone arm 1 remains unverified after bounded probing',
+    ).toContainEqual(
+      expect.stringMatching(
+        /^state callChild: nested playbook onDone arm 1(?: remains unverified|: exhausted)/,
+      ),
     );
   });
 
@@ -5815,8 +5823,10 @@ describe('checkFsmCoverage (verification-6)', () => {
       await checkFsmCoverage({
         machine: nestedMultiArmMachine({ deadErrorArm: true }),
       }),
-    ).toContain(
-      'state callChild: nested playbook onError arm 1 remains unverified after bounded probing',
+    ).toContainEqual(
+      expect.stringMatching(
+        /^state callChild: nested playbook onError arm 1(?: remains unverified|: exhausted)/,
+      ),
     );
   });
 

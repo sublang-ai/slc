@@ -93,6 +93,89 @@ const large = {
 };
 
 describe('finite coverage policy through public integration boundaries', () => {
+  it('applies file policy and environment overrides to the installed check command before artifact access', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'slc-budget-check-cli-'));
+    const repository = fileURLToPath(new URL('..', import.meta.url));
+    try {
+      await symlink(
+        join(repository, 'node_modules'),
+        join(root, 'node_modules'),
+        'dir',
+      );
+      const gears = join(root, 'long.gears.md');
+      const fsm = join(root, 'long.fsm.ts');
+      await writeFile(
+        gears,
+        Array.from(
+          { length: 10 },
+          (_, i) =>
+            `### STEP-${i}\n\nCaptain shall call playbook \`child\`:\n> Perform the child.\n`,
+        ).join('\n'),
+      );
+      const testSource = await readFile(fileURLToPath(import.meta.url), 'utf8');
+      const fn = testSource.slice(
+        testSource.indexOf('function longMachine'),
+        testSource.indexOf('const large ='),
+      );
+      await writeFile(
+        fsm,
+        `import { assign, fromPromise, setup } from 'xstate';\n${fn}\nexport const machine = longMachine();\n`,
+      );
+      const env = {
+        ...process.env,
+        HOME: join(root, 'home'),
+        XDG_CONFIG_HOME: join(root, 'config'),
+        SLC_AGENT: 'unused-unsupported-agent',
+        SLC_COVERAGE_MAX_INVOCATIONS: '',
+        SLC_COVERAGE_MAX_ATTEMPTS: '',
+        SLC_COVERAGE_MAX_DURATION_MS: '',
+      };
+      const invoke = async (
+        overrides: NodeJS.ProcessEnv = {},
+        paths = [gears, fsm],
+      ) => {
+        try {
+          const result = await promisify(execFile)(
+            process.execPath,
+            [join(repository, 'dist/cli.js'), 'check', 'fsm', ...paths],
+            { cwd: root, env: { ...env, ...overrides } },
+          );
+          return { status: 0, ...result };
+        } catch (error) {
+          return error as unknown as {
+            status?: number;
+            stdout: string;
+            stderr: string;
+          };
+        }
+      };
+      const defaults = await invoke();
+      expect(JSON.parse(defaults.stdout).status).toBe('failed');
+      expect(defaults.stdout).toContain('8-invocation');
+      await writeFile(
+        join(root, 'slc.config.yaml'),
+        'coverageMaxInvocations: 12\ncoverageMaxAttempts: 1024\ncoverageMaxDurationMs: 900000\n',
+      );
+      const configured = await invoke();
+      expect(configured.status, configured.stderr).toBe(0);
+      expect(JSON.parse(configured.stdout).status).toBe('verified');
+      const limited = await invoke({ SLC_COVERAGE_MAX_INVOCATIONS: '1' });
+      expect(JSON.parse(limited.stdout).status).toBe('failed');
+      expect(limited.stdout).toContain('1-invocation');
+      const invalid = await invoke({ SLC_COVERAGE_MAX_ATTEMPTS: '0' }, [
+        'absent.gears.md',
+        'absent.fsm.ts',
+      ]);
+      expect(invalid.stderr).toMatch(/coverage.*[Aa]ttempts/);
+      expect(invalid.stderr).not.toMatch(/ENOENT|absent/);
+      await expect(
+        readFile(join(root, 'config/slc/config.yaml')),
+      ).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 120000);
+
   it('executes a real ten-invocation path and isolates concurrent default/larger checks', async () => {
     let starts = 0;
     const live = createActor(

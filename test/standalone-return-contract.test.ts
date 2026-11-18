@@ -48,6 +48,33 @@ describe('Source-bound terminal-return producer integration', () => {
       ).join('\n'),
     ).toMatch(/Source line 1.*reason.*no matching failure/);
   });
+  it.each([
+    ['producer', 'message', 'Output shall include `message: <string>`.', ''],
+    ['producer', 'reason', 'Output shall include `reason: <string>`.', ''],
+    ['output', 'message', 'return message to the caller', 'finish'],
+    ['output', 'reason', 'return reason to the caller', 'finish'],
+  ])(
+    'reports the independent %s.%s omission at its Source condition',
+    (kind, field, before, after) => {
+      const findings = checkSourceReturnContracts(
+        source,
+        gears.replace(before, after),
+      );
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toContain('Source line 1');
+      expect(findings[0]).toContain('terminal return ' + field);
+      expect(findings[0]).toContain(
+        field === 'message' ? '成功时' : '输入无法读取时',
+      );
+      expect(findings[0]).toContain(
+        kind === 'producer'
+          ? 'no declared producer field'
+          : 'no matching ' +
+              (field === 'message' ? 'success' : 'failure') +
+              ' workflow-output obligation',
+      );
+    },
+  );
   it('does not claim arbitrary-natural-language completeness', () => {
     expect(
       checkSourceReturnContracts('Writer 返回 message 字符串。', gears).join(
