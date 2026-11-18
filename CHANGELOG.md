@@ -11,6 +11,14 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.23.0-rc.13] - 2026-11-18
+
+### Changed
+
+- Prepare a workflow-owned ESM environment with compiler-owned TypeScript and Node typings, canonical `.mjs` entries, checked runtime identity and safe entry initialization/disposal across parent-directory states.
+- Pin coordinated public-registry Cligent and Playbook candidates, automatically acquiring both Codex and Claude SDK runtime stacks; select the Agent and model through environment variables.
+- Refresh compatible locked transitive dependencies to remove existing production advisories and unrelated development advisories; retain only the explicitly deferred development-only picomatch advisory, with its raw audit evidence preserved.
+
 ## [0.23.0-rc.11] - 2026-11-18
 
 - Supply independently caller-owned startup data through actual actor input; the repository review binds only its own current pinned meta-definition contract, while artifact-authored startup witnesses remain unverified.
@@ -1161,7 +1169,8 @@ and this project adheres to
 - Made demo repository-root initialization safe inside a containing checkout.
 - Rejected unrelated shared-engine imports as pinned runtime factories.
 
-[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.11...HEAD
+[Unreleased]: https://github.com/sublang-ai/slc/compare/v0.23.0-rc.13...HEAD
+[0.23.0-rc.13]: https://github.com/sublang-ai/slc/compare/v0.22.0...v0.23.0-rc.13
 [0.23.0-rc.11]: https://github.com/sublang-ai/slc/compare/v0.22.0...v0.23.0-rc.11
 [0.22.0]: https://github.com/sublang-ai/slc/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/sublang-ai/slc/compare/v0.20.2...v0.21.0

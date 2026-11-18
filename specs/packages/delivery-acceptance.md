@@ -21,7 +21,7 @@ The delivery acceptance shall exercise the real installed SLC CLI and actual con
 
 ### delivery-acceptance-3
 
-When testing parent-directory independence, acceptance shall create a new empty child for every case and use the same frozen self-contained workflow definition and equivalent Agent/model settings across this case matrix:
+When testing parent-directory independence, acceptance shall create a new empty child for every case and use the same frozen self-contained workflow definition and equivalent Agent/model settings across this case matrix, with factorization permitted only under all conditions below:
 
 | Parent or path state | Required outcome |
 | --- | --- |
@@ -33,6 +33,12 @@ When testing parent-directory independence, acceptance shall create a new empty 
 | Ancestor has unrelated compiler settings, Node typings or dependency versions | Compiler-owned checking, without reading parent tsconfig as authority. |
 | Paths contain spaces and Chinese characters, including native Windows drive paths | Correct input, output, command and runtime-link handling. |
 | Child is inside or outside a Git repository | No user-created child repository as a compilation prerequisite. |
+
+Permitted factorization conditions:
+
+- Separately identified current evidence of real source-only cold compilation on every native platform and backend in both a no-project, outside-Git empty parent and a CommonJS stress fixture with a real Git ancestor, spaces and Chinese characters in the child path, conflicting parent runtimes and unrelated compiler/types settings.
+- Current installed-CLI environment/checking/initialization revalidation of immutable independently accepted workflow inputs for each matrix state, exercising the actual selected runtime and checks in fresh children, preserving independent accepted-code hashes and disclosing zero generation calls, without describing retained-input cases as source-only cold compilation.
+- Identification of the common workflow-owned preparation and compiler-owned checking paths exercised by both layers, with independent review of why remaining parent-state differences cannot select another Agent runtime or checking environment; any uncovered Agent trust, path or environment branch requires a further real cold case.
 
 ### delivery-acceptance-4
 
@@ -63,7 +69,7 @@ When a coordinated candidate set is evaluated for merge, maintainers shall merge
 
 ### delivery-acceptance-9
 
-When the installed-candidate acceptance harness runs the frozen workflow through real CLI processes, the system suite shall verify the single-install/empty-child contract [[delivery-acceptance-1](#delivery-acceptance-1)], the complete native-platform/backend/parent matrix [[delivery-acceptance-2](#delivery-acceptance-2)], [[delivery-acceptance-3](#delivery-acceptance-3)], [[delivery-acceptance-4](#delivery-acceptance-4)], and truthful compile/initialization outcomes without business execution [[delivery-acceptance-5](#delivery-acceptance-5)].
+When the installed-candidate acceptance harness runs the frozen workflow through real CLI processes, the system suite shall verify the single-install/empty-child contract [[delivery-acceptance-1](#delivery-acceptance-1)], the complete native-platform/backend/parent matrix [[delivery-acceptance-2](#delivery-acceptance-2)], [[delivery-acceptance-3](#delivery-acceptance-3)], [[delivery-acceptance-4](#delivery-acceptance-4)], the separately identified cold-generation and retained-input layers permitted by [[delivery-acceptance-3](#delivery-acceptance-3)], and truthful compile/initialization outcomes without business execution [[delivery-acceptance-5](#delivery-acceptance-5)].
 
 ### delivery-acceptance-10
 
