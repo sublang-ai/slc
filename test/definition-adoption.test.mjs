@@ -21,16 +21,17 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 
 describe('definition adoption (self-hosting-12)', () => {
   it.each([
-    ['^0.40.0', true],
-    ['0.40.0-rc.1', true],
-    ['^0.39.0', false],
-    ['^0.38.0', false],
-    ['^0.38.0 || ^0.39.0', false],
-    ['>=0.39.0', false],
-    [undefined, false],
+    ['0.23.0', '^0.40.0', true],
+    ['0.23.0-rc.1', '0.40.0-rc.1', true],
+    ['0.23.0', '0.40.0-rc.1', false],
+    ['0.23.0', '^0.39.0', false],
+    ['0.23.0', '^0.38.0', false],
+    ['0.23.0', '^0.38.0 || ^0.39.0', false],
+    ['0.23.0', '>=0.39.0', false],
+    ['0.23.0', undefined, false],
   ])(
-    'checks the Cligent requirement %s before accepting definitions',
-    (range, accepted) => {
+    'checks the Cligent requirement for SLC %s with %s',
+    (version, range, accepted) => {
       const dir = mkdtempSync(join(tmpdir(), 'slc-definition-adoption-'));
       try {
         mkdirSync(join(dir, 'scripts'));
@@ -51,6 +52,7 @@ describe('definition adoption (self-hosting-12)', () => {
         const manifest = JSON.parse(
           readFileSync(join(root, 'package.json'), 'utf8'),
         );
+        manifest.version = version;
         manifest.dependencies['@sublang/cligent'] = range;
         writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest));
         const run = spawnSync(
