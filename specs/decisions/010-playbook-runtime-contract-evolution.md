@@ -25,6 +25,7 @@ SLC still needs to understand the new host boundary before the release arrives, 
 Committed phase definitions, compiled artifacts, and pins shall be built only against an immutable Playbook dependency resolved by the lockfile.
 SLC shall not refresh those reviewed assets from an uncommitted sibling checkout or merely rehash an old-contract artifact against a new runtime target.
 An adoption shall update the dependency, re-synchronize the authored definitions, retain or rebuild each affected artifact bundle under [DR-028](028-contract-based-adoption-without-recompilation.md), record all out-of-bundle executable dependencies, and regenerate the pins atomically.
+CI shall not read a mutable sibling checkout or refresh reviewed assets from one.
 
 ### Runtime profiles and root phase sessions
 
@@ -73,7 +74,6 @@ SLC shall expose the composed nested-playbook port, but shall settle every call 
 Human status and non-trace operational telemetry may become phase diagnostics.
 `playbook.trace` payloads shall not become ordinary diagnostics because they contain exact prompts, replies, errors, and continuation tokens; a separate protected trace sink would require its own decision.
 
-CI shall not read a mutable sibling checkout or refresh reviewed assets from one.
 
 ## Consequences
 

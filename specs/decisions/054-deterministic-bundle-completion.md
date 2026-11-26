@@ -6,7 +6,7 @@
 ## Status
 
 Accepted.
-Amends [DR-014](014-cwd-output-invocation-defaults-entry-emission.md), [DR-021](021-incremental-compilation.md).
+Amends [DR-014](014-cwd-output-invocation-defaults-entry-emission.md), [DR-015](015-first-run-config-seeding.md), [DR-021](021-incremental-compilation.md).
 
 ## Context
 

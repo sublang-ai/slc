@@ -21,7 +21,7 @@ Playbook 11.0.0 released on 2026-09-01 with host-level changes only; its four `s
 
 The adopted set of [DR-024](024-playbook-10-schema-3-adoption.md) is current: exact Playbook 10.0.0 provenance actively selects `composed-v3`, [DR-020](020-playbook-4-0-adoption.md)'s current-version authority ends, and every "dormant readiness" qualification in the package specs becomes current behavior.
 The definitions gate verifies each vendored definition byte-identical to the installed immutable 10.0.0 file, with pin-input declarations governed by the [DR-026](026-slc-owned-pin-input-declarations.md) sidecar rather than inline sections.
-The demo consumer manifest requires `@sublang/playbook@^10.0.0`.
+The demo consumer manifest requires the adopted Playbook release.
 Both demo reference sets are regenerated through real compiles until each passes its complete reference checker, including Boss-task delivery to the first player.
 Playbook 11.0.0 is reviewed as compile-contract-identical to 10.0.0; it and every later Playbook release are adopted under [DR-028](028-contract-based-adoption-without-recompilation.md)'s contract-based selection and routine adoption.
 

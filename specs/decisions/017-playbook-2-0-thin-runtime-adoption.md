@@ -66,7 +66,7 @@ The demo reference sets shall be recompiled against the adopted set: the English
 - Even a host port that rejects without an error value remains a thrown control-plane failure at the SLC boundary instead of being misreported as an authored `failed` outcome.
 - Pins bind the shared engine's identity, so shared-machinery changes stale pins the way link-target changes always have.
 - Cased English schema-1 sources run end to end under Playbook's published `playbook run` host, with `--player` flags matching the names the README documents [[8]]; caseless sources keep their exact prior behavior.
-- 1.3.0 and every other unadopted provenance stay fail-closed, keeping the profile map a record of reviewed adoptions rather than of releases.
+- 1.3.0 stays fail-closed, keeping the exact profile map a record of reviewed adoptions rather than of releases.
 - [[phase-execution-30](../packages/phase-execution.md#phase-execution-30)]'s stated provenance set matches the configured selector again.
 
 ## References

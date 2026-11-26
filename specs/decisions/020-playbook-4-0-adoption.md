@@ -39,7 +39,7 @@ Amended by [DR-024](024-playbook-10-schema-3-adoption.md), [DR-068](068-standalo
 ### Provenance mapping
 
 Exact `@sublang/playbook@4.0.0` link-target provenance selects the six-port `composed-v2` profile, joining 0.10.0, 1.0.0, 2.0.0, and 3.1.0: 4.0.0 ships `runtime.ts` byte-identical to 3.1.0's, with the same ABI and artifact schemas, and its major version marks the SDK-topology break rather than any runtime-contract change [[4]].
-`1.3.0`, `3.0.0`, and every other unreviewed release remain fail-closed as unmapped ([[phase-execution-30](../packages/phase-execution.md#phase-execution-30)]).
+`1.3.0`, `3.0.0`, and every other release that neither an exact mapping nor its link target's declared contract ([DR-028](028-contract-based-adoption-without-recompilation.md)) selects remain fail-closed ([[phase-execution-30](../packages/phase-execution.md#phase-execution-30)]).
 
 ### Agent runtimes for repository verification
 
