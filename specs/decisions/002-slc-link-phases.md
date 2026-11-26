@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amended by [DR-014](014-cwd-output-invocation-defaults-entry-emission.md).
 
 ## Context
 
@@ -99,8 +100,8 @@ slc <pipeline>.link main.fsm.ts helper.fsm.ts runner.ts -o app.run.ts
 `slc` shall not infer positional roles by extension, file existence, or `--`.
 
 `--link <target>` is required only for full-pipeline invocation because it selects the terminal link phase.
-Full-pipeline invocation without `--link` stops at the ordinary compile-chain output from [DR-001](001-slc-pipeline-layout-naming-invocation.md).
-Default link targets are not supported; full-pipeline linking always requires an explicit `--link <target>`.
+Full-pipeline invocation without `--link` stops at the ordinary compile-chain output from [DR-001](001-slc-pipeline-layout-naming-invocation.md), except that the reserved `playbook` pipeline links against the installed `@sublang/playbook` runtime by default ([DR-014](014-cwd-output-invocation-defaults-entry-emission.md)).
+Every other pipeline has no default link target; its full-pipeline linking requires an explicit `--link <target>`.
 
 `--link-option` values are opaque name/value pairs.
 They may be appended to either invocation form.

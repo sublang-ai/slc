@@ -5,9 +5,9 @@
 
 ## Status
 
-Accepted; completion-only emission eligibility amended by [DR-054](054-deterministic-bundle-completion.md).
-
-Amended by [DR-068](068-standalone-compilation-environment.md): new registry entries use real JavaScript `.mjs` beside the internal ESM bundle; historical `.ts` artifact consumption remains supported.
+Accepted.
+Amends [DR-001](001-slc-pipeline-layout-naming-invocation.md), [DR-002](002-slc-link-phases.md), [DR-009](009-slc-playbook-pipeline-compilation.md), [DR-013](013-normalize-and-pass-phases.md).
+Amended by [DR-024](024-playbook-10-schema-3-adoption.md), [DR-054](054-deterministic-bundle-completion.md), [DR-068](068-standalone-compilation-environment.md).
 
 ## Context
 
@@ -56,25 +56,25 @@ Amends the CLI decision in [DR-002](002-slc-link-phases.md) ("default link targe
 
 Supersedes the "registry entry" item of [DR-009](009-slc-playbook-pipeline-compilation.md)'s host-infrastructure scoping; the captain shell, launcher, and config template remain Playbook-side.
 
-- After a successful full-link of the reserved `playbook` pipeline with the linked artifact at its canonical path, `slc` deterministically emits `<cwd>/<basename>.ts` — a runnable entry module whose default export satisfies Playbook's registry-entry contract [[1]].
+- After a successful full-link of the reserved `playbook` pipeline with the linked artifact at its canonical path, or a `--complete` run over a retained bundle ([DR-054](054-deterministic-bundle-completion.md)), `slc` deterministically emits `<cwd>/<basename>.mjs` — a runnable JavaScript entry module whose default export satisfies Playbook's registry-entry contract [[1]] ([DR-068](068-standalone-compilation-environment.md)).
 - Field derivation:
 
 | Field | Derivation |
 | --- | --- |
 | `id`, `command` | `<basename>` — stable across recompiles, as parked-session resume requires [[4]] |
-| `requiredRoleIds` | the source-declared players, verbatim in source order (the FSM's player union) |
+| `requiredRoleIds` | the canonical local role ids, in source order ([DR-024](024-playbook-10-schema-3-adoption.md)) |
 | `intent` | the normalized source's title and lead line, in the source language |
 | `validateOptions` | fail-closed allowlist of the linked options interface minus Boss-turn inputs (`cwd` exactly when the FSM has a script state) |
-| `createRuntime` | the linked module's default factory, called with `cwd ?? process.cwd()` |
+| `createRuntime` | the linked module's default factory, composing `{ configuredOptions, hostCapabilities }` at the linked-artifact boundary ([DR-024](024-playbook-10-schema-3-adoption.md)) |
 
-- The module is erasable TypeScript and imports the linked module by the source-only relative specifier `./<basename>.<pipeline>/<basename>.playbook.ts`, so the pair is relocatable together.
-- `<basename>.ts` is a deliberate carve-out from the `<art-dir>/<basename>.<format><ext>` scheme: the entry module is the pipeline's runnable product beside the bundle, mirroring a compiler emitting the executable beside its build directory.
+- The module is real JavaScript and imports the linked module by the relative path derived from its actual artifact location, so the pair is relocatable together; historical `.ts` entries remain consumable ([DR-068](068-standalone-compilation-environment.md)).
+- `<basename>.mjs` is a deliberate carve-out from the `<art-dir>/<basename>.<format><ext>` scheme: the entry module is the pipeline's runnable product beside the bundle, mirroring a compiler emitting the executable beside its build directory.
 - Emission is skipped when `-o` relocates the linked artifact, like verification emission.
 
 ## Consequences
 
 - `cd demo && slc playbook workflow.zh.txt` reproduces the committed bundle and its entry with zero flags: raw input → normalize → chain → passes → link → entry module.
-- `playbook run ./workflow.zh.ts "<task>"` performs it; players and the captain default per Playbook's PBCLI-19 [[3]], so only the roles a user wants to change need `--player`.
+- Playbook performs it once the entry is enabled and its roles are bound in Playbook configuration, through its slash command ([DR-024](024-playbook-10-schema-3-adoption.md)).
 - Compiling someone else's source from any other directory leaves its committed bundle untouched — the out-of-tree property.
 - Committed reference bundles regenerate in place only when `slc` is invoked from their own directory; meta-pipeline rebuild flows and docs must anchor their CWD accordingly.
 - Until the optimize pass is pinned, default-on passes add one interpreted agent step to otherwise-pinned playbook runs; `--no-optimize` opts out.

@@ -6,8 +6,7 @@
 ## Status
 
 Accepted (2026-11-14).
-Amends [DR-063](063-adapter-model-defaults-and-subagent-selection.md) for the source and delivery of implicit model pairs, the Cligent floor and the omission of child-model requests on tool-free calls.
-Amends [DR-062](062-independent-ultracode-configuration.md) by requiring a Cligent release that supports independent Ultracode.
+Amends [DR-062](062-independent-ultracode-configuration.md), [DR-063](063-adapter-model-defaults-and-subagent-selection.md).
 
 ## Context
 

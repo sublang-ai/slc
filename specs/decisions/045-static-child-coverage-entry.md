@@ -6,10 +6,7 @@
 ## Status
 
 Accepted.
-
-### Bounded path extension
-
-[DR-046](046-bounded-child-chain-coverage.md) extends the original one-predecessor limit and preemption-dependent selection with finite child chains and ordinary acting-result coverage; the reached-context and no-private-jump requirements remain in force.
+Amended by [DR-046](046-bounded-child-chain-coverage.md).
 
 ## Context
 
@@ -19,16 +16,15 @@ Ten reported unreachable or unsatisfiable arms execute successfully through the 
 
 ## Decision
 
-- Within selected nested-call coverage, enter literal and dynamic child calls through an initially active invocation, an authored public entry, or one preceding Captain/player result that selects the call.
+- Within nested-call coverage, enter literal and dynamic child calls through an initially active invocation, an authored public entry, or a preceding Captain/player result that selects the call, including finite chains of preceding children ([DR-046](046-bounded-child-chain-coverage.md)).
 - Enumerate the finite declared predecessor results; different results may establish different contexts for the same child.
 - Evaluate ordered child-result guards against the snapshot reached by actual predecessor execution, without assigning new child-context values.
 - Resolve or reject the pending scripted child and require its authored target; neither a satisfying predicate alone nor a private state jump establishes coverage.
 - Keep missing, shadowed, unsatisfiable and unentered transitions as findings, with input failures diagnosed at their real start boundary.
-- Bound the search to one predecessor invocation and existing result, guard and settle budgets; deeper unsupported paths remain findings.
+- Bound the search by the existing result, guard and settle budgets; paths beyond those bounds remain findings.
 - Keep source-specific child acceptance and public-envelope correctness separate from generic transition reachability.
 
 ## Consequences
 
 Valid non-root-jumpable child calls pass through their real accumulated context.
 Coverage remains a bounded test rather than an exhaustive proof, and its generated-test timeout includes the finite predecessor attempts.
-Selection of workflows without a preemption surface and paths through preceding children are outside this correction.

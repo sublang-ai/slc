@@ -5,13 +5,13 @@
 
 ## Status
 
-Accepted
-
-Supersedes the deferral in [DR-025](025-defer-playbook-10-activation.md).
+Accepted.
+Amends [DR-024](024-playbook-10-schema-3-adoption.md).
+Amended by [DR-028](028-contract-based-adoption-without-recompilation.md).
 
 ## Context
 
-[DR-024](024-playbook-10-schema-3-adoption.md) accepted the complete atomic Playbook 10 schema-3 design, and [DR-025](025-defer-playbook-10-activation.md) deferred its activation without a delivery owner, leaving [DR-020](020-playbook-4-0-adoption.md) the current authority.
+[DR-024](024-playbook-10-schema-3-adoption.md) accepted the complete atomic Playbook 10 schema-3 design, but its activation was first deferred without a delivery owner, leaving [DR-020](020-playbook-4-0-adoption.md) the current authority and exact Playbook 10 compiled selection fail-closed.
 The activation delivery has since landed: the manifest ranges `@sublang/playbook@^10.0.0` and `@sublang/cligent@^0.23.0` with the lock resolving exact 10.0.0 and 0.23.0, all four definitions re-synchronized byte-identically from immutable 10.0.0, all three meta-phase bundles rebuilt as shared-factory schema-3 artifacts through interpreted real-agent runs, regenerated current pins, and rebuilt demo reference sets.
 [DR-026](026-slc-owned-pin-input-declarations.md) moved SLC's pin-input declarations into the `slc.pin-inputs.json` sidecar after [DR-024](024-playbook-10-schema-3-adoption.md) was written, so the synchronized definitions no longer carry `## Pin Inputs` sections and are byte-identical to the installed package.
 The delivery landed without reconciling the deferral-era guard script, demo manifest, or package specs, and the rebuilt demo reference sets failed their own reference checkers on Boss-task delivery and zh role mapping.
@@ -23,7 +23,7 @@ The adopted set of [DR-024](024-playbook-10-schema-3-adoption.md) is current: ex
 The definitions gate verifies each vendored definition byte-identical to the installed immutable 10.0.0 file, with pin-input declarations governed by the [DR-026](026-slc-owned-pin-input-declarations.md) sidecar rather than inline sections.
 The demo consumer manifest requires `@sublang/playbook@^10.0.0`.
 Both demo reference sets are regenerated through real compiles until each passes its complete reference checker, including Boss-task delivery to the first player.
-Playbook 11.0.0 is reviewed as compile-contract-identical to 10.0.0 but is not adopted: it and every other unreviewed provenance remain fail-closed, and adopting any later Playbook requires its own decision.
+Playbook 11.0.0 is reviewed as compile-contract-identical to 10.0.0; it and every later Playbook release are adopted under [DR-028](028-contract-based-adoption-without-recompilation.md)'s contract-based selection and routine adoption.
 
 ## Consequences
 

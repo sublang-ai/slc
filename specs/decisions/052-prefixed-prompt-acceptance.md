@@ -6,6 +6,7 @@
 ## Status
 
 Accepted.
+Amends [DR-029](029-source-fidelity-gate.md).
 
 ## Context
 

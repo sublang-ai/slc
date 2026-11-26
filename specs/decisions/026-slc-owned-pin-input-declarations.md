@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amends [DR-007](007-slc-phase-artifact-pinning.md), [DR-021](021-incremental-compilation.md), [DR-024](024-playbook-10-schema-3-adoption.md).
 
 ## Context
 
@@ -32,8 +33,7 @@ The declaration source also contributes to incremental input identity and target
 
 This decision narrowly supersedes [DR-007](007-slc-phase-artifact-pinning.md)'s requirement that the root closure declaration live in the definition body and that the complete definition locator equal `<phase>.md`.
 It supersedes [DR-021](021-incremental-compilation.md)'s inline-only phase-definition closure source while retaining its inline behavior for explicit Markdown references.
-For future Playbook 10 activation only, it supersedes [DR-024](024-playbook-10-schema-3-adoption.md)'s requirement that synchronized definitions retain SLC's inline `## Pin Inputs`; the applicable SLC-owned declaration may instead carry that closure without changing package-owned definition bytes.
-It does not activate that cutover: the current vendored Playbook 4 definitions, inline declarations, reviewed bundles, pins, dependency ranges, and resolution behavior remain unchanged under [DR-025](025-defer-playbook-10-activation.md).
+It supersedes [DR-024](024-playbook-10-schema-3-adoption.md)'s requirement that synchronized definitions retain SLC's inline `## Pin Inputs`; the applicable SLC-owned declaration carries that closure without changing package-owned definition bytes.
 
 ## Consequences
 

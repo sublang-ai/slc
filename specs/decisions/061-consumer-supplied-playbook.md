@@ -5,10 +5,9 @@
 
 ## Status
 
-Accepted
-Amends [DR-028](028-contract-based-adoption-without-recompilation.md) in the dependency contract alone: consumers supply a required Playbook peer, while the repository verifies one exact development release.
-
-Amended by [DR-068](068-standalone-compilation-environment.md): retain the required compatible peer and exact development provenance, and give each workflow its own environment from that selected compiler runtime, independently of surrounding project manifests and without changing their dependencies.
+Accepted.
+Amends [DR-028](028-contract-based-adoption-without-recompilation.md).
+Amended by [DR-068](068-standalone-compilation-environment.md).
 
 ## Context
 
@@ -27,5 +26,5 @@ The exact release used to review SLC's definitions, retained bundles, and pins i
 
 An application can select the shared runtime without SLC silently requesting a conflicting private engine.
 The compiler remains directly installable with npm's automatic peer installation.
-Peers constrain a consumer dependency graph rather than guaranteeing a process-wide singleton: hosts still verify resolution from their own code and generated-artifact destinations.
+Peers constrain a consumer dependency graph rather than guaranteeing a process-wide singleton: hosts still verify resolution from their own code, while each workflow's own environment takes the selected compiler runtime independently of surrounding project manifests ([DR-068](068-standalone-compilation-environment.md)).
 The development lock, immutable definition checks, and exact pin provenance remain release evidence; the published peer range does not replace them.

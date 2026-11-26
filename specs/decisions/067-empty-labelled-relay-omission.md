@@ -5,8 +5,8 @@
 
 ## Status
 
-Accepted
-Amends [DR-050](050-required-child-relay-substitution.md) and [DR-041](041-composed-child-input-fidelity.md) in one scope: in reached-case proof, an invocation may omit a labelled quoted relay line whose value is empty or absent.
+Accepted.
+Amends [DR-041](041-composed-child-input-fidelity.md), [DR-050](050-required-child-relay-substitution.md).
 
 ## Context
 

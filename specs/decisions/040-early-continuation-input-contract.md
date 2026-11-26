@@ -6,8 +6,8 @@
 ## Status
 
 Accepted.
-Extends the existing boundary in [DR-033](033-early-conformance-and-mechanical-repair.md).
-Schema-3 probe storage is amended by [DR-058](058-topology-bound-boss-questions.md); historical schema-1 probes retain both representations.
+Amends [DR-033](033-early-conformance-and-mechanical-repair.md).
+Amended by [DR-049](049-early-transition-coverage.md), [DR-058](058-topology-bound-boss-questions.md).
 
 ## Context
 
@@ -18,6 +18,7 @@ Linking spent 39.734 seconds before refusing that protected input; the existing 
 ## Decision
 
 - Reuse the existing canonical scalar and state-keyed continuation-input sentinel probe before accepting a produced FSM and before executing a protected-FSM consumer.
+- For schema 3, populate only the question representation the shared-runtime topology selects ([DR-058](058-topology-bound-boss-questions.md)); historical schema-1 probes populate both.
 - Run generation-specific probes only when the existing schema decision resolves the artifact, preserving the unclassified direct-Captain case and controller exemption.
 - Preserve resolved initial context shapes and source-owned context members; require only the existing singular question and reply input contract, without introducing a general context-shape validator or a composer requirement.
 - Use the existing producer repair budget and reject supplied invalid FSMs before consumer construction; preserve source protection and cancellation.

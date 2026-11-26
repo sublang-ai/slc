@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted; unreviewed-finding disposition amended by [DR-033](033-early-conformance-and-mechanical-repair.md); contiguous-appearance and in-item order rules both relaxed for the prefix-first layout by [DR-052](052-prefixed-prompt-acceptance.md); foreign-line scope amended by [DR-055](055-mixed-source-prompt-fidelity.md); relay marker made language-neutral by [DR-057](057-language-neutral-relay-marker.md).
+Accepted.
+Amended by [DR-033](033-early-conformance-and-mechanical-repair.md), [DR-052](052-prefixed-prompt-acceptance.md), [DR-055](055-mixed-source-prompt-fidelity.md), [DR-057](057-language-neutral-relay-marker.md).
 
 ## Context
 
@@ -18,14 +19,14 @@ Not every Source authors fragments: the demo Sources are plain prose, leaving pr
 ## Decision
 
 - After a text2gears phase outside the reserved meta-pipeline produces a Coder result, and before any Reviewer call on that result, the host runs a deterministic conservation check of the current live target against the invocation Source:
-  - every authored fragment — a fenced `markdown` block or a blockquote, with Markdown escapes of `<` and `>` resolved and a blockquote that prose introduces "in quotes (`>`)" kept with its literal `>` markers — appears contiguously in at least one item's prompt;
-  - within one item, complete nonoverlapping authored fragments appear in Source order; an occurrence contained in a larger fully matched fragment belongs to that larger fragment, and identical fragments pass when their occurrences have an order-preserving Source attribution;
-  - where the Source authors at least one fragment, every non-empty prompt line of every item is an authored line or a bare quoted relay placeholder `> <name>`;
+  - every authored fragment — a fenced `markdown` block or a blockquote, with Markdown escapes of `<` and `>` resolved and a blockquote whose introducing prose carries the relay marker `` (`>`) `` ([DR-057](057-language-neutral-relay-marker.md)) kept with its literal `>` markers — appears in at least one item's prompt, contiguously or as a whole fragment of an item accepted in the prefix-first layout ([DR-052](052-prefixed-prompt-acceptance.md));
+  - within one item not accepted in the prefix-first layout, complete nonoverlapping authored fragments appear in Source order; an occurrence contained in a larger fully matched fragment belongs to that larger fragment, and identical fragments pass when their occurrences have an order-preserving Source attribution;
+  - where the Source authors at least one fragment, every non-empty prompt line of an item carrying at least one complete authored fragment is an authored line or a bare quoted relay placeholder `> <name>` ([DR-055](055-mixed-source-prompt-fidelity.md));
   - every output property a result description names matches the ASCII identifier pattern a guard name matches, since downstream artifacts and calling playbooks consume those properties by name;
   - a result field is not declared verbatim-owned in one item and judge-authored in another;
   - a placeholder that the Source relays in quotes carries a literal quote marker wherever a prompt line the compiler composed reads it; a line the Source itself authored — a command comparing the value as a single-quoted shell word, for instance — keeps the Source's form, and a script item's shell text, read by no agent, is exempt.
-- Findings are mechanical Reviewer findings: under a reviewed loop they are relayed to the Coder as a numbered findings list in place of the Reviewer call for that round and count as one of the permitted Reviewer calls, so the loop's bound is unchanged; a result with no mechanical finding proceeds to the Reviewer as before.
-- Without a reviewed loop, mechanical findings fail the phase closed with the findings as its diagnostic.
+- Findings are mechanical findings relayed to the same Coder as a numbered findings list through bounded mechanical repair, with or without a reviewed loop ([DR-033](033-early-conformance-and-mechanical-repair.md)); under a reviewed loop they take the place of that round's Reviewer call within the loop's unchanged bound, and a result with no mechanical finding proceeds to the Reviewer.
+- Findings that remain after the bounded corrections fail the phase closed with the findings as its diagnostic.
 - The check is a pure function of the Source text and the GEARS text, exported for standalone artifact review, and it never consults the definition, the installed engine, or any prior artifact.
 
 ## Consequences

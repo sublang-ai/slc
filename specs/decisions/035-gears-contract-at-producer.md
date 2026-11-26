@@ -6,6 +6,7 @@
 ## Status
 
 Accepted.
+Amended by [DR-051](051-output-field-guidance-boundary.md).
 
 ## Context
 

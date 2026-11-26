@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amended by [DR-024](024-playbook-10-schema-3-adoption.md).
 
 ## Context
 
@@ -45,10 +46,11 @@ Generated verification keeps running at the destination with the destination's o
 ### Registry-entry role binding
 
 The deterministic entry module is SLC-owned host glue ([DR-014](014-cwd-output-invocation-defaults-entry-emission.md)), and it shall close the role-identity gap at the host boundary it already owns.
-`requiredRoleIds` stay the source-declared player names verbatim, keeping the documented `--player <Player>=…` bindings true to the source [[8]].
+For schema-1 entries, `requiredRoleIds` stay the source-declared player names verbatim, keeping the documented `--player <Player>=…` bindings true to the source [[8]].
 The emitted `createRuntime` shall return the linked runtime behind a role-binding boundary: sessions passed to `init` — and to `restore` when the runtime offers it — carry a `callPlayer` port that maps a runtime-resolved player id back to its declared role id (lowercased declared id → declared id, unknown ids passed through), while every other port, member, and optional capability crosses unchanged, so the host observes only ids from `requiredRoleIds`.
 For caseless player names the map is the identity, so existing flows are byte-for-byte unaffected in behavior.
 Two declared players that collide case-insensitively make the binding ambiguous; the emission shall fail closed with a diagnostic instead of emitting a colliding map.
+Schema-3 entries instead carry canonical local role ids and receive concrete players through host-owned role bindings, without this boundary ([DR-024](024-playbook-10-schema-3-adoption.md)).
 
 ### Atomic reviewed-asset adoption
 
@@ -63,7 +65,7 @@ The demo reference sets shall be recompiled against the adopted set: the English
 - A host Captain failure surfaces through the structured `failed` mapping (`compiled runtime failed: …`) instead of the thrown-turn diagnostic (`compiled run failed: …`), while control-plane rejection diagnostics keep their meaning.
 - Even a host port that rejects without an error value remains a thrown control-plane failure at the SLC boundary instead of being misreported as an authored `failed` outcome.
 - Pins bind the shared engine's identity, so shared-machinery changes stale pins the way link-target changes always have.
-- Cased English sources run end to end under Playbook's published `playbook run` host, with `--player` flags matching the names the README documents [[8]]; caseless sources keep their exact prior behavior.
+- Cased English schema-1 sources run end to end under Playbook's published `playbook run` host, with `--player` flags matching the names the README documents [[8]]; caseless sources keep their exact prior behavior.
 - 1.3.0 and every other unadopted provenance stay fail-closed, keeping the profile map a record of reviewed adoptions rather than of releases.
 - [[phase-execution-30](../packages/phase-execution.md#phase-execution-30)]'s stated provenance set matches the configured selector again.
 

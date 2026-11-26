@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amends [DR-003](003-slc-phase-execution.md).
 
 ## Context
 

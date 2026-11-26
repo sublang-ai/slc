@@ -5,16 +5,16 @@
 
 ## Status
 
-Superseded — the initial `phase` artifact and file-capability design was replaced by the `PlaybookRuntime` contract, and the capability was later removed under [DR-008](../decisions/008-slc-file-capability.md).
+Superseded — the initial `phase` artifact and file-capability design was replaced by the `PlaybookRuntime` contract, and the capability was later removed under [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md).
 
 ## Intent
 
-Implement the first end-to-end compiled-execution and reserved-`slc` self-hosting design under [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md), and [DR-008](../decisions/008-slc-file-capability.md).
+Implement the first end-to-end compiled-execution and reserved-`slc` self-hosting design under [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) and [DR-007](../decisions/007-slc-phase-artifact-pinning.md).
 The iteration began from interpreted-only execution plus an unwired pin validator and decomposed capability, facade and executor, selection, meta-pipeline, and pin generation into independently reviewable commits.
 Judgment-produced compiled artifacts required explicit build and review followed by committed pins rather than regeneration during ordinary runs.
 Consuming Playbook-owned definitions avoided a second authored copy of the meta-pipeline.
 The planned runnable link and first compiled artifact in Task 10 did not land before their initial contract was superseded.
-Surviving behavior and evidence are now owned by the [`phase-execution`](../packages/phase-execution.md), [`compiler`](../packages/compiler.md), [`pinning`](../packages/pinning.md), and [`self-hosting`](../packages/self-hosting.md) packages, while [DR-008](../decisions/008-slc-file-capability.md) retains the removed capability design for history.
+Surviving behavior and evidence are now owned by the [`phase-execution`](../packages/phase-execution.md), [`compiler`](../packages/compiler.md), [`pinning`](../packages/pinning.md), and [`self-hosting`](../packages/self-hosting.md) packages, while [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) records the capability's removal.
 
 ## Deliverables
 
@@ -35,7 +35,7 @@ Surviving behavior and evidence are now owned by the [`phase-execution`](../pack
 
 Each task is one-commit-sized and updates code, specs, and tests together.
 
-### A. File capability ([DR-008](../decisions/008-slc-file-capability.md))
+### A. File capability ([DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md))
 
 1. **Artifact-facing `FileCapability`.**
    Author the file-capability package behavior and verification and implement `read`/`list`/`write` over virtual POSIX paths: treat a leading `/` as the virtual run root, normalize and confine each path to the run root after realpath, reject platform-absolute syntax such as Windows drive paths, return exact-byte `sha256:` hashes, write whole files atomically, and honor `ifMatch` as a compare-and-swap that returns `stale`.
@@ -92,4 +92,4 @@ Each task is one-commit-sized and updates code, specs, and tests together.
 
 - The 12 checked deliverables and ten completed task commits preserve the delivered portions of this iteration, while Task 10 records the runnable-artifact boundary that did not land before supersession.
 - Current compiled-runtime and selection scenarios [[phase-execution-26](../packages/phase-execution.md#phase-execution-26)] and [[phase-execution-28](../packages/phase-execution.md#phase-execution-28)], artifact-format and generation scenarios [[pinning-14](../packages/pinning.md#pinning-14)] and [[pinning-16](../packages/pinning.md#pinning-16)], and meta-pipeline scenarios [[self-hosting-4](../packages/self-hosting.md#self-hosting-4)] and [[self-hosting-5](../packages/self-hosting.md#self-hosting-5)] preserve the surviving acceptance coverage.
-- [DR-008](../decisions/008-slc-file-capability.md) retains the removed capability design, and interpreted reference semantics remained unchanged.
+- [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) records the capability's removal, and interpreted reference semantics remained unchanged.

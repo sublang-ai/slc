@@ -6,6 +6,7 @@
 ## Status
 
 Accepted.
+Amends [DR-045](045-static-child-coverage-entry.md).
 
 ## Context
 

@@ -6,6 +6,7 @@
 ## Status
 
 Accepted.
+Amended by [DR-028](028-contract-based-adoption-without-recompilation.md).
 
 ## Context
 

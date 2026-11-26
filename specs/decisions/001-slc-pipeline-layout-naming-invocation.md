@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amended by [DR-014](014-cwd-output-invocation-defaults-entry-emission.md).
 
 ## Context
 
@@ -72,7 +73,7 @@ A source file shall conform to one of these forms, using the consuming phase's `
 - Non-entry-phase: `<basename>.<source-format>.<ext>` — makes intermediates self-identifying as they flow through the pipeline.
 - Entry-phase: `<basename>[.<source-format>].<ext>` — the plain form lets users write original inputs without learning the convention.
 
-`slc` shall refuse any source whose name matches no applicable form.
+`slc` shall refuse any non-entry source whose name matches no applicable form; an entry source with another extension is a raw input that `slc` normalizes first ([DR-014](014-cwd-output-invocation-defaults-entry-emission.md)).
 
 ### Full-pipeline ordering
 
@@ -96,24 +97,23 @@ slc <pipeline>[.<phase>] <source> [-o <target>]
 
 ### Output locations
 
-Artifacts go to a `<basename>.<pipeline>/` directory placed alongside the source file.
+Artifacts go to a `<basename>.<pipeline>/` directory in the invocation working directory ([DR-014](014-cwd-output-invocation-defaults-entry-emission.md)).
 Each artifact's location depends on its role in the pipeline, not on invocation mode.
 The pipeline output is the artifact emitted by the terminal phase, and all earlier artifacts are intermediates.
 
-Let `<src-dir>` be the directory containing `<source>`, and let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` stripped.
+Let `<cwd>` be the invocation working directory, and let `<basename>` be `<source>`'s basename with any trailing `.<source-format>` stripped.
 Let `<art-dir>` be the **artifact directory**:
 
-- `<art-dir>` = `<src-dir>/<basename>.<pipeline>/`, except
-- when `<src-dir>`'s leaf name is exactly `<basename>.<pipeline>`, `<art-dir>` = `<src-dir>` — `slc` shall not nest another artifact directory inside the canonical one.
+- `<art-dir>` = `<cwd>/<basename>.<pipeline>/`, except
+- when `<cwd>`'s leaf name is exactly `<basename>.<pipeline>`, `<art-dir>` = `<cwd>` — `slc` shall not nest another artifact directory inside the canonical one.
 
-The second rule keeps re-runs from a file already inside `<basename>.<pipeline>/` (e.g., an edited intermediate) from producing `<basename>.<pipeline>/<basename>.<pipeline>/…`.
+The second rule keeps re-runs invoked inside `<basename>.<pipeline>/` (e.g., on an edited intermediate) from producing `<basename>.<pipeline>/<basename>.<pipeline>/…`.
 
 - The pipeline output goes to `<art-dir>/<basename>.<target-format>.<ext>`, unless `-o <target>` overrides.
 - Intermediates go to `<art-dir>/<basename>.<format>.<ext>` regardless of `-o`.
 
 ```text
-<src-dir>/
-    <basename>[.<source-format>].<ext>          # source file
+<cwd>/
     <basename>.<pipeline>/                      # <art-dir>
         <basename>.<format>.<ext>               # intermediates
         <basename>.<target-format>.<ext>        # pipeline output (when -o omitted)
@@ -121,16 +121,16 @@ The second rule keeps re-runs from a file already inside `<basename>.<pipeline>/
 
 Examples:
 
-- `slc playbook flows/onboarding.md` → `flows/onboarding.playbook/onboarding.gears.md` (intermediate) + `flows/onboarding.playbook/onboarding.fsm.ts` (output).
-- `slc playbook.text2gears flows/onboarding.md` → `flows/onboarding.playbook/onboarding.gears.md` only; same location as the full run.
-- `slc playbook.gears2fsm flows/onboarding.playbook/onboarding.gears.md` → `flows/onboarding.playbook/onboarding.fsm.ts`; the canonical artifact directory is reused, not nested.
+- `slc playbook flows/onboarding.md` → `onboarding.playbook/onboarding.gears.md` (intermediate) + `onboarding.playbook/onboarding.fsm.ts` (output), under the invocation directory.
+- `slc playbook.text2gears flows/onboarding.md` → `onboarding.playbook/onboarding.gears.md` only; same location as the full run.
+- Invoked inside `onboarding.playbook/`, `slc playbook.gears2fsm onboarding.gears.md` → `onboarding.playbook/onboarding.fsm.ts`; the canonical artifact directory is reused, not nested.
 
 ## Consequences
 
 - A single vocabulary (pipeline, phase, source, target, intermediate) reduces cognitive overhead.
 - Chain inference keeps linear pipelines manifest-free.
 - Single-phase and full-pipeline runs write to the same locations, so users can iterate on any phase without file shuffling.
-- Outputs travel with the source tree under `<basename>.<pipeline>/`, so artifacts move with the source rather than the invocation cwd. Collisions are scoped to the source basename within its directory.
+- Outputs land under `<basename>.<pipeline>/` in the invocation directory, so compiling a source from elsewhere never overwrites a bundle committed beside it. Collisions are scoped to the source basename within that directory.
 - Per-phase format declarations are authoritative, so new formats do not require amending this DR.
-- Basename normalization lets users edit `flows/onboarding.playbook/onboarding.gears.md` and rerun phase 2 to produce `flows/onboarding.playbook/onboarding.fsm.ts` (not `onboarding.gears.fsm.ts`).
+- Basename normalization lets users edit `onboarding.playbook/onboarding.gears.md` and rerun phase 2 to produce `onboarding.playbook/onboarding.fsm.ts` (not `onboarding.gears.fsm.ts`).
 - Entry-phase sources may be plain `<name>.<ext>`, so users needn't learn a convention to start authoring.

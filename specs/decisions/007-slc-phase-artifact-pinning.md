@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amended by [DR-026](026-slc-owned-pin-input-declarations.md).
 
 ## Context
 
@@ -30,7 +31,7 @@ The present index shall be a regular file and shall not be a symbolic link.
 The file shall be strict JSON with a schema identifier, a hash algorithm, and a map from phase name to pin record.
 The reserved key `link` represents the pipeline's `link.md` phase.
 Other keys shall use the phase or pass's non-empty portable definition basename, without a path separator, NUL, or ASCII drive prefix and other than `.` or `..`; this admits pass names such as `optimize` as well as transform names such as `text2gears`.
-Each map key shall bind to that phase's canonical definition, artifact bundle, and linked entry paths (`<phase>.md`, `<phase>.slc`, and `<phase>.slc/<phase>.playbook.ts`); swapping otherwise-current records shall therefore be malformed rather than selecting another phase's compiled semantics.
+Each map key shall bind to that phase's canonical definition, artifact bundle, and linked entry paths (a definition with basename `<phase>.md` inside the path boundary ([DR-026](026-slc-owned-pin-input-declarations.md)), `<phase>.slc`, and `<phase>.slc/<phase>.playbook.ts`); swapping otherwise-current records shall therefore be malformed rather than selecting another phase's compiled semantics.
 
 ```json
 {
@@ -130,15 +131,16 @@ The artifact-bundle path shall identify the reviewed artifact directory directly
 The semantic input closure for a pinned phase is:
 
 - the phase definition file, or `link.md` for the reserved link phase;
-- every local file explicitly named by the definition's `## Pin Inputs` section;
-- every transitive local file explicitly named by a pinned input's own `## Pin Inputs` section, where that input format supports the section.
+- every local file named by the phase's entry in the SLC-owned pin-input sidecar ([DR-026](026-slc-owned-pin-input-declarations.md)), which is then the complete closure;
+- absent that entry, every local file explicitly named by the definition's `## Pin Inputs` section;
+- absent that entry, every transitive local file explicitly named by a pinned input's own `## Pin Inputs` section, where that input format supports the section.
 
 The definition file is always an input and is recorded separately from `semanticInputs`.
 The `semanticInputs` array records the remaining local closure files with a path, hash, and role.
 Roles are descriptive metadata for review and diagnostics; they do not change currentness.
 
-`## Pin Inputs` is the precise citation mechanism for pinnability.
-A phase definition that depends on referenced content outside its definition but does not declare that content in `## Pin Inputs` is interpretable but not pinnable.
+The sidecar entry or `## Pin Inputs` is the precise citation mechanism for pinnability.
+A phase definition that depends on referenced content outside its definition but does not declare that content is interpretable but not pinnable.
 Non-Markdown inputs and Markdown inputs without `## Pin Inputs` terminate transitive closure.
 
 At build time, the meta-pipeline should derive a candidate closure for review where possible.
@@ -184,7 +186,7 @@ A pin is current only when all of these checks pass:
 - the compiled artifact path identifies the bundle's direct-child `.playbook.ts` entry module, exists, its hash matches, and it resolves to the linked `playbook` format;
 - the artifact-bundle directory exists, directly contains the entry module and its canonical local FSM, GEARS, GEARS↔FSM, FSM-introspection, prompt-contract, and FSM-coverage files, contains no symbolic links or other unsupported entries, and its deterministic tree hash matches;
 - every local semantic input path exists and its hash matches;
-- the semantic input closure set recorded in the pin matches the definition's declared `## Pin Inputs` closure;
+- the semantic input closure set recorded in the pin matches the phase's declared closure;
 - every immutable external input, if any, has a well-formed immutable content-addressed identity;
 - every local runtime dependency, if any, exists and matches its recorded file or canonical tree identity;
 - the `linkTarget` locator can be resolved and its identity matches the content consumed by the reserved `slc.link` target.

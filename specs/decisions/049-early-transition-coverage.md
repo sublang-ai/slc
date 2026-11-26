@@ -6,7 +6,7 @@
 ## Status
 
 Accepted.
-Extends [DR-033](033-early-conformance-and-mechanical-repair.md) and [DR-040](040-early-continuation-input-contract.md).
+Amends [DR-033](033-early-conformance-and-mechanical-repair.md), [DR-034](034-faithful-transition-coverage.md), [DR-040](040-early-continuation-input-contract.md).
 
 ## Context
 

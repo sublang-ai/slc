@@ -5,7 +5,9 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amends [DR-005](005-slc-self-hosting-meta-pipeline.md), [DR-009](009-slc-playbook-pipeline-compilation.md), [DR-010](010-playbook-runtime-contract-evolution.md).
+Amended by [DR-012](012-playbook-routing-control-separation.md).
 
 ## Context
 
@@ -29,7 +31,7 @@ Its runtime shall retain the structured turn result and callable `resumePlaybook
 
 Absent provenance and exact `@sublang/playbook@0.9.0` provenance shall continue to select `legacy`.
 Exact `@sublang/playbook@1.0.0` provenance shall select the final six-port `composed-v2` profile.
-Every other provenance shall fail closed until a later decision maps it, without shape inference or initialization retry.
+Every other unmapped provenance shall fail closed, without shape inference or initialization retry; [DR-024](024-playbook-10-schema-3-adoption.md) and [DR-028](028-contract-based-adoption-without-recompilation.md) map later generations.
 The `session-v1` profile shall remain an explicit compatibility and test seam, not a configured production selection.
 
 This decision supersedes [DR-005](005-slc-self-hosting-meta-pipeline.md)'s five-port composed adapter listing, [DR-009](009-slc-playbook-pipeline-compilation.md)'s Captain-as-player and unsupported nested-coverage assumptions, and [DR-010](010-playbook-runtime-contract-evolution.md)'s provisional five-port `composed-v2` boundary and release deferral.
@@ -39,6 +41,7 @@ This decision supersedes [DR-005](005-slc-self-hosting-meta-pipeline.md)'s five-
 
 The compiled phase host shall implement `callCaptain` as a first-class agent call returning Playbook's Captain status, final text, and error shape without player identity or resume-token semantics.
 It shall honor the call's abort signal and required visibility option even though SLC has no interactive Boss pane.
+Generated direct-Captain control calls request a fresh transport session and no tools ([DR-012](012-playbook-routing-control-separation.md)).
 Captain and judge calls shall share one abort-aware concurrency-one queue because they use the same configured Captain transport; player calls retain their independent player semantics.
 
 SLC remains a non-interactive root phase host rather than a nested-playbook host.
@@ -58,9 +61,8 @@ Generated transition coverage shall provide distinct scripted Captain, player, a
 For every nested invocation it shall drive successful child output through declared `onDone` routing and child rejection through `onError`, including dynamic targets after their context has been populated.
 An uncovered nested transition shall be a finding rather than an accepted unsupported notice.
 
-Generated verification shall not make Playbook depend on SLC while SLC still depends on the immutable Playbook 0.9 compiler contract.
+Generated verification shall not make Playbook depend on SLC.
 SLC shall emit its compiled checker closure under each new artifact directory and generate relative imports to that support, preserving the destination's own `xstate` resolution and Node floor.
-Current Playbook 0.9 reviewed bundles and pins shall retain their existing layout until the complete Playbook 1.0 refresh replaces them atomically.
 
 ### Atomic reviewed-asset adoption
 

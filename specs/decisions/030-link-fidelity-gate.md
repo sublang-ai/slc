@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted; unreviewed-finding disposition amended by [DR-033](033-early-conformance-and-mechanical-repair.md).
+Accepted.
+Amended by [DR-033](033-early-conformance-and-mechanical-repair.md).
 
 ## Context
 
@@ -17,7 +18,7 @@ The FSM coverage verifier is excluded: it reports probing limits on valid artifa
 ## Decision
 
 - After a link phase produces a Coder result, and before any Reviewer call on that result, the host runs the deterministic link checks on the current live linked module beside its FSM: the module imports, its artifact schema reconciles against that FSM, and every player-invoking state's prompt composer yields the authored prompt on an ordinary turn with each placeholder substituted per the link contract, exactly as the emitted prompt-contract suite would assert and no further check.
-- Findings are mechanical Reviewer findings under the [DR-029](029-source-fidelity-gate.md) protocol: relayed to the Coder as a numbered findings list in place of that round's Reviewer call, counted as one permitted Reviewer call, and failing the phase closed without a reviewed loop; a result with no finding proceeds to the Reviewer as before.
+- Findings are mechanical findings under the [DR-029](029-source-fidelity-gate.md) protocol: relayed to the same Coder as a numbered findings list through bounded mechanical repair ([DR-033](033-early-conformance-and-mechanical-repair.md)), in place of that round's Reviewer call where one is configured, and failing the phase closed when they remain; a result with no finding proceeds to the Reviewer, if configured.
 - A module that cannot be loaded yields findings, not an error, so the Coder receives the import diagnostic as a finding.
 - The emitted prompt-contract suite remains the post-link record; the gate reuses its checks and adds none.
 

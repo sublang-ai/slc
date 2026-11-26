@@ -5,9 +5,8 @@
 
 ## Status
 
-Accepted
-Amends [DR-009](009-slc-playbook-pipeline-compilation.md) in one scope: conformance requires each action item, not each `gears` item, to map to exactly one executable leaf.
-Keeps [DR-016](016-gears-grammar-provenance.md): SLC still reads only fixed-English machine syntax and never parses condition or requirement prose.
+Accepted.
+Amends [DR-009](009-slc-playbook-pipeline-compilation.md).
 
 ## Context
 
@@ -24,6 +23,7 @@ The machines Playbook maintains are verified and are not recompiled for a change
 - A declarative item that carries a prompt blockquote or a `Results:` label, and a leaf that cites a declarative item, are findings, so an action that lost its acting clause is reported rather than read as a requirement.
 - A leaf's `sourceItem` matches an item ID without regard to ASCII letter case, and two item IDs of one package that differ only in case are a finding.
 - The findings that need no machine — a declarative item carrying a prompt or `Results:`, and IDs equal ignoring case — are also checked where a `gears` artifact is produced or consumed ([DR-035](035-gears-contract-at-producer.md)), so the phase that can still edit the artifact repairs them and no later phase receives it as protected input.
+- [DR-016](016-gears-grammar-provenance.md) stands: SLC reads only fixed-English machine syntax and never parses condition or requirement prose.
 - Prose around an action item's statement remains accepted, so artifacts compiled before this record, including SLC's own phase bundles and demo references, stay conformant unchanged.
 - Adopting the Playbook release that carries the reworded definitions is routine under [DR-028](028-contract-based-adoption-without-recompilation.md): the definitions resynchronize, the pins regenerate, and the phase bundles are retained because each definition's `## Compiled execution` section is unchanged.
 

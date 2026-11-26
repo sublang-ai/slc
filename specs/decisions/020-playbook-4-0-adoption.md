@@ -6,8 +6,7 @@
 ## Status
 
 Accepted.
-
-Amended by [DR-068](068-standalone-compilation-environment.md) for SDK delivery: Cligent now supplies both default SDKs as ordinary dependencies, while SLC keeps no duplicate SDK runtime ranges; historical adoption evidence remains unchanged.
+Amended by [DR-024](024-playbook-10-schema-3-adoption.md), [DR-068](068-standalone-compilation-environment.md).
 
 ## Context
 
@@ -42,35 +41,19 @@ Amended by [DR-068](068-standalone-compilation-environment.md) for SDK delivery:
 Exact `@sublang/playbook@4.0.0` link-target provenance selects the six-port `composed-v2` profile, joining 0.10.0, 1.0.0, 2.0.0, and 3.1.0: 4.0.0 ships `runtime.ts` byte-identical to 3.1.0's, with the same ABI and artifact schemas, and its major version marks the SDK-topology break rather than any runtime-contract change [[4]].
 `1.3.0`, `3.0.0`, and every other unreviewed release remain fail-closed as unmapped ([[phase-execution-30](../packages/phase-execution.md#phase-execution-30)]).
 
-### Atomic reviewed-asset adoption
-
-The dependency range moves to `^4.0.0` with the lock resolving exactly 4.0.0, and `@sublang/cligent` moves to `^0.18.0` in the same unit — the release whose descriptor owns the runtime-version policy [[2]][[6]][[7]].
-The vendored definitions are verified unchanged against the 4.0.0 tarball, and the three reviewed meta-phase bundles are retained rather than rebuilt: every input the pins record for them — definitions, link target, engine — is byte-identical, so a rebuild could only launder identical bytes through nondeterministic runs [[4]].
-Pins regenerate with exact 4.0.0 provenance, moving the lockfile hash and the installed-package identities.
-Manifest, lock, definitions, bundles, and pins move as one reviewed set ([[self-hosting-11](../packages/self-hosting.md#self-hosting-11)]).
-
 ### Agent runtimes for repository verification
 
 The repository supplies `@anthropic-ai/claude-agent-sdk` and `@openai/codex-sdk` as `devDependencies` for its own opt-in live acceptance, resolved by the lock like every other dev tool.
-The published `@sublang/slc` keeps both SDKs out of `dependencies`, `optionalDependencies`, and `peerDependencies`; Cligent's optional-peer declaration is the single range npm checks [[7]], and a second copy could only drift — drifting is exactly what froze Codex.
+The published `@sublang/slc` keeps both SDKs out of `dependencies`, `optionalDependencies`, and `peerDependencies`; Cligent supplies both default SDKs as ordinary dependencies ([DR-068](068-standalone-compilation-environment.md)), so its declaration is the single range npm checks, and a second copy could only drift — drifting is exactly what froze Codex.
 Hermetic gates are unaffected; they fake the agent layer.
-
-### Version-coupled consumers
-
-`demo/package.json` moves to `@sublang/playbook` `^4.0.0` in the same unit and now also names the demo lineup's SDKs as its own dependencies: the demo is a project-local install, and a project tree has no other way to place the SDKs where its nested Cligent resolves them — Playbook's global-install guidance does not reach inside a project's `node_modules` [[1]].
 
 ## Consequences
 
-- The transitive Codex freeze ends structurally: no SLC install closure
-  carries an agent-SDK range any more, so a vendor release never again
-  requires an SLC change — floors and repairs arrive by upgrading cligent.
-- Compiled artifacts pinned with 3.1.0 provenance keep running unchanged;
-  artifacts pinned after this adoption carry 4.0.0 provenance and run the
-  same `composed-v2` profile. Mixed dependency, definition, bundle, or pin
-  sets still fail closed.
-- A live phase run on a machine without a needed SDK now fails at
-  playbook's preflight with cligent's pinned install command, instead of
-  mid-run on a vendor error [[1]][[2]][[3]].
+- The transitive Codex freeze ends structurally: SLC declares no agent-SDK
+  range, so a vendor release never again requires an SLC change — floors and
+  repairs arrive by upgrading Cligent [[2]][[3]].
+- Compiled artifacts pinned with 3.1.0 or 4.0.0 provenance run the same
+  `composed-v2` profile.
 
 ## References
 

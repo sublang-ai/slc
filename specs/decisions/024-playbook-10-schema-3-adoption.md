@@ -5,9 +5,9 @@
 
 ## Status
 
-Controller discrimination amended by [DR-053](053-recovery-controller-discrimination.md) to accept the legacy and recovery-capable domains.
-
-Accepted; activation completed under [DR-027](027-complete-playbook-10-activation.md).
+Accepted.
+Amends [DR-005](005-slc-self-hosting-meta-pipeline.md), [DR-014](014-cwd-output-invocation-defaults-entry-emission.md), [DR-017](017-playbook-2-0-thin-runtime-adoption.md), [DR-020](020-playbook-4-0-adoption.md).
+Amended by [DR-026](026-slc-owned-pin-input-declarations.md), [DR-027](027-complete-playbook-10-activation.md), [DR-028](028-contract-based-adoption-without-recompilation.md), [DR-053](053-recovery-controller-discrimination.md).
 
 ## Context
 
@@ -26,7 +26,7 @@ Playbook 10.0.0 also depends on `@sublang/cligent@^0.23.0`, whose optional peers
 
 ### Immutable profile boundary
 
-Exact `@sublang/playbook@10.0.0` link-target provenance shall select a new `composed-v3` runtime contract profile.
+Exact `@sublang/playbook@10.0.0` link-target provenance shall select a new `composed-v3` runtime contract profile, which [DR-028](028-contract-based-adoption-without-recompilation.md) extends to every link target whose engine declares runtime ABI 1 and artifact schema 3.
 Absent provenance and exact 0.9.0 provenance shall continue to select `legacy`, and exact 0.10.0, 1.0.0, 2.0.0, 3.1.0, and 4.0.0 provenance shall continue to select `composed-v2`.
 Exact 5.0.0, 6.0.0, 7.0.0, 8.0.0, and 9.0.0 provenance shall remain unmapped and fail closed with every other unreviewed provenance because reviewing 10.0.0 establishes no contract identity for an intermediate release.
 The `composed-v3` profile shall construct a schema-3 linked runtime with exact separate configured options and live current-host capabilities; SLC's phase host shall supply an effect-ledger capability and a repository capability exposing `runExclusive` and `runDeferred` on every construction even though the engine consults that repository only for governed player states; the phase host shall initialize the same six-port causal root session with canonical local-role semantics and shall never serialize the live capabilities into options, machine input, or snapshots [[2]][[3]].
@@ -38,13 +38,13 @@ SLC's compiled `composed-v3` phase host shall support any roleless shared-factor
 The phase host shall reject a bespoke implementation or an artifact that lacks the required shared-factory compatibility record or requires a delegated role, runtime option, repository operation, or effect-ledger write; emitted role-bearing or bespoke playbooks remain runnable through a Playbook schema-3 host rather than through SLC's non-interactive phase host.
 SLC's non-interactive phase host shall not initiate adoption or controller actions, and the presence of `adopt`, retained-generation metadata, `describe`, `apply`, or `unresolvedEffectEnvelopes` shall neither select a profile nor relax exact provenance checks.
 The phase host shall continue to reject nested playbook execution deterministically because it owns no child stack.
-Preparatory host and verification support may land while 10.0.0 remains unmapped, but the dependency and provenance mapping shall not activate until the complete adopted set below can move atomically.
+The dependency and provenance mapping activate only with the complete adopted set below, moved atomically ([DR-027](027-complete-playbook-10-activation.md)).
 
 ### Roles and schema-3 output
 
-SLC shall synchronize all four Playbook definitions from immutable 10.0.0 while retaining SLC's explicit `## Pin Inputs` sections.
+SLC shall synchronize all four Playbook definitions byte-identically from immutable 10.0.0, with SLC's pin-input declarations in its own sidecar ([DR-026](026-slc-owned-pin-input-declarations.md)).
 Current compilation shall accept `Roles`, reject removed player-alias syntax and canonical-id collisions, require every canonical local role id to equal its own lowercasing, to carry no whitespace or identifier-ambiguous separator, and to differ from the host-reserved `captain` — a class that admits the non-English role names Playbook 10 sanctions, whose caseless scripts lowercase to themselves, rather than an ASCII-only class that would make the shipped Chinese demo uncompilable, preserve those ids through `meta.playbook.role` and `invoke.input.role`, and carry one role per simultaneously active parallel region into declared concurrent-role sets and deterministic verification [[4]][[5]][[11]][[12]].
-SLC shall therefore narrow that class for deterministic verification through a verifier-owned emitted-shape witness: a Captain decision state whose domain result keys, after excluding compiler-owned `needsBossReply`, are exactly `respond`, `resume`, `start`, `switch`, `dismiss`, `deliver`, and `runtime`; GEARS prose and a proper subset or superset of those keys shall not independently select the controller contract.
+SLC shall therefore narrow that class for deterministic verification through a verifier-owned emitted-shape witness: a Captain decision state whose domain result keys, after excluding compiler-owned `needsBossReply`, are exactly `respond`, `resume`, `start`, `switch`, `dismiss`, `deliver`, and `runtime`, optionally with `recover` ([DR-053](053-recovery-controller-discrimination.md)); GEARS prose and a proper subset or superset of those keys shall not independently select the controller contract.
 The recognized controller class is Playbook 10's closed host-action session loop: its FSM keeps working playbooks outside the engagement stack and uses direct-Captain decision and reporting work, so a controller-classified artifact containing a delegated-player invocation, nested-playbook invocation, or parallel working surface is nonconformant rather than an ordinary workflow surface that acquires controller entry semantics [[5]].
 Artifact verification shall reconcile the artifact's own reviewed full-link target provenance, generation-specific FSM actor bindings, and exact shared-factory compatibility rather than use a compiler phase's pin; mutually inconsistent or unsupported present signals shall fail closed, a compat-less linked factory with no schema-3 signal shall retain the historical schema-1 continuation, and a direct-Captain artifact with neither a linked factory nor another generation signal shall remain unclassified.
 Current entry modules shall advertise artifact schema 3, the linked factory's exact runtime profile, canonical `requiredRoleIds`, declared `concurrentRoleSets`, validated configured options, and a two-argument runtime factory that composes `{ configuredOptions, hostCapabilities }` at the linked-artifact boundary.
@@ -73,7 +73,7 @@ This decision supersedes [DR-020](020-playbook-4-0-adoption.md)'s exhaustive pro
 For schema-3 output only, it also supersedes [DR-017](017-playbook-2-0-thin-runtime-adoption.md)'s verbatim source-name `requiredRoleIds`, lowercase-to-verbatim entry-binding shim, and positional demo invocation with `--player` role flags.
 For schema-3 output only, it supersedes [DR-014](014-cwd-output-invocation-defaults-entry-emission.md)'s positional and default-agent `playbook run <entry> <task>` consequence while retaining deterministic entry emission and placement.
 For `composed-v3` phase execution only, it supersedes [DR-005](005-slc-self-hosting-meta-pipeline.md)'s assumption that every compiled phase's player port is Cligent-backed; the full schema-3 Playbook host retains delegated-role execution.
-[DR-010](010-playbook-runtime-contract-evolution.md)'s exact-provenance and fail-closed rules, [DR-011](011-playbook-1-0-captain-contract-adoption.md)'s atomic reviewed-set boundary, [DR-016](016-gears-grammar-provenance.md)'s direct Spex 0.3 grammar authority, and [DR-018](018-playbook-3-1-adoption.md)'s rebuild and independent-verification rule remain in force.
+[DR-010](010-playbook-runtime-contract-evolution.md)'s exact-provenance and fail-closed rules, [DR-011](011-playbook-1-0-captain-contract-adoption.md)'s atomic reviewed-set boundary, [DR-016](016-gears-grammar-provenance.md)'s direct Spex 0.3 grammar authority, and [DR-018](018-playbook-3-1-adoption.md)'s independent-verification rule remain in force; [DR-028](028-contract-based-adoption-without-recompilation.md) replaces the rebuild rule with retention by verified equivalence.
 
 ## Consequences
 
