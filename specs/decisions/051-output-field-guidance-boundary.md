@@ -6,6 +6,7 @@
 ## Status
 
 Accepted.
+Amends [DR-035](035-gears-contract-at-producer.md).
 
 ## Context
 

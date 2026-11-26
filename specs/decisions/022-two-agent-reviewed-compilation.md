@@ -5,9 +5,9 @@
 
 ## Status
 
-Accepted
-
-Extended by [DR-062](062-independent-ultracode-configuration.md) for independent Coder and Reviewer Ultracode settings under the required Cligent floor.
+Accepted.
+Amends [DR-004](004-slc-interpreted-phase-execution.md).
+Amended by [DR-062](062-independent-ultracode-configuration.md).
 
 ## Context
 
@@ -22,6 +22,7 @@ The installed `@sublang/playbook` v4.0.0 package exposes no standalone `review` 
 
 - The existing `agent`, `model`, and `effort` selection remains the Coder.
   An optional independent `reviewerAgent`, `reviewerModel`, and `reviewerEffort` selection enables review; Reviewer model or effort without Reviewer agent is invalid.
+  Coder and Reviewer each take an independent Ultracode switch ([DR-062](062-independent-ultracode-configuration.md)).
 - After each successful, non-`BLOCKED` transformation-performing Coder call, SLC shall create a fresh read-only Reviewer session for that call.
   Calls carrying explicit `allowedTools`, including routing Captain and judge control calls, bypass review.
 - The Reviewer shall inspect the request, Coder output, artifact, and relevant workspace state — and nothing outside that workspace, such as a prior or reference artifact — through host-exposed read-only file/search capabilities — treating shell and network as potentially unavailable and any exposed read-only shell as non-mutating inspection only — report only material correctness, behavior, or spec-quality findings, cover worthwhile instances of each defect class, make no edits, writes, mutations, or commits, and return `NO_FINDINGS` with optional surrounding whitespace or `FINDINGS:` with consecutive top-level numbered findings and only indented continuation/evidence lines.

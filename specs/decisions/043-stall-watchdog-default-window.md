@@ -6,8 +6,7 @@
 ## Status
 
 Accepted.
-
-Amends the default stall timeout in [DR-019](019-compile-progress-stall-watchdog.md); every other rule of that watchdog stands.
+Amends [DR-019](019-compile-progress-stall-watchdog.md).
 
 ## Context
 

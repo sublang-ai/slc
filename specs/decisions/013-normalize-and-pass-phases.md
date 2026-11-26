@@ -6,6 +6,7 @@
 ## Status
 
 Accepted.
+Amended by [DR-014](014-cwd-output-invocation-defaults-entry-emission.md).
 
 ## Context
 
@@ -27,7 +28,7 @@ Playbook's DR-016 [[3]] adds the target-side primitive — GEARS script items co
   Its filename is its non-empty portable pass name (`<name>.md`, e.g. `optimize.md`), which may otherwise be named freely but may not contain a path separator, NUL, or ASCII drive prefix or use `.` or `..`; the `<source>2<target>.md` rule applies only to format-changing phases.
 - Pass phases sit outside chain inference: entry/exit computation, branch and cycle refusals, and the single-linear-chain requirement consider only format-changing phases.
   A pass may not shadow a chain phase's name or the reserved `link`.
-- Passes run only on request. `-O`/`--optimize` on a full or full-link run schedules every discovered pass after the phase producing its format, in pass-name order.
+- A full or full-link run schedules every discovered pass by default ([DR-014](014-cwd-output-invocation-defaults-entry-emission.md)), after the phase producing its format, in pass-name order; `--no-optimize` omits them, and `-O`/`--optimize` states the default.
   With passes active on a format, the producing phase writes the `.raw` intermediate (`<basename>.<format>.raw<ext>`) and the final pass writes the canonical path, so downstream phases, verification, and pins see the canonical artifact with identical naming whether or not optimization ran.
 - `slc <pipeline>.<pass> <source>` runs one pass standalone; it writes `<basename>.<format>.opt<ext>` (or `-o`) because a pass may not overwrite its own source ([DR-003](003-slc-phase-execution.md)).
 - A pass executes like any phase: interpreted without a pin, compiled through a current pin, fail-closed on a stale one ([DR-007](007-slc-phase-artifact-pinning.md)).
@@ -51,7 +52,7 @@ Playbook's DR-016 [[3]] adds the target-side primitive — GEARS script items co
 ## Consequences
 
 - `slc playbook workflow.md --normalize -O --link <runtime>` compiles raw prose end to end: normalization makes actors and preconditions explicit, the optimize pass rewrites mechanical steps into agent-free script states, and the emitted verification tests cover both (script conformance and coverage extend `verification`).
-- Unoptimized runs are byte-compatible with today: no pass phase in the directory, or no `-O`, changes nothing.
+- Unoptimized runs are byte-compatible with runs before passes existed: no pass phase in the directory, or `--no-optimize`, changes nothing.
 - A pipeline directory may now legally contain non-chain `.md` phase files; hosts older than this decision refuse such directories, which is the intended fail-closed behavior for a vendored pipeline they cannot schedule.
 - Verification gains script-item parsing and script-state conformance/coverage so optimized artifacts verify as strictly as unoptimized ones.
 

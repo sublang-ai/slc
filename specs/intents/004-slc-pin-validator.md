@@ -13,7 +13,7 @@ Implement the portion of [DR-007](../decisions/007-slc-phase-artifact-pinning.md
 The validator loads the pin file, hashes committed bytes, resolves the path boundary, derives and compares the `## Pin Inputs` semantic-input closure, and emits a per-phase verdict of `current`, `stale`, or `malformed` with a diagnostic naming the changed input or malformed field.
 The standalone deterministic library changed no runtime execution behavior and required neither the compiled executor nor its file capability.
 The additive work left `runSlc`, the interpreted executor, and the [DR-003](../decisions/003-slc-phase-execution.md) execution boundary unchanged.
-The iteration left these concerns to follow-up work under [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md), [DR-007](../decisions/007-slc-phase-artifact-pinning.md), and [DR-008](../decisions/008-slc-file-capability.md):
+The iteration left these concerns to follow-up work under [DR-005](../decisions/005-slc-self-hosting-meta-pipeline.md) and [DR-007](../decisions/007-slc-phase-artifact-pinning.md):
 
   - compiled execution, the `PhaseRunner` facade, `slc.link`, and the `phase` format;
   - the package-manager integrity-digest link-target identity for directory or package targets, because this iteration's validator recomputed only a `sha256:` content or tree hash;

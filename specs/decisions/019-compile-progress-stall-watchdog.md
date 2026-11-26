@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted; the default stall timeout amended by [DR-043](043-stall-watchdog-default-window.md).
+Accepted.
+Amended by [DR-043](043-stall-watchdog-default-window.md).
 
 ## Context
 
@@ -55,7 +56,7 @@ An absolute per-phase deadline would misfire on legitimately long phases, whose 
 - The configured window must stay representable as a timer delay, so a value the runtime would silently clamp is refused at both configuration sources rather than inverting the watchdog into an immediate abort.
 - The watchdog applies to every agent call on both transports: the single interpreted invocation and each compiled player, Captain, and judge call.
 - A tripped watchdog surfaces through the unchanged phase protocols: a failure report naming the phase and target, no retry of the call ([[phase-execution-12](../packages/phase-execution.md#phase-execution-12)], [[phase-execution-23](../packages/phase-execution.md#phase-execution-23)]), and fail-closed handling for a pinned phase — never a silent interpreted fallback ([[phase-execution-27](../packages/phase-execution.md#phase-execution-27)]).
-- The timeout is configuration: the `stallTimeout` config-file key in seconds, overridden by a non-blank `SLC_STALL_TIMEOUT`, defaulting to 600 seconds, with `0` disabling the watchdog.
+- The timeout is configuration: the `stallTimeout` config-file key in seconds, overridden by a non-blank `SLC_STALL_TIMEOUT`, defaulting to 2400 seconds ([DR-043](043-stall-watchdog-default-window.md)), with `0` disabling the watchdog.
   The default is deliberately generous because one long tool execution or model turn is legitimately event-silent on every adapter; the aim is to convert an indefinite hang into a loud, attributed failure within minutes, not to police normal phase length.
 
 ### Measured time estimates

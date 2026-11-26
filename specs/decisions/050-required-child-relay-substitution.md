@@ -5,8 +5,9 @@
 
 ## Status
 
-Accepted
-Amended by [DR-067](067-empty-labelled-relay-omission.md) in one scope: in reached-case proof, an invocation may omit a labelled quoted relay line whose value is empty or absent.
+Accepted.
+Amends [DR-041](041-composed-child-input-fidelity.md).
+Amended by [DR-067](067-empty-labelled-relay-omission.md).
 
 ## Context
 
@@ -18,7 +19,7 @@ Angle-bracket syntax alone also occurs in ordinary domain instructions and canno
 ## Decision
 
 Amend [DR-041](041-composed-child-input-fidelity.md) at explicit child-template relay positions only.
-A complete unescaped standalone `> <token>` or labelled `> Label: <token>` line requires observable runtime substitution, with the same correspondence for repeated occurrences.
+A complete unescaped standalone `> <token>` or labelled `> Label: <token>` line requires observable runtime substitution, with the same correspondence for repeated occurrences, unless a labelled line whose value is empty or absent is omitted ([DR-067](067-empty-labelled-relay-omission.md)).
 Static object-valued inputs, constant functions, and partial composers cannot leave a required relay unresolved.
 Ordinary literal text, inline-code or escaped tokens, and other domain metavariables retain their existing treatment.
 Keep context-field names unconstrained and preserve literal placeholder-looking text inside inserted runtime values through the existing single-pass probes.

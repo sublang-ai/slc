@@ -5,8 +5,8 @@
 
 ## Status
 
-Accepted
-Amends [DR-041](041-composed-child-input-fidelity.md) in one scope: a reached list of strings may fill a child-input token as its elements joined by a comma and a space.
+Accepted.
+Amends [DR-041](041-composed-child-input-fidelity.md).
 
 ## Context
 

@@ -5,11 +5,8 @@
 
 ## Status
 
-Accepted
-
-Extended by [DR-063](063-adapter-model-defaults-and-subagent-selection.md) for opt-in defaults and independent subagent models.
-
-Extended by [DR-062](062-independent-ultracode-configuration.md) for independent Coder and Reviewer Ultracode settings under the required Cligent floor.
+Accepted.
+Amended by [DR-015](015-first-run-config-seeding.md), [DR-062](062-independent-ultracode-configuration.md), [DR-063](063-adapter-model-defaults-and-subagent-selection.md).
 
 ## Context
 
@@ -29,7 +26,7 @@ This DR settles the sources and their precedence, discovery, the schema (includi
   3. the built-in default.
 - Environment overrides file so every current env-only run is unchanged and the unset-agent refusal ([[cli-12](../packages/cli.md#cli-12)]) still fires only when neither environment nor file supplies an agent.
 - An unset, empty, or all-whitespace environment value does not supply its key, so resolution falls through to the config file and then the built-in default.
-- Each key maps one-to-one to an existing environment variable, so the two sources are interchangeable per key.
+- Each key except `modelDefaults` maps one-to-one to an existing environment variable, so the two sources are interchangeable per key.
 
 | Key | Type | Meaning | Environment equivalent |
 | --- | --- | --- | --- |
@@ -43,13 +40,15 @@ This DR settles the sources and their precedence, discovery, the schema (includi
 | `reviewerFastMode` | boolean (optional) | literal adapter-scoped Reviewer fast-mode request, as `fastMode`; requires `reviewerAgent` | `SLC_REVIEWER_FAST_MODE` (exactly `true` or `false`) |
 | `pipelinePath` | sequence of strings | pipeline search roots | `SLC_PIPELINE_PATH` |
 
+- [DR-062](062-independent-ultracode-configuration.md) adds Coder and Reviewer `ultracode` and `reviewerUltracode`; [DR-063](063-adapter-model-defaults-and-subagent-selection.md) adds `modelDefaults`, `subagentModel`, and `reviewerSubagentModel`; [DR-019](019-compile-progress-stall-watchdog.md) adds `stallTimeout`.
+
 ### File format and discovery
 
 - The config file is a single flat YAML document.
 - Absent an explicit `--config`, discovery reads `slc.config.yaml` in the cwd, then `${XDG_CONFIG_HOME:-~/.config}/slc/config.yaml`; the first file found wins and cwd takes precedence over home.
 - `--config <path>` names a specific file and disables discovery.
 - An explicit `--config` path that does not exist is an error, whereas a discovery miss is not — it falls through to environment and defaults, so an optional config may be absent but a mistyped `--config` fails loudly rather than silently degrading.
-- `slc` does not auto-create a default config in this iteration; unlike `tmux-play` [[1]], a missing config is never written.
+- When discovery misses both files, `slc` seeds the user config ([DR-015](015-first-run-config-seeding.md)); an absent explicit `--config` path is never written.
 
 ### `pipelinePath` shape and base
 
@@ -70,7 +69,7 @@ This DR settles the sources and their precedence, discovery, the schema (includi
 - A `--config` typo fails loudly, while an absent discovered config is benign.
 - A cwd-relative `pipelinePath` sequence reads the same regardless of which source supplied it, so a home default such as `[./pipelines]` means the same thing wherever `slc` runs.
 - A YAML parse dependency and a config-loading surface are added.
-- A `permissions` block (the [DR-003](003-slc-phase-execution.md) write-scope sandbox), `maxTurns`, first-run auto-create, legacy-file handling, and config snapshotting are out of scope and may extend this DR later.
+- A `permissions` block (the [DR-003](003-slc-phase-execution.md) write-scope sandbox), `maxTurns`, legacy-file handling, and config snapshotting are out of scope and may extend this DR later.
 
 ## References
 

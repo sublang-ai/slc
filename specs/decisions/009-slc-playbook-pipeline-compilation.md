@@ -5,10 +5,8 @@
 
 ## Status
 
-Accepted
-Amended by [DR-065](065-compiled-gears-as-a-spec-package.md) in one scope: conformance requires each action item, not each `gears` item, to map to exactly one executable leaf.
-
-Amended by [DR-068](068-standalone-compilation-environment.md) for managed artifact environments, explicit standalone ESM entries, selected-runtime identity and compiler-owned verification.
+Accepted.
+Amended by [DR-011](011-playbook-1-0-captain-contract-adoption.md), [DR-012](012-playbook-routing-control-separation.md), [DR-014](014-cwd-output-invocation-defaults-entry-emission.md), [DR-065](065-compiled-gears-as-a-spec-package.md), [DR-068](068-standalone-compilation-environment.md).
 
 ## Context
 
@@ -39,7 +37,7 @@ No new transformation rules are introduced.
 ### Compile output versus host-performing infrastructure
 
 `slc`'s compile output for the `playbook` pipeline is the compile-chain artifacts (the `gears` intermediate and the `fsm` object) and, with linking, the `playbook` linked module — a `createPlaybookRuntime` factory per [DR-005](005-slc-self-hosting-meta-pipeline.md).
-The reference's registry entry, captain shell, `bin/playbook.js` launcher, and config template are `@sublang/playbook` host-performing infrastructure [[2]]; `slc` does not emit them.
+The reference's captain shell, `bin/playbook.js` launcher, and config template are `@sublang/playbook` host-performing infrastructure [[2]]; `slc` does not emit them, and emits only the registry entry ([DR-014](014-cwd-output-invocation-defaults-entry-emission.md)).
 The compilation-correctness verification bundle (see [Verification](#verification-is-deterministic-and-artifact-derived)) is `slc` output, emitted beside the artifacts.
 Equivalence to the manual reference is defined over `slc`'s in-scope output and need not be byte-identical.
 
@@ -60,10 +58,10 @@ The `## Link Targets` exception applies to the Playbook-authored `playbook`-form
 `slc` shall generate compilation-correctness tests deterministically from the compiled artifacts — the `gears` source, the `fsm` object, and the linked runtime — with no agent involvement, so every build re-checks faithfulness.
 The invariants, modeled on the reference, are:
 
-- GEARS↔FSM conformance: each `gears` item maps to one executable working leaf carrying the item's actor kind and verbatim prompt or child-input body; Captain leaves also carry the player binding, and `needsBossReply` results are present where the definition requires them.
-- FSM introspection: every `gears` item maps to exactly one executable leaf; every node in a structured machine carries a non-empty explicit state id and matching `meta.playbook.stateId`; and the hierarchy, both config path and public id, state types, tags, parallel joins, actor kinds, and per-node transition surfaces are pinned so unintended topology or runtime-visible identity changes are caught.
+- GEARS↔FSM conformance: each action item ([DR-065](065-compiled-gears-as-a-spec-package.md)) maps to one executable working leaf carrying the item's actor kind and verbatim prompt or child-input body; delegated player leaves also carry the player binding, while direct Captain leaves carry none ([DR-011](011-playbook-1-0-captain-contract-adoption.md)), and `needsBossReply` results are present where the definition requires them.
+- FSM introspection: every action item maps to exactly one executable leaf; every node in a structured machine carries a non-empty explicit state id and matching `meta.playbook.stateId`; and the hierarchy, both config path and public id, state types, tags, parallel joins, actor kinds, and per-node transition surfaces are pinned so unintended topology or runtime-visible identity changes are caught.
 - Prompt contract: each Captain state wires the declared context fields, substitutes the declared placeholders, and orders labelled blocks as the link definition requires.
-- FSM coverage: Captain results, `onDone` and `onError` arms, parallel joins, root or keyed branch-local Boss replies, and interrupt targets are driven through public state identities; nested-playbook invocations and any other transition the bounded driver cannot exercise are reported explicitly as unsupported rather than silently counted as covered.
+- FSM coverage: Captain results, `onDone` and `onError` arms, parallel joins, root or keyed branch-local Boss replies, and interrupt targets are driven through public state identities; nested-playbook invocations are driven through `onDone` and `onError` with scripted children ([DR-011](011-playbook-1-0-captain-contract-adoption.md)), and any transition the bounded driver cannot exercise is reported explicitly rather than silently counted as covered.
 
 Verification shall traverse nested and parallel state nodes through their public stable metadata rather than assume every state is a root child or that every snapshot value is scalar.
 Flat machines shall retain their existing deterministic verification representation so adding structured support does not churn reviewed artifacts that did not change.
@@ -74,9 +72,8 @@ This artifact probe or marker does not replace the pin-provenance execution sele
 
 The tests verify structural faithfulness of artifacts to source, not domain behavior, and live beside the artifacts under `<basename>.playbook/`.
 A full reserved-pipeline run shall also emit the exact compiled SLC checker module closure under that artifact directory and make every generated test import it relatively, so the tests remain bound to the checker that produced them and run in a destination project without installing SLC.
-The closure shall leave `xstate` external because the compiled FSM already requires that runtime from its destination project.
-The pre-adoption Playbook 0.9 reviewed bundles may retain their existing package import and bundle layout until [DR-011](011-playbook-1-0-captain-contract-adoption.md)'s atomic refresh; adding portable support to new output shall not make those immutable legacy pins stale early.
-The verification contract is realized as a new spec package whose items are authored when the generator lands.
+The closure shall leave `xstate` external, resolved like the compiled FSM's own runtime from the artifact's managed environment ([DR-068](068-standalone-compilation-environment.md)).
+The verification contract is the `verification` spec package.
 
 ## Consequences
 

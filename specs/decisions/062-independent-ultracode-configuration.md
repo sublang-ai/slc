@@ -6,8 +6,8 @@
 ## Status
 
 Accepted (2026-11-14).
-Amended by [DR-064](064-runtime-owned-model-defaults.md) to require a Cligent release that supports independent Ultracode.
-Extends [DR-006](006-slc-configuration-sources.md)'s configuration schema and [DR-022](022-two-agent-reviewed-compilation.md)'s independent role configuration without changing source precedence or review orchestration.
+Amends [DR-006](006-slc-configuration-sources.md), [DR-022](022-two-agent-reviewed-compilation.md).
+Amended by [DR-064](064-runtime-owned-model-defaults.md).
 
 ## Context
 
@@ -20,6 +20,7 @@ Independent booleans must preserve explicit false even when an effort shorthand 
 Coder accepts optional YAML `ultracode` and environment `SLC_ULTRACODE`; Reviewer accepts `reviewerUltracode` and `SLC_REVIEWER_ULTRACODE`.
 YAML values are booleans; nonblank environment values are exactly `true` or `false` and override YAML independently per key.
 Reviewer settings require a Reviewer agent.
+These keys extend [DR-006](006-slc-configuration-sources.md)'s configuration schema and [DR-022](022-two-agent-reviewed-compilation.md)'s independent role configuration without changing source precedence or review orchestration.
 Omission preserves existing defaults and the legacy effort shorthand.
 
 Consumer-supplied Cligent's `isUltracodeSupported` is the authority for native transport support.

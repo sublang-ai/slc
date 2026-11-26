@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amended by [DR-011](011-playbook-1-0-captain-contract-adoption.md), [DR-024](024-playbook-10-schema-3-adoption.md).
 
 ## Context
 
@@ -48,7 +49,7 @@ A compiled phase artifact shall be behavior-equivalent to interpreting its defin
 
 `slc` runs a compiled phase by loading its `playbook` module, constructing the `PlaybookRuntime` its default-exported `PlaybookRuntimeFactory` builds, and driving it through a stable host-side SLC phase-runner facade.
 A compiled phase runs as a non-interactive playbook: the facade seeds the runtime from `PhaseInput`, drives one turn to the runtime's declared boundary through `handleBossInput`, and derives the result from the source-owned runtime outcome and the declared-output postcondition.
-The exact `legacy`, `session-v1`, and `composed-v2` initialization profiles, pin-provenance selection, structured-result mapping, nested-call host policy, and trace handling are settled by [DR-010](010-playbook-runtime-contract-evolution.md).
+The exact initialization profiles, profile selection, structured-result mapping, nested-call host policy, and trace handling are settled by [DR-010](010-playbook-runtime-contract-evolution.md), [DR-011](011-playbook-1-0-captain-contract-adoption.md), [DR-024](024-playbook-10-schema-3-adoption.md), and [DR-028](028-contract-based-adoption-without-recompilation.md).
 
 | Result | Mapping |
 | --- | --- |
@@ -90,18 +91,19 @@ interface PhaseRunner {
 ```
 
 `slc` constructs the facade with a `PlaybookPorts` adapter.
-A `legacy` runtime receives the four published ports directly, `session-v1` receives the exact four traced-session ports through its minimal session, and `composed-v2` receives five ports through a causal root `PlaybookSession`, per [DR-010](010-playbook-runtime-contract-evolution.md).
+A `legacy` runtime receives the four published ports directly, `session-v1` receives the exact four traced-session ports through its minimal session, `composed-v2` receives six ports through a causal root `PlaybookSession` ([DR-011](011-playbook-1-0-captain-contract-adoption.md)), and `composed-v3` receives the same session with separate configured options and live host capabilities ([DR-024](024-playbook-10-schema-3-adoption.md)), per [DR-010](010-playbook-runtime-contract-evolution.md).
 
 `PhaseInput` carries workspace paths, not contents; the artifact performs no direct file I/O.
 Agentic phases reach the workspace through the coding agent (`callPlayer`), which reads the source and writes the `target` or `linked` output directly and runs any tool the definition calls for, as in interpreted execution ([DR-004](004-slc-interpreted-phase-execution.md)).
 Per-step model selection flows through Playbook player and judge bindings plus host configuration.
 Playbook port semantics are source-owned; SLC defines only the phase input, the phase result, and the mapping to the [DR-003](003-slc-phase-execution.md) protocol.
 `slc` supplies a `PlaybookPorts` adapter.
-It backs the agent-facing ports (`callPlayer` and `callJudge`) with Cligent (npm `@sublang/cligent` [[2]]) per [DR-004](004-slc-interpreted-phase-execution.md), and supplies status and telemetry sinks so diagnostics can be drained.
+It backs the agent-facing ports (`callPlayer`, `callCaptain`, and `callJudge`) with Cligent (npm `@sublang/cligent` [[2]]) per [DR-004](004-slc-interpreted-phase-execution.md), and supplies status and telemetry sinks so diagnostics can be drained.
+A `composed-v3` phase host runs only roleless artifacts, leaving delegated-role execution to a full Playbook host ([DR-024](024-playbook-10-schema-3-adoption.md)).
 How a host maps Playbook ports to concrete agents, models, process limits, and diagnostic sinks is host-defined; portability holds over the Playbook contract and the SLC phase-runner facade, not the execution environment.
 
 The run is expected to write only the `target` or `linked` path from its input — the [DR-003](003-slc-phase-execution.md) write-scope invariant — through the Playbook-mediated coding agent.
-Compiled execution relies on the same [DR-003](003-slc-phase-execution.md) generic checks as interpreted execution ([DR-004](004-slc-interpreted-phase-execution.md)), which defend the protected inputs but do not prove the full write scope, and `slc` adds no host-side write-scope enforcement for compiled runs.
+Compiled execution relies on the same [DR-003](003-slc-phase-execution.md) generic checks as interpreted execution ([DR-004](004-slc-interpreted-phase-execution.md)), which defend the protected inputs but do not prove the full write scope, and `slc` adds no host-side write-scope enforcement for compiled runs: no host-side file capability, per-run grant, or player sandbox.
 `slc` constructs the runtime, supplies the exact pin-selected profile boundary, drives it to that boundary, then maps the outcome onto the [DR-003](003-slc-phase-execution.md) protocol: `ok` proceeds to generic checks, `blocked` is the `BLOCKED` outcome, and `error` stops the pipeline like a failed generic check; non-sensitive diagnostics surface for every status, so an `ok` run still reports any ambiguity it resolved ([DR-003](003-slc-phase-execution.md), [DR-010](010-playbook-runtime-contract-evolution.md)).
 
 ### Strategy selection

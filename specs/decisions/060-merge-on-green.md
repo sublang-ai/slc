@@ -5,10 +5,11 @@
 
 ## Status
 
-Accepted (2026-10-23) on the owner's direction to make merging timely while several branches land on `main` in one day.
+Accepted (2026-10-23).
 
 ## Context
 
+The owner directed making merging timely while several branches land on `main` in one day.
 As many as four pull requests have merged into `main` in one day.
 `main` required the `quality` check with the branch up to date, so every merge made each open pull request merge `main` and run its whole quality job again, and a pull request that turned green still waited for a person to merge it while `main` moved on.
 The CI workflow ran on every push and every pull request, grouping runs by ref and cancelling the run in progress for any event:

@@ -6,10 +6,8 @@
 ## Status
 
 Accepted (2026-11-14).
-
-Amended by [DR-064](064-runtime-owned-model-defaults.md) for the source and delivery of implicit model pairs, the Cligent floor and the omission of child-model requests on tool-free calls.
-
-Amends [DR-015](015-first-run-config-seeding.md)'s starter defaults and extends [DR-006](006-slc-configuration-sources.md)'s schema.
+Amends [DR-006](006-slc-configuration-sources.md), [DR-015](015-first-run-config-seeding.md).
+Amended by [DR-064](064-runtime-owned-model-defaults.md).
 
 ## Context
 
@@ -18,13 +16,13 @@ Existing hand-authored configurations must retain provider defaults when they om
 
 ## Decision
 
-- Seed `modelDefaults: true` without pinning vendor-specific model fields in the starter.
-- Resolve opted-in defaults by the effective adapter: Claude Fable 5.2 with Opus 5.5 subagents, or Codex GPT-6 Astra with GPT-6.1 Sol subagents.
+- Seed `modelDefaults: true` in [DR-015](015-first-run-config-seeding.md)'s starter, without pinning vendor-specific model fields, and add it to [DR-006](006-slc-configuration-sources.md)'s schema.
+- Resolve opted-in defaults by the effective adapter, so a Claude adapter receives Claude's primary and subagent pair and a Codex adapter Codex's, as Cligent supplies them ([DR-064](064-runtime-owned-model-defaults.md)).
 - Fill primary and child defaults returned by required Cligent; explicit unsupported child requests refuse before execution.
 - Preserve explicit model fields and independent Reviewer opt-in; omitted or false `modelDefaults` leaves omitted models to the provider.
 - Suppress implicit model pins when Cligent detects a custom provider in the run environment or user-level settings, preserving explicit selections.
 - Add `subagentModel` and `reviewerSubagentModel`, independently overridden by their matching `SLC_*` environment variables; `false` suppresses a child pin, `inherit` requests parent inheritance, and other nonblank strings name a model.
-- Verify the repository against Claude Agent SDK 0.3.325, declared as `^0.3.325` in development only, retaining [DR-020](020-playbook-4-0-adoption.md)'s consumer-supplied SDK policy.
+- Verify the repository against Claude Agent SDK 0.3.325, declared as `^0.3.325` in development only, while normal installations receive the SDKs through Cligent ([DR-020](020-playbook-4-0-adoption.md)).
 - Apply selections through the common client construction shared by interpreted and compiled execution.
 
 ## Consequences

@@ -5,9 +5,9 @@
 
 ## Status
 
-Controller discrimination amended by [DR-053](053-recovery-controller-discrimination.md) to accept the legacy and recovery-capable domains.
-
-Accepted; activation completed under [DR-027](027-complete-playbook-10-activation.md).
+Accepted.
+Amends [DR-005](005-slc-self-hosting-meta-pipeline.md), [DR-014](014-cwd-output-invocation-defaults-entry-emission.md), [DR-017](017-playbook-2-0-thin-runtime-adoption.md), [DR-020](020-playbook-4-0-adoption.md).
+Amended by [DR-026](026-slc-owned-pin-input-declarations.md), [DR-027](027-complete-playbook-10-activation.md), [DR-028](028-contract-based-adoption-without-recompilation.md), [DR-053](053-recovery-controller-discrimination.md).
 
 ## Context
 
@@ -26,9 +26,9 @@ Playbook 10.0.0 also depends on `@sublang/cligent@^0.23.0`, whose optional peers
 
 ### Immutable profile boundary
 
-Exact `@sublang/playbook@10.0.0` link-target provenance shall select a new `composed-v3` runtime contract profile.
+Exact `@sublang/playbook@10.0.0` link-target provenance shall select a new `composed-v3` runtime contract profile, which [DR-028](028-contract-based-adoption-without-recompilation.md) extends to every link target whose engine declares runtime ABI 1 and artifact schema 3.
 Absent provenance and exact 0.9.0 provenance shall continue to select `legacy`, and exact 0.10.0, 1.0.0, 2.0.0, 3.1.0, and 4.0.0 provenance shall continue to select `composed-v2`.
-Exact 5.0.0, 6.0.0, 7.0.0, 8.0.0, and 9.0.0 provenance shall remain unmapped and fail closed with every other unreviewed provenance because reviewing 10.0.0 establishes no contract identity for an intermediate release.
+Exact 5.0.0, 6.0.0, 7.0.0, 8.0.0, and 9.0.0 provenance shall gain no exact mapping because reviewing 10.0.0 establishes no contract identity for an intermediate release; such a pin selects `composed-v3` only through its link target's declared contract ([DR-028](028-contract-based-adoption-without-recompilation.md)) and otherwise fails closed.
 The `composed-v3` profile shall construct a schema-3 linked runtime with exact separate configured options and live current-host capabilities; SLC's phase host shall supply an effect-ledger capability and a repository capability exposing `runExclusive` and `runDeferred` on every construction even though the engine consults that repository only for governed player states; the phase host shall initialize the same six-port causal root session with canonical local-role semantics and shall never serialize the live capabilities into options, machine input, or snapshots [[2]][[3]].
 A shared-factory `composed-v3` implementation shall carry the factory's own immutable `createPlaybookRuntime.compat` record equal to `{ artifactSchema: 3, runtimeAbi: 1 }`, while a bespoke implementation shall instead carry the exact registry declaration `{ kind: 'bespoke', artifactSchema: 3 }` with no runtime-ABI claim [[2]][[3]].
 Playbook's roleless session-Captain options-only wrapper is not a compiled phase artifact, and the phase host shall reject that wrapper rather than retry its exceptional public signature or infer a different profile [[2]].
@@ -38,18 +38,18 @@ SLC's compiled `composed-v3` phase host shall support any roleless shared-factor
 The phase host shall reject a bespoke implementation or an artifact that lacks the required shared-factory compatibility record or requires a delegated role, runtime option, repository operation, or effect-ledger write; emitted role-bearing or bespoke playbooks remain runnable through a Playbook schema-3 host rather than through SLC's non-interactive phase host.
 SLC's non-interactive phase host shall not initiate adoption or controller actions, and the presence of `adopt`, retained-generation metadata, `describe`, `apply`, or `unresolvedEffectEnvelopes` shall neither select a profile nor relax exact provenance checks.
 The phase host shall continue to reject nested playbook execution deterministically because it owns no child stack.
-Preparatory host and verification support may land while 10.0.0 remains unmapped, but the dependency and provenance mapping shall not activate until the complete adopted set below can move atomically.
+The dependency and provenance mapping activate only with the complete adopted set below, moved atomically ([DR-027](027-complete-playbook-10-activation.md)).
 
 ### Roles and schema-3 output
 
-SLC shall synchronize all four Playbook definitions from immutable 10.0.0 while retaining SLC's explicit `## Pin Inputs` sections.
+SLC shall synchronize all four Playbook definitions byte-identically from immutable 10.0.0, with SLC's pin-input declarations in its own sidecar ([DR-026](026-slc-owned-pin-input-declarations.md)).
 Current compilation shall accept `Roles`, reject removed player-alias syntax and canonical-id collisions, require every canonical local role id to equal its own lowercasing, to carry no whitespace or identifier-ambiguous separator, and to differ from the host-reserved `captain` — a class that admits the non-English role names Playbook 10 sanctions, whose caseless scripts lowercase to themselves, rather than an ASCII-only class that would make the shipped Chinese demo uncompilable, preserve those ids through `meta.playbook.role` and `invoke.input.role`, and carry one role per simultaneously active parallel region into declared concurrent-role sets and deterministic verification [[4]][[5]][[11]][[12]].
-SLC shall therefore narrow that class for deterministic verification through a verifier-owned emitted-shape witness: a Captain decision state whose domain result keys, after excluding compiler-owned `needsBossReply`, are exactly `respond`, `resume`, `start`, `switch`, `dismiss`, `deliver`, and `runtime`; GEARS prose and a proper subset or superset of those keys shall not independently select the controller contract.
+SLC shall therefore narrow that class for deterministic verification through a verifier-owned emitted-shape witness: a Captain decision state whose domain result keys, after excluding compiler-owned `needsBossReply`, are exactly `respond`, `resume`, `start`, `switch`, `dismiss`, `deliver`, and `runtime`, optionally with `recover` ([DR-053](053-recovery-controller-discrimination.md)); GEARS prose and a proper subset or superset of those keys shall not independently select the controller contract.
 The recognized controller class is Playbook 10's closed host-action session loop: its FSM keeps working playbooks outside the engagement stack and uses direct-Captain decision and reporting work, so a controller-classified artifact containing a delegated-player invocation, nested-playbook invocation, or parallel working surface is nonconformant rather than an ordinary workflow surface that acquires controller entry semantics [[5]].
 Artifact verification shall reconcile the artifact's own reviewed full-link target provenance, generation-specific FSM actor bindings, and exact shared-factory compatibility rather than use a compiler phase's pin; mutually inconsistent or unsupported present signals shall fail closed, a compat-less linked factory with no schema-3 signal shall retain the historical schema-1 continuation, and a direct-Captain artifact with neither a linked factory nor another generation signal shall remain unclassified.
 Current entry modules shall advertise artifact schema 3, the linked factory's exact runtime profile, canonical `requiredRoleIds`, declared `concurrentRoleSets`, validated configured options, and a two-argument runtime factory that composes `{ configuredOptions, hostCapabilities }` at the linked-artifact boundary.
 SLC verification shall admit Playbook's optional host-owned summary policy without semantically comparing its formatter prose only when the policy has the host-supported shape, and shall fail closed on a malformed policy.
-Entry emission shall support only exact Playbook 10.0.0 schema-3 closures and the reviewed exact 0.10.0, 1.0.0, 2.0.0, 3.1.0, and 4.0.0 schema-1 closures; absent provenance and every other provenance — including exact 0.9.0 and 5.0.0 through 9.0.0 — or a schema or factory declaration inconsistent with its exact reviewed provenance shall fail closed because a compiled-phase runtime mapping does not itself establish a compatible Playbook registry contract.
+Entry emission shall select the schema-3 entry for a `Roles` source and retain the schema-1 entry for a historical `Players` source from the GEARS role declaration alone, without inspecting link-target provenance or factory compatibility.
 The schema-3 entry shall be enabled through Playbook configuration with every required local role bound to a configured top-level player, roles declared concurrent bound to distinct player ids, and shall be invoked through its effective slash command rather than as a positional `playbook run` module argument [[10]][[11]].
 The schema-3 entry path shall remove [DR-017](017-playbook-2-0-thin-runtime-adoption.md)'s lowercase-to-verbatim player-binding shim because concrete player selection and prompt identity now enter through host-owned role bindings rather than emitted aliases.
 Existing schema-1 artifacts shall retain their `Players`, `invoke.input.player`, and entry-binding semantics under their complete historical Playbook 4 or earlier dependency closure, and SLC shall neither relabel nor rehash them as schema-3 artifacts.
@@ -58,12 +58,12 @@ Existing schema-1 artifacts shall retain their `Players`, `invoke.input.player`,
 
 All three reviewed meta-phase bundles shall be rebuilt as shared-factory schema-3 artifacts through fresh interpreted real-agent `slc slc` runs from the synchronized definitions and shall pass every independently executed generated verification file before pin generation.
 No bundle shall be retained under [DR-020](020-playbook-4-0-adoption.md)'s exception because the definitions, link emission, artifact schema, engine, and dependency lock are no longer one byte-identical input closure.
-Regenerated pins shall close over the synchronized definitions, complete rebuilt bundle trees whose hashed artifact bytes contain the schema-3 construction contract and required shared-factory compatibility declaration, package lock, exact Playbook 10.0.0 link-target identity, and Playbook and XState runtime-dependency identities, while retaining the direct Spex 0.3 grammar identities required by [DR-016](016-gears-grammar-provenance.md).
+Regenerated pins shall close over the synchronized definitions, complete rebuilt bundle trees whose hashed artifact bytes contain the schema-3 construction contract and required shared-factory compatibility declaration, package lock, exact Playbook link-target identity, and Playbook and XState runtime-dependency identities, while retaining the direct Spex 0.3 grammar identities required by [DR-016](016-gears-grammar-provenance.md).
 
 ### Atomic authority and consumers
 
-The adopted state shall be one reviewed set containing the root manifest ranges `@sublang/playbook@^10.0.0` and `@sublang/cligent@^0.23.0` with the lock resolving exact 10.0.0 and 0.23.0, `composed-v3` host and verification support, schema-3 entry emission, all four definitions, the version-coupled normalization prompt, all three rebuilt bundles, regenerated pins, the demo manifest, every version-coupled demo reference and entry artifact, the demo's version-bearing documentation, and the installed-host acceptance path updated for configured-registry slash-command invocation.
-Cligent 0.23.0 shall supersede 0.18.0 as the runtime-version authority, and every installed agent SDK shall meet its optional-peer floor — Anthropic `>=0.3.219`, Codex `>=0.144.0`, and OpenCode `>=1.18.12` — without requiring an absent optional adapter SDK to be added [[6]].
+The adopted state shall be one reviewed set containing the root Playbook and Cligent manifest ranges with the lock resolving the exact adopted releases, `composed-v3` host and verification support, schema-3 entry emission, all four definitions, the version-coupled normalization prompt, all three rebuilt bundles, regenerated pins, the demo manifest, every version-coupled demo reference and entry artifact, the demo's version-bearing documentation, and the installed-host acceptance path updated for configured-registry slash-command invocation.
+Cligent remains the runtime-version authority for the agent SDKs.
 SLC's direct `@sublang/spex@^0.3.0`, its lock resolution, and its pin-recorded grammar paths shall not change; a transitive Spex 3 dependency inside Playbook's tooling closure shall not become SLC's compiled-grammar authority.
 No mixed Playbook 4/10 dependency, definition, bundle, pin, entry, or demo set shall pass adoption review.
 
@@ -73,14 +73,13 @@ This decision supersedes [DR-020](020-playbook-4-0-adoption.md)'s exhaustive pro
 For schema-3 output only, it also supersedes [DR-017](017-playbook-2-0-thin-runtime-adoption.md)'s verbatim source-name `requiredRoleIds`, lowercase-to-verbatim entry-binding shim, and positional demo invocation with `--player` role flags.
 For schema-3 output only, it supersedes [DR-014](014-cwd-output-invocation-defaults-entry-emission.md)'s positional and default-agent `playbook run <entry> <task>` consequence while retaining deterministic entry emission and placement.
 For `composed-v3` phase execution only, it supersedes [DR-005](005-slc-self-hosting-meta-pipeline.md)'s assumption that every compiled phase's player port is Cligent-backed; the full schema-3 Playbook host retains delegated-role execution.
-[DR-010](010-playbook-runtime-contract-evolution.md)'s exact-provenance and fail-closed rules, [DR-011](011-playbook-1-0-captain-contract-adoption.md)'s atomic reviewed-set boundary, [DR-016](016-gears-grammar-provenance.md)'s direct Spex 0.3 grammar authority, and [DR-018](018-playbook-3-1-adoption.md)'s rebuild and independent-verification rule remain in force.
+[DR-010](010-playbook-runtime-contract-evolution.md)'s exact-provenance and fail-closed rules, [DR-011](011-playbook-1-0-captain-contract-adoption.md)'s atomic reviewed-set boundary, [DR-016](016-gears-grammar-provenance.md)'s direct Spex 0.3 grammar authority, and [DR-018](018-playbook-3-1-adoption.md)'s independent-verification rule remain in force; [DR-028](028-contract-based-adoption-without-recompilation.md) replaces the rebuild rule with retention by verified equivalence.
 
 ## Consequences
 
 - A bare dependency bump fails closed: Playbook 10 becomes active only with the `composed-v3` host seam and the complete atomic asset set.
 - Every current meta-phase and version-coupled demo bundle is rebuilt as schema 3 even though `optimize.md` itself is unchanged.
 - Historical schema-1 artifacts remain meaningful evidence for their exact old closures but cannot execute through the Playbook 10 engine.
-- Playbook 5.0.0 through 9.0.0 remain deliberately unsupported until a later decision reviews and maps an exact contract.
 - The phase host acquires an explicit fail-closed repository and effect-ledger boundary and treats any unresolved effect as a failed compiler phase.
 - A role-bearing phase that ran compiled under `composed-v2` does not migrate directly to compiled `composed-v3`: it must retain its complete historical dependency closure, remove its pin and run interpreted, refactor delegated work to direct Captain work, or run the emitted role-bearing artifact through a full Playbook schema-3 host until a later decision supplies SLC's governed repository and effect-ledger host.
 - The automatic installed-package acceptance flow no longer executes a compiled Boss turn; it retains consumer-side engine resolution and schema-3 construction, initialization, and disposal coverage, while compiled-turn execution from an installed consumer moves to the opt-in real Playbook host so SLC does not substitute for Playbook's governed repository and effect-ledger protocol [[release-18](../packages/release.md#release-18)].

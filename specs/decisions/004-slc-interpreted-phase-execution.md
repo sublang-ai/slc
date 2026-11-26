@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted; single-invocation scope amended by [DR-033](033-early-conformance-and-mechanical-repair.md).
+Accepted.
+Amended by [DR-022](022-two-agent-reviewed-compilation.md), [DR-033](033-early-conformance-and-mechanical-repair.md).
 
 ## Context
 
@@ -50,15 +51,15 @@ When interpreting a phase, the agent prompt shall establish this contract:
 
 ### Scope
 
-Within this DR's scope, `slc` shall interpret a phase with one agent invocation per phase.
-Automatic multi-call audit and repair orchestration is out of scope for this DR unless the optional independent Reviewer in [DR-022](022-two-agent-reviewed-compilation.md) is configured; that decision supersedes this one-call scope for that opt-in mode.
+`slc` shall interpret a phase with one initial agent invocation per phase.
+The only further calls are at most two same-Coder corrections of deterministic mechanical findings ([DR-033](033-early-conformance-and-mechanical-repair.md)) and, when configured, the optional independent Reviewer's loop ([DR-022](022-two-agent-reviewed-compilation.md)).
 
 ## Consequences
 
 - A pipeline is runnable directly from its phase definitions, with no compilation step.
 - Interpreted runs are the oracle against which compiled artifacts ([DR-005](005-slc-self-hosting-meta-pipeline.md)) are validated; the validation procedure belongs to test specs, not this DR.
 - Per-run variation from a stochastic agent is bounded by the human-editable intermediate ([DR-001](001-slc-pipeline-layout-naming-invocation.md)) between phases, which is the pipeline's error-correction boundary.
-- Interpreted execution covers every phase at the correctness level, with the agent following the definition within one invocation; compilation ([DR-005](005-slc-self-hosting-meta-pipeline.md)) adds determinism, fixed and auditable control flow, and per-step model binding where a phase needs that fidelity.
+- Interpreted execution covers every phase at the correctness level, with the agent following the definition; compilation ([DR-005](005-slc-self-hosting-meta-pipeline.md)) adds determinism, fixed and auditable control flow, and per-step model binding where a phase needs that fidelity.
 
 ## References
 

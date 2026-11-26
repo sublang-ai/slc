@@ -6,6 +6,7 @@
 ## Status
 
 Accepted.
+Amended by [DR-028](028-contract-based-adoption-without-recompilation.md).
 
 ## Context
 
@@ -37,8 +38,9 @@ Exact `@sublang/playbook@3.1.0` link-target provenance selects the six-port `com
 ### Atomic reviewed-asset adoption
 
 The dependency range moves to `^3.1.0` with the lock resolving exactly 3.1.0.
-The vendored definitions re-sync from the registry tarball with SLC's explicit `## Pin Inputs` retained — only `link.md` changes content [[2]][[4]].
+The vendored definitions re-sync from the registry tarball — only `link.md` changes content [[2]][[4]].
 Because the link emission contract changed, all three meta-phase bundles are rebuilt via interpreted `slc slc` runs from the synced definitions, so every bundle's runtime module carries the hardened judge prompts and the `spec.compat` declaration; pins regenerate with exact 3.1.0 provenance [[3]][[4]].
+Later adoptions retain bundles by verified equivalence instead of rebuilding ([DR-028](028-contract-based-adoption-without-recompilation.md)).
 Manifest, lock, definitions, bundles, and pins move as one reviewed set ([[self-hosting-11](../packages/self-hosting.md#self-hosting-11)]).
 
 ### Version-coupled consumers

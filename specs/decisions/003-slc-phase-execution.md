@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amended by [DR-023](023-host-settled-link-object-imports.md).
 
 ## Context
 

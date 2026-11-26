@@ -6,7 +6,7 @@
 ## Status
 
 Accepted.
-Amended by [DR-053](053-recovery-controller-discrimination.md): a defensive parked fallback does not accept a second controller action.
+Amended by [DR-049](049-early-transition-coverage.md), [DR-053](053-recovery-controller-discrimination.md).
 
 ## Context
 
@@ -17,13 +17,13 @@ An invalid synthetic success could therefore leave the working state through fai
 ## Decision
 
 - Evaluate declared outcomes against ordered XState arms, including a fallback only when every preceding guard rejects that valid output.
-- Preserve controller action distinctness and rejection of missing, shadowed, unresolved, or unsatisfiable transitions.
+- Preserve controller action distinctness and rejection of missing, shadowed, unresolved, or unsatisfiable transitions; a defensive final unguarded fallback into the parked leaf reports invalid output rather than selecting a second action ([DR-053](053-recovery-controller-discrimination.md)).
 - Give script probes the actual two-field runtime output: the first declared guard with exit status zero, and the second with representative nonzero exit statuses drawn from the bounded candidate set.
 - Use the same bounded valid-output candidates for declared-result acceptance and arm auditing, and drive a directly accepting candidate; outcome reachability requires one satisfying representative rather than proving every possible exit status safe.
 - Apply the candidate cap per arm, prioritizing that arm's constants over general artifact candidates, so unrelated arms cannot exhaust its search; combine only accepted candidates for runtime driving.
 - Never invent additional script output fields or use a malformed bare script output to satisfy a guarded arm.
 - Preserve the supplied top-level event payload in both candidate evaluation and read tracing, including its own-property descriptors; an authored guard may read known fields through descriptors without requiring new reflective-field inference.
-- Keep coverage outside the early compilation gates; this correction changes verification accuracy, not compilation policy.
+- This correction changes verification accuracy; [DR-049](049-early-transition-coverage.md) runs the same coverage at the FSM boundary.
 
 ## Consequences
 

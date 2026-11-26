@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted. Amends [DR-029](029-source-fidelity-gate.md) in what marks a quoted relay.
+Accepted.
+Amends [DR-029](029-source-fidelity-gate.md).
 
 ## Context
 

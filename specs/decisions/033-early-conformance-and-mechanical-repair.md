@@ -6,7 +6,8 @@
 ## Status
 
 Accepted.
-Amends the unreviewed-finding disposition in [DR-029](029-source-fidelity-gate.md) and [DR-030](030-link-fidelity-gate.md), and the single-invocation rule in [DR-004](004-slc-interpreted-phase-execution.md).
+Amends [DR-004](004-slc-interpreted-phase-execution.md), [DR-029](029-source-fidelity-gate.md), [DR-030](030-link-fidelity-gate.md).
+Amended by [DR-039](039-strict-fsm-boundary.md), [DR-040](040-early-continuation-input-contract.md), [DR-049](049-early-transition-coverage.md).
 
 ## Context
 
@@ -16,7 +17,7 @@ Deterministic findings currently reach the Coder only when an independent Review
 
 ## Decision
 
-- Apply existing GEARS-to-FSM conformance and artifact-schema resolution at that format boundary, before downstream work, including import failures as findings; use only the existing conformance checks, excluding introspection snapshots and coverage.
+- Apply existing GEARS-to-FSM conformance and artifact-schema resolution at that format boundary, before downstream work, including import failures as findings; use only existing checks — conformance, joined at the same boundary by strict typing ([DR-039](039-strict-fsm-boundary.md)), continuation inputs ([DR-040](040-early-continuation-input-contract.md)), and transition coverage ([DR-049](049-early-transition-coverage.md)) — excluding introspection snapshots.
 - Use the actual full-link target's contract as schema evidence when available, otherwise the generated FSM's structural evidence; never substitute a compiler phase pin or a previous linked artifact.
 - A missing continuation generation remains unclassified at pre-link conformance, which has no continuation composer to check; it still reports conflicting or invalid supplied schema evidence.
 - Make mechanical correction available with the same Coder independently of optional semantic review: at most three checking rounds and two corrections, with the existing numbered findings and private correction envelope.

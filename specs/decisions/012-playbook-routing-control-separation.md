@@ -5,7 +5,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+Amends [DR-009](009-slc-playbook-pipeline-compilation.md), [DR-011](011-playbook-1-0-captain-contract-adoption.md).
 
 ## Context
 

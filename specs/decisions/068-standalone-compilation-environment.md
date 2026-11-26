@@ -5,8 +5,8 @@
 
 ## Status
 
-Approved direction; implementation and delivery acceptance authorized by the user on 2026-11-17.
-Amends [DR-009](009-slc-playbook-pipeline-compilation.md), [DR-014](014-cwd-output-invocation-defaults-entry-emission.md), [DR-020](020-playbook-4-0-adoption.md), [DR-039](039-strict-fsm-boundary.md), and [DR-061](061-consumer-supplied-playbook.md) only as stated below.
+Accepted (2026-11-17).
+Amends [DR-009](009-slc-playbook-pipeline-compilation.md), [DR-014](014-cwd-output-invocation-defaults-entry-emission.md), [DR-020](020-playbook-4-0-adoption.md), [DR-039](039-strict-fsm-boundary.md), [DR-061](061-consumer-supplied-playbook.md).
 
 ## Context
 
@@ -32,19 +32,18 @@ Bounded coverage can fail to discover a valid public input, which is insufficien
 - Verify packed global installations with separate real Codex and Claude cold-generation samples and an independent reuse check; retain each sampled outcome without claiming all natural-language generation is stable.
 - Under the user’s narrowed 2026-11-18 acceptance scope, use Codex for the native-platform/parent matrix and only one successful simple-flow Claude/GLM compilation for workability; stop additional Claude scenarios and preserve their records as scope cancellations.
 - Unpacked documentation-only integration does not replace the already immutable public candidate: compare every packed file and run current-head CI, without repeating unaffected model calls or publication; runtime-source or packed-file changes still need a new candidate.
-
 - Pre-merge validation separates locally built/installed functional candidates from real branch prerelease registry installs, retaining stable publication gates without making a formal stable release a prerequisite.
 - The shared compilation dependency/environment contract supports macOS, Linux and native Windows; POSIX-only historical front-end constraints do not exempt the native Windows compiler/library path.
 
-## Consequences
+### Amended decisions
 
-Users can compile in an empty output directory after installing SLC once, without creating a Node project or installing project dependencies.
-The compiler's own TypeScript, Node typings, and Agent SDKs remain distinct from an artifact's linked runtime environment.
-The new entry extension requires coordinated SLC entry emission and Playbook loading support; adaptation or release gates for the separate `spex-playbook` Skill are outside this change.
-Runtime links are machine-local and can require compatible repair or recompilation after global upgrades; portable dependency bundles are outside this change.
-Extra local checks add bounded work and may expose real defects earlier, but neither SDK inclusion nor deterministic checking guarantees AI generation success or business-result quality.
+- [DR-009](009-slc-playbook-pipeline-compilation.md): managed artifact environments, explicit standalone ESM entries, selected-runtime identity, and compiler-owned verification.
+- [DR-014](014-cwd-output-invocation-defaults-entry-emission.md): new registry entries are real JavaScript `.mjs` beside the internal ESM bundle; historical `.ts` artifact consumption remains supported.
+- [DR-020](020-playbook-4-0-adoption.md): Cligent supplies both default SDKs as ordinary dependencies, and SLC keeps no duplicate SDK runtime ranges.
+- [DR-039](039-strict-fsm-boundary.md): the compiler-owned strict policy also checks linked modules and emitted entries against one selected target environment, with fresh-revision load checks.
+- [DR-061](061-consumer-supplied-playbook.md): the required compatible peer and exact development provenance stay, and each workflow gets its own environment from that selected compiler runtime, independently of surrounding project manifests and without changing their dependencies.
 
-## Implementation Evidence
+### From implementation evidence
 
 Independent native checks reproduced a constructor bypass through an unrelated child IPC message and an actual loopback business write on Node 23.6, whose permission model does not restrict networking.
 The SLC minimum is therefore Node 25.5.0, whose native network permission is checked before Agent work, while Cligent and Playbook retain their separate runtime floors.
@@ -54,8 +53,22 @@ A generated witness cannot establish the Source permission of its own arbitrary 
 Native acceptance also exposed an occupied private manifest and actual proxy/workspace-routing refusals being labeled as artifact defects.
 Their established environment cause is retained through failure reporting; unknown isolated-check exceptions remain checker failures rather than invented workflow defects.
 
-Actual-initial replay exposed maintained bounded review loops that the former synthetic-context driver had bypassed. Repeated invocations therefore remain eligible only through actual transitions and newly reached actor starts, with every revisit charged to the unchanged configured depth, attempt and duration limits; no private snapshot or larger default budget substitutes for proof.
+Actual-initial replay exposed maintained bounded review loops that the former synthetic-context driver had bypassed.
+Repeated invocations therefore remain eligible only through actual transitions and newly reached actor starts, with every revisit charged to the unchanged configured depth, attempt and duration limits; no private snapshot or larger default budget substitutes for proof.
 
-Maintained demo completion now records an explicit 64-invocation/1,024-attempt/900,000 ms proof policy after the smaller 12/256 policy exhausted finite exploration. Product defaults remain 8/64/300,000. Actual reached-context interrupts into the audited target, action-observed guard-free entry fields and progress-aware question scheduling close the observed gaps; unsearched public-event combinations remain unverified rather than receiving a reachability claim. Original demo FSM, GEARS and Source bytes are retained.
+Maintained demo completion now records an explicit 64-invocation/1,024-attempt/900,000 ms proof policy after the smaller 12/256 policy exhausted finite exploration.
+Product defaults remain 8/64/300,000.
+Actual reached-context interrupts into the audited target, action-observed guard-free entry fields and progress-aware question scheduling close the observed gaps; unsearched public-event combinations remain unverified rather than receiving a reachability claim.
+Original demo FSM, GEARS and Source bytes are retained.
 
-The independent meta-artifact review also exposed link’s legitimate required `definition` input. Caller-supplied bounded JSON `machineInput` is a separate host-owned API input, never an artifact export or context patch. The repository review supplies exact definition bytes only after its own current pin and compiled-execution contract establish DR-028 authority; ordinary workflows and nonempty artifact witnesses receive no inferred startup values.
+The independent meta-artifact review also exposed link’s legitimate required `definition` input.
+Caller-supplied bounded JSON `machineInput` is a separate host-owned API input, never an artifact export or context patch.
+The repository review supplies exact definition bytes only after its own current pin and compiled-execution contract establish DR-028 authority; ordinary workflows and nonempty artifact witnesses receive no inferred startup values.
+
+## Consequences
+
+Users can compile in an empty output directory after installing SLC once, without creating a Node project or installing project dependencies.
+The compiler's own TypeScript, Node typings, and Agent SDKs remain distinct from an artifact's linked runtime environment.
+The new entry extension requires coordinated SLC entry emission and Playbook loading support; adaptation or release gates for the separate `spex-playbook` Skill are outside this change.
+Runtime links are machine-local and can require compatible repair or recompilation after global upgrades; portable dependency bundles are outside this change.
+Extra local checks add bounded work and may expose real defects earlier, but neither SDK inclusion nor deterministic checking guarantees AI generation success or business-result quality.

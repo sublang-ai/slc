@@ -6,7 +6,7 @@
 ## Status
 
 Accepted.
-Amends [DR-040](040-early-continuation-input-contract.md)'s schema-3 continuation probes.
+Amends [DR-040](040-early-continuation-input-contract.md).
 
 ## Context
 
