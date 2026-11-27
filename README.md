@@ -10,6 +10,10 @@
 _The SubLang Compiler: describe a workflow in a paragraph of prose, get a
 deterministic multi-agent program you can inspect, verify, and run._
 
+<p align="center">
+  <img src="assets/social-preview.png" width="75%" alt="SubLang Compiler — describe the workflow, ship the state machine">
+</p>
+
 You write what should happen — in English or Chinese, no DSL, no
 orchestration framework. `slc` compiles that paragraph into a spec, a
 state machine, and a runnable **playbook** that drives AI coding agents
